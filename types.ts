@@ -410,11 +410,72 @@ export interface RiskMetric {
     value: string;
 }
 
+export type AnalysisTimeRange = '1W' | '1M' | '3M' | '6M' | '1Y';
+
+export interface AnalysisPerformancePoint {
+    timestamp: string;
+    equity: number;
+    pnl: number;
+    drawdown: number;
+}
+
 export interface AnalysisStat {
-    label: string;
-    value: string;
-    subValue: string;
+    id: string;
+    labelKey: string;
+    subLabelKey: string;
+    subLabelParams?: Record<string, string | number>;
+    value: number;
+    format: 'currency' | 'percent' | 'plain' | 'ratio';
+    decimals?: number;
+    prefix?: string;
+    suffix?: string;
     change?: number;
+    changeFormat?: 'percent' | 'plain';
+    changeDecimals?: number;
+    changeDirection?: 'up' | 'down';
+}
+
+export interface AnalysisDistributionSlice {
+    id: string;
+    labelKey: string;
+    value: number;
+    color: string;
+}
+
+export interface AnalysisRiskMetric {
+    id: string;
+    labelKey: string;
+    descriptionKey?: string;
+    value: number;
+    format: 'currency' | 'percent' | 'plain' | 'ratio';
+    decimals?: number;
+    prefix?: string;
+    suffix?: string;
+    change?: number;
+    changeFormat?: 'percent' | 'plain';
+    changeDecimals?: number;
+    changeDirection?: 'up' | 'down';
+}
+
+export interface AnalysisReportTemplate {
+    id: string;
+    format: 'pdf' | 'excel' | 'csv' | 'full';
+    labelKey: string;
+    descriptionKey?: string;
+    isPrimary?: boolean;
+    lastGeneratedAt?: string;
+}
+
+export interface AnalysisPageData {
+    stats: AnalysisStat[];
+    performance: Record<AnalysisTimeRange, AnalysisPerformancePoint[]>;
+    activeRange: AnalysisTimeRange;
+    distribution: AnalysisDistributionSlice[];
+    riskMetrics: AnalysisRiskMetric[];
+    predictions: SmartPrediction[];
+    trades: PerformanceTrade[];
+    reports: AnalysisReportTemplate[];
+    lastUpdated: string;
 }
 
 export interface SmartPrediction {

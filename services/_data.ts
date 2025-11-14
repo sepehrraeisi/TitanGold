@@ -17,6 +17,12 @@ import type {
     PortfolioActivity,
     RiskMetric,
     AnalysisStat,
+    AnalysisPageData,
+    AnalysisPerformancePoint,
+    AnalysisTimeRange,
+    AnalysisDistributionSlice,
+    AnalysisRiskMetric,
+    AnalysisReportTemplate,
     SmartPrediction,
     PerformanceTrade,
     NewsArticle,
@@ -446,18 +452,165 @@ const portfolio: PortfolioPageData = {
     lastUpdated: new Date().toISOString(),
 };
 
+const makePerformanceSeries = (
+    length: number,
+    stepHours: number,
+    base: number,
+    amplitude: number,
+    drift: number,
+): AnalysisPerformancePoint[] =>
+    Array.from({ length }).map((_, index) => {
+        const timestamp = new Date(Date.now() - (length - index - 1) * stepHours * 60 * 60 * 1000).toISOString();
+        const equityBase = base + Math.sin(index / 2) * amplitude + index * drift;
+        const pnl = (Math.sin(index / 3) + Math.cos(index / 5)) * amplitude * 0.12;
+        const drawdown = Math.max(1.5, 4 + Math.sin(index / 4) * 1.8 + Math.random() * 0.8);
+        return {
+            timestamp,
+            equity: Number(equityBase.toFixed(2)),
+            pnl: Number(pnl.toFixed(2)),
+            drawdown: Number(drawdown.toFixed(2)),
+        };
+    });
+
+const analysisPerformance: Record<AnalysisTimeRange, AnalysisPerformancePoint[]> = {
+    '1W': makePerformanceSeries(7, 24, 125000, 4200, 520),
+    '1M': makePerformanceSeries(30, 24, 124500, 6800, 280),
+    '3M': makePerformanceSeries(12, 72, 121000, 8200, 650),
+    '6M': makePerformanceSeries(12, 144, 115000, 9600, 780),
+    '1Y': makePerformanceSeries(12, 720 / 2, 102000, 12800, 920),
+};
+
 const analysisStats: AnalysisStat[] = [
-    { label: 'success_rate', value: '85%', subValue: 'excellent_performance', change: 3.2 },
-    { label: 'sharpe_ratio', value: '2.34', subValue: 'excellent_performance' },
-    { label: 'max_drawdown', value: '5.2%', subValue: 'good_risk_control', change: -1.1 },
-    { label: 'total_capital', value: '$125,000', subValue: 'total_growth', change: 25.3 },
+    {
+        id: 'success_rate',
+        labelKey: 'success_rate',
+        subLabelKey: 'excellent_performance',
+        value: 85.2,
+        format: 'percent',
+        decimals: 1,
+        change: 3.2,
+        changeFormat: 'percent',
+        changeDecimals: 1,
+        changeDirection: 'up',
+    },
+    {
+        id: 'sharpe_ratio',
+        labelKey: 'sharpe_ratio',
+        subLabelKey: 'excellent_performance',
+        value: 2.34,
+        format: 'plain',
+        decimals: 2,
+        change: 0.08,
+        changeFormat: 'plain',
+        changeDecimals: 2,
+        changeDirection: 'up',
+    },
+    {
+        id: 'max_drawdown',
+        labelKey: 'max_drawdown',
+        subLabelKey: 'good_risk_control',
+        value: 5.2,
+        format: 'percent',
+        decimals: 1,
+        change: -1.1,
+        changeFormat: 'percent',
+        changeDecimals: 1,
+        changeDirection: 'down',
+    },
+    {
+        id: 'total_capital',
+        labelKey: 'total_capital',
+        subLabelKey: 'total_growth',
+        value: 125000,
+        format: 'currency',
+        decimals: 0,
+        prefix: '$',
+        change: 25.3,
+        changeFormat: 'percent',
+        changeDecimals: 1,
+        changeDirection: 'up',
+    },
 ];
 
 const smartPredictions: SmartPrediction[] = [
-    { id: '1', symbol: 'BTC/USDT', trend: 'Bullish', targetPrice: '$48,000', timeframe: '7 Days', confidence: 87, analysis: 'btc_prediction_analysis' },
-    { id: '2', symbol: 'ETH/USDT', trend: 'Neutral', targetPrice: '$2,900', timeframe: '3 Days', confidence: 65, analysis: 'eth_prediction_analysis' },
-    { id: '3', symbol: 'SOL/USDT', trend: 'Bullish', targetPrice: '$120', timeframe: '5 Days', confidence: 92, analysis: 'sol_prediction_analysis' },
+    { id: 'analysis-btc', symbol: 'BTC/USDT', trend: 'Bullish', targetPrice: '$48,250', timeframe: '7 Days', confidence: 87, analysis: 'btc_prediction_analysis' },
+    { id: 'analysis-eth', symbol: 'ETH/USDT', trend: 'Neutral', targetPrice: '$2,890', timeframe: '3 Days', confidence: 65, analysis: 'eth_prediction_analysis' },
+    { id: 'analysis-sol', symbol: 'SOL/USDT', trend: 'Bullish', targetPrice: '$118', timeframe: '5 Days', confidence: 92, analysis: 'sol_prediction_analysis' },
+    { id: 'analysis-matic', symbol: 'MATIC/USDT', trend: 'Bearish', targetPrice: '$0.95', timeframe: '10 Days', confidence: 58, analysis: 'matic_prediction_analysis' },
 ];
+
+const analysisDistribution: AnalysisDistributionSlice[] = [
+    { id: 'profitable', labelKey: 'profitable_trades', value: 68, color: '#22c55e' },
+    { id: 'neutral', labelKey: 'neutral_trades', value: 12, color: '#eab308' },
+    { id: 'losing', labelKey: 'losing_trades', value: 20, color: '#ef4444' },
+];
+
+const analysisRiskMetrics: AnalysisRiskMetric[] = [
+    {
+        id: 'var95',
+        labelKey: 'value_at_risk',
+        descriptionKey: 'value_at_risk_desc',
+        value: 2850,
+        format: 'currency',
+        prefix: '$',
+        decimals: 0,
+        change: -3.1,
+        changeFormat: 'percent',
+        changeDecimals: 1,
+        changeDirection: 'down',
+    },
+    {
+        id: 'risk_reward',
+        labelKey: 'risk_reward_ratio',
+        descriptionKey: 'optimal_ratio',
+        value: 3.2,
+        format: 'ratio',
+        decimals: 1,
+        change: 0.4,
+        changeFormat: 'plain',
+        changeDecimals: 1,
+        changeDirection: 'up',
+    },
+    {
+        id: 'volatility',
+        labelKey: 'volatility',
+        descriptionKey: 'annual_volatility',
+        value: 12.8,
+        format: 'percent',
+        decimals: 1,
+        change: -0.6,
+        changeFormat: 'percent',
+        changeDecimals: 1,
+        changeDirection: 'down',
+    },
+];
+
+const performanceTrades: PerformanceTrade[] = [
+    { id: 'analysis-trade-1', date: '2024-01-12T08:00:00Z', symbol: 'BTC/USDT', type: 'BUY', amount: 0.5, entryPrice: 42500, exitPrice: 45220, pnl: 1360, pnlPercent: 6.4 },
+    { id: 'analysis-trade-2', date: '2024-01-11T15:30:00Z', symbol: 'ETH/USDT', type: 'SELL', amount: 4.2, entryPrice: 2740, exitPrice: 2610, pnl: 546, pnlPercent: 4.8 },
+    { id: 'analysis-trade-3', date: '2024-01-10T10:45:00Z', symbol: 'SOL/USDT', type: 'BUY', amount: 320, entryPrice: 96.5, exitPrice: 108.2, pnl: 3744, pnlPercent: 12.1 },
+    { id: 'analysis-trade-4', date: '2024-01-09T18:15:00Z', symbol: 'XAU/USDT', type: 'SELL', amount: 2.5, entryPrice: 2068, exitPrice: 2012, pnl: 140, pnlPercent: 2.7 },
+    { id: 'analysis-trade-5', date: '2024-01-08T12:05:00Z', symbol: 'ADA/USDT', type: 'BUY', amount: 1800, entryPrice: 0.54, exitPrice: 0.61, pnl: 126, pnlPercent: 13.1 },
+];
+
+const analysisReports: AnalysisReportTemplate[] = [
+    { id: 'analysis-report-pdf', format: 'pdf', labelKey: 'export_pdf', lastGeneratedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
+    { id: 'analysis-report-excel', format: 'excel', labelKey: 'export_excel' },
+    { id: 'analysis-report-csv', format: 'csv', labelKey: 'export_csv' },
+    { id: 'analysis-report-full', format: 'full', labelKey: 'full_report', isPrimary: true },
+];
+
+const analysis: AnalysisPageData = {
+    stats: analysisStats,
+    performance: analysisPerformance,
+    activeRange: '1M',
+    distribution: analysisDistribution,
+    riskMetrics: analysisRiskMetrics,
+    predictions: smartPredictions,
+    trades: performanceTrades,
+    reports: analysisReports,
+    lastUpdated: new Date().toISOString(),
+};
 
 const tradingChartSeeds: Record<TradingTimeRange, ChartPoint[]> = {
     '1H': Array.from({ length: 12 }).map((_, i) => ({ timestamp: `${(i * 5).toString().padStart(2, '0')}`, value: 32000 + Math.sin(i / 2) * 420 })),
@@ -554,11 +707,6 @@ const manualTrading: ManualTradingPageData = {
     ],
     lastUpdated: new Date().toISOString(),
 };
-
-const performanceTrades: PerformanceTrade[] = [
-    { id: '1', date: '2023-10-30', symbol: 'BTC/USDT', type: 'BUY', amount: 0.5, entryPrice: 42000, exitPrice: 45000, pnl: 1500, pnlPercent: 7.14 },
-    { id: '2', date: '2023-10-29', symbol: 'ETH/USDT', type: 'SELL', amount: 2, entryPrice: 2800, exitPrice: 2650, pnl: 300, pnlPercent: 5.36 },
-];
 
 const newsArticles: NewsArticle[] = [
     { id: '1', source: 'CoinDesk', timestamp: '10m ago', headline: 'Bitcoin Pushes Past $47,000 as Key Resistance Breaks', snippet: 'The price of Bitcoin has surged past a critical resistance level, reaching over $47,000.', category: 'Crypto', verificationStatus: 'Verified', impactScore: 85, sentiment: 'Bullish', aiAnalysis: { summary: 'Strong bullish signal.', verificationDetails: 'Confirmed by multiple on-chain sources.', impactAnalysis: 'High potential for short-term rally.', keyTakeaways: ['Breakout confirmed.', 'Volume increasing.'] }, link: '#' },
@@ -751,9 +899,7 @@ export const _data = {
     strategies,
     portfolio,
     riskMetrics,
-    analysisStats,
-    smartPredictions,
-    performanceTrades,
+    analysis,
     newsArticles,
     economicEvents,
     connectionSettings,

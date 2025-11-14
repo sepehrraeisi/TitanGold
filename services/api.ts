@@ -23,6 +23,12 @@ import type {
     PortfolioRebalanceStrategy,
     RiskMetric,
     AnalysisStat,
+    AnalysisPageData,
+    AnalysisTimeRange,
+    AnalysisPerformancePoint,
+    AnalysisDistributionSlice,
+    AnalysisRiskMetric,
+    AnalysisReportTemplate,
     SmartPrediction,
     PerformanceTrade,
     NewsArticle,
@@ -83,6 +89,13 @@ const ensurePortfolio = (): PortfolioPageData => {
         throw new Error('Portfolio data not initialized');
     }
     return db.portfolio;
+};
+
+const ensureAnalysis = (): AnalysisPageData => {
+    if (!db.analysis) {
+        throw new Error('Analysis data not initialized');
+    }
+    return db.analysis;
 };
 
 const cloneAutopilotState = (state: AutopilotState): AutopilotState => ({
@@ -176,6 +189,30 @@ const clonePortfolio = (data: PortfolioPageData): PortfolioPageData => ({
     })),
 });
 
+const cloneAnalysisPerformance = (
+    performance: Record<AnalysisTimeRange, AnalysisPerformancePoint[]>,
+): Record<AnalysisTimeRange, AnalysisPerformancePoint[]> => {
+    const entries = Object.entries(performance) as [AnalysisTimeRange, AnalysisPerformancePoint[]][];
+    return entries.reduce((acc, [range, series]) => {
+        acc[range] = series.map(point => ({ ...point }));
+        return acc;
+    }, {} as Record<AnalysisTimeRange, AnalysisPerformancePoint[]>);
+};
+
+const cloneAnalysis = (data: AnalysisPageData): AnalysisPageData => ({
+    ...data,
+    stats: data.stats.map(stat => ({
+        ...stat,
+        subLabelParams: stat.subLabelParams ? { ...stat.subLabelParams } : undefined,
+    })),
+    performance: cloneAnalysisPerformance(data.performance),
+    distribution: data.distribution.map(slice => ({ ...slice })),
+    riskMetrics: data.riskMetrics.map(metric => ({ ...metric })),
+    predictions: data.predictions.map(prediction => ({ ...prediction })),
+    trades: data.trades.map(trade => ({ ...trade })),
+    reports: data.reports.map(report => ({ ...report })),
+});
+
 const advancePerformanceSeries = (
     series: PortfolioPerformancePoint[],
     amplitude: number,
@@ -266,6 +303,16 @@ const mutatePortfolio = (
     return clonePortfolio(base);
 };
 
+const mutateAnalysis = (
+    mutator: (draft: AnalysisPageData) => void,
+): AnalysisPageData => {
+    const base = cloneAnalysis(ensureAnalysis());
+    mutator(base);
+    base.lastUpdated = new Date().toISOString();
+    db.analysis = base;
+    return cloneAnalysis(base);
+};
+
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
 const updateStatTrend = (stat: PortfolioOverviewStat | undefined, variance: number) => {
@@ -289,6 +336,169 @@ const recordPortfolioActivity = (
         metadata,
     });
     draft.activities = draft.activities.slice(0, 25);
+};
+
+const analysisTradeConfigs = [
+    { symbol: 'BTC/USDT', price: 45200, pricePrecision: 2, amountMin: 0.15, amountMax: 0.8, amountPrecision: 2 },
+    { symbol: 'ETH/USDT', price: 2760, pricePrecision: 2, amountMin: 1.2, amountMax: 6.5, amountPrecision: 2 },
+    { symbol: 'SOL/USDT', price: 105, pricePrecision: 2, amountMin: 120, amountMax: 420, amountPrecision: 0 },
+    { symbol: 'XAU/USDT', price: 2035, pricePrecision: 2, amountMin: 1.1, amountMax: 3.4, amountPrecision: 2 },
+    { symbol: 'ADA/USDT', price: 0.58, pricePrecision: 4, amountMin: 1400, amountMax: 3200, amountPrecision: 0 },
+] as const;
+
+const analysisRangeVariance: Record<AnalysisTimeRange, { equity: number; pnl: number; drawdown: number }> = {
+    '1W': { equity: 1.8, pnl: 420, drawdown: 1.2 },
+    '1M': { equity: 1.4, pnl: 520, drawdown: 1.1 },
+    '3M': { equity: 1.2, pnl: 640, drawdown: 0.9 },
+    '6M': { equity: 1.0, pnl: 760, drawdown: 0.8 },
+    '1Y': { equity: 0.8, pnl: 920, drawdown: 0.7 },
+};
+
+const advanceAnalysisSeries = (
+    series: AnalysisPerformancePoint[],
+    variance: { equity: number; pnl: number; drawdown: number },
+): AnalysisPerformancePoint[] => {
+    if (series.length === 0) {
+        return series;
+    }
+
+    const last = series[series.length - 1];
+    const equityDeltaPercent = (Math.random() - 0.45) * variance.equity;
+    const nextEquity = Math.max(50000, last.equity * (1 + equityDeltaPercent / 100));
+    const pnlDelta = (Math.random() - 0.4) * variance.pnl;
+    const drawdownDelta = (Math.random() - 0.55) * variance.drawdown;
+
+    const nextPoint: AnalysisPerformancePoint = {
+        timestamp: new Date().toISOString(),
+        equity: Number(nextEquity.toFixed(2)),
+        pnl: Number((last.pnl + pnlDelta).toFixed(2)),
+        drawdown: Number(clamp(last.drawdown + drawdownDelta, 0.5, 25).toFixed(2)),
+    };
+
+    return [...series.slice(1), nextPoint];
+};
+
+const jitterDistribution = (distribution: AnalysisDistributionSlice[]) => {
+    distribution.forEach(slice => {
+        const delta = (Math.random() - 0.5) * 4.2;
+        slice.value = clamp(slice.value + delta, 0, 100);
+    });
+
+    const total = distribution.reduce((sum, slice) => sum + slice.value, 0) || 1;
+    distribution.forEach(slice => {
+        slice.value = Number(((slice.value / total) * 100).toFixed(1));
+    });
+};
+
+const adjustAnalysisStat = (stat: AnalysisStat) => {
+    const decimals = stat.decimals ?? 2;
+    switch (stat.format) {
+        case 'currency': {
+            const delta = (Math.random() - 0.5) * (stat.value * 0.015 + 900);
+            stat.value = Number(Math.max(0, stat.value + delta).toFixed(decimals));
+            break;
+        }
+        case 'percent': {
+            const delta = (Math.random() - 0.5) * 2.4;
+            stat.value = Number(clamp(stat.value + delta, 0, 100).toFixed(decimals));
+            break;
+        }
+        case 'ratio': {
+            const delta = (Math.random() - 0.5) * 0.25;
+            stat.value = Number(Math.max(0.5, stat.value + delta).toFixed(decimals));
+            break;
+        }
+        default: {
+            const delta = (Math.random() - 0.5) * 0.18;
+            stat.value = Number(Math.max(0, stat.value + delta).toFixed(decimals));
+            break;
+        }
+    }
+
+    if (stat.change !== undefined) {
+        const decimalsChange = stat.changeDecimals ?? 1;
+        const variance = stat.changeFormat === 'plain' ? 0.3 : 1.1;
+        stat.change = Number((stat.change + (Math.random() - 0.5) * variance).toFixed(decimalsChange));
+        stat.changeDirection = (stat.change ?? 0) >= 0 ? 'up' : 'down';
+    }
+};
+
+const adjustRiskMetric = (metric: AnalysisRiskMetric) => {
+    const decimals = metric.decimals ?? 2;
+    switch (metric.format) {
+        case 'currency': {
+            const delta = (Math.random() - 0.5) * 160;
+            metric.value = Number(Math.max(0, metric.value + delta).toFixed(decimals));
+            break;
+        }
+        case 'percent': {
+            const delta = (Math.random() - 0.5) * 1.3;
+            metric.value = Number(clamp(metric.value + delta, 0, 100).toFixed(decimals));
+            break;
+        }
+        case 'ratio': {
+            const delta = (Math.random() - 0.5) * 0.2;
+            metric.value = Number(Math.max(0.5, metric.value + delta).toFixed(decimals));
+            break;
+        }
+        default: {
+            const delta = (Math.random() - 0.5) * 0.2;
+            metric.value = Number(Math.max(0, metric.value + delta).toFixed(decimals));
+            break;
+        }
+    }
+
+    if (metric.change !== undefined) {
+        const decimalsChange = metric.changeDecimals ?? 1;
+        const variance = metric.changeFormat === 'plain' ? 0.25 : 0.8;
+        metric.change = Number((metric.change + (Math.random() - 0.5) * variance).toFixed(decimalsChange));
+        metric.changeDirection = (metric.change ?? 0) >= 0 ? 'up' : 'down';
+    }
+};
+
+const adjustSmartPrediction = (prediction: SmartPrediction) => {
+    const numericTarget = parseFloat(prediction.targetPrice.replace(/[^0-9.]/g, ''));
+    if (!Number.isNaN(numericTarget)) {
+        const deltaPercent = (Math.random() - 0.45) * 2.6;
+        const nextTarget = Math.max(0, numericTarget * (1 + deltaPercent / 100));
+        const prefix = prediction.targetPrice.trim().startsWith('$') ? '$' : '';
+        const decimals = nextTarget >= 10 ? 2 : 4;
+        prediction.targetPrice = `${prefix}${nextTarget.toFixed(decimals)}`;
+    }
+    const confidenceShift = Math.round((Math.random() - 0.4) * 7);
+    prediction.confidence = clamp(prediction.confidence + confidenceShift, 45, 98);
+};
+
+const createAnalysisTrade = (): PerformanceTrade => {
+    const config = analysisTradeConfigs[Math.floor(Math.random() * analysisTradeConfigs.length)];
+    const type: 'BUY' | 'SELL' = Math.random() > 0.5 ? 'BUY' : 'SELL';
+    const amount = Number(
+        clamp(
+            config.amountMin + Math.random() * (config.amountMax - config.amountMin),
+            config.amountMin,
+            config.amountMax,
+        ).toFixed(config.amountPrecision),
+    );
+    const entryBase = config.price * (0.97 + Math.random() * 0.06);
+    const entryPrice = Number(entryBase.toFixed(config.pricePrecision));
+    const exitMultiplier = 1 + (Math.random() - 0.45) * 0.07;
+    const exitPrice = Number((entryPrice * exitMultiplier).toFixed(config.pricePrecision));
+    const pnlValue = (type === 'BUY' ? exitPrice - entryPrice : entryPrice - exitPrice) * amount;
+    const pnlPercentValue = (type === 'BUY'
+        ? ((exitPrice - entryPrice) / entryPrice) * 100
+        : ((entryPrice - exitPrice) / entryPrice) * 100);
+
+    return {
+        id: `analysis-trade-${Math.random().toString(36).slice(2, 10)}`,
+        date: new Date().toISOString(),
+        symbol: config.symbol,
+        type,
+        amount,
+        entryPrice,
+        exitPrice,
+        pnl: Number(pnlValue.toFixed(2)),
+        pnlPercent: Number(pnlPercentValue.toFixed(2)),
+    };
 };
 
 const findAdjustmentAsset = (draft: PortfolioPageData, excludeId: string): PortfolioAsset | undefined => {
@@ -961,16 +1171,65 @@ export const refreshPortfolioSnapshot = (): Promise<PortfolioPageData> =>
         320,
     );
 
-export const fetchAnalysisPageData = (): Promise<{ stats: AnalysisStat[], predictions: SmartPrediction[], trades: PerformanceTrade[] }> => {
-     return new Promise(resolve => {
-        setTimeout(() => {
-            resolve({
-                stats: db.analysisStats,
-                predictions: db.smartPredictions,
-                trades: db.performanceTrades,
+export const fetchAnalysisPageData = (): Promise<AnalysisPageData> =>
+    withLatency(cloneAnalysis(ensureAnalysis()), 500);
+
+export const setAnalysisActiveRange = (
+    range: AnalysisTimeRange,
+): Promise<AnalysisPageData> =>
+    withLatency(
+        mutateAnalysis(draft => {
+            if (draft.performance[range]) {
+                draft.activeRange = range;
+            }
+        }),
+        260,
+    );
+
+export const refreshAnalysisSnapshot = (): Promise<AnalysisPageData> =>
+    withLatency(
+        mutateAnalysis(draft => {
+            (Object.keys(draft.performance) as AnalysisTimeRange[]).forEach(range => {
+                const variance = analysisRangeVariance[range];
+                draft.performance[range] = advanceAnalysisSeries(draft.performance[range], variance);
             });
-        }, FAKE_LATENCY);
+
+            draft.stats.forEach(adjustAnalysisStat);
+            jitterDistribution(draft.distribution);
+            draft.riskMetrics.forEach(adjustRiskMetric);
+            draft.predictions.forEach(adjustSmartPrediction);
+
+            draft.trades = [createAnalysisTrade(), ...draft.trades].slice(0, 8);
+        }),
+        420,
+    );
+
+export const regenerateAnalysisPrediction = (
+    predictionId: string,
+): Promise<AnalysisPageData> =>
+    withLatency(
+        mutateAnalysis(draft => {
+            const prediction = draft.predictions.find(item => item.id === predictionId);
+            if (!prediction) {
+                return;
+            }
+            adjustSmartPrediction(prediction);
+        }),
+        480,
+    );
+
+export const generateAnalysisReport = (
+    reportId: string,
+): Promise<{ data: AnalysisPageData; downloadUrl: string }> => {
+    const updated = mutateAnalysis(draft => {
+        const report = draft.reports.find(item => item.id === reportId);
+        if (report) {
+            report.lastGeneratedAt = new Date().toISOString();
+        }
     });
+
+    const downloadUrl = `https://titan.ai/reports/${reportId}-${Date.now()}`;
+    return withLatency({ data: updated, downloadUrl }, 650);
 };
 
 export const fetchNewsPageData = (): Promise<{ articles: NewsArticle[], events: EconomicEvent[] }> => {
