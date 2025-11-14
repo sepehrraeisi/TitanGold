@@ -47,6 +47,24 @@ export interface User {
     password?: string; // For mock auth
 }
 
+export interface Asset {
+    id: string;
+    name: string;
+    symbol: string;
+    amount: number;
+    currentValue: number;
+    change24h: number;
+}
+
+export interface Trade {
+    id: string;
+    pair: string;
+    side: 'buy' | 'sell';
+    price: number;
+    amount: number;
+    time: string;
+}
+
 export interface AIPrediction {
   id: string;
   aiAgent: string;
@@ -351,4 +369,49 @@ export interface Workflow {
     trigger: WorkflowTrigger;
     conditions: WorkflowCondition[];
     actions: WorkflowAction[];
+}
+
+export type AutopilotMode = 'balanced' | 'aggressive' | 'scalping' | 'capital_preservation';
+
+export type AutopilotRiskLevel = 'conservative' | 'balanced' | 'aggressive';
+
+export interface AutopilotGoal {
+    startCapital: number;
+    targetCapital: number;
+    progress: number;
+    etaMinutes: number;
+    lastSyncSeconds: number;
+    activeTrades: number;
+    maxConcurrentTrades: number;
+    successRate: number;
+    agentsOnline: number;
+    agentsTraining: number;
+    agentsTotal: number;
+    mode: 'auto' | 'paused';
+    nextActionKey: string;
+}
+
+export interface AutopilotMetrics {
+    totalPerformance: number;
+    winRate: number;
+    totalTrades: number;
+    todayProfit: number;
+}
+
+export interface AutopilotState {
+    isActive: boolean;
+    operatingMode: AutopilotMode;
+    tradingBudget: number;
+    riskLevel: AutopilotRiskLevel;
+    goal: AutopilotGoal;
+    metrics: AutopilotMetrics;
+    statusMessageKey: string;
+    lastUpdated: string;
+}
+
+export type AutopilotQuickAction = 'ai_decisions' | 'performance_report' | 'export_settings';
+
+export interface AutopilotQuickActionResult {
+    state: AutopilotState;
+    actionKey: string;
 }

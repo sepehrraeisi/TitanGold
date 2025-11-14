@@ -1,9 +1,39 @@
-import type { User, FavoriteItem, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, WalletAsset, WalletTransaction, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow } from '../types.ts';
+import type { User, FavoriteItem, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, WalletAsset, WalletTransaction, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState } from '../types.ts';
 
 const users: User[] = [
     { id: '1', name: 'Sepehr', email: 'sepehr@titan.ai', role: 'Admin', password: 'password123' },
     { id: '2', name: 'Trader One', email: 'trader.one@titan.ai', role: 'Trader', password: 'password123' },
 ];
+
+const autopilotState: AutopilotState = {
+    isActive: true,
+    operatingMode: 'balanced',
+    tradingBudget: 50000,
+    riskLevel: 'balanced',
+    goal: {
+        startCapital: 100,
+        targetCapital: 500,
+        progress: 72,
+        etaMinutes: 204,
+        lastSyncSeconds: 28,
+        activeTrades: 12,
+        maxConcurrentTrades: 20,
+        successRate: 91,
+        agentsOnline: 13,
+        agentsTraining: 2,
+        agentsTotal: 15,
+        mode: 'auto',
+        nextActionKey: 'autopilot_next_action_desc',
+    },
+    metrics: {
+        totalPerformance: 7.0,
+        winRate: 78.2,
+        totalTrades: 156,
+        todayProfit: 2847,
+    },
+    statusMessageKey: 'autopilot_status_running',
+    lastUpdated: new Date().toISOString(),
+};
 
 const favorites: FavoriteItem[] = [
     { id: 'bitcoin', symbol: 'BTCUSDT', name: 'Bitcoin', price: 68543.21, change24h: 2.45, volume: '45.2B', hasAlert: true },
@@ -268,6 +298,7 @@ const automationSettings = {
 
 export const _data = {
     users,
+    autopilotState,
     favorites,
     allAssets,
     marketMovers,

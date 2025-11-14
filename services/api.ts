@@ -1,12 +1,48 @@
 import { _data } from './_data.ts';
-import type { User, FavoriteItem, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow } from '../types.ts';
+import type { User, FavoriteItem, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, AutopilotMode, AutopilotRiskLevel, AutopilotQuickAction, AutopilotQuickActionResult } from '../types.ts';
 
 // --- SIMULATED BACKEND ---
 
 const FAKE_LATENCY = 800;
 
 // Simulate a database
-let db = { ..._data };
+let db: typeof _data = { ..._data };
+
+const ensureAutopilotState = (): AutopilotState => {
+    if (!db.autopilotState) {
+        throw new Error('Autopilot state not initialized');
+    }
+    return db.autopilotState;
+};
+
+const cloneAutopilotState = (state: AutopilotState): AutopilotState => ({
+    ...state,
+    goal: { ...state.goal },
+    metrics: { ...state.metrics },
+});
+
+const mutateAutopilotState = (
+    mutator: (draft: AutopilotState) => void,
+    statusKey?: string,
+    nextActionKey?: string
+): AutopilotState => {
+    const base = cloneAutopilotState(ensureAutopilotState());
+    mutator(base);
+    base.lastUpdated = new Date().toISOString();
+    if (statusKey) {
+        base.statusMessageKey = statusKey;
+    }
+    if (nextActionKey) {
+        base.goal.nextActionKey = nextActionKey;
+    }
+    db.autopilotState = base;
+    return cloneAutopilotState(base);
+};
+
+const withLatency = <T>(value: T, delay = FAKE_LATENCY): Promise<T> =>
+    new Promise(resolve => {
+        setTimeout(() => resolve(value), delay);
+    });
 
 // --- API FUNCTIONS ---
 
@@ -44,6 +80,121 @@ export const fetchDashboardData = (): Promise<any> => {
         setTimeout(() => resolve({}), FAKE_LATENCY);
     });
 }
+
+export const fetchAutopilotState = (): Promise<AutopilotState> =>
+    withLatency(cloneAutopilotState(ensureAutopilotState()));
+
+export const setAutopilotActive = (isActive: boolean): Promise<AutopilotState> => {
+    const statusKey = isActive ? 'autopilot_status_running' : 'autopilot_status_paused';
+    const nextActionKey = isActive ? 'autopilot_next_action_resume' : 'autopilot_next_action_recalibrate';
+    const updated = mutateAutopilotState(draft => {
+        draft.isActive = isActive;
+        draft.goal.mode = isActive ? 'auto' : 'paused';
+        draft.goal.lastSyncSeconds = 5;
+        if (isActive) {
+            draft.goal.activeTrades = Math.min(
+                draft.goal.maxConcurrentTrades,
+                Math.max(4, draft.goal.activeTrades || Math.ceil(draft.goal.maxConcurrentTrades / 2))
+            );
+        } else {
+            draft.goal.activeTrades = 0;
+        }
+        draft.goal.progress = Math.min(100, draft.goal.progress + (isActive ? 1.5 : 0));
+    }, statusKey, nextActionKey);
+
+    return withLatency(updated, 500);
+};
+
+export const updateAutopilotMode = (mode: AutopilotMode): Promise<AutopilotState> => {
+    const updated = mutateAutopilotState(draft => {
+        draft.operatingMode = mode;
+        draft.goal.lastSyncSeconds = 8;
+    }, 'autopilot_status_running', 'autopilot_next_action_recalibrate');
+
+    return withLatency(updated, 450);
+};
+
+export const updateAutopilotBudget = (budget: number): Promise<AutopilotState> => {
+    const updated = mutateAutopilotState(draft => {
+        draft.tradingBudget = budget;
+        draft.goal.lastSyncSeconds = 4;
+    }, 'autopilot_status_running');
+
+    return withLatency(updated, 450);
+};
+
+export const updateAutopilotRiskLevel = (riskLevel: AutopilotRiskLevel): Promise<AutopilotState> => {
+    const updated = mutateAutopilotState(draft => {
+        draft.riskLevel = riskLevel;
+        draft.goal.lastSyncSeconds = 6;
+    }, 'autopilot_status_running', 'autopilot_next_action_recalibrate');
+
+    return withLatency(updated, 450);
+};
+
+export const startAutopilotGoal = (startCapital: number, targetCapital: number): Promise<AutopilotState> => {
+    const updated = mutateAutopilotState(draft => {
+        draft.goal.startCapital = startCapital;
+        draft.goal.targetCapital = targetCapital;
+        draft.goal.progress = 0;
+        draft.goal.activeTrades = 0;
+        draft.goal.etaMinutes = Math.max(45, Math.round((targetCapital - startCapital) * 1.8));
+        draft.goal.lastSyncSeconds = 3;
+    }, 'autopilot_status_running', 'autopilot_next_action_resume');
+
+    return withLatency(updated, 650);
+};
+
+export const emergencyStopAutopilot = (): Promise<AutopilotState> => {
+    const updated = mutateAutopilotState(draft => {
+        draft.isActive = false;
+        draft.goal.mode = 'paused';
+        draft.goal.activeTrades = 0;
+        draft.goal.lastSyncSeconds = 2;
+    }, 'autopilot_status_emergency', 'autopilot_next_action_recalibrate');
+
+    return withLatency(updated, 500);
+};
+
+export const temporaryPauseAutopilot = (): Promise<AutopilotState> => {
+    const updated = mutateAutopilotState(draft => {
+        draft.isActive = false;
+        draft.goal.mode = 'paused';
+        draft.goal.lastSyncSeconds = 2;
+    }, 'autopilot_status_temp_pause', 'autopilot_next_action_recalibrate');
+
+    return withLatency(updated, 400);
+};
+
+export const resetAutopilotSystem = (): Promise<AutopilotState> => {
+    const updated = mutateAutopilotState(draft => {
+        draft.isActive = true;
+        draft.goal.mode = 'auto';
+        draft.goal.progress = 0;
+        draft.goal.activeTrades = Math.min(draft.goal.maxConcurrentTrades, 6);
+        draft.goal.lastSyncSeconds = 5;
+        draft.goal.etaMinutes = 240;
+        draft.metrics.totalPerformance = 0.5;
+        draft.metrics.todayProfit = 0;
+    }, 'autopilot_status_reset', 'autopilot_next_action_resume');
+
+    return withLatency(updated, 600);
+};
+
+export const runAutopilotQuickAction = (action: AutopilotQuickAction): Promise<AutopilotQuickActionResult> => {
+    const actionMap: Record<AutopilotQuickAction, { actionKey: string; nextActionKey: string }> = {
+        ai_decisions: { actionKey: 'autopilot_action_ai_decisions', nextActionKey: 'autopilot_next_action_review' },
+        performance_report: { actionKey: 'autopilot_action_performance_report', nextActionKey: 'autopilot_next_action_review' },
+        export_settings: { actionKey: 'autopilot_action_export_settings', nextActionKey: 'autopilot_next_action_recalibrate' },
+    };
+
+    const mapping = actionMap[action];
+    const state = mutateAutopilotState(draft => {
+        draft.goal.lastSyncSeconds = 1;
+    }, 'autopilot_status_running', mapping.nextActionKey);
+
+    return withLatency({ state, actionKey: mapping.actionKey }, 500);
+};
 
 export const fetchFavoritesPageData = (): Promise<{ favorites: FavoriteItem[], gainers: any[], losers: any[], trending: any[] }> => {
     return new Promise(resolve => {
