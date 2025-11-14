@@ -1,4 +1,4 @@
-import type { User, FavoriteItem, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, WalletAsset, WalletTransaction, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, TradingDashboardData, TradingTimeRange, ChartPoint } from '../types.ts';
+import type { User, FavoriteItem, FavoriteAlert, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, WalletAsset, WalletTransaction, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, TradingDashboardData, TradingTimeRange, ChartPoint } from '../types.ts';
 
 const users: User[] = [
     { id: '1', name: 'Sepehr', email: 'sepehr@titan.ai', role: 'Admin', password: 'password123' },
@@ -38,6 +38,17 @@ const autopilotState: AutopilotState = {
 const favorites: FavoriteItem[] = [
     { id: 'bitcoin', symbol: 'BTCUSDT', name: 'Bitcoin', price: 68543.21, change24h: 2.45, volume: '45.2B', hasAlert: true },
     { id: 'ethereum', symbol: 'ETHUSDT', name: 'Ethereum', price: 3498.76, change24h: -1.23, volume: '22.8B', hasAlert: false },
+];
+
+const favoriteAlerts: FavoriteAlert[] = [
+    {
+        id: 'alert-bitcoin-above-70k',
+        favoriteId: 'bitcoin',
+        condition: 'above',
+        targetPrice: 70000,
+        createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+        isActive: true,
+    }
 ];
 
 const allAssets: CryptoAsset[] = [
@@ -331,6 +342,7 @@ export const _data = {
     users,
     autopilotState,
     favorites,
+    favoriteAlerts,
     allAssets,
     marketMovers,
     strategies,

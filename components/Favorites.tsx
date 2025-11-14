@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
-import { FavoriteItem, MarketMover, CryptoAsset } from '../types.ts';
+import { FavoriteItem, MarketMover, CryptoAsset, FavoritesPageData, FavoriteAlertInput } from '../types.ts';
 import AddFavoriteModal from './modals/AddFavoriteModal.tsx';
 import SetAlertModal from './modals/SetAlertModal.tsx';
 import ActionMenu from './favorites/ActionMenu.tsx';
@@ -73,38 +73,65 @@ const MoversList: React.FC<{ title: string; data: MarketMover[]; isGainers: bool
 const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActiveView}) => {
     const { t } = useLanguage();
     const [isLoading, setIsLoading] = useState(true);
-    const [data, setData] = useState<{
-        favorites: FavoriteItem[];
-        gainers: MarketMover[];
-        losers: MarketMover[];
-        trending: MarketMover[];
-    } | null>(null);
+    const [data, setData] = useState<FavoritesPageData | null>(null);
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
     const [selectedAsset, setSelectedAsset] = useState<FavoriteItem | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [status, setStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
-            const favoritesData = await api.fetchFavoritesPageData();
-            setData(favoritesData);
-            setIsLoading(false);
+            try {
+                const favoritesData = await api.fetchFavoritesPageData();
+                setData(favoritesData);
+            } catch (error) {
+                console.error('Failed to load favorites', error);
+            } finally {
+                setIsLoading(false);
+            }
         };
         fetchData();
     }, []);
+
+    useEffect(() => {
+        if (!status) return;
+        const timeout = setTimeout(() => setStatus(null), 4000);
+        return () => clearTimeout(timeout);
+    }, [status]);
     
     const handleAddFavorite = async (asset: CryptoAsset) => {
-        const newFavorites = await api.addFavorite(asset.id);
-        if (newFavorites && data) {
-            setData({ ...data, favorites: newFavorites });
+        try {
+            const updated = await api.addFavorite(asset.id);
+            setData(updated);
+            setStatus({ type: 'success', text: t('favorite_added', { asset: asset.symbol }) });
+        } catch (error) {
+            console.error('Failed to add favorite', error);
+            setStatus({ type: 'error', text: t('error_occurred') });
         }
     };
-    
-    const handleRemoveFavorite = async (itemId: string) => {
-        const newFavorites = await api.removeFavorite(itemId);
-        if (newFavorites && data) {
-            setData({ ...data, favorites: newFavorites });
+
+    const handleRemoveFavorite = async (item: FavoriteItem) => {
+        try {
+            const updated = await api.removeFavorite(item.id);
+            setData(updated);
+            setStatus({ type: 'success', text: t('favorite_removed', { asset: item.symbol }) });
+        } catch (error) {
+            console.error('Failed to remove favorite', error);
+            setStatus({ type: 'error', text: t('error_occurred') });
+        }
+    };
+
+    const handleCreateAlert = async (favorite: FavoriteItem, payload: FavoriteAlertInput) => {
+        try {
+            const updated = await api.createFavoriteAlert(favorite.id, payload);
+            setData(updated);
+            setStatus({ type: 'success', text: t('price_alert_saved', { asset: favorite.symbol }) });
+        } catch (error) {
+            console.error('Failed to create alert', error);
+            setStatus({ type: 'error', text: t('error_occurred') });
+            throw error;
         }
     };
 
@@ -126,8 +153,21 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
         return <div className="text-center p-10 text-red-500">{t('error_occurred')}</div>
     }
 
+    const summary = data.summary;
+
     return (
         <div className="space-y-6">
+             {status && (
+                <div
+                    className={`rounded-lg border px-4 py-3 text-sm ${
+                        status.type === 'success'
+                            ? 'border-green-500/40 bg-green-500/10 text-green-300'
+                            : 'border-red-500/40 bg-red-500/10 text-red-300'
+                    }`}
+                >
+                    {status.text}
+                </div>
+            )}
              <div className="flex flex-wrap justify-between items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-white">{t('favorites_list')}</h1>
@@ -140,10 +180,10 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <SummaryCard title={t('total_items')} value={data.favorites.length} icon={<svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>} />
-                <SummaryCard title={t('active_alerts')} value={data.favorites.filter(i => i.hasAlert).length} icon={<svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>} />
-                <SummaryCard title={t('gainers')} value={data.favorites.filter(i => i.change24h > 0).length} icon={<svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>} />
-                <SummaryCard title={t('decliners')} value={data.favorites.filter(i => i.change24h < 0).length} icon={<svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" /></svg>} />
+                <SummaryCard title={t('total_items')} value={summary.totalItems} icon={<svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>} />
+                <SummaryCard title={t('active_alerts')} value={summary.activeAlerts} icon={<svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>} />
+                <SummaryCard title={t('gainers')} value={summary.gainers} icon={<svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>} />
+                <SummaryCard title={t('decliners')} value={summary.decliners} icon={<svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" /></svg>} />
             </div>
 
             <div className="bg-[#1c1e2f] border border-gray-700/50 rounded-lg">
@@ -181,11 +221,11 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                                 <td className="px-6 py-4">{item.volume}</td>
                                 <td className="px-6 py-4">{item.hasAlert && <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" /></svg>}</td>
                                 <td className="px-6 py-4 text-right">
-                                    <ActionMenu 
-                                        item={item} 
-                                        onSetAlert={() => handleSetAlert(item)} 
+                                    <ActionMenu
+                                        item={item}
+                                        onSetAlert={() => handleSetAlert(item)}
                                         onTrade={() => setActiveView('trades')}
-                                        onRemove={() => handleRemoveFavorite(item.id)}
+                                        onRemove={() => handleRemoveFavorite(item)}
                                     />
                                 </td>
                             </tr>
@@ -229,8 +269,24 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                 </div>
             </div>
             
-            {isAddModalOpen && <AddFavoriteModal onClose={() => setIsAddModalOpen(false)} onAddFavorite={handleAddFavorite} existingFavorites={data.favorites} />}
-            {isAlertModalOpen && selectedAsset && <SetAlertModal onClose={() => setIsAlertModalOpen(false)} asset={selectedAsset} />}
+            {isAddModalOpen && data && (
+                <AddFavoriteModal
+                    onClose={() => setIsAddModalOpen(false)}
+                    onAddFavorite={handleAddFavorite}
+                    existingFavorites={data.favorites}
+                    availableAssets={data.catalog}
+                />
+            )}
+            {isAlertModalOpen && selectedAsset && (
+                <SetAlertModal
+                    onClose={() => {
+                        setIsAlertModalOpen(false);
+                        setSelectedAsset(null);
+                    }}
+                    asset={selectedAsset}
+                    onCreateAlert={payload => handleCreateAlert(selectedAsset, payload)}
+                />
+            )}
         </div>
     );
 };

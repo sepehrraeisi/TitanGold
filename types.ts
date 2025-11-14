@@ -130,6 +130,40 @@ export interface FavoriteItem {
   hasAlert: boolean;
 }
 
+export type FavoriteAlertCondition = 'above' | 'below';
+
+export interface FavoriteAlert {
+  id: string;
+  favoriteId: string;
+  condition: FavoriteAlertCondition;
+  targetPrice: number;
+  createdAt: string;
+  isActive: boolean;
+}
+
+export interface FavoriteAlertInput {
+  condition: FavoriteAlertCondition;
+  targetPrice: number;
+}
+
+export interface FavoritesSummary {
+  totalItems: number;
+  activeAlerts: number;
+  gainers: number;
+  decliners: number;
+}
+
+export interface FavoritesPageData {
+  favorites: FavoriteItem[];
+  gainers: MarketMover[];
+  losers: MarketMover[];
+  trending: MarketMover[];
+  catalog: CryptoAsset[];
+  alerts: FavoriteAlert[];
+  summary: FavoritesSummary;
+  lastUpdated: string;
+}
+
 export interface MarketMover {
   id: string;
   symbol: string;

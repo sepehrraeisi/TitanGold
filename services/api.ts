@@ -1,5 +1,5 @@
 import { _data } from './_data.ts';
-import type { User, FavoriteItem, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, AutopilotMode, AutopilotRiskLevel, AutopilotQuickAction, AutopilotQuickActionResult, TradingDashboardData, TradingKPI, TradingTimeRange, ChartPoint, Trade } from '../types.ts';
+import type { User, FavoriteItem, FavoriteAlert, FavoriteAlertInput, FavoritesPageData, FavoritesSummary, CryptoAsset, MarketMover, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, AutopilotMode, AutopilotRiskLevel, AutopilotQuickAction, AutopilotQuickActionResult, TradingDashboardData, TradingKPI, TradingTimeRange, ChartPoint, Trade } from '../types.ts';
 
 // --- SIMULATED BACKEND ---
 
@@ -76,6 +76,85 @@ const withLatency = <T>(value: T, delay = FAKE_LATENCY): Promise<T> =>
     new Promise(resolve => {
         setTimeout(() => resolve(value), delay);
     });
+
+const ensureFavoriteCollections = () => {
+    if (!db.favoriteAlerts) {
+        db.favoriteAlerts = [];
+    }
+    if (!db.favorites) {
+        db.favorites = [];
+    }
+};
+
+const cloneFavorites = (favorites: FavoriteItem[] = []): FavoriteItem[] =>
+    favorites.map(item => ({ ...item }));
+
+const cloneFavoriteAlerts = (alerts: FavoriteAlert[] = []): FavoriteAlert[] =>
+    alerts.map(alert => ({ ...alert }));
+
+const cloneMovers = (items: MarketMover[] = []): MarketMover[] =>
+    items.map(item => ({ ...item }));
+
+const cloneAssets = (assets: CryptoAsset[] = []): CryptoAsset[] =>
+    assets.map(asset => ({ ...asset }));
+
+const syncFavoriteAlertFlags = (favorites: FavoriteItem[], alerts: FavoriteAlert[]) => {
+    const activeMap = new Set(
+        alerts.filter(alert => alert.isActive).map(alert => alert.favoriteId)
+    );
+    favorites.forEach(favorite => {
+        favorite.hasAlert = activeMap.has(favorite.id);
+    });
+};
+
+const summarizeFavorites = (favorites: FavoriteItem[], alerts: FavoriteAlert[]): FavoritesSummary => {
+    const activeAlertIds = new Set(
+        alerts.filter(alert => alert.isActive).map(alert => alert.favoriteId)
+    );
+
+    return {
+        totalItems: favorites.length,
+        activeAlerts: favorites.filter(item => activeAlertIds.has(item.id)).length,
+        gainers: favorites.filter(item => item.change24h > 0).length,
+        decliners: favorites.filter(item => item.change24h < 0).length,
+    };
+};
+
+const buildFavoritesPage = (): FavoritesPageData => {
+    ensureFavoriteCollections();
+    const favorites = cloneFavorites(db.favorites);
+    const alerts = cloneFavoriteAlerts(db.favoriteAlerts);
+    syncFavoriteAlertFlags(favorites, alerts);
+
+    return {
+        favorites,
+        alerts,
+        gainers: cloneMovers(db.marketMovers?.gainers ?? []),
+        losers: cloneMovers(db.marketMovers?.losers ?? []),
+        trending: cloneMovers(db.marketMovers?.trending ?? []),
+        catalog: cloneAssets(db.allAssets ?? []),
+        summary: summarizeFavorites(favorites, alerts),
+        lastUpdated: new Date().toISOString(),
+    };
+};
+
+const mutateFavoritesState = (
+    mutator: (draft: { favorites: FavoriteItem[]; alerts: FavoriteAlert[] }) => void,
+): FavoritesPageData => {
+    ensureFavoriteCollections();
+    const draft = {
+        favorites: cloneFavorites(db.favorites),
+        alerts: cloneFavoriteAlerts(db.favoriteAlerts),
+    };
+
+    mutator(draft);
+    syncFavoriteAlertFlags(draft.favorites, draft.alerts);
+
+    db.favorites = cloneFavorites(draft.favorites);
+    db.favoriteAlerts = cloneFavoriteAlerts(draft.alerts);
+
+    return buildFavoritesPage();
+};
 
 // --- API FUNCTIONS ---
 
@@ -291,48 +370,72 @@ export const runAutopilotQuickAction = (action: AutopilotQuickAction): Promise<A
     return withLatency({ state, actionKey: mapping.actionKey }, 500);
 };
 
-export const fetchFavoritesPageData = (): Promise<{ favorites: FavoriteItem[], gainers: any[], losers: any[], trending: any[] }> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve({
-                favorites: db.favorites,
-                gainers: db.marketMovers.gainers,
-                losers: db.marketMovers.losers,
-                trending: db.marketMovers.trending,
-            });
-        }, FAKE_LATENCY);
-    });
-};
+export const fetchFavoritesPageData = (): Promise<FavoritesPageData> =>
+    withLatency(buildFavoritesPage(), 500);
 
-export const addFavorite = (assetId: string): Promise<FavoriteItem[]> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const assetToAdd = _data.allAssets.find(a => a.id === assetId);
-            if (assetToAdd && !db.favorites.some(f => f.id === assetId)) {
-                const newFavorite: FavoriteItem = {
-                    id: assetToAdd.id,
-                    symbol: assetToAdd.symbol,
-                    name: assetToAdd.name,
-                    price: 100 + Math.random() * 1000,
-                    change24h: (Math.random() - 0.5) * 10,
-                    volume: `${(Math.random() * 100).toFixed(2)}M`,
-                    hasAlert: false
-                };
-                db.favorites.unshift(newFavorite);
+export const addFavorite = (assetId: string): Promise<FavoritesPageData> =>
+    withLatency(mutateFavoritesState(draft => {
+        const assetToAdd = db.allAssets?.find(asset => asset.id === assetId)
+            ?? _data.allAssets.find(asset => asset.id === assetId);
+        if (!assetToAdd) {
+            return;
+        }
+        if (draft.favorites.some(item => item.id === assetId)) {
+            return;
+        }
+        const newFavorite: FavoriteItem = {
+            id: assetToAdd.id,
+            symbol: assetToAdd.symbol,
+            name: assetToAdd.name,
+            price: Number((100 + Math.random() * 1000).toFixed(2)),
+            change24h: parseFloat(((Math.random() - 0.5) * 12).toFixed(2)),
+            volume: `${(Math.random() * 150 + 10).toFixed(2)}M`,
+            hasAlert: false,
+        };
+        draft.favorites.unshift(newFavorite);
+    }), 300);
+
+export const removeFavorite = (itemId: string): Promise<FavoritesPageData> =>
+    withLatency(mutateFavoritesState(draft => {
+        draft.favorites = draft.favorites.filter(item => item.id !== itemId);
+        draft.alerts = draft.alerts.filter(alert => alert.favoriteId !== itemId);
+    }), 300);
+
+export const createFavoriteAlert = (
+    favoriteId: string,
+    input: FavoriteAlertInput,
+): Promise<FavoritesPageData> =>
+    withLatency(mutateFavoritesState(draft => {
+        const target = draft.favorites.find(item => item.id === favoriteId);
+        if (!target) {
+            return;
+        }
+
+        draft.alerts.forEach(alert => {
+            if (alert.favoriteId === favoriteId) {
+                alert.isActive = false;
             }
-            resolve([...db.favorites]);
-        }, 300);
-    });
-};
+        });
 
-export const removeFavorite = (itemId: string): Promise<FavoriteItem[]> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            db.favorites = db.favorites.filter(f => f.id !== itemId);
-            resolve([...db.favorites]);
-        }, 300);
-    });
-}
+        const alert: FavoriteAlert = {
+            id: `alert-${Math.random().toString(36).slice(2, 10)}`,
+            favoriteId,
+            condition: input.condition,
+            targetPrice: input.targetPrice,
+            createdAt: new Date().toISOString(),
+            isActive: true,
+        };
+
+        draft.alerts.push(alert);
+    }), 400);
+
+export const deactivateFavoriteAlert = (alertId: string): Promise<FavoritesPageData> =>
+    withLatency(mutateFavoritesState(draft => {
+        const alert = draft.alerts.find(item => item.id === alertId);
+        if (alert) {
+            alert.isActive = false;
+        }
+    }), 250);
 
 
 export const fetchStrategies = (): Promise<Strategy[]> => {
