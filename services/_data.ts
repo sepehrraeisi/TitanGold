@@ -1,9 +1,39 @@
-import type { User, FavoriteItem, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, WalletAsset, WalletTransaction, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow } from '../types.ts';
+import type { User, FavoriteItem, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, WalletAsset, WalletTransaction, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, TradingDashboardData, TradingTimeRange, ChartPoint } from '../types.ts';
 
 const users: User[] = [
     { id: '1', name: 'Sepehr', email: 'sepehr@titan.ai', role: 'Admin', password: 'password123' },
     { id: '2', name: 'Trader One', email: 'trader.one@titan.ai', role: 'Trader', password: 'password123' },
 ];
+
+const autopilotState: AutopilotState = {
+    isActive: true,
+    operatingMode: 'balanced',
+    tradingBudget: 50000,
+    riskLevel: 'balanced',
+    goal: {
+        startCapital: 100,
+        targetCapital: 500,
+        progress: 72,
+        etaMinutes: 204,
+        lastSyncSeconds: 28,
+        activeTrades: 12,
+        maxConcurrentTrades: 20,
+        successRate: 91,
+        agentsOnline: 13,
+        agentsTraining: 2,
+        agentsTotal: 15,
+        mode: 'auto',
+        nextActionKey: 'autopilot_next_action_desc',
+    },
+    metrics: {
+        totalPerformance: 7.0,
+        winRate: 78.2,
+        totalTrades: 156,
+        todayProfit: 2847,
+    },
+    statusMessageKey: 'autopilot_status_running',
+    lastUpdated: new Date().toISOString(),
+};
 
 const favorites: FavoriteItem[] = [
     { id: 'bitcoin', symbol: 'BTCUSDT', name: 'Bitcoin', price: 68543.21, change24h: 2.45, volume: '45.2B', hasAlert: true },
@@ -79,6 +109,37 @@ const smartPredictions: SmartPrediction[] = [
     { id: '2', symbol: 'ETH/USDT', trend: 'Neutral', targetPrice: '$2,900', timeframe: '3 Days', confidence: 65, analysis: 'eth_prediction_analysis' },
     { id: '3', symbol: 'SOL/USDT', trend: 'Bullish', targetPrice: '$120', timeframe: '5 Days', confidence: 92, analysis: 'sol_prediction_analysis' },
 ];
+
+const tradingChartSeeds: Record<TradingTimeRange, ChartPoint[]> = {
+    '1H': Array.from({ length: 12 }).map((_, i) => ({ timestamp: `${(i * 5).toString().padStart(2, '0')}`, value: 32000 + Math.sin(i / 2) * 420 })),
+    '24H': Array.from({ length: 24 }).map((_, i) => ({ timestamp: `${i.toString().padStart(2, '0')}`, value: 32500 + Math.cos(i / 3) * 650 })),
+    '7D': Array.from({ length: 7 }).map((_, i) => ({ timestamp: `D${i + 1}`, value: 33100 + Math.sin(i / 1.5) * 1200 })),
+    '1M': Array.from({ length: 30 }).map((_, i) => ({ timestamp: `${i + 1}`, value: 31500 + Math.sin(i / 3) * 1800 })),
+    '1Y': Array.from({ length: 12 }).map((_, i) => ({ timestamp: `M${i + 1}`, value: 28000 + Math.sin(i / 1.5) * 2500 })),
+};
+
+const tradingDashboard: TradingDashboardData = {
+    kpis: [
+        { id: 'total_value', labelKey: 'trading_kpi_total_asset_value', value: '$271,406', change: '+3.1%', positive: true },
+        { id: 'pnl_24h', labelKey: 'trading_kpi_24h_pnl', value: '+$5,482', change: '+2.9%', positive: true },
+        { id: 'volume', labelKey: 'trading_kpi_volume', value: '$1,240,000', change: '+11%', positive: true },
+        { id: 'available_balance', labelKey: 'trading_kpi_available_balance', value: '$86,500', change: '-4.5%', positive: false },
+    ],
+    trades: [
+        { id: '1', pair: 'BTC/USDT', side: 'buy', price: 48650, amount: 0.8, time: '2024-01-12T08:32:00Z' },
+        { id: '2', pair: 'ETH/USDT', side: 'sell', price: 2680, amount: 12, time: '2024-01-12T07:58:00Z' },
+        { id: '3', pair: 'SOL/USDT', side: 'buy', price: 98.4, amount: 180, time: '2024-01-12T07:10:00Z' },
+        { id: '4', pair: 'XAU/USDT', side: 'buy', price: 2055, amount: 4, time: '2024-01-12T06:45:00Z' },
+    ],
+    assets: [
+        { id: 'btc', name: 'Bitcoin', symbol: 'BTC', amount: 4.25, currentValue: 207000, change24h: 2.4 },
+        { id: 'eth', name: 'Ethereum', symbol: 'ETH', amount: 62, currentValue: 165000, change24h: -1.2 },
+        { id: 'sol', name: 'Solana', symbol: 'SOL', amount: 820, currentValue: 98400, change24h: 6.8 },
+        { id: 'xau', name: 'Gold Token', symbol: 'XAU', amount: 15, currentValue: 30280, change24h: 0.5 },
+    ],
+    chart: tradingChartSeeds,
+    lastUpdated: new Date().toISOString(),
+};
 
 const performanceTrades: PerformanceTrade[] = [
     { id: '1', date: '2023-10-30', symbol: 'BTC/USDT', type: 'BUY', amount: 0.5, entryPrice: 42000, exitPrice: 45000, pnl: 1500, pnlPercent: 7.14 },
@@ -268,6 +329,7 @@ const automationSettings = {
 
 export const _data = {
     users,
+    autopilotState,
     favorites,
     allAssets,
     marketMovers,
@@ -287,6 +349,7 @@ export const _data = {
     aiSystemSummary,
     aiAnalytics,
     walletData,
+    tradingDashboard,
     goldAssets,
     goldPrediction,
     goldNews,
