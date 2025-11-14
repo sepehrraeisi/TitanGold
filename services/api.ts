@@ -1,5 +1,5 @@
 import { _data } from './_data.ts';
-import type { User, FavoriteItem, FavoriteAlert, FavoriteAlertInput, FavoritesPageData, FavoritesSummary, CryptoAsset, MarketMover, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, AutopilotMode, AutopilotRiskLevel, AutopilotQuickAction, AutopilotQuickActionResult, TradingDashboardData, TradingKPI, TradingTimeRange, ChartPoint, Trade } from '../types.ts';
+import type { User, FavoriteItem, FavoriteAlert, FavoriteAlertInput, FavoritesPageData, FavoritesSummary, CryptoAsset, MarketMover, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, AutopilotMode, AutopilotRiskLevel, AutopilotQuickAction, AutopilotQuickActionResult, TradingDashboardData, TradingKPI, TradingTimeRange, ChartPoint, Trade, ManualTradingPageData, ManualQuickTradeOrder } from '../types.ts';
 
 // --- SIMULATED BACKEND ---
 
@@ -20,6 +20,13 @@ const ensureTradingDashboard = (): TradingDashboardData => {
         throw new Error('Trading dashboard not initialized');
     }
     return db.tradingDashboard;
+};
+
+const ensureManualTrading = (): ManualTradingPageData => {
+    if (!db.manualTrading) {
+        throw new Error('Manual trading data not initialized');
+    }
+    return db.manualTrading;
 };
 
 const cloneAutopilotState = (state: AutopilotState): AutopilotState => ({
@@ -44,6 +51,22 @@ const cloneTradingDashboard = (dashboard: TradingDashboardData): TradingDashboar
     chart: cloneChart(dashboard.chart),
 });
 
+const cloneManualTrading = (data: ManualTradingPageData): ManualTradingPageData => ({
+    ...data,
+    stats: data.stats.map(stat => ({ ...stat })),
+    chart: data.chart.map(point => ({ ...point })),
+    quickTrade: {
+        ...data.quickTrade,
+        amountPresets: [...data.quickTrade.amountPresets],
+    },
+    recommendations: data.recommendations.map(item => ({ ...item })),
+    sentiment: { ...data.sentiment },
+    strategies: data.strategies.map(item => ({ ...item })),
+    portfolio: data.portfolio.map(item => ({ ...item })),
+    performance: data.performance.map(item => ({ ...item })),
+    recentTrades: data.recentTrades.map(item => ({ ...item })),
+});
+
 const mutateTradingDashboard = (
     mutator: (draft: TradingDashboardData) => void
 ): TradingDashboardData => {
@@ -52,6 +75,16 @@ const mutateTradingDashboard = (
     base.lastUpdated = new Date().toISOString();
     db.tradingDashboard = base;
     return cloneTradingDashboard(base);
+};
+
+const mutateManualTrading = (
+    mutator: (draft: ManualTradingPageData) => void,
+): ManualTradingPageData => {
+    const base = cloneManualTrading(ensureManualTrading());
+    mutator(base);
+    base.lastUpdated = new Date().toISOString();
+    db.manualTrading = base;
+    return cloneManualTrading(base);
 };
 
 const mutateAutopilotState = (
@@ -196,6 +229,9 @@ export const fetchDashboardData = (): Promise<any> => {
 export const fetchTradingDashboardData = (): Promise<TradingDashboardData> =>
     withLatency(cloneTradingDashboard(ensureTradingDashboard()), 600);
 
+export const fetchManualTradingPageData = (): Promise<ManualTradingPageData> =>
+    withLatency(cloneManualTrading(ensureManualTrading()), 500);
+
 type SimulatedTradeInput = {
     pair: string;
     side: 'buy' | 'sell';
@@ -211,6 +247,101 @@ const maybeUpdateKpi = (kpis: TradingKPI[], id: string, updater: (kpi: TradingKP
     if (kpi) {
         updater(kpi);
     }
+};
+
+const updateManualTradingStat = (
+    stats: ManualTradingPageData['stats'],
+    id: string,
+    updater: (stat: ManualTradingPageData['stats'][number]) => void,
+) => {
+    const stat = stats.find(item => item.id === id);
+    if (stat) {
+        updater(stat);
+    }
+};
+
+export const executeManualQuickTrade = (
+    order: ManualQuickTradeOrder,
+): Promise<ManualTradingPageData> => {
+    return withLatency(
+        mutateManualTrading(draft => {
+            const config = draft.quickTrade;
+            const amountPercent = Math.min(100, Math.max(1, order.amountPercent || config.defaultPreset));
+            const notional = Number(((config.availableBalance * amountPercent) / 100).toFixed(2));
+            const baseAmount = Number((notional / config.price).toFixed(config.baseAssetPrecision));
+            const direction = order.side === 'buy' ? 1 : -1;
+            const pnlPercent = Number(((Math.random() * 1.8 + 0.4) * direction).toFixed(2));
+            const pnlValue = Number(((notional * pnlPercent) / 100).toFixed(2));
+
+            draft.recentTrades.unshift({
+                id: randomId(),
+                side: order.side,
+                asset: config.baseAsset,
+                pair: config.pair,
+                price: Number(config.price.toFixed(2)),
+                amount: baseAmount,
+                pnl: pnlValue,
+                pnlPercent,
+                executedAt: new Date().toISOString(),
+            });
+            draft.recentTrades = draft.recentTrades.slice(0, 12);
+
+            updateManualTradingStat(draft.stats, 'today_profit', stat => {
+                stat.value = Number((stat.value + pnlValue).toFixed(stat.decimals ?? 2));
+            });
+            updateManualTradingStat(draft.stats, 'total_profit', stat => {
+                stat.value = Number((stat.value + pnlValue).toFixed(stat.decimals ?? 2));
+            });
+            updateManualTradingStat(draft.stats, 'trades_volume', stat => {
+                stat.value = Number((stat.value + notional).toFixed(stat.decimals ?? 0));
+            });
+            updateManualTradingStat(draft.stats, 'active_trades', stat => {
+                const next = stat.value + (order.side === 'buy' ? 1 : -1);
+                stat.value = Math.max(0, Math.round(next));
+            });
+            updateManualTradingStat(draft.stats, 'win_rate', stat => {
+                const delta = (Math.random() * 0.6 + 0.1) * (direction > 0 ? 1 : -1);
+                stat.value = Math.min(100, Math.max(0, Number((stat.value + delta).toFixed(stat.decimals ?? 1))));
+            });
+
+            draft.quickTrade.stopLossPercent = order.stopLossPercent ?? draft.quickTrade.stopLossPercent;
+            draft.quickTrade.takeProfitPercent = order.takeProfitPercent ?? draft.quickTrade.takeProfitPercent;
+
+            const balanceShift = direction > 0 ? -notional * 0.15 : notional * 0.1;
+            draft.quickTrade.availableBalance = Number(
+                Math.max(0, draft.quickTrade.availableBalance + balanceShift).toFixed(2)
+            );
+
+            draft.sentiment.score = Math.min(100, Math.max(0, Math.round(draft.sentiment.score + direction * (Math.random() * 2 - 0.5))));
+        }),
+        600,
+    );
+};
+
+export const toggleManualStrategy = (strategyId: string): Promise<ManualTradingPageData> => {
+    return withLatency(
+        mutateManualTrading(draft => {
+            const strategy = draft.strategies.find(item => item.id === strategyId);
+            if (!strategy) {
+                return;
+            }
+
+            strategy.isActive = !strategy.isActive;
+            const performanceDelta = strategy.isActive ? Math.random() * 1.2 : -Math.random() * 1.2;
+            strategy.performance = Number((strategy.performance + performanceDelta).toFixed(1));
+
+            updateManualTradingStat(draft.stats, 'active_trades', stat => {
+                const delta = strategy.isActive ? 1 : -1;
+                stat.value = Math.max(0, Math.round(stat.value + delta));
+            });
+
+            updateManualTradingStat(draft.stats, 'win_rate', stat => {
+                const delta = strategy.isActive ? Math.random() * 0.4 : -Math.random() * 0.4;
+                stat.value = Math.min(100, Math.max(0, Number((stat.value + delta).toFixed(stat.decimals ?? 1))));
+            });
+        }),
+        450,
+    );
 };
 
 export const createSimulatedTrade = (input?: Partial<SimulatedTradeInput>): Promise<TradingDashboardData> => {

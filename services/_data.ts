@@ -1,4 +1,4 @@
-import type { User, FavoriteItem, FavoriteAlert, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, WalletAsset, WalletTransaction, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, TradingDashboardData, TradingTimeRange, ChartPoint } from '../types.ts';
+import type { User, FavoriteItem, FavoriteAlert, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, WalletAsset, WalletTransaction, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, TradingDashboardData, TradingTimeRange, ChartPoint, ManualTradingPageData } from '../types.ts';
 
 const users: User[] = [
     { id: '1', name: 'Sepehr', email: 'sepehr@titan.ai', role: 'Admin', password: 'password123' },
@@ -149,6 +149,71 @@ const tradingDashboard: TradingDashboardData = {
         { id: 'xau', name: 'Gold Token', symbol: 'XAU', amount: 15, currentValue: 30280, change24h: 0.5 },
     ],
     chart: tradingChartSeeds,
+    lastUpdated: new Date().toISOString(),
+};
+
+const manualTrading: ManualTradingPageData = {
+    stats: [
+        { id: 'win_rate', labelKey: 'win_rate', value: 78.4, format: 'percent', decimals: 1 },
+        { id: 'today_profit', labelKey: 'today_profit', value: 245.67, format: 'currency', decimals: 2, showSign: true },
+        { id: 'total_profit', labelKey: 'total_profit', value: 12450, format: 'currency', decimals: 2 },
+        { id: 'sharpe_ratio', labelKey: 'sharpe_ratio', value: 2.47, format: 'plain', decimals: 2, subLabelKey: 'adjusted_performance' },
+        { id: 'best_trade', labelKey: 'best_trade', value: 12.3, format: 'percent', decimals: 1, showSign: true },
+        { id: 'trades_volume', labelKey: 'trades_volume', value: 45200, format: 'currency', decimals: 0, subLabelKey: 'past_24_hours' },
+        { id: 'active_trades', labelKey: 'active_trades', value: 8, format: 'plain', subLabelKey: 'in_progress' },
+    ],
+    chart: Array.from({ length: 24 }).map((_, index) => {
+        const base = 43000 + Math.sin(index / 3) * 520;
+        const open = base - 80 + Math.sin(index) * 40;
+        const close = base + Math.cos(index / 2) * 55;
+        const high = Math.max(open, close) + 70 + Math.random() * 35;
+        const low = Math.min(open, close) - 70 - Math.random() * 35;
+        const timestamp = new Date(Date.now() - (23 - index) * 60 * 60 * 1000).toISOString();
+        return {
+            timestamp,
+            open: Number(open.toFixed(2)),
+            high: Number(high.toFixed(2)),
+            low: Number(low.toFixed(2)),
+            close: Number(close.toFixed(2)),
+            volume: Number((Math.random() * 900 + 450).toFixed(0)),
+        };
+    }),
+    quickTrade: {
+        pair: 'BTC/USDT',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        price: 43250,
+        changePercent: 2.45,
+        availableBalance: 12500,
+        amountPresets: [25, 50, 75, 100],
+        defaultPreset: 50,
+        stopLossPercent: 2.5,
+        takeProfitPercent: 5,
+        baseAssetPrecision: 4,
+    },
+    recommendations: [
+        { id: 'rec-btc', titleKey: 'smart_recommendation', descriptionKey: 'buy_recommendation', type: 'buy', confidence: 84 },
+        { id: 'rec-eth', titleKey: 'ai_signal', descriptionKey: 'ai_signal_description', type: 'hold', confidence: 68 },
+    ],
+    sentiment: { score: 72, labelKey: 'greed_state' },
+    strategies: [
+        { id: 'btc_scalping', nameKey: 'btc_scalping', isActive: true, performance: 12.3 },
+        { id: 'eth_dca', nameKey: 'eth_dca', isActive: false, performance: 6.8 },
+    ],
+    portfolio: [
+        { id: 'btc', asset: 'BTC', percentage: 45.2, color: '#f7931a', value: 125600 },
+        { id: 'eth', asset: 'ETH', percentage: 32.1, color: '#627eea', value: 89200 },
+        { id: 'usdt', asset: 'USDT', percentage: 22.7, color: '#26a17b', value: 63000 },
+    ],
+    performance: Array.from({ length: 16 }).map((_, index) => ({
+        timestamp: new Date(Date.now() - (15 - index) * 60 * 60 * 1000).toISOString(),
+        value: 100 + Math.sin(index / 2) * 8 + index * 0.8,
+    })),
+    recentTrades: [
+        { id: 'manual-1', side: 'buy', asset: 'BTC', pair: 'BTC/USDT', price: 42850, amount: 0.35, pnl: 185, pnlPercent: 1.2, executedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString() },
+        { id: 'manual-2', side: 'sell', asset: 'ETH', pair: 'ETH/USDT', price: 2675, amount: 11.5, pnl: -220, pnlPercent: -0.9, executedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
+        { id: 'manual-3', side: 'buy', asset: 'AI Signal', pair: 'SOL/USDT', price: 96.4, amount: 120, pnl: 0, pnlPercent: 0, confidence: 85, executedAt: new Date(Date.now() - 32 * 60 * 1000).toISOString() },
+    ],
     lastUpdated: new Date().toISOString(),
 };
 
@@ -362,6 +427,7 @@ export const _data = {
     aiAnalytics,
     walletData,
     tradingDashboard,
+    manualTrading,
     goldAssets,
     goldPrediction,
     goldNews,

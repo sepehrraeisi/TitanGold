@@ -72,6 +72,107 @@ export interface ChartPoint {
     value: number;
 }
 
+export type ManualTradingStatFormat = 'percent' | 'currency' | 'plain';
+
+export interface ManualTradingStat {
+    id: string;
+    labelKey: string;
+    value: number;
+    format: ManualTradingStatFormat;
+    decimals?: number;
+    showSign?: boolean;
+    subLabelKey?: string;
+}
+
+export interface ManualTradingChartPoint {
+    timestamp: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+}
+
+export interface ManualTradingQuickTradeConfig {
+    pair: string;
+    baseAsset: string;
+    quoteAsset: string;
+    price: number;
+    changePercent: number;
+    availableBalance: number;
+    amountPresets: number[];
+    defaultPreset: number;
+    stopLossPercent: number;
+    takeProfitPercent: number;
+    baseAssetPrecision: number;
+}
+
+export interface ManualQuickTradeOrder {
+    side: 'buy' | 'sell';
+    amountPercent: number;
+    stopLossPercent?: number;
+    takeProfitPercent?: number;
+}
+
+export interface ManualTradingRecommendation {
+    id: string;
+    titleKey: string;
+    descriptionKey: string;
+    type: 'buy' | 'sell' | 'hold';
+    confidence: number;
+}
+
+export interface ManualTradingSentiment {
+    score: number;
+    labelKey: string;
+}
+
+export interface ManualTradingStrategy {
+    id: string;
+    nameKey: string;
+    isActive: boolean;
+    performance: number;
+}
+
+export interface ManualTradingPortfolioSlice {
+    id: string;
+    asset: string;
+    percentage: number;
+    color: string;
+    value: number;
+}
+
+export interface ManualTradingPerformancePoint {
+    timestamp: string;
+    value: number;
+}
+
+export interface ManualTradingRecentTrade {
+    id: string;
+    side: 'buy' | 'sell';
+    asset: string;
+    pair: string;
+    price: number;
+    amount: number;
+    pnl: number;
+    pnlPercent: number;
+    confidence?: number;
+    executedAt: string;
+}
+
+export interface ManualTradingPageData {
+    stats: ManualTradingStat[];
+    chart: ManualTradingChartPoint[];
+    quickTrade: ManualTradingQuickTradeConfig;
+    recommendations: ManualTradingRecommendation[];
+    sentiment: ManualTradingSentiment;
+    strategies: ManualTradingStrategy[];
+    portfolio: ManualTradingPortfolioSlice[];
+    performance: ManualTradingPerformancePoint[];
+    recentTrades: ManualTradingRecentTrade[];
+    lastUpdated: string;
+}
+
 export interface TradingKPI {
     id: string;
     labelKey: string;
