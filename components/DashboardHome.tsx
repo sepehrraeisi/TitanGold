@@ -8,6 +8,7 @@ import TitanAIWidget from './widgets/TitanAIWidget.tsx';
 import ActiveTradesWidget from './widgets/ActiveTrades.tsx';
 import PriceTrackerWidget from './widgets/MarketWatchlist.tsx';
 import ArtemisStatusWidget from './widgets/SystemStatusWidget.tsx';
+import AutopilotWidget from './widgets/AutopilotWidget.tsx';
 import PortfolioSummaryWidget from './widgets/PortfolioSummaryWidget.tsx';
 import PerformanceChartWidget from './widgets/PerformanceChartWidget.tsx';
 import TradingSignalsWidget from './widgets/TradingSignalsWidget.tsx';
@@ -70,6 +71,9 @@ const DashboardHome: React.FC = () => {
                 
                 <div className="md:col-span-1 lg:col-span-1 xl:col-span-1">
                     <ArtemisStatusWidget />
+                </div>
+                <div className="md:col-span-1 lg:col-span-2 xl:col-span-2">
+                    <AutopilotWidget />
                 </div>
                 <div className="md:col-span-1 lg:col-span-2 xl:col-span-2">
                     <PortfolioSummaryWidget />
