@@ -1,0 +1,88 @@
+import React, { useState, useEffect } from 'react';
+import { useLanguage } from '../../context/LanguageContext.tsx';
+import * as api from '../../services/api.ts';
+import { AIAgent } from '../../types.ts';
+
+const AIAgents: React.FC = () => {
+    const { t } = useLanguage();
+    const [isLoading, setIsLoading] = useState(true);
+    const [agents, setAgents] = useState<AIAgent[]>([]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            const agentData = await api.fetchAIAgents();
+            setAgents(agentData);
+            setIsLoading(false);
+        };
+        fetchData();
+    }, []);
+
+    if (isLoading) {
+        return <div className="text-center p-10">{t('loading')}</div>;
+    }
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {agents.map(agent => <AgentCard key={agent.id} agent={agent} />)}
+        </div>
+    );
+};
+
+const AgentCard: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    
+    return (
+         <div className="bg-card border border-border rounded-lg p-4 flex flex-col justify-between">
+            <div>
+                <div className="flex justify-between items-start">
+                    <div>
+                         <h3 className="font-bold text-foreground">{agent.name}: {agent.role}</h3>
+                         <p className={`text-xs font-semibold ${agent.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>{t(agent.status)}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-xl font-bold text-purple-400">{agent.accuracy.toFixed(1)}%</p>
+                        <p className="text-xs text-muted-foreground">{t('accuracy')}</p>
+                    </div>
+                </div>
+                <div className="my-4 space-y-2 text-xs">
+                    <ProgressBar label={t('training_progress')} value={agent.trainingProgress} />
+                    <Metric label={t('decisions')} value={agent.decisions.toLocaleString()} />
+                    <Metric label={t('learning_time_hours')} value={agent.learningTime.toLocaleString()} />
+                    <Metric label={t('knowledge_size_mb')} value={`${agent.knowledgeSize.toFixed(1)}MB`} />
+                </div>
+                 <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-1">{t('capabilities')}</h4>
+                    <div className="flex flex-wrap gap-1">
+                        {agent.capabilities.map(c => <span key={c} className="text-xs bg-secondary px-2 py-0.5 rounded">{c}</span>)}
+                    </div>
+                 </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-border flex justify-between items-center">
+                 <button className="text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold py-1 px-3 rounded-md">{t('control_panel')}</button>
+                 <span className="text-xs text-muted-foreground">{t('last_update')}: {new Date(agent.lastUpdate).toLocaleTimeString()}</span>
+            </div>
+        </div>
+    )
+};
+
+const Metric: React.FC<{label: string, value: string}> = ({label, value}) => (
+    <div className="flex justify-between items-center">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-semibold text-foreground">{value}</span>
+    </div>
+);
+
+const ProgressBar: React.FC<{label: string, value: number}> = ({ label, value }) => (
+    <div>
+        <div className="flex justify-between text-xs mb-1">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="text-foreground font-semibold">{value.toFixed(1)}%</span>
+        </div>
+        <div className="w-full bg-secondary rounded-full h-1.5">
+            <div className="bg-purple-500 h-1.5 rounded-full" style={{width: `${value}%`}}></div>
+        </div>
+    </div>
+);
+
+export default AIAgents;

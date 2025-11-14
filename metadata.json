@@ -1,0 +1,8 @@
+
+{
+  "name": "Titan Trading Autopilot",
+  "description": "A sophisticated, AI-powered dashboard for autonomous crypto trading. Titan uses a central AI, Artemis, to manage specialized trading agents, providing users with a seamless, autopilot income source. Features include a customizable dashboard, an advanced AI chatbot, market analysis, and AI-powered image tools.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

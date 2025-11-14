@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Titan Trading Autopilot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --background: 222.2 84% 4.9%;
+        --foreground: 210 40% 98%;
+        --card: 222.2 84% 4.9%;
+        --card-foreground: 210 40% 98%;
+        --popover: 222.2 84% 4.9%;
+        --popover-foreground: 210 40% 98%;
+        --primary: 210 40% 98%;
+        --primary-foreground: 222.2 47.4% 11.2%;
+        --secondary: 217.2 32.6% 17.5%;
+        --secondary-foreground: 210 40% 98%;
+        --muted: 217.2 32.6% 17.5%;
+        --muted-foreground: 215 20.2% 65.1%;
+        --accent: 217.2 32.6% 17.5%;
+        --accent-foreground: 210 40% 98%;
+        --destructive: 0 62.8% 30.6%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 217.2 32.6% 17.5%;
+        --input: 217.2 32.6% 17.5%;
+        --ring: 212.7 26.8% 83.9%;
+        
+        /* Coinbase-inspired additions */
+        --cb-background: #0D111C;
+        --cb-card: #161B22;
+        --cb-border: #2a2d3e;
+        --cb-blue: #0052FF;
+        --cb-text-primary: #FFFFFF;
+        --cb-text-secondary: #8A919E;
+        --cb-green: #05C169;
+        --cb-red: #FF4747;
+      }
+      
+      .dark {
+        --background: var(--cb-background);
+        --foreground: var(--cb-text-primary);
+        --card: var(--cb-card);
+        --card-foreground: var(--cb-text-primary);
+        --border: var(--cb-border);
+        --input: var(--cb-card);
+        --muted-foreground: var(--cb-text-secondary);
+        --secondary: #2a2d3e;
+        --secondary-foreground: var(--cb-text-primary);
+        --primary: var(--cb-blue);
+        --primary-foreground: #FFFFFF;
+        --ring: var(--cb-blue);
+        --positive: var(--cb-green);
+        --negative: var(--cb-red);
+      }
+      
+      html.light {
+        --cb-background: #F6F7F8;
+        --cb-card: #FFFFFF;
+        --cb-border: #EAECEF;
+        --cb-text-primary: #0A0A0A;
+        --cb-text-secondary: #5E6672;
+        
+        --background: var(--cb-background);
+        --foreground: var(--cb-text-primary);
+        --card: var(--cb-card);
+        --card-foreground: var(--cb-text-primary);
+        --border: var(--cb-border);
+        --input: #FFFFFF;
+        --muted-foreground: var(--cb-text-secondary);
+        --secondary: #EAECEF;
+        --secondary-foreground: var(--cb-text-primary);
+        --primary: var(--cb-blue);
+        --primary-foreground: #FFFFFF;
+        --ring: var(--cb-blue);
+        --positive: #05C169;
+        --negative: #FF4747;
+      }
+      
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: var(--background);
+        color: var(--foreground);
+      }
+
+      /* Custom Tailwind Config for CDN */
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              background: 'var(--background)',
+              foreground: 'var(--foreground)',
+              card: 'var(--card)',
+              'card-foreground': 'var(--card-foreground)',
+              border: 'var(--border)',
+              input: 'var(--input)',
+              primary: 'var(--primary)',
+              'primary-foreground': 'var(--primary-foreground)',
+              secondary: 'var(--secondary)',
+              'secondary-foreground': 'var(--secondary-foreground)',
+              'muted-foreground': 'var(--muted-foreground)',
+              positive: 'var(--positive)',
+              negative: 'var(--negative)',
+            }
+          }
+        }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
