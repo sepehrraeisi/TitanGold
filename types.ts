@@ -314,6 +314,95 @@ export interface PortfolioAsset {
   pnl: number;
   pnlPercent: number;
   volatility: number;
+  allocation?: number;
+  targetAllocation?: number;
+  color?: string;
+  lastRebalancedAt?: string;
+}
+
+export type PortfolioStatFormat = 'currency' | 'percent' | 'plain';
+
+export interface PortfolioOverviewStat {
+  id: string;
+  labelKey: string;
+  value: number;
+  format: PortfolioStatFormat;
+  decimals?: number;
+  change?: number;
+  changeFormat?: PortfolioStatFormat;
+  changeDecimals?: number;
+  showChangeSign?: boolean;
+  subLabelKey?: string;
+  subLabelParams?: Record<string, string | number>;
+}
+
+export interface PortfolioPerformancePoint {
+  timestamp: string;
+  value: number;
+  benchmark?: number;
+}
+
+export type PortfolioTimeRange = '1W' | '1M' | '3M' | '6M' | '1Y';
+
+export interface PortfolioDistributionSlice {
+  id: string;
+  asset: string;
+  percentage: number;
+  value: number;
+  color: string;
+}
+
+export interface PortfolioRiskExposure {
+  id: string;
+  metricKey: string;
+  score: number; // 0 - 100
+}
+
+export interface PortfolioCorrelationMatrix {
+  assets: string[];
+  values: number[][];
+}
+
+export interface PortfolioMonthlyReturn {
+  id: string;
+  month: string;
+  value: number;
+  benchmark?: number;
+}
+
+export type PortfolioInsightTone = 'positive' | 'warning' | 'neutral';
+
+export interface PortfolioInsight {
+  id: string;
+  titleKey: string;
+  descriptionKey: string;
+  tone: PortfolioInsightTone;
+  confidence?: number;
+  acknowledged?: boolean;
+  timestamp: string;
+}
+
+export interface PortfolioActivity {
+  id: string;
+  timestamp: string;
+  messageKey: string;
+  metadata?: Record<string, string | number>;
+}
+
+export type PortfolioRebalanceStrategy = 'equal_weight' | 'risk_adjusted' | 'momentum_focus';
+
+export interface PortfolioPageData {
+  stats: PortfolioOverviewStat[];
+  holdings: PortfolioAsset[];
+  riskMetrics: RiskMetric[];
+  performance: Record<PortfolioTimeRange, PortfolioPerformancePoint[]>;
+  distribution: PortfolioDistributionSlice[];
+  exposures: PortfolioRiskExposure[];
+  correlation: PortfolioCorrelationMatrix;
+  monthlyReturns: PortfolioMonthlyReturn[];
+  insights: PortfolioInsight[];
+  activities: PortfolioActivity[];
+  lastUpdated: string;
 }
 
 export interface RiskMetric {

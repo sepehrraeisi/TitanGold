@@ -1,5 +1,54 @@
 import { _data } from './_data.ts';
-import type { User, FavoriteItem, FavoriteAlert, FavoriteAlertInput, FavoritesPageData, FavoritesSummary, CryptoAsset, MarketMover, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, AutopilotMode, AutopilotRiskLevel, AutopilotQuickAction, AutopilotQuickActionResult, TradingDashboardData, TradingKPI, TradingTimeRange, ChartPoint, Trade, ManualTradingPageData, ManualQuickTradeOrder } from '../types.ts';
+import type {
+    User,
+    FavoriteItem,
+    FavoriteAlert,
+    FavoriteAlertInput,
+    FavoritesPageData,
+    FavoritesSummary,
+    CryptoAsset,
+    MarketMover,
+    Strategy,
+    PortfolioAsset,
+    PortfolioOverviewStat,
+    PortfolioPageData,
+    PortfolioDistributionSlice,
+    PortfolioRiskExposure,
+    PortfolioCorrelationMatrix,
+    PortfolioMonthlyReturn,
+    PortfolioInsight,
+    PortfolioPerformancePoint,
+    PortfolioTimeRange,
+    PortfolioActivity,
+    PortfolioRebalanceStrategy,
+    RiskMetric,
+    AnalysisStat,
+    SmartPrediction,
+    PerformanceTrade,
+    NewsArticle,
+    EconomicEvent,
+    AIAgent,
+    AIProvider,
+    AIAnalyticsMetrics,
+    GoldAsset,
+    GoldPrediction,
+    GoldNewsArticle,
+    DataSource,
+    TelegramPublisherConfig,
+    Workflow,
+    AutopilotState,
+    AutopilotMode,
+    AutopilotRiskLevel,
+    AutopilotQuickAction,
+    AutopilotQuickActionResult,
+    TradingDashboardData,
+    TradingKPI,
+    TradingTimeRange,
+    ChartPoint,
+    Trade,
+    ManualTradingPageData,
+    ManualQuickTradeOrder,
+} from '../types.ts';
 
 // --- SIMULATED BACKEND ---
 
@@ -27,6 +76,13 @@ const ensureManualTrading = (): ManualTradingPageData => {
         throw new Error('Manual trading data not initialized');
     }
     return db.manualTrading;
+};
+
+const ensurePortfolio = (): PortfolioPageData => {
+    if (!db.portfolio) {
+        throw new Error('Portfolio data not initialized');
+    }
+    return db.portfolio;
 };
 
 const cloneAutopilotState = (state: AutopilotState): AutopilotState => ({
@@ -85,6 +141,160 @@ const mutateManualTrading = (
     base.lastUpdated = new Date().toISOString();
     db.manualTrading = base;
     return cloneManualTrading(base);
+};
+
+const clonePerformance = (
+    performance: Record<PortfolioTimeRange, PortfolioPerformancePoint[]>,
+): Record<PortfolioTimeRange, PortfolioPerformancePoint[]> => {
+    const entries = Object.entries(performance) as [PortfolioTimeRange, PortfolioPerformancePoint[]][];
+    return entries.reduce((acc, [range, points]) => {
+        acc[range] = points.map(point => ({ ...point }));
+        return acc;
+    }, {} as Record<PortfolioTimeRange, PortfolioPerformancePoint[]>);
+};
+
+const clonePortfolio = (data: PortfolioPageData): PortfolioPageData => ({
+    ...data,
+    stats: data.stats.map(stat => ({
+        ...stat,
+        subLabelParams: stat.subLabelParams ? { ...stat.subLabelParams } : undefined,
+    })),
+    holdings: data.holdings.map(asset => ({ ...asset })),
+    riskMetrics: data.riskMetrics.map(metric => ({ ...metric })),
+    performance: clonePerformance(data.performance),
+    distribution: data.distribution.map(slice => ({ ...slice })),
+    exposures: data.exposures.map(exposure => ({ ...exposure })),
+    correlation: {
+        assets: [...data.correlation.assets],
+        values: data.correlation.values.map(row => [...row]),
+    },
+    monthlyReturns: data.monthlyReturns.map(item => ({ ...item })),
+    insights: data.insights.map(item => ({ ...item })),
+    activities: data.activities.map(activity => ({
+        ...activity,
+        metadata: activity.metadata ? { ...activity.metadata } : undefined,
+    })),
+});
+
+const advancePerformanceSeries = (
+    series: PortfolioPerformancePoint[],
+    amplitude: number,
+    hoursStep: number,
+    maxPoints: number,
+): PortfolioPerformancePoint[] => {
+    if (series.length === 0) {
+        return series;
+    }
+
+    const lastPoint = series[series.length - 1];
+    const change = (Math.random() - 0.45) * amplitude;
+    const nextValue = Math.max(lastPoint.value + change, lastPoint.value * 0.85);
+    const baseline = lastPoint.benchmark ?? lastPoint.value * 0.97;
+    const nextBenchmark = Math.max(baseline + change * 0.6, baseline * 0.9);
+
+    const nextTimestamp = new Date(
+        new Date(lastPoint.timestamp).getTime() + hoursStep * 60 * 60 * 1000,
+    ).toISOString();
+
+    const updated = [...series, {
+        timestamp: nextTimestamp,
+        value: Number(nextValue.toFixed(2)),
+        benchmark: Number(nextBenchmark.toFixed(2)),
+    }];
+
+    while (updated.length > maxPoints) {
+        updated.shift();
+    }
+
+    return updated;
+};
+
+const recalculatePortfolioSummary = (draft: PortfolioPageData) => {
+    const totalValue = draft.holdings.reduce((sum, asset) => sum + asset.value, 0);
+    const totalValueStat = draft.stats.find((stat: PortfolioOverviewStat) => stat.id === 'total_value');
+    if (totalValueStat) {
+        const decimals = totalValueStat.decimals ?? 2;
+        totalValueStat.value = Number(totalValue.toFixed(decimals));
+    }
+
+    const netProfitStat = draft.stats.find((stat: PortfolioOverviewStat) => stat.id === 'net_profit');
+    if (netProfitStat) {
+        const totalProfit = draft.holdings.reduce((sum, asset) => sum + asset.pnl, 0);
+        const decimals = netProfitStat.decimals ?? 0;
+        netProfitStat.value = Number(totalProfit.toFixed(decimals));
+    }
+
+    const distributionMap = new Map<string, PortfolioDistributionSlice>(
+        draft.distribution.map(slice => [slice.id, slice]),
+    );
+
+    draft.holdings.forEach(asset => {
+        const percentage = totalValue > 0 ? (asset.value / totalValue) * 100 : 0;
+        asset.allocation = Number(percentage.toFixed(2));
+        const slice = distributionMap.get(asset.id);
+        if (slice) {
+            slice.percentage = Number(percentage.toFixed(2));
+            slice.value = Number(asset.value.toFixed(2));
+            slice.asset = asset.symbol;
+            if (asset.color) {
+                slice.color = asset.color;
+            }
+        } else {
+            draft.distribution.push({
+                id: asset.id,
+                asset: asset.symbol,
+                percentage: Number(percentage.toFixed(2)),
+                value: Number(asset.value.toFixed(2)),
+                color: asset.color ?? '#818cf8',
+            });
+        }
+    });
+
+    draft.distribution = draft.distribution.filter(slice =>
+        draft.holdings.some(asset => asset.id === slice.id),
+    );
+};
+
+const mutatePortfolio = (
+    mutator: (draft: PortfolioPageData) => void,
+): PortfolioPageData => {
+    const base = clonePortfolio(ensurePortfolio());
+    mutator(base);
+    base.lastUpdated = new Date().toISOString();
+    recalculatePortfolioSummary(base);
+    db.portfolio = base;
+    return clonePortfolio(base);
+};
+
+const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
+
+const updateStatTrend = (stat: PortfolioOverviewStat | undefined, variance: number) => {
+    if (!stat) {
+        return;
+    }
+    const decimals = stat.changeDecimals ?? stat.decimals ?? 2;
+    const next = (stat.change ?? 0) + (Math.random() - 0.5) * variance;
+    stat.change = Number(next.toFixed(decimals));
+};
+
+const recordPortfolioActivity = (
+    draft: PortfolioPageData,
+    messageKey: string,
+    metadata?: Record<string, string | number>,
+) => {
+    draft.activities.unshift({
+        id: `portfolio-activity-${Math.random().toString(36).slice(2, 10)}`,
+        timestamp: new Date().toISOString(),
+        messageKey,
+        metadata,
+    });
+    draft.activities = draft.activities.slice(0, 25);
+};
+
+const findAdjustmentAsset = (draft: PortfolioPageData, excludeId: string): PortfolioAsset | undefined => {
+    return draft.holdings
+        .filter(asset => asset.id !== excludeId && asset.value > 0)
+        .sort((a, b) => b.value - a.value)[0];
 };
 
 const mutateAutopilotState = (
@@ -575,17 +785,181 @@ export const fetchStrategies = (): Promise<Strategy[]> => {
     });
 };
 
-export const fetchPortfolioPageData = (): Promise<{ stats: any[], assets: PortfolioAsset[], riskMetrics: RiskMetric[] }> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve({
-                stats: db.portfolioStats,
-                assets: db.portfolioAssets,
-                riskMetrics: db.riskMetrics,
+export const fetchPortfolioPageData = (): Promise<PortfolioPageData> =>
+    withLatency(clonePortfolio(ensurePortfolio()), 400);
+
+export const rebalancePortfolio = (
+    strategy: PortfolioRebalanceStrategy,
+): Promise<PortfolioPageData> =>
+    withLatency(
+        mutatePortfolio(draft => {
+            if (draft.holdings.length === 0) {
+                return;
+            }
+
+            const totalValue = draft.holdings.reduce((sum, asset) => sum + asset.value, 0);
+            if (totalValue <= 0) {
+                return;
+            }
+
+            const weightMap = new Map<string, number>();
+
+            if (strategy === 'equal_weight') {
+                const equalWeight = 1 / draft.holdings.length;
+                draft.holdings.forEach(asset => weightMap.set(asset.id, equalWeight));
+            } else if (strategy === 'risk_adjusted') {
+                const scores = draft.holdings.map(asset => ({
+                    id: asset.id,
+                    score: asset.volatility > 0 ? 1 / asset.volatility : 1,
+                }));
+                const scoreTotal = scores.reduce((sum, entry) => sum + entry.score, 0);
+                scores.forEach(entry => {
+                    weightMap.set(entry.id, scoreTotal > 0 ? entry.score / scoreTotal : 0);
+                });
+            } else {
+                const scores = draft.holdings.map(asset => ({
+                    id: asset.id,
+                    score: clamp(asset.pnlPercent + 12, 1, 150),
+                }));
+                const scoreTotal = scores.reduce((sum, entry) => sum + entry.score, 0);
+                scores.forEach(entry => {
+                    weightMap.set(entry.id, scoreTotal > 0 ? entry.score / scoreTotal : 0);
+                });
+            }
+
+            draft.holdings.forEach(asset => {
+                const share = clamp(weightMap.get(asset.id) ?? 0, 0, 1);
+                const nextValue = Number((totalValue * share).toFixed(2));
+                asset.value = nextValue;
+                if (asset.currentPrice > 0) {
+                    asset.amount = Number((nextValue / asset.currentPrice).toFixed(4));
+                }
+                asset.targetAllocation = Number((share * 100).toFixed(2));
+                asset.lastRebalancedAt = new Date().toISOString();
             });
-        }, FAKE_LATENCY);
-    });
-};
+
+            draft.performance['1W'] = advancePerformanceSeries(draft.performance['1W'], 2200, 12, 18);
+            draft.performance['1M'] = advancePerformanceSeries(draft.performance['1M'], 3600, 24, 34);
+            draft.performance['3M'] = advancePerformanceSeries(draft.performance['3M'], 4800, 48, 40);
+            draft.performance['6M'] = advancePerformanceSeries(draft.performance['6M'], 6200, 96, 34);
+            draft.performance['1Y'] = advancePerformanceSeries(draft.performance['1Y'], 7800, 168, 30);
+
+            updateStatTrend(draft.stats.find(stat => stat.id === 'total_value'), 1.4);
+            updateStatTrend(draft.stats.find(stat => stat.id === 'net_profit'), 2.1);
+            updateStatTrend(draft.stats.find(stat => stat.id === 'success_rate'), 0.8);
+
+            recordPortfolioActivity(draft, 'portfolio_activity_rebalanced', { strategy });
+        }),
+        650,
+    );
+
+export const updatePortfolioAllocation = (
+    assetId: string,
+    targetAllocation: number,
+): Promise<PortfolioPageData> =>
+    withLatency(
+        mutatePortfolio(draft => {
+            const holding = draft.holdings.find(asset => asset.id === assetId);
+            if (!holding) {
+                return;
+            }
+
+            const totalValue = draft.holdings.reduce((sum, asset) => sum + asset.value, 0);
+            if (totalValue <= 0) {
+                return;
+            }
+
+            const clampedTarget = clamp(targetAllocation, 0, 100);
+            const targetValue = Number(((totalValue * clampedTarget) / 100).toFixed(2));
+            let delta = targetValue - holding.value;
+
+            if (Math.abs(delta) < 1) {
+                holding.targetAllocation = Number(clampedTarget.toFixed(2));
+                return;
+            }
+
+            const adjustmentAsset = findAdjustmentAsset(draft, assetId);
+            if (!adjustmentAsset) {
+                return;
+            }
+
+            if (delta > 0) {
+                const transferable = Math.min(delta, adjustmentAsset.value);
+                adjustmentAsset.value = Number((adjustmentAsset.value - transferable).toFixed(2));
+                delta = transferable;
+            } else {
+                const transferable = Math.min(-delta, holding.value);
+                adjustmentAsset.value = Number((adjustmentAsset.value + transferable).toFixed(2));
+                delta = -transferable;
+            }
+
+            if (adjustmentAsset.currentPrice > 0) {
+                adjustmentAsset.amount = Number((adjustmentAsset.value / adjustmentAsset.currentPrice).toFixed(4));
+            }
+
+            holding.value = Number((holding.value + delta).toFixed(2));
+            if (holding.currentPrice > 0) {
+                holding.amount = Number((holding.value / holding.currentPrice).toFixed(4));
+            }
+
+            holding.targetAllocation = Number(clampedTarget.toFixed(2));
+
+            updateStatTrend(draft.stats.find(stat => stat.id === 'net_profit'), 1.5);
+            draft.performance['1W'] = advancePerformanceSeries(draft.performance['1W'], 1800, 12, 18);
+
+            recordPortfolioActivity(draft, 'portfolio_activity_allocation_updated', {
+                asset: holding.symbol,
+                target: Number(clampedTarget.toFixed(2)),
+            });
+        }),
+        450,
+    );
+
+export const acknowledgePortfolioInsight = (
+    insightId: string,
+): Promise<PortfolioPageData> =>
+    withLatency(
+        mutatePortfolio(draft => {
+            const insight = draft.insights.find(item => item.id === insightId);
+            if (!insight) {
+                return;
+            }
+
+            insight.acknowledged = true;
+            recordPortfolioActivity(draft, 'portfolio_activity_insight_acknowledged', { insight: insightId });
+        }),
+        220,
+    );
+
+export const refreshPortfolioSnapshot = (): Promise<PortfolioPageData> =>
+    withLatency(
+        mutatePortfolio(draft => {
+            draft.holdings.forEach(asset => {
+                const drift = 0.995 + Math.random() * 0.025;
+                const nextPrice = asset.currentPrice * drift;
+                asset.currentPrice = Number(nextPrice.toFixed(2));
+                const nextValue = asset.amount * asset.currentPrice;
+                asset.value = Number(nextValue.toFixed(2));
+                const costBasis = asset.amount * asset.avgPrice;
+                const pnl = nextValue - costBasis;
+                asset.pnl = Number(pnl.toFixed(2));
+                asset.pnlPercent = Number((costBasis === 0 ? 0 : (pnl / costBasis) * 100).toFixed(2));
+            });
+
+            draft.performance['1W'] = advancePerformanceSeries(draft.performance['1W'], 1500, 12, 18);
+            draft.performance['1M'] = advancePerformanceSeries(draft.performance['1M'], 2400, 24, 34);
+            draft.performance['3M'] = advancePerformanceSeries(draft.performance['3M'], 3600, 48, 40);
+            draft.performance['6M'] = advancePerformanceSeries(draft.performance['6M'], 5200, 96, 34);
+            draft.performance['1Y'] = advancePerformanceSeries(draft.performance['1Y'], 6800, 168, 30);
+
+            updateStatTrend(draft.stats.find(stat => stat.id === 'total_value'), 1.1);
+            updateStatTrend(draft.stats.find(stat => stat.id === 'net_profit'), 1.7);
+            updateStatTrend(draft.stats.find(stat => stat.id === 'success_rate'), 0.5);
+
+            recordPortfolioActivity(draft, 'portfolio_activity_snapshot_refreshed');
+        }),
+        320,
+    );
 
 export const fetchAnalysisPageData = (): Promise<{ stats: AnalysisStat[], predictions: SmartPrediction[], trades: PerformanceTrade[] }> => {
      return new Promise(resolve => {

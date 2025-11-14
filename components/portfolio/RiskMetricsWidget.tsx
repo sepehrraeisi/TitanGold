@@ -15,14 +15,20 @@ const RiskMetricsWidget: React.FC<RiskMetricsWidgetProps> = ({ metrics }) => {
                 <h3 className="font-semibold text-white">{t('risk_metrics')}</h3>
                 <button className="text-xs text-purple-400 hover:underline">{t('manage_transactions')}</button>
             </div>
-             <div className="space-y-2 text-sm">
-                {metrics.map(m => (
-                    <div key={m.label} className="flex justify-between items-center">
-                        <span className="text-gray-400">{t(m.label)}</span>
-                        <span className="font-semibold text-white">{m.value}</span>
-                    </div>
-                ))}
-            </div>
+            {metrics.length === 0 ? (
+                <div className="h-24 flex items-center justify-center text-sm text-gray-400">
+                    {t('no_risk_metrics')}
+                </div>
+            ) : (
+                <div className="space-y-2 text-sm">
+                    {metrics.map(metric => (
+                        <div key={metric.label} className="flex justify-between items-center">
+                            <span className="text-gray-400">{t(metric.label)}</span>
+                            <span className="font-semibold text-white">{metric.value}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };

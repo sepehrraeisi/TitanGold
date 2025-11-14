@@ -1,4 +1,43 @@
-import type { User, FavoriteItem, FavoriteAlert, CryptoAsset, Strategy, PortfolioAsset, RiskMetric, AnalysisStat, SmartPrediction, PerformanceTrade, NewsArticle, EconomicEvent, AIAgent, AIProvider, AIAnalyticsMetrics, WalletAsset, WalletTransaction, GoldAsset, GoldPrediction, GoldNewsArticle, DataSource, TelegramPublisherConfig, Workflow, AutopilotState, TradingDashboardData, TradingTimeRange, ChartPoint, ManualTradingPageData } from '../types.ts';
+import type {
+    User,
+    FavoriteItem,
+    FavoriteAlert,
+    CryptoAsset,
+    Strategy,
+    PortfolioAsset,
+    PortfolioOverviewStat,
+    PortfolioPageData,
+    PortfolioDistributionSlice,
+    PortfolioRiskExposure,
+    PortfolioCorrelationMatrix,
+    PortfolioMonthlyReturn,
+    PortfolioInsight,
+    PortfolioPerformancePoint,
+    PortfolioTimeRange,
+    PortfolioActivity,
+    RiskMetric,
+    AnalysisStat,
+    SmartPrediction,
+    PerformanceTrade,
+    NewsArticle,
+    EconomicEvent,
+    AIAgent,
+    AIProvider,
+    AIAnalyticsMetrics,
+    WalletAsset,
+    WalletTransaction,
+    GoldAsset,
+    GoldPrediction,
+    GoldNewsArticle,
+    DataSource,
+    TelegramPublisherConfig,
+    Workflow,
+    AutopilotState,
+    TradingDashboardData,
+    TradingTimeRange,
+    ChartPoint,
+    ManualTradingPageData,
+} from '../types.ts';
 
 const users: User[] = [
     { id: '1', name: 'Sepehr', email: 'sepehr@titan.ai', role: 'Admin', password: 'password123' },
@@ -88,16 +127,168 @@ const strategies: Strategy[] = [
     { id: '6', name: 'DCA Bitcoin Strategy', type: 'Trend', agents: 2, status: 'inactive', roi: 18.5, winRate: 68.3, trades: 78, sharpe: 1.65, maxDrawdown: 12.4, chartData: [5, 6, 8, 10, 12, 15, 18], rank: 'D' },
 ];
 
-const portfolioStats = [
-    { label: 'total_portfolio_value', value: '$271,406.51', change: '+8.85%' },
-    { label: 'success_rate', value: '77.3%', subValue: 'from_trades' },
-    { label: 'sharpe_ratio', value: '1.91' },
+const portfolioStats: PortfolioOverviewStat[] = [
+    {
+        id: 'total_value',
+        labelKey: 'total_portfolio_value',
+        value: 269121.5,
+        format: 'currency',
+        decimals: 2,
+        change: 2.85,
+        changeFormat: 'percent',
+        changeDecimals: 2,
+        showChangeSign: true,
+    },
+    {
+        id: 'net_profit',
+        labelKey: 'net_profit',
+        value: 82450,
+        format: 'currency',
+        decimals: 0,
+        change: 12.4,
+        changeFormat: 'percent',
+        changeDecimals: 1,
+        showChangeSign: true,
+    },
+    {
+        id: 'success_rate',
+        labelKey: 'success_rate',
+        value: 77.3,
+        format: 'percent',
+        decimals: 1,
+        change: 1.6,
+        changeFormat: 'percent',
+        changeDecimals: 1,
+        showChangeSign: true,
+        subLabelKey: 'from_trades',
+        subLabelParams: { count: 428 },
+    },
+    {
+        id: 'sharpe_ratio',
+        labelKey: 'sharpe_ratio',
+        value: 1.91,
+        format: 'plain',
+        decimals: 2,
+        change: 0.12,
+        changeFormat: 'plain',
+        changeDecimals: 2,
+        showChangeSign: true,
+    },
 ];
 
-const portfolioAssets: PortfolioAsset[] = [
-    { id: '1', name: 'Bitcoin', symbol: 'BTC', amount: 40.3259, avgPrice: 26882.69, currentPrice: 48865.95, value: 1291.35, pnl: 0, pnlPercent: 3.11, volatility: 13.5 },
-    { id: '2', name: 'Ethereum', symbol: 'ETH', amount: 38.0700, avgPrice: 49579.22, currentPrice: 34237.14, value: 6202.96, pnl: 0, pnlPercent: 11.91, volatility: 18.2 },
-    { id: '3', name: 'Cardano', symbol: 'ADA', amount: 11.1996, avgPrice: 38770.08, currentPrice: 19806.29, value: 1318.05, pnl: 0, pnlPercent: -0.03, volatility: 17.6 },
+const portfolioHoldings: PortfolioAsset[] = [
+    {
+        id: 'btc',
+        name: 'Bitcoin',
+        symbol: 'BTC',
+        amount: 2.45,
+        avgPrice: 26882.69,
+        currentPrice: 48650,
+        value: 119192.5,
+        pnl: 53331.6,
+        pnlPercent: 80.97,
+        volatility: 14.2,
+        allocation: 44.29,
+        targetAllocation: 42,
+        color: '#f7931a',
+        lastRebalancedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'eth',
+        name: 'Ethereum',
+        symbol: 'ETH',
+        amount: 18.2,
+        avgPrice: 1895.42,
+        currentPrice: 2675,
+        value: 48685,
+        pnl: 14159.6,
+        pnlPercent: 41.03,
+        volatility: 18.7,
+        allocation: 18.09,
+        targetAllocation: 19,
+        color: '#627eea',
+        lastRebalancedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'sol',
+        name: 'Solana',
+        symbol: 'SOL',
+        amount: 320,
+        avgPrice: 62.75,
+        currentPrice: 96.4,
+        value: 30848,
+        pnl: 10768,
+        pnlPercent: 53.6,
+        volatility: 27.5,
+        allocation: 11.46,
+        targetAllocation: 10,
+        color: '#14f195',
+        lastRebalancedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'bnb',
+        name: 'BNB',
+        symbol: 'BNB',
+        amount: 48,
+        avgPrice: 412.35,
+        currentPrice: 542,
+        value: 26016,
+        pnl: 6230.4,
+        pnlPercent: 31.51,
+        volatility: 19.8,
+        allocation: 9.67,
+        targetAllocation: 10,
+        color: '#f0b90b',
+        lastRebalancedAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'usdt',
+        name: 'Tether',
+        symbol: 'USDT',
+        amount: 22000,
+        avgPrice: 1,
+        currentPrice: 1,
+        value: 22000,
+        pnl: 0,
+        pnlPercent: 0,
+        volatility: 0.2,
+        allocation: 8.17,
+        targetAllocation: 8,
+        color: '#26a17b',
+        lastRebalancedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'link',
+        name: 'Chainlink',
+        symbol: 'LINK',
+        amount: 950,
+        avgPrice: 9.85,
+        currentPrice: 14.4,
+        value: 13680,
+        pnl: 4315.5,
+        pnlPercent: 46.02,
+        volatility: 24.3,
+        allocation: 5.08,
+        targetAllocation: 6,
+        color: '#2a5ada',
+        lastRebalancedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'ada',
+        name: 'Cardano',
+        symbol: 'ADA',
+        amount: 15000,
+        avgPrice: 0.43,
+        currentPrice: 0.58,
+        value: 8700,
+        pnl: 2250,
+        pnlPercent: 34.09,
+        volatility: 22.1,
+        allocation: 3.23,
+        targetAllocation: 5,
+        color: '#0033ad',
+        lastRebalancedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    },
 ];
 
 const riskMetrics: RiskMetric[] = [
@@ -107,6 +298,153 @@ const riskMetrics: RiskMetric[] = [
     { label: 'jensen_alpha', value: '0.49%' },
     { label: 'info_ratio', value: '1.26' },
 ];
+
+const generatePortfolioPerformance = (
+    points: number,
+    base: number,
+    amplitude: number,
+    hoursStep: number,
+): PortfolioPerformancePoint[] =>
+    Array.from({ length: points }).map((_, index) => {
+        const phase = index / Math.max(points - 1, 1);
+        const seasonal = Math.sin(phase * Math.PI * 2) * amplitude;
+        const drift = phase * amplitude * 0.45;
+        const noise = (Math.random() - 0.5) * amplitude * 0.2;
+        const value = base + seasonal + drift + noise;
+        const benchmarkBase = base * 0.96;
+        const benchmark = benchmarkBase + seasonal * 0.65 + drift * 0.55;
+        return {
+            timestamp: new Date(Date.now() - (points - 1 - index) * hoursStep * 60 * 60 * 1000).toISOString(),
+            value: Number(value.toFixed(2)),
+            benchmark: Number(benchmark.toFixed(2)),
+        };
+    });
+
+const portfolioPerformance: Record<PortfolioTimeRange, PortfolioPerformancePoint[]> = {
+    '1W': generatePortfolioPerformance(14, 255000, 4200, 12),
+    '1M': generatePortfolioPerformance(30, 248000, 6200, 24),
+    '3M': generatePortfolioPerformance(36, 235000, 7800, 48),
+    '6M': generatePortfolioPerformance(30, 226000, 9500, 96),
+    '1Y': generatePortfolioPerformance(26, 208000, 11200, 168),
+};
+
+const portfolioDistribution: PortfolioDistributionSlice[] = portfolioHoldings.map(asset => ({
+    id: asset.id,
+    asset: asset.symbol,
+    percentage: Number((asset.allocation ?? 0).toFixed(2)),
+    value: Number(asset.value.toFixed(2)),
+    color: asset.color ?? '#818cf8',
+}));
+
+const portfolioExposures: PortfolioRiskExposure[] = [
+    { id: 'exp-var', metricKey: 'var', score: 72 },
+    { id: 'exp-drawdown', metricKey: 'drawdown', score: 64 },
+    { id: 'exp-volatility', metricKey: 'volatility', score: 58 },
+    { id: 'exp-sharpe', metricKey: 'sharpe', score: 82 },
+    { id: 'exp-diversity', metricKey: 'diversity', score: 76 },
+    { id: 'exp-liquidity', metricKey: 'liquidity', score: 88 },
+];
+
+const portfolioCorrelation: PortfolioCorrelationMatrix = {
+    assets: ['BTC', 'ETH', 'SOL', 'BNB', 'LINK', 'ADA'],
+    values: [
+        [1.0, 0.79, 0.63, 0.58, 0.52, 0.49],
+        [0.79, 1.0, 0.68, 0.61, 0.57, 0.54],
+        [0.63, 0.68, 1.0, 0.55, 0.48, 0.46],
+        [0.58, 0.61, 0.55, 1.0, 0.51, 0.44],
+        [0.52, 0.57, 0.48, 0.51, 1.0, 0.42],
+        [0.49, 0.54, 0.46, 0.44, 0.42, 1.0],
+    ],
+};
+
+const portfolioMonthlyReturns: PortfolioMonthlyReturn[] = [
+    { id: '2023-10', month: '2023-10-01', value: 2.18, benchmark: 1.62 },
+    { id: '2023-11', month: '2023-11-01', value: 3.94, benchmark: 2.75 },
+    { id: '2023-12', month: '2023-12-01', value: 5.62, benchmark: 3.88 },
+    { id: '2024-01', month: '2024-01-01', value: -1.84, benchmark: -2.45 },
+    { id: '2024-02', month: '2024-02-01', value: 4.37, benchmark: 2.91 },
+    { id: '2024-03', month: '2024-03-01', value: 6.12, benchmark: 3.45 },
+    { id: '2024-04', month: '2024-04-01', value: 3.48, benchmark: 1.82 },
+    { id: '2024-05', month: '2024-05-01', value: -2.57, benchmark: -3.14 },
+    { id: '2024-06', month: '2024-06-01', value: 5.21, benchmark: 2.64 },
+    { id: '2024-07', month: '2024-07-01', value: 4.88, benchmark: 2.12 },
+    { id: '2024-08', month: '2024-08-01', value: -1.96, benchmark: -2.75 },
+    { id: '2024-09', month: '2024-09-01', value: 3.77, benchmark: 1.95 },
+];
+
+const portfolioInsights: PortfolioInsight[] = [
+    {
+        id: 'insight-outperform',
+        titleKey: 'outperform_market',
+        descriptionKey: 'outperform_market_desc',
+        tone: 'positive',
+        confidence: 92,
+        acknowledged: false,
+        timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'insight-concentration',
+        titleKey: 'high_btc_concentration',
+        descriptionKey: 'high_btc_concentration_desc',
+        tone: 'warning',
+        confidence: 74,
+        acknowledged: false,
+        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'insight-rebalance',
+        titleKey: 'rebalance_opportunity',
+        descriptionKey: 'rebalance_opportunity_desc',
+        tone: 'neutral',
+        confidence: 68,
+        acknowledged: true,
+        timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'insight-risk',
+        titleKey: 'excellent_risk_management',
+        descriptionKey: 'excellent_risk_management_desc',
+        tone: 'positive',
+        confidence: 81,
+        acknowledged: false,
+        timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+    },
+];
+
+const portfolioActivities: PortfolioActivity[] = [
+    {
+        id: 'activity-1',
+        timestamp: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+        messageKey: 'portfolio_activity_rebalanced',
+        metadata: { strategy: 'equal_weight' },
+    },
+    {
+        id: 'activity-2',
+        timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+        messageKey: 'portfolio_activity_allocation_updated',
+        metadata: { asset: 'BTC', target: 42 },
+    },
+    {
+        id: 'activity-3',
+        timestamp: new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString(),
+        messageKey: 'portfolio_activity_new_signal',
+        metadata: { asset: 'SOL', confidence: 84 },
+    },
+];
+
+const portfolio: PortfolioPageData = {
+    stats: portfolioStats,
+    holdings: portfolioHoldings,
+    riskMetrics,
+    performance: portfolioPerformance,
+    distribution: portfolioDistribution,
+    exposures: portfolioExposures,
+    correlation: portfolioCorrelation,
+    monthlyReturns: portfolioMonthlyReturns,
+    insights: portfolioInsights,
+    activities: portfolioActivities,
+    lastUpdated: new Date().toISOString(),
+};
 
 const analysisStats: AnalysisStat[] = [
     { label: 'success_rate', value: '85%', subValue: 'excellent_performance', change: 3.2 },
@@ -411,8 +749,7 @@ export const _data = {
     allAssets,
     marketMovers,
     strategies,
-    portfolioStats,
-    portfolioAssets,
+    portfolio,
     riskMetrics,
     analysisStats,
     smartPredictions,
