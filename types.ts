@@ -47,6 +47,24 @@ export interface User {
     password?: string; // For mock auth
 }
 
+export interface Asset {
+    id: string;
+    name: string;
+    symbol: string;
+    amount: number;
+    currentValue: number;
+    change24h: number;
+}
+
+export interface Trade {
+    id: string;
+    pair: string;
+    side: 'buy' | 'sell';
+    price: number;
+    amount: number;
+    time: string;
+}
+
 export interface AIPrediction {
   id: string;
   aiAgent: string;
