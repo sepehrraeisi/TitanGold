@@ -36,7 +36,14 @@ import type {
     NewsPageData,
     AIAgent,
     AIProvider,
+    AISystemSummary,
+    AIManagerOverview,
     AIAnalyticsMetrics,
+    AITrainingStats,
+    AITrainingSession,
+    AICenterData,
+    APIServiceIntegration,
+    AIAPIConfigData,
     WalletAsset,
     WalletTransaction,
     GoldAsset,
@@ -1032,7 +1039,7 @@ const aiProviders: AIProvider[] = [
     { id: 'openai', name: 'OpenAI GPT', performance: 94, usage: 0 },
 ];
 
-const aiSystemSummary = {
+const aiSystemSummary: AISystemSummary = {
     totalAgents: 15,
     activeAgents: 15,
     inTraining: 2,
@@ -1044,6 +1051,136 @@ const aiAnalytics: AIAnalyticsMetrics = {
     performance: { totalDecisions: 354574, totalLearningHours: 26755, avgAccuracy: 89.3, monthlyImprovement: 2.3 },
     resourceUsage: { cpu: 67, gpu: 91.8, memory: 52, precision: [0.9, 0.92, 0.91, 0.93, 0.94, 0.93, 0.942], recall: [0.88, 0.89, 0.88, 0.9, 0.91, 0.9, 0.918] },
     agentMatrix: aiAgents.slice(0, 12).map(a => ({ id: a.id, name: a.role.substring(0, 15) + '...', accuracy: parseFloat(a.accuracy.toFixed(1)), successRate: parseFloat((a.accuracy - Math.random() * 5).toFixed(1)), progress: parseFloat(a.trainingProgress.toFixed(1)), status: a.status as any })),
+    lastUpdated: new Date().toISOString(),
+};
+
+const aiTrainingRunning: AITrainingSession[] = [
+    {
+        id: 'session-btc-alpha',
+        title: 'BTC Momentum Reinforcement',
+        mode: 'individual',
+        agentIds: ['1'],
+        status: 'running',
+        startedAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+        expectedCompletionMinutes: 25,
+    },
+    {
+        id: 'session-cross-liquidity',
+        title: 'Cross-Market Liquidity Sweep',
+        mode: 'cross-functional',
+        agentIds: ['6', '9', '11'],
+        status: 'running',
+        startedAt: new Date(Date.now() - 7 * 60 * 1000).toISOString(),
+        expectedCompletionMinutes: 40,
+    },
+];
+
+const aiTrainingQueue: AITrainingSession[] = [
+    {
+        id: 'session-altcoin',
+        title: 'Altcoin Breakout Detection',
+        mode: 'collective',
+        agentIds: ['4', '8', '12'],
+        status: 'scheduled',
+        startedAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        expectedCompletionMinutes: 55,
+    },
+    {
+        id: 'session-risk-balance',
+        title: 'Risk/Reward Rebalancing',
+        mode: 'collective',
+        agentIds: ['2', '5'],
+        status: 'scheduled',
+        startedAt: new Date(Date.now() + 35 * 60 * 1000).toISOString(),
+        expectedCompletionMinutes: 30,
+    },
+];
+
+const aiTrainingHistory: AITrainingSession[] = [
+    {
+        id: 'session-sentiment',
+        title: 'Sentiment to Execution Alignment',
+        mode: 'cross-functional',
+        agentIds: ['3', '7'],
+        status: 'completed',
+        startedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+        expectedCompletionMinutes: 45,
+        completedAt: new Date(Date.now() - 2.2 * 60 * 60 * 1000).toISOString(),
+        accuracyGain: 2.1,
+    },
+    {
+        id: 'session-arbitrage',
+        title: 'Arbitrage Path Optimization',
+        mode: 'individual',
+        agentIds: ['6'],
+        status: 'completed',
+        startedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+        expectedCompletionMinutes: 35,
+        completedAt: new Date(Date.now() - 5.5 * 60 * 60 * 1000).toISOString(),
+        accuracyGain: 1.4,
+    },
+];
+
+const aiTrainingStats: AITrainingStats = {
+    sessions: 4388,
+    avgAccuracy: 89.7,
+    activeTrainingAgents: 5,
+    runningSessions: aiTrainingRunning,
+    queue: aiTrainingQueue,
+    recentHistory: aiTrainingHistory,
+    lastUpdated: new Date().toISOString(),
+};
+
+const aiServiceIntegrations: APIServiceIntegration[] = [
+    { id: 'ai-gemini', name: 'Google Gemini', category: 'ai', hasSecret: true, connected: true, maskedKey: 'AK***GEM', lastTestedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
+    { id: 'ai-claude', name: 'Anthropic Claude', category: 'ai', hasSecret: true, connected: true, maskedKey: 'AK***ANT', lastTestedAt: new Date(Date.now() - 65 * 60 * 1000).toISOString() },
+    { id: 'ai-openai', name: 'OpenAI GPT', category: 'ai', hasSecret: true, connected: false, maskedKey: 'AK***GPT', issues: 'Usage quota exceeded - awaiting top-up', lastTestedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString() },
+];
+
+const exchangeIntegrations: APIServiceIntegration[] = [
+    { id: 'ex-mexc', name: 'MEXC', category: 'exchange', hasSecret: true, connected: true, maskedKey: 'MX***001', lastTestedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
+    { id: 'ex-binance', name: 'Binance', category: 'exchange', hasSecret: true, connected: false, maskedKey: 'BN***221', issues: 'API key disabled due to region restrictions' },
+    { id: 'ex-kucoin', name: 'KuCoin', category: 'exchange', hasSecret: true, connected: false, maskedKey: 'KC***117', issues: 'Pending security verification' },
+    { id: 'ex-coinbase', name: 'Coinbase', category: 'exchange', hasSecret: true, connected: true, maskedKey: 'CB***908', lastTestedAt: new Date(Date.now() - 90 * 60 * 1000).toISOString() },
+];
+
+const communicationIntegrations: APIServiceIntegration[] = [
+    { id: 'com-telegram', name: 'Telegram Bot', category: 'communication', hasSecret: true, connected: true, maskedKey: 'TG***321', lastTestedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
+    { id: 'com-voice', name: 'Realtime Voice', category: 'communication', hasSecret: false, connected: true, maskedKey: 'Voice Enabled' },
+    { id: 'com-email', name: 'Transactional Email', category: 'communication', hasSecret: false, connected: false, maskedKey: 'smtp@titan.ai', issues: 'SMTP credentials expired' },
+];
+
+const marketDataIntegrations: APIServiceIntegration[] = [
+    { id: 'market-mexc', name: 'MEXC Market Data', category: 'market_data', hasSecret: false, connected: true, maskedKey: 'Premium Feed', lastTestedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString() },
+    { id: 'market-chain', name: 'On-chain Analytics', category: 'market_data', hasSecret: true, connected: true, maskedKey: 'ON***998', lastTestedAt: new Date(Date.now() - 120 * 60 * 1000).toISOString() },
+    { id: 'market-news', name: 'Verified News Grid', category: 'market_data', hasSecret: false, connected: true, maskedKey: 'Linked to News Engine', lastTestedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString() },
+];
+
+const aiApiConfig: AIAPIConfigData = {
+    aiServices: aiServiceIntegrations,
+    exchangeServices: exchangeIntegrations,
+    communicationServices: communicationIntegrations,
+    marketDataServices: marketDataIntegrations,
+    lastUpdated: new Date().toISOString(),
+};
+
+const aiManagerOverview: AIManagerOverview = {
+    summary: aiSystemSummary,
+    providers: aiProviders,
+    topAgents: aiAgents
+        .slice()
+        .sort((a, b) => b.accuracy - a.accuracy)
+        .slice(0, 5)
+        .map(agent => ({ id: agent.id, name: agent.name, role: agent.role, accuracy: agent.accuracy, status: agent.status })),
+    lastUpdated: new Date().toISOString(),
+};
+
+const aiCenter: AICenterData = {
+    overview: aiManagerOverview,
+    agents: aiAgents,
+    analytics: aiAnalytics,
+    training: aiTrainingStats,
+    apiConfig: aiApiConfig,
 };
 
 const walletData = {
@@ -1191,10 +1328,7 @@ export const _data = {
     news,
     connectionSettings,
     notificationSettings,
-    aiAgents,
-    aiProviders,
-    aiSystemSummary,
-    aiAnalytics,
+    aiCenter,
     walletData,
     tradingDashboard,
     manualTrading,

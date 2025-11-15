@@ -41,7 +41,14 @@ import type {
     NewsPageData,
     AIAgent,
     AIProvider,
+    AIManagerOverview,
     AIAnalyticsMetrics,
+    AITrainingStats,
+    AITrainingSession,
+    AITrainingMode,
+    APIServiceIntegration,
+    AIAPIConfigData,
+    AICenterData,
     GoldAsset,
     GoldPrediction,
     GoldNewsArticle,
@@ -111,6 +118,13 @@ const ensureNews = (): NewsPageData => {
     return db.news;
 };
 
+const ensureAICenter = (): AICenterData => {
+    if (!db.aiCenter) {
+        throw new Error('AI center data not initialized');
+    }
+    return db.aiCenter;
+};
+
 const cloneAutopilotState = (state: AutopilotState): AutopilotState => ({
     ...state,
     goal: { ...state.goal },
@@ -149,6 +163,69 @@ const cloneManualTrading = (data: ManualTradingPageData): ManualTradingPageData 
     recentTrades: data.recentTrades.map(item => ({ ...item })),
 });
 
+const cloneAIAgent = (agent: AIAgent): AIAgent => ({
+    ...agent,
+    capabilities: [...agent.capabilities],
+});
+
+const cloneAIProvider = (provider: AIProvider): AIProvider => ({ ...provider });
+
+const cloneAITrainingSession = (session: AITrainingSession): AITrainingSession => ({
+    ...session,
+    agentIds: [...session.agentIds],
+});
+
+const cloneAITrainingStats = (stats: AITrainingStats): AITrainingStats => ({
+    ...stats,
+    runningSessions: stats.runningSessions.map(cloneAITrainingSession),
+    queue: stats.queue.map(cloneAITrainingSession),
+    recentHistory: stats.recentHistory.map(cloneAITrainingSession),
+});
+
+const cloneAIAnalytics = (analytics: AIAnalyticsMetrics): AIAnalyticsMetrics => ({
+    realtime: {
+        ...analytics.realtime,
+        agentDistribution: { ...analytics.realtime.agentDistribution },
+    },
+    performance: { ...analytics.performance },
+    resourceUsage: {
+        cpu: analytics.resourceUsage.cpu,
+        gpu: analytics.resourceUsage.gpu,
+        memory: analytics.resourceUsage.memory,
+        precision: [...analytics.resourceUsage.precision],
+        recall: [...analytics.resourceUsage.recall],
+    },
+    agentMatrix: analytics.agentMatrix.map(row => ({ ...row })),
+    lastUpdated: analytics.lastUpdated,
+});
+
+const cloneAIManagerOverview = (overview: AIManagerOverview): AIManagerOverview => ({
+    summary: { ...overview.summary },
+    providers: overview.providers.map(cloneAIProvider),
+    topAgents: overview.topAgents.map(agent => ({ ...agent })),
+    lastUpdated: overview.lastUpdated,
+});
+
+const cloneAPIServiceIntegration = (service: APIServiceIntegration): APIServiceIntegration => ({
+    ...service,
+});
+
+const cloneAIAPIConfig = (config: AIAPIConfigData): AIAPIConfigData => ({
+    aiServices: config.aiServices.map(cloneAPIServiceIntegration),
+    exchangeServices: config.exchangeServices.map(cloneAPIServiceIntegration),
+    communicationServices: config.communicationServices.map(cloneAPIServiceIntegration),
+    marketDataServices: config.marketDataServices.map(cloneAPIServiceIntegration),
+    lastUpdated: config.lastUpdated,
+});
+
+const cloneAICenter = (center: AICenterData): AICenterData => ({
+    overview: cloneAIManagerOverview(center.overview),
+    agents: center.agents.map(cloneAIAgent),
+    analytics: cloneAIAnalytics(center.analytics),
+    training: cloneAITrainingStats(center.training),
+    apiConfig: cloneAIAPIConfig(center.apiConfig),
+});
+
 const mutateTradingDashboard = (
     mutator: (draft: TradingDashboardData) => void
 ): TradingDashboardData => {
@@ -167,6 +244,86 @@ const mutateManualTrading = (
     base.lastUpdated = new Date().toISOString();
     db.manualTrading = base;
     return cloneManualTrading(base);
+};
+
+const mutateAICenter = (
+    mutator: (draft: AICenterData) => void,
+): AICenterData => {
+    const base = cloneAICenter(ensureAICenter());
+    mutator(base);
+    db.aiCenter = base;
+    return cloneAICenter(base);
+};
+
+const recalculateAISummary = (draft: AICenterData): void => {
+    const total = draft.agents.length;
+    const active = draft.agents.filter(agent => agent.status === 'active').length;
+    const inTraining = draft.agents.filter(agent => agent.status === 'training').length;
+    const avgAccuracy = total
+        ? Number((draft.agents.reduce((sum, agent) => sum + agent.accuracy, 0) / total).toFixed(1))
+        : 0;
+
+    draft.overview.summary = {
+        ...draft.overview.summary,
+        totalAgents: total,
+        activeAgents: active,
+        inTraining,
+        avgAccuracy,
+    };
+};
+
+const refreshAIOverview = (draft: AICenterData): void => {
+    recalculateAISummary(draft);
+    draft.overview.topAgents = draft.agents
+        .slice()
+        .sort((a, b) => b.accuracy - a.accuracy)
+        .slice(0, 5)
+        .map(agent => ({
+            id: agent.id,
+            name: agent.name,
+            role: agent.role,
+            accuracy: agent.accuracy,
+            status: agent.status,
+        }));
+    draft.overview.lastUpdated = new Date().toISOString();
+};
+
+const updateTrainingTimestamp = (draft: AICenterData): void => {
+    draft.training.lastUpdated = new Date().toISOString();
+};
+
+const updateAnalyticsTimestamp = (draft: AICenterData): void => {
+    draft.analytics.lastUpdated = new Date().toISOString();
+};
+
+const updateAPIConfigTimestamp = (draft: AICenterData): void => {
+    draft.apiConfig.lastUpdated = new Date().toISOString();
+};
+
+const findIntegrationById = (config: AIAPIConfigData, serviceId: string): APIServiceIntegration | undefined => {
+    const groups = [
+        config.aiServices,
+        config.exchangeServices,
+        config.communicationServices,
+        config.marketDataServices,
+    ];
+
+    for (const group of groups) {
+        const service = group.find(item => item.id === serviceId);
+        if (service) {
+            return service;
+        }
+    }
+
+    return undefined;
+};
+
+const updateActiveTrainingAgents = (draft: AICenterData): void => {
+    const agentIds = new Set<string>();
+    draft.training.runningSessions.forEach(session => {
+        session.agentIds.forEach(id => agentIds.add(id));
+    });
+    draft.training.activeTrainingAgents = agentIds.size;
 };
 
 const mutateNews = (
@@ -1710,33 +1867,247 @@ export const sendTestTelegramMessage = (botToken: string, channelId: string): Pr
     });
 }
 
-export const fetchAIManagerData = (): Promise<{ summary: any, providers: AIProvider[], topAgents: any[] }> => {
-    return new Promise(resolve => {
+export const fetchAIManagerData = (): Promise<AIManagerOverview> =>
+    new Promise(resolve => {
         setTimeout(() => {
-            resolve({
-                summary: db.aiSystemSummary,
-                providers: db.aiProviders,
-                topAgents: db.aiAgents.slice(0, 5).sort((a, b) => b.accuracy - a.accuracy)
-            });
+            resolve(cloneAIManagerOverview(ensureAICenter().overview));
         }, FAKE_LATENCY);
     });
-}
 
-export const fetchAIAgents = (): Promise<AIAgent[]> => {
-    return new Promise(resolve => setTimeout(() => resolve(db.aiAgents), FAKE_LATENCY));
-}
+export const fetchAIAgents = (): Promise<AIAgent[]> =>
+    new Promise(resolve => {
+        setTimeout(() => {
+            resolve(ensureAICenter().agents.map(cloneAIAgent));
+        }, FAKE_LATENCY);
+    });
 
-export const fetchTrainingData = (): Promise<any> => {
-    return new Promise(resolve => setTimeout(() => resolve({ sessions: 4388, avgAccuracy: 89.7 }), FAKE_LATENCY));
-}
+export const fetchTrainingData = (): Promise<AITrainingStats> =>
+    new Promise(resolve => {
+        setTimeout(() => {
+            resolve(cloneAITrainingStats(ensureAICenter().training));
+        }, FAKE_LATENCY);
+    });
 
-export const fetchAnalyticsData = (): Promise<AIAnalyticsMetrics> => {
-    return new Promise(resolve => setTimeout(() => resolve(db.aiAnalytics), FAKE_LATENCY));
-}
+export const fetchAnalyticsData = (): Promise<AIAnalyticsMetrics> =>
+    new Promise(resolve => {
+        setTimeout(() => {
+            resolve(cloneAIAnalytics(ensureAICenter().analytics));
+        }, FAKE_LATENCY);
+    });
 
-export const fetchAPIConfigData = (): Promise<any> => {
-    return new Promise(resolve => setTimeout(() => resolve({}), FAKE_LATENCY));
-}
+export const fetchAPIConfigData = (): Promise<AIAPIConfigData> =>
+    new Promise(resolve => {
+        setTimeout(() => {
+            resolve(cloneAIAPIConfig(ensureAICenter().apiConfig));
+        }, FAKE_LATENCY);
+    });
+
+export const updateAIAgent = (
+    agentId: string,
+    updates: Partial<Pick<AIAgent, 'status' | 'trainingProgress' | 'accuracy' | 'decisions' | 'learningTime' | 'knowledgeSize'>>,
+): Promise<AIAgent> =>
+    new Promise((resolve, reject) => {
+        setTimeout(() => {
+            try {
+                const result = mutateAICenter(draft => {
+                    const agent = draft.agents.find(item => item.id === agentId);
+                    if (!agent) {
+                        throw new Error('Agent not found');
+                    }
+
+                    if (updates.trainingProgress !== undefined) {
+                        agent.trainingProgress = Math.max(0, Math.min(100, updates.trainingProgress));
+                    }
+                    if (updates.accuracy !== undefined) {
+                        agent.accuracy = Number(Math.max(0, Math.min(100, updates.accuracy)).toFixed(1));
+                    }
+                    if (updates.decisions !== undefined) {
+                        agent.decisions = Math.max(0, Math.round(updates.decisions));
+                    }
+                    if (updates.learningTime !== undefined) {
+                        agent.learningTime = Math.max(0, Math.round(updates.learningTime));
+                    }
+                    if (updates.knowledgeSize !== undefined) {
+                        agent.knowledgeSize = Math.max(0, updates.knowledgeSize);
+                    }
+                    if (updates.status) {
+                        agent.status = updates.status;
+                    }
+
+                    agent.lastUpdate = new Date().toISOString();
+                    refreshAIOverview(draft);
+                    updateAnalyticsTimestamp(draft);
+                });
+
+                const updatedAgent = result.agents.find(item => item.id === agentId);
+                if (!updatedAgent) {
+                    throw new Error('Agent not found after update');
+                }
+
+                resolve(cloneAIAgent(updatedAgent));
+            } catch (error) {
+                reject(error);
+            }
+        }, FAKE_LATENCY);
+    });
+
+export const scheduleAITrainingSession = (
+    input: {
+        title: string;
+        mode: AITrainingMode;
+        agentIds: string[];
+        expectedCompletionMinutes: number;
+        startInMinutes?: number;
+    },
+): Promise<AITrainingStats> =>
+    new Promise((resolve, reject) => {
+        setTimeout(() => {
+            try {
+                const result = mutateAICenter(draft => {
+                    const session: AITrainingSession = {
+                        id: `session-${Date.now()}`,
+                        title: input.title,
+                        mode: input.mode,
+                        agentIds: [...input.agentIds],
+                        status: 'scheduled',
+                        startedAt: new Date(Date.now() + (input.startInMinutes ?? 5) * 60 * 1000).toISOString(),
+                        expectedCompletionMinutes: input.expectedCompletionMinutes,
+                    };
+
+                    draft.training.queue.push(session);
+                    draft.training.sessions += 1;
+                    updateTrainingTimestamp(draft);
+                    updateActiveTrainingAgents(draft);
+                });
+
+                resolve(cloneAITrainingStats(result.training));
+            } catch (error) {
+                reject(error);
+            }
+        }, FAKE_LATENCY);
+    });
+
+export const completeAITrainingSession = (
+    sessionId: string,
+    accuracyGain: number,
+): Promise<AITrainingStats> =>
+    new Promise((resolve, reject) => {
+        setTimeout(() => {
+            try {
+                const result = mutateAICenter(draft => {
+                    const runningIndex = draft.training.runningSessions.findIndex(session => session.id === sessionId);
+                    if (runningIndex === -1) {
+                        throw new Error('Training session is not running');
+                    }
+
+                    const runningSession = draft.training.runningSessions.splice(runningIndex, 1)[0];
+                    const completed: AITrainingSession = {
+                        ...runningSession,
+                        status: 'completed',
+                        completedAt: new Date().toISOString(),
+                        accuracyGain,
+                    };
+
+                    draft.training.recentHistory = [completed, ...draft.training.recentHistory].slice(0, 12);
+
+                    const perAgentGain = accuracyGain / Math.max(1, completed.agentIds.length);
+                    completed.agentIds.forEach(agentId => {
+                        const agent = draft.agents.find(item => item.id === agentId);
+                        if (agent) {
+                            agent.accuracy = Number(Math.min(100, agent.accuracy + perAgentGain).toFixed(1));
+                            agent.trainingProgress = Math.min(100, Number((agent.trainingProgress + 5).toFixed(1)));
+                            agent.lastUpdate = new Date().toISOString();
+                        }
+                    });
+
+                    const nextSession = draft.training.queue.shift();
+                    if (nextSession) {
+                        nextSession.status = 'running';
+                        nextSession.startedAt = new Date().toISOString();
+                        draft.training.runningSessions.push(nextSession);
+                    }
+
+                    updateActiveTrainingAgents(draft);
+                    updateTrainingTimestamp(draft);
+                    refreshAIOverview(draft);
+                    updateAnalyticsTimestamp(draft);
+                });
+
+                resolve(cloneAITrainingStats(result.training));
+            } catch (error) {
+                reject(error);
+            }
+        }, FAKE_LATENCY);
+    });
+
+export const updateAIProviderStats = (
+    providerId: AIProvider['id'],
+    updates: Partial<Pick<AIProvider, 'usage' | 'performance'>>,
+): Promise<AIManagerOverview> =>
+    new Promise((resolve, reject) => {
+        setTimeout(() => {
+            try {
+                const result = mutateAICenter(draft => {
+                    const provider = draft.overview.providers.find(item => item.id === providerId);
+                    if (!provider) {
+                        throw new Error('Provider not found');
+                    }
+
+                    if (updates.usage !== undefined) {
+                        provider.usage = Math.max(0, updates.usage);
+                    }
+
+                    if (updates.performance !== undefined) {
+                        provider.performance = Math.max(0, Math.min(100, updates.performance));
+                    }
+
+                    draft.overview.providers = draft.overview.providers.map(cloneAIProvider);
+                    draft.overview.lastUpdated = new Date().toISOString();
+                });
+
+                resolve(cloneAIManagerOverview(result.overview));
+            } catch (error) {
+                reject(error);
+            }
+        }, FAKE_LATENCY);
+    });
+
+export const testAIIntegration = (
+    serviceId: string,
+    succeed = true,
+): Promise<APIServiceIntegration> =>
+    new Promise((resolve, reject) => {
+        setTimeout(() => {
+            try {
+                const result = mutateAICenter(draft => {
+                    const service = findIntegrationById(draft.apiConfig, serviceId);
+                    if (!service) {
+                        throw new Error('Integration not found');
+                    }
+
+                    service.lastTestedAt = new Date().toISOString();
+                    if (succeed) {
+                        service.connected = true;
+                        service.issues = undefined;
+                    } else {
+                        service.connected = false;
+                        service.issues = 'Connection test failed';
+                    }
+
+                    updateAPIConfigTimestamp(draft);
+                });
+
+                const updated = findIntegrationById(result.apiConfig, serviceId);
+                if (!updated) {
+                    throw new Error('Integration not found after update');
+                }
+
+                resolve(cloneAPIServiceIntegration(updated));
+            } catch (error) {
+                reject(error);
+            }
+        }, FAKE_LATENCY);
+    });
 
 export const fetchWalletData = (): Promise<any> => {
     return new Promise(resolve => setTimeout(() => resolve(db.walletData), FAKE_LATENCY));

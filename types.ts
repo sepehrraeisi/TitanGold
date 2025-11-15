@@ -669,6 +669,20 @@ export interface AIProvider {
     usage: number;
 }
 
+export interface AISystemSummary {
+    totalAgents: number;
+    activeAgents: number;
+    inTraining: number;
+    avgAccuracy: number;
+}
+
+export interface AIManagerOverview {
+    summary: AISystemSummary;
+    providers: AIProvider[];
+    topAgents: Array<Pick<AIAgent, 'id' | 'name' | 'role' | 'accuracy' | 'status'>>;
+    lastUpdated: string;
+}
+
 export interface AIAnalyticsMetrics {
     realtime: {
         decisionRate: number;
@@ -690,6 +704,60 @@ export interface AIAnalyticsMetrics {
         recall: number[];
     };
     agentMatrix: Array<{ id: string; name: string; accuracy: number; successRate: number; progress: number; status: 'active' | 'training' | 'error' }>;
+    lastUpdated: string;
+}
+
+export type AITrainingMode = 'individual' | 'collective' | 'cross-functional';
+
+export type AITrainingStatus = 'scheduled' | 'running' | 'completed';
+
+export interface AITrainingSession {
+    id: string;
+    title: string;
+    mode: AITrainingMode;
+    agentIds: string[];
+    status: AITrainingStatus;
+    startedAt: string;
+    expectedCompletionMinutes: number;
+    completedAt?: string;
+    accuracyGain?: number;
+}
+
+export interface AITrainingStats {
+    sessions: number;
+    avgAccuracy: number;
+    activeTrainingAgents: number;
+    runningSessions: AITrainingSession[];
+    queue: AITrainingSession[];
+    recentHistory: AITrainingSession[];
+    lastUpdated: string;
+}
+
+export interface APIServiceIntegration {
+    id: string;
+    name: string;
+    category: 'ai' | 'exchange' | 'communication' | 'market_data';
+    hasSecret: boolean;
+    connected: boolean;
+    maskedKey: string;
+    lastTestedAt?: string;
+    issues?: string;
+}
+
+export interface AIAPIConfigData {
+    aiServices: APIServiceIntegration[];
+    exchangeServices: APIServiceIntegration[];
+    communicationServices: APIServiceIntegration[];
+    marketDataServices: APIServiceIntegration[];
+    lastUpdated: string;
+}
+
+export interface AICenterData {
+    overview: AIManagerOverview;
+    agents: AIAgent[];
+    analytics: AIAnalyticsMetrics;
+    training: AITrainingStats;
+    apiConfig: AIAPIConfigData;
 }
 
 export interface GoldAsset {
