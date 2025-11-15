@@ -33,6 +33,12 @@ import type {
     PerformanceTrade,
     NewsArticle,
     EconomicEvent,
+    NewsSummaryStat,
+    NewsSentimentSnapshot,
+    NewsSource,
+    NewsAlert,
+    NewsBriefing,
+    NewsPageData,
     AIAgent,
     AIProvider,
     AIAnalyticsMetrics,
@@ -98,6 +104,13 @@ const ensureAnalysis = (): AnalysisPageData => {
     return db.analysis;
 };
 
+const ensureNews = (): NewsPageData => {
+    if (!db.news) {
+        throw new Error('News data not initialized');
+    }
+    return db.news;
+};
+
 const cloneAutopilotState = (state: AutopilotState): AutopilotState => ({
     ...state,
     goal: { ...state.goal },
@@ -156,6 +169,264 @@ const mutateManualTrading = (
     return cloneManualTrading(base);
 };
 
+const mutateNews = (
+    mutator: (draft: NewsPageData) => void,
+): NewsPageData => {
+    const base = cloneNews(ensureNews());
+    mutator(base);
+    base.lastUpdated = new Date().toISOString();
+    db.news = base;
+    return cloneNews(base);
+};
+
+const setNewsStatValue = (stats: NewsSummaryStat[], id: string, nextValue: number): void => {
+    const stat = stats.find(item => item.id === id);
+    if (!stat) {
+        return;
+    }
+    const delta = Number((nextValue - stat.value).toFixed(1));
+    stat.direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+    stat.delta = Math.abs(delta);
+    stat.value = nextValue;
+};
+
+const recalculateNewsStats = (draft: NewsPageData): void => {
+    setNewsStatValue(draft.stats, 'news-total', draft.articles.length);
+    setNewsStatValue(
+        draft.stats,
+        'news-high-impact',
+        draft.events.filter(event => event.importance === 'high').length,
+    );
+    setNewsStatValue(
+        draft.stats,
+        'news-bullish',
+        draft.articles.filter(article => article.sentiment === 'Bullish').length,
+    );
+    setNewsStatValue(
+        draft.stats,
+        'news-bearish',
+        draft.articles.filter(article => article.sentiment === 'Bearish').length,
+    );
+};
+
+const adjustNewsSentiment = (snapshot: NewsSentimentSnapshot): void => {
+    const drift = Number(((Math.random() - 0.5) * 6).toFixed(1));
+    const nextScore = Math.min(100, Math.max(0, snapshot.marketScore + drift));
+    snapshot.trend = drift > 1 ? 'up' : drift < -1 ? 'down' : 'flat';
+    snapshot.change = Number((snapshot.change * 0.4 + drift).toFixed(1));
+    snapshot.marketScore = Number(nextScore.toFixed(1));
+    snapshot.bias = snapshot.marketScore > 55 ? 'Bullish' : snapshot.marketScore < 45 ? 'Bearish' : 'Neutral';
+    snapshot.trendingAssets = snapshot.trendingAssets.map(asset => ({
+        ...asset,
+        change: Number((asset.change + Number(((Math.random() - 0.5) * 4).toFixed(1))).toFixed(1)),
+    }));
+    snapshot.heatmap = snapshot.heatmap.map(cell => ({
+        ...cell,
+        value: Math.min(100, Math.max(0, cell.value + Math.round((Math.random() - 0.5) * 6))),
+    }));
+};
+
+const adjustNewsSources = (sources: NewsSource[]): void => {
+    const now = new Date().toISOString();
+    sources.forEach(source => {
+        const variance = Math.round((Math.random() - 0.5) * 6);
+        source.reliability = Math.min(100, Math.max(50, source.reliability + variance));
+        source.lastCheckedAt = now;
+    });
+};
+
+const parseNumericValue = (value: string): { number: number; decimals: number; suffix: string } | null => {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(-?\d+)(?:\.(\d+))?(%?)$/);
+    if (!match) {
+        return null;
+    }
+    const decimals = match[2] ? match[2].length : 0;
+    const number = parseFloat(match[1] + (match[2] ? `.${match[2]}` : ''));
+    return { number, decimals, suffix: match[3] ?? '' };
+};
+
+const formatNumericValue = (value: number, decimals: number, suffix: string): string =>
+    `${value.toFixed(decimals)}${suffix}`;
+
+const advanceEconomicEvents = (events: EconomicEvent[]): void => {
+    events.forEach(event => {
+        const parsed = parseNumericValue(event.actual);
+        if (!parsed) {
+            return;
+        }
+        const varianceBase = event.importance === 'high' ? 0.6 : 0.3;
+        const variance = (Math.random() - 0.5) * varianceBase;
+        const next = parsed.number + variance;
+        const decimals = parsed.decimals > 0 ? parsed.decimals : parsed.suffix ? 1 : 0;
+        event.actual = formatNumericValue(next, decimals, parsed.suffix);
+    });
+};
+
+type NewsArticleTemplate = {
+    source: string;
+    language?: 'en' | 'fa';
+    headline: string;
+    snippet: string;
+    category: NewsArticle['category'];
+    sentiment: NewsArticle['sentiment'];
+    verificationStatus: NewsArticle['verificationStatus'];
+    summary: string;
+    verificationDetails: string;
+    impactAnalysis: string;
+    takeaways: string[];
+    relatedAssets: string[];
+    tags: string[];
+    shareTargets?: string[];
+};
+
+const newsArticleTemplates: NewsArticleTemplate[] = [
+    {
+        source: 'Bloomberg',
+        headline: 'Institutional desks hedge ahead of CPI release',
+        snippet: 'Block trades on MEXC futures show strategic long hedging before macro catalysts.',
+        category: 'Crypto',
+        sentiment: 'Neutral',
+        verificationStatus: 'Verified',
+        summary: 'Mixed positioning signals controlled volatility into the event.',
+        verificationDetails: 'Confirmed with derivatives desk reports and Artemis liquidity monitors.',
+        impactAnalysis: 'Expect range-bound price action until macro data lands.',
+        takeaways: [
+            'Liquidity depth increased 12% overnight.',
+            'Options skew pricing mild downside risk.',
+            'Order book imbalance remains neutral.',
+        ],
+        relatedAssets: ['BTC', 'ETH'],
+        tags: ['Macro', 'Derivatives'],
+        shareTargets: ['@macro_watch'],
+    },
+    {
+        source: 'CoinDesk',
+        headline: 'Layer-2 activity surges on gaming token launches',
+        snippet: 'Artemis highlighted a 34% spike in daily transactions across Arbitrum gaming ecosystems.',
+        category: 'Crypto',
+        sentiment: 'Bullish',
+        verificationStatus: 'Verified',
+        summary: 'Network growth remains broad-based with sustained fee revenue.',
+        verificationDetails: 'Cross-checked with L2 analytics dashboards and MEXC listing data.',
+        impactAnalysis: 'Supports continued upside for ecosystem governance tokens.',
+        takeaways: [
+            'Active addresses up 21% week-over-week.',
+            'Bridge inflows remain net positive.',
+            'On-chain fees holding above seasonal averages.',
+        ],
+        relatedAssets: ['ARB', 'MAGIC'],
+        tags: ['Layer-2', 'Gaming'],
+        shareTargets: ['@vip_signals'],
+    },
+    {
+        source: 'Reuters',
+        headline: 'Energy markets steady as OPEC maintains output guidance',
+        snippet: 'Oil volatility cooled after OPEC signalled no immediate production changes.',
+        category: 'Economy',
+        sentiment: 'Neutral',
+        verificationStatus: 'Verified',
+        summary: 'Macro risk backdrop remains balanced for commodities.',
+        verificationDetails: 'Verified with official OPEC communiqué and industry trackers.',
+        impactAnalysis: 'Supports gradual rotation back into cyclicals and metals.',
+        takeaways: [
+            'Brent futures confined within 2% range.',
+            'Option skews pricing modest downside.',
+            'USD correlation remains elevated.',
+        ],
+        relatedAssets: ['OIL', 'XAU'],
+        tags: ['Commodities', 'Macro'],
+        shareTargets: ['@macro_watch'],
+    },
+    {
+        source: 'Security Ledger',
+        headline: 'Cross-chain bridge patches vulnerability after white-hat disclosure',
+        snippet: 'A coordinated fix closed a replay attack vector impacting mid-size DeFi bridges.',
+        category: 'Crypto',
+        sentiment: 'Bullish',
+        verificationStatus: 'Unverified',
+        summary: 'Remediation reduces near-term exploit risk for wrapped assets.',
+        verificationDetails: 'Awaiting public audit notes from participating security firms.',
+        impactAnalysis: 'Positive signal for cross-chain volumes once audits complete.',
+        takeaways: [
+            'Patch deployed across 5 networks.',
+            'Bridged liquidity restored within hours.',
+            'No customer funds impacted.',
+        ],
+        relatedAssets: ['OP', 'FTM'],
+        tags: ['Security', 'Infrastructure'],
+        shareTargets: ['@risk_channel'],
+    },
+];
+
+const randomFrom = <T,>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
+
+const createNewsArticle = (): NewsArticle => {
+    const template = randomFrom(newsArticleTemplates);
+    const impactScore = Math.min(100, Math.max(50, Math.round(60 + Math.random() * 35)));
+    const id = `news-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    return {
+        id,
+        source: template.source,
+        timestamp: 'Just now',
+        headline: template.headline,
+        snippet: template.snippet,
+        category: template.category,
+        verificationStatus: template.verificationStatus,
+        impactScore,
+        sentiment: template.sentiment,
+        aiAnalysis: {
+            summary: template.summary,
+            verificationDetails: template.verificationDetails,
+            impactAnalysis: template.impactAnalysis,
+            keyTakeaways: [...template.takeaways],
+        },
+        link: '#',
+        language: template.language ?? 'en',
+        relatedAssets: [...template.relatedAssets],
+        tags: [...template.tags],
+        shareTargets: template.shareTargets ? [...template.shareTargets] : undefined,
+        isBreaking: impactScore >= 85,
+        priority: impactScore,
+    };
+};
+
+const maybeAddNewsAlert = (draft: NewsPageData, article: NewsArticle): void => {
+    if (article.impactScore < 80) {
+        return;
+    }
+    const isBearish = article.sentiment === 'Bearish';
+    const severity: NewsAlert['severity'] = isBearish ? 'critical' : 'high';
+    const alert: NewsAlert = {
+        id: `alert-${article.id}`,
+        titleKey: isBearish ? 'alert_security_incident' : 'alert_high_impact_breakout',
+        descriptionKey: isBearish ? 'alert_security_incident_desc' : 'alert_high_impact_breakout_desc',
+        severity,
+        acknowledged: false,
+        relatedArticleId: article.id,
+        timestamp: new Date().toISOString(),
+    };
+    draft.alerts = [alert, ...draft.alerts].slice(0, 6);
+};
+
+const buildNewsBriefing = (data: NewsPageData, generatedAt: string): NewsBriefing => {
+    const breaking = (data.breakingArticleId && data.articles.find(article => article.id === data.breakingArticleId))
+        ?? data.articles[0];
+    const activeAlerts = data.alerts.filter(alert => !alert.acknowledged).length;
+    const highImpactEvents = data.events.filter(event => event.importance === 'high').length;
+
+    return {
+        title: 'Titan Market Pulse',
+        summary: `Artemis reviewed ${data.articles.length} stories. Sentiment is ${data.sentiment.bias.toLowerCase()} at ${data.sentiment.marketScore}.`,
+        highlights: [
+            breaking ? breaking.headline : 'No breaking headlines at this time.',
+            `${highImpactEvents} high-impact macro events are on the radar today.`,
+            `${activeAlerts} actionable alerts awaiting acknowledgment.`,
+        ],
+        generatedAt,
+    };
+};
+
 const clonePerformance = (
     performance: Record<PortfolioTimeRange, PortfolioPerformancePoint[]>,
 ): Record<PortfolioTimeRange, PortfolioPerformancePoint[]> => {
@@ -211,6 +482,39 @@ const cloneAnalysis = (data: AnalysisPageData): AnalysisPageData => ({
     predictions: data.predictions.map(prediction => ({ ...prediction })),
     trades: data.trades.map(trade => ({ ...trade })),
     reports: data.reports.map(report => ({ ...report })),
+});
+
+const cloneNewsArticle = (article: NewsArticle): NewsArticle => ({
+    ...article,
+    aiAnalysis: {
+        ...article.aiAnalysis,
+        keyTakeaways: [...article.aiAnalysis.keyTakeaways],
+    },
+    relatedAssets: article.relatedAssets ? [...article.relatedAssets] : undefined,
+    tags: article.tags ? [...article.tags] : undefined,
+    shareTargets: article.shareTargets ? [...article.shareTargets] : undefined,
+});
+
+const cloneNews = (data: NewsPageData): NewsPageData => ({
+    ...data,
+    stats: data.stats.map(stat => ({ ...stat })),
+    sentiment: {
+        ...data.sentiment,
+        trendingAssets: data.sentiment.trendingAssets.map(asset => ({ ...asset })),
+        heatmap: data.sentiment.heatmap.map(cell => ({ ...cell })),
+    },
+    sources: data.sources.map(source => ({ ...source })),
+    alerts: data.alerts.map(alert => ({ ...alert })),
+    watchlist: data.watchlist.map(item => ({ ...item })),
+    filterPresets: data.filterPresets.map(preset => ({
+        ...preset,
+        categories: [...preset.categories],
+        sentiments: [...preset.sentiments],
+        sources: preset.sources ? [...preset.sources] : undefined,
+    })),
+    articles: data.articles.map(cloneNewsArticle),
+    events: data.events.map(event => ({ ...event })),
+    pinnedArticleIds: data.pinnedArticleIds ? [...data.pinnedArticleIds] : undefined,
 });
 
 const advancePerformanceSeries = (
@@ -1232,15 +1536,108 @@ export const generateAnalysisReport = (
     return withLatency({ data: updated, downloadUrl }, 650);
 };
 
-export const fetchNewsPageData = (): Promise<{ articles: NewsArticle[], events: EconomicEvent[] }> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve({
-                articles: db.newsArticles,
-                events: db.economicEvents,
-            });
-        }, FAKE_LATENCY);
+export const fetchNewsPageData = (): Promise<NewsPageData> =>
+    withLatency(cloneNews(ensureNews()), 500);
+
+export const refreshNewsFeed = (): Promise<NewsPageData> =>
+    withLatency(
+        mutateNews(draft => {
+            const article = createNewsArticle();
+            draft.articles = [article, ...draft.articles].slice(0, 40);
+            if (article.isBreaking) {
+                draft.breakingArticleId = article.id;
+            }
+            maybeAddNewsAlert(draft, article);
+            recalculateNewsStats(draft);
+            adjustNewsSentiment(draft.sentiment);
+            adjustNewsSources(draft.sources);
+            advanceEconomicEvents(draft.events);
+        }),
+        420,
+    );
+
+export const updateNewsArticleVerification = (
+    articleId: string,
+    status: NewsArticle['verificationStatus'],
+): Promise<NewsPageData> =>
+    withLatency(
+        mutateNews(draft => {
+            const article = draft.articles.find(item => item.id === articleId);
+            if (!article) {
+                return;
+            }
+            article.verificationStatus = status;
+            article.aiAnalysis.verificationDetails =
+                status === 'Verified'
+                    ? 'Verification complete — Artemis confirmed all priority sources.'
+                    : status === 'Disputed'
+                        ? 'Conflicting sources detected. Manual review requested.'
+                        : 'Awaiting confirmations from priority news feeds.';
+        }),
+        320,
+    );
+
+export const pinNewsArticle = (articleId: string, pinned: boolean): Promise<NewsPageData> =>
+    withLatency(
+        mutateNews(draft => {
+            const article = draft.articles.find(item => item.id === articleId);
+            if (!article) {
+                return;
+            }
+            article.pinned = pinned;
+            article.priority = pinned ? Math.max(article.priority ?? 70, 90) : article.priority;
+            const pinnedSet = new Set(draft.pinnedArticleIds ?? []);
+            if (pinned) {
+                pinnedSet.add(articleId);
+            } else {
+                pinnedSet.delete(articleId);
+            }
+            draft.pinnedArticleIds = Array.from(pinnedSet);
+        }),
+        260,
+    );
+
+export const acknowledgeNewsAlert = (alertId: string): Promise<NewsPageData> =>
+    withLatency(
+        mutateNews(draft => {
+            const alert = draft.alerts.find(item => item.id === alertId);
+            if (alert) {
+                alert.acknowledged = true;
+            }
+        }),
+        220,
+    );
+
+export const toggleNewsWatchlistItem = (itemId: string): Promise<NewsPageData> =>
+    withLatency(
+        mutateNews(draft => {
+            const item = draft.watchlist.find(entry => entry.id === itemId);
+            if (item) {
+                item.isActive = !item.isActive;
+            }
+        }),
+        240,
+    );
+
+export const setNewsActiveFilter = (presetId: string): Promise<NewsPageData> =>
+    withLatency(
+        mutateNews(draft => {
+            if (draft.filterPresets.some(preset => preset.id === presetId)) {
+                draft.activeFilterId = presetId;
+            }
+        }),
+        200,
+    );
+
+export const generateNewsBriefing = (): Promise<{ data: NewsPageData; briefing: NewsBriefing }> => {
+    let briefing: NewsBriefing | undefined;
+    const updated = mutateNews(draft => {
+        const generatedAt = new Date().toISOString();
+        draft.lastBriefingGeneratedAt = generatedAt;
+        briefing = buildNewsBriefing(draft, generatedAt);
     });
+
+    return withLatency({ data: updated, briefing: briefing! }, 520);
 };
 
 export const fetchGoldPageData = (): Promise<{ assets: GoldAsset[], prediction: GoldPrediction, news: GoldNewsArticle[] }> => {

@@ -517,6 +517,13 @@ export interface NewsArticle {
     keyTakeaways: string[];
   };
   link: string;
+  language: 'en' | 'fa';
+  isBreaking?: boolean;
+  pinned?: boolean;
+  priority?: number;
+  relatedAssets?: string[];
+  tags?: string[];
+  shareTargets?: string[];
 }
 
 export interface EconomicEvent {
@@ -528,6 +535,99 @@ export interface EconomicEvent {
     previous: string;
     forecast: string;
     actual: string;
+}
+
+export interface NewsSummaryStat {
+    id: string;
+    labelKey: string;
+    value: number;
+    delta: number;
+    direction: 'up' | 'down' | 'flat';
+    suffix?: string;
+}
+
+export interface NewsSentimentAsset {
+    id: string;
+    name: string;
+    sentiment: 'Bullish' | 'Bearish' | 'Neutral';
+    change: number;
+}
+
+export interface NewsSentimentHeatmapCell {
+    id: string;
+    label: string;
+    value: number;
+}
+
+export interface NewsSentimentSnapshot {
+    marketScore: number;
+    bias: 'Bullish' | 'Bearish' | 'Neutral';
+    change: number;
+    trend: 'up' | 'down' | 'flat';
+    trendingAssets: NewsSentimentAsset[];
+    heatmap: NewsSentimentHeatmapCell[];
+}
+
+export type NewsAlertSeverity = 'critical' | 'high' | 'medium' | 'low';
+
+export interface NewsAlert {
+    id: string;
+    titleKey: string;
+    descriptionKey: string;
+    severity: NewsAlertSeverity;
+    acknowledged: boolean;
+    relatedArticleId?: string;
+    timestamp: string;
+}
+
+export interface NewsSource {
+    id: string;
+    name: string;
+    reliability: number;
+    verified: boolean;
+    isPriority: boolean;
+    lastCheckedAt: string;
+}
+
+export type NewsWatchlistItemType = 'asset' | 'macro' | 'defi' | 'custom';
+
+export interface NewsWatchlistItem {
+    id: string;
+    name: string;
+    type: NewsWatchlistItemType;
+    isActive: boolean;
+}
+
+export interface NewsFilterPreset {
+    id: string;
+    nameKey: string;
+    categories: Array<NewsArticle['category'] | 'All'>;
+    sentiments: Array<NewsArticle['sentiment'] | 'All'>;
+    minImpact?: number;
+    sources?: string[];
+}
+
+export interface NewsBriefing {
+    title: string;
+    summary: string;
+    highlights: string[];
+    generatedAt: string;
+}
+
+export interface NewsPageData {
+    stats: NewsSummaryStat[];
+    sentiment: NewsSentimentSnapshot;
+    sources: NewsSource[];
+    alerts: NewsAlert[];
+    watchlist: NewsWatchlistItem[];
+    filterPresets: NewsFilterPreset[];
+    activeFilterId: string;
+    articles: NewsArticle[];
+    events: EconomicEvent[];
+    breakingArticleId?: string;
+    pinnedArticleIds?: string[];
+    lastUpdated: string;
+    lastBriefingGeneratedAt?: string;
 }
 
 export interface WalletAsset {
