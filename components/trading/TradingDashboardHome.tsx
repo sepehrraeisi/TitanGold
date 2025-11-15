@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
-import type { Asset, Trade } from '../../types.ts';
+import type { Asset, Trade, TradingKPI, TradingTimeRange, ChartPoint, TradingDashboardData } from '../../types.ts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card.tsx';
 import Button from '../ui/button.tsx';
 import Skeleton from '../ui/skeleton.tsx';
@@ -8,36 +8,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs.tsx';
 import ScrollArea from '../ui/scroll-area.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table.tsx';
 import { cn } from '../../lib/utils.ts';
+import { fetchTradingDashboardData, createSimulatedTrade } from '../../services/api.ts';
 
 type SortKey = 'pair' | 'side' | 'price' | 'amount' | 'time';
 
 type SortDirection = 'asc' | 'desc';
 
-interface KPI {
-  id: string;
-  label: { en: string; fa: string };
-  value: string;
-  change?: string;
-  positive?: boolean;
-}
+const createEmptyChart = (): Record<TradingTimeRange, ChartPoint[]> => ({
+  '1H': [],
+  '24H': [],
+  '7D': [],
+  '1M': [],
+  '1Y': [],
+});
 
-interface ChartPoint {
-  timestamp: string;
-  value: number;
-}
-
-type TimeRange = '1H' | '24H' | '7D' | '1M' | '1Y';
-
-const chartSeeds: Record<TimeRange, ChartPoint[]> = {
-  '1H': Array.from({ length: 12 }).map((_, i) => ({ timestamp: `${i * 5}`.padStart(2, '0'), value: 32000 + Math.sin(i / 2) * 420 })),
-  '24H': Array.from({ length: 24 }).map((_, i) => ({ timestamp: `${i}`.padStart(2, '0'), value: 32500 + Math.cos(i / 3) * 650 })),
-  '7D': Array.from({ length: 7 }).map((_, i) => ({ timestamp: `D${i + 1}`, value: 33100 + Math.sin(i / 1.5) * 1200 })),
-  '1M': Array.from({ length: 30 }).map((_, i) => ({ timestamp: `${i + 1}`, value: 31500 + Math.sin(i / 3) * 1800 })),
-  '1Y': Array.from({ length: 12 }).map((_, i) => ({ timestamp: `M${i + 1}`, value: 28000 + Math.sin(i / 1.5) * 2500 })),
-};
-
-const translations = {
-  portfolioTitle: { en: 'Portfolio Assets', fa: 'دارایی‌های پورتفولیو' },
+const baseTranslations = {
+  overviewTitle: { en: 'Trading Overview', fa: 'نمای کلی معاملات' },
+  overviewSubtitle: {
+    en: 'Monitor key metrics, live trades, and portfolio allocations in real-time.',
+    fa: 'شاخص‌های کلیدی، معاملات زنده و وضعیت پورتفولیو را در لحظه دنبال کنید.',
+  },
+  loading: { en: 'Loading trading overview…', fa: 'در حال بارگذاری وضعیت معاملات…' },
+  errorLoading: { en: 'Unable to load trading data.', fa: 'امکان بارگذاری داده‌های معاملاتی وجود ندارد.' },
+  retry: { en: 'Retry', fa: 'تلاش مجدد' },
+  lastUpdated: { en: 'Last updated', fa: 'آخرین به‌روزرسانی' },
+  refresh: { en: 'Refresh Data', fa: 'به‌روزرسانی داده‌ها' },
+  simulateTrade: { en: 'Simulate Trade', fa: 'شبیه‌سازی معامله' },
   kpiAssets: { en: 'Total Asset Value', fa: 'ارزش کل دارایی' },
   kpiPnL: { en: '24h Profit / Loss', fa: 'سود/زیان ۲۴ ساعته' },
   kpiVolume: { en: 'Trading Volume', fa: 'حجم معاملات' },
@@ -52,52 +48,61 @@ const translations = {
   price: { en: 'Price', fa: 'قیمت' },
   amount: { en: 'Amount', fa: 'مقدار' },
   time: { en: 'Time', fa: 'زمان' },
+  portfolioTitle: { en: 'Portfolio Assets', fa: 'دارایی‌های پورتفولیو' },
   portfolioEmpty: { en: 'No assets tracked yet.', fa: 'هنوز دارایی‌ای ثبت نشده است.' },
-  loading: { en: 'Loading trading overview…', fa: 'در حال بارگذاری وضعیت معاملات…' },
+  chartEmpty: { en: 'No chart data available for this range.', fa: 'اطلاعات نمودار برای این بازه موجود نیست.' },
 };
 
-const formatTime = (value: number): string => `${value.toString().padStart(2, '0')}:00`;
+const kpiLabels: Record<string, { en: string; fa: string }> = {
+  trading_kpi_total_asset_value: baseTranslations.kpiAssets,
+  trading_kpi_24h_pnl: baseTranslations.kpiPnL,
+  trading_kpi_volume: baseTranslations.kpiVolume,
+  trading_kpi_available_balance: baseTranslations.kpiAvailable,
+};
 
 const TradingDashboardHome: React.FC = () => {
   const { language } = useLanguage();
+  const locale = language === 'fa' ? 'fa-IR' : 'en-US';
+
   const [loading, setLoading] = useState(true);
-  const [kpis, setKpis] = useState<KPI[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [kpis, setKpis] = useState<TradingKPI[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [selectedRange, setSelectedRange] = useState<TimeRange>('24H');
+  const [chartRanges, setChartRanges] = useState<Record<TradingTimeRange, ChartPoint[]>>(createEmptyChart());
+  const [selectedRange, setSelectedRange] = useState<TradingTimeRange>('24H');
   const [sortKey, setSortKey] = useState<SortKey>('time');
   const [direction, setDirection] = useState<SortDirection>('desc');
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  const translate = (key: keyof typeof baseTranslations) => baseTranslations[key][language];
+
+  const applyDashboard = useCallback((data: TradingDashboardData) => {
+    setKpis(data.kpis);
+    setTrades(data.trades);
+    setAssets(data.assets);
+    setChartRanges({ ...createEmptyChart(), ...data.chart });
+    setLastUpdated(data.lastUpdated);
+    setSelectedRange(prev => (data.chart[prev] ? prev : '24H'));
+  }, []);
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchTradingDashboardData();
+      applyDashboard(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'unknown_error');
+    } finally {
+      setLoading(false);
+    }
+  }, [applyDashboard]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setKpis([
-        { id: 'value', label: translations.kpiAssets, value: '$271,406', change: '+3.1%', positive: true },
-        { id: 'pnl', label: translations.kpiPnL, value: '+$5,482', change: '+2.9%', positive: true },
-        { id: 'volume', label: translations.kpiVolume, value: '$1,240,000', change: '+11%', positive: true },
-        { id: 'available', label: translations.kpiAvailable, value: '$86,500', change: '-4.5%', positive: false },
-      ]);
-
-      const mockTrades: Trade[] = [
-        { id: '1', pair: 'BTC/USDT', side: 'buy', price: 48650, amount: 0.8, time: '2024-01-12T08:32:00Z' },
-        { id: '2', pair: 'ETH/USDT', side: 'sell', price: 2680, amount: 12, time: '2024-01-12T07:58:00Z' },
-        { id: '3', pair: 'SOL/USDT', side: 'buy', price: 98.4, amount: 180, time: '2024-01-12T07:10:00Z' },
-        { id: '4', pair: 'XAU/USDT', side: 'buy', price: 2055, amount: 4, time: '2024-01-12T06:45:00Z' },
-      ];
-
-      const mockAssets: Asset[] = [
-        { id: 'btc', name: 'Bitcoin', symbol: 'BTC', amount: 4.25, currentValue: 207_000, change24h: 2.4 },
-        { id: 'eth', name: 'Ethereum', symbol: 'ETH', amount: 62, currentValue: 165_000, change24h: -1.2 },
-        { id: 'sol', name: 'Solana', symbol: 'SOL', amount: 820, currentValue: 98_400, change24h: 6.8 },
-        { id: 'xau', name: 'Gold Token', symbol: 'XAU', amount: 15, currentValue: 30_280, change24h: 0.5 },
-      ];
-
-      setTrades(mockTrades);
-      setAssets(mockAssets);
-      setLoading(false);
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, []);
+    loadDashboard();
+  }, [loadDashboard]);
 
   const sortedTrades = useMemo(() => {
     const sorted = [...trades];
@@ -129,19 +134,95 @@ const TradingDashboardHome: React.FC = () => {
     }
   };
 
-  const chartData = chartSeeds[selectedRange];
+  const handleSimulateTrade = async () => {
+    setIsSimulating(true);
+    setError(null);
+    try {
+      const data = await createSimulatedTrade();
+      applyDashboard(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'unknown_error');
+    } finally {
+      setIsSimulating(false);
+    }
+  };
 
-  const label = (key: keyof typeof translations) => translations[key][language];
+  const formattedUpdated = lastUpdated
+    ? new Date(lastUpdated).toLocaleString(locale, { hour12: false })
+    : null;
+
+  const formatNumber = (value: number, maximumFractionDigits = 2) =>
+    value.toLocaleString(locale, { maximumFractionDigits });
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(value);
+
+  const labelKpi = (key: string) => kpiLabels[key]?.[language] ?? key;
+
+  const showTradesEmpty = !loading && sortedTrades.length === 0;
+  const showAssetsEmpty = !loading && assets.length === 0;
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-white">{translate('overviewTitle')}</h2>
+          <p className="text-sm text-gray-400">{translate('overviewSubtitle')}</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {formattedUpdated && (
+            <span className="text-xs text-gray-400">
+              {translate('lastUpdated')}: {formattedUpdated}
+            </span>
+          )}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!loading) {
+                  void loadDashboard();
+                }
+              }}
+              disabled={loading}
+            >
+              {translate('refresh')}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void handleSimulateTrade()}
+              disabled={loading || isSimulating}
+            >
+              {isSimulating ? `${translate('simulateTrade')}…` : translate('simulateTrade')}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <Card className="border border-red-500/40 bg-red-500/10">
+          <CardContent className="flex flex-col gap-3 py-6 text-red-200 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="font-medium">{translate('errorLoading')}</p>
+              <p className="text-sm text-red-300/80">{error}</p>
+            </div>
+            <Button variant="outline" onClick={() => void loadDashboard()}>
+              {translate('retry')}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {loading
           ? Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-28 w-full rounded-xl" />)
           : kpis.map(metric => (
               <Card key={metric.id} className="bg-gradient-to-br from-[#111827] via-[#0e1625] to-[#111827]">
                 <CardHeader className="mb-2 space-y-1.5">
-                  <CardTitle className="text-sm text-gray-400">{metric.label[language]}</CardTitle>
+                  <CardTitle className="text-sm text-gray-400">{labelKpi(metric.labelKey)}</CardTitle>
                   <div className="text-2xl font-semibold text-white">{metric.value}</div>
                 </CardHeader>
                 {metric.change && (
@@ -158,12 +239,12 @@ const TradingDashboardHome: React.FC = () => {
       <Card className="border border-gray-800/60 bg-[#101528]">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <CardTitle className="text-xl text-white">{label('priceChartTitle')}</CardTitle>
+            <CardTitle className="text-xl text-white">{baseTranslations.priceChartTitle[language]}</CardTitle>
             <p className="text-sm text-gray-400">BTC / USDT</p>
           </div>
-          <Tabs value={selectedRange} onValueChange={value => setSelectedRange(value as TimeRange)}>
+          <Tabs value={selectedRange} onValueChange={value => setSelectedRange(value as TradingTimeRange)}>
             <TabsList>
-              {(['1H', '24H', '7D', '1M', '1Y'] as TimeRange[]).map(range => (
+              {(['1H', '24H', '7D', '1M', '1Y'] as TradingTimeRange[]).map(range => (
                 <TabsTrigger key={range} value={range}>
                   {range}
                 </TabsTrigger>
@@ -171,161 +252,161 @@ const TradingDashboardHome: React.FC = () => {
             </TabsList>
           </Tabs>
         </div>
-        <TabsContent value={selectedRange} className="mt-6">
-          {loading ? (
-            <Skeleton className="h-64 w-full rounded-lg" />
-          ) : (
-            <div className="relative h-64 w-full">
-              <svg viewBox="0 0 400 200" className="h-full w-full">
-                <defs>
-                  <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#2563eb" stopOpacity="0.35" />
-                    <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <polyline
-                  fill="url(#chartFill)"
-                  stroke="#3b82f6"
-                  strokeWidth="2"
-                  points={chartData
-                    .map((point, index) => {
-                      const x = (index / Math.max(chartData.length - 1, 1)) * 400;
-                      const normalized = (point.value - 26000) / 8000;
-                      const y = 180 - normalized * 160;
-                      return `${x},${y}`;
-                    })
-                    .join(' ')}
-                />
-                {chartData.map((point, index) => {
-                  const x = (index / Math.max(chartData.length - 1, 1)) * 400;
-                  const normalized = (point.value - 26000) / 8000;
-                  const y = 180 - normalized * 160;
-                  return <circle key={point.timestamp} cx={x} cy={y} r={2} fill="#93c5fd" />;
-                })}
-              </svg>
-              <div className="absolute bottom-2 left-0 right-0 flex justify-between px-4 text-xs text-gray-500">
-                {chartData.slice(0, 6).map(point => (
-                  <span key={point.timestamp}>{point.timestamp}</span>
-                ))}
-              </div>
-            </div>
-          )}
-        </TabsContent>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <CardTitle className="text-white">{label('tradesTitle')}</CardTitle>
-            <Button variant="ghost" className="text-xs text-gray-400 hover:text-white">
-              {label('viewAll')}
-            </Button>
-          </div>
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <Skeleton key={index} className="h-12 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : trades.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center space-y-2 text-gray-400">
-              <div className="rounded-full bg-gray-900/60 p-3">
-                <svg className="h-6 w-6 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16.5 9.4l-4.5 4.5-4.5-4.5" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 4v10.5" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4.75 19.25h14.5" />
+        {(['1H', '24H', '7D', '1M', '1Y'] as TradingTimeRange[]).map(range => (
+          <TabsContent key={range} value={range} className="mt-6">
+            {loading ? (
+              <Skeleton className="h-64 w-full rounded-lg" />
+            ) : chartRanges[range]?.length ? (
+              <div className="relative h-64 w-full">
+                <svg viewBox="0 0 400 200" className="h-full w-full">
+                  <defs>
+                    <linearGradient id={`chartFill-${range}`} x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor="#2563eb" stopOpacity="0.35" />
+                      <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <polyline
+                    fill={`url(#chartFill-${range})`}
+                    stroke="#3b82f6"
+                    strokeWidth="2"
+                    points={chartRanges[range]
+                      .map((point, index) => {
+                        const x = (index / Math.max(chartRanges[range].length - 1, 1)) * 400;
+                        const normalized = (point.value - 26000) / 8000;
+                        const y = 180 - normalized * 160;
+                        return `${x},${y}`;
+                      })
+                      .join(' ')}
+                  />
+                  {chartRanges[range].map((point, index) => {
+                    const x = (index / Math.max(chartRanges[range].length - 1, 1)) * 400;
+                    const normalized = (point.value - 26000) / 8000;
+                    const y = 180 - normalized * 160;
+                    return (
+                      <g key={`${point.timestamp}-${index}`}>
+                        <circle cx={x} cy={y} r={2.5} fill="#60a5fa" />
+                      </g>
+                    );
+                  })}
                 </svg>
               </div>
-              <p className="text-sm">{label('emptyTrades')}</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead onClick={() => handleSort('pair')} className="cursor-pointer">
-                    {label('pair')}
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('side')} className="cursor-pointer">
-                    {label('type')}
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('price')} className="cursor-pointer">
-                    {label('price')}
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('amount')} className="cursor-pointer">
-                    {label('amount')}
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('time')} className="cursor-pointer">
-                    {label('time')}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedTrades.map(trade => (
-                  <TableRow key={trade.id}>
-                    <TableCell className="font-medium text-white">{trade.pair}</TableCell>
-                    <TableCell>
-                      <span className={cn('rounded-full px-2 py-1 text-xs font-medium', trade.side === 'buy' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300')}>
-                        {trade.side === 'buy' ? (language === 'fa' ? 'خرید' : 'Buy') : language === 'fa' ? 'فروش' : 'Sell'}
-                      </span>
-                    </TableCell>
-                    <TableCell>${trade.price.toLocaleString()}</TableCell>
-                    <TableCell>{trade.amount}</TableCell>
-                    <TableCell>{formatTime(new Date(trade.time).getUTCHours())}</TableCell>
-                  </TableRow>
+            ) : (
+              <div className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-gray-700 text-sm text-gray-400">
+                {baseTranslations.chartEmpty[language]}
+              </div>
+            )}
+          </TabsContent>
+        ))}
+      </Card>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex items-center justify-between">
+            <CardTitle className="text-white">{baseTranslations.tradesTitle[language]}</CardTitle>
+            <Button variant="ghost" className="text-xs text-gray-400 hover:text-white">
+              {baseTranslations.viewAll[language]}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <Skeleton key={index} className="h-10 w-full rounded-md" />
                 ))}
-              </TableBody>
-            </Table>
-          )}
+              </div>
+            ) : showTradesEmpty ? (
+              <div className="flex h-40 flex-col items-center justify-center gap-2 text-gray-400">
+                <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M3 5h18M3 12h18M3 19h18" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="text-sm">{baseTranslations.emptyTrades[language]}</span>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead onClick={() => handleSort('pair')} className="cursor-pointer text-gray-400">
+                        {baseTranslations.pair[language]}
+                      </TableHead>
+                      <TableHead onClick={() => handleSort('side')} className="cursor-pointer text-gray-400">
+                        {baseTranslations.type[language]}
+                      </TableHead>
+                      <TableHead onClick={() => handleSort('price')} className="cursor-pointer text-gray-400">
+                        {baseTranslations.price[language]}
+                      </TableHead>
+                      <TableHead onClick={() => handleSort('amount')} className="cursor-pointer text-gray-400">
+                        {baseTranslations.amount[language]}
+                      </TableHead>
+                      <TableHead onClick={() => handleSort('time')} className="cursor-pointer text-gray-400">
+                        {baseTranslations.time[language]}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedTrades.map(trade => (
+                      <TableRow key={trade.id}>
+                        <TableCell className="font-medium text-white">{trade.pair}</TableCell>
+                        <TableCell className={cn('uppercase', trade.side === 'buy' ? 'text-emerald-400' : 'text-red-400')}>
+                          {trade.side}
+                        </TableCell>
+                        <TableCell className="text-gray-300">${formatNumber(trade.price, 2)}</TableCell>
+                        <TableCell className="text-gray-300">{formatNumber(trade.amount, 4)}</TableCell>
+                        <TableCell className="text-gray-400">
+                          {new Date(trade.time).toLocaleString(locale, { hour12: false })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
         </Card>
 
-        <Card className="border border-gray-800/80">
-          <div className="mb-4 flex items-center justify-between">
-            <CardTitle className="text-white">{label('portfolioTitle')}</CardTitle>
-            <Button variant="ghost" className="text-xs text-gray-400 hover:text-white">
-              {label('viewAll')}
-            </Button>
-          </div>
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <Skeleton key={index} className="h-14 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : assets.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center space-y-2 text-gray-400">
-              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <circle cx="12" cy="12" r="8" strokeWidth="1.5" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6" />
-              </svg>
-              <p className="text-sm">{label('portfolioEmpty')}</p>
-            </div>
-          ) : (
-            <ScrollArea>
-              <ul className="space-y-3">
-                {assets.map(asset => (
-                  <li
-                    key={asset.id}
-                    className="flex items-center justify-between rounded-lg border border-gray-800 bg-[#0d1321]/60 p-3 text-sm"
-                  >
-                    <div>
-                      <p className="font-semibold text-white">{asset.name}</p>
-                      <p className="text-xs text-gray-400">{asset.symbol}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-300">
-                        {asset.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                      </p>
-                      <p className="text-xs text-gray-500">${asset.currentValue.toLocaleString()}</p>
-                    </div>
-                    <span className={cn('text-xs font-semibold', asset.change24h >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-                      {asset.change24h >= 0 ? '+' : ''}
-                      {asset.change24h}%
-                    </span>
-                  </li>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-white">{baseTranslations.portfolioTitle[language]}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <Skeleton key={index} className="h-14 w-full rounded-md" />
                 ))}
-              </ul>
-            </ScrollArea>
-          )}
+              </div>
+            ) : showAssetsEmpty ? (
+              <div className="flex h-40 flex-col items-center justify-center gap-2 text-gray-400">
+                <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="text-sm">{baseTranslations.portfolioEmpty[language]}</span>
+              </div>
+            ) : (
+              <ScrollArea className="h-64">
+                <div className="space-y-3 pr-2">
+                  {assets.map(asset => (
+                    <div
+                      key={asset.id}
+                      className="flex items-center justify-between rounded-lg border border-gray-800/70 bg-[#0f1424] p-3"
+                    >
+                      <div>
+                        <div className="text-sm font-semibold text-white">{asset.name}</div>
+                        <div className="text-xs uppercase text-gray-500">{asset.symbol}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-white">{formatCurrency(asset.currentValue)}</div>
+                        <div className="text-xs text-gray-400">{formatNumber(asset.amount, 4)} {asset.symbol}</div>
+                        <div className={cn('text-xs font-medium', asset.change24h >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                          {asset.change24h >= 0 ? '+' : ''}{asset.change24h.toFixed(2)}%
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </CardContent>
         </Card>
       </div>
     </div>

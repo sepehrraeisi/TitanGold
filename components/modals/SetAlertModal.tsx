@@ -1,23 +1,40 @@
 import React, { useState } from 'react';
 import Modal from './Modal.tsx';
 import { useLanguage } from '../../context/LanguageContext.tsx';
-import { FavoriteItem } from '../../types.ts';
+import { FavoriteItem, FavoriteAlertInput } from '../../types.ts';
 
 interface SetAlertModalProps {
   onClose: () => void;
   asset: FavoriteItem;
+  onCreateAlert: (input: FavoriteAlertInput) => Promise<void>;
 }
 
-const SetAlertModal: React.FC<SetAlertModalProps> = ({ onClose, asset }) => {
+const SetAlertModal: React.FC<SetAlertModalProps> = ({ onClose, asset, onCreateAlert }) => {
     const { t } = useLanguage();
     const [condition, setCondition] = useState<'above' | 'below'>('above');
     const [price, setPrice] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Here you would typically handle the alert creation logic
-        console.log(`Alert set for ${asset.symbol}: Price ${condition} ${price}`);
-        onClose();
+        setError(null);
+        const numericPrice = parseFloat(price);
+        if (Number.isNaN(numericPrice) || numericPrice <= 0) {
+            setError(t('target_price_required'));
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            await onCreateAlert({ condition, targetPrice: numericPrice });
+            onClose();
+        } catch (err) {
+            console.error('Failed to create alert', err);
+            setError(t('error_occurred'));
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -47,8 +64,15 @@ const SetAlertModal: React.FC<SetAlertModalProps> = ({ onClose, asset }) => {
                         placeholder={`e.g. ${asset.price * 1.05}`}
                     />
                 </div>
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
-                    {t('set_alert')}
+                {error && <p className="text-sm text-red-400">{error}</p>}
+                <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className={`w-full text-white font-bold py-2 px-4 rounded-md transition-colors ${
+                        isSubmitting ? 'bg-blue-500/40 cursor-wait' : 'bg-blue-600 hover:bg-blue-700'
+                    }`}
+                >
+                    {isSubmitting ? t('saving') : t('set_alert')}
                 </button>
             </form>
         </Modal>

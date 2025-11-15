@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
-import { AIProvider } from '../../types.ts';
+import { AIManagerOverview, AIProvider } from '../../types.ts';
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
@@ -12,7 +12,7 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
 const AIManager: React.FC = () => {
     const { t } = useLanguage();
     const [isLoading, setIsLoading] = useState(true);
-    const [data, setData] = useState<{ summary: any; providers: AIProvider[]; topAgents: any[] } | null>(null);
+    const [data, setData] = useState<AIManagerOverview | null>(null);
     
     useEffect(() => {
         const fetchData = async () => {
@@ -55,7 +55,7 @@ const AIManager: React.FC = () => {
                         </div>
                     </div>
                 </Card>
-                 <Card>
+                <Card>
                     <h3 className="font-semibold text-foreground mb-3">{t('external_providers')}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {data.providers.map(p => (
@@ -86,6 +86,9 @@ const AIManager: React.FC = () => {
                             </div>
                         ))}
                     </div>
+                    <p className="mt-4 text-xs text-muted-foreground text-right">
+                        {t('last_update')}: {new Date(data.lastUpdated).toLocaleString()}
+                    </p>
                 </Card>
             </div>
         </div>

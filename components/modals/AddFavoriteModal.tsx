@@ -5,35 +5,32 @@ import { CryptoAsset, FavoriteItem } from '../../types.ts';
 
 interface AddFavoriteModalProps {
   onClose: () => void;
-  onAddFavorite: (asset: CryptoAsset) => void;
+  onAddFavorite: (asset: CryptoAsset) => Promise<void> | void;
   existingFavorites: FavoriteItem[];
+  availableAssets: CryptoAsset[];
 }
 
-const allAssets: CryptoAsset[] = [
-    { id: 'solana', symbol: 'SOLUSDT', name: 'Solana' },
-    { id: 'cardano', symbol: 'ADAUSDT', name: 'Cardano' },
-    { id: 'avalanche', symbol: 'AVAXUSDT', name: 'Avalanche' },
-    { id: 'chainlink', symbol: 'LINKUSDT', name: 'Chainlink' },
-    { id: 'polkadot', symbol: 'DOTUSDT', name: 'Polkadot' },
-    { id: 'shiba-inu', symbol: 'SHIBUSDT', name: 'Shiba Inu' },
-    { id: 'dogecoin', symbol: 'DOGEUSDT', name: 'Dogecoin' },
-];
-
-const AddFavoriteModal: React.FC<AddFavoriteModalProps> = ({ onClose, onAddFavorite, existingFavorites }) => {
+const AddFavoriteModal: React.FC<AddFavoriteModalProps> = ({ onClose, onAddFavorite, existingFavorites, availableAssets }) => {
     const { t } = useLanguage();
     const [searchTerm, setSearchTerm] = useState('');
     const [addedIds, setAddedIds] = useState<string[]>([]);
+    const [pendingId, setPendingId] = useState<string | null>(null);
 
     const existingIds = existingFavorites.map(f => f.id);
 
-    const filteredAssets = allAssets.filter(asset => 
-        asset.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const filteredAssets = availableAssets.filter(asset =>
+        asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         asset.symbol.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const handleAdd = (asset: CryptoAsset) => {
-        onAddFavorite(asset);
-        setAddedIds(prev => [...prev, asset.id]);
+    const handleAdd = async (asset: CryptoAsset) => {
+        setPendingId(asset.id);
+        try {
+            await onAddFavorite(asset);
+            setAddedIds(prev => [...prev, asset.id]);
+        } finally {
+            setPendingId(null);
+        }
     };
 
     return (
@@ -47,28 +44,39 @@ const AddFavoriteModal: React.FC<AddFavoriteModalProps> = ({ onClose, onAddFavor
                     className="w-full bg-gray-800/50 border border-gray-700 rounded-lg py-2 px-3 focus:ring-purple-500 focus:border-purple-500"
                 />
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
-                   {filteredAssets.map(asset => {
-                       const isAdded = existingIds.includes(asset.id) || addedIds.includes(asset.id);
-                       return (
-                           <div key={asset.id} className="flex justify-between items-center p-2 bg-gray-800/30 rounded-lg">
-                               <div>
-                                   <p className="font-bold text-white">{asset.symbol}</p>
-                                   <p className="text-sm text-gray-400">{asset.name}</p>
-                               </div>
-                               <button 
-                                   onClick={() => handleAdd(asset)} 
-                                   disabled={isAdded}
-                                   className={`text-sm font-semibold py-1 px-3 rounded-md transition-colors ${
-                                       isAdded 
-                                       ? 'bg-green-500/20 text-green-400 cursor-not-allowed' 
-                                       : 'bg-purple-600 hover:bg-purple-700 text-white'
-                                   }`}
-                               >
-                                   {isAdded ? t('added') : t('add_new')}
-                               </button>
-                           </div>
-                       );
-                   })}
+                   {filteredAssets.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-6">{t('no_assets_found')}</p>
+                    ) : (
+                        filteredAssets.map(asset => {
+                            const isAdded = existingIds.includes(asset.id) || addedIds.includes(asset.id);
+                            const isPending = pendingId === asset.id;
+                            return (
+                                <div key={asset.id} className="flex justify-between items-center p-2 bg-gray-800/30 rounded-lg">
+                                    <div>
+                                        <p className="font-bold text-white">{asset.symbol}</p>
+                                        <p className="text-sm text-gray-400">{asset.name}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => handleAdd(asset)}
+                                        disabled={isAdded || isPending}
+                                        className={`text-sm font-semibold py-1 px-3 rounded-md transition-colors ${
+                                            isAdded
+                                                ? 'bg-green-500/20 text-green-400 cursor-not-allowed'
+                                                : isPending
+                                                    ? 'bg-purple-500/40 text-purple-200 cursor-wait'
+                                                    : 'bg-purple-600 hover:bg-purple-700 text-white'
+                                        }`}
+                                    >
+                                        {isPending
+                                            ? t('saving')
+                                            : isAdded
+                                                ? t('added')
+                                                : t('add_new')}
+                                    </button>
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
             </div>
         </Modal>
