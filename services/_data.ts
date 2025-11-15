@@ -46,9 +46,7 @@ import type {
     AIAPIConfigData,
     WalletAsset,
     WalletTransaction,
-    GoldAsset,
-    GoldPrediction,
-    GoldNewsArticle,
+    GoldPageData,
     DataSource,
     TelegramPublisherConfig,
     Workflow,
@@ -1203,30 +1201,249 @@ const walletData = {
     ] as WalletTransaction[],
 };
 
-const goldAssets: GoldAsset[] = [
-    { id: 'emami', name: 'سکه امامی', buyPrice: 41500000, sellPrice: 41400000, change: 0.5 },
-    { id: 'azadi', name: 'سکه بهار آزادی', buyPrice: 38000000, sellPrice: 37900000, change: 0.2 },
-    { id: 'gram', name: 'گرم طلای ۱۸ عیار', buyPrice: 3850000, sellPrice: 3840000, change: -0.1 },
-];
+const generateGoldSeries = (points: number, minutesStep: number, startPrice: number, volatility: number) => {
+    const now = Date.now();
+    const series = [] as GoldPageData['priceRanges'][keyof GoldPageData['priceRanges']];
+    let price = startPrice;
 
-const goldPrediction: GoldPrediction = {
-    id: '1',
-    title: 'پیش‌بینی کوتاه‌مدت و بلندمدت بازار طلا',
-    shortTerm: 'روند خنثی با نوسان محدود در کانال ۴۱ تا ۴۲ میلیون تومان برای سکه امامی.',
-    longTerm: 'وابسته به نرخ دلار و اونس جهانی، پتانسیل رشد تا کانال ۴۵ میلیون تومان در سه ماه آینده وجود دارد.',
-    confidence: 78,
-    scenarios: {
-        bullish: 'در صورت افزایش تنش‌های منطقه‌ای، احتمال شکست مقاومت ۴۳ میلیون تومان وجود دارد.',
-        bearish: 'در صورت کاهش نرخ دلار نیمایی، حمایت ۴۰ میلیون تومانی در دسترس خواهد بود.'
-    },
-    fullAnalysis: 'تحلیل کامل مبتنی بر داده‌های فاندامنتال و تکنیکال...'
+    for (let i = points - 1; i >= 0; i--) {
+        const timestamp = new Date(now - i * minutesStep * 60 * 1000);
+        const change = Number(((Math.random() - 0.45) * volatility).toFixed(2));
+        price = Math.max(35_000_000, Math.round(price * (1 + change / 100)));
+        const volume = Math.round(120 + Math.random() * 120);
+        series.push({
+            timestamp: timestamp.toISOString(),
+            price,
+            change,
+            volume,
+        });
+    }
+
+    return series;
 };
 
-const goldNews: GoldNewsArticle[] = [
-    { id: '1', headline: 'نرخ بهره بانک مرکزی بدون تغییر باقی ماند', source: 'دنیای اقتصاد', verificationStatus: 'Verified', impactScore: 70, aiAnalysis: 'این خبر اثر خنثی در کوتاه‌مدت دارد اما ثبات را به بازار می‌دهد.' },
-    { id: '2', headline: 'آمار جدید از ذخایر طلای بانک‌های مرکزی جهان منتشر شد', source: 'تجارت نیوز', verificationStatus: 'Verified', impactScore: 55, aiAnalysis: 'افزایش ذخایر توسط چین می‌تواند سیگنال مثبتی برای اونس جهانی باشد.' },
-    { id: '3', headline: 'شایعه عرضه سکه در مرکز مبادلات ارزی', source: 'شبکه‌های اجتماعی', verificationStatus: 'Unverified', impactScore: 85, aiAnalysis: 'این خبر تایید نشده است اما در صورت صحت، می‌تواند باعث کاهش قیمت کوتاه‌مدت شود.' },
-];
+const goldPage: GoldPageData = {
+    lastUpdated: new Date().toISOString(),
+    activeRange: '1W',
+    stats: [
+        { id: 'gold-stat-spot', labelKey: 'gold_spot_price', value: '$2,352.10', delta: 0.3, direction: 'up', hintKey: 'gold_spot_price_hint' },
+        { id: 'gold-stat-usdirr', labelKey: 'usd_irr_rate', value: '59,480', delta: -0.2, direction: 'down', hintKey: 'usd_irr_rate_hint' },
+        { id: 'gold-stat-coin', labelKey: 'domestic_gold_coin', value: '41,480,000', delta: 0.6, direction: 'up' },
+        { id: 'gold-stat-sentiment', labelKey: 'gold_sentiment_score', value: '54', delta: 4, direction: 'up' },
+    ],
+    priceRanges: {
+        '1D': generateGoldSeries(12, 60, 41_200_000, 0.4),
+        '1W': generateGoldSeries(14, 12 * 60, 40_800_000, 0.8),
+        '1M': generateGoldSeries(30, 24 * 60, 39_900_000, 1.2),
+        '3M': generateGoldSeries(24, 3 * 24 * 60, 38_700_000, 1.6),
+        '1Y': generateGoldSeries(26, 14 * 24 * 60, 35_900_000, 2.2),
+    },
+    assets: [
+        { id: 'emami', name: 'سکه امامی', buyPrice: 41_480_000, sellPrice: 41_320_000, change: 0.58 },
+        { id: 'azadi', name: 'سکه بهار آزادی', buyPrice: 38_420_000, sellPrice: 38_280_000, change: 0.22 },
+        { id: 'half-coin', name: 'نیم سکه', buyPrice: 23_150_000, sellPrice: 23_040_000, change: 0.34 },
+        { id: 'quarter-coin', name: 'ربع سکه', buyPrice: 15_480_000, sellPrice: 15_410_000, change: -0.12 },
+        { id: 'gram', name: 'گرم طلای ۱۸ عیار', buyPrice: 3_860_000, sellPrice: 3_842_000, change: -0.08 },
+    ],
+    prediction: {
+        id: 'gold-prediction-main',
+        title: 'پیش‌بینی ترکیبی بازار طلا',
+        shortTerm: 'نوسان خفیف در محدوده ۴۱ تا ۴۲ میلیون تومان با حساسیت بالا به نرخ دلار آزاد.',
+        longTerm: 'انتظار حرکت تدریجی به سمت کانال ۴۴ میلیون تومان در صورت تثبیت دلار نیما بالای ۵۹ هزار.',
+        confidence: 76,
+        horizon: '۳ ماهه',
+        updatedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+        scenarios: {
+            bullish: 'افزایش تنش‌های ژئوپلیتیک و رشد اونس جهانی می‌تواند مقاومت ۴۳.۲ میلیون را بشکند.',
+            bearish: 'در صورت کاهش نرخ دلار نیمایی به زیر ۵۷ هزار، حمایت ۳۹ میلیون در دسترس خواهد بود.'
+        },
+        confidenceBreakdown: {
+            ai: 42,
+            fundamental: 33,
+            technical: 25,
+        },
+        signals: [
+            {
+                id: 'gold-signal-liquidity',
+                labelKey: 'gold_signal_liquidity',
+                descriptionKey: 'gold_signal_liquidity_desc',
+                strength: 'moderate',
+                confidence: 68,
+                lastUpdated: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+            },
+            {
+                id: 'gold-signal-rate',
+                labelKey: 'gold_signal_rate',
+                descriptionKey: 'gold_signal_rate_desc',
+                strength: 'strong',
+                confidence: 82,
+                lastUpdated: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+            },
+            {
+                id: 'gold-signal-demand',
+                labelKey: 'gold_signal_demand',
+                descriptionKey: 'gold_signal_demand_desc',
+                strength: 'weak',
+                confidence: 54,
+                lastUpdated: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+            },
+        ],
+        recommendedActions: [
+            'gold_action_scale_in',
+            'gold_action_trail_stop',
+            'gold_action_watch_usdirr',
+        ],
+        fullAnalysis: 'تحلیل جامع مبتنی بر داده‌های بازار داخلی و جهانی همراه با سناریوهای ریسک به‌روزرسانی شده.'
+    },
+    news: [
+        {
+            id: 'gold-news-1',
+            headline: 'نرخ بهره بانک مرکزی ثابت ماند',
+            source: 'دنیای اقتصاد',
+            verificationStatus: 'Verified',
+            impactScore: 68,
+            aiAnalysis: 'ثبات نرخ بهره سیگنال حفظ وضعیت موجود را می‌دهد و از افت شدید قیمت جلوگیری می‌کند.',
+            sentiment: 'Neutral',
+            category: 'macro',
+            publishedAt: new Date(Date.now() - 1000 * 60 * 75).toISOString(),
+            watchlisted: true,
+            pinned: true,
+            tags: ['بانک مرکزی', 'بهره'],
+        },
+        {
+            id: 'gold-news-2',
+            headline: 'افزایش ذخایر طلای بانک‌های مرکزی آسیا',
+            source: 'تجارت‌نیوز',
+            verificationStatus: 'Verified',
+            impactScore: 72,
+            aiAnalysis: 'تقاضای جهانی را تقویت می‌کند و می‌تواند باعث رشد اونس جهانی شود.',
+            sentiment: 'Bullish',
+            category: 'global',
+            publishedAt: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+            watchlisted: false,
+            pinned: false,
+            tags: ['اونس جهانی', 'بانک مرکزی'],
+        },
+        {
+            id: 'gold-news-3',
+            headline: 'شایعه عرضه سکه در بازار متشکل ارزی',
+            source: 'شبکه‌های اجتماعی',
+            verificationStatus: 'Unverified',
+            impactScore: 84,
+            aiAnalysis: 'در صورت تایید می‌تواند فشار فروش کوتاه‌مدت ایجاد کند. نیاز به راستی‌آزمایی بیشتر.',
+            sentiment: 'Bearish',
+            category: 'rumor',
+            publishedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+            watchlisted: true,
+            pinned: false,
+            tags: ['عرضه اولیه', 'بازار داخلی'],
+        },
+    ],
+    marketDrivers: [
+        {
+            id: 'driver-global-spot',
+            labelKey: 'global_gold_price',
+            value: '$2,352.10',
+            change: 0.28,
+            descriptionKey: 'driver_global_spot_desc',
+            updatedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+        },
+        {
+            id: 'driver-usdirr',
+            labelKey: 'usd_irr_rate',
+            value: '59,480',
+            change: -0.18,
+            descriptionKey: 'driver_usdirr_desc',
+            updatedAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
+        },
+        {
+            id: 'driver-oil',
+            labelKey: 'brent_crude_price',
+            value: '$86.40',
+            change: 0.65,
+            descriptionKey: 'driver_oil_desc',
+            updatedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+        },
+        {
+            id: 'driver-bond',
+            labelKey: 'us_bond_yield',
+            value: '3.92%',
+            change: -0.11,
+            descriptionKey: 'driver_bond_desc',
+            updatedAt: new Date(Date.now() - 1000 * 60 * 55).toISOString(),
+        },
+    ],
+    telegram: {
+        channels: [
+            {
+                id: 'channel-gold-public',
+                name: 'کانال عمومی تحلیل طلا',
+                handle: '@gold_analysis',
+                type: 'public',
+                subscribers: 18240,
+                autoPost: {
+                    predictions: true,
+                    news: true,
+                    alerts: false,
+                },
+                lastPublishedAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+            },
+            {
+                id: 'channel-gold-vip',
+                name: 'کلاب VIP طلا',
+                handle: '@titan_gold_vip',
+                type: 'vip',
+                subscribers: 2480,
+                autoPost: {
+                    predictions: true,
+                    news: false,
+                    alerts: true,
+                },
+                lastPublishedAt: new Date(Date.now() - 1000 * 60 * 300).toISOString(),
+            },
+        ],
+        templates: [
+            {
+                id: 'template-prediction',
+                nameKey: 'gold_template_prediction',
+                descriptionKey: 'gold_template_prediction_desc',
+            },
+            {
+                id: 'template-news',
+                nameKey: 'gold_template_news',
+                descriptionKey: 'gold_template_news_desc',
+            },
+            {
+                id: 'template-alert',
+                nameKey: 'gold_template_alert',
+                descriptionKey: 'gold_template_alert_desc',
+            },
+        ],
+        defaultChannelId: 'channel-gold-public',
+        lastPublishedAt: new Date(Date.now() - 1000 * 60 * 110).toISOString(),
+    },
+    alerts: [
+        {
+            id: 'gold-alert-spike',
+            labelKey: 'gold_alert_price_spike',
+            direction: 'up',
+            threshold: 0.6,
+            assetId: 'emami',
+            active: true,
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
+            lastTriggeredAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
+        },
+        {
+            id: 'gold-alert-dollar',
+            labelKey: 'gold_alert_dollar_drop',
+            direction: 'down',
+            threshold: -0.8,
+            assetId: 'usd-irr',
+            active: false,
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 12).toISOString(),
+        },
+    ],
+};
 
 const automationSettings = {
     dataSources: [
@@ -1332,8 +1549,6 @@ export const _data = {
     walletData,
     tradingDashboard,
     manualTrading,
-    goldAssets,
-    goldPrediction,
-    goldNews,
+    gold: goldPage,
     automationSettings
 };

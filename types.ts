@@ -760,6 +760,8 @@ export interface AICenterData {
     apiConfig: AIAPIConfigData;
 }
 
+export type GoldTimeRange = '1D' | '1W' | '1M' | '3M' | '1Y';
+
 export interface GoldAsset {
     id: string;
     name: string;
@@ -768,16 +770,59 @@ export interface GoldAsset {
     change: number;
 }
 
+export interface GoldOverviewStat {
+    id: string;
+    labelKey: string;
+    value: string;
+    delta: number;
+    direction: 'up' | 'down' | 'flat';
+    hintKey?: string;
+}
+
+export interface GoldPricePoint {
+    timestamp: string;
+    price: number;
+    change: number;
+    volume: number;
+}
+
+export interface GoldMarketDriver {
+    id: string;
+    labelKey: string;
+    value: string;
+    change: number;
+    descriptionKey: string;
+    updatedAt: string;
+}
+
+export interface GoldPredictionSignal {
+    id: string;
+    labelKey: string;
+    descriptionKey: string;
+    strength: 'strong' | 'moderate' | 'weak';
+    confidence: number;
+    lastUpdated: string;
+}
+
 export interface GoldPrediction {
     id: string;
     title: string;
     shortTerm: string;
     longTerm: string;
     confidence: number;
+    horizon: string;
+    updatedAt: string;
     scenarios: {
         bullish: string;
         bearish: string;
     };
+    confidenceBreakdown: {
+        ai: number;
+        fundamental: number;
+        technical: number;
+    };
+    signals: GoldPredictionSignal[];
+    recommendedActions: string[];
     fullAnalysis: string;
 }
 
@@ -788,6 +833,84 @@ export interface GoldNewsArticle {
     verificationStatus: 'Verified' | 'Unverified';
     impactScore: number;
     aiAnalysis: string;
+    sentiment: 'Bullish' | 'Bearish' | 'Neutral';
+    category: string;
+    publishedAt: string;
+    watchlisted: boolean;
+    pinned?: boolean;
+    tags: string[];
+}
+
+export interface GoldAlert {
+    id: string;
+    labelKey: string;
+    direction: 'up' | 'down';
+    threshold: number;
+    assetId: string;
+    active: boolean;
+    createdAt: string;
+    lastTriggeredAt?: string;
+}
+
+export interface GoldAlertInput {
+    assetId: string;
+    direction: 'up' | 'down';
+    threshold: number;
+    labelKey?: string;
+    active?: boolean;
+}
+
+export interface GoldTelegramChannel {
+    id: string;
+    name: string;
+    handle: string;
+    type: 'public' | 'vip' | 'private';
+    subscribers: number;
+    autoPost: {
+        predictions: boolean;
+        news: boolean;
+        alerts: boolean;
+    };
+    lastPublishedAt?: string;
+}
+
+export interface GoldPublishTemplate {
+    id: string;
+    nameKey: string;
+    descriptionKey: string;
+}
+
+export interface GoldPublishItem {
+    id: string;
+    type: 'Prediction' | 'News' | 'Alert';
+    content: string;
+}
+
+export interface GoldTelegramSettings {
+    channels: GoldTelegramChannel[];
+    templates: GoldPublishTemplate[];
+    defaultChannelId: string;
+    lastPublishedAt?: string;
+}
+
+export interface GoldPageData {
+    lastUpdated: string;
+    activeRange: GoldTimeRange;
+    stats: GoldOverviewStat[];
+    priceRanges: Record<GoldTimeRange, GoldPricePoint[]>;
+    assets: GoldAsset[];
+    prediction: GoldPrediction;
+    news: GoldNewsArticle[];
+    marketDrivers: GoldMarketDriver[];
+    telegram: GoldTelegramSettings;
+    alerts: GoldAlert[];
+}
+
+export interface GoldPublishResponse {
+    data: GoldPageData;
+    channel: GoldTelegramChannel;
+    publishedAt: string;
+    message: string;
 }
 
 export interface DataSource {

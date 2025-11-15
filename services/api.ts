@@ -52,6 +52,17 @@ import type {
     GoldAsset,
     GoldPrediction,
     GoldNewsArticle,
+    GoldPageData,
+    GoldOverviewStat,
+    GoldMarketDriver,
+    GoldPricePoint,
+    GoldTimeRange,
+    GoldAlert,
+    GoldAlertInput,
+    GoldTelegramChannel,
+    GoldPublishTemplate,
+    GoldPublishItem,
+    GoldPublishResponse,
     DataSource,
     TelegramPublisherConfig,
     Workflow,
@@ -75,6 +86,7 @@ const FAKE_LATENCY = 800;
 
 // Simulate a database
 let db: typeof _data = { ..._data };
+let goldAlertSequence = _data.gold.alerts.length;
 
 const ensureAutopilotState = (): AutopilotState => {
     if (!db.autopilotState) {
@@ -123,6 +135,13 @@ const ensureAICenter = (): AICenterData => {
         throw new Error('AI center data not initialized');
     }
     return db.aiCenter;
+};
+
+const ensureGold = (): GoldPageData => {
+    if (!db.gold) {
+        throw new Error('Gold data not initialized');
+    }
+    return db.gold;
 };
 
 const cloneAutopilotState = (state: AutopilotState): AutopilotState => ({
@@ -198,6 +217,63 @@ const cloneAIAnalytics = (analytics: AIAnalyticsMetrics): AIAnalyticsMetrics => 
     agentMatrix: analytics.agentMatrix.map(row => ({ ...row })),
     lastUpdated: analytics.lastUpdated,
 });
+
+const cloneGoldPricePoint = (point: GoldPricePoint): GoldPricePoint => ({ ...point });
+
+const cloneGoldOverviewStat = (stat: GoldOverviewStat): GoldOverviewStat => ({ ...stat });
+
+const cloneGoldMarketDriver = (driver: GoldMarketDriver): GoldMarketDriver => ({ ...driver });
+
+const cloneGoldPrediction = (prediction: GoldPrediction): GoldPrediction => ({
+    ...prediction,
+    scenarios: { ...prediction.scenarios },
+    confidenceBreakdown: { ...prediction.confidenceBreakdown },
+    signals: prediction.signals.map(signal => ({ ...signal })),
+    recommendedActions: [...prediction.recommendedActions],
+});
+
+const cloneGoldNewsArticle = (article: GoldNewsArticle): GoldNewsArticle => ({
+    ...article,
+    tags: [...article.tags],
+});
+
+const cloneGoldAlert = (alert: GoldAlert): GoldAlert => ({ ...alert });
+
+const cloneGoldTelegramChannel = (channel: GoldTelegramChannel): GoldTelegramChannel => ({
+    ...channel,
+    autoPost: { ...channel.autoPost },
+});
+
+const cloneGoldTelegramTemplate = (template: GoldPublishTemplate): GoldPublishTemplate => ({ ...template });
+
+const cloneGoldTelegram = (telegram: GoldPageData['telegram']): GoldPageData['telegram'] => ({
+    ...telegram,
+    channels: telegram.channels.map(cloneGoldTelegramChannel),
+    templates: telegram.templates.map(cloneGoldTelegramTemplate),
+});
+
+const cloneGold = (data: GoldPageData): GoldPageData => ({
+    ...data,
+    stats: data.stats.map(cloneGoldOverviewStat),
+    priceRanges: (Object.entries(data.priceRanges) as [GoldTimeRange, GoldPricePoint[]][]).reduce(
+        (acc, [range, points]) => {
+            acc[range] = points.map(cloneGoldPricePoint);
+            return acc;
+        },
+        {} as Record<GoldTimeRange, GoldPricePoint[]>,
+    ),
+    assets: data.assets.map(asset => ({ ...asset })),
+    prediction: cloneGoldPrediction(data.prediction),
+    news: data.news.map(cloneGoldNewsArticle),
+    marketDrivers: data.marketDrivers.map(cloneGoldMarketDriver),
+    telegram: cloneGoldTelegram(data.telegram),
+    alerts: data.alerts.map(cloneGoldAlert),
+});
+
+const generateGoldAlertId = (): string => {
+    goldAlertSequence += 1;
+    return `gold-alert-${goldAlertSequence}`;
+};
 
 const cloneAIManagerOverview = (overview: AIManagerOverview): AIManagerOverview => ({
     summary: { ...overview.summary },
@@ -335,6 +411,189 @@ const mutateNews = (
     db.news = base;
     return cloneNews(base);
 };
+
+const mutateGold = (
+    mutator: (draft: GoldPageData) => void,
+): GoldPageData => {
+    const base = cloneGold(ensureGold());
+    mutator(base);
+    base.lastUpdated = new Date().toISOString();
+    db.gold = base;
+    return cloneGold(base);
+};
+
+const numericValue = (value: string): number => {
+    const parsed = Number(value.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const formatThousands = (value: number): string =>
+    Math.round(value).toLocaleString('en-US');
+
+const updateGoldStats = (stats: GoldOverviewStat[]): void => {
+    stats.forEach(stat => {
+        switch (stat.id) {
+            case 'gold-stat-spot': {
+                const base = numericValue(stat.value) || 2352.1;
+                const delta = Number(((Math.random() - 0.45) * 1.2).toFixed(2));
+                const next = Math.max(2250, Number((base + delta).toFixed(2)));
+                stat.value = `$${next.toFixed(2)}`;
+                stat.delta = Math.abs(delta);
+                stat.direction = delta > 0.05 ? 'up' : delta < -0.05 ? 'down' : 'flat';
+                break;
+            }
+            case 'gold-stat-usdirr': {
+                const base = numericValue(stat.value) || 59_400;
+                const delta = Number(((Math.random() - 0.45) * 0.8).toFixed(2));
+                const next = clamp(Math.round(base * (1 + delta / 100)), 52_000, 68_000);
+                stat.value = formatThousands(next);
+                stat.delta = Math.abs(delta);
+                stat.direction = delta > 0.02 ? 'up' : delta < -0.02 ? 'down' : 'flat';
+                break;
+            }
+            case 'gold-stat-coin': {
+                const base = numericValue(stat.value) || 41_200_000;
+                const delta = Number(((Math.random() - 0.45) * 0.9).toFixed(2));
+                const next = clamp(Math.round(base * (1 + delta / 100)), 32_000_000, 55_000_000);
+                stat.value = formatThousands(next);
+                stat.delta = Math.abs(delta);
+                stat.direction = delta > 0.05 ? 'up' : delta < -0.05 ? 'down' : 'flat';
+                break;
+            }
+            case 'gold-stat-sentiment': {
+                const base = numericValue(stat.value) || 54;
+                const delta = Number(((Math.random() - 0.45) * 6).toFixed(1));
+                const next = clamp(Math.round(base + delta), 30, 80);
+                stat.value = next.toString();
+                stat.delta = Math.abs(delta);
+                stat.direction = delta > 0.2 ? 'up' : delta < -0.2 ? 'down' : 'flat';
+                break;
+            }
+            default:
+                break;
+        }
+    });
+};
+
+const appendGoldPricePoint = (draft: GoldPageData): void => {
+    const now = new Date().toISOString();
+    const baseSeries = draft.priceRanges['1D'];
+    const lastPrice = baseSeries[baseSeries.length - 1]?.price ?? 40_500_000;
+    const change = Number(((Math.random() - 0.45) * 0.8).toFixed(2));
+    const nextBase = clamp(Math.round(lastPrice * (1 + change / 100)), 32_000_000, 55_000_000);
+
+    const createPoint = (price: number, delta: number): GoldPricePoint => ({
+        timestamp: now,
+        price,
+        change: Number(delta.toFixed(2)),
+        volume: Math.round(140 + Math.random() * 160),
+    });
+
+    (Object.keys(draft.priceRanges) as GoldTimeRange[]).forEach(range => {
+        const points = draft.priceRanges[range];
+        const modifier = range === '1D' ? 0.9 : range === '1W' ? 1.3 : range === '1M' ? 1.8 : range === '3M' ? 2.2 : 2.6;
+        const delta = change + (Math.random() - 0.5) * modifier * 0.35;
+        const last = points[points.length - 1]?.price ?? nextBase;
+        const nextPrice = clamp(Math.round(last * (1 + delta / 100)), 30_000_000, 60_000_000);
+        points.push(createPoint(nextPrice, delta));
+
+        const limit = range === '1D' ? 18 : range === '1W' ? 32 : range === '1M' ? 40 : range === '3M' ? 32 : 30;
+        while (points.length > limit) {
+            points.shift();
+        }
+    });
+};
+
+const updateGoldAssets = (assets: GoldAsset[]): void => {
+    assets.forEach(asset => {
+        const drift = Number(((Math.random() - 0.45) * 0.9).toFixed(2));
+        const midpoint = (asset.buyPrice + asset.sellPrice) / 2;
+        const nextMidpoint = clamp(Math.round(midpoint * (1 + drift / 100)), 12_000_000, 60_000_000);
+        const spread = Math.max(70_000, Math.abs(asset.buyPrice - asset.sellPrice));
+        asset.buyPrice = Math.round(nextMidpoint + spread / 2);
+        asset.sellPrice = Math.round(nextMidpoint - spread / 2);
+        asset.change = Number(clamp(asset.change + drift, -4.5, 5).toFixed(2));
+    });
+};
+
+const updateGoldDrivers = (drivers: GoldMarketDriver[]): void => {
+    drivers.forEach(driver => {
+        const delta = Number(((Math.random() - 0.45) * 1.2).toFixed(2));
+        driver.change = delta;
+        driver.updatedAt = new Date().toISOString();
+
+        switch (driver.id) {
+            case 'driver-global-spot': {
+                const base = numericValue(driver.value) || 2352;
+                const next = Math.max(2200, Number((base + delta * 4).toFixed(2)));
+                driver.value = `$${next.toFixed(2)}`;
+                break;
+            }
+            case 'driver-usdirr': {
+                const base = numericValue(driver.value) || 59_400;
+                const next = clamp(Math.round(base * (1 + delta / 100)), 52_000, 68_000);
+                driver.value = formatThousands(next);
+                break;
+            }
+            case 'driver-oil': {
+                const base = numericValue(driver.value) || 86;
+                const next = Math.max(58, Number((base + delta).toFixed(2)));
+                driver.value = `$${next.toFixed(2)}`;
+                break;
+            }
+            case 'driver-bond': {
+                const base = numericValue(driver.value) || 3.9;
+                const next = Math.max(0.8, Number((base + delta * 0.5).toFixed(2)));
+                driver.value = `${next.toFixed(2)}%`;
+                break;
+            }
+            default:
+                break;
+        }
+    });
+};
+
+const adjustGoldConfidenceBreakdown = (prediction: GoldPrediction): void => {
+    const ai = clamp(prediction.confidenceBreakdown.ai + Math.round((Math.random() - 0.5) * 6), 25, 55);
+    const fundamental = clamp(prediction.confidenceBreakdown.fundamental + Math.round((Math.random() - 0.5) * 5), 20, 45);
+    let technical = 100 - ai - fundamental;
+    if (technical < 10) {
+        technical = 10;
+    }
+    const total = ai + fundamental + technical;
+    if (total !== 100) {
+        technical += 100 - total;
+    }
+    prediction.confidenceBreakdown = { ai, fundamental, technical };
+};
+
+const recalculateGoldPrediction = (prediction: GoldPrediction): void => {
+    const confidenceShift = Number(((Math.random() - 0.45) * 6).toFixed(1));
+    prediction.confidence = Number(clamp(prediction.confidence + confidenceShift, 55, 90).toFixed(1));
+    prediction.updatedAt = new Date().toISOString();
+    adjustGoldConfidenceBreakdown(prediction);
+
+    prediction.signals = prediction.signals.map(signal => {
+        const nextConfidence = clamp(signal.confidence + Math.round((Math.random() - 0.45) * 12), 35, 95);
+        const strength = nextConfidence > 75 ? 'strong' : nextConfidence < 55 ? 'weak' : 'moderate';
+        return {
+            ...signal,
+            confidence: nextConfidence,
+            strength,
+            lastUpdated: prediction.updatedAt,
+        };
+    });
+
+    const actions = [...prediction.recommendedActions];
+    actions.unshift(actions.pop() ?? 'gold_action_watch_usdirr');
+    prediction.recommendedActions = Array.from(new Set(actions));
+};
+
+const findGoldNews = (draft: GoldPageData, articleId: string): GoldNewsArticle | undefined =>
+    draft.news.find(article => article.id === articleId);
+
+const findGoldAlert = (draft: GoldPageData, alertId: string): GoldAlert | undefined =>
+    draft.alerts.find(alert => alert.id === alertId);
 
 const setNewsStatValue = (stats: NewsSummaryStat[], id: string, nextValue: number): void => {
     const stat = stats.find(item => item.id === id);
@@ -1797,17 +2056,197 @@ export const generateNewsBriefing = (): Promise<{ data: NewsPageData; briefing: 
     return withLatency({ data: updated, briefing: briefing! }, 520);
 };
 
-export const fetchGoldPageData = (): Promise<{ assets: GoldAsset[], prediction: GoldPrediction, news: GoldNewsArticle[] }> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve({
-                assets: db.goldAssets,
-                prediction: db.goldPrediction,
-                news: db.goldNews,
-            });
-        }, FAKE_LATENCY);
+export const fetchGoldPageData = (): Promise<GoldPageData> =>
+    withLatency(cloneGold(ensureGold()), 500);
+
+export const refreshGoldMarketSnapshot = (): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            updateGoldStats(draft.stats);
+            appendGoldPricePoint(draft);
+            updateGoldAssets(draft.assets);
+            updateGoldDrivers(draft.marketDrivers);
+        }),
+        520,
+    );
+
+export const setGoldActiveRange = (range: GoldTimeRange): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            if (draft.priceRanges[range]) {
+                draft.activeRange = range;
+            }
+        }),
+        180,
+    );
+
+export const regenerateGoldPrediction = (): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            recalculateGoldPrediction(draft.prediction);
+        }),
+        540,
+    );
+
+export const updateGoldNewsVerification = (
+    articleId: string,
+    status: GoldNewsArticle['verificationStatus'],
+): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            const article = findGoldNews(draft, articleId);
+            if (!article) {
+                return;
+            }
+            article.verificationStatus = status;
+            const adjustment = status === 'Verified' ? -6 : 5;
+            article.impactScore = clamp(article.impactScore + adjustment, 30, 100);
+            if (status === 'Verified' && article.sentiment === 'Bearish') {
+                article.sentiment = 'Neutral';
+            }
+        }),
+        320,
+    );
+
+export const toggleGoldNewsWatchlist = (articleId: string): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            const article = findGoldNews(draft, articleId);
+            if (article) {
+                article.watchlisted = !article.watchlisted;
+            }
+        }),
+        260,
+    );
+
+export const pinGoldNewsArticle = (articleId: string, pinned?: boolean): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            const article = findGoldNews(draft, articleId);
+            if (!article) {
+                return;
+            }
+            const next = typeof pinned === 'boolean' ? pinned : !article.pinned;
+            if (next) {
+                draft.news.forEach(item => {
+                    if (item.id !== article.id) {
+                        item.pinned = false;
+                    }
+                });
+            }
+            article.pinned = next;
+        }),
+        240,
+    );
+
+export const publishGoldToTelegram = (
+    request: { channelId: string; templateId?: string; items: GoldPublishItem[] },
+): Promise<GoldPublishResponse> => {
+    const snapshot = cloneGold(ensureGold());
+    const fallbackChannel = snapshot.telegram.channels.find(channel => channel.id === request.channelId)
+        ?? snapshot.telegram.channels.find(channel => channel.id === snapshot.telegram.defaultChannelId)
+        ?? snapshot.telegram.channels[0];
+
+    if (!request.items.length || !fallbackChannel) {
+        return withLatency({
+            data: snapshot,
+            channel: fallbackChannel ?? snapshot.telegram.channels[0],
+            publishedAt: new Date().toISOString(),
+            message: 'gold_publish_queue_empty',
+        }, 180);
+    }
+
+    let publishedAt = new Date().toISOString();
+    const updated = mutateGold(draft => {
+        const channel = draft.telegram.channels.find(item => item.id === request.channelId)
+            ?? draft.telegram.channels.find(item => item.id === draft.telegram.defaultChannelId);
+        if (!channel) {
+            throw new Error('gold_channel_not_found');
+        }
+        publishedAt = new Date().toISOString();
+        channel.lastPublishedAt = publishedAt;
+        draft.telegram.lastPublishedAt = publishedAt;
+        draft.telegram.defaultChannelId = channel.id;
     });
+
+    const channel = updated.telegram.channels.find(item => item.id === request.channelId)
+        ?? updated.telegram.channels.find(item => item.id === updated.telegram.defaultChannelId)
+        ?? updated.telegram.channels[0];
+
+    return withLatency({
+        data: updated,
+        channel,
+        publishedAt,
+        message: request.templateId ? 'gold_publish_success_template' : 'gold_publish_success',
+    }, 520);
 };
+
+export const createGoldAlert = (input: GoldAlertInput): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            const asset = draft.assets.find(item => item.id === input.assetId);
+            const rawThreshold = Number.isFinite(input.threshold)
+                ? Number(input.threshold)
+                : 0;
+            const normalizedThreshold = Number(rawThreshold.toFixed(2));
+            const alert: GoldAlert = {
+                id: generateGoldAlertId(),
+                labelKey: input.labelKey ?? 'gold_alert_custom',
+                direction: input.direction,
+                threshold: normalizedThreshold,
+                assetId: asset?.id ?? input.assetId,
+                active: input.active ?? true,
+                createdAt: new Date().toISOString(),
+            };
+            draft.alerts = [alert, ...draft.alerts];
+        }),
+        420,
+    );
+
+export const toggleGoldAlertActive = (alertId: string, active?: boolean): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            const alert = findGoldAlert(draft, alertId);
+            if (!alert) {
+                return;
+            }
+            alert.active = typeof active === 'boolean' ? active : !alert.active;
+        }),
+        300,
+    );
+
+export const updateGoldAlertThreshold = (alertId: string, threshold: number): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            const alert = findGoldAlert(draft, alertId);
+            if (!alert) {
+                return;
+            }
+            const normalized = Number.isFinite(threshold) ? Number(threshold.toFixed(2)) : alert.threshold;
+            alert.threshold = normalized;
+        }),
+        320,
+    );
+
+export const acknowledgeGoldAlert = (alertId: string): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            const alert = findGoldAlert(draft, alertId);
+            if (!alert) {
+                return;
+            }
+            alert.lastTriggeredAt = new Date().toISOString();
+        }),
+        260,
+    );
+
+export const deleteGoldAlert = (alertId: string): Promise<GoldPageData> =>
+    withLatency(
+        mutateGold(draft => {
+            draft.alerts = draft.alerts.filter(alert => alert.id !== alertId);
+        }),
+        350,
+    );
 
 export const fetchConnectionSettings = (): Promise<{ apiKey: string, apiSecret: string, isConnected: boolean }> => {
     return new Promise(resolve => {
