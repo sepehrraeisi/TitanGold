@@ -55,11 +55,16 @@ import type {
     TradingTimeRange,
     ChartPoint,
     ManualTradingPageData,
+    WalletSettingsData,
+    ProfileSettingsData,
+    SecuritySettingsData,
+    UserManagementData,
 } from '../types.ts';
 
 const users: User[] = [
-    { id: '1', name: 'Sepehr', email: 'sepehr@titan.ai', role: 'Admin', password: 'password123' },
-    { id: '2', name: 'Trader One', email: 'trader.one@titan.ai', role: 'Trader', password: 'password123' },
+    { id: 'user-admin', name: 'Aria Nazari', email: 'aria.nazari@titan.ai', role: 'Admin', password: 'titanAdmin!23' },
+    { id: 'user-trader', name: 'Reza Farhadi', email: 'reza.farhadi@titan.ai', role: 'Trader', password: 'tradeSecure1' },
+    { id: 'user-analyst', name: 'Sara Mohammadi', email: 'sara.mohammadi@titan.ai', role: 'Analyst', password: 'analysis!8' },
 ];
 
 const autopilotState: AutopilotState = {
@@ -1181,24 +1186,267 @@ const aiCenter: AICenterData = {
     apiConfig: aiApiConfig,
 };
 
-const walletData = {
+const walletData: WalletSettingsData = {
     stats: {
         totalAssets: 23015,
         activeWallets: 3,
         profit24h: 12.5,
-        coldStorage: 1
+        coldStorage: 1,
     },
     assets: [
         { id: 'usdt', name: 'Tether', symbol: 'USDT', value: 14982, percentage: 65 },
         { id: 'btc', name: 'Bitcoin', symbol: 'BTC', value: 2.45, percentage: 25 },
         { id: 'eth', name: 'Ethereum', symbol: 'ETH', value: 3.2, percentage: 8 },
         { id: 'bnb', name: 'BNB', symbol: 'BNB', value: 15.8, percentage: 2 },
-    ] as WalletAsset[],
+    ],
     transactions: [
-        {id: '1', type: 'Deposit', amount: '1.2 BTC', exchange: 'MEXC', time: '2h ago', status: 'Completed'},
-        {id: '2', type: 'Withdrawal', amount: '1500 USDT', exchange: 'Cold Wallet', time: '8h ago', status: 'Completed'},
-        {id: '3', type: 'Trade', amount: 'BUY 0.5 ETH', exchange: 'MEXC', time: '1d ago', status: 'Completed'},
-    ] as WalletTransaction[],
+        { id: '1', type: 'Deposit', amount: '1.2 BTC', exchange: 'MEXC', time: '2h ago', status: 'Completed' },
+        { id: '2', type: 'Withdrawal', amount: '1500 USDT', exchange: 'Cold Wallet', time: '8h ago', status: 'Completed' },
+        { id: '3', type: 'Trade', amount: 'BUY 0.5 ETH', exchange: 'MEXC', time: '1d ago', status: 'Completed' },
+    ],
+    connectors: [
+        {
+            id: 'connector-mexc',
+            name: 'MEXC Exchange',
+            type: 'exchange',
+            status: 'connected',
+            lastSyncedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+            descriptionKey: 'wallet_connector_mexc_desc',
+        },
+        {
+            id: 'connector-ledger',
+            name: 'Ledger Cold Wallet',
+            type: 'wallet',
+            status: 'syncing',
+            lastSyncedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+            descriptionKey: 'wallet_connector_ledger_desc',
+        },
+        {
+            id: 'connector-aave',
+            name: 'Aave Yield Vault',
+            type: 'defi',
+            status: 'error',
+            lastSyncedAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+            descriptionKey: 'wallet_connector_aave_desc',
+        },
+    ],
+    securityControls: [
+        { id: 'encrypt-keys', labelKey: 'encrypt_private_keys', enabled: true },
+        { id: 'two-step', labelKey: 'two_step_verification', enabled: true },
+        { id: 'withdrawal-limit', labelKey: 'daily_withdrawal_limit', enabled: true },
+        { id: 'suspicious-alerts', labelKey: 'suspicious_transaction_alerts', enabled: true },
+    ],
+    preferences: {
+        baseCurrency: 'USD',
+        autoRefreshIntervalMinutes: 30,
+        lowBalanceThreshold: 1000,
+        showZeroBalance: false,
+    },
+    lastSyncedAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+};
+
+const profileSettings: ProfileSettingsData = {
+    profile: {
+        id: 'user-admin',
+        fullName: 'Aria Nazari',
+        email: 'aria.nazari@titan.ai',
+        username: 'aria.n',
+        jobTitle: 'Autopilot Architect',
+        phone: '+98 912 555 0101',
+        timezone: 'Asia/Tehran',
+        language: 'fa',
+        location: 'Tehran, IR',
+        status: 'verified',
+        memberSince: '2023-03-18T08:00:00.000Z',
+        lastLoginAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+        avatarUrl: '/avatars/aria.png',
+    },
+    communications: {
+        emailReports: true,
+        smsAlerts: false,
+        aiSummaries: true,
+        tradePush: true,
+        weeklyDigest: true,
+    },
+    metrics: [
+        { id: 'profile-metric-goals', labelKey: 'profile_metric_active_goals', value: '3', change: 1.2, direction: 'up' },
+        { id: 'profile-metric-alerts', labelKey: 'profile_metric_active_alerts', value: '5', change: -1.0, direction: 'down' },
+        { id: 'profile-metric-integrations', labelKey: 'profile_metric_integrations', value: '7', change: 0.0 },
+        { id: 'profile-metric-success', labelKey: 'profile_metric_success_rate', value: '91%', change: 2.4, direction: 'up' },
+    ],
+    integrations: [
+        {
+            id: 'integration-mexc',
+            nameKey: 'integration_mexc_exchange',
+            type: 'exchange',
+            status: 'connected',
+            lastSyncedAt: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
+        },
+        {
+            id: 'integration-ledger',
+            nameKey: 'integration_ledger_cold',
+            type: 'wallet',
+            status: 'syncing',
+            lastSyncedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+        },
+        {
+            id: 'integration-telegram',
+            nameKey: 'integration_telegram_broadcast',
+            type: 'messaging',
+            status: 'connected',
+            lastSyncedAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+        },
+        {
+            id: 'integration-ml',
+            nameKey: 'integration_ml_lab',
+            type: 'ai',
+            status: 'error',
+            lastSyncedAt: new Date(Date.now() - 1000 * 60 * 55).toISOString(),
+        },
+    ],
+    activity: [
+        {
+            id: 'profile-activity-1',
+            timestamp: new Date(Date.now() - 1000 * 60 * 22).toISOString(),
+            messageKey: 'profile_activity_goal_completed',
+            context: 'BTC Scalper',
+        },
+        {
+            id: 'profile-activity-2',
+            timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+            messageKey: 'profile_activity_new_integration',
+            context: 'Ledger Cold Wallet',
+        },
+        {
+            id: 'profile-activity-3',
+            timestamp: new Date(Date.now() - 1000 * 60 * 140).toISOString(),
+            messageKey: 'profile_activity_alert_acknowledged',
+            context: 'ETH Breakout',
+        },
+    ],
+    lastUpdated: new Date().toISOString(),
+};
+
+const securitySettings: SecuritySettingsData = {
+    score: 92,
+    twoFactor: {
+        enabled: true,
+        primaryMethod: 'authenticator',
+        backupCodesRemaining: 6,
+        lastUpdated: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+    },
+    methods: [
+        { id: 'sec-method-auth', type: 'authenticator', enabled: true, lastUsedAt: new Date(Date.now() - 1000 * 60 * 20).toISOString() },
+        { id: 'sec-method-sms', type: 'sms', enabled: false },
+        { id: 'sec-method-key', type: 'hardware_key', enabled: true, deviceName: 'YubiKey 5C', lastUsedAt: new Date(Date.now() - 1000 * 60 * 120).toISOString() },
+    ],
+    sessions: [
+        {
+            id: 'session-current',
+            device: 'Chrome on macOS',
+            location: 'Tehran, IR',
+            ipAddress: '192.168.10.24',
+            lastActiveAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+            current: true,
+            risk: 'low',
+        },
+        {
+            id: 'session-mobile',
+            device: 'iOS Titan App',
+            location: 'Tehran, IR',
+            ipAddress: '192.168.15.44',
+            lastActiveAt: new Date(Date.now() - 1000 * 60 * 200).toISOString(),
+            current: false,
+            risk: 'low',
+        },
+        {
+            id: 'session-dubai',
+            device: 'Edge on Windows',
+            location: 'Dubai, AE',
+            ipAddress: '185.20.14.88',
+            lastActiveAt: new Date(Date.now() - 1000 * 60 * 560).toISOString(),
+            current: false,
+            risk: 'medium',
+        },
+    ],
+    events: [
+        {
+            id: 'security-event-1',
+            timestamp: new Date(Date.now() - 1000 * 60 * 32).toISOString(),
+            titleKey: 'security_event_new_device',
+            descriptionKey: 'security_event_new_device_desc',
+            severity: 'medium',
+        },
+        {
+            id: 'security-event-2',
+            timestamp: new Date(Date.now() - 1000 * 60 * 300).toISOString(),
+            titleKey: 'security_event_failed_login',
+            descriptionKey: 'security_event_failed_login_desc',
+            severity: 'low',
+        },
+    ],
+    alerts: {
+        suspiciousLogin: true,
+        largeWithdrawal: true,
+        newDevice: true,
+    },
+    trustedLocations: ['Tehran, IR', 'Dubai, AE'],
+    lastReviewed: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
+};
+
+const userManagement: UserManagementData = {
+    users: [
+        {
+            id: 'user-admin',
+            name: 'Aria Nazari',
+            email: 'aria.nazari@titan.ai',
+            roleKey: 'role_admin',
+            status: 'active',
+            lastActiveAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+            createdAt: '2023-03-18T08:00:00.000Z',
+            twoFactorEnabled: true,
+            permissions: ['permission_manage_users', 'permission_trade_execution', 'permission_broadcast'],
+        },
+        {
+            id: 'user-trader',
+            name: 'Reza Farhadi',
+            email: 'reza.farhadi@titan.ai',
+            roleKey: 'role_trader',
+            status: 'active',
+            lastActiveAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
+            createdAt: '2023-09-02T12:00:00.000Z',
+            twoFactorEnabled: false,
+            permissions: ['permission_trade_execution', 'permission_ai_requests'],
+        },
+        {
+            id: 'user-analyst',
+            name: 'Sara Mohammadi',
+            email: 'sara.mohammadi@titan.ai',
+            roleKey: 'role_analyst',
+            status: 'suspended',
+            lastActiveAt: new Date(Date.now() - 1000 * 60 * 820).toISOString(),
+            createdAt: '2024-02-10T10:30:00.000Z',
+            twoFactorEnabled: true,
+            permissions: ['permission_view_reports'],
+        },
+    ],
+    invitations: [
+        {
+            id: 'invite-1',
+            email: 'advisor@titan.ai',
+            roleKey: 'role_analyst',
+            invitedAt: new Date(Date.now() - 1000 * 60 * 360).toISOString(),
+            invitedBy: 'Aria Nazari',
+            lastSentAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+        },
+    ],
+    availableRoles: [
+        { roleKey: 'role_admin', descriptionKey: 'role_admin_desc' },
+        { roleKey: 'role_trader', descriptionKey: 'role_trader_desc' },
+        { roleKey: 'role_analyst', descriptionKey: 'role_analyst_desc' },
+    ],
+    defaultRoleKey: 'role_trader',
+    lastUpdated: new Date().toISOString(),
 };
 
 const generateGoldSeries = (points: number, minutesStep: number, startPrice: number, volatility: number) => {
@@ -1547,6 +1795,9 @@ export const _data = {
     notificationSettings,
     aiCenter,
     walletData,
+    profileSettings,
+    securitySettings,
+    userManagement,
     tradingDashboard,
     manualTrading,
     gold: goldPage,

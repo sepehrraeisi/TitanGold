@@ -78,6 +78,21 @@ import type {
     Trade,
     ManualTradingPageData,
     ManualQuickTradeOrder,
+    WalletSettingsData,
+    WalletPreferences,
+    WalletSecurityControl,
+    WalletConnector,
+    ProfileSettingsData,
+    ProfileDetailsUpdate,
+    ProfileCommunicationSettings,
+    ProfilePasswordChangeRequest,
+    SecuritySettingsData,
+    SecurityAlertSettings,
+    SecuritySession,
+    ManagedUser,
+    UserManagementData,
+    UserInvitation,
+    UserRoleOption,
 } from '../types.ts';
 
 // --- SIMULATED BACKEND ---
@@ -87,6 +102,8 @@ const FAKE_LATENCY = 800;
 // Simulate a database
 let db: typeof _data = { ..._data };
 let goldAlertSequence = _data.gold.alerts.length;
+let userInviteSequence = _data.userManagement?.invitations.length ?? 0;
+let userSequence = _data.userManagement?.users.length ?? 0;
 
 const ensureAutopilotState = (): AutopilotState => {
     if (!db.autopilotState) {
@@ -142,6 +159,34 @@ const ensureGold = (): GoldPageData => {
         throw new Error('Gold data not initialized');
     }
     return db.gold;
+};
+
+const ensureWalletSettings = (): WalletSettingsData => {
+    if (!db.walletData) {
+        throw new Error('Wallet settings not initialized');
+    }
+    return db.walletData;
+};
+
+const ensureProfileSettings = (): ProfileSettingsData => {
+    if (!db.profileSettings) {
+        throw new Error('Profile settings not initialized');
+    }
+    return db.profileSettings;
+};
+
+const ensureSecuritySettings = (): SecuritySettingsData => {
+    if (!db.securitySettings) {
+        throw new Error('Security settings not initialized');
+    }
+    return db.securitySettings;
+};
+
+const ensureUserManagement = (): UserManagementData => {
+    if (!db.userManagement) {
+        throw new Error('User management data not initialized');
+    }
+    return db.userManagement;
 };
 
 const cloneAutopilotState = (state: AutopilotState): AutopilotState => ({
@@ -275,6 +320,44 @@ const generateGoldAlertId = (): string => {
     return `gold-alert-${goldAlertSequence}`;
 };
 
+const cloneWalletSettings = (settings: WalletSettingsData): WalletSettingsData => ({
+    stats: { ...settings.stats },
+    assets: settings.assets.map(asset => ({ ...asset })),
+    transactions: settings.transactions.map(transaction => ({ ...transaction })),
+    connectors: settings.connectors.map(connector => ({ ...connector })),
+    securityControls: settings.securityControls.map(control => ({ ...control })),
+    preferences: { ...settings.preferences },
+    lastSyncedAt: settings.lastSyncedAt,
+});
+
+const cloneProfileSettings = (settings: ProfileSettingsData): ProfileSettingsData => ({
+    profile: { ...settings.profile },
+    communications: { ...settings.communications },
+    metrics: settings.metrics.map(metric => ({ ...metric })),
+    integrations: settings.integrations.map(integration => ({ ...integration })),
+    activity: settings.activity.map(entry => ({ ...entry })),
+    lastUpdated: settings.lastUpdated,
+});
+
+const cloneSecuritySettings = (settings: SecuritySettingsData): SecuritySettingsData => ({
+    score: settings.score,
+    twoFactor: { ...settings.twoFactor },
+    methods: settings.methods.map(method => ({ ...method })),
+    sessions: settings.sessions.map(session => ({ ...session })),
+    events: settings.events.map(event => ({ ...event })),
+    alerts: { ...settings.alerts },
+    trustedLocations: [...settings.trustedLocations],
+    lastReviewed: settings.lastReviewed,
+});
+
+const cloneUserManagement = (settings: UserManagementData): UserManagementData => ({
+    users: settings.users.map(user => ({ ...user, permissions: [...user.permissions] })),
+    invitations: settings.invitations.map(invitation => ({ ...invitation })),
+    availableRoles: settings.availableRoles.map(role => ({ ...role })),
+    defaultRoleKey: settings.defaultRoleKey,
+    lastUpdated: settings.lastUpdated,
+});
+
 const cloneAIManagerOverview = (overview: AIManagerOverview): AIManagerOverview => ({
     summary: { ...overview.summary },
     providers: overview.providers.map(cloneAIProvider),
@@ -329,6 +412,45 @@ const mutateAICenter = (
     mutator(base);
     db.aiCenter = base;
     return cloneAICenter(base);
+};
+
+const mutateWalletSettings = (
+    mutator: (draft: WalletSettingsData) => void,
+): WalletSettingsData => {
+    const base = cloneWalletSettings(ensureWalletSettings());
+    mutator(base);
+    base.lastSyncedAt = new Date().toISOString();
+    db.walletData = base;
+    return cloneWalletSettings(base);
+};
+
+const mutateProfileSettings = (
+    mutator: (draft: ProfileSettingsData) => void,
+): ProfileSettingsData => {
+    const base = cloneProfileSettings(ensureProfileSettings());
+    mutator(base);
+    base.lastUpdated = new Date().toISOString();
+    db.profileSettings = base;
+    return cloneProfileSettings(base);
+};
+
+const mutateSecuritySettings = (
+    mutator: (draft: SecuritySettingsData) => void,
+): SecuritySettingsData => {
+    const base = cloneSecuritySettings(ensureSecuritySettings());
+    mutator(base);
+    db.securitySettings = base;
+    return cloneSecuritySettings(base);
+};
+
+const mutateUserManagement = (
+    mutator: (draft: UserManagementData) => void,
+): UserManagementData => {
+    const base = cloneUserManagement(ensureUserManagement());
+    mutator(base);
+    base.lastUpdated = new Date().toISOString();
+    db.userManagement = base;
+    return cloneUserManagement(base);
 };
 
 const recalculateAISummary = (draft: AICenterData): void => {
@@ -2548,9 +2670,44 @@ export const testAIIntegration = (
         }, FAKE_LATENCY);
     });
 
-export const fetchWalletData = (): Promise<any> => {
-    return new Promise(resolve => setTimeout(() => resolve(db.walletData), FAKE_LATENCY));
-}
+export const fetchWalletData = (): Promise<WalletSettingsData> =>
+    withLatency(cloneWalletSettings(ensureWalletSettings()), 480);
+
+export const updateWalletPreferences = (preferences: WalletPreferences): Promise<WalletSettingsData> =>
+    withLatency(
+        mutateWalletSettings(draft => {
+            draft.preferences = { ...preferences };
+        }),
+        520,
+    );
+
+export const toggleWalletSecurityControl = (controlId: string, enabled?: boolean): Promise<WalletSettingsData> =>
+    withLatency(
+        mutateWalletSettings(draft => {
+            const control = draft.securityControls.find(item => item.id === controlId);
+            if (!control) {
+                return;
+            }
+            control.enabled = typeof enabled === 'boolean' ? enabled : !control.enabled;
+        }),
+        420,
+    );
+
+export const refreshWalletConnector = (
+    connectorId: string,
+    status: WalletConnector['status'] = 'connected',
+): Promise<WalletSettingsData> =>
+    withLatency(
+        mutateWalletSettings(draft => {
+            const connector = draft.connectors.find(item => item.id === connectorId);
+            if (!connector) {
+                return;
+            }
+            connector.status = status;
+            connector.lastSyncedAt = new Date().toISOString();
+        }),
+        650,
+    );
 
 export const fetchAutomationSettings = (): Promise<{ dataSources: DataSource[], telegramConfigs: TelegramPublisherConfig[], workflows: Workflow[] }> => {
     return new Promise(resolve => {
@@ -2566,8 +2723,232 @@ export const saveAutomationSettings = (settings: { dataSources: DataSource[], te
             db.automationSettings.dataSources = settings.dataSources;
             db.automationSettings.telegramConfigs = settings.telegramConfigs;
             db.automationSettings.workflows = settings.workflows;
-            console.log("Saved Automation Settings:", settings);
             resolve();
         }, 500);
     });
 };
+
+export const fetchProfileSettings = (): Promise<ProfileSettingsData> =>
+    withLatency(cloneProfileSettings(ensureProfileSettings()), 420);
+
+export const saveProfileDetails = (updates: ProfileDetailsUpdate): Promise<ProfileSettingsData> =>
+    withLatency(
+        mutateProfileSettings(draft => {
+            draft.profile = { ...draft.profile, ...updates };
+            draft.activity = [
+                {
+                    id: `profile-activity-${Math.random().toString(36).slice(2, 8)}`,
+                    timestamp: new Date().toISOString(),
+                    messageKey: 'profile_activity_details_updated',
+                    context: draft.profile.fullName,
+                },
+                ...draft.activity,
+            ].slice(0, 8);
+        }),
+        560,
+    );
+
+export const saveProfileCommunications = (preferences: ProfileCommunicationSettings): Promise<ProfileSettingsData> =>
+    withLatency(
+        mutateProfileSettings(draft => {
+            draft.communications = { ...preferences };
+            draft.activity = [
+                {
+                    id: `profile-activity-${Math.random().toString(36).slice(2, 8)}`,
+                    timestamp: new Date().toISOString(),
+                    messageKey: 'profile_activity_preferences_updated',
+                },
+                ...draft.activity,
+            ].slice(0, 8);
+        }),
+        480,
+    );
+
+export const changeProfilePassword = ({ currentPassword, newPassword }: ProfilePasswordChangeRequest): Promise<{ success: boolean; message: string }> =>
+    new Promise(resolve => {
+        setTimeout(() => {
+            const profile = ensureProfileSettings();
+            const userRecord = db.users.find(user => user.email === profile.profile.email)
+                ?? db.users[0];
+
+            if (!userRecord) {
+                resolve({ success: false, message: 'profile_password_error_user_missing' });
+                return;
+            }
+
+            if (newPassword.length < 8) {
+                resolve({ success: false, message: 'profile_password_error_length' });
+                return;
+            }
+
+            if (userRecord.password !== currentPassword) {
+                resolve({ success: false, message: 'profile_password_error_current' });
+                return;
+            }
+
+            userRecord.password = newPassword;
+            mutateProfileSettings(draft => {
+                draft.activity = [
+                    {
+                        id: `profile-activity-${Math.random().toString(36).slice(2, 8)}`,
+                        timestamp: new Date().toISOString(),
+                        messageKey: 'profile_activity_password_changed',
+                    },
+                    ...draft.activity,
+                ].slice(0, 8);
+            });
+
+            resolve({ success: true, message: 'profile_password_success' });
+        }, 700);
+    });
+
+export const fetchSecuritySettings = (): Promise<SecuritySettingsData> =>
+    withLatency(cloneSecuritySettings(ensureSecuritySettings()), 400);
+
+export const toggleTwoFactorAuth = (enabled?: boolean): Promise<SecuritySettingsData> =>
+    withLatency(
+        mutateSecuritySettings(draft => {
+            const next = typeof enabled === 'boolean' ? enabled : !draft.twoFactor.enabled;
+            draft.twoFactor.enabled = next;
+            draft.twoFactor.lastUpdated = new Date().toISOString();
+            if (next && draft.twoFactor.backupCodesRemaining === 0) {
+                draft.twoFactor.backupCodesRemaining = 8;
+            }
+            if (!next) {
+                draft.twoFactor.backupCodesRemaining = 0;
+            }
+            draft.events = [
+                {
+                    id: `security-event-${Math.random().toString(36).slice(2, 8)}`,
+                    timestamp: new Date().toISOString(),
+                    titleKey: next ? 'security_event_2fa_enabled' : 'security_event_2fa_disabled',
+                    descriptionKey: next ? 'security_event_2fa_enabled_desc' : 'security_event_2fa_disabled_desc',
+                    severity: next ? 'low' : 'medium',
+                },
+                ...draft.events,
+            ].slice(0, 8);
+        }),
+        520,
+    );
+
+export const updateSecurityAlerts = (alerts: SecurityAlertSettings): Promise<SecuritySettingsData> =>
+    withLatency(
+        mutateSecuritySettings(draft => {
+            draft.alerts = { ...alerts };
+        }),
+        360,
+    );
+
+export const revokeSecuritySession = (sessionId: string): Promise<SecuritySettingsData> =>
+    withLatency(
+        mutateSecuritySettings(draft => {
+            const session = draft.sessions.find(item => item.id === sessionId);
+            if (!session) {
+                return;
+            }
+            if (session.current) {
+                session.current = false;
+                session.lastActiveAt = new Date().toISOString();
+            } else {
+                draft.sessions = draft.sessions.filter(item => item.id !== sessionId);
+            }
+            draft.events = [
+                {
+                    id: `security-event-${Math.random().toString(36).slice(2, 8)}`,
+                    timestamp: new Date().toISOString(),
+                    titleKey: 'security_event_session_revoked',
+                    descriptionKey: 'security_event_session_revoked_desc',
+                    severity: 'medium',
+                },
+                ...draft.events,
+            ].slice(0, 8);
+        }),
+        460,
+    );
+
+export const generateSecurityBackupCodes = (count = 8): Promise<{ codes: string[]; data: SecuritySettingsData }> =>
+    new Promise(resolve => {
+        setTimeout(() => {
+            const codes = Array.from({ length: count }, () => Math.random().toString(36).slice(2, 8).toUpperCase());
+            const updated = mutateSecuritySettings(draft => {
+                draft.twoFactor.backupCodesRemaining = count;
+                draft.twoFactor.lastUpdated = new Date().toISOString();
+            });
+            resolve({ codes, data: updated });
+        }, 620);
+    });
+
+export const fetchUserManagement = (): Promise<UserManagementData> =>
+    withLatency(cloneUserManagement(ensureUserManagement()), 520);
+
+export const updateManagedUserRole = (userId: string, roleKey: string): Promise<UserManagementData> =>
+    withLatency(
+        mutateUserManagement(draft => {
+            const user = draft.users.find(item => item.id === userId);
+            if (user) {
+                user.roleKey = roleKey;
+            }
+        }),
+        420,
+    );
+
+export const toggleManagedUserStatus = (
+    userId: string,
+    status?: ManagedUser['status'],
+): Promise<UserManagementData> =>
+    withLatency(
+        mutateUserManagement(draft => {
+            const user = draft.users.find(item => item.id === userId);
+            if (!user) {
+                return;
+            }
+            if (status) {
+                user.status = status;
+            } else {
+                user.status = user.status === 'suspended' ? 'active' : 'suspended';
+            }
+            if (user.status === 'active') {
+                user.lastActiveAt = new Date().toISOString();
+            }
+        }),
+        480,
+    );
+
+export const removeManagedUser = (userId: string): Promise<UserManagementData> =>
+    withLatency(
+        mutateUserManagement(draft => {
+            draft.users = draft.users.filter(item => item.id !== userId);
+        }),
+        440,
+    );
+
+export const inviteManagedUser = (email: string, roleKey: string): Promise<UserManagementData> =>
+    withLatency(
+        mutateUserManagement(draft => {
+            userInviteSequence += 1;
+            const invitation: UserInvitation = {
+                id: `invite-${userInviteSequence}`,
+                email,
+                roleKey,
+                invitedAt: new Date().toISOString(),
+                invitedBy: draft.users.find(user => user.roleKey === 'role_admin')?.name ?? 'Titan Admin',
+                lastSentAt: new Date().toISOString(),
+            };
+            draft.invitations = [invitation, ...draft.invitations].slice(0, 8);
+        }),
+        600,
+    );
+
+export const resendUserInvitation = (invitationId: string): Promise<{ success: boolean; invitation?: UserInvitation }> =>
+    new Promise(resolve => {
+        setTimeout(() => {
+            const updated = mutateUserManagement(draft => {
+                const invitation = draft.invitations.find(item => item.id === invitationId);
+                if (invitation) {
+                    invitation.lastSentAt = new Date().toISOString();
+                }
+            });
+            const invitation = updated.invitations.find(item => item.id === invitationId);
+            resolve({ success: Boolean(invitation), invitation });
+        }, 520);
+    });

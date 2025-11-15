@@ -647,6 +647,197 @@ export interface WalletTransaction {
   status: 'Completed' | 'Pending';
 }
 
+export interface WalletConnector {
+    id: string;
+    name: string;
+    type: 'exchange' | 'wallet' | 'defi';
+    status: 'connected' | 'error' | 'disconnected' | 'syncing';
+    lastSyncedAt: string;
+    descriptionKey: string;
+}
+
+export interface WalletSecurityControl {
+    id: string;
+    labelKey: string;
+    enabled: boolean;
+}
+
+export interface WalletPreferences {
+    baseCurrency: string;
+    autoRefreshIntervalMinutes: number;
+    lowBalanceThreshold: number;
+    showZeroBalance: boolean;
+}
+
+export interface WalletStatsOverview {
+    totalAssets: number;
+    activeWallets: number;
+    profit24h: number;
+    coldStorage: number;
+}
+
+export interface WalletSettingsData {
+    stats: WalletStatsOverview;
+    assets: WalletAsset[];
+    transactions: WalletTransaction[];
+    connectors: WalletConnector[];
+    securityControls: WalletSecurityControl[];
+    preferences: WalletPreferences;
+    lastSyncedAt: string;
+}
+
+export type ProfileStatus = 'verified' | 'pending' | 'restricted';
+
+export type ProfileIntegrationType = 'exchange' | 'wallet' | 'ai' | 'messaging';
+
+export interface ProfileMetric {
+    id: string;
+    labelKey: string;
+    value: string;
+    change?: number;
+    direction?: 'up' | 'down';
+}
+
+export interface ProfileIntegration {
+    id: string;
+    nameKey: string;
+    type: ProfileIntegrationType;
+    status: 'connected' | 'error' | 'syncing';
+    lastSyncedAt: string;
+}
+
+export interface ProfileActivityEntry {
+    id: string;
+    timestamp: string;
+    messageKey: string;
+    context?: string;
+}
+
+export interface ProfileCommunicationSettings {
+    emailReports: boolean;
+    smsAlerts: boolean;
+    aiSummaries: boolean;
+    tradePush: boolean;
+    weeklyDigest: boolean;
+}
+
+export interface ProfileDetails {
+    id: string;
+    fullName: string;
+    email: string;
+    username: string;
+    jobTitle: string;
+    phone: string;
+    timezone: string;
+    language: 'en' | 'fa';
+    location: string;
+    status: ProfileStatus;
+    memberSince: string;
+    lastLoginAt: string;
+    avatarUrl?: string;
+}
+
+export interface ProfileSettingsData {
+    profile: ProfileDetails;
+    communications: ProfileCommunicationSettings;
+    metrics: ProfileMetric[];
+    integrations: ProfileIntegration[];
+    activity: ProfileActivityEntry[];
+    lastUpdated: string;
+}
+
+export type ProfileDetailsUpdate = Partial<Pick<ProfileDetails,
+    'fullName' | 'email' | 'jobTitle' | 'phone' | 'timezone' | 'language' | 'location'>>;
+
+export interface ProfilePasswordChangeRequest {
+    currentPassword: string;
+    newPassword: string;
+}
+
+export interface SecurityMethod {
+    id: string;
+    type: 'authenticator' | 'sms' | 'hardware_key';
+    enabled: boolean;
+    lastUsedAt?: string;
+    deviceName?: string;
+}
+
+export type SecuritySeverity = 'low' | 'medium' | 'high';
+
+export interface SecuritySession {
+    id: string;
+    device: string;
+    location: string;
+    ipAddress: string;
+    lastActiveAt: string;
+    current: boolean;
+    risk: SecuritySeverity;
+}
+
+export interface SecurityEvent {
+    id: string;
+    timestamp: string;
+    titleKey: string;
+    descriptionKey: string;
+    severity: SecuritySeverity;
+}
+
+export interface SecurityAlertSettings {
+    suspiciousLogin: boolean;
+    largeWithdrawal: boolean;
+    newDevice: boolean;
+}
+
+export interface SecuritySettingsData {
+    score: number;
+    twoFactor: {
+        enabled: boolean;
+        primaryMethod: SecurityMethod['type'];
+        backupCodesRemaining: number;
+        lastUpdated: string;
+    };
+    methods: SecurityMethod[];
+    sessions: SecuritySession[];
+    events: SecurityEvent[];
+    alerts: SecurityAlertSettings;
+    trustedLocations: string[];
+    lastReviewed: string;
+}
+
+export interface ManagedUser {
+    id: string;
+    name: string;
+    email: string;
+    roleKey: string;
+    status: 'active' | 'invited' | 'suspended';
+    lastActiveAt?: string;
+    createdAt: string;
+    twoFactorEnabled: boolean;
+    permissions: string[];
+}
+
+export interface UserInvitation {
+    id: string;
+    email: string;
+    roleKey: string;
+    invitedAt: string;
+    invitedBy: string;
+    lastSentAt: string;
+}
+
+export interface UserRoleOption {
+    roleKey: string;
+    descriptionKey: string;
+}
+
+export interface UserManagementData {
+    users: ManagedUser[];
+    invitations: UserInvitation[];
+    availableRoles: UserRoleOption[];
+    defaultRoleKey: string;
+    lastUpdated: string;
+}
+
 export interface AIAgent {
   id: string;
   name: string;
