@@ -1,0 +1,281 @@
+import express from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { body, validationResult } from 'express-validator';
+import { query, transaction } from '../database/db.js';
+import { authenticate } from '../middleware/auth.js';
+
+const router = express.Router();
+
+// Generate JWT token
+const generateToken = (userId) => {
+  return jwt.sign(
+    { userId },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+};
+
+// Generate refresh token
+const generateRefreshToken = (userId) => {
+  return jwt.sign(
+    { userId, type: 'refresh' },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '30d' }
+  );
+};
+
+// ============================================================================
+// REGISTER
+// ============================================================================
+
+router.post('/register', [
+  body('email').isEmail().normalizeEmail(),
+  body('username').isLength({ min: 3 }).trim(),
+  body('password').isLength({ min: 6 }),
+  body('fullName').optional().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, username, password, fullName } = req.body;
+
+    // Check if user exists
+    const existingUser = await query(
+      'SELECT id FROM users WHERE email = $1 OR username = $2',
+      [email, username]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create user and initial settings in transaction
+    const result = await transaction(async (client) => {
+      // Insert user
+      const userResult = await client.query(
+        `INSERT INTO users (email, username, password_hash, full_name)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, email, username, full_name, role, created_at`,
+        [email, username, passwordHash, fullName || username]
+      );
+
+      const user = userResult.rows[0];
+
+      // Create default settings
+      await client.query(
+        `INSERT INTO user_settings (user_id) VALUES ($1)`,
+        [user.id]
+      );
+
+      // Create default portfolio
+      await client.query(
+        `INSERT INTO portfolios (user_id, name, is_main, base_currency)
+         VALUES ($1, $2, TRUE, 'USD')`,
+        [user.id, 'Main Portfolio']
+      );
+
+      return user;
+    });
+
+    // Generate tokens
+    const token = generateToken(result.id);
+    const refreshToken = generateRefreshToken(result.id);
+
+    // Save session
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    await query(
+      `INSERT INTO user_sessions (user_id, token, refresh_token, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [result.id, token, refreshToken, expiresAt, req.ip, req.headers['user-agent']]
+    );
+
+    res.status(201).json({
+      user: result,
+      token,
+      refreshToken
+    });
+  } catch (error) {
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// ============================================================================
+// LOGIN
+// ============================================================================
+
+router.post('/login', [
+  body('username').trim().notEmpty(),
+  body('password').notEmpty()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { username, password } = req.body;
+
+    // Find user by username or email
+    const result = await query(
+      `SELECT id, email, username, password_hash, full_name, role, is_active
+       FROM users 
+       WHERE (username = $1 OR email = $1)`,
+      [username]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = result.rows[0];
+
+    if (!user.is_active) {
+      return res.status(401).json({ error: 'Account is inactive' });
+    }
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Generate tokens
+    const token = generateToken(user.id);
+    const refreshToken = generateRefreshToken(user.id);
+
+    // Save session
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await query(
+      `INSERT INTO user_sessions (user_id, token, refresh_token, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [user.id, token, refreshToken, expiresAt, req.ip, req.headers['user-agent']]
+    );
+
+    // Update last login
+    await query(
+      'UPDATE users SET last_login_at = NOW() WHERE id = $1',
+      [user.id]
+    );
+
+    // Remove password hash from response
+    delete user.password_hash;
+
+    res.json({
+      user,
+      token,
+      refreshToken
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// ============================================================================
+// LOGOUT
+// ============================================================================
+
+router.post('/logout', authenticate, async (req, res) => {
+  try {
+    await query(
+      'DELETE FROM user_sessions WHERE token = $1',
+      [req.token]
+    );
+
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// ============================================================================
+// REFRESH TOKEN
+// ============================================================================
+
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token required' });
+    }
+
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+
+    if (decoded.type !== 'refresh') {
+      return res.status(400).json({ error: 'Invalid token type' });
+    }
+
+    // Check if session exists
+    const sessionResult = await query(
+      'SELECT user_id FROM user_sessions WHERE refresh_token = $1',
+      [refreshToken]
+    );
+
+    if (sessionResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    const userId = sessionResult.rows[0].user_id;
+
+    // Generate new tokens
+    const newToken = generateToken(userId);
+    const newRefreshToken = generateRefreshToken(userId);
+
+    // Update session
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await query(
+      `UPDATE user_sessions 
+       SET token = $1, refresh_token = $2, expires_at = $3, last_activity_at = NOW()
+       WHERE refresh_token = $4`,
+      [newToken, newRefreshToken, expiresAt, refreshToken]
+    );
+
+    res.json({
+      token: newToken,
+      refreshToken: newRefreshToken
+    });
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    res.status(401).json({ error: 'Token refresh failed' });
+  }
+});
+
+// ============================================================================
+// GET CURRENT USER
+// ============================================================================
+
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT u.id, u.email, u.username, u.full_name, u.phone, u.avatar_url, 
+              u.role, u.created_at, u.last_login_at,
+              s.theme, s.language, s.currency
+       FROM users u
+       LEFT JOIN user_settings s ON u.id = s.user_id
+       WHERE u.id = $1`,
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Get current user error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+export default router;
