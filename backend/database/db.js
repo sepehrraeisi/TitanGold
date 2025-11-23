@@ -5,9 +5,12 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Create PostgreSQL connection pool
-// Use connection string or individual parameters
 const pool = new Pool({
-  connectionString: `postgresql://postgres@localhost:5432/titangold_db`,
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT) || 5433,  // PostgreSQL is on port 5433
+  database: process.env.DB_NAME || 'titangold_db',
+  user: process.env.DB_USER || 'postgres',
+  // No password with trust authentication
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
