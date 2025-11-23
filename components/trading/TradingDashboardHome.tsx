@@ -236,7 +236,7 @@ const TradingDashboardHome: React.FC = () => {
             ))}
       </div>
 
-      <Card className="border border-gray-800/60 bg-[#101528]">
+      <Card className="border border-border bg-card">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle className="text-xl text-white">{baseTranslations.priceChartTitle[language]}</CardTitle>
@@ -250,53 +250,53 @@ const TradingDashboardHome: React.FC = () => {
                 </TabsTrigger>
               ))}
             </TabsList>
-          </Tabs>
-        </div>
-        {(['1H', '24H', '7D', '1M', '1Y'] as TradingTimeRange[]).map(range => (
-          <TabsContent key={range} value={range} className="mt-6">
-            {loading ? (
-              <Skeleton className="h-64 w-full rounded-lg" />
-            ) : chartRanges[range]?.length ? (
-              <div className="relative h-64 w-full">
-                <svg viewBox="0 0 400 200" className="h-full w-full">
-                  <defs>
-                    <linearGradient id={`chartFill-${range}`} x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="#2563eb" stopOpacity="0.35" />
-                      <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  <polyline
-                    fill={`url(#chartFill-${range})`}
-                    stroke="#3b82f6"
-                    strokeWidth="2"
-                    points={chartRanges[range]
-                      .map((point, index) => {
+            {(['1H', '24H', '7D', '1M', '1Y'] as TradingTimeRange[]).map(range => (
+              <TabsContent key={range} value={range} className="mt-6">
+                {loading ? (
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                ) : chartRanges[range]?.length ? (
+                  <div className="relative h-64 w-full">
+                    <svg viewBox="0 0 400 200" className="h-full w-full">
+                      <defs>
+                        <linearGradient id={`chartFill-${range}`} x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="0%" stopColor="#2563eb" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <polyline
+                        fill={`url(#chartFill-${range})`}
+                        stroke="#3b82f6"
+                        strokeWidth="2"
+                        points={chartRanges[range]
+                          .map((point, index) => {
+                            const x = (index / Math.max(chartRanges[range].length - 1, 1)) * 400;
+                            const normalized = (point.value - 26000) / 8000;
+                            const y = 180 - normalized * 160;
+                            return `${x},${y}`;
+                          })
+                          .join(' ')}
+                      />
+                      {chartRanges[range].map((point, index) => {
                         const x = (index / Math.max(chartRanges[range].length - 1, 1)) * 400;
                         const normalized = (point.value - 26000) / 8000;
                         const y = 180 - normalized * 160;
-                        return `${x},${y}`;
-                      })
-                      .join(' ')}
-                  />
-                  {chartRanges[range].map((point, index) => {
-                    const x = (index / Math.max(chartRanges[range].length - 1, 1)) * 400;
-                    const normalized = (point.value - 26000) / 8000;
-                    const y = 180 - normalized * 160;
-                    return (
-                      <g key={`${point.timestamp}-${index}`}>
-                        <circle cx={x} cy={y} r={2.5} fill="#60a5fa" />
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-            ) : (
-              <div className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-gray-700 text-sm text-gray-400">
-                {baseTranslations.chartEmpty[language]}
-              </div>
-            )}
-          </TabsContent>
-        ))}
+                        return (
+                          <g key={`${point.timestamp}-${index}`}>
+                            <circle cx={x} cy={y} r={2.5} fill="#60a5fa" />
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-gray-700 text-sm text-gray-400">
+                    {baseTranslations.chartEmpty[language]}
+                  </div>
+                )}
+              </TabsContent>
+            ))}
+          </Tabs>
+        </div>
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -388,7 +388,7 @@ const TradingDashboardHome: React.FC = () => {
                   {assets.map(asset => (
                     <div
                       key={asset.id}
-                      className="flex items-center justify-between rounded-lg border border-gray-800/70 bg-[#0f1424] p-3"
+                      className="flex items-center justify-between rounded-lg border border-border bg-secondary p-3"
                     >
                       <div>
                         <div className="text-sm font-semibold text-white">{asset.name}</div>

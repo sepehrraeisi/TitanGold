@@ -6,125 +6,293 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Titan Trading Autopilot</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Iran Sans Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <style>
-      :root {
-        --background: 222.2 84% 4.9%;
-        --foreground: 210 40% 98%;
-        --card: 222.2 84% 4.9%;
-        --card-foreground: 210 40% 98%;
-        --popover: 222.2 84% 4.9%;
-        --popover-foreground: 210 40% 98%;
-        --primary: 210 40% 98%;
-        --primary-foreground: 222.2 47.4% 11.2%;
-        --secondary: 217.2 32.6% 17.5%;
-        --secondary-foreground: 210 40% 98%;
-        --muted: 217.2 32.6% 17.5%;
-        --muted-foreground: 215 20.2% 65.1%;
-        --accent: 217.2 32.6% 17.5%;
-        --accent-foreground: 210 40% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 210 40% 98%;
-        --border: 217.2 32.6% 17.5%;
-        --input: 217.2 32.6% 17.5%;
-        --ring: 212.7 26.8% 83.9%;
-        
-        /* Coinbase-inspired additions */
-        --cb-background: #0D111C;
-        --cb-card: #161B22;
-        --cb-border: #2a2d3e;
-        --cb-blue: #0052FF;
-        --cb-text-primary: #FFFFFF;
-        --cb-text-secondary: #8A919E;
-        --cb-green: #05C169;
-        --cb-red: #FF4747;
+      @font-face {
+        font-family: "IRANSans";
+        font-style: normal;
+        font-weight: 300;
+        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Light-FD.woff2")
+          format("woff2");
       }
-      
-      .dark {
-        --background: var(--cb-background);
-        --foreground: var(--cb-text-primary);
-        --card: var(--cb-card);
-        --card-foreground: var(--cb-text-primary);
-        --border: var(--cb-border);
-        --input: var(--cb-card);
-        --muted-foreground: var(--cb-text-secondary);
-        --secondary: #2a2d3e;
-        --secondary-foreground: var(--cb-text-primary);
-        --primary: var(--cb-blue);
-        --primary-foreground: #FFFFFF;
-        --ring: var(--cb-blue);
-        --positive: var(--cb-green);
-        --negative: var(--cb-red);
+      @font-face {
+        font-family: "IRANSans";
+        font-style: normal;
+        font-weight: 400;
+        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Regular-FD.woff2")
+          format("woff2");
       }
-      
-      html.light {
-        --cb-background: #F6F7F8;
-        --cb-card: #FFFFFF;
-        --cb-border: #EAECEF;
-        --cb-text-primary: #0A0A0A;
-        --cb-text-secondary: #5E6672;
-        
-        --background: var(--cb-background);
-        --foreground: var(--cb-text-primary);
-        --card: var(--cb-card);
-        --card-foreground: var(--cb-text-primary);
-        --border: var(--cb-border);
-        --input: #FFFFFF;
-        --muted-foreground: var(--cb-text-secondary);
-        --secondary: #EAECEF;
-        --secondary-foreground: var(--cb-text-primary);
-        --primary: var(--cb-blue);
-        --primary-foreground: #FFFFFF;
-        --ring: var(--cb-blue);
-        --positive: #05C169;
-        --negative: #FF4747;
+      @font-face {
+        font-family: "IRANSans";
+        font-style: normal;
+        font-weight: 500;
+        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Medium-FD.woff2")
+          format("woff2");
       }
-      
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: var(--background);
-        color: var(--foreground);
+      @font-face {
+        font-family: "IRANSans";
+        font-style: normal;
+        font-weight: 600;
+        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Bold-FD.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "IRANSans";
+        font-style: normal;
+        font-weight: 700;
+        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Bold-FD.woff2")
+          format("woff2");
       }
 
-      /* Custom Tailwind Config for CDN */
+      :root {
+        /* Professional Trading Theme - Dark Mode */
+        --trading-bg-primary: #0a0e27;
+        --trading-bg-secondary: #131829;
+        --trading-bg-tertiary: #1a1f35;
+        --trading-card: #1e2339;
+        --trading-card-hover: #252b45;
+        --trading-border: #2a3147;
+        --trading-border-light: #3a4157;
+
+        /* Text Colors */
+        --trading-text-primary: #ffffff;
+        --trading-text-secondary: #8b92b7;
+        --trading-text-tertiary: #5a5f7a;
+        --trading-text-muted: #4a4f6a;
+
+        /* Trading Colors */
+        --trading-green: #00d4aa;
+        --trading-green-dark: #00b894;
+        --trading-red: #ff4757;
+        --trading-red-dark: #ee3542;
+        --trading-blue: #3742fa;
+        --trading-blue-light: #5352ed;
+        --trading-yellow: #ffa502;
+        --trading-purple: #a55eea;
+
+        /* Accent Colors */
+        --trading-accent: #5f27cd;
+        --trading-accent-light: #7c3aed;
+        --trading-accent-dark: #4c1d95;
+
+        /* Chart Colors */
+        --trading-chart-bg: #0f1320;
+        --trading-chart-grid: #1a1f35;
+        --trading-chart-line-up: #00d4aa;
+        --trading-chart-line-down: #ff4757;
+
+        /* Status Colors */
+        --trading-success: #00d4aa;
+        --trading-warning: #ffa502;
+        --trading-error: #ff4757;
+        --trading-info: #3742fa;
+      }
+
+      .dark {
+        --background: var(--trading-bg-primary);
+        --foreground: var(--trading-text-primary);
+        --card: var(--trading-card);
+        --card-foreground: var(--trading-text-primary);
+        --popover: var(--trading-bg-secondary);
+        --popover-foreground: var(--trading-text-primary);
+        --primary: var(--trading-blue);
+        --primary-foreground: var(--trading-text-primary);
+        --secondary: var(--trading-bg-secondary);
+        --secondary-foreground: var(--trading-text-primary);
+        --muted: var(--trading-bg-tertiary);
+        --muted-foreground: var(--trading-text-secondary);
+        --accent: var(--trading-accent);
+        --accent-foreground: var(--trading-text-primary);
+        --destructive: var(--trading-red);
+        --destructive-foreground: var(--trading-text-primary);
+        --border: var(--trading-border);
+        --input: var(--trading-bg-tertiary);
+        --ring: var(--trading-blue);
+        --positive: var(--trading-green);
+        --negative: var(--trading-red);
+      }
+
+      html.light {
+        --trading-bg-primary: #ffffff;
+        --trading-bg-secondary: #f8f9fa;
+        --trading-bg-tertiary: #e9ecef;
+        --trading-card: #ffffff;
+        --trading-card-hover: #f8f9fa;
+        --trading-border: #dee2e6;
+        --trading-border-light: #ced4da;
+        --trading-text-primary: #1a1f35;
+        --trading-text-secondary: #5a5f7a;
+        --trading-text-tertiary: #8b92b7;
+        --trading-text-muted: #adb5bd;
+
+        --background: var(--trading-bg-primary);
+        --foreground: var(--trading-text-primary);
+        --card: var(--trading-card);
+        --card-foreground: var(--trading-text-primary);
+        --border: var(--trading-border);
+        --input: var(--trading-bg-secondary);
+        --muted-foreground: var(--trading-text-secondary);
+        --secondary: var(--trading-bg-secondary);
+        --secondary-foreground: var(--trading-text-primary);
+        --primary: var(--trading-blue);
+        --primary-foreground: #ffffff;
+        --ring: var(--trading-blue);
+        --positive: var(--trading-green);
+        --negative: var(--trading-red);
+      }
+
+      /* Base font for English */
+      body {
+        font-family: "Inter", sans-serif;
+        background: linear-gradient(
+          135deg,
+          var(--trading-bg-primary) 0%,
+          var(--trading-bg-secondary) 100%
+        );
+        color: var(--foreground);
+        min-height: 100vh;
+      }
+
+      /* Persian font for RTL content */
+      [dir="rtl"],
+      html[lang="fa"] body,
+      body[data-lang="fa"] {
+        font-family: "IRANSans", "Vazir", "Tahoma", sans-serif;
+      }
+
+      /* Apply Persian font to all elements when language is Persian */
+      .rtl,
+      [dir="rtl"] * {
+        font-family: "IRANSans", "Vazir", "Tahoma", sans-serif !important;
+      }
+
+      /* Professional Trading Card Style */
+      .trading-card {
+        background: var(--trading-card);
+        border: 1px solid var(--trading-border);
+        border-radius: 12px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .trading-card:hover {
+        border-color: var(--trading-border-light);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        transform: translateY(-2px);
+      }
+
+      /* Professional Button Styles */
+      .btn-primary {
+        background: linear-gradient(
+          135deg,
+          var(--trading-blue) 0%,
+          var(--trading-blue-light) 100%
+        );
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(95, 39, 205, 0.4);
+      }
+
+      /* Chart Container */
+      .chart-container {
+        background: var(--trading-chart-bg);
+        border: 1px solid var(--trading-border);
+        border-radius: 12px;
+      }
+
+      /* Profit/Loss Indicators */
+      .profit {
+        color: var(--trading-green);
+      }
+
+      .loss {
+        color: var(--trading-red);
+      }
+
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--trading-bg-secondary);
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--trading-border);
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--trading-border-light);
+      }
+    </style>
+
+    <!-- Tailwind Config Script -->
+    <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
-              background: 'var(--background)',
-              foreground: 'var(--foreground)',
-              card: 'var(--card)',
-              'card-foreground': 'var(--card-foreground)',
-              border: 'var(--border)',
-              input: 'var(--input)',
-              primary: 'var(--primary)',
-              'primary-foreground': 'var(--primary-foreground)',
-              secondary: 'var(--secondary)',
-              'secondary-foreground': 'var(--secondary-foreground)',
-              'muted-foreground': 'var(--muted-foreground)',
-              positive: 'var(--positive)',
-              negative: 'var(--negative)',
-            }
-          }
-        }
+              background: "var(--background)",
+              foreground: "var(--foreground)",
+              card: "var(--card)",
+              "card-foreground": "var(--card-foreground)",
+              border: "var(--border)",
+              input: "var(--input)",
+              primary: "var(--primary)",
+              "primary-foreground": "var(--primary-foreground)",
+              secondary: "var(--secondary)",
+              "secondary-foreground": "var(--secondary-foreground)",
+              "muted-foreground": "var(--muted-foreground)",
+              positive: "var(--positive)",
+              negative: "var(--negative)",
+              "trading-green": "var(--trading-green)",
+              "trading-red": "var(--trading-red)",
+              "trading-blue": "var(--trading-blue)",
+            },
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+              persian: ["IRANSans", "Vazir", "Tahoma", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+
+    <script>
+      // Polyfill for global (needed for WalletConnect SDK)
+      if (typeof global === "undefined") {
+        var global = globalThis;
       }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+
+      // Polyfill for Buffer (if needed)
+      if (typeof Buffer === "undefined") {
+        // Buffer will be provided by walletconnect if needed
+      }
+    </script>
+
+    <link rel="stylesheet" href="/index.css" />
+  </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -6,11 +6,17 @@ import { AppProvider, useAppContext } from './context/AppContext.tsx';
 import { checkSession, login } from './services/api.ts';
 import LoadingScreen from './components/LoadingScreen.tsx';
 import type { User } from './types.ts';
+import { database } from './services/database.ts';
 
 const AppContent: React.FC = () => {
   const { user, setUser, theme } = useAppContext();
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Initialize database
+    database.init().catch(console.error);
+  }, []);
 
   useEffect(() => {
     // Standard theme switching by toggling a class on the root element

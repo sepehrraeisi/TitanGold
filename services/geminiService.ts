@@ -1,18 +1,26 @@
 
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality } from "@google/genai";
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-    throw new Error("API_KEY environment variable not set.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-
+// Lazy initialization - don't throw error at module level
+let aiInstance: GoogleGenAI | null = null;
 let chatInstance: Chat | null = null;
+
+function getAIInstance(): GoogleGenAI {
+    if (!aiInstance) {
+        // Try localStorage first (for browser), then environment variables
+        const tempKey = typeof window !== 'undefined' ? localStorage.getItem('temp_gemini_key') : null;
+        const API_KEY = tempKey || process.env.API_KEY || process.env.GEMINI_API_KEY;
+        if (!API_KEY) {
+            throw new Error("API_KEY or GEMINI_API_KEY environment variable not set.");
+        }
+        aiInstance = new GoogleGenAI({ apiKey: API_KEY });
+    }
+    return aiInstance;
+}
 
 function getChatInstance(): Chat {
     if (!chatInstance) {
+        const ai = getAIInstance();
         chatInstance = ai.chats.create({
             model: 'gemini-2.5-flash-lite',
             config: {
@@ -39,6 +47,7 @@ export const analyzeImage = async (prompt: string, imageBase64: string, mimeType
         text: prompt,
     };
     
+    const ai = getAIInstance();
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: { parts: [imagePart, textPart] },
@@ -57,6 +66,7 @@ export const editImage = async (prompt: string, imageBase64: string, mimeType: s
     };
     const textPart = { text: prompt };
 
+    const ai = getAIInstance();
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: { parts: [imagePart, textPart] },
@@ -74,6 +84,7 @@ export const editImage = async (prompt: string, imageBase64: string, mimeType: s
 };
 
 export const generateImage = async (prompt: string, aspectRatio: "1:1" | "3:4" | "4:3" | "9:16" | "16:9"): Promise<string | null> => {
+    const ai = getAIInstance();
     const response = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt,
@@ -91,6 +102,7 @@ export const generateImage = async (prompt: string, aspectRatio: "1:1" | "3:4" |
 };
 
 export const generateSpeech = async (text: string): Promise<string | null> => {
+    const ai = getAIInstance();
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text }] }],
@@ -110,6 +122,7 @@ export const generateSpeech = async (text: string): Promise<string | null> => {
 
 
 export const getGroundedResponse = async (prompt: string): Promise<{ text: string, sources: any[] }> => {
+    const ai = getAIInstance();
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: prompt,
@@ -133,4 +146,25 @@ export const fileToBase64 = (file: File): Promise<string> => {
         };
         reader.onerror = error => reject(error);
     });
+};
+
+// Test Gemini connection
+export const testGeminiConnection = async (): Promise<{ success: boolean; latency?: number; error?: string }> => {
+    try {
+        const startTime = Date.now();
+        // Reset instance to use new key from localStorage
+        aiInstance = null;
+        const ai = getAIInstance();
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ parts: [{ text: 'Hello' }] }],
+        });
+        const latency = Date.now() - startTime;
+        if (response.text) {
+            return { success: true, latency };
+        }
+        return { success: false, error: 'No response from Gemini' };
+    } catch (e: any) {
+        return { success: false, error: e.message || 'Connection failed' };
+    }
 };

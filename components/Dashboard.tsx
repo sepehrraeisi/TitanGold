@@ -12,6 +12,7 @@ import AICenter from './AICenter.tsx';
 import ProfilePage from './ProfilePage.tsx';
 import GoldPage from './GoldPage.tsx';
 import Chatbot from './Chatbot.tsx';
+import WalletManagement from './WalletManagement.tsx';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './ui/resizable.tsx';
 import Button from './ui/button.tsx';
 
@@ -29,7 +30,8 @@ type ViewKey =
   | 'ai'
   | 'gold'
   | 'settings'
-  | 'profile';
+  | 'profile'
+  | 'wallet';
 
 const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const { language } = useLanguage();
@@ -44,6 +46,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       { key: 'portfolio' as ViewKey, icon: '💼', label: { en: 'Portfolio', fa: 'پورتفولیو' } },
       { key: 'trades' as ViewKey, icon: '⚡️', label: { en: 'Trades', fa: 'معاملات' } },
       { key: 'favorites' as ViewKey, icon: '⭐️', label: { en: 'Watchlist', fa: 'لیست دلخواه' } },
+      { key: 'wallet' as ViewKey, icon: '💼', label: { en: 'Wallet', fa: 'کیف پول' } },
       { key: 'analysis' as ViewKey, icon: '🧠', label: { en: 'Analysis', fa: 'تحلیل' } },
       { key: 'ai' as ViewKey, icon: '🤖', label: { en: 'AI Center', fa: 'مرکز هوش مصنوعی' } },
       { key: 'news' as ViewKey, icon: '📰', label: { en: 'News', fa: 'اخبار' } },
@@ -63,6 +66,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         return <Trades />;
       case 'portfolio':
         return <Portfolio />;
+      case 'wallet':
+        return <WalletManagement />;
       case 'analysis':
         return <Analysis />;
       case 'news':
@@ -84,12 +89,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const dir = language === 'fa' ? 'rtl' : 'ltr';
 
   return (
-    <div className={`min-h-screen bg-[#0b0e1a] text-white ${dir}`} dir={dir}>
+    <div 
+      className={`min-h-screen bg-background text-foreground ${dir}`} 
+      dir={dir}
+      style={language === 'fa' ? { fontFamily: 'IRANSans, Vazir, Tahoma, sans-serif' } : {}}
+    >
       <div className="relative flex h-screen w-full overflow-hidden">
         <ResizablePanelGroup defaultLayout={[22, 78]} className="hidden h-full w-full md:flex">
           <ResizablePanel index={0} minSize={16} className="hidden md:flex">
-            <aside className="flex h-full w-full flex-col border-r border-gray-900 bg-[#111827]/90 backdrop-blur">
-              <div className="flex items-center justify-between border-b border-gray-800 px-6 py-5 text-xl font-bold text-white">
+            <aside className="flex h-full w-full flex-col border-r border-border bg-card/90 backdrop-blur">
+              <div className="flex items-center justify-between border-b border-border px-6 py-5 text-xl font-bold text-foreground">
                 <span>TITAN</span>
               </div>
               <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-6 text-sm">
@@ -98,7 +107,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                     key={item.key}
                     onClick={() => setActiveView(item.key)}
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 transition-colors ${
-                      activeView === item.key ? 'bg-blue-600/20 text-blue-300' : 'text-gray-400 hover:bg-gray-800/60 hover:text-white'
+                      activeView === item.key 
+                        ? 'bg-primary/20 text-primary' 
+                        : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
                     }`}
                   >
                     <span className="flex items-center gap-3">
@@ -111,10 +122,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                   </button>
                 ))}
               </nav>
-              <div className="border-t border-gray-900 px-4 py-5">
+              <div className="border-t border-border px-4 py-5">
                 <Button
                   variant="outline"
-                  className="w-full border-gray-800 text-gray-300 hover:text-white"
+                  className="w-full border-border text-muted-foreground hover:text-foreground"
                   onClick={onLogout}
                 >
                   {language === 'fa' ? 'خروج' : 'Logout'}
@@ -124,10 +135,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           </ResizablePanel>
           <ResizableHandle className="hidden md:flex" />
           <ResizablePanel index={1} className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between border-b border-gray-900 bg-[#101428]/80 px-4 py-3 backdrop-blur">
+            <header className="flex items-center justify-between border-b border-border bg-[#101428]/80 px-4 py-3 backdrop-blur">
               <div className="flex items-center gap-3">
                 <button
-                  className="rounded-md border border-gray-800 p-2 text-gray-400 hover:text-white md:hidden"
+                  className="rounded-md border border-border p-2 text-muted-foreground hover:text-foreground md:hidden"
                   onClick={() => setMobileNavOpen(true)}
                   aria-label="Toggle navigation"
                 >
@@ -139,13 +150,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                   <p className="text-sm uppercase tracking-wide text-gray-500">
                     {language === 'fa' ? 'ناحیه' : 'Section'}
                   </p>
-                  <h1 className="text-lg font-semibold text-white">
+                  <h1 className="text-lg font-semibold text-foreground">
                     {language === 'fa' ? viewTitle.fa : viewTitle.en}
                   </h1>
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <button className="relative rounded-md border border-gray-800 p-2 text-gray-400 hover:text-white" aria-label="Notifications">
+                <button className="relative rounded-md border border-border p-2 text-muted-foreground hover:text-foreground" aria-label="Notifications">
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path
                       strokeLinecap="round"
@@ -161,14 +172,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 <div className="relative">
                   <button
                     onClick={() => setIsProfileMenuOpen(prev => !prev)}
-                    className="flex items-center gap-2 rounded-md border border-gray-800 bg-[#0f1422] px-3 py-1.5 text-sm text-gray-200 hover:text-white"
+                    className="flex items-center gap-2 rounded-md border border-border bg-[#0f1422] px-3 py-1.5 text-sm text-gray-200 hover:text-foreground"
                   >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white">
                       {user?.name?.[0] ?? 'U'}
                     </div>
                     <div className="hidden text-left sm:block">
-                      <p className="text-sm font-medium text-white">{user?.name ?? 'Trader'}</p>
-                      <p className="text-xs text-gray-400">{user?.email}</p>
+                      <p className="text-sm font-medium text-foreground">{user?.name ?? 'Trader'}</p>
+                      <p className="text-xs text-muted-foreground">{user?.email}</p>
                     </div>
                     <svg className={`h-4 w-4 transition-transform ${isProfileMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
                       <path
@@ -179,13 +190,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                     </svg>
                   </button>
                   {isProfileMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 rounded-lg border border-gray-800 bg-[#101528] p-2 shadow-xl">
+                    <div className="absolute right-0 mt-2 w-48 rounded-lg border border-border bg-[#101528] p-2 shadow-xl">
                       <button
                         onClick={() => {
                           setActiveView('profile');
                           setIsProfileMenuOpen(false);
                         }}
-                        className="w-full rounded-md px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800"
+                        className="w-full rounded-md px-3 py-2 text-left text-sm text-foreground hover:bg-secondary"
                       >
                         {language === 'fa' ? 'پروفایل' : 'Profile'}
                       </button>
@@ -194,11 +205,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                           setActiveView('settings');
                           setIsProfileMenuOpen(false);
                         }}
-                        className="w-full rounded-md px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800"
+                        className="w-full rounded-md px-3 py-2 text-left text-sm text-foreground hover:bg-secondary"
                       >
                         {language === 'fa' ? 'تنظیمات' : 'Settings'}
                       </button>
-                      <div className="my-1 h-px bg-gray-800" />
+                      <div className="my-1 h-px border-border" />
                       <button
                         onClick={onLogout}
                         className="w-full rounded-md px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/20"
@@ -210,7 +221,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 </div>
               </div>
             </header>
-            <main className="flex-1 overflow-y-auto bg-[#0b0e1a] px-4 py-6 sm:px-6 lg:px-8">
+            <main className="flex-1 overflow-y-auto bg-background px-4 py-6 sm:px-6 lg:px-8">
               <div className="mx-auto max-w-7xl">
                 {renderView()}
               </div>
@@ -219,9 +230,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         </ResizablePanelGroup>
 
         <div className="flex h-full w-full flex-col md:hidden">
-          <header className="flex items-center justify-between border-b border-gray-900 bg-[#101428]/90 px-4 py-3">
+          <header className="flex items-center justify-between border-b border-border bg-[#101428]/90 px-4 py-3">
             <button
-              className="rounded-md border border-gray-800 p-2 text-gray-400"
+              className="rounded-md border border-border p-2 text-muted-foreground"
               onClick={() => setMobileNavOpen(true)}
               aria-label="Toggle navigation"
             >
@@ -234,7 +245,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               {language === 'fa' ? 'معامله جدید' : 'New Trade'}
             </Button>
           </header>
-          <main className="flex-1 overflow-y-auto bg-[#0b0e1a] px-4 py-6">
+          <main className="flex-1 overflow-y-auto bg-background px-4 py-6">
             <div className="mx-auto max-w-5xl">{renderView()}</div>
           </main>
         </div>
@@ -242,7 +253,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         {isMobileNavOpen && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur" onClick={() => setMobileNavOpen(false)}>
             <div
-              className="absolute top-0 h-full w-64 bg-[#111827] p-6 text-sm text-gray-200"
+              className="absolute top-0 h-full w-64 bg-background p-6 text-sm text-muted-foreground"
               style={language === 'fa' ? { right: 0 } : { left: 0 }}
               onClick={event => event.stopPropagation()}
             >
@@ -263,7 +274,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                       setMobileNavOpen(false);
                     }}
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 ${
-                      activeView === item.key ? 'bg-blue-600/20 text-blue-300' : 'text-gray-300 hover:bg-gray-800'
+                      activeView === item.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-secondary'
                     }`}
                   >
                     <span className="flex items-center gap-3">
@@ -273,8 +284,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                   </button>
                 ))}
               </nav>
-              <div className="mt-8 border-t border-gray-800 pt-4">
-                <Button variant="outline" className="w-full border-gray-700" onClick={onLogout}>
+              <div className="mt-8 border-t border-border pt-4">
+                <Button variant="outline" className="w-full border-border" onClick={onLogout}>
                   {language === 'fa' ? 'خروج' : 'Logout'}
                 </Button>
               </div>

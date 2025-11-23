@@ -8,6 +8,7 @@ import type {
     ProfileCommunicationSettings,
 } from '../../types.ts';
 import Skeleton from '../ui/skeleton.tsx';
+import { useAppContext } from '../../context/AppContext.tsx';
 
 const SettingsCard: React.FC<{ title: string, children: React.ReactNode, description?: string }> = ({ title, children, description }) => (
     <div className="bg-[#161B22] border border-gray-800 rounded-xl shadow-sm">
@@ -55,6 +56,7 @@ const Toggle: React.FC<{ label: string, checked: boolean, onChange: (value: bool
 
 const ProfileSettings: React.FC = () => {
     const { t } = useLanguage();
+    const { setAvatarUrl } = useAppContext();
     const [data, setData] = useState<ProfileSettingsData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [details, setDetails] = useState<ProfileDetailsUpdate>({});
@@ -64,23 +66,38 @@ const ProfileSettings: React.FC = () => {
     const [passwords, setPasswords] = useState({ current: '', next: '' });
     const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
     const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const load = async () => {
             setIsLoading(true);
-            const response = await api.fetchProfileSettings();
-            setData(response);
-            setDetails({
-                fullName: response.profile.fullName,
-                email: response.profile.email,
-                jobTitle: response.profile.jobTitle,
-                phone: response.profile.phone,
-                timezone: response.profile.timezone,
-                language: response.profile.language,
-                location: response.profile.location,
-            });
-            setPreferences(response.communications);
-            setIsLoading(false);
+            setError(null);
+            try {
+                const response = await api.fetchProfileSettings();
+                setData(response);
+                setDetails({
+                    fullName: response.profile.fullName,
+                    email: response.profile.email,
+                    jobTitle: response.profile.jobTitle,
+                    phone: response.profile.phone,
+                    timezone: response.profile.timezone,
+                    language: response.profile.language,
+                    location: response.profile.location,
+                });
+                setPreferences(response.communications);
+                // Set avatar preview if exists
+                if (response.profile.avatarUrl) {
+                    setAvatarPreview(response.profile.avatarUrl);
+                    setAvatarUrl(response.profile.avatarUrl);
+                }
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to load profile');
+            } finally {
+                setIsLoading(false);
+            }
         };
 
         load();
@@ -105,9 +122,19 @@ const ProfileSettings: React.FC = () => {
     const handleSaveDetails = async () => {
         if (!details) return;
         setIsSavingDetails(true);
-        const updated = await api.saveProfileDetails(details);
-        setData(updated);
-        setIsSavingDetails(false);
+        setError(null);
+        setSuccess(null);
+        
+        try {
+            const updated = await api.saveProfileDetails(details);
+            setData(updated);
+            setSuccess(t('profile_details_saved'));
+            setTimeout(() => setSuccess(null), 3000);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to save details');
+        } finally {
+            setIsSavingDetails(false);
+        }
     };
 
     const handlePreferenceChange = (field: keyof ProfileCommunicationSettings, value: boolean) => {
@@ -117,20 +144,97 @@ const ProfileSettings: React.FC = () => {
     const handleSavePreferences = async () => {
         if (!preferences) return;
         setIsSavingPreferences(true);
-        const updated = await api.saveProfileCommunications(preferences);
-        setData(updated);
-        setPreferences(updated.communications);
-        setIsSavingPreferences(false);
+        setError(null);
+        setSuccess(null);
+        
+        try {
+            const updated = await api.saveProfileCommunications(preferences);
+            setData(updated);
+            setPreferences(updated.communications);
+            setSuccess(t('preferences_saved'));
+            setTimeout(() => setSuccess(null), 3000);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to save preferences');
+        } finally {
+            setIsSavingPreferences(false);
+        }
     };
 
     const handleChangePassword = async () => {
         setIsChangingPassword(true);
-        const result = await api.changeProfilePassword({ currentPassword: passwords.current, newPassword: passwords.next });
-        setPasswordFeedback(result.message);
-        if (result.success) {
-            setPasswords({ current: '', next: '' });
+        setError(null);
+        setPasswordFeedback(null);
+        
+        try {
+            const result = await api.changeProfilePassword({ currentPassword: passwords.current, newPassword: passwords.next });
+            setPasswordFeedback(result.message);
+            if (result.success) {
+                setPasswords({ current: '', next: '' });
+                setSuccess(t('password_changed'));
+                setTimeout(() => setSuccess(null), 3000);
+            } else {
+                setError(t(result.message));
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to change password');
+        } finally {
+            setIsChangingPassword(false);
         }
-        setIsChangingPassword(false);
+    };
+
+    const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            setError(t('invalid_image_file'));
+            return;
+        }
+
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            setError(t('image_too_large'));
+            return;
+        }
+
+        try {
+            // Convert to base64 for storage
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64String = reader.result as string;
+                
+                // Update preview
+                setAvatarPreview(base64String);
+                
+                // Update AppContext immediately
+                setAvatarUrl(base64String);
+                
+                // Save to profile
+                try {
+                    const updated = await api.saveProfileDetails({ avatarUrl: base64String });
+                    setData(updated);
+                    
+                    // Ensure event is dispatched (it should be in saveProfileDetails, but just in case)
+                    window.dispatchEvent(new CustomEvent('titan_avatar_updated'));
+                    
+                    setSuccess(t('avatar_updated'));
+                    setTimeout(() => setSuccess(null), 3000);
+                } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Failed to save avatar');
+                }
+            };
+            reader.onerror = () => {
+                setError(t('failed_to_read_image'));
+            };
+            reader.readAsDataURL(file);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to upload avatar');
+        }
+    };
+
+    const handleUploadClick = () => {
+        fileInputRef.current?.click();
     };
 
     if (isLoading || !data || !preferences) {
@@ -150,6 +254,18 @@ const ProfileSettings: React.FC = () => {
 
     return (
         <div className="space-y-6">
+            {/* Success/Error Messages */}
+            {success && (
+                <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4 text-green-300 text-sm">
+                    {success}
+                </div>
+            )}
+            {error && (
+                <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 text-red-300 text-sm">
+                    {error}
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {data.metrics.map(metric => (
                     <div key={metric.id} className="bg-[#161B22] border border-gray-800 rounded-xl p-4">
@@ -167,6 +283,39 @@ const ProfileSettings: React.FC = () => {
             </div>
 
             <SettingsCard title={t('account_details')} description={t('account_details_desc')}>
+                {/* Avatar Upload Section */}
+                <div className="flex flex-col items-center mb-6 pb-6 border-b border-gray-800">
+                    <div className="relative">
+                        <img
+                            src={avatarPreview || data?.profile.avatarUrl || 'https://i.pravatar.cc/40?u=traderone'}
+                            alt="Profile"
+                            className="h-24 w-24 rounded-full object-cover ring-4 ring-gray-700"
+                            onError={(e) => {
+                                // Fallback to default if image fails to load
+                                (e.target as HTMLImageElement).src = 'https://i.pravatar.cc/40?u=traderone';
+                            }}
+                        />
+                        <button
+                            onClick={handleUploadClick}
+                            className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-2 shadow-lg"
+                            title={t('change_avatar')}
+                        >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleAvatarChange}
+                        accept="image/jpeg,image/png,image/jpg,image/gif,image/webp"
+                        className="hidden"
+                    />
+                    <p className="text-xs text-gray-400 mt-2">{t('avatar_upload_hint')}</p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <TextField label={t('full_name')} id="full_name" value={details.fullName ?? ''} onChange={value => handleDetailChange('fullName', value)} />
                     <TextField label={t('email_address')} id="email" type="email" value={details.email ?? ''} onChange={value => handleDetailChange('email', value)} />

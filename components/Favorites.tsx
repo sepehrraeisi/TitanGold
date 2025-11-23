@@ -6,6 +6,75 @@ import SetAlertModal from './modals/SetAlertModal.tsx';
 import ActionMenu from './favorites/ActionMenu.tsx';
 import * as api from '../services/api.ts';
 
+// Market Stats Widget Component
+const MarketStatsWidget: React.FC = () => {
+    const { t } = useLanguage();
+    const [stats, setStats] = useState<{
+        btcDominance: number;
+        ethDominance: number;
+        totalVolume24h: number;
+        totalMarketCap: number;
+    } | null>(null);
+    
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const marketStats = await api.fetchMexcMarketStats();
+                setStats(marketStats);
+            } catch (error) {
+                console.error('Failed to fetch market stats:', error);
+            }
+        };
+        fetchStats();
+        // Refresh market stats every 60 seconds (less frequent, not critical)
+        const interval = setInterval(fetchStats, 60000);
+        return () => clearInterval(interval);
+    }, []);
+    
+    const formatVolume = (volume: number): string => {
+        if (volume >= 1000000000000) {
+            return `$${(volume / 1000000000000).toFixed(2)}T`;
+        } else if (volume >= 1000000000) {
+            return `$${(volume / 1000000000).toFixed(2)}B`;
+        } else if (volume >= 1000000) {
+            return `$${(volume / 1000000).toFixed(2)}M`;
+        }
+        return `$${volume.toFixed(2)}`;
+    };
+    
+    return (
+        <div className="bg-[#1c1e2f] border border-gray-700/50 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-gray-300">{t('overall_market_stats')}</h3>
+            <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
+                <div>
+                    <p className="text-gray-400">{t('btc_dominance')}</p>
+                    <p className="font-bold text-white text-lg">
+                        {stats ? `${stats.btcDominance.toFixed(2)}%` : '...'}
+                    </p>
+                </div>
+                <div>
+                    <p className="text-gray-400">{t('eth_dominance')}</p>
+                    <p className="font-bold text-white text-lg">
+                        {stats ? `${stats.ethDominance.toFixed(2)}%` : '...'}
+                    </p>
+                </div>
+                <div>
+                    <p className="text-gray-400">{t('24h_volume')}</p>
+                    <p className="font-bold text-white text-lg">
+                        {stats ? formatVolume(stats.totalVolume24h) : '...'}
+                    </p>
+                </div>
+                <div>
+                    <p className="text-gray-400">{t('market_cap')}</p>
+                    <p className="font-bold text-white text-lg">
+                        {stats ? formatVolume(stats.totalMarketCap) : '...'}
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const SummaryCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; }> = ({ title, value, icon }) => (
     <div className="bg-[#1c1e2f] border border-gray-700/50 rounded-lg p-4 flex items-center space-x-4">
         <div className="bg-gray-700/50 p-3 rounded-full">
@@ -81,19 +150,92 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     const [searchTerm, setSearchTerm] = useState('');
     const [status, setStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+    // Initial data fetch
     useEffect(() => {
         const fetchData = async () => {
             try {
+                console.log('🔄 Fetching favorites page data...');
                 const favoritesData = await api.fetchFavoritesPageData();
+                console.log('✅ Favorites data received:', {
+                    favorites: favoritesData.favorites.length,
+                    catalog: favoritesData.catalog.length,
+                    gainers: favoritesData.gainers.length,
+                    losers: favoritesData.losers.length
+                });
                 setData(favoritesData);
             } catch (error) {
-                console.error('Failed to load favorites', error);
+                console.error('❌ Failed to load favorites', error);
             } finally {
                 setIsLoading(false);
             }
         };
         fetchData();
-    }, []);
+    }, []); // Only run once on mount
+
+    // Lightweight price updates (only prices, not full page refresh)
+    useEffect(() => {
+        if (!data || data.favorites.length === 0) {
+            return; // Don't start interval if no favorites
+        }
+
+        // Lightweight price updates every 5 seconds (only prices, not full page)
+        const priceUpdateInterval = setInterval(async () => {
+            try {
+                // Get all symbols from current favorites
+                const symbols = data.favorites.map(fav => {
+                    // Use id if it's a MEXC symbol, otherwise construct from symbol
+                    return fav.id.includes('USDT') ? fav.id : `${fav.symbol}USDT`;
+                });
+                
+                // Update only prices
+                const priceMap = await api.updateWatchlistPrices(symbols);
+                
+                // Update state with new prices
+                setData(prevData => {
+                    if (!prevData) return prevData;
+                    
+                    const updatedFavorites = prevData.favorites.map(fav => {
+                        const mexcSymbol = fav.id.includes('USDT') ? fav.id : `${fav.symbol}USDT`;
+                        const priceData = priceMap.get(mexcSymbol);
+                        
+                        if (priceData) {
+                            // Track price change direction for animation
+                            const priceChanged = priceData.price !== fav.price;
+                            const priceDirection = priceData.price > fav.price ? 'up' : priceData.price < fav.price ? 'down' : null;
+                            
+                            return {
+                                ...fav,
+                                price: priceData.price,
+                                change24h: priceData.change24h,
+                                volume: priceData.volume,
+                                _priceChangeDirection: priceChanged ? priceDirection : null,
+                                _priceUpdateTime: Date.now(),
+                            };
+                        }
+                        return fav;
+                    });
+                    
+                    // Update summary based on new prices
+                    const updatedSummary = {
+                        ...prevData.summary,
+                        gainers: updatedFavorites.filter(f => f.change24h > 0).length,
+                        decliners: updatedFavorites.filter(f => f.change24h < 0).length,
+                    };
+                    
+                    return {
+                        ...prevData,
+                        favorites: updatedFavorites,
+                        summary: updatedSummary,
+                        lastUpdated: new Date().toISOString(),
+                    };
+                });
+            } catch (error) {
+                console.warn('⚠️ Failed to update prices:', error);
+            }
+        }, 5000); // Update every 5 seconds
+        
+        return () => clearInterval(priceUpdateInterval);
+    }, [data?.favorites.length]); // Re-run only when favorites count changes
 
     useEffect(() => {
         if (!status) return;
@@ -106,6 +248,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
             const updated = await api.addFavorite(asset.id);
             setData(updated);
             setStatus({ type: 'success', text: t('favorite_added', { asset: asset.symbol }) });
+            setIsAddModalOpen(false); // Close modal after successful add
         } catch (error) {
             console.error('Failed to add favorite', error);
             setStatus({ type: 'error', text: t('error_occurred') });
@@ -213,11 +356,17 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                             </tr>
                         </thead>
                         <tbody className="text-gray-200">
-                           {filteredItems.map(item => (
-                             <tr key={item.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                           {filteredItems.map(item => {
+                                const priceChangeDirection = item._priceChangeDirection;
+                                const isHighlighted = priceChangeDirection && item._priceUpdateTime && (Date.now() - item._priceUpdateTime) < 2000;
+                                
+                                return (
+                             <tr key={item.id} className="border-b border-gray-800 hover:bg-gray-800/50 relative">
                                 <td className="px-6 py-4 font-bold">{item.symbol} <span className="text-gray-400 font-normal text-xs">{item.name}</span></td>
-                                <td className="px-6 py-4 font-semibold">${item.price.toLocaleString()}</td>
-                                <td className={`px-6 py-4 font-semibold ${item.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>{item.change24h.toFixed(2)}%</td>
+                                <td className={`px-6 py-4 font-semibold relative rounded ${isHighlighted && priceChangeDirection === 'up' ? 'price-up-animation' : isHighlighted && priceChangeDirection === 'down' ? 'price-down-animation' : ''}`}>
+                                    ${item.price.toLocaleString()}
+                                </td>
+                                <td className={`px-6 py-4 font-semibold ${item.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>{item.change24h >= 0 ? '+' : ''}{item.change24h.toFixed(2)}%</td>
                                 <td className="px-6 py-4">{item.volume}</td>
                                 <td className="px-6 py-4">{item.hasAlert && <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" /></svg>}</td>
                                 <td className="px-6 py-4 text-right">
@@ -229,7 +378,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                                     />
                                 </td>
                             </tr>
-                           ))}
+                           )})}
                         </tbody>
                     </table>
                 </div>
@@ -240,15 +389,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                    <FearAndGreedGauge value={23} />
                    <MoversList title={t('top_gainers')} data={data.gainers} isGainers={true} />
                    <MoversList title={t('top_losers')} data={data.losers} isGainers={false} />
-                   <div className="bg-[#1c1e2f] border border-gray-700/50 rounded-lg p-4">
-                        <h3 className="text-sm font-semibold text-gray-300">{t('overall_market_stats')}</h3>
-                        <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
-                            <div><p className="text-gray-400">{t('btc_dominance')}</p><p className="font-bold text-white text-lg">58.2%</p></div>
-                            <div><p className="text-gray-400">{t('eth_dominance')}</p><p className="font-bold text-white text-lg">12.8%</p></div>
-                            <div><p className="text-gray-400">{t('24h_volume')}</p><p className="font-bold text-white text-lg">$85B</p></div>
-                            <div><p className="text-gray-400">{t('market_cap')}</p><p className="font-bold text-white text-lg">$1.9T</p></div>
-                        </div>
-                   </div>
+                   <MarketStatsWidget />
                 </div>
                  <div className="bg-[#1c1e2f] border border-gray-700/50 rounded-lg p-4">
                     <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('trending_coins')}</h3>
@@ -260,8 +401,9 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                                     <p className="text-xs text-gray-400">{item.name}</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-semibold text-white">$...price</p>
-                                    <p className={`font-semibold ${item.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>{item.change > 0 ? '+' : ''}{item.change.toFixed(2)}%</p>
+                                    <p className={`font-semibold ${item.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {item.change > 0 ? '+' : ''}{item.change.toFixed(2)}%
+                                    </p>
                                 </div>
                             </div>
                          ))}
@@ -273,8 +415,8 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                 <AddFavoriteModal
                     onClose={() => setIsAddModalOpen(false)}
                     onAddFavorite={handleAddFavorite}
-                    existingFavorites={data.favorites}
-                    availableAssets={data.catalog}
+                    existingFavorites={data.favorites || []}
+                    availableAssets={data.catalog || []}
                 />
             )}
             {isAlertModalOpen && selectedAsset && (

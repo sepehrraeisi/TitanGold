@@ -2,11 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import { AIAgent } from '../../types.ts';
+import TechnicalAnalysisAgentControl from './TechnicalAnalysisAgentControl.tsx';
+import RiskManagementAgentControl from './RiskManagementAgentControl.tsx';
+import SentimentAgentControl from './SentimentAgentControl.tsx';
+import PatternAgentControl from './PatternAgentControl.tsx';
+import PricePredictionAgentControl from './PricePredictionAgentControl.tsx';
+import ArbitrageAgentControl from './ArbitrageAgentControl.tsx';
+import PortfolioAllocationAgentControl from './PortfolioAllocationAgentControl.tsx';
+import LiquidityAgentControl from './LiquidityAgentControl.tsx';
+import TrendAgentControl from './TrendAgentControl.tsx';
+import OptimizationAgentControl from './OptimizationAgentControl.tsx';
+import OrderManagementAgentControl from './OrderManagementAgentControl.tsx';
+import FundamentalAgentControl from './FundamentalAgentControl.tsx';
+import MarketIntelligenceAgentControl from './MarketIntelligenceAgentControl.tsx';
+import VolumeAgentControl from './VolumeAgentControl.tsx';
+import TimingAgentControl from './TimingAgentControl.tsx';
 
 const AIAgents: React.FC = () => {
     const { t } = useLanguage();
     const [isLoading, setIsLoading] = useState(true);
     const [agents, setAgents] = useState<AIAgent[]>([]);
+    const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -18,18 +34,137 @@ const AIAgents: React.FC = () => {
         fetchData();
     }, []);
 
+    const handleAgentUpdate = (updatedAgent: AIAgent) => {
+        setAgents(prev => prev.map(a => a.id === updatedAgent.id ? updatedAgent : a));
+        setSelectedAgent(updatedAgent);
+    };
+
     if (isLoading) {
         return <div className="text-center p-10">{t('loading')}</div>;
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {agents.map(agent => <AgentCard key={agent.id} agent={agent} />)}
-        </div>
+        <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {agents.map(agent => (
+                    <AgentCard
+                        key={agent.id}
+                        agent={agent}
+                        onOpenControlPanel={() => setSelectedAgent(agent)}
+                    />
+                ))}
+            </div>
+            
+            {selectedAgent && selectedAgent.id === '1' && (
+                <TechnicalAnalysisAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '2' && (
+                <RiskManagementAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '3' && (
+                <SentimentAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '4' && (
+                <PatternAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '5' && (
+                <PricePredictionAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '6' && (
+                <ArbitrageAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '7' && (
+                <PortfolioAllocationAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '8' && (
+                <LiquidityAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '9' && (
+                <TrendAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '10' && (
+                <OptimizationAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '11' && (
+                <OrderManagementAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '12' && (
+                <FundamentalAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '13' && (
+                <MarketIntelligenceAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '14' && (
+                <VolumeAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+            {selectedAgent && selectedAgent.id === '15' && (
+                <TimingAgentControl
+                    agent={selectedAgent}
+                    onClose={() => setSelectedAgent(null)}
+                    onUpdate={handleAgentUpdate}
+                />
+            )}
+        </>
     );
 };
 
-const AgentCard: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+const AgentCard: React.FC<{ agent: AIAgent; onOpenControlPanel: () => void }> = ({ agent, onOpenControlPanel }) => {
     const { t } = useLanguage();
     
     return (
@@ -59,7 +194,12 @@ const AgentCard: React.FC<{ agent: AIAgent }> = ({ agent }) => {
                  </div>
             </div>
             <div className="mt-4 pt-3 border-t border-border flex justify-between items-center">
-                 <button className="text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold py-1 px-3 rounded-md">{t('control_panel')}</button>
+                 <button
+                     onClick={onOpenControlPanel}
+                     className="text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold py-1 px-3 rounded-md"
+                 >
+                     {t('control_panel')}
+                 </button>
                  <span className="text-xs text-muted-foreground">{t('last_update')}: {new Date(agent.lastUpdate).toLocaleTimeString()}</span>
             </div>
         </div>

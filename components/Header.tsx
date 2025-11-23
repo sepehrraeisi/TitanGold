@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import { useAppContext } from '../context/AppContext.tsx';
 
@@ -25,19 +25,113 @@ const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: (
     const { t } = useLanguage();
     const { user, isDemoMode, toggleDemoMode, avatarUrl } = useAppContext();
     const [isOpen, setIsOpen] = useState(false);
+    const [currentAvatar, setCurrentAvatar] = useState<string | null>(null);
+    const [avatarError, setAvatarError] = useState(false);
+
+    // Get first letter of user name for fallback
+    const getInitials = (name?: string): string => {
+        if (!name) return 'U';
+        const parts = name.trim().split(' ');
+        if (parts.length >= 2) {
+            return (parts[0][0] + parts[1][0]).toUpperCase();
+        }
+        return name[0].toUpperCase();
+    };
+
+    // Function to load avatar from all sources
+    const loadAvatar = () => {
+        // Reset error state
+        setAvatarError(false);
+
+        // First try avatarUrl from context (most up-to-date)
+        if (avatarUrl && avatarUrl.startsWith('data:image')) {
+            setCurrentAvatar(avatarUrl);
+            return;
+        }
+
+        // Then try localStorage
+        try {
+            const profileData = localStorage.getItem('titan_profile_settings');
+            if (profileData) {
+                const parsed = JSON.parse(profileData);
+                if (parsed.profile?.avatarUrl) {
+                    const url = parsed.profile.avatarUrl;
+                    // Accept both data:image and http/https URLs
+                    if (url.startsWith('data:image') || url.startsWith('http://') || url.startsWith('https://')) {
+                        setCurrentAvatar(url);
+                        return;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load avatar from localStorage:', e);
+        }
+
+        // If no avatar found, set to null to show initials
+        setCurrentAvatar(null);
+    };
+
+    // Load avatar on mount and when avatarUrl changes
+    useEffect(() => {
+        loadAvatar();
+    }, [avatarUrl]);
+
+    // Listen for avatar updates
+    useEffect(() => {
+        const handleAvatarUpdate = () => {
+            loadAvatar();
+        };
+
+        // Listen for custom event
+        window.addEventListener('titan_avatar_updated', handleAvatarUpdate);
+        
+        // Listen for storage changes (for multi-tab sync)
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'titan_profile_settings') {
+                loadAvatar();
+            }
+        };
+        window.addEventListener('storage', handleStorageChange);
+
+        // Also check periodically (in case event is missed)
+        const interval = setInterval(() => {
+            loadAvatar();
+        }, 2000); // Check every 2 seconds
+
+        return () => {
+            window.removeEventListener('titan_avatar_updated', handleAvatarUpdate);
+            window.removeEventListener('storage', handleStorageChange);
+            clearInterval(interval);
+        };
+    }, []);
 
     const handleNavigation = (view: string) => {
         setActiveView(view);
         setIsOpen(false);
-    }
+    };
 
     return (
         <div className="relative">
             <button onClick={() => setIsOpen(!isOpen)} className="flex items-center space-x-2 p-2 rounded-lg hover:bg-secondary">
-                <img className="h-8 w-8 rounded-full" src={avatarUrl} alt="User" />
+                {currentAvatar && !avatarError ? (
+                    <img 
+                        className="h-8 w-8 rounded-full object-cover border border-border" 
+                        src={currentAvatar} 
+                        alt={user?.name || 'User'}
+                        onError={() => {
+                            console.warn('Avatar image failed to load:', currentAvatar);
+                            setAvatarError(true);
+                            setCurrentAvatar(null);
+                        }}
+                    />
+                ) : (
+                    <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-semibold border border-border">
+                        {getInitials(user?.name)}
+                    </div>
+                )}
                 <div className="text-left hidden md:block">
                     <p className="text-sm font-semibold text-foreground">{user?.name}</p>
-                    <p className="text-xs text-muted-foreground">{t('user_balance', { balance: '0' })}</p>
+                    <p className="text-xs text-muted-foreground">{user?.email || t('user_balance', { balance: '0' })}</p>
                 </div>
                 <div className="text-left hidden lg:block border-l border-border pl-2 ml-2">
                      <p className="text-sm font-semibold text-positive">+$0</p>

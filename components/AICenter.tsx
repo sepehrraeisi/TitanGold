@@ -53,10 +53,6 @@ const AICenter: React.FC = () => {
                         <h1 className="text-2xl font-bold text-foreground">{t('ai_management_system')}</h1>
                         <p className="text-muted-foreground mt-1">{t('ai_management_desc')}</p>
                     </div>
-                    <div className="flex gap-2">
-                         <button className="bg-secondary hover:bg-accent text-secondary-foreground font-semibold py-2 px-4 rounded-lg text-sm">{t('backup')}</button>
-                         <button className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg text-sm">{t('start_training')}</button>
-                    </div>
                 </div>
                  <div className="border-b border-border mt-4">
                     <nav className="-mb-px flex space-x-6 overflow-x-auto">

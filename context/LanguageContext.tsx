@@ -1,4 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
+import enTranslations from '../locales/en.json';
+import faTranslations from '../locales/fa.json';
 
 type Language = 'en' | 'fa';
 type Translations = { [key: string]: string };
@@ -6,7 +8,6 @@ type Translations = { [key: string]: string };
 interface LanguageContextType {
   language: Language;
   setLanguage: (language: Language) => void;
-  // FIX: Update `t` function signature to accept an options object for interpolation.
   t: (key: string, options?: { [key: string]: string | number }) => string;
 }
 
@@ -14,27 +15,11 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>('en');
-  const [translations, setTranslations] = useState<{ [key in Language]?: Translations }>({});
+  const [translations] = useState<{ [key in Language]: Translations }>({
+    en: enTranslations as Translations,
+    fa: faTranslations as Translations,
+  });
 
-  useEffect(() => {
-    const fetchTranslations = async () => {
-      try {
-        const [enResponse, faResponse] = await Promise.all([
-          fetch('./locales/en.json'),
-          fetch('./locales/fa.json')
-        ]);
-        const enData = await enResponse.json();
-        const faData = await faResponse.json();
-        setTranslations({ en: enData, fa: faData });
-      } catch (error) {
-        console.error("Failed to load translations:", error);
-      }
-    };
-
-    fetchTranslations();
-  }, []);
-
-  // FIX: Implement interpolation logic in the `t` function to handle dynamic values.
   const t = useCallback((key: string, options?: { [key: string]: string | number }): string => {
     let translation = translations[language]?.[key] || key;
     if (options) {
@@ -45,11 +30,6 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
     return translation;
   }, [language, translations]);
-
-  // To prevent flash of untranslated content, we wait for translations to load.
-  if (!translations.en || !translations.fa) {
-    return null; // Or return a loading spinner component
-  }
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>
