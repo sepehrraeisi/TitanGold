@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import * as api from '../services/api.ts';
+import { registerWithBackend } from '../services/api-auth.ts';
 
 interface LoginProps {
   onLogin: (username: string, pass: string) => void;
@@ -9,85 +10,52 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLogin, errorKey }) => {
   const { t } = useLanguage();
-  const [username, setUsername] = useState('reza_farhadi');
-  const [password, setPassword] = useState('tradeSecure1');
+  const [username, setUsername] = useState('admin');  // Changed to existing backend user
+  const [password, setPassword] = useState('Admin123!');  // Changed to existing backend password
   const [showRegister, setShowRegister] = useState(false);
-  const [registerData, setRegisterData] = useState({ name: '', email: '', password: '', confirmPassword: '' });
+  const [registerData, setRegisterData] = useState({ name: '', username: '', email: '', password: '', confirmPassword: '' });
   const [isRegistering, setIsRegistering] = useState(false);
-  const [registrationEnabled, setRegistrationEnabled] = useState(false);
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);  // Always enable registration
 
+  // Registration is always enabled with backend API
   useEffect(() => {
-    const checkRegistration = async () => {
-      try {
-        const settings = await api.fetchUserManagement();
-        console.log('Registration status checked:', settings.registrationEnabled);
-        setRegistrationEnabled(settings.registrationEnabled);
-      } catch (e) {
-        console.warn('Failed to check registration status:', e);
-      }
-    };
-    
-    // Check on mount
-    checkRegistration();
-    
-    // Listen for storage changes (when registration is toggled in Settings)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'titan_user_management') {
-        console.log('Storage change detected for user_management');
-        checkRegistration();
-      }
-    };
-    
-    // Listen for custom events (when registration is toggled in Settings)
-    const handleRegistrationToggle = (e: Event) => {
-      console.log('Registration toggle event received:', e);
-      checkRegistration();
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('titan_registration_toggled', handleRegistrationToggle);
-    
-    // Also check periodically (every 2 seconds) as a fallback
-    const interval = setInterval(checkRegistration, 2000);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('titan_registration_toggled', handleRegistrationToggle);
-      clearInterval(interval);
-    };
+    console.log('✅ Registration is enabled (using backend API)');
   }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (registerData.password !== registerData.confirmPassword) {
-      // Show error
+      alert(t('password_mismatch') || 'Passwords do not match!');
       return;
     }
     
     setIsRegistering(true);
     try {
-      const result = await api.registerNewUser({
-        name: registerData.name,
-        email: registerData.email,
-        password: registerData.password,
-      });
+      console.log('📝 Registering with backend API...');
       
-      if (result.success) {
+      // Use real backend API for registration
+      const newUser = await registerWithBackend(
+        registerData.email,
+        registerData.username || registerData.email.split('@')[0],
+        registerData.password,
+        registerData.name
+      );
+      
+      if (newUser) {
         // Show success message and switch to login
+        console.log('✅ Registration successful:', newUser);
         setShowRegister(false);
-        // Pre-fill username with email prefix for easier login
-        const username = registerData.email.split('@')[0];
-        setUsername(username);
-        setRegisterData({ name: '', email: '', password: '', confirmPassword: '' });
-        // Show success message
+        setUsername(newUser.username);
+        setRegisterData({ name: '', username: '', email: '', password: '', confirmPassword: '' });
         alert(t('registration_success_message') || 'Registration successful! You can now login.');
       } else {
-        // Show error message
-        alert(t(result.message) || 'Registration failed. Please try again.');
+        console.error('❌ Registration failed');
+        alert(t('registration_failed') || 'Registration failed. Please try again.');
       }
     } catch (err) {
-      // Show error
+      console.error('💥 Registration error:', err);
+      alert(t('registration_error') || 'An error occurred during registration.');
     } finally {
       setIsRegistering(false);
     }
@@ -174,9 +142,23 @@ const Login: React.FC<LoginProps> = ({ onLogin, errorKey }) => {
                 autoComplete="name"
                 required
                 className="appearance-none relative block w-full px-3 py-3 border border-border bg-input text-foreground placeholder-muted-foreground focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm rounded-md"
-                placeholder={t('full_name')}
+                placeholder={t('full_name') || 'Full Name'}
                 value={registerData.name}
                 onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="registerUsername" className="sr-only">{t('username') || 'Username'}</label>
+              <input
+                id="registerUsername"
+                name="registerUsername"
+                type="text"
+                autoComplete="username"
+                required
+                className="appearance-none relative block w-full px-3 py-3 border border-border bg-input text-foreground placeholder-muted-foreground focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm rounded-md"
+                placeholder={t('username') || 'Username'}
+                value={registerData.username}
+                onChange={(e) => setRegisterData({ ...registerData, username: e.target.value })}
               />
             </div>
             <div>
@@ -188,7 +170,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, errorKey }) => {
                 autoComplete="email"
                 required
                 className="appearance-none relative block w-full px-3 py-3 border border-border bg-input text-foreground placeholder-muted-foreground focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm rounded-md"
-                placeholder={t('email_address')}
+                placeholder={t('email_address') || 'Email Address'}
                 value={registerData.email}
                 onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
               />
