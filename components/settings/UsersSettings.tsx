@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
+import { fetchAllUsers } from '../../services/api-auth.ts';
 import type { ManagedUser, UserManagementData } from '../../types.ts';
 import Skeleton from '../ui/skeleton.tsx';
 import type { UserActivity } from '../../types.ts';
@@ -81,14 +82,67 @@ const UsersSettings: React.FC = () => {
         const load = async () => {
             setIsLoading(true);
             try {
-            const response = await api.fetchUserManagement();
-            setData(response);
-            setInviteRole(response.defaultRoleKey);
+                // Try to fetch from backend API first
+                console.log('🔄 Loading users from backend API...');
+                const backendUsers = await fetchAllUsers();
+                
+                if (backendUsers && backendUsers.length > 0) {
+                    // Convert backend users to frontend format
+                    const managedUsers: ManagedUser[] = backendUsers.map((user: any) => ({
+                        id: user.id,
+                        name: user.full_name || user.username,
+                        username: user.username,
+                        email: user.email,
+                        password: '', // Never expose password
+                        roleKey: user.role === 'admin' ? 'role_admin' : user.role === 'user' ? 'role_trader' : 'role_viewer',
+                        status: user.is_active ? 'active' : 'suspended',
+                        joinedAt: user.created_at,
+                        lastActiveAt: user.last_login_at || user.created_at,
+                        twoFactorEnabled: false,
+                        permissions: [],
+                    }));
+                    
+                    console.log('✅ Loaded users from backend:', managedUsers.length);
+                    
+                    // Create UserManagementData structure
+                    const userData: UserManagementData = {
+                        users: managedUsers,
+                        invitations: [],
+                        availableRoles: [
+                            { roleKey: 'role_admin', descriptionKey: 'role_admin_desc', permissions: [] },
+                            { roleKey: 'role_trader', descriptionKey: 'role_trader_desc', permissions: [] },
+                            { roleKey: 'role_viewer', descriptionKey: 'role_viewer_desc', permissions: [] },
+                        ],
+                        defaultRoleKey: 'role_trader',
+                        lastUpdated: new Date().toISOString(),
+                        registrationEnabled: true,
+                    };
+                    
+                    setData(userData);
+                    setInviteRole(userData.defaultRoleKey);
+                } else {
+                    // Fallback to mock data if backend fails
+                    console.warn('⚠️ No users from backend, using mock data');
+                    const response = await api.fetchUserManagement();
+                    setData(response);
+                    setInviteRole(response.defaultRoleKey);
+                }
+                
                 setError(null);
             } catch (err) {
+                console.error('❌ Error loading users:', err);
                 setError(err instanceof Error ? err.message : 'Failed to load users');
+                
+                // Try fallback to mock data
+                try {
+                    const response = await api.fetchUserManagement();
+                    setData(response);
+                    setInviteRole(response.defaultRoleKey);
+                } catch {
+                    // Ignore fallback error
+                }
             } finally {
-            setIsLoading(false);
+                setIsLoading(false);
             }
         };
         load();

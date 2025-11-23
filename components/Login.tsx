@@ -76,63 +76,71 @@ const Login: React.FC<LoginProps> = ({ onLogin, errorKey }) => {
           <h2 className="mt-6 text-2xl font-bold tracking-tight text-foreground">{t('login_welcome')}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{t('login_subtitle')}</p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="username" className="sr-only">{t('login_username')}</label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                autoComplete="username"
-                required
-                className="appearance-none relative block w-full px-3 py-3 border border-border bg-input text-foreground placeholder-muted-foreground focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm rounded-md"
-                placeholder={t('login_username')}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">{t('login_password')}</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="appearance-none relative block w-full px-3 py-3 border border-border bg-input text-foreground placeholder-muted-foreground focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm rounded-md"
-                placeholder={t('login_password')}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-          </div>
-          
-          {errorKey && <p className="text-sm text-red-400 text-center">{t(errorKey)}</p>}
-
-          <div>
-            <button
-              type="submit"
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-primary transition-colors"
-            >
-              {t('login_button')}
-            </button>
-          </div>
-        </form>
         
-        {registrationEnabled && (
-          <div className="text-center">
-            <button
-              onClick={() => setShowRegister(!showRegister)}
-              className="text-sm text-blue-400 hover:text-blue-300"
-            >
-              {showRegister ? t('back_to_login') : t('create_account')}
-            </button>
-          </div>
+        {/* Login Form - Only show when NOT in register mode */}
+        {!showRegister && (
+          <>
+            <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="username" className="sr-only">{t('login_username')}</label>
+                  <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    autoComplete="username"
+                    required
+                    className="appearance-none relative block w-full px-3 py-3 border border-border bg-input text-foreground placeholder-muted-foreground focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm rounded-md"
+                    placeholder={t('login_username')}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="password" className="sr-only">{t('login_password')}</label>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    className="appearance-none relative block w-full px-3 py-3 border border-border bg-input text-foreground placeholder-muted-foreground focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm rounded-md"
+                    placeholder={t('login_password')}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              {errorKey && <p className="text-sm text-red-400 text-center">{t(errorKey)}</p>}
+
+              <div>
+                <button
+                  type="submit"
+                  className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-primary transition-colors"
+                >
+                  {t('login_button')}
+                </button>
+              </div>
+            </form>
+            
+            {registrationEnabled && (
+              <div className="text-center">
+                <button
+                  onClick={() => setShowRegister(true)}
+                  className="text-sm text-blue-400 hover:text-blue-300"
+                >
+                  {t('create_account')}
+                </button>
+              </div>
+            )}
+          </>
         )}
 
+        {/* Registration Form - Only show when in register mode */}
         {showRegister && registrationEnabled && (
-          <form className="mt-4 space-y-4" onSubmit={handleRegister}>
+          <>
+            <form className="mt-4 space-y-4" onSubmit={handleRegister}>
             <div>
               <label htmlFor="registerName" className="sr-only">{t('full_name')}</label>
               <input
@@ -213,6 +221,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, errorKey }) => {
               </button>
             </div>
           </form>
+          
+          <div className="text-center">
+            <button
+              onClick={() => setShowRegister(false)}
+              className="text-sm text-blue-400 hover:text-blue-300"
+            >
+              {t('back_to_login')}
+            </button>
+          </div>
+          </>
         )}
       </div>
     </div>

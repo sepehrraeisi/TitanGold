@@ -203,3 +203,25 @@ export const authenticatedFetch = async (endpoint: string, options: RequestInit 
     headers,
   });
 };
+
+/**
+ * Fetch all users from backend (Admin only)
+ */
+export const fetchAllUsers = async (): Promise<any[]> => {
+  try {
+    const response = await authenticatedFetch('/users');
+    
+    if (!response.ok) {
+      console.error('❌ Failed to fetch users:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    console.log('✅ Fetched users:', data);
+    
+    return data.users || [];
+  } catch (error) {
+    console.error('💥 Error fetching users:', error);
+    return [];
+  }
+};
