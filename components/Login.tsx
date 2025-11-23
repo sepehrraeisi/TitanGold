@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import * as api from '../services/api.ts';
-import { registerWithBackend } from '../services/api-auth.ts';
+import { registerWithBackend, getSetting } from '../services/api-auth.ts';
 
 interface LoginProps {
   onLogin: (username: string, pass: string) => void;
@@ -15,11 +15,38 @@ const Login: React.FC<LoginProps> = ({ onLogin, errorKey }) => {
   const [showRegister, setShowRegister] = useState(false);
   const [registerData, setRegisterData] = useState({ name: '', username: '', email: '', password: '', confirmPassword: '' });
   const [isRegistering, setIsRegistering] = useState(false);
-  const [registrationEnabled, setRegistrationEnabled] = useState(true);  // Always enable registration
+  const [registrationEnabled, setRegistrationEnabled] = useState(false);  // Default to false, fetch from backend
+  const [isCheckingSettings, setIsCheckingSettings] = useState(true);
 
-  // Registration is always enabled with backend API
+  // Check registration status from backend
   useEffect(() => {
-    console.log('✅ Registration is enabled (using backend API)');
+    const checkRegistrationStatus = async () => {
+      setIsCheckingSettings(true);
+      try {
+        console.log('🔄 Checking registration status from backend...');
+        const enabled = await getSetting('public_registration');
+        
+        if (enabled !== null) {
+          console.log('✅ Registration status from backend:', enabled);
+          setRegistrationEnabled(enabled === true || enabled === 'true');
+        } else {
+          console.warn('⚠️ Could not fetch registration status, defaulting to false');
+          setRegistrationEnabled(false);
+        }
+      } catch (error) {
+        console.error('❌ Error checking registration status:', error);
+        setRegistrationEnabled(false);
+      } finally {
+        setIsCheckingSettings(false);
+      }
+    };
+    
+    checkRegistrationStatus();
+    
+    // Check every 5 seconds in case settings change
+    const interval = setInterval(checkRegistrationStatus, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const handleRegister = async (e: React.FormEvent) => {

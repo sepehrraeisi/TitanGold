@@ -225,3 +225,72 @@ export const fetchAllUsers = async (): Promise<any[]> => {
     return [];
   }
 };
+
+/**
+ * Get system settings (public endpoint)
+ */
+export const getSystemSettings = async (): Promise<any> => {
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/settings`);
+    
+    if (!response.ok) {
+      console.error('❌ Failed to fetch settings:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log('✅ Fetched settings:', data);
+    
+    return data.settings || {};
+  } catch (error) {
+    console.error('💥 Error fetching settings:', error);
+    return null;
+  }
+};
+
+/**
+ * Get a specific setting value
+ */
+export const getSetting = async (key: string): Promise<any> => {
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/settings/${key}`);
+    
+    if (!response.ok) {
+      console.error(`❌ Failed to fetch setting ${key}:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log(`✅ Fetched setting ${key}:`, data.value);
+    
+    return data.value;
+  } catch (error) {
+    console.error(`💥 Error fetching setting ${key}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Update a setting (Admin only)
+ */
+export const updateSetting = async (key: string, value: any, description?: string): Promise<boolean> => {
+  try {
+    const response = await authenticatedFetch(`/settings/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value, description }),
+    });
+    
+    if (!response.ok) {
+      console.error(`❌ Failed to update setting ${key}:`, response.status);
+      return false;
+    }
+
+    const data = await response.json();
+    console.log(`✅ Updated setting ${key}:`, data);
+    
+    return true;
+  } catch (error) {
+    console.error(`💥 Error updating setting ${key}:`, error);
+    return false;
+  }
+};
