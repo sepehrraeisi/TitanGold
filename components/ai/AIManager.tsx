@@ -1296,10 +1296,6 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
     };
 
     const handleCollectorHealth = async () => {
-        if (!telegramCollectorUrl) {
-            setCollectorError('VITE_TELEGRAM_COLLECTOR_URL تنظیم نشده است.');
-            return;
-        }
         setIsLoadingCollector(true);
         setCollectorError(null);
         try {
@@ -1892,14 +1888,12 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                         <div>
                             <h3 className="font-semibold text-foreground">{t('telegram_collector') || 'Telegram Collector'}</h3>
                             <p className="text-xs text-muted-foreground">
-                                {telegramCollectorUrl
-                                    ? `${t('service_url') || 'Service URL'}: ${telegramCollectorUrl}`
-                                    : 'VITE_TELEGRAM_COLLECTOR_URL تنظیم نشده است.'}
+                                {t('service_url') || 'Service URL'}: {telegramCollectorUrl || '/api/telegram-collector (proxied)'}
                             </p>
                         </div>
                         <button
                             onClick={handleCollectorHealth}
-                            disabled={isLoadingCollector || !telegramCollectorUrl}
+                            disabled={isLoadingCollector}
                             className="text-xs px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded"
                         >
                             {isLoadingCollector ? (t('loading') || 'Loading...') : (t('refresh_health') || 'Refresh Health')}
@@ -1967,7 +1961,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                 </div>
                                 <button
                                     onClick={handleStartCollectorLogin}
-                                    disabled={isLoadingCollector || !telegramCollectorUrl}
+                                    disabled={isLoadingCollector}
                                     className="w-full text-xs px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded"
                                 >
                                     {t('send_verification_code') || 'Send Verification Code'}
