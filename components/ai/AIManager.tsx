@@ -1261,6 +1261,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
     } | null>(null);
     const [isRefreshingChannels, setIsRefreshingChannels] = useState(false);
     const telegramCollectorUrl = typeof api.getTelegramCollectorBaseUrl === 'function' ? api.getTelegramCollectorBaseUrl() : undefined;
+    const telegramCollectorState = dataHub?.telegramCollector;    const telegramChannels = telegramCollectorState?.channels || [];
     
     useEffect(() => {
         const loadDataHub = async () => {
