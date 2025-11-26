@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "MTProto-based Telegram collector service for Titan Data Hub",
   "main": "dist/index.js",
-
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc -p tsconfig.json",
@@ -14,8 +13,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "telegram": "^2.26.22",
     "input": "^1.0.1",
+    "telegram": "^2.26.22",
     "uuid": "^11.0.3"
   },
   "devDependencies": {
@@ -28,4 +27,3 @@
     "typescript": "^5.6.3"
   }
 }
-
