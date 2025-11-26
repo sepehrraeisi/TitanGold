@@ -19732,57 +19732,9 @@ export const logArtemisAction = async (log: Omit<ArtemisLog, 'id' | 'timestamp'>
 // ==================== Artemis Data Hub Functions ====================
 
 const buildDefaultTelegramCollectorChannels = (): TelegramCollectorChannel[] => {
-    const now = Date.now();
-    return [
-        {
-            id: 'collector-gold-insights',
-            title: 'Titan Gold Insights',
-            handle: 'titan_gold_insights',
-            status: 'idle',
-            enabled: true,
-            usingCollector: true,
-            category: 'news',
-            sourceId: 'telegram-gold-news',
-            lastSyncAt: new Date(now - 1000 * 60 * 12).toISOString(),
-            lastMessageAt: new Date(now - 1000 * 60 * 8).toISOString(),
-            messageCount24h: 28,
-            fetchLatencyMs: 380,
-            createdAt: new Date(now - 1000 * 60 * 60 * 24 * 10).toISOString(),
-            updatedAt: new Date(now - 1000 * 60 * 5).toISOString(),
-        },
-        {
-            id: 'collector-vip-alerts',
-            title: 'VIP Market Alerts',
-            handle: 'titan_vip_alerts',
-            status: 'paused',
-            enabled: false,
-            usingCollector: true,
-            category: 'alerts',
-            sourceId: 'telegram-vip-alerts',
-            lastSyncAt: new Date(now - 1000 * 60 * 90).toISOString(),
-            lastMessageAt: new Date(now - 1000 * 60 * 75).toISOString(),
-            messageCount24h: 6,
-            fetchLatencyMs: 520,
-            createdAt: new Date(now - 1000 * 60 * 60 * 24 * 5).toISOString(),
-            updatedAt: new Date(now - 1000 * 60 * 80).toISOString(),
-        },
-        {
-            id: 'collector-news-aggregator',
-            title: 'Global Macro Monitor',
-            handle: 'global_macro_monitor',
-            status: 'idle',
-            enabled: true,
-            usingCollector: true,
-            category: 'macro',
-            sourceId: 'telegram-macro-monitor',
-            lastSyncAt: new Date(now - 1000 * 60 * 25).toISOString(),
-            lastMessageAt: new Date(now - 1000 * 60 * 20).toISOString(),
-            messageCount24h: 14,
-            fetchLatencyMs: 445,
-            createdAt: new Date(now - 1000 * 60 * 60 * 24 * 20).toISOString(),
-            updatedAt: new Date(now - 1000 * 60 * 20).toISOString(),
-        },
-    ];
+    // Start with empty array - real channels will be loaded from telegram-collector service
+    // This prevents showing mock/fake channels to users
+    return [];
 };
 
 const buildDefaultTelegramCollectorState = (): TelegramCollectorState => ({
