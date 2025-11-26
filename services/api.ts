@@ -21173,7 +21173,7 @@ export const getTelegramCollectorBaseUrl = () => resolveTelegramCollectorBaseUrl
 
 export const getTelegramCollectorHealth = async () => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
-    const response = await fetch(`${baseUrl}/health`);
+    const response = await fetch(`${baseUrl}/api/telegram-collector/health`);
     if (!response.ok) {
         throw new Error(`Collector health request failed with ${response.status}`);
     }
