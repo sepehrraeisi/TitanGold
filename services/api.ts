@@ -21207,9 +21207,9 @@ type ConfirmCollectorLoginInput = {
     code: string;
     password?: string;
 };
-    if (!baseUrl) {
-        throw new Error('Telegram Collector URL is not configured. Set VITE_TELEGRAM_COLLECTOR_URL.');
-    }
+
+export const confirmTelegramCollectorLogin = async (payload: ConfirmCollectorLoginInput) => {
+    const baseUrl = resolveTelegramCollectorBaseUrl();
     const response = await fetch(`${baseUrl}/api/telegram-collector/login/confirm`, {
         method: 'POST',
         headers: {
@@ -21220,12 +21220,13 @@ type ConfirmCollectorLoginInput = {
     const data = await response.json();
     if (!response.ok || data?.ok === false) {
         throw new Error(data?.error || `Login confirm failed with status ${response.status}`);
+    }
+    return data;
+};
+
 
 export const cancelTelegramCollectorLogin = async (authId: string) => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
-    if (!baseUrl) {
-        throw new Error('Telegram Collector URL is not configured. Set VITE_TELEGRAM_COLLECTOR_URL.');
-    }
     const response = await fetch(`${baseUrl}/api/telegram-collector/login/cancel`, {
         method: 'POST',
         headers: {
@@ -21246,9 +21247,6 @@ export const cancelTelegramCollectorLogin = async (authId: string) => {
     source: 'collector';
 }> => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
-    if (!baseUrl) {
-        throw new Error('Telegram Collector URL not configured (set VITE_TELEGRAM_COLLECTOR_URL).');
-    }
 
     const normalizedChannel = channelUsername.replace(/^@/, '');
     const url = `${baseUrl}/telegram/${encodeURIComponent(normalizedChannel)}/recent?limit=${limit}`;
