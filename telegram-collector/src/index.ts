@@ -11,8 +11,22 @@ const PORT = process.env.PORT || 3002;
 app.use(cors());
 app.use(express.json());
 
-// Health check endpoint
+// Health check endpoints (both paths for compatibility)
 app.get('/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        service: 'telegram-collector',
+        version: '0.1.0',
+        timestamp: new Date().toISOString(),
+        configured: {
+            apiId: !!process.env.TELEGRAM_API_ID,
+            apiHash: !!process.env.TELEGRAM_API_HASH,
+            session: !!process.env.TELEGRAM_SESSION_STRING
+        }
+    });
+});
+
+app.get('/api/telegram-collector/health', (req, res) => {
     res.json({
         status: 'healthy',
         service: 'telegram-collector',

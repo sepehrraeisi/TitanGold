@@ -21160,12 +21160,12 @@ const extractTelegramMessagesFromHtml = (htmlText: string, limit: number): Array
 };
 
 // Post-process Telegram articles to clean them up for agents
-const resolveTelegramCollectorBaseUrl = (): string | undefined => {
+const resolveTelegramCollectorBaseUrl = (): string => {
     const viteEnv = typeof import.meta !== 'undefined' && (import.meta as any)?.env;
     const fromImportMeta = viteEnv?.VITE_TELEGRAM_COLLECTOR_URL;
     const fromNode = typeof process !== 'undefined' ? (process as any)?.env?.VITE_TELEGRAM_COLLECTOR_URL : undefined;
     const value = fromImportMeta || fromNode;
-    if (!value) return undefined;
+    if (!value) return '';
     return value.replace(/\/$/, '');
 };
 
@@ -21173,9 +21173,6 @@ export const getTelegramCollectorBaseUrl = () => resolveTelegramCollectorBaseUrl
 
 export const getTelegramCollectorHealth = async () => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
-    if (!baseUrl) {
-        throw new Error('Telegram Collector URL is not configured. Set VITE_TELEGRAM_COLLECTOR_URL.');
-    }
     const response = await fetch(`${baseUrl}/health`);
     if (!response.ok) {
         throw new Error(`Collector health request failed with ${response.status}`);
@@ -21191,9 +21188,6 @@ type StartCollectorLoginInput = {
 
 export const startTelegramCollectorLogin = async (payload: StartCollectorLoginInput) => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
-    if (!baseUrl) {
-        throw new Error('Telegram Collector URL is not configured. Set VITE_TELEGRAM_COLLECTOR_URL.');
-    }
     const response = await fetch(`${baseUrl}/api/telegram-collector/login/start`, {
         method: 'POST',
         headers: {
@@ -21213,9 +21207,6 @@ type ConfirmCollectorLoginInput = {
     code: string;
     password?: string;
 };
-
-export const confirmTelegramCollectorLogin = async (payload: ConfirmCollectorLoginInput) => {
-    const baseUrl = resolveTelegramCollectorBaseUrl();
     if (!baseUrl) {
         throw new Error('Telegram Collector URL is not configured. Set VITE_TELEGRAM_COLLECTOR_URL.');
     }
@@ -21229,9 +21220,6 @@ export const confirmTelegramCollectorLogin = async (payload: ConfirmCollectorLog
     const data = await response.json();
     if (!response.ok || data?.ok === false) {
         throw new Error(data?.error || `Login confirm failed with status ${response.status}`);
-    }
-    return data;
-};
 
 export const cancelTelegramCollectorLogin = async (authId: string) => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
@@ -21252,9 +21240,6 @@ export const cancelTelegramCollectorLogin = async (authId: string) => {
     return data;
 };
 
-const fetchFromTelegramCollector = async (
-    channelUsername: string,
-    limit = 50
 ): Promise<{
     channel: string;
     messages: Array<{ text: string; timestamp: string; link?: string }>;
