@@ -152,6 +152,30 @@ app.post('/api/telegram-collector/login/confirm', async (req, res) => {
         // Get session string
         const sessionString = client.session.save() as unknown as string;
 
+        // Save session to .env file
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const envPath = path.join(__dirname, '../.env');
+            let envContent = fs.readFileSync(envPath, 'utf8');
+            
+            // Update or add TELEGRAM_SESSION_STRING
+            if (envContent.includes('TELEGRAM_SESSION_STRING=')) {
+                envContent = envContent.replace(
+                    /TELEGRAM_SESSION_STRING=.*/,
+                    `TELEGRAM_SESSION_STRING=${sessionString}`
+                );
+            } else {
+                envContent += `\nTELEGRAM_SESSION_STRING=${sessionString}\n`;
+            }
+            
+            fs.writeFileSync(envPath, envContent);
+            process.env.TELEGRAM_SESSION_STRING = sessionString;
+            console.log('💾 Session saved to .env file');
+        } catch (error) {
+            console.error('⚠️  Failed to save session to .env:', error);
+        }
+
         // Clean up auth session
         authSessions.delete(authId);
 
