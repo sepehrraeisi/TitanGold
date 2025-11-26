@@ -159,10 +159,10 @@ app.post('/api/telegram-collector/login/confirm', async (req, res) => {
             const envPath = path.join(__dirname, '../.env');
             let envContent = fs.readFileSync(envPath, 'utf8');
             
-            // Update or add TELEGRAM_SESSION_STRING
+            // Update or add TELEGRAM_SESSION_STRING (handle commented lines too)
             if (envContent.includes('TELEGRAM_SESSION_STRING=')) {
                 envContent = envContent.replace(
-                    /TELEGRAM_SESSION_STRING=.*/,
+                    /^#?\s*TELEGRAM_SESSION_STRING=.*/m,
                     `TELEGRAM_SESSION_STRING=${sessionString}`
                 );
             } else {
