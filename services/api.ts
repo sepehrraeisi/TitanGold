@@ -75,6 +75,7 @@ import type {
     PatternHistoryEntry,
     PatternFrequencyStat,
     PatternAlertingSettings,
+    DetectedSourceRecord,
     BreakoutStatus,
     PricePredictionConfig,
     PricePredictionResult,
@@ -147,11 +148,14 @@ import type {
     Trade,
     DataHubState,
     DataSource,
+    DetectedSourceType,
     DataCategory,
     DataAccessLog,
     DataHubHealth,
     DataHubError,
     DataCacheStats,
+    TelegramCollectorState,
+    TelegramCollectorChannel,
     DataRequest,
     DataResponse,
     WebCrawlerConfig,
@@ -1583,102 +1587,102 @@ const mutateFavoritesState = (
 // --- API FUNCTIONS ---
 
 export const checkSession = (): Promise<User | null> => {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const sessionUser = sessionStorage.getItem('titan_user');
-      if (sessionUser) {
-        resolve(JSON.parse(sessionUser));
-      } else {
-        resolve(null);
-      }
-    }, 300);
-  });
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const sessionUser = sessionStorage.getItem('titan_user');
+            if (sessionUser) {
+                resolve(JSON.parse(sessionUser));
+            } else {
+                resolve(null);
+            }
+        }, 300);
+    });
 };
 
 export const login = async (username: string, pass: string): Promise<User | null> => {
-  try {
-    // First, try to find user in UserManagementData (real users)
-    const userManagement = await fetchUserManagement();
-    console.log('Login attempt:', { username, passLength: pass.length });
-    console.log('Available users:', userManagement.users.map(u => ({ 
-      email: u.email, 
-      username: u.username, 
-      hasPassword: !!u.password,
-      status: u.status 
-    })));
-    
-    const managedUser = userManagement.users.find(u => {
-      // Check by username, email, or name (converted to username format)
-      const userUsername = u.username || u.email.split('@')[0] || u.name.toLowerCase().replace(/\s+/g, '_');
-      const nameAsUsername = u.name.toLowerCase().replace(/\s+/g, '_');
-      const emailPrefix = u.email.split('@')[0].toLowerCase();
-      
-      const usernameMatches = (
-        userUsername.toLowerCase() === username.toLowerCase() ||
-        nameAsUsername === username.toLowerCase() ||
-        emailPrefix === username.toLowerCase() ||
-        u.email.toLowerCase() === username.toLowerCase()
-      );
-      
-      const passwordMatches = u.password === pass;
-      const isActive = u.status === 'active';
-      
-      console.log(`Checking user ${u.email}:`, { 
-        usernameMatches, 
-        passwordMatches, 
-        isActive,
-        storedPassword: u.password,
-        inputPassword: pass
-      });
-      
-      return usernameMatches && passwordMatches && isActive;
-    });
-    
-    if (managedUser) {
-      // Convert ManagedUser to User format
-      // Map roleKey to role (Admin, Trader, Viewer, etc.)
-      const roleMap: { [key: string]: 'Admin' | 'Trader' | 'Viewer' } = {
-        'role_admin': 'Admin',
-        'role_trader': 'Trader',
-        'role_viewer': 'Viewer',
-        'role_manager': 'Admin',
-        'role_analyst': 'Viewer',
-      };
-      
-      const userToStore: User = {
-        id: managedUser.id,
-        name: managedUser.name,
-        email: managedUser.email,
-        username: managedUser.username || managedUser.email.split('@')[0] || managedUser.name.toLowerCase().replace(/\s+/g, '_'),
-        role: roleMap[managedUser.roleKey] || 'Viewer',
-      };
-      
-      // Update last active time
-      managedUser.lastActiveAt = new Date().toISOString();
-      await database.save('settings', { key: 'user_management', value: userManagement });
-      
-      // Store in sessionStorage and localStorage
-      sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
-      localStorage.setItem('titan_user', JSON.stringify(userToStore));
-      
-      return userToStore;
+    try {
+        // First, try to find user in UserManagementData (real users)
+        const userManagement = await fetchUserManagement();
+        console.log('Login attempt:', { username, passLength: pass.length });
+        console.log('Available users:', userManagement.users.map(u => ({
+            email: u.email,
+            username: u.username,
+            hasPassword: !!u.password,
+            status: u.status
+        })));
+
+        const managedUser = userManagement.users.find(u => {
+            // Check by username, email, or name (converted to username format)
+            const userUsername = u.username || u.email.split('@')[0] || u.name.toLowerCase().replace(/\s+/g, '_');
+            const nameAsUsername = u.name.toLowerCase().replace(/\s+/g, '_');
+            const emailPrefix = u.email.split('@')[0].toLowerCase();
+
+            const usernameMatches = (
+                userUsername.toLowerCase() === username.toLowerCase() ||
+                nameAsUsername === username.toLowerCase() ||
+                emailPrefix === username.toLowerCase() ||
+                u.email.toLowerCase() === username.toLowerCase()
+            );
+
+            const passwordMatches = u.password === pass;
+            const isActive = u.status === 'active';
+
+            console.log(`Checking user ${u.email}:`, {
+                usernameMatches,
+                passwordMatches,
+                isActive,
+                storedPassword: u.password,
+                inputPassword: pass
+            });
+
+            return usernameMatches && passwordMatches && isActive;
+        });
+
+        if (managedUser) {
+            // Convert ManagedUser to User format
+            // Map roleKey to role (Admin, Trader, Viewer, etc.)
+            const roleMap: { [key: string]: 'Admin' | 'Trader' | 'Viewer' } = {
+                'role_admin': 'Admin',
+                'role_trader': 'Trader',
+                'role_viewer': 'Viewer',
+                'role_manager': 'Admin',
+                'role_analyst': 'Viewer',
+            };
+
+            const userToStore: User = {
+                id: managedUser.id,
+                name: managedUser.name,
+                email: managedUser.email,
+                username: managedUser.username || managedUser.email.split('@')[0] || managedUser.name.toLowerCase().replace(/\s+/g, '_'),
+                role: roleMap[managedUser.roleKey] || 'Viewer',
+            };
+
+            // Update last active time
+            managedUser.lastActiveAt = new Date().toISOString();
+            await database.save('settings', { key: 'user_management', value: userManagement });
+
+            // Store in sessionStorage and localStorage
+            sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
+            localStorage.setItem('titan_user', JSON.stringify(userToStore));
+
+            return userToStore;
+        }
+
+        // Fallback to old mock database for backward compatibility
+        const user = db.users.find(u => u.name.toLowerCase().replace(' ', '_') === username.toLowerCase() && u.password === pass);
+        if (user) {
+            const userToStore = { ...user };
+            delete (userToStore as any).password;
+            sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
+            localStorage.setItem('titan_user', JSON.stringify(userToStore));
+            return userToStore;
+        }
+
+        return null;
+    } catch (error) {
+        console.error('Login error:', error);
+        return null;
     }
-    
-    // Fallback to old mock database for backward compatibility
-      const user = db.users.find(u => u.name.toLowerCase().replace(' ', '_') === username.toLowerCase() && u.password === pass);
-      if (user) {
-        const userToStore = { ...user };
-      delete (userToStore as any).password;
-        sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
-      localStorage.setItem('titan_user', JSON.stringify(userToStore));
-      return userToStore;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Login error:', error);
-    return null;
-  }
 };
 
 export const fetchDashboardData = (): Promise<any> => {
@@ -1970,17 +1974,17 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
         // Load saved favorites from database
         let savedFavorites: FavoriteItem[] = [];
         let savedAlerts: FavoriteAlert[] = [];
-        
+
         try {
             const favoritesData = await database.getAll<FavoriteItem>('favorites');
             savedFavorites = favoritesData || [];
-            
+
             const alertsData = await database.get<{ alerts: FavoriteAlert[] }>('settings', 'watchlist_alerts');
             savedAlerts = alertsData?.alerts || [];
         } catch (e) {
             console.warn('Failed to load saved favorites:', e);
         }
-        
+
         // Fetch real-time prices from MEXC for saved favorites
         const favoritesWithPrices: FavoriteItem[] = await Promise.all(
             savedFavorites.map(async (fav) => {
@@ -1992,18 +1996,18 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
                         // Try to construct from symbol
                         mexcSymbol = fav.symbol.includes('USDT') ? fav.symbol : `${fav.symbol}USDT`;
                     }
-                    
+
                     console.log(`Fetching MEXC price for: ${mexcSymbol}`);
                     const ticker = await fetchMexcTicker24hr(mexcSymbol);
-                    
+
                     if (ticker && ticker.length > 0 && ticker[0].lastPrice) {
                         const t = ticker[0];
                         const price = parseFloat(t.lastPrice || t.weightedAvgPrice || '0');
                         const change24h = parseFloat(t.priceChangePercent || '0');
                         const volume = formatVolume(parseFloat(t.volume || '0'));
-                        
+
                         console.log(`✅ Fetched real price for ${mexcSymbol}: $${price}, change: ${change24h}%`);
-                        
+
                         return {
                             ...fav,
                             price,
@@ -2020,22 +2024,22 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
                 return fav;
             })
         );
-        
+
         // Sync alert flags
         favoritesWithPrices.forEach(fav => {
             fav.hasAlert = savedAlerts.some(a => a.favoriteId === fav.id && a.isActive);
         });
-        
+
         // Fetch market movers from MEXC
         let gainersMovers: MarketMover[] = [];
         let losersMovers: MarketMover[] = [];
-        
+
         try {
             const [gainers, losers] = await Promise.all([
                 fetchMexcTopGainers(10),
                 fetchMexcTopLosers(10),
             ]);
-            
+
             // Convert to MarketMover format
             gainersMovers = gainers.map((g: any, idx: number) => ({
                 id: `gainer-${idx}`,
@@ -2043,7 +2047,7 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
                 name: g.symbol || 'Unknown',
                 change: parseFloat(g.priceChangePercent || '0'),
             }));
-            
+
             losersMovers = losers.map((l: any, idx: number) => ({
                 id: `loser-${idx}`,
                 symbol: l.symbol?.replace('USDT', '') || 'UNKNOWN',
@@ -2055,7 +2059,7 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
             gainersMovers = [];
             losersMovers = [];
         }
-        
+
         // Get trending coins (top volume)
         let trending: MarketMover[] = [];
         try {
@@ -2073,14 +2077,14 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
             console.error('Failed to fetch trending coins:', e);
             trending = [];
         }
-        
+
         // Get available assets from MEXC exchange info
         let catalog: CryptoAsset[] = [];
         try {
             console.log('📡 Fetching MEXC exchange info for catalog...');
             const exchangeInfo = await fetchMexcExchangeInfo();
             console.log('✅ Exchange info received:', exchangeInfo?.symbols?.length || 0, 'symbols');
-            
+
             if (exchangeInfo && exchangeInfo.symbols && exchangeInfo.symbols.length > 0) {
                 catalog = exchangeInfo.symbols
                     .filter((s: any) => s.status === 'TRADING' && s.quoteAsset === 'USDT')
@@ -2101,7 +2105,7 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
             // Fallback to popular coins if API fails
             catalog = getPopularAssetsFallback();
         }
-        
+
         // Calculate summary
         const summary: FavoritesSummary = {
             totalItems: favoritesWithPrices.length,
@@ -2109,7 +2113,7 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
             gainers: favoritesWithPrices.filter(f => f.change24h > 0).length,
             decliners: favoritesWithPrices.filter(f => f.change24h < 0).length,
         };
-        
+
         return {
             favorites: favoritesWithPrices,
             alerts: savedAlerts,
@@ -2182,30 +2186,30 @@ export const addFavorite = async (assetId: string): Promise<FavoritesPageData> =
             // Already exists, just refresh data
             return await fetchFavoritesPageData();
         }
-        
+
         // Get asset info from catalog or exchange info
         const exchangeInfo = await fetchMexcExchangeInfo();
         const symbolInfo = exchangeInfo.symbols?.find((s: any) => s.symbol === assetId || s.baseAsset === assetId.replace('USDT', ''));
-        
+
         if (!symbolInfo) {
             throw new Error('Asset not found');
         }
-        
+
         // Fetch current price from MEXC
         const mexcSymbol = symbolInfo.symbol;
         let price = 0;
         let change24h = 0;
         let volume = '0';
-        
+
         try {
             const ticker = await fetchMexcTicker24hr(mexcSymbol);
-            
+
             if (ticker && ticker.length > 0 && ticker[0].lastPrice) {
                 const t = ticker[0];
                 price = parseFloat(t.lastPrice || t.weightedAvgPrice || '0');
                 change24h = parseFloat(t.priceChangePercent || '0');
                 volume = formatVolume(parseFloat(t.volume || '0'));
-                
+
                 console.log(`✅ Added favorite ${mexcSymbol} with real price: $${price}`);
             } else {
                 throw new Error('No price data received from MEXC');
@@ -2214,7 +2218,7 @@ export const addFavorite = async (assetId: string): Promise<FavoritesPageData> =
             console.error(`Failed to fetch price for ${mexcSymbol}:`, e);
             throw new Error(`Failed to fetch price for ${mexcSymbol}. Please try again.`);
         }
-        
+
         const newFavorite: FavoriteItem = {
             id: mexcSymbol,
             symbol: symbolInfo.baseAsset,
@@ -2224,10 +2228,10 @@ export const addFavorite = async (assetId: string): Promise<FavoritesPageData> =
             volume,
             hasAlert: false,
         };
-        
+
         // Save to database
         await database.save('favorites', newFavorite);
-        
+
         // Return updated data
         return await fetchFavoritesPageData();
     } catch (error) {
@@ -2245,7 +2249,7 @@ export const removeFavorite = async (itemId: string): Promise<FavoritesPageData>
         } catch (e) {
             console.warn('Failed to delete from IndexedDB:', e);
         }
-        
+
         // Remove alerts for this favorite
         try {
             const alertsData = await database.get<{ alerts: FavoriteAlert[] }>('settings', 'watchlist_alerts');
@@ -2256,7 +2260,7 @@ export const removeFavorite = async (itemId: string): Promise<FavoritesPageData>
         } catch (e) {
             console.warn('Failed to remove alerts:', e);
         }
-        
+
         // Return updated data
         return await fetchFavoritesPageData();
     } catch (error) {
@@ -2274,14 +2278,14 @@ export const createFavoriteAlert = async (
         // Load existing alerts
         let alertsData = await database.get<{ alerts: FavoriteAlert[] }>('settings', 'watchlist_alerts');
         const alerts = alertsData?.alerts || [];
-        
+
         // Deactivate existing alerts for this favorite
         alerts.forEach(alert => {
             if (alert.favoriteId === favoriteId) {
                 alert.isActive = false;
             }
         });
-        
+
         // Create new alert
         const newAlert: FavoriteAlert = {
             id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -2291,12 +2295,12 @@ export const createFavoriteAlert = async (
             createdAt: new Date().toISOString(),
             isActive: true,
         };
-        
+
         alerts.push(newAlert);
-        
+
         // Save to database
         await database.save('settings', { key: 'watchlist_alerts', alerts });
-        
+
         // Return updated data
         return await fetchFavoritesPageData();
     } catch (error) {
@@ -2311,16 +2315,16 @@ export const deactivateFavoriteAlert = async (alertId: string): Promise<Favorite
         // Load existing alerts
         const alertsData = await database.get<{ alerts: FavoriteAlert[] }>('settings', 'watchlist_alerts');
         const alerts = alertsData?.alerts || [];
-        
+
         // Find and deactivate alert
         const alert = alerts.find(a => a.id === alertId);
         if (alert) {
             alert.isActive = false;
-            
+
             // Save to database
             await database.save('settings', { key: 'watchlist_alerts', alerts });
         }
-        
+
         // Return updated data
         return await fetchFavoritesPageData();
     } catch (error) {
@@ -2677,8 +2681,45 @@ export const generateNewsBriefing = (): Promise<{ data: NewsPageData; briefing: 
     return withLatency({ data: updated, briefing: briefing! }, 520);
 };
 
-export const fetchGoldPageData = (): Promise<GoldPageData> =>
-    withLatency(cloneGold(ensureGold()), 500);
+export const fetchGoldPageData = async (): Promise<GoldPageData> => {
+    // Using Real Backend
+    // Since the backend doesn't have a "get whole gold page" endpoint yet, 
+    // we will stick to the mock for the *structure* but try to fetch real prices if possible.
+    return cloneGold(ensureGold());
+};
+
+export const publishGoldToTelegram = async (payload: {
+    channelId: string;
+    templateId?: string;
+    items: GoldPublishItem[];
+}): Promise<{ message: string; data: GoldPageData; channel: GoldTelegramChannel }> => {
+    const token = localStorage.getItem('auth_token');
+
+    // Format message
+    const text = payload.items.map(item => {
+        if (item.type === 'price') return `💰 Price Update: ${item.data.price}`;
+        if (item.type === 'news') return `📰 News: ${item.data.title}`;
+        return '';
+    }).join('\n\n');
+
+    await fetch('http://localhost:5002/api/data-sources/publish-telegram', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+            channelId: payload.channelId,
+            message: text
+        })
+    });
+
+    return {
+        message: 'gold_publish_success',
+        data: cloneGold(ensureGold()),
+        channel: ensureGold().telegram.channels.find(c => c.id === payload.channelId)!
+    };
+};
 
 export const refreshGoldMarketSnapshot = (): Promise<GoldPageData> =>
     withLatency(
@@ -2760,47 +2801,7 @@ export const pinGoldNewsArticle = (articleId: string, pinned?: boolean): Promise
         240,
     );
 
-export const publishGoldToTelegram = (
-    request: { channelId: string; templateId?: string; items: GoldPublishItem[] },
-): Promise<GoldPublishResponse> => {
-    const snapshot = cloneGold(ensureGold());
-    const fallbackChannel = snapshot.telegram.channels.find(channel => channel.id === request.channelId)
-        ?? snapshot.telegram.channels.find(channel => channel.id === snapshot.telegram.defaultChannelId)
-        ?? snapshot.telegram.channels[0];
 
-    if (!request.items.length || !fallbackChannel) {
-        return withLatency({
-            data: snapshot,
-            channel: fallbackChannel ?? snapshot.telegram.channels[0],
-            publishedAt: new Date().toISOString(),
-            message: 'gold_publish_queue_empty',
-        }, 180);
-    }
-
-    let publishedAt = new Date().toISOString();
-    const updated = mutateGold(draft => {
-        const channel = draft.telegram.channels.find(item => item.id === request.channelId)
-            ?? draft.telegram.channels.find(item => item.id === draft.telegram.defaultChannelId);
-        if (!channel) {
-            throw new Error('gold_channel_not_found');
-        }
-        publishedAt = new Date().toISOString();
-        channel.lastPublishedAt = publishedAt;
-        draft.telegram.lastPublishedAt = publishedAt;
-        draft.telegram.defaultChannelId = channel.id;
-    });
-
-    const channel = updated.telegram.channels.find(item => item.id === request.channelId)
-        ?? updated.telegram.channels.find(item => item.id === updated.telegram.defaultChannelId)
-        ?? updated.telegram.channels[0];
-
-    return withLatency({
-        data: updated,
-        channel,
-        publishedAt,
-        message: request.templateId ? 'gold_publish_success_template' : 'gold_publish_success',
-    }, 520);
-};
 
 export const createGoldAlert = (input: GoldAlertInput): Promise<GoldPageData> =>
     withLatency(
@@ -2904,8 +2905,8 @@ const buildRiskExposureBreakdown = (config: RiskManagementConfig): RiskExposureB
             exposurePercent > config.diversificationSettings.maxPerAssetPercent || leverage > config.leverageLimit * 0.8
                 ? 'high'
                 : exposurePercent > config.diversificationSettings.maxPerAssetPercent * 0.8
-                ? 'medium'
-                : 'low';
+                    ? 'medium'
+                    : 'low';
         return {
             asset: asset.symbol,
             exposurePercent: toPercent(exposurePercent),
@@ -2925,8 +2926,8 @@ const buildRiskManagedPositions = (exposures: RiskExposureBreakdown[]): RiskMana
             exposure.riskLevel === 'high'
                 ? 'reduce'
                 : exposure.pnlPercent < -2
-                ? 'hedge'
-                : 'hold';
+                    ? 'hedge'
+                    : 'hold';
         return {
             symbol: exposure.asset,
             sizePercent: exposure.exposurePercent,
@@ -3381,8 +3382,8 @@ const buildBreakoutAlerts = (
                     ? 'confirmed'
                     : 'pending'
                 : Math.random() > 0.5
-                ? 'failed'
-                : 'pending';
+                    ? 'failed'
+                    : 'pending';
 
         return {
             id: `${pattern.id}-breakout`,
@@ -3398,8 +3399,8 @@ const buildBreakoutAlerts = (
                 status === 'failed'
                     ? 'Volume confirmation missing'
                     : status === 'pending'
-                    ? 'Awaiting confirmation candle'
-                    : 'Validated with higher timeframe momentum',
+                        ? 'Awaiting confirmation candle'
+                        : 'Validated with higher timeframe momentum',
         };
     });
 };
@@ -3422,7 +3423,7 @@ export const fetchAIManagerData = async (): Promise<AIManagerOverview> => {
     } catch (e) {
         console.warn('Failed to load AI overview from database:', e);
     }
-    
+
     // Initialize with default data if not exists
     const defaultData: AIManagerOverview = {
         summary: {
@@ -3440,7 +3441,7 @@ export const fetchAIManagerData = async (): Promise<AIManagerOverview> => {
         topAgents: [],
         lastUpdated: new Date().toISOString(),
     };
-    
+
     // Load agents to calculate topAgents
     try {
         const agents = await database.getAll<AIAgent>('aiAgents');
@@ -3449,7 +3450,7 @@ export const fetchAIManagerData = async (): Promise<AIManagerOverview> => {
             defaultData.summary.activeAgents = agents.filter(a => a.status === 'active').length;
             defaultData.summary.inTraining = agents.filter(a => a.status === 'training').length;
             defaultData.summary.avgAccuracy = agents.reduce((sum, a) => sum + a.accuracy, 0) / agents.length;
-            
+
             defaultData.topAgents = agents
                 .slice()
                 .sort((a, b) => b.accuracy - a.accuracy)
@@ -3465,7 +3466,7 @@ export const fetchAIManagerData = async (): Promise<AIManagerOverview> => {
     } catch (e) {
         console.warn('Failed to load agents for overview:', e);
     }
-    
+
     // Load Artemis state
     try {
         const artemisState = await fetchArtemisState();
@@ -3473,7 +3474,7 @@ export const fetchAIManagerData = async (): Promise<AIManagerOverview> => {
     } catch (e) {
         console.warn('Failed to load Artemis state:', e);
     }
-    
+
     // Save default data
     try {
         await database.save('settings', {
@@ -3483,7 +3484,7 @@ export const fetchAIManagerData = async (): Promise<AIManagerOverview> => {
     } catch (e) {
         console.warn('Failed to save AI overview:', e);
     }
-    
+
     return defaultData;
 };
 
@@ -3497,7 +3498,7 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
     } catch (e) {
         console.warn('Failed to load agents from database:', e);
     }
-    
+
     // Initialize with default agents if not exists
     const roles = ['Technical Analysis', 'Risk Management', 'Sentiment Analysis', 'Pattern Recognition', 'Price Prediction', 'Arbitrage', 'Liquidity Analysis', 'Portfolio Management', 'Trend Detection', 'Optimization', 'Order Management', 'Fundamental Analysis', 'Market Intelligence', 'Volume Analysis', 'Timing'];
     const defaultAgents: AIAgent[] = Array.from({ length: 15 }, (_, i) => {
@@ -3515,7 +3516,7 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
             capabilities: ['Capability A', 'Capability B', 'Capability C'],
             lastUpdate: new Date().toISOString(),
         };
-        
+
         // Add Technical Analysis config for Agent 1
         if (i === 0) {
             agent.technicalAnalysisConfig = {
@@ -3544,7 +3545,7 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
                     realTimeAnalysis: true,
                 },
             };
-            
+
             agent.performanceMetrics = {
                 totalSignals: 1247,
                 successfulSignals: 1089,
@@ -3578,7 +3579,7 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
                 'technical_capability_alerts',
             ];
         }
-        
+
         // Add Risk Management config for Agent 2
         if (i === 1) {
             agent.riskManagementConfig = {
@@ -3664,9 +3665,9 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
                     varConfidence: 95,
                 },
             };
-            
+
             agent.riskMetrics = createDefaultRiskMetrics(agent.riskManagementConfig);
-            
+
             agent.learningData = {
                 mistakes: [],
                 improvements: [],
@@ -3683,7 +3684,7 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
                 'risk_capability_agent_coordination',
             ];
         }
-        
+
         // Add Sentiment Analysis config for Agent 3
         if (i === 2) {
             agent.sentimentAnalysisConfig = {
@@ -5199,7 +5200,7 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
 
         return agent;
     });
-    
+
     // Save default agents
     try {
         for (const agent of defaultAgents) {
@@ -5208,7 +5209,7 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
     } catch (e) {
         console.warn('Failed to save default agents:', e);
     }
-    
+
     return defaultAgents;
 };
 
@@ -5217,23 +5218,23 @@ export const fetchTrainingData = async (): Promise<AITrainingStats> => {
     try {
         // Load training sessions from database
         const allSessions = await database.getAll<AITrainingSession>('aiTrainingSessions');
-        
+
         if (allSessions && allSessions.length > 0) {
             const runningSessions = allSessions.filter(s => s.status === 'running');
             const queuedSessions = allSessions.filter(s => s.status === 'scheduled');
             const completedSessions = allSessions.filter(s => s.status === 'completed').slice(0, 12);
-            
+
             // Calculate active training agents
             const agentIds = new Set<string>();
             runningSessions.forEach(session => {
                 session.agentIds.forEach(id => agentIds.add(id));
             });
-            
+
             // Calculate average accuracy from completed sessions
             const avgAccuracy = completedSessions.length > 0
                 ? completedSessions.reduce((sum, s) => sum + (s.accuracyGain || 0), 0) / completedSessions.length
                 : 89.7;
-            
+
             const config = await fetchTrainingConfig();
             const stats: AITrainingStats = {
                 sessions: allSessions.length,
@@ -5245,13 +5246,13 @@ export const fetchTrainingData = async (): Promise<AITrainingStats> => {
                 lastUpdated: new Date().toISOString(),
                 config,
             };
-            
+
             return stats;
         }
     } catch (e) {
         console.warn('Failed to load training data from database:', e);
     }
-    
+
     // Initialize with default data
     const config = await fetchTrainingConfig();
     const defaultStats: AITrainingStats = {
@@ -5264,7 +5265,7 @@ export const fetchTrainingData = async (): Promise<AITrainingStats> => {
         lastUpdated: new Date().toISOString(),
         config,
     };
-    
+
     return defaultStats;
 };
 
@@ -5278,26 +5279,26 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
     } catch (e) {
         console.warn('Failed to load AI analytics from database:', e);
     }
-    
+
     // Calculate analytics from real data
     try {
         const agents = await database.getAll<AIAgent>('aiAgents');
         const allSessions = await database.getAll<AITrainingSession>('aiTrainingSessions');
-        
+
         const activeAgents = agents.filter(a => a.status === 'active').length;
         const trainingAgents = agents.filter(a => a.status === 'training').length;
         const offlineAgents = agents.filter(a => a.status === 'inactive').length;
-        
+
         const totalDecisions = agents.reduce((sum, a) => sum + a.decisions, 0);
         const totalLearningHours = agents.reduce((sum, a) => sum + a.learningTime, 0);
         const avgAccuracy = agents.length > 0 ? agents.reduce((sum, a) => sum + a.accuracy, 0) / agents.length : 0;
-        
+
         // Calculate decision rate (decisions per minute) - simulate based on total decisions
         const decisionRate = totalDecisions > 0 ? (totalDecisions / (totalLearningHours * 60)) : 1.2;
-        
+
         // Calculate success rate from agent accuracy
         const successRate = avgAccuracy;
-        
+
         // Calculate monthly improvement from recent training sessions
         const recentCompleted = allSessions
             .filter(s => s.status === 'completed' && s.completedAt)
@@ -5309,7 +5310,7 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
         const monthlyImprovement = recentCompleted.length > 0
             ? recentCompleted.reduce((sum, s) => sum + (s.accuracyGain || 0), 0) / recentCompleted.length
             : 2.3;
-        
+
         const analytics: AIAnalyticsMetrics = {
             realtime: {
                 decisionRate: Math.round(decisionRate * 10) / 10,
@@ -5344,7 +5345,7 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
             })),
             lastUpdated: new Date().toISOString(),
         };
-        
+
         // Save analytics
         try {
             await database.save('settings', {
@@ -5354,12 +5355,12 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
         } catch (e) {
             console.warn('Failed to save analytics:', e);
         }
-        
+
         return analytics;
     } catch (e) {
         console.warn('Failed to calculate analytics:', e);
     }
-    
+
     // Default analytics
     const defaultAnalytics: AIAnalyticsMetrics = {
         realtime: {
@@ -5384,7 +5385,7 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
         agentMatrix: [],
         lastUpdated: new Date().toISOString(),
     };
-    
+
     return defaultAnalytics;
 };
 
@@ -5398,7 +5399,7 @@ export const fetchAPIConfigData = async (): Promise<AIAPIConfigData> => {
     } catch (e) {
         console.warn('Failed to load API config from database:', e);
     }
-    
+
     // Initialize with default API config
     const defaultConfig: AIAPIConfigData = {
         aiServices: [
@@ -5425,7 +5426,7 @@ export const fetchAPIConfigData = async (): Promise<AIAPIConfigData> => {
         ],
         lastUpdated: new Date().toISOString(),
     };
-    
+
     // Save default config
     try {
         await database.save('settings', {
@@ -5435,7 +5436,7 @@ export const fetchAPIConfigData = async (): Promise<AIAPIConfigData> => {
     } catch (e) {
         console.warn('Failed to save API config:', e);
     }
-    
+
     return defaultConfig;
 };
 
@@ -5457,7 +5458,7 @@ export const fetchTechnicalAnalysisAgentData = async (agentId: string): Promise<
     } catch (e) {
         console.warn('Failed to load technical analysis agent data:', e);
     }
-    
+
     // Return default if agent not found
     return {
         config: null,
@@ -5491,18 +5492,18 @@ export const updateTechnicalAnalysisConfig = async (
 // Helper function to calculate RSI from price data
 const calculateRSI = (prices: number[], period: number = 14): number => {
     if (prices.length < period + 1) return 50; // Default neutral
-    
+
     const changes = [];
     for (let i = 1; i < prices.length; i++) {
         changes.push(prices[i] - prices[i - 1]);
     }
-    
+
     const gains = changes.filter(c => c > 0);
     const losses = changes.filter(c => c < 0).map(c => Math.abs(c));
-    
+
     const avgGain = gains.length > 0 ? gains.reduce((a, b) => a + b, 0) / period : 0;
     const avgLoss = losses.length > 0 ? losses.reduce((a, b) => a + b, 0) / period : 0;
-    
+
     if (avgLoss === 0) return 100;
     const rs = avgGain / avgLoss;
     return 100 - (100 / (1 + rs));
@@ -5511,14 +5512,14 @@ const calculateRSI = (prices: number[], period: number = 14): number => {
 // Helper function to calculate EMA
 const calculateEMA = (prices: number[], period: number): number => {
     if (prices.length < period) return prices[prices.length - 1] || 0;
-    
+
     const multiplier = 2 / (period + 1);
     let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
-    
+
     for (let i = period; i < prices.length; i++) {
         ema = (prices[i] * multiplier) + (ema * (1 - multiplier));
     }
-    
+
     return ema;
 };
 
@@ -5527,15 +5528,15 @@ const calculateMACD = (prices: number[], fast: number = 12, slow: number = 26, s
     if (prices.length < slow) {
         return { macd: 0, signal: 0, histogram: 0 };
     }
-    
+
     const fastEMA = calculateEMA(prices, fast);
     const slowEMA = calculateEMA(prices, slow);
     const macd = fastEMA - slowEMA;
-    
+
     // For signal line, we'd need historical MACD values, simplified here
     const signalValue = macd * 0.9; // Simplified
     const histogram = macd - signalValue;
-    
+
     return { macd, signal: signalValue, histogram };
 };
 
@@ -5545,13 +5546,13 @@ const calculateBollingerBands = (prices: number[], period: number = 20, stdDev: 
         const lastPrice = prices[prices.length - 1] || 0;
         return { upper: lastPrice * 1.02, middle: lastPrice, lower: lastPrice * 0.98 };
     }
-    
+
     const recentPrices = prices.slice(-period);
     const middle = recentPrices.reduce((a, b) => a + b, 0) / period;
-    
+
     const variance = recentPrices.reduce((sum, price) => sum + Math.pow(price - middle, 2), 0) / period;
     const standardDeviation = Math.sqrt(variance);
-    
+
     return {
         upper: middle + (standardDeviation * stdDev),
         middle: middle,
@@ -5564,12 +5565,12 @@ const fetchMexcKlines = async (symbol: string, interval: string = '1h', limit: n
     try {
         const endpoint = `/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
         const url = getMexcApiUrl(endpoint);
-        
+
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`MEXC API error: ${response.status}`);
         }
-        
+
         const data = await response.json();
         return Array.isArray(data) ? data : [];
     } catch (error) {
@@ -5584,33 +5585,33 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
         if (!agent || !agent.technicalAnalysisConfig) {
             throw new Error('Agent or config not found');
         }
-        
+
         const config = agent.technicalAnalysisConfig;
         const targetSymbol = symbol || 'BTCUSDT';
         const targetTimeframe = timeframe || '1h';
-        
+
         // Map timeframe to MEXC interval
         const intervalMap: { [key in Timeframe]: string } = {
             '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m',
             '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1w',
         };
         const mexcInterval = intervalMap[targetTimeframe] || '1h';
-        
+
         // Fetch REAL data from MEXC
         const [ticker, klines] = await Promise.all([
             fetchMexcTicker24hr(targetSymbol).catch(() => null),
             fetchMexcKlines(targetSymbol, mexcInterval, 100).catch(() => []),
         ]);
-        
+
         // Extract prices from klines (format: [openTime, open, high, low, close, volume, ...])
         const prices = klines.map((k: any) => parseFloat(k[4])); // Close prices
         const volumes = klines.map((k: any) => parseFloat(k[5])); // Volumes
-        
+
         // Get current price from ticker
         let currentPrice = 0;
         let priceChange24h = 0;
         let volume24h = 0;
-        
+
         if (ticker && ticker.length > 0 && ticker[0].lastPrice) {
             currentPrice = parseFloat(ticker[0].lastPrice);
             priceChange24h = parseFloat(ticker[0].priceChangePercent || '0');
@@ -5620,15 +5621,15 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
         } else {
             throw new Error('Failed to fetch price data from MEXC');
         }
-        
+
         // Calculate REAL indicators from actual price data
         const enabledIndicators = config.enabledIndicators.filter(i => i.enabled);
         const totalWeight = enabledIndicators.reduce((sum, i) => sum + i.weight, 0);
-        
+
         const indicatorSignals = enabledIndicators.map(ind => {
             let value = 0;
             let signal: 'buy' | 'sell' | 'neutral' = 'neutral';
-            
+
             if (ind.id === 'rsi') {
                 const period = (ind.parameters.period as number) || 14;
                 value = calculateRSI(prices, period);
@@ -5674,7 +5675,7 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
                     signal = 'neutral';
                 }
             }
-            
+
             return {
                 indicatorId: ind.id,
                 value: Math.round(value * 100) / 100,
@@ -5682,7 +5683,7 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
                 weight: ind.weight,
             };
         });
-        
+
         // Calculate overall signal based on weighted indicators
         let buyWeight = 0;
         let sellWeight = 0;
@@ -5690,23 +5691,23 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
             if (sig.signal === 'buy') buyWeight += sig.weight;
             if (sig.signal === 'sell') sellWeight += sig.weight;
         });
-        
+
         const overallSignal = buyWeight > sellWeight ? 'buy' : sellWeight > buyWeight ? 'sell' : 'hold';
         const confidence = totalWeight > 0 ? Math.min(100, Math.max(50, Math.abs(buyWeight - sellWeight) / totalWeight * 100)) : 50;
-        
+
         // Calculate price targets based on real volatility
-        const volatility = prices.length > 1 
-            ? (Math.max(...prices) - Math.min(...prices)) / currentPrice 
+        const volatility = prices.length > 1
+            ? (Math.max(...prices) - Math.min(...prices)) / currentPrice
             : 0.02; // Default 2% volatility
-        
+
         const entry = currentPrice;
-        const stopLoss = overallSignal === 'buy' 
-            ? currentPrice * (1 - Math.max(0.01, volatility * 0.5)) 
+        const stopLoss = overallSignal === 'buy'
+            ? currentPrice * (1 - Math.max(0.01, volatility * 0.5))
             : currentPrice * (1 + Math.max(0.01, volatility * 0.5));
-        const takeProfit = overallSignal === 'buy' 
-            ? currentPrice * (1 + Math.max(0.02, volatility)) 
+        const takeProfit = overallSignal === 'buy'
+            ? currentPrice * (1 + Math.max(0.02, volatility))
             : currentPrice * (1 - Math.max(0.02, volatility));
-        
+
         const result: TechnicalAnalysisResult = {
             timestamp: new Date().toISOString(),
             symbol: targetSymbol,
@@ -5721,7 +5722,7 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
             },
             reasoning: `Analysis based on ${enabledIndicators.length} real indicators from MEXC data. ${overallSignal === 'buy' ? 'Bullish' : overallSignal === 'sell' ? 'Bearish' : 'Neutral'} signals detected with ${confidence.toFixed(1)}% confidence. Price change 24h: ${priceChange24h.toFixed(2)}%.`,
         };
-        
+
         // Update performance metrics based on real analysis
         const currentMetrics = agent.performanceMetrics || {
             totalSignals: 0,
@@ -5737,7 +5738,7 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
                 last30d: { signals: 0, winRate: 0 },
             },
         };
-        
+
         const updatedMetrics: AgentPerformanceMetrics = {
             ...currentMetrics,
             totalSignals: currentMetrics.totalSignals + 1,
@@ -5750,7 +5751,7 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
                 },
             },
         };
-        
+
         // Save result and metrics to agent
         const updated = {
             ...agent,
@@ -5759,7 +5760,7 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
             lastUpdate: new Date().toISOString(),
         };
         await database.save('aiAgents', updated);
-        
+
         return result;
     } catch (e) {
         console.error('Failed to run technical analysis:', e);
@@ -6150,7 +6151,7 @@ export const sendAgentControlCommand = async (agentId: string, command: string):
         if (!agent) {
             throw new Error('Agent not found');
         }
-        
+
         let updatedStatus = agent.status;
         switch (command) {
             case 'start':
@@ -6167,13 +6168,13 @@ export const sendAgentControlCommand = async (agentId: string, command: string):
                 updatedStatus = 'active';
                 break;
         }
-        
+
         const updated = {
             ...agent,
             status: updatedStatus,
             lastUpdate: new Date().toISOString(),
         };
-        
+
         await database.save('aiAgents', updated);
     } catch (e) {
         console.error('Failed to execute control command:', e);
@@ -6191,7 +6192,7 @@ export const learnFromTechnicalMistake = async (
         if (!agent) {
             throw new Error('Agent not found');
         }
-        
+
         // Initialize learning data if not exists
         if (!agent.learningData) {
             agent.learningData = {
@@ -6199,7 +6200,7 @@ export const learnFromTechnicalMistake = async (
                 improvements: [],
             };
         }
-        
+
         // Add mistake
         agent.learningData.mistakes.push({
             timestamp: new Date().toISOString(),
@@ -6208,11 +6209,11 @@ export const learnFromTechnicalMistake = async (
             error: mistake.error,
             learned: false,
         });
-        
+
         // If auto-adjustment is enabled, learn from mistake
         if (agent.technicalAnalysisConfig?.advancedSettings.useMachineLearning) {
             const config = agent.technicalAnalysisConfig;
-            
+
             // Adjust indicator weights based on error
             if (mistake.error > 15) {
                 // Large error - reduce weights of indicators that gave wrong signal
@@ -6221,7 +6222,7 @@ export const learnFromTechnicalMistake = async (
                     if (indicatorSignal && indicatorSignal.signal !== 'neutral') {
                         // If indicator gave wrong signal, reduce its weight
                         const wasWrong = (indicatorSignal.signal === 'buy' && mistake.actual.direction === 'down') ||
-                                       (indicatorSignal.signal === 'sell' && mistake.actual.direction === 'up');
+                            (indicatorSignal.signal === 'sell' && mistake.actual.direction === 'up');
                         if (wasWrong) {
                             return { ...ind, weight: Math.max(5, ind.weight * 0.9) };
                         }
@@ -6234,7 +6235,7 @@ export const learnFromTechnicalMistake = async (
                     const indicatorSignal = mistake.prediction.indicators.find(i => i.indicatorId === ind.id);
                     if (indicatorSignal && indicatorSignal.signal !== 'neutral') {
                         const wasCorrect = (indicatorSignal.signal === 'buy' && mistake.actual.direction === 'up') ||
-                                         (indicatorSignal.signal === 'sell' && mistake.actual.direction === 'down');
+                            (indicatorSignal.signal === 'sell' && mistake.actual.direction === 'down');
                         if (wasCorrect) {
                             return { ...ind, weight: Math.min(100, ind.weight * 1.02) };
                         }
@@ -6242,18 +6243,18 @@ export const learnFromTechnicalMistake = async (
                     return ind;
                 });
             }
-            
+
             // Adjust minConfidence based on error
             if (mistake.error > 10) {
                 config.minConfidence = Math.min(95, config.minConfidence + 2);
             } else if (mistake.error < 2) {
                 config.minConfidence = Math.max(50, config.minConfidence - 1);
             }
-            
+
             // Mark mistake as learned
             const lastMistake = agent.learningData.mistakes[agent.learningData.mistakes.length - 1];
             lastMistake.learned = true;
-            
+
             // Record improvement
             agent.learningData.improvements.push({
                 timestamp: new Date().toISOString(),
@@ -6262,15 +6263,15 @@ export const learnFromTechnicalMistake = async (
                 after: config.enabledIndicators.reduce((sum, ind) => sum + ind.weight, 0),
                 improvement: mistake.error > 10 ? -2 : 1,
             });
-            
+
             agent.technicalAnalysisConfig = config;
         }
-        
+
         const updated = {
             ...agent,
             lastUpdate: new Date().toISOString(),
         };
-        
+
         await database.save('aiAgents', updated);
     } catch (e) {
         console.error('Failed to learn from technical mistake:', e);
@@ -6337,7 +6338,7 @@ const executeArtemisCommandOnAgent = async (agent: AIAgent, command: ArtemisComm
                     await updateTimingAnalysisConfig(agent.id, command.parameters.config);
                 }
                 return { success: true, message: 'Config updated' };
-                
+
             case 'run_analysis':
                 if (agent.id === '1') {
                     return await runTechnicalAnalysis(agent.id, command.parameters.symbol, command.parameters.timeframe);
@@ -6371,7 +6372,7 @@ const executeArtemisCommandOnAgent = async (agent: AIAgent, command: ArtemisComm
                     return await runTimingAnalysis(agent.id);
                 }
                 return { success: false, message: 'Analysis not supported for this agent' };
-                
+
             case 'adjust_parameters':
                 // Adjust agent parameters based on Artemis decision
                 if (agent.id === '1' && agent.technicalAnalysisConfig) {
@@ -6601,7 +6602,7 @@ const executeArtemisCommandOnAgent = async (agent: AIAgent, command: ArtemisComm
                     await updateTimingAnalysisConfig(agent.id, config);
                 }
                 return { success: true, message: 'Parameters adjusted' };
-                
+
             case 'learn_from_mistake':
                 if (agent.id === '1') {
                     await learnFromTechnicalMistake(agent.id, command.parameters.mistake);
@@ -6635,7 +6636,7 @@ const executeArtemisCommandOnAgent = async (agent: AIAgent, command: ArtemisComm
                     await learnFromTimingMistake(agent.id, command.parameters.mistake);
                 }
                 return { success: true, message: 'Learned from mistake' };
-                
+
             case 'request_data':
                 // Return requested data from agent
                 if (command.parameters.dataType === 'lastAnalysis' && agent.id === '1') {
@@ -6686,7 +6687,7 @@ const executeArtemisCommandOnAgent = async (agent: AIAgent, command: ArtemisComm
                     if (agent.id === '15') return agent.timingMetrics;
                 }
                 return { success: false, message: 'Data type not found' };
-                
+
             default:
                 return { success: false, message: 'Unknown command type' };
         }
@@ -6754,9 +6755,9 @@ export const runSentimentAnalysis = async (agentId: string): Promise<SentimentAn
         const [newsInsights, socialVotes, fearGreed, trendingAssets] = await Promise.all([
             config.sources.news.enabled
                 ? fetchCryptoNewsArticles(
-                      config.sources.news.sources.map(source => source.toLowerCase()),
-                      config.sources.news.maxArticles,
-                  )
+                    config.sources.news.sources.map(source => source.toLowerCase()),
+                    config.sources.news.maxArticles,
+                )
                 : Promise.resolve<SentimentArticleInsight[]>([]),
             config.sources.social.enabled
                 ? fetchCoinGeckoSentiment(['bitcoin', 'ethereum', 'solana', 'arbitrum'])
@@ -6767,10 +6768,10 @@ export const runSentimentAnalysis = async (agentId: string): Promise<SentimentAn
 
         const filteredNews = config.sources.news.keywords && config.sources.news.keywords.length > 0
             ? newsInsights.filter(article =>
-                  config.sources.news.keywords.some(keyword =>
-                      (article.title + article.keywords.join(' ')).toLowerCase().includes(keyword.toLowerCase()),
-                  ),
-              )
+                config.sources.news.keywords.some(keyword =>
+                    (article.title + article.keywords.join(' ')).toLowerCase().includes(keyword.toLowerCase()),
+                ),
+            )
             : newsInsights;
 
         const newsScore =
@@ -6819,8 +6820,8 @@ export const runSentimentAnalysis = async (agentId: string): Promise<SentimentAn
             momentumDirection === 'rising'
                 ? 'Momentum building upward'
                 : momentumDirection === 'falling'
-                ? 'Momentum fading'
-                : 'Stable sentiment';
+                    ? 'Momentum fading'
+                    : 'Stable sentiment';
 
         const predictionScore = clamp(
             Math.round(overallScore * 0.5 + newsImpactScore * 0.3 + Math.random() * 20),
@@ -6832,8 +6833,8 @@ export const runSentimentAnalysis = async (agentId: string): Promise<SentimentAn
             overallScore >= config.alertThresholds.bullish
                 ? 'Bullish'
                 : overallScore <= config.alertThresholds.bearish
-                ? 'Bearish'
-                : 'Neutral';
+                    ? 'Bearish'
+                    : 'Neutral';
 
         const reasoning = `News score ${newsScore.toFixed(1)}, social sentiment ${socialScore.toFixed(
             1,
@@ -6922,8 +6923,8 @@ export const runSentimentAnalysis = async (agentId: string): Promise<SentimentAn
                 (bias === 'Bullish' && analysis.overallScore >= config.alertThresholds.bullish
                     ? 1
                     : bias === 'Bearish' && analysis.overallScore <= config.alertThresholds.bearish
-                    ? 1
-                    : 0) +
+                        ? 1
+                        : 0) +
                 impactAlerts.length,
             trendShiftAlerts:
                 currentMetrics.trendShiftAlerts + impactAlerts.filter(alert => alert.type === 'trend_shift').length,
@@ -7379,8 +7380,8 @@ export const runPatternRecognitionAnalysis = async (agentId: string): Promise<Pa
                         detectionSettings.sensitivity === 'high'
                             ? 1.1
                             : detectionSettings.sensitivity === 'low'
-                            ? 0.9
-                            : 1;
+                                ? 0.9
+                                : 1;
 
                     const confidence = Math.round(Math.min(100, detection.reliability * 100 * sensitivityBoost));
                     const minDetectionScore = detectionSettings.minDetectionScore ?? config.alertSettings.minConfidence;
@@ -7412,15 +7413,15 @@ export const runPatternRecognitionAnalysis = async (agentId: string): Promise<Pa
         const detectionScore =
             detectedPatterns.length > 0
                 ? Math.round(
-                      detectedPatterns.reduce((sum, p) => sum + p.confidence, 0) / detectedPatterns.length,
-                  )
+                    detectedPatterns.reduce((sum, p) => sum + p.confidence, 0) / detectedPatterns.length,
+                )
                 : 0;
         const breakoutPotential = clamp(
             Math.round(
                 detectionScore * 0.6 +
-                    (stats.bullish - stats.bearish) * 5 +
-                    (config.confirmation.requireVolumeSpike ? 8 : 0) +
-                    (Math.random() - 0.5) * 12,
+                (stats.bullish - stats.bearish) * 5 +
+                (config.confirmation.requireVolumeSpike ? 8 : 0) +
+                (Math.random() - 0.5) * 12,
             ),
             0,
             100,
@@ -7429,8 +7430,8 @@ export const runPatternRecognitionAnalysis = async (agentId: string): Promise<Pa
             stats.bullish > stats.bearish
                 ? { type: 'continuation', confidence: Math.max(40, detectionScore), label: 'Bullish bias' }
                 : stats.bearish > stats.bullish
-                ? { type: 'reversal', confidence: Math.max(40, detectionScore), label: 'Potential reversal' }
-                : { type: 'neutral', confidence: Math.max(35, detectionScore), label: 'Sideways' };
+                    ? { type: 'reversal', confidence: Math.max(40, detectionScore), label: 'Potential reversal' }
+                    : { type: 'neutral', confidence: Math.max(35, detectionScore), label: 'Sideways' };
 
         const patternFrequency = buildPatternFrequencyStats(detectedPatterns);
         const candlestickPatterns = buildCandlestickInsights(detectedPatterns, config.symbols, config.timeframes);
@@ -7681,8 +7682,8 @@ const buildScenarioForecasts = (
             label === 'optimistic'
                 ? 'Momentum, volume, and sentiment support a bullish continuation.'
                 : label === 'pessimistic'
-                ? 'Risk-off flows or macro stress could trigger deeper pullbacks.'
-                : 'Balanced scenario with mixed technicals and neutral flows.';
+                    ? 'Risk-off flows or macro stress could trigger deeper pullbacks.'
+                    : 'Balanced scenario with mixed technicals and neutral flows.';
         return { targetPrice: target, probability, narrative };
     };
 
@@ -8254,7 +8255,7 @@ export const runArbitrageAnalysis = async (agentId: string): Promise<ArbitrageSc
             averageProfitBps:
                 currentMetrics.totalScans > 0
                     ? (currentMetrics.averageProfitBps * currentMetrics.totalScans + avgProfitBps) /
-                      (currentMetrics.totalScans + 1)
+                    (currentMetrics.totalScans + 1)
                     : avgProfitBps,
             bestProfitBps,
             simulatedVolumeUSDT: currentMetrics.simulatedVolumeUSDT + simulatedVolume,
@@ -8531,12 +8532,12 @@ export const runPortfolioAllocationAnalysis = async (agentId: string): Promise<P
         const nextAvgRiskReward =
             currentMetrics.totalAnalyses > 0
                 ? ((currentMetrics.avgRiskRewardScore ?? riskRewardScore) * currentMetrics.totalAnalyses + riskRewardScore) /
-                  (currentMetrics.totalAnalyses + 1)
+                (currentMetrics.totalAnalyses + 1)
                 : riskRewardScore;
         const nextDiversificationAvg =
             currentMetrics.totalAnalyses > 0
                 ? ((currentMetrics.avgDiversificationIndex ?? diversificationIndex) * currentMetrics.totalAnalyses + diversificationIndex) /
-                  (currentMetrics.totalAnalyses + 1)
+                (currentMetrics.totalAnalyses + 1)
                 : diversificationIndex;
 
         const updatedMetrics: PortfolioAllocationMetrics = {
@@ -9594,7 +9595,7 @@ export const runTrendDetectionAnalysis = async (agentId: string): Promise<TrendD
                 if (!signal) continue;
                 const key = `${symbol}-${timeframe}`;
                 const previous = previousMap.get(key);
-                
+
                 // Calculate duration
                 if (previous && previous.direction === signal.direction && previous.direction !== 'sideways') {
                     const durationMinutes = previousTimestamp ? Math.round((currentTimestamp - previousTimestamp) / 60000) : 0;
@@ -10133,9 +10134,9 @@ export const runOptimizationCycle = async (agentId: string): Promise<Optimizatio
 
         // Calculate Efficiency Index
         const efficiencyIndex = Math.round(
-            (fitnessScore * 0.4 + 
-             (100 - config.constraints.maxDrawdownPercent) * 0.3 + 
-             config.constraints.minWinRatePercent * 0.3) * 100
+            (fitnessScore * 0.4 +
+                (100 - config.constraints.maxDrawdownPercent) * 0.3 +
+                config.constraints.minWinRatePercent * 0.3) * 100
         ) / 100;
 
         const result: OptimizationResult = {
@@ -10833,7 +10834,7 @@ export const runFundamentalAnalysis = async (agentId: string): Promise<Fundament
             const fairValueRatio = lastPrice > 0 ? intrinsicValue / lastPrice : 1;
             const valuationStatus = fairValueRatio > (config.thresholds?.overvalued ?? 1.1) ? 'overvalued' :
                 fairValueRatio < (config.thresholds?.undervalued ?? 0.9) ? 'undervalued' : 'fair';
-            
+
             // Calculate rating
             let rating: 'buy' | 'hold' | 'sell' | undefined;
             if (config.outputType === 'buy_sell' || config.outputType === 'rating') {
@@ -10841,13 +10842,13 @@ export const runFundamentalAnalysis = async (agentId: string): Promise<Fundament
                 else if (verdict === 'bearish' && valuationStatus === 'overvalued') rating = 'sell';
                 else rating = 'hold';
             }
-            
+
             // Calculate growth potential
             const growthPotential = (weightedScore - 50) * 2; // -100 to +100
-            
+
             // Calculate health index
             const healthIndex = (onchainScore + macroScore + newsScore) / 3;
-            
+
             // Generate financial ratios (mock data for now)
             const financialRatios = config.dataSources.financial ? [
                 { name: 'P/E Ratio', value: 15.5, benchmark: 20, status: 'good' as const, description: 'Below industry average' },
@@ -10878,7 +10879,7 @@ export const runFundamentalAnalysis = async (agentId: string): Promise<Fundament
                     { name: 'News', value: newsScore, weight: weights.news, impact: newsScore * weights.news },
                 ],
             });
-            
+
             // Add valuation alerts
             if (config.alerts?.onOvervalued && valuationStatus === 'overvalued') {
                 alerts.push(`${symbol} appears overvalued (fair value ratio: ${fairValueRatio.toFixed(2)})`);
@@ -11087,12 +11088,12 @@ export const learnFromFundamentalMistake = async (
                 const adjust = error > 0 ? -0.01 : 0.01;
                 const key = signal.factors.reduce((best, factor) =>
                     Math.abs(factor.impact) > Math.abs(best.impact) ? factor : best,
-                signal.factors[0]);
+                    signal.factors[0]);
                 if (key) {
                     const field = key.name.startsWith('On-chain') ? 'onchain'
                         : key.name.startsWith('Macro') ? 'macro'
-                        : key.name.startsWith('Funding') ? 'funding'
-                        : 'news';
+                            : key.name.startsWith('Funding') ? 'funding'
+                                : 'news';
                     config.weights[field] = Math.round(clampNumber(config.weights[field] + adjust, 0.05, 0.6) * 100) / 100;
                 }
             }
@@ -11240,11 +11241,11 @@ export const runMarketIntelligenceCycle = async (agentId: string): Promise<Marke
             const volatilityPenalty = Math.max(0, volatility - config.filters.volatilityThreshold * 100) * 0.1;
             const confidence = clampNumber(
                 config.aiSettings.confidenceThreshold +
-                    indicatorScore * 25 +
-                    liquidityBonus -
-                    volatilityPenalty +
-                    (config.strategy.combineFundamental ? 3 : 0) +
-                    (config.strategy.combineSentiment ? 2 : 0),
+                indicatorScore * 25 +
+                liquidityBonus -
+                volatilityPenalty +
+                (config.strategy.combineFundamental ? 3 : 0) +
+                (config.strategy.combineSentiment ? 2 : 0),
                 40,
                 98,
             );
@@ -11386,8 +11387,8 @@ export const runMarketIntelligenceCycle = async (agentId: string): Promise<Marke
 
         // Build Market Overview
         const marketScore = (avgRoi + 50) / 2; // Normalize to 0-100
-        const avgVolatility = priceChangeSamples.length > 0 
-            ? priceChangeSamples.reduce((sum, change) => sum + Math.abs(change), 0) / priceChangeSamples.length 
+        const avgVolatility = priceChangeSamples.length > 0
+            ? priceChangeSamples.reduce((sum, change) => sum + Math.abs(change), 0) / priceChangeSamples.length
             : 0;
         const marketOverview: MarketOverview = {
             overallStatus: avgRoi > 2 ? 'bullish' : avgRoi < -2 ? 'bearish' : 'neutral',
@@ -11582,19 +11583,19 @@ export const runMarketIntelligenceCycle = async (agentId: string): Promise<Marke
             maxDrawdownPercent: summary.maxDrawdownPercent,
             signalAccuracy: currentMetrics.totalSignals
                 ? ((currentMetrics.signalAccuracy * currentMetrics.totalSignals) + summary.signalAccuracy * signals.length) /
-                    (currentMetrics.totalSignals + signals.length)
+                (currentMetrics.totalSignals + signals.length)
                 : summary.signalAccuracy,
             avgLatencyMs: currentMetrics.totalSignals
                 ? (currentMetrics.avgLatencyMs * currentMetrics.totalSignals + summary.avgLatencyMs * signals.length) /
-                    (currentMetrics.totalSignals + signals.length)
+                (currentMetrics.totalSignals + signals.length)
                 : summary.avgLatencyMs,
             avgRiskReward: currentMetrics.totalSignals
                 ? (currentMetrics.avgRiskReward * currentMetrics.totalSignals + summary.riskReward * signals.length) /
-                    (currentMetrics.totalSignals + signals.length)
+                (currentMetrics.totalSignals + signals.length)
                 : summary.riskReward,
             predictionSuccess: currentMetrics.totalRuns
                 ? (currentMetrics.predictionSuccess * currentMetrics.totalRuns + summary.predictionSuccess) /
-                    (currentMetrics.totalRuns + 1)
+                (currentMetrics.totalRuns + 1)
                 : summary.predictionSuccess,
             periodPerformance: {
                 today: { signals: signals.length, roi: summary.roiPercent },
@@ -11885,10 +11886,10 @@ export const runVolumeAnalysis = async (agentId: string): Promise<VolumeAnalysis
             const spread = high - low;
             const prevVolume = parseFloat(prevKline[5]);
             const volumeRatio = prevVolume > 0 ? volume / prevVolume : 1;
-            
+
             let vsaSignal: VolumeSpreadAnalysis['vsaSignal'] = 'neutral';
             let confidence = 50;
-            
+
             if (spread > 0 && volume > 0) {
                 const spreadVolumeRatio = spread / volume;
                 if (volumeRatio > 1.5 && close > open && spreadVolumeRatio < 0.1) {
@@ -11905,7 +11906,7 @@ export const runVolumeAnalysis = async (agentId: string): Promise<VolumeAnalysis
                     confidence = 70;
                 }
             }
-            
+
             vsaData.push({
                 symbol,
                 timeframe: primaryTimeframe,
@@ -11927,19 +11928,19 @@ export const runVolumeAnalysis = async (agentId: string): Promise<VolumeAnalysis
             const volumes = recentKlines.map(k => parseFloat(k[5]));
             const highs = recentKlines.map(k => parseFloat(k[2]));
             const lows = recentKlines.map(k => parseFloat(k[3]));
-            
+
             let accDistValue = 0;
             for (let i = 1; i < recentKlines.length; i++) {
                 const clv = ((closes[i] - lows[i]) - (highs[i] - closes[i])) / (highs[i] - lows[i] || 1);
                 accDistValue += clv * volumes[i];
             }
-            
+
             const priceTrend = closes[closes.length - 1] > closes[0] ? 'rising' : closes[closes.length - 1] < closes[0] ? 'falling' : 'sideways';
             const signalType: 'accumulation' | 'distribution' = accDistValue > 0 ? 'accumulation' : 'distribution';
             const strength = Math.min(100, Math.abs(accDistValue) / (volumes.reduce((a, b) => a + b, 0) / volumes.length) * 10);
             const volumeConfirmation = volumes[volumes.length - 1] > volumes.slice(0, -1).reduce((a, b) => a + b, 0) / (volumes.length - 1);
             const confidence = Math.min(95, Math.round(strength * 0.6 + (volumeConfirmation ? 30 : 10)));
-            
+
             accDistSignals.push({
                 symbol,
                 timeframe: primaryTimeframe,
@@ -12042,11 +12043,11 @@ export const runVolumeAnalysis = async (agentId: string): Promise<VolumeAnalysis
             totalRuns: currentMetrics.totalRuns + 1,
             avgRelativeVolume: currentMetrics.totalRuns
                 ? (currentMetrics.avgRelativeVolume * currentMetrics.totalRuns + summary.averageRelativeVolume) /
-                  (currentMetrics.totalRuns + 1)
+                (currentMetrics.totalRuns + 1)
                 : summary.averageRelativeVolume,
             volumeStrengthScore: currentMetrics.totalRuns
                 ? (currentMetrics.volumeStrengthScore * currentMetrics.totalRuns + summary.volumeStrengthScore) /
-                  (currentMetrics.totalRuns + 1)
+                (currentMetrics.totalRuns + 1)
                 : summary.volumeStrengthScore,
             pocReliability: currentMetrics.pocReliability
                 ? (currentMetrics.pocReliability * currentMetrics.totalRuns + profileData.length) / (currentMetrics.totalRuns + 1)
@@ -12069,15 +12070,15 @@ export const runVolumeAnalysis = async (agentId: string): Promise<VolumeAnalysis
             indicatorScores: {
                 obvTrend: Math.round(
                     Object.values(indicatorSnapshots).reduce((sum, snap) => sum + (snap.obv || 0), 0) /
-                        Math.max(1, Object.keys(indicatorSnapshots).length),
+                    Math.max(1, Object.keys(indicatorSnapshots).length),
                 ),
                 mfiScore: Math.round(
                     Object.values(indicatorSnapshots).reduce((sum, snap) => sum + (snap.mfi || 0), 0) /
-                        Math.max(1, Object.keys(indicatorSnapshots).length),
+                    Math.max(1, Object.keys(indicatorSnapshots).length),
                 ),
                 cmfScore: Math.round(
                     Object.values(indicatorSnapshots).reduce((sum, snap) => sum + (snap.cmf || 0), 0) /
-                        Math.max(1, Object.keys(indicatorSnapshots).length),
+                    Math.max(1, Object.keys(indicatorSnapshots).length),
                 ),
                 vwapDistance: Math.round(
                     Object.entries(indicatorSnapshots).reduce((sum, [symbol, snap]) => {
@@ -12304,8 +12305,8 @@ export const runTimingAnalysis = async (agentId: string): Promise<TimingAnalysis
                     Math.min(
                         100,
                         baseConfidence +
-                            (config.automation.requireConfirmation ? -3 : 5) +
-                            (signalType === 'entry' ? 6 : 0),
+                        (config.automation.requireConfirmation ? -3 : 5) +
+                        (signalType === 'entry' ? 6 : 0),
                     ),
                 );
                 const confirmationScore = Math.round(
@@ -12788,7 +12789,7 @@ export const fetchRiskManagementAgentData = async (agentId: string): Promise<{
     } catch (e) {
         console.warn('Failed to load risk management agent data:', e);
     }
-    
+
     return {
         config: null,
         metrics: null,
@@ -12824,24 +12825,24 @@ export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment
         if (!agent || !agent.riskManagementConfig) {
             throw new Error('Agent or config not found');
         }
-        
+
         const config = agent.riskManagementConfig;
-        
+
         // Simulate risk assessment (in real app, this would analyze actual portfolio)
         // Calculate portfolio risk based on various factors
-        const portfolioRisk = Math.min(100, Math.max(0, 
+        const portfolioRisk = Math.min(100, Math.max(0,
             30 + // Base risk
             (Math.random() * 20) + // Market volatility
             (config.maxDrawdown > 15 ? 10 : 0) + // Drawdown risk
             (config.leverageLimit > 3 ? 15 : 0) // Leverage risk
         ));
-        
+
         // Generate position risks (simulated)
         const positionRisks: RiskAssessment['positionRisks'] = [
             { symbol: 'BTCUSDT', riskScore: 45, riskLevel: 'medium', reasons: ['High volatility', 'Large position size'] },
             { symbol: 'ETHUSDT', riskScore: 32, riskLevel: 'low', reasons: ['Normal volatility'] },
         ];
-        
+
         // Add critical risk if portfolio risk is very high
         if (portfolioRisk > 80) {
             positionRisks.push({
@@ -12851,7 +12852,7 @@ export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment
                 reasons: ['Portfolio risk exceeds safe threshold'],
             });
         }
-        
+
         // Generate recommendations based on risk
         const recommendations: RiskAssessment['recommendations'] = [];
         if (portfolioRisk > 70) {
@@ -12870,7 +12871,7 @@ export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment
                 priority: 'critical',
             });
         }
-        
+
         const riskScoreValue = Math.round(portfolioRisk * 10) / 10;
         const assessment: RiskAssessment = {
             timestamp: new Date().toISOString(),
@@ -12892,7 +12893,7 @@ export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment
                 correlation: 0.4 + Math.random() * 0.3,
             },
         };
-        
+
         // Update metrics
         const currentMetrics = agent.riskMetrics || {
             totalAssessments: 0,
@@ -12913,7 +12914,7 @@ export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment
                 lastLearningUpdate: new Date().toISOString(),
             },
         };
-        
+
         const updatedMetrics: RiskManagementMetrics = {
             ...currentMetrics,
             totalAssessments: currentMetrics.totalAssessments + 1,
@@ -12921,8 +12922,8 @@ export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment
             risksMitigated: currentMetrics.risksMitigated + (recommendations.filter(r => r.action === 'reduce').length),
             averageRiskScore: (currentMetrics.averageRiskScore * currentMetrics.totalAssessments + portfolioRisk) / (currentMetrics.totalAssessments + 1),
             maxRiskScore: Math.max(currentMetrics.maxRiskScore, portfolioRisk),
-            portfolioProtectionRate: currentMetrics.totalAssessments > 0 
-                ? (currentMetrics.risksBlocked / currentMetrics.totalAssessments) * 100 
+            portfolioProtectionRate: currentMetrics.totalAssessments > 0
+                ? (currentMetrics.risksBlocked / currentMetrics.totalAssessments) * 100
                 : 0,
             recentPerformance: {
                 last24h: {
@@ -12934,7 +12935,7 @@ export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment
                 last30d: currentMetrics.recentPerformance.last30d,
             },
         };
-        
+
         // Save assessment and metrics to agent
         const updated = {
             ...agent,
@@ -12943,7 +12944,7 @@ export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment
             lastUpdate: new Date().toISOString(),
         };
         await database.save('aiAgents', updated);
-        
+
         return assessment;
     } catch (e) {
         console.error('Failed to run risk assessment:', e);
@@ -12961,7 +12962,7 @@ export const learnFromMistake = async (
         if (!agent) {
             throw new Error('Agent not found');
         }
-        
+
         // Initialize learning data if not exists
         if (!agent.learningData) {
             agent.learningData = {
@@ -12969,7 +12970,7 @@ export const learnFromMistake = async (
                 improvements: [],
             };
         }
-        
+
         // Add mistake
         agent.learningData.mistakes.push({
             timestamp: new Date().toISOString(),
@@ -12978,7 +12979,7 @@ export const learnFromMistake = async (
             error: mistake.error,
             learned: false, // Will be marked as learned after processing
         });
-        
+
         // If auto-adjustment is enabled, learn from mistake
         if (agent.riskManagementConfig?.autoAdjustment.learningMode) {
             // Simulate learning - adjust parameters based on error
@@ -12991,11 +12992,11 @@ export const learnFromMistake = async (
                 // Small error - can slightly increase limits
                 config.maxPositionSize = Math.min(30, config.maxPositionSize * 1.02);
             }
-            
+
             // Mark mistake as learned
             const lastMistake = agent.learningData.mistakes[agent.learningData.mistakes.length - 1];
             lastMistake.learned = true;
-            
+
             // Record improvement
             agent.learningData.improvements.push({
                 timestamp: new Date().toISOString(),
@@ -13004,15 +13005,15 @@ export const learnFromMistake = async (
                 after: config.maxPositionSize,
                 improvement: mistake.error > 10 ? -5 : 2,
             });
-            
+
             agent.riskManagementConfig = config;
         }
-        
+
         const updated = {
             ...agent,
             lastUpdate: new Date().toISOString(),
         };
-        
+
         await database.save('aiAgents', updated);
     } catch (e) {
         console.error('Failed to learn from mistake:', e);
@@ -13125,7 +13126,7 @@ export const fetchTrainingConfig = async (): Promise<AITrainingConfig> => {
     } catch (e) {
         console.warn('Failed to load training config:', e);
     }
-    
+
     // Default config
     const defaultConfig: AITrainingConfig = {
         autoTraining: {
@@ -13192,7 +13193,7 @@ export const fetchTrainingConfig = async (): Promise<AITrainingConfig> => {
             artemisOptimizationLevel: 'balanced',
         },
     };
-    
+
     return defaultConfig;
 };
 
@@ -13202,7 +13203,7 @@ export const updateTrainingConfig = async (config: AITrainingConfig): Promise<AI
             key: 'training_config',
             value: config,
         });
-        
+
         // Update training stats
         const stats = await fetchTrainingData();
         stats.config = config;
@@ -13210,7 +13211,7 @@ export const updateTrainingConfig = async (config: AITrainingConfig): Promise<AI
             key: 'training_stats',
             value: stats,
         });
-        
+
         return config;
     } catch (e) {
         console.error('Failed to update training config:', e);
@@ -13224,7 +13225,7 @@ export const artemisAutoConfigureTraining = async (): Promise<AITrainingConfig> 
         const artemis = await fetchArtemisState();
         const trainingStats = await fetchTrainingData();
         const managerData = await fetchAIManagerData();
-        
+
         // Analyze agent performance
         const agentPerformances = managerData.agents.map(agent => ({
             id: agent.id,
@@ -13233,21 +13234,21 @@ export const artemisAutoConfigureTraining = async (): Promise<AITrainingConfig> 
             successRate: agent.metrics?.successRate || 0,
             status: agent.status,
         }));
-        
+
         // Identify agents that need training
         const lowPerformingAgents = agentPerformances
             .filter(a => a.accuracy < 80 || a.successRate < 70)
             .map(a => a.id);
-        
+
         // Analyze recent training results
         const recentSessions = trainingStats.recentHistory.slice(0, 10);
         const avgAccuracyGain = recentSessions.length > 0
             ? recentSessions.reduce((sum, s) => sum + (s.accuracyGain || 0), 0) / recentSessions.length
             : 1.5;
-        
+
         // Determine optimal configuration based on analysis
         const currentConfig = await fetchTrainingConfig();
-        
+
         const optimizedConfig: AITrainingConfig = {
             ...currentConfig,
             autoTraining: {
@@ -13284,10 +13285,10 @@ export const artemisAutoConfigureTraining = async (): Promise<AITrainingConfig> 
                 artemisOptimizationLevel: artemis.successRate > 85 ? 'aggressive' : artemis.successRate > 75 ? 'balanced' : 'conservative',
             },
         };
-        
+
         // Save optimized config
         await updateTrainingConfig(optimizedConfig);
-        
+
         // Log the action
         await logArtemisAction({
             type: 'config_change',
@@ -13302,7 +13303,7 @@ export const artemisAutoConfigureTraining = async (): Promise<AITrainingConfig> 
             },
             result: 'success',
         });
-        
+
         return optimizedConfig;
     } catch (e) {
         console.error('Failed to auto-configure training with Artemis:', e);
@@ -13348,7 +13349,7 @@ export const completeAITrainingSession = async (
         const stats = await fetchTrainingData();
         const queue = stats.queue.filter(s => s.id !== sessionId);
         const nextSession = queue.find(s => s.status === 'scheduled');
-        
+
         if (nextSession) {
             nextSession.status = 'running';
             nextSession.startedAt = new Date().toISOString();
@@ -13386,7 +13387,7 @@ export const updateAIProviderStats = async (
     try {
         const overview = await fetchAIManagerData();
         const provider = overview.providers.find(item => item.id === providerId);
-        
+
         if (!provider) {
             throw new Error('Provider not found');
         }
@@ -13462,32 +13463,32 @@ export const fetchConnectionSettings = async (): Promise<{ apiKey: string; apiSe
         const saved = await database.get<{ apiKey: string; apiSecret: string; isConnected: boolean; id: string }>('connectionSettings', 'default');
         if (saved) {
             console.log('✅ MEXC settings loaded from database');
-            return { 
-                apiKey: saved.apiKey || '', 
-                apiSecret: saved.apiSecret || '', 
-                isConnected: saved.isConnected || false 
+            return {
+                apiKey: saved.apiKey || '',
+                apiSecret: saved.apiSecret || '',
+                isConnected: saved.isConnected || false
             };
         }
     } catch (e) {
         console.warn('Failed to load from database:', e);
     }
-    
+
     // Try localStorage as backup
     try {
         const localData = localStorage.getItem('titan_mexc_settings');
         if (localData) {
             const parsed = JSON.parse(localData);
             console.log('✅ MEXC settings loaded from localStorage');
-            return { 
-                apiKey: parsed.apiKey || '', 
-                apiSecret: parsed.apiSecret || '', 
-                isConnected: parsed.isConnected || false 
+            return {
+                apiKey: parsed.apiKey || '',
+                apiSecret: parsed.apiSecret || '',
+                isConnected: parsed.isConnected || false
             };
         }
     } catch (e) {
         console.warn('Failed to load from localStorage:', e);
     }
-    
+
     // Fallback to memory
     return new Promise(resolve => {
         setTimeout(() => {
@@ -13508,7 +13509,7 @@ export const saveConnectionSettings = async (settings: { apiKey: string; apiSecr
     } catch (e) {
         console.warn('Failed to save to IndexedDB:', e);
     }
-    
+
     // Also save to localStorage as backup
     try {
         localStorage.setItem('titan_mexc_settings', JSON.stringify({
@@ -13520,10 +13521,10 @@ export const saveConnectionSettings = async (settings: { apiKey: string; apiSecr
     } catch (e) {
         console.error('Failed to save to localStorage:', e);
     }
-    
+
     // Also save to memory
     db.connectionSettings = settings;
-    
+
     return Promise.resolve();
 };
 
@@ -13537,16 +13538,16 @@ export const testMexcConnection = async (key: string, secret: string): Promise<{
         // MEXC API endpoint: /api/v3/account
         const timestamp = Date.now();
         const queryString = `timestamp=${timestamp}`;
-        
+
         // Note: In production, you need proper HMAC-SHA256 signature
         // For now, we'll use a simple test endpoint that doesn't require signature
-        
+
         // Test with a public endpoint first (like server time)
         // Use Vite proxy in development to bypass CORS
         const apiUrl = import.meta.env.DEV
             ? `/api/mexc/api/v3/time`
             : `${MEXC_API_BASE}/api/v3/time`;
-        
+
         const response = await fetch(apiUrl, {
             method: 'GET',
             headers: {
@@ -13562,23 +13563,23 @@ export const testMexcConnection = async (key: string, secret: string): Promise<{
         // Validate the keys format (MEXC keys can vary in length)
         const keyTrimmed = key.trim();
         const secretTrimmed = secret.trim();
-        
+
         // More lenient validation - MEXC API keys can be 16-32 characters
         // API Secret is typically 40+ characters but can vary
         const keyFormatValid = keyTrimmed.length >= 16 && /^[A-Za-z0-9_-]+$/.test(keyTrimmed);
         const secretFormatValid = secretTrimmed.length >= 32 && /^[A-Za-z0-9_-]+$/.test(secretTrimmed);
 
         if (!keyFormatValid) {
-            return { 
-                success: false, 
-                message: `❌ Invalid API key format. Key must be at least 16 characters and contain only letters, numbers, hyphens, and underscores. Current length: ${keyTrimmed.length}` 
+            return {
+                success: false,
+                message: `❌ Invalid API key format. Key must be at least 16 characters and contain only letters, numbers, hyphens, and underscores. Current length: ${keyTrimmed.length}`
             };
         }
 
         if (!secretFormatValid) {
-            return { 
-                success: false, 
-                message: `❌ Invalid API secret format. Secret must be at least 32 characters and contain only letters, numbers, hyphens, and underscores. Current length: ${secretTrimmed.length}` 
+            return {
+                success: false,
+                message: `❌ Invalid API secret format. Secret must be at least 32 characters and contain only letters, numbers, hyphens, and underscores. Current length: ${secretTrimmed.length}`
             };
         }
 
@@ -13588,16 +13589,16 @@ export const testMexcConnection = async (key: string, secret: string): Promise<{
             apiSecret: secretTrimmed,
             isConnected: true
         });
-        
-        return { 
-            success: true, 
-            message: '✅ Connection successful! MEXC API keys format is valid. Note: Full authentication requires proper HMAC signature implementation.' 
+
+        return {
+            success: true,
+            message: '✅ Connection successful! MEXC API keys format is valid. Note: Full authentication requires proper HMAC signature implementation.'
         };
     } catch (error) {
         console.error('MEXC connection test error:', error);
-        return { 
-            success: false, 
-            message: `❌ Connection failed: ${error instanceof Error ? error.message : 'Network error'}` 
+        return {
+            success: false,
+            message: `❌ Connection failed: ${error instanceof Error ? error.message : 'Network error'}`
         };
     }
 };
@@ -13605,7 +13606,7 @@ export const testMexcConnection = async (key: string, secret: string): Promise<{
 // Get MEXC Account Balance
 export const fetchMexcBalance = async (): Promise<any> => {
     const settings = await fetchConnectionSettings();
-    
+
     if (!settings.apiKey || !settings.apiSecret || !settings.isConnected) {
         throw new Error('MEXC not connected. Please configure API keys first.');
     }
@@ -13614,10 +13615,10 @@ export const fetchMexcBalance = async (): Promise<any> => {
         const timestamp = Date.now();
         // MEXC requires signature for private endpoints
         // This is a simplified version - in production use proper HMAC-SHA256
-        
+
         // For now, return mock data if connected
-    return new Promise(resolve => {
-        setTimeout(() => {
+        return new Promise(resolve => {
+            setTimeout(() => {
                 resolve({
                     balances: [
                         { asset: 'USDT', free: '50000', locked: '0' },
@@ -13637,7 +13638,7 @@ export const fetchMexcBalance = async (): Promise<any> => {
 // Get MEXC Open Orders
 export const fetchMexcOpenOrders = async (symbol?: string): Promise<any[]> => {
     const settings = await fetchConnectionSettings();
-    
+
     if (!settings.apiKey || !settings.apiSecret || !settings.isConnected) {
         throw new Error('MEXC not connected');
     }
@@ -13656,7 +13657,7 @@ export const fetchMexcOpenOrders = async (symbol?: string): Promise<any[]> => {
 // Get MEXC Trade History
 export const fetchMexcTrades = async (symbol?: string, limit: number = 50): Promise<any[]> => {
     const settings = await fetchConnectionSettings();
-    
+
     if (!settings.apiKey || !settings.apiSecret || !settings.isConnected) {
         throw new Error('MEXC not connected');
     }
@@ -13687,23 +13688,23 @@ const getMexcApiUrl = (endpoint: string): string => {
 // Get MEXC 24hr Ticker Statistics
 export const fetchMexcTicker24hr = async (symbol?: string): Promise<any> => {
     try {
-        const endpoint = symbol 
+        const endpoint = symbol
             ? `/api/v3/ticker/24hr?symbol=${symbol}`
             : `/api/v3/ticker/24hr`;
         const url = getMexcApiUrl(endpoint);
-        
+
         console.log(`📡 Fetching MEXC ticker from: ${url}`);
         const response = await fetch(url);
-        
+
         if (!response.ok) {
             const errorText = await response.text();
             console.error(`❌ MEXC API error ${response.status}:`, errorText);
             throw new Error(`MEXC API error: ${response.status} - ${errorText}`);
         }
-        
+
         const data = await response.json();
         const result = Array.isArray(data) ? data : [data];
-        
+
         if (symbol && result.length > 0) {
             console.log(`✅ MEXC ticker data received for ${symbol}:`, {
                 lastPrice: result[0].lastPrice,
@@ -13711,7 +13712,7 @@ export const fetchMexcTicker24hr = async (symbol?: string): Promise<any> => {
                 volume: result[0].volume
             });
         }
-        
+
         return result;
     } catch (error) {
         console.error(`❌ Failed to fetch MEXC 24hr ticker${symbol ? ` for ${symbol}` : ''}:`, error);
@@ -13723,16 +13724,16 @@ export const fetchMexcTicker24hr = async (symbol?: string): Promise<any> => {
 // Get MEXC Current Price
 export const fetchMexcPrice = async (symbol?: string): Promise<any> => {
     try {
-        const endpoint = symbol 
+        const endpoint = symbol
             ? `/api/v3/ticker/price?symbol=${symbol}`
             : `/api/v3/ticker/price`;
         const url = getMexcApiUrl(endpoint);
-        
+
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`MEXC API error: ${response.status}`);
         }
-        
+
         const data = await response.json();
         return Array.isArray(data) ? data : [data];
     } catch (error) {
@@ -13749,7 +13750,7 @@ export const fetchMexcExchangeInfo = async (): Promise<any> => {
         if (!response.ok) {
             throw new Error(`MEXC API error: ${response.status}`);
         }
-        
+
         const data = await response.json();
         return data;
     } catch (error) {
@@ -13797,23 +13798,23 @@ export const fetchMexcMarketStats = async (): Promise<{
     try {
         // MEXC doesn't provide dominance directly, so we'll calculate from tickers
         const tickers = await fetchMexcTicker24hr();
-        
+
         // Calculate total volume
         const totalVolume = tickers.reduce((sum: number, t: any) => {
             return sum + parseFloat(t.quoteVolume || '0');
         }, 0);
-        
+
         // Find BTC and ETH volumes
         const btcTicker = tickers.find((t: any) => t.symbol === 'BTCUSDT');
         const ethTicker = tickers.find((t: any) => t.symbol === 'ETHUSDT');
-        
+
         const btcVolume = btcTicker ? parseFloat(btcTicker.quoteVolume || '0') : 0;
         const ethVolume = ethTicker ? parseFloat(ethTicker.quoteVolume || '0') : 0;
-        
+
         // Estimate dominance (simplified calculation)
         const btcDominance = totalVolume > 0 ? (btcVolume / totalVolume) * 100 : 50;
         const ethDominance = totalVolume > 0 ? (ethVolume / totalVolume) * 100 : 15;
-        
+
         return {
             btcDominance: parseFloat(btcDominance.toFixed(2)),
             ethDominance: parseFloat(ethDominance.toFixed(2)),
@@ -13831,7 +13832,7 @@ export const fetchMexcMarketStats = async (): Promise<{
 // Update prices for specific watchlist items (lightweight, only prices)
 export const updateWatchlistPrices = async (symbols: string[]): Promise<Map<string, { price: number; change24h: number; volume: string }>> => {
     const priceMap = new Map<string, { price: number; change24h: number; volume: string }>();
-    
+
     // Fetch prices in parallel for all symbols
     await Promise.all(
         symbols.map(async (symbol) => {
@@ -13839,7 +13840,7 @@ export const updateWatchlistPrices = async (symbols: string[]): Promise<Map<stri
                 // Ensure symbol is in MEXC format
                 const mexcSymbol = symbol.includes('USDT') ? symbol : `${symbol}USDT`;
                 const ticker = await fetchMexcTicker24hr(mexcSymbol);
-                
+
                 if (ticker && ticker.length > 0 && ticker[0].lastPrice) {
                     const t = ticker[0];
                     priceMap.set(symbol, {
@@ -13853,7 +13854,7 @@ export const updateWatchlistPrices = async (symbols: string[]): Promise<Map<stri
             }
         })
     );
-    
+
     return priceMap;
 };
 
@@ -13868,7 +13869,7 @@ export const placeMexcOrder = async (
     price?: number
 ): Promise<{ success: boolean; orderId?: string; message: string }> => {
     const settings = await fetchConnectionSettings();
-    
+
     if (!settings.apiKey || !settings.apiSecret || !settings.isConnected) {
         return { success: false, message: 'MEXC not connected' };
     }
@@ -13928,7 +13929,7 @@ export const saveWalletConnection = async (wallet: WalletConnection): Promise<vo
     } catch (e) {
         console.warn('Failed to save to IndexedDB:', e);
     }
-    
+
     // Also save to localStorage
     try {
         const existing = await fetchWalletConnections();
@@ -13948,7 +13949,7 @@ export const deleteWalletConnection = async (walletId: string): Promise<void> =>
     } catch (e) {
         console.warn('Failed to delete from IndexedDB:', e);
     }
-    
+
     // Also delete from localStorage
     try {
         const existing = await fetchWalletConnections();
@@ -13963,9 +13964,9 @@ export const deleteWalletConnection = async (walletId: string): Promise<void> =>
 // Connect MetaMask Wallet
 export const connectMetaMask = async (): Promise<{ success: boolean; wallet?: WalletConnection; message: string }> => {
     if (typeof window.ethereum === 'undefined') {
-        return { 
-            success: false, 
-            message: '❌ MetaMask is not installed. Please install MetaMask extension.' 
+        return {
+            success: false,
+            message: '❌ MetaMask is not installed. Please install MetaMask extension.'
         };
     }
 
@@ -13977,7 +13978,7 @@ export const connectMetaMask = async (): Promise<{ success: boolean; wallet?: Wa
 
         const address = accounts[0];
         const network = await window.ethereum.request({ method: 'eth_chainId' });
-        
+
         // Get balance
         const balance = await window.ethereum.request({
             method: 'eth_getBalance',
@@ -14007,9 +14008,9 @@ export const connectMetaMask = async (): Promise<{ success: boolean; wallet?: Wa
         if (error.code === 4001) {
             return { success: false, message: '❌ Connection rejected by user' };
         }
-        return { 
-            success: false, 
-            message: `❌ Connection failed: ${error.message || 'Unknown error'}` 
+        return {
+            success: false,
+            message: `❌ Connection failed: ${error.message || 'Unknown error'}`
         };
     }
 };
@@ -14024,9 +14025,9 @@ let walletConnectState: {
 } | null = null;
 
 // Connect WalletConnect v2 - REAL IMPLEMENTATION for Trust Wallet and other mobile wallets
-export const connectWalletConnect = async (): Promise<{ 
-    success: boolean; 
-    wallet?: WalletConnection; 
+export const connectWalletConnect = async (): Promise<{
+    success: boolean;
+    wallet?: WalletConnection;
     message: string;
     qrCode?: string;
     uri?: string;
@@ -14034,7 +14035,7 @@ export const connectWalletConnect = async (): Promise<{
     try {
         // Dynamic import of WalletConnect v2
         const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
-        
+
         // Initialize WalletConnect Provider v2
         walletConnectProvider = await EthereumProvider.init({
             projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || '27e484dcd9e3efcfd25b83a78777cdf1',
@@ -14061,7 +14062,7 @@ export const connectWalletConnect = async (): Promise<{
         walletConnectProvider.on('display_uri', async (uri: string) => {
             try {
                 uriResolve(uri);
-                
+
                 const QRCode = (await import('qrcode')).default;
                 const qrCodeDataUrl = await QRCode.toDataURL(uri, {
                     width: 300,
@@ -14071,7 +14072,7 @@ export const connectWalletConnect = async (): Promise<{
                         light: '#FFFFFF'
                     }
                 });
-                
+
                 // Store for retrieval
                 if (!walletConnectState) {
                     walletConnectState = {};
@@ -14093,11 +14094,11 @@ export const connectWalletConnect = async (): Promise<{
         try {
             // Start connection process (non-blocking)
             const connectPromise = walletConnectProvider.connect();
-            
+
             // Wait for URI first
             const uri = await uriPromise;
             clearTimeout(uriTimeout);
-            
+
             // Generate QR code
             const QRCode = (await import('qrcode')).default;
             const qrCodeDataUrl = await QRCode.toDataURL(uri, {
@@ -14108,14 +14109,14 @@ export const connectWalletConnect = async (): Promise<{
                     light: '#FFFFFF'
                 }
             });
-            
+
             // Store URI
             if (!walletConnectState) {
                 walletConnectState = {};
             }
             walletConnectState.uri = uri;
             walletConnectState.qrCode = qrCodeDataUrl;
-            
+
             // Return QR code immediately
             return {
                 success: true,
@@ -14123,16 +14124,16 @@ export const connectWalletConnect = async (): Promise<{
                 qrCode: qrCodeDataUrl,
                 uri: uri
             };
-            
+
             // Note: connectPromise will resolve when user connects via mobile wallet
             // The connection will be handled by setupWalletConnectListeners
-            
+
         } catch (connectError: any) {
             clearTimeout(uriTimeout);
-            
+
             // Check if we already have URI from event
             const uri = walletConnectState?.uri || walletConnectProvider.session?.uri || walletConnectProvider.uri;
-            
+
             if (uri) {
                 const QRCode = (await import('qrcode')).default;
                 const qrCodeDataUrl = await QRCode.toDataURL(uri, {
@@ -14143,7 +14144,7 @@ export const connectWalletConnect = async (): Promise<{
                         light: '#FFFFFF'
                     }
                 });
-                
+
                 return {
                     success: true,
                     message: '📱 Scan QR code with Trust Wallet or other mobile wallet app',
@@ -14151,7 +14152,7 @@ export const connectWalletConnect = async (): Promise<{
                     uri: uri
                 };
             }
-            
+
             // If user cancelled
             if (connectError.message && (connectError.message.includes('User rejected') || connectError.message.includes('cancelled'))) {
                 return {
@@ -14159,7 +14160,7 @@ export const connectWalletConnect = async (): Promise<{
                     message: '❌ Connection cancelled by user'
                 };
             }
-            
+
             // If it's a timeout or other error, still try to return URI if available
             throw connectError;
         }
@@ -14176,7 +14177,7 @@ export const connectWalletConnect = async (): Promise<{
                         light: '#FFFFFF'
                     }
                 });
-                
+
                 return {
                     success: true,
                     message: '📱 Scan QR code with Trust Wallet or other mobile wallet app',
@@ -14187,7 +14188,7 @@ export const connectWalletConnect = async (): Promise<{
                 // Fall through to error return
             }
         }
-        
+
         return {
             success: false,
             message: `❌ Failed to initialize WalletConnect: ${error.message || 'Unknown error'}`
@@ -14224,10 +14225,10 @@ export const checkWalletConnectStatus = async (uri: string): Promise<{
         // Check accounts directly (most reliable)
         const accounts = walletConnectProvider.accounts;
         const hasAccounts = accounts && Array.isArray(accounts) && accounts.length > 0;
-        
+
         // Check connected property
         const isConnected = walletConnectProvider.connected === true;
-        
+
         // Check session (try different ways)
         let hasSession = false;
         try {
@@ -14240,7 +14241,7 @@ export const checkWalletConnectStatus = async (uri: string): Promise<{
         } catch (e) {
             // Session check failed, continue
         }
-        
+
         console.log('WalletConnect: Status check result', {
             isConnected,
             hasAccounts,
@@ -14252,7 +14253,7 @@ export const checkWalletConnectStatus = async (uri: string): Promise<{
         if (hasAccounts) {
             const address = accounts[0];
             console.log('WalletConnect: Accounts found, creating wallet for', address);
-            
+
             try {
                 // Get balance
                 const balance = await walletConnectProvider.request({
@@ -14307,7 +14308,7 @@ export const checkWalletConnectStatus = async (uri: string): Promise<{
                 };
             }
         }
-        
+
         // Check if connected property is true but no accounts yet
         if (isConnected && !hasAccounts) {
             console.log('WalletConnect: Connected but no accounts yet');
@@ -14317,7 +14318,7 @@ export const checkWalletConnectStatus = async (uri: string): Promise<{
                 message: '⏳ Connected, waiting for accounts...'
             };
         }
-        
+
         // Check if session exists but not fully connected yet
         if (hasSession && !hasAccounts) {
             console.log('WalletConnect: Session exists but no accounts');
@@ -14360,7 +14361,7 @@ export const setupWalletConnectListeners = (onConnect: (wallet: WalletConnection
         const accounts = walletConnectProvider.accounts;
         if (accounts && accounts.length > 0) {
             const address = accounts[0];
-            
+
             try {
                 const balance = await walletConnectProvider.request({
                     method: 'eth_getBalance',
@@ -14524,11 +14525,11 @@ export const getWalletBalance = async (address: string): Promise<number | undefi
         // Use Web3 provider or public RPC
         const response = await fetch(`https://api.etherscan.io/api?module=account&action=balance&address=${address}&tag=latest&apikey=YourApiKeyToken`);
         const data = await response.json();
-        
+
         if (data.status === '1' && data.result) {
             return parseInt(data.result, 10) / 1e18; // Convert from Wei to ETH
         }
-        
+
         // Fallback: try using public RPC
         const rpcResponse = await fetch('https://eth.llamarpc.com', {
             method: 'POST',
@@ -14540,12 +14541,12 @@ export const getWalletBalance = async (address: string): Promise<number | undefi
                 id: 1
             })
         });
-        
+
         const rpcData = await rpcResponse.json();
         if (rpcData.result) {
             return parseInt(rpcData.result, 16) / 1e18;
         }
-        
+
         return undefined;
     } catch (error) {
         console.error('Failed to fetch wallet balance:', error);
@@ -14560,7 +14561,7 @@ function formatTimeAgo(date: Date): string {
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
-    
+
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
@@ -14577,7 +14578,7 @@ export const fetchWalletPreferences = async (): Promise<WalletPreferences> => {
     } catch (e) {
         console.warn('Failed to load wallet preferences from database:', e);
     }
-    
+
     // Try localStorage
     try {
         const localData = localStorage.getItem('titan_wallet_preferences');
@@ -14587,7 +14588,7 @@ export const fetchWalletPreferences = async (): Promise<WalletPreferences> => {
     } catch (e) {
         console.warn('Failed to load from localStorage:', e);
     }
-    
+
     // Default preferences
     return {
         baseCurrency: 'USD',
@@ -14608,7 +14609,7 @@ export const saveWalletPreferences = async (preferences: WalletPreferences): Pro
     } catch (e) {
         console.warn('Failed to save to IndexedDB:', e);
     }
-    
+
     // Also save to localStorage
     try {
         localStorage.setItem('titan_wallet_preferences', JSON.stringify(preferences));
@@ -14628,7 +14629,7 @@ export const fetchWalletSecurityControls = async (): Promise<WalletSecurityContr
     } catch (e) {
         console.warn('Failed to load from database:', e);
     }
-    
+
     // Try localStorage
     try {
         const localData = localStorage.getItem('titan_wallet_security_controls');
@@ -14638,7 +14639,7 @@ export const fetchWalletSecurityControls = async (): Promise<WalletSecurityContr
     } catch (e) {
         console.warn('Failed to load from localStorage:', e);
     }
-    
+
     // Default security controls
     return [
         { id: 'encrypt-keys', labelKey: 'encrypt_private_keys', enabled: true },
@@ -14659,7 +14660,7 @@ export const saveWalletSecurityControls = async (controls: WalletSecurityControl
     } catch (e) {
         console.warn('Failed to save to IndexedDB:', e);
     }
-    
+
     // Also save to localStorage
     try {
         localStorage.setItem('titan_wallet_security_controls', JSON.stringify(controls));
@@ -14684,7 +14685,7 @@ export const fetchWalletSecuritySettings = async (): Promise<WalletSecuritySetti
     } catch (e) {
         console.warn('Failed to load from database:', e);
     }
-    
+
     // Try localStorage
     try {
         const localData = localStorage.getItem('titan_wallet_security_settings');
@@ -14694,7 +14695,7 @@ export const fetchWalletSecuritySettings = async (): Promise<WalletSecuritySetti
     } catch (e) {
         console.warn('Failed to load from localStorage:', e);
     }
-    
+
     // Default settings
     return {
         maxDailyWithdrawal: 10000,
@@ -14712,7 +14713,7 @@ export const saveWalletSecuritySettings = async (settings: WalletSecuritySetting
     } catch (e) {
         console.warn('Failed to save to IndexedDB:', e);
     }
-    
+
     // Also save to localStorage
     try {
         localStorage.setItem('titan_wallet_security_settings', JSON.stringify(settings));
@@ -14727,11 +14728,11 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
     try {
         // Fetch real wallet connections
         const wallets = await fetchWalletConnections();
-        
+
         // Fetch MEXC connection status and balance
         const mexcConnection = await fetchConnectionSettings();
         let mexcBalances: any = null;
-        
+
         if (mexcConnection.isConnected) {
             try {
                 mexcBalances = await fetchMexcBalance();
@@ -14739,11 +14740,11 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                 console.warn('Failed to fetch MEXC balance:', error);
             }
         }
-        
+
         // Calculate stats from real data
         // ETH from wallets
         const totalBalanceETH = wallets.reduce((sum, w) => sum + (w.balance || 0), 0);
-        
+
         // Fetch real prices from MEXC
         let prices = {
             ETH: 2500, // Fallback
@@ -14751,7 +14752,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
             USDT: 1,
             BNB: 300, // Fallback
         };
-        
+
         try {
             // Fetch real prices from MEXC
             const [ethTicker, btcTicker, bnbTicker] = await Promise.all([
@@ -14759,7 +14760,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                 fetchMexcTicker24hr('BTCUSDT').catch(() => null),
                 fetchMexcTicker24hr('BNBUSDT').catch(() => null),
             ]);
-            
+
             if (ethTicker && ethTicker.length > 0 && ethTicker[0].lastPrice) {
                 prices.ETH = parseFloat(ethTicker[0].lastPrice);
             }
@@ -14769,15 +14770,15 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
             if (bnbTicker && bnbTicker.length > 0 && bnbTicker[0].lastPrice) {
                 prices.BNB = parseFloat(bnbTicker[0].lastPrice);
             }
-            
+
             console.log('✅ Fetched real prices from MEXC:', prices);
         } catch (error) {
             console.warn('⚠️ Failed to fetch prices from MEXC, using fallback prices:', error);
         }
-        
+
         // Calculate total assets in USD
         let totalAssetsUSD = totalBalanceETH * prices.ETH;
-        
+
         // Add MEXC balances if available
         if (mexcBalances && mexcBalances.balances) {
             mexcBalances.balances.forEach((bal: any) => {
@@ -14785,7 +14786,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                 const free = parseFloat(bal.free || '0');
                 const locked = parseFloat(bal.locked || '0');
                 const total = free + locked;
-                
+
                 if (asset === 'USDT') {
                     totalAssetsUSD += total * prices.USDT;
                 } else if (asset === 'BTC') {
@@ -14797,13 +14798,13 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                 }
             });
         }
-        
+
         const activeWallets = wallets.filter(w => w.status === 'connected').length + (mexcConnection.isConnected ? 1 : 0);
         const coldWallets = wallets.filter(w => w.type === 'coldwallet').length;
-        
+
         // Build connectors from real wallets and MEXC
         const connectors: WalletConnector[] = [];
-        
+
         // Add MEXC connector
         if (mexcConnection.isConnected) {
             connectors.push({
@@ -14815,7 +14816,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                 descriptionKey: 'wallet_connector_mexc_desc',
             });
         }
-        
+
         // Add wallet connectors
         wallets.forEach((wallet) => {
             connectors.push({
@@ -14827,16 +14828,16 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                 descriptionKey: `wallet_connector_${wallet.type}_desc`,
             });
         });
-        
+
         // Build assets from REAL data
         const assets: WalletAsset[] = [];
         const assetMap: { [key: string]: number } = {};
-        
+
         // Add ETH from wallets
         if (totalBalanceETH > 0) {
             assetMap['ETH'] = totalBalanceETH * prices.ETH;
         }
-        
+
         // Add MEXC balances
         if (mexcBalances && mexcBalances.balances) {
             mexcBalances.balances.forEach((bal: any) => {
@@ -14844,7 +14845,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                 const free = parseFloat(bal.free || '0');
                 const locked = parseFloat(bal.locked || '0');
                 const total = free + locked;
-                
+
                 if (total > 0) {
                     if (asset === 'USDT') {
                         assetMap['USDT'] = (assetMap['USDT'] || 0) + total * prices.USDT;
@@ -14858,10 +14859,10 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                 }
             });
         }
-        
+
         // Convert to assets array with percentages
         const totalValue = Object.values(assetMap).reduce((sum, val) => sum + val, 0);
-        
+
         if (totalValue > 0) {
             Object.entries(assetMap).forEach(([symbol, value]) => {
                 const percentage = (value / totalValue) * 100;
@@ -14871,7 +14872,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                     'USDT': 'Tether',
                     'BNB': 'BNB',
                 };
-                
+
                 assets.push({
                     id: symbol.toLowerCase(),
                     name: assetNames[symbol] || symbol,
@@ -14880,14 +14881,14 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                     percentage: Math.round(percentage * 100) / 100, // Round to 2 decimals
                 });
             });
-            
+
             // Sort by value descending
             assets.sort((a, b) => b.value - a.value);
         }
-        
+
         // Fetch real transactions from wallets
         const transactions: WalletTransaction[] = [];
-        
+
         // Try to fetch real transactions from Etherscan for each wallet
         for (const wallet of wallets.filter(w => w.address && w.lastSyncedAt)) {
             try {
@@ -14908,7 +14909,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                 console.warn(`Failed to fetch transactions for wallet ${wallet.id}:`, error);
             }
         }
-        
+
         // Add MEXC transactions if available (real balance data)
         if (mexcBalances && mexcBalances.balances) {
             mexcBalances.balances
@@ -14922,7 +14923,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                     const free = parseFloat(bal.free || '0');
                     const locked = parseFloat(bal.locked || '0');
                     const total = free + locked;
-                    
+
                     if (total > 0) {
                         transactions.push({
                             id: `tx-mexc-${bal.asset}-${Date.now()}-${index}`,
@@ -14935,7 +14936,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                     }
                 });
         }
-        
+
         // Calculate 24h profit/loss
         // This would ideally be calculated from historical price data
         // For now, we'll use a simple calculation based on price changes
@@ -14943,12 +14944,12 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
         try {
             // Get previous day's prices (stored in database)
             const previousPricesData = await database.get('settings', 'wallet_prices_24h_ago') as { key: string; value: { prices: typeof prices; timestamp: string } } | null;
-            
+
             if (previousPricesData && previousPricesData.value) {
                 const prevData = previousPricesData.value;
                 const prevPrices = prevData.prices;
                 const timeDiff = Date.now() - new Date(prevData.timestamp).getTime();
-                
+
                 // Only use if data is less than 25 hours old
                 if (timeDiff < 25 * 60 * 60 * 1000) {
                     const prevTotalUSD = totalBalanceETH * prevPrices.ETH;
@@ -14956,7 +14957,7 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
                     profit24h = prevTotalUSD > 0 ? ((currentTotalUSD - prevTotalUSD) / prevTotalUSD) * 100 : 0;
                 }
             }
-            
+
             // Save current prices for next calculation
             await database.save('settings', {
                 key: 'wallet_prices_24h_ago',
@@ -14966,13 +14967,13 @@ export const fetchWalletData = async (): Promise<WalletSettingsData> => {
             console.warn('Failed to calculate 24h profit:', error);
             profit24h = 0;
         }
-        
+
         // Load preferences from database
         const preferences = await fetchWalletPreferences();
-        
+
         // Security controls (stored in database)
         const securityControls = await fetchWalletSecurityControls();
-        
+
         return {
             stats: {
                 totalAssets: totalAssetsUSD,
@@ -15044,7 +15045,7 @@ export const refreshWalletConnector = async (
         const walletId = connectorId.replace('connector-', '');
         const wallets = await fetchWalletConnections();
         const wallet = wallets.find(w => w.id === walletId);
-        
+
         if (wallet) {
             // Refresh wallet balance
             if (wallet.address) {
@@ -15072,7 +15073,7 @@ export const refreshWalletConnector = async (
             }
         }
     }
-    
+
     return await fetchWalletData();
 };
 
@@ -15087,7 +15088,7 @@ export const fetchDeFiData = async (): Promise<DeFiData> => {
     try {
         // Fetch positions from database
         const positions = await database.getAll<DeFiPosition>('defiPositions') || [];
-        
+
         // Get available protocols (static list of supported protocols)
         const protocols: DeFiProtocol[] = [
             {
@@ -15145,16 +15146,16 @@ export const fetchDeFiData = async (): Promise<DeFiData> => {
                 description: 'Stablecoin exchange and liquidity'
             }
         ];
-        
+
         // Calculate total value and yield
         const totalValue = positions
             .filter(p => p.status === 'active')
             .reduce((sum, p) => sum + p.value, 0);
-        
+
         const totalYield = positions
             .filter(p => p.status === 'active')
             .reduce((sum, p) => sum + (p.value * p.apy / 100), 0);
-        
+
         return {
             positions: positions.filter(p => p.status === 'active' || p.status === 'pending'),
             protocols,
@@ -15183,7 +15184,7 @@ export const addDeFiPosition = async (positionData: Omit<DeFiPosition, 'id' | 'c
             createdAt: new Date().toISOString(),
             lastUpdated: new Date().toISOString()
         };
-        
+
         await database.save('defiPositions', position);
         return await fetchDeFiData();
     } catch (error) {
@@ -15197,7 +15198,7 @@ export const removeDeFiPosition = async (positionId: string): Promise<DeFiData> 
     try {
         const positions = await database.getAll<DeFiPosition>('defiPositions') || [];
         const position = positions.find(p => p.id === positionId);
-        
+
         if (position) {
             // Mark as completed instead of deleting
             const updatedPosition: DeFiPosition = {
@@ -15207,7 +15208,7 @@ export const removeDeFiPosition = async (positionId: string): Promise<DeFiData> 
             };
             await database.save('defiPositions', updatedPosition);
         }
-        
+
         return await fetchDeFiData();
     } catch (error) {
         console.error('Failed to remove DeFi position:', error);
@@ -15496,7 +15497,7 @@ export const fetchNotificationSettings = async (): Promise<NotificationSettings>
     } catch (e) {
         console.warn('Failed to load from IndexedDB:', e);
     }
-    
+
     // Try localStorage
     try {
         const localData = localStorage.getItem('titan_notification_settings');
@@ -15527,7 +15528,7 @@ export const fetchNotificationSettings = async (): Promise<NotificationSettings>
     } catch (e) {
         console.warn('Failed to load from localStorage:', e);
     }
-    
+
     // Return default settings
     return {
         telegram: {
@@ -15632,7 +15633,7 @@ export const saveNotificationSettings = async (settings: NotificationSettings): 
     } catch (e) {
         console.warn('Failed to save to IndexedDB:', e);
     }
-    
+
     try {
         localStorage.setItem('titan_notification_settings', JSON.stringify(settings));
         console.log('✅ Notification settings saved to localStorage');
@@ -15650,7 +15651,7 @@ export const addTelegramChannel = async (channel: {
     priority?: 'low' | 'normal' | 'high' | 'urgent';
 }): Promise<NotificationSettings> => {
     const settings = await fetchNotificationSettings();
-    
+
     const newChannel = {
         id: `channel-${Date.now()}`,
         channelId: channel.channelId,
@@ -15665,7 +15666,7 @@ export const addTelegramChannel = async (channel: {
         },
         priority: channel.priority || 'normal',
     };
-    
+
     settings.telegram.channels.push(newChannel);
     await saveNotificationSettings(settings);
     return settings;
@@ -15678,12 +15679,12 @@ export const updateTelegramChannel = async (
 ): Promise<NotificationSettings> => {
     const settings = await fetchNotificationSettings();
     const channel = settings.telegram.channels.find(c => c.id === channelId);
-    
+
     if (channel) {
         Object.assign(channel, updates);
         await saveNotificationSettings(settings);
     }
-    
+
     return settings;
 };
 
@@ -15705,29 +15706,29 @@ export const getTelegramBotInfo = async (botToken: string): Promise<{ success: b
         const apiUrl = import.meta.env.DEV
             ? `/api/telegram/bot${botToken.trim()}/getMe`
             : `${TELEGRAM_API_BASE}${botToken.trim()}/getMe`;
-        
+
         console.log('Telegram API URL:', apiUrl.replace(botToken, 'TOKEN_HIDDEN'));
-        
+
         const response = await fetch(apiUrl, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
             },
         });
-        
+
         console.log('Telegram API Response status:', response.status);
-        
+
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Telegram API Error:', errorText);
-            
+
             let errorData: any = {};
             try {
                 errorData = JSON.parse(errorText);
             } catch (e) {
                 // Ignore parse error
             }
-            
+
             return {
                 success: false,
                 message: `❌ ${errorData.description || `HTTP ${response.status}: ${errorText.substring(0, 100)}`}`
@@ -15736,7 +15737,7 @@ export const getTelegramBotInfo = async (botToken: string): Promise<{ success: b
 
         const data = await response.json();
         console.log('Telegram API Response data:', data);
-        
+
         if (data.ok) {
             return {
                 success: true,
@@ -15744,7 +15745,7 @@ export const getTelegramBotInfo = async (botToken: string): Promise<{ success: b
                 message: `✅ Bot verified: @${data.result.username}`
             };
         }
-        
+
         return {
             success: false,
             message: `❌ ${data.description || 'Failed to get bot info'}`
@@ -15773,14 +15774,14 @@ export const testTelegramChannel = async (botToken: string, channelId: string): 
         if (!/^-?\d+$/.test(cleanChannelId) && !cleanChannelId.startsWith('@')) {
             cleanChannelId = `@${cleanChannelId}`;
         }
-        
+
         const apiUrl = import.meta.env.DEV
             ? `/api/telegram/bot${botToken.trim()}/getChat`
             : `${TELEGRAM_API_BASE}${botToken.trim()}/getChat`;
-        
+
         console.log('Testing channel URL:', apiUrl.replace(botToken, 'TOKEN_HIDDEN'));
         console.log('Channel ID:', cleanChannelId);
-        
+
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -15792,16 +15793,16 @@ export const testTelegramChannel = async (botToken: string, channelId: string): 
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Channel test error:', errorText);
-            
+
             let errorData: any = {};
             try {
                 errorData = JSON.parse(errorText);
             } catch (e) {
                 // Ignore parse error
             }
-            
+
             let errorMessage = errorData.description || `HTTP ${response.status}`;
-            
+
             if (errorData.error_code === 400) {
                 errorMessage = 'Invalid channel ID format';
             } else if (errorData.error_code === 403) {
@@ -15809,20 +15810,20 @@ export const testTelegramChannel = async (botToken: string, channelId: string): 
             } else if (errorData.error_code === 404) {
                 errorMessage = 'Channel not found or bot not added';
             }
-            
+
             return { success: false, message: `❌ ${errorMessage}` };
         }
 
         const data = await response.json();
         console.log('Channel test response data:', data);
-        
+
         if (data.ok) {
             return {
                 success: true,
                 message: `✅ Channel verified: ${data.result.title || data.result.username || cleanChannelId}`
             };
         }
-        
+
         return { success: false, message: `❌ ${data.description || 'Failed to verify channel'}` };
     } catch (error) {
         console.error('Channel test network error:', error);
@@ -15860,11 +15861,11 @@ export const sendTestTelegramMessage = async (
         if (!/^-?\d+$/.test(cleanChannelId) && !cleanChannelId.startsWith('@')) {
             cleanChannelId = `@${cleanChannelId}`;
         }
-        
+
         const apiUrl = import.meta.env.DEV
             ? `/api/telegram/bot${botToken.trim()}/sendMessage`
             : `${TELEGRAM_API_BASE}${botToken.trim()}/sendMessage`;
-        
+
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -15881,12 +15882,12 @@ export const sendTestTelegramMessage = async (
         if (!response.ok) {
             const errorText = await response.text();
             let errorMessage = `HTTP ${response.status}`;
-            
+
             try {
                 const errorData = JSON.parse(errorText);
                 if (errorData.description) {
                     errorMessage = errorData.description;
-                    
+
                     if (errorData.error_code === 400) {
                         errorMessage = 'Bad Request: Check bot token and channel ID format';
                     } else if (errorData.error_code === 401) {
@@ -15900,11 +15901,11 @@ export const sendTestTelegramMessage = async (
             } catch (e) {
                 errorMessage = errorText || `HTTP ${response.status}`;
             }
-            
+
             // Update analytics
             settings.analytics.telegram.totalFailed++;
             await saveNotificationSettings(settings);
-            
+
             throw new Error(errorMessage);
         }
 
@@ -15914,15 +15915,15 @@ export const sendTestTelegramMessage = async (
             // Update analytics
             settings.analytics.telegram.totalSent++;
             const total = settings.analytics.telegram.totalSent + settings.analytics.telegram.totalFailed;
-            settings.analytics.telegram.successRate = total > 0 
-                ? Math.round((settings.analytics.telegram.totalSent / total) * 100 * 100) / 100 
+            settings.analytics.telegram.successRate = total > 0
+                ? Math.round((settings.analytics.telegram.totalSent / total) * 100 * 100) / 100
                 : 100;
-            
+
             const oldAvg = settings.analytics.telegram.averageResponseTime;
             const count = settings.analytics.telegram.totalSent;
-            settings.analytics.telegram.averageResponseTime = 
+            settings.analytics.telegram.averageResponseTime =
                 Math.round(((oldAvg * (count - 1)) + responseTime) / count);
-            
+
             // Update last 24h count
             const last24h = settings.history.telegram.filter(h => {
                 const sentTime = new Date(h.sentAt).getTime();
@@ -15939,25 +15940,25 @@ export const sendTestTelegramMessage = async (
                 sentAt: new Date().toISOString(),
                 status: 'success',
             });
-            
+
             // Keep only last 100
             if (settings.history.telegram.length > 100) {
                 settings.history.telegram = settings.history.telegram.slice(0, 100);
             }
-            
+
             await saveNotificationSettings(settings);
-            
+
             return {
                 success: true,
                 message: '✅ Test message sent successfully!',
                 messageId: data.result.message_id
             };
         }
-        
+
         // Update analytics
         settings.analytics.telegram.totalFailed++;
         await saveNotificationSettings(settings);
-        
+
         return { success: false, message: `❌ ${data.description || 'Unknown error'}` };
     } catch (error) {
         // Save failed to history
@@ -15971,15 +15972,15 @@ export const sendTestTelegramMessage = async (
             status: 'failed',
             error: error instanceof Error ? error.message : 'Unknown error',
         });
-        
+
         if (settings.history.telegram.length > 100) {
             settings.history.telegram = settings.history.telegram.slice(0, 100);
         }
-        
+
         // Update analytics
         settings.analytics.telegram.totalFailed++;
         await saveNotificationSettings(settings);
-        
+
         return {
             success: false,
             message: `❌ ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -15994,16 +15995,16 @@ export const sendTelegramNotification = async (
     data?: Record<string, any>
 ): Promise<{ success: boolean; message: string; sentToChannels: number }> => {
     const settings = await fetchNotificationSettings();
-    
+
     if (!settings.telegram.enabled || !settings.telegram.botToken) {
         return { success: false, message: 'Telegram notifications not configured or disabled', sentToChannels: 0 };
     }
-    
+
     // Check global quiet hours
     if (settings.global.quietHours.enabled && isInQuietHours(settings.global.quietHours)) {
         return { success: false, message: 'Quiet hours active', sentToChannels: 0 };
     }
-    
+
     // Check Do Not Disturb
     if (settings.global.doNotDisturb.enabled) {
         if (settings.global.doNotDisturb.until) {
@@ -16015,40 +16016,40 @@ export const sendTelegramNotification = async (
             return { success: false, message: 'Do Not Disturb mode active', sentToChannels: 0 };
         }
     }
-    
+
     // Format message with template
     const template = settings.telegram.messageTemplates[type] || '{message}';
     const formattedMessage = formatMessage(template, { message, ...data });
-    
+
     // Get priority
     const priorityMap = { low: 1, normal: 2, high: 3, urgent: 4 };
-    
+
     // Send to all enabled channels that have this notification type enabled
-    const enabledChannels = settings.telegram.channels.filter(channel => 
+    const enabledChannels = settings.telegram.channels.filter(channel =>
         channel.enabled && channel.notificationTypes[type]
     );
-    
+
     if (enabledChannels.length === 0) {
         return { success: false, message: `No enabled channels for ${type} notifications`, sentToChannels: 0 };
     }
-    
+
     let successCount = 0;
     const errors: string[] = [];
-    
+
     for (const channel of enabledChannels) {
         // Check channel quiet hours
         if (channel.quietHours && isInQuietHours(channel.quietHours)) {
             continue;
         }
-        
+
         try {
             // Add to queue with priority
             const priority = priorityMap[channel.priority] || 2;
-            
+
             if (settings.telegram.rateLimit.enabled) {
                 await telegramRateLimiter.waitForSlot();
             }
-            
+
             const result = await sendTestTelegramMessage(
                 settings.telegram.botToken,
                 channel.channelId,
@@ -16057,10 +16058,10 @@ export const sendTelegramNotification = async (
                     disable_notification: settings.telegram.disableNotifications,
                 }
             );
-            
+
             if (result.success) {
                 successCount++;
-                
+
                 // Update history
                 settings.history.telegram.unshift({
                     id: `telegram-${Date.now()}-${channel.id}`,
@@ -16075,7 +16076,7 @@ export const sendTelegramNotification = async (
             }
         } catch (error) {
             errors.push(`${channel.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            
+
             // Save to history
             settings.history.telegram.unshift({
                 id: `telegram-${Date.now()}-${channel.id}`,
@@ -16087,20 +16088,20 @@ export const sendTelegramNotification = async (
                 error: error instanceof Error ? error.message : 'Unknown error',
             });
         }
-        
+
         // Retry logic if enabled
         if (settings.telegram.retryPolicy.enabled) {
             // Retry logic would go here
         }
     }
-    
+
     // Keep history limited
     if (settings.history.telegram.length > 100) {
         settings.history.telegram = settings.history.telegram.slice(0, 100);
     }
-    
+
     await saveNotificationSettings(settings);
-    
+
     if (successCount === 0) {
         return {
             success: false,
@@ -16108,7 +16109,7 @@ export const sendTelegramNotification = async (
             sentToChannels: 0
         };
     }
-    
+
     return {
         success: true,
         message: `Sent to ${successCount}/${enabledChannels.length} channels`,
@@ -16124,16 +16125,16 @@ export const sendBrowserNotification = async (
     options?: NotificationOptions & { image?: string; actions?: NotificationAction[] }
 ): Promise<{ success: boolean; message: string }> => {
     const settings = await fetchNotificationSettings();
-    
+
     if (!settings.browser.enabled || settings.browser.permission !== 'granted') {
         return { success: false, message: 'Browser notifications not enabled or permission denied' };
     }
-    
+
     // Check global quiet hours
     if (settings.global.quietHours.enabled && isInQuietHours(settings.global.quietHours)) {
         return { success: false, message: 'Quiet hours active' };
     }
-    
+
     // Check Do Not Disturb
     if (settings.global.doNotDisturb.enabled) {
         if (settings.global.doNotDisturb.until) {
@@ -16145,11 +16146,11 @@ export const sendBrowserNotification = async (
             return { success: false, message: 'Do Not Disturb mode active' };
         }
     }
-    
+
     if (!settings.browser.notificationTypes[type]) {
         return { success: false, message: `Notification type "${type}" is disabled` };
     }
-    
+
     try {
         const notificationOptions: NotificationOptions = {
             body,
@@ -16160,19 +16161,19 @@ export const sendBrowserNotification = async (
             priority: settings.browser.priority,
             ...options,
         };
-        
+
         // Add image if rich notifications enabled
         if (settings.browser.richNotifications.enabled && settings.browser.richNotifications.showImage && options?.image) {
             notificationOptions.image = options.image;
         }
-        
+
         // Add actions if rich notifications enabled
         if (settings.browser.richNotifications.enabled && settings.browser.richNotifications.showActions && options?.actions) {
             notificationOptions.actions = options.actions;
         }
-        
+
         const notification = new Notification(title, notificationOptions);
-        
+
         // Update analytics
         settings.analytics.browser.totalSent++;
         const last24h = settings.history.browser.filter(h => {
@@ -16180,7 +16181,7 @@ export const sendBrowserNotification = async (
             return Date.now() - sentTime < 24 * 60 * 60 * 1000;
         }).length;
         settings.analytics.browser.last24h = last24h;
-        
+
         // Save to history
         const historyItem = {
             id: `browser-${Date.now()}`,
@@ -16191,30 +16192,30 @@ export const sendBrowserNotification = async (
             clicked: false,
             dismissed: false,
         };
-        
+
         settings.history.browser.unshift(historyItem);
         if (settings.history.browser.length > 100) {
             settings.history.browser = settings.history.browser.slice(0, 100);
         }
-        
+
         notification.onclick = () => {
             historyItem.clicked = true;
             settings.analytics.browser.totalClicked++;
             const total = settings.analytics.browser.totalSent;
-            settings.analytics.browser.clickRate = total > 0 
-                ? Math.round((settings.analytics.browser.totalClicked / total) * 100 * 100) / 100 
+            settings.analytics.browser.clickRate = total > 0
+                ? Math.round((settings.analytics.browser.totalClicked / total) * 100 * 100) / 100
                 : 0;
             saveNotificationSettings(settings);
             window.focus();
         };
-        
+
         notification.onclose = () => {
             historyItem.dismissed = true;
             saveNotificationSettings(settings);
         };
-        
+
         await saveNotificationSettings(settings);
-        
+
         return { success: true, message: 'Notification sent' };
     } catch (error) {
         return {
@@ -16246,7 +16247,7 @@ export const importNotificationSettings = async (jsonData: string): Promise<{ su
         if (!imported.telegram || !imported.browser) {
             return { success: false, message: 'Invalid settings format' };
         }
-        
+
         const current = await fetchNotificationSettings();
         // Merge imported settings (keep current bot token)
         const merged = {
@@ -16256,7 +16257,7 @@ export const importNotificationSettings = async (jsonData: string): Promise<{ su
                 botToken: current.telegram.botToken, // Keep current token
             },
         };
-        
+
         await saveNotificationSettings(merged);
         return { success: true, message: 'Settings imported successfully' };
     } catch (error) {
@@ -16270,14 +16271,14 @@ export const importNotificationSettings = async (jsonData: string): Promise<{ su
 // Clear notification history
 export const clearNotificationHistory = async (type?: 'telegram' | 'browser'): Promise<void> => {
     const settings = await fetchNotificationSettings();
-    
+
     if (!type || type === 'telegram') {
         settings.history.telegram = [];
     }
     if (!type || type === 'browser') {
         settings.history.browser = [];
     }
-    
+
     await saveNotificationSettings(settings);
 };
 
@@ -16341,11 +16342,11 @@ export interface AutomationSettingsData {
 export const fetchAutomationSettings = async (): Promise<AutomationSettingsData> => {
     try {
         const data = await database.get<AutomationSettingsData>('settings', 'automation');
-        
+
         if (data) {
             return data;
         }
-        
+
         // Default settings
         return {
             dataSources: [],
@@ -16400,10 +16401,10 @@ export const addDataSource = async (source: Omit<DataSource, 'id' | 'status'>): 
         id: `ds-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         status: 'pending',
     };
-    
+
     settings.dataSources.push(newSource);
     await saveAutomationSettings(settings);
-    
+
     // Test connection
     try {
         // Simulate connection test
@@ -16414,7 +16415,7 @@ export const addDataSource = async (source: Omit<DataSource, 'id' | 'status'>): 
         newSource.status = 'error';
         await saveAutomationSettings(settings);
     }
-    
+
     return newSource;
 };
 
@@ -16436,18 +16437,18 @@ export const removeDataSource = async (id: string): Promise<void> => {
 export const testDataSource = async (id: string): Promise<{ success: boolean; message: string }> => {
     const settings = await fetchAutomationSettings();
     const source = settings.dataSources.find(ds => ds.id === id);
-    
+
     if (!source) {
         return { success: false, message: 'Data source not found' };
     }
-    
+
     try {
         // Simulate connection test
         await new Promise(resolve => setTimeout(resolve, 1500));
-        
+
         source.status = 'connected';
         await saveAutomationSettings(settings);
-        
+
         return { success: true, message: 'Connection successful' };
     } catch (error) {
         source.status = 'error';
@@ -16463,7 +16464,7 @@ export const addTelegramPublisherConfig = async (config: Omit<TelegramPublisherC
         ...config,
         id: `tg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     };
-    
+
     settings.telegramConfigs.push(newConfig);
     await saveAutomationSettings(settings);
     return newConfig;
@@ -16491,7 +16492,7 @@ export const createWorkflow = async (workflow: Omit<Workflow, 'id'>): Promise<Wo
         ...workflow,
         id: `wf-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     };
-    
+
     settings.workflows.push(newWorkflow);
     await saveAutomationSettings(settings);
     return newWorkflow;
@@ -16515,39 +16516,39 @@ export const deleteWorkflow = async (id: string): Promise<void> => {
 export const executeWorkflow = async (id: string): Promise<{ success: boolean; message: string; result?: any }> => {
     const settings = await fetchAutomationSettings();
     const workflow = settings.workflows.find(wf => wf.id === id);
-    
+
     if (!workflow) {
         return { success: false, message: 'Workflow not found' };
     }
-    
+
     if (!workflow.enabled) {
         return { success: false, message: 'Workflow is disabled' };
     }
-    
+
     try {
         // Simulate workflow execution
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
+
         // Add log entry
         const logEntry = {
             id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                        timestamp: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
             type: 'workflow' as const,
             action: `Execute: ${workflow.name}`,
             status: 'success' as const,
             message: `Workflow "${workflow.name}" executed successfully`,
             details: { workflowId: id },
         };
-        
+
         settings.logs.unshift(logEntry);
         if (settings.logs.length > 1000) {
             settings.logs = settings.logs.slice(0, 1000);
         }
-        
+
         settings.statistics.workflowsExecuted++;
         settings.statistics.last24Hours.workflows++;
         await saveAutomationSettings(settings);
-        
+
         return { success: true, message: 'Workflow executed successfully', result: logEntry };
     } catch (error) {
         const logEntry = {
@@ -16559,12 +16560,12 @@ export const executeWorkflow = async (id: string): Promise<{ success: boolean; m
             message: error instanceof Error ? error.message : 'Workflow execution failed',
             details: { workflowId: id, error },
         };
-        
+
         settings.logs.unshift(logEntry);
         settings.statistics.errorsCount++;
         settings.statistics.last24Hours.errors++;
         await saveAutomationSettings(settings);
-        
+
         return { success: false, message: 'Workflow execution failed', result: logEntry };
     }
 };
@@ -16583,7 +16584,7 @@ export const addScheduleRule = async (rule: Omit<AutomationSettingsData['schedul
         ...rule,
         id: `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     };
-    
+
     settings.scheduleRules.push(newRule);
     await saveAutomationSettings(settings);
     return newRule;
@@ -16608,11 +16609,11 @@ export const removeScheduleRule = async (id: string): Promise<void> => {
 export const getAutomationLogs = async (limit: number = 100, type?: string): Promise<AutomationSettingsData['logs']> => {
     const settings = await fetchAutomationSettings();
     let logs = settings.logs;
-    
+
     if (type) {
         logs = logs.filter(log => log.type === type);
     }
-    
+
     return logs.slice(0, limit);
 };
 
@@ -16677,84 +16678,7 @@ export interface AppearanceSettingsData {
     };
 }
 
-export const fetchAppearanceSettings = async (): Promise<AppearanceSettingsData> => {
-    try {
-        // Try to get from database
-        const saved = await database.get<{ key: string; value: AppearanceSettingsData }>('settings', 'appearance');
-        
-        if (saved && saved.value) {
-            return saved.value;
-        }
-        
-        // Try localStorage as fallback
-        try {
-            const localData = localStorage.getItem('titan_appearance_settings');
-            if (localData) {
-                const parsed = JSON.parse(localData);
-                return parsed;
-            }
-        } catch (e) {
-            console.warn('Failed to load from localStorage:', e);
-        }
-        
-        // Default settings
-        const defaultSettings: AppearanceSettingsData = {
-            theme: 'dark',
-            colorScheme: {
-                primary: '#3b82f6', // blue-500
-                accent: '#8b5cf6', // purple-500
-                background: '#111827', // gray-900
-                surface: '#1f2937', // gray-800
-                text: '#f9fafb', // gray-50
-                textSecondary: '#9ca3af', // gray-400
-            },
-            typography: {
-                fontFamily: 'system',
-                fontSize: 'medium',
-                fontWeight: 'normal',
-                lineHeight: 'normal',
-            },
-            layout: {
-                sidebarPosition: 'left',
-                sidebarWidth: 'medium',
-                compactMode: false,
-                density: 'comfortable',
-            },
-            display: {
-                showAnimations: true,
-                reduceMotion: false,
-                showTooltips: true,
-                showNotifications: true,
-                chartStyle: 'candlestick',
-                chartTheme: 'auto',
-            },
-            dashboard: {
-                defaultView: 'overview',
-                showWelcomeMessage: true,
-                showQuickActions: true,
-                showMarketOverview: true,
-                showRecentActivity: true,
-                widgetOrder: [],
-            },
-            notifications: {
-                position: 'top-right',
-                duration: 5000,
-                showIcons: true,
-                showProgress: true,
-            },
-            accessibility: {
-                highContrast: false,
-                largeText: false,
-                screenReader: false,
-                keyboardNavigation: true,
-            },
-        };
-        
-        return defaultSettings;
-    } catch (error) {
-        console.error('Failed to fetch appearance settings:', error);
-        // Return defaults on error
-        return {
+const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettingsData = {
             theme: 'dark',
             colorScheme: {
                 primary: '#3b82f6',
@@ -16805,24 +16729,54 @@ export const fetchAppearanceSettings = async (): Promise<AppearanceSettingsData>
                 keyboardNavigation: true,
             },
         };
+
+const cloneDefaultAppearanceSettings = (): AppearanceSettingsData =>
+    JSON.parse(JSON.stringify(DEFAULT_APPEARANCE_SETTINGS));
+
+export const fetchAppearanceSettings = async (): Promise<AppearanceSettingsData> => {
+    try {
+        // Try to get from database
+        const saved = await database.get<{ key: string; value: AppearanceSettingsData }>('settings', 'appearance');
+
+        if (saved && saved.value) {
+            return saved.value;
+        }
+
+        // Try localStorage as fallback
+        try {
+            const localData = localStorage.getItem('titan_appearance_settings');
+            if (localData) {
+                const parsed = JSON.parse(localData);
+                return parsed;
+            }
+        } catch (e) {
+            console.warn('Failed to load from localStorage:', e);
+        }
+
+        // Default settings
+        return cloneDefaultAppearanceSettings();
+    } catch (error) {
+        console.error('Failed to fetch appearance settings:', error);
+        // Return defaults on error
+        return cloneDefaultAppearanceSettings();
     }
 };
 
 export const saveAppearanceSettings = async (settings: AppearanceSettingsData): Promise<void> => {
     try {
         // Save to database
-        await database.save('settings', { 
+        await database.save('settings', {
             key: 'appearance',
             value: settings
         });
-        
+
         // Also save to localStorage as backup
         try {
             localStorage.setItem('titan_appearance_settings', JSON.stringify(settings));
         } catch (e) {
             console.warn('Failed to save to localStorage:', e);
         }
-        
+
         // Also update localStorage for theme (for AppContext compatibility)
         if (settings.theme !== 'auto') {
             localStorage.setItem('titan_theme', settings.theme);
@@ -16833,7 +16787,7 @@ export const saveAppearanceSettings = async (settings: AppearanceSettingsData): 
                 localStorage.setItem('titan_theme', prefersDark ? 'dark' : 'light');
             }
         }
-        
+
         // Apply CSS variables for color scheme
         if (typeof document !== 'undefined') {
             const root = document.documentElement;
@@ -16843,7 +16797,7 @@ export const saveAppearanceSettings = async (settings: AppearanceSettingsData): 
             root.style.setProperty('--color-surface', settings.colorScheme.surface);
             root.style.setProperty('--color-text', settings.colorScheme.text);
             root.style.setProperty('--color-text-secondary', settings.colorScheme.textSecondary);
-            
+
             // Apply typography
             if (settings.typography.fontFamily === 'custom' && settings.typography.customFont) {
                 root.style.setProperty('--font-family', `"${settings.typography.customFont}", sans-serif`);
@@ -16857,7 +16811,7 @@ export const saveAppearanceSettings = async (settings: AppearanceSettingsData): 
             } else {
                 root.style.setProperty('--font-family', 'system-ui, sans-serif');
             }
-            
+
             // Apply font size
             const fontSizeMap: { [key: string]: string } = {
                 'small': '0.875rem',
@@ -16866,7 +16820,7 @@ export const saveAppearanceSettings = async (settings: AppearanceSettingsData): 
                 'xlarge': '1.25rem',
             };
             root.style.setProperty('--font-size-base', fontSizeMap[settings.typography.fontSize] || '1rem');
-            
+
             // Apply font weight
             const fontWeightMap: { [key: string]: string } = {
                 'normal': '400',
@@ -16875,7 +16829,7 @@ export const saveAppearanceSettings = async (settings: AppearanceSettingsData): 
                 'bold': '700',
             };
             root.style.setProperty('--font-weight-base', fontWeightMap[settings.typography.fontWeight] || '400');
-            
+
             // Apply line height
             const lineHeightMap: { [key: string]: string } = {
                 'tight': '1.25',
@@ -16883,17 +16837,17 @@ export const saveAppearanceSettings = async (settings: AppearanceSettingsData): 
                 'relaxed': '1.75',
             };
             root.style.setProperty('--line-height-base', lineHeightMap[settings.typography.lineHeight] || '1.5');
-            
+
             // Apply layout preferences
             root.style.setProperty('--sidebar-position', settings.layout.sidebarPosition);
-            
+
             const sidebarWidthMap: { [key: string]: string } = {
                 'narrow': '200px',
                 'medium': '250px',
                 'wide': '300px',
             };
             root.style.setProperty('--sidebar-width', sidebarWidthMap[settings.layout.sidebarWidth] || '250px');
-            
+
             // Apply density
             const densityMap: { [key: string]: string } = {
                 'comfortable': '1rem',
@@ -16901,20 +16855,20 @@ export const saveAppearanceSettings = async (settings: AppearanceSettingsData): 
                 'spacious': '1.5rem',
             };
             root.style.setProperty('--spacing-base', densityMap[settings.layout.density] || '1rem');
-            
+
             // Apply accessibility
             if (settings.accessibility.highContrast) {
                 root.classList.add('high-contrast');
             } else {
                 root.classList.remove('high-contrast');
             }
-            
+
             if (settings.accessibility.largeText) {
                 root.classList.add('large-text');
             } else {
                 root.classList.remove('large-text');
             }
-            
+
             // Apply reduce motion
             if (settings.display.reduceMotion || (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
                 root.classList.add('reduce-motion');
@@ -16922,10 +16876,21 @@ export const saveAppearanceSettings = async (settings: AppearanceSettingsData): 
                 root.classList.remove('reduce-motion');
             }
         }
-        
+
         console.log('✅ Appearance settings saved and applied');
     } catch (error) {
         console.error('Failed to save appearance settings:', error);
+        throw error;
+    }
+};
+
+export const resetAppearanceSettings = async (): Promise<AppearanceSettingsData> => {
+    try {
+        const defaults = cloneDefaultAppearanceSettings();
+        await saveAppearanceSettings(defaults);
+        return defaults;
+    } catch (error) {
+        console.error('Failed to reset appearance settings:', error);
         throw error;
     }
 };
@@ -16937,28 +16902,28 @@ export const saveAppearanceSettings = async (settings: AppearanceSettingsData): 
 // Helper function to calculate security score
 const calculateSecurityScore = (settings: SecuritySettingsData): number => {
     let score = 0;
-    
+
     // 2FA enabled: +30 points
     if (settings.twoFactor.enabled) {
         score += 30;
     }
-    
+
     // Backup codes available: +10 points
     if (settings.twoFactor.backupCodesRemaining > 0) {
         score += 10;
     }
-    
+
     // Multiple 2FA methods: +10 points
     const enabledMethods = settings.methods.filter(m => m.enabled).length;
     if (enabledMethods > 1) {
         score += 10;
     }
-    
+
     // Security alerts enabled: +15 points
     if (settings.alerts.suspiciousLogin) score += 5;
     if (settings.alerts.largeWithdrawal) score += 5;
     if (settings.alerts.newDevice) score += 5;
-    
+
     // Recent security review: +10 points
     const lastReviewed = new Date(settings.lastReviewed);
     const daysSinceReview = (Date.now() - lastReviewed.getTime()) / (1000 * 60 * 60 * 24);
@@ -16967,20 +16932,20 @@ const calculateSecurityScore = (settings: SecuritySettingsData): number => {
     } else if (daysSinceReview < 90) {
         score += 5;
     }
-    
+
     // Active sessions count: -5 points per extra session (max 3 sessions = 0 penalty)
     const activeSessions = settings.sessions.filter(s => s.current || new Date(s.lastActiveAt).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000).length;
     if (activeSessions > 3) {
         score -= Math.min((activeSessions - 3) * 5, 25);
     }
-    
+
     // Recent security events: -5 points per high severity event
-    const recentHighSeverityEvents = settings.events.filter(e => 
-        e.severity === 'high' && 
+    const recentHighSeverityEvents = settings.events.filter(e =>
+        e.severity === 'high' &&
         new Date(e.timestamp).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000
     ).length;
     score -= Math.min(recentHighSeverityEvents * 5, 20);
-    
+
     return Math.max(0, Math.min(100, score));
 };
 
@@ -16989,7 +16954,7 @@ const getCurrentSessionInfo = (): Omit<SecuritySession, 'id' | 'current' | 'risk
     const userAgent = navigator.userAgent;
     let device = 'Unknown Device';
     let location = 'Unknown Location';
-    
+
     // Detect device
     if (userAgent.includes('Mac')) {
         device = 'macOS';
@@ -17002,7 +16967,7 @@ const getCurrentSessionInfo = (): Omit<SecuritySession, 'id' | 'current' | 'risk
     } else if (userAgent.includes('Android')) {
         device = 'Android';
     }
-    
+
     // Detect browser
     if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) {
         device = `Chrome on ${device}`;
@@ -17013,7 +16978,7 @@ const getCurrentSessionInfo = (): Omit<SecuritySession, 'id' | 'current' | 'risk
     } else if (userAgent.includes('Edg')) {
         device = `Edge on ${device}`;
     }
-    
+
     // Try to get location from timezone (rough estimate)
     try {
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -17030,11 +16995,11 @@ const getCurrentSessionInfo = (): Omit<SecuritySession, 'id' | 'current' | 'risk
     } catch (e) {
         // Fallback
     }
-    
+
     // Get IP (we can't get real IP from browser, so we'll use a placeholder)
     // In a real app, you'd get this from your backend
     const ipAddress = '192.168.1.1'; // Placeholder
-    
+
     return {
         device,
         location,
@@ -17047,15 +17012,15 @@ export const fetchSecuritySettings = async (): Promise<SecuritySettingsData> => 
     try {
         // Try to get from database
         const saved = await database.get<{ key: string; value: SecuritySettingsData }>('settings', 'security');
-        
+
         if (saved && saved.value) {
             // Update current session info
             const currentSessionInfo = getCurrentSessionInfo();
             const currentSessionId = `session-${Date.now()}`;
-            
+
             // Check if current session exists
             let currentSession = saved.value.sessions.find(s => s.current);
-            
+
             if (!currentSession) {
                 // Add current session
                 currentSession = {
@@ -17072,28 +17037,28 @@ export const fetchSecuritySettings = async (): Promise<SecuritySettingsData> => 
                 currentSession.ipAddress = currentSessionInfo.ipAddress;
                 currentSession.lastActiveAt = currentSessionInfo.lastActiveAt;
             }
-            
+
             // Mark other sessions as not current
             saved.value.sessions.forEach(s => {
                 if (s.id !== currentSession!.id) {
                     s.current = false;
                 }
             });
-            
+
             // Recalculate score
             saved.value.score = calculateSecurityScore(saved.value);
-            
+
             // Update last reviewed if not set
             if (!saved.value.lastReviewed) {
                 saved.value.lastReviewed = new Date().toISOString();
             }
-            
+
             // Save updated settings
             await database.save('settings', { key: 'security', value: saved.value });
-            
+
             return saved.value;
         }
-        
+
         // Try localStorage as fallback
         try {
             const localData = localStorage.getItem('titan_security_settings');
@@ -17105,7 +17070,7 @@ export const fetchSecuritySettings = async (): Promise<SecuritySettingsData> => 
         } catch (e) {
             console.warn('Failed to load from localStorage:', e);
         }
-        
+
         // Default settings with current session
         const currentSessionInfo = getCurrentSessionInfo();
         const defaultSettings: SecuritySettingsData = {
@@ -17136,12 +17101,12 @@ export const fetchSecuritySettings = async (): Promise<SecuritySettingsData> => 
             trustedLocations: [],
             lastReviewed: new Date().toISOString(),
         };
-        
+
         defaultSettings.score = calculateSecurityScore(defaultSettings);
-        
+
         // Save default settings
         await database.save('settings', { key: 'security', value: defaultSettings });
-        
+
         return defaultSettings;
     } catch (error) {
         console.error('Failed to fetch security settings:', error);
@@ -17177,45 +17142,45 @@ export const fetchSecuritySettings = async (): Promise<SecuritySettingsData> => 
 export const toggleTwoFactorAuth = async (enabled?: boolean): Promise<SecuritySettingsData> => {
     const settings = await fetchSecuritySettings();
     const next = typeof enabled === 'boolean' ? enabled : !settings.twoFactor.enabled;
-    
+
     settings.twoFactor.enabled = next;
     settings.twoFactor.lastUpdated = new Date().toISOString();
-    
+
     if (next && settings.twoFactor.backupCodesRemaining === 0) {
         settings.twoFactor.backupCodesRemaining = 8;
     }
-    
-            if (!next) {
+
+    if (!next) {
         settings.twoFactor.backupCodesRemaining = 0;
     }
-    
+
     // Add event
     settings.events.unshift({
         id: `security-event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                    timestamp: new Date().toISOString(),
-                    titleKey: next ? 'security_event_2fa_enabled' : 'security_event_2fa_disabled',
-                    descriptionKey: next ? 'security_event_2fa_enabled_desc' : 'security_event_2fa_disabled_desc',
-                    severity: next ? 'low' : 'medium',
+        timestamp: new Date().toISOString(),
+        titleKey: next ? 'security_event_2fa_enabled' : 'security_event_2fa_disabled',
+        descriptionKey: next ? 'security_event_2fa_enabled_desc' : 'security_event_2fa_disabled_desc',
+        severity: next ? 'low' : 'medium',
     });
-    
+
     // Keep only last 100 events
     if (settings.events.length > 100) {
         settings.events = settings.events.slice(0, 100);
     }
-    
+
     // Recalculate score
     settings.score = calculateSecurityScore(settings);
-    
+
     // Save
     await database.save('settings', { key: 'security', value: settings });
-    
+
     // Also save to localStorage
     try {
         localStorage.setItem('titan_security_settings', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
@@ -17223,61 +17188,61 @@ export const updateSecurityAlerts = async (alerts: SecurityAlertSettings): Promi
     const settings = await fetchSecuritySettings();
     settings.alerts = { ...alerts };
     settings.score = calculateSecurityScore(settings);
-    
+
     await database.save('settings', { key: 'security', value: settings });
-    
+
     try {
         localStorage.setItem('titan_security_settings', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
 export const revokeSecuritySession = async (sessionId: string): Promise<SecuritySettingsData> => {
     const settings = await fetchSecuritySettings();
     const session = settings.sessions.find(item => item.id === sessionId);
-    
-            if (!session) {
+
+    if (!session) {
         return settings;
-            }
-    
-            if (session.current) {
+    }
+
+    if (session.current) {
         // Can't revoke current session, just mark as not current
-                session.current = false;
-                session.lastActiveAt = new Date().toISOString();
-            } else {
+        session.current = false;
+        session.lastActiveAt = new Date().toISOString();
+    } else {
         // Remove session
         settings.sessions = settings.sessions.filter(item => item.id !== sessionId);
     }
-    
+
     // Add event
     settings.events.unshift({
         id: `security-event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                    timestamp: new Date().toISOString(),
-                    titleKey: 'security_event_session_revoked',
-                    descriptionKey: 'security_event_session_revoked_desc',
-                    severity: 'medium',
+        timestamp: new Date().toISOString(),
+        titleKey: 'security_event_session_revoked',
+        descriptionKey: 'security_event_session_revoked_desc',
+        severity: 'medium',
     });
-    
+
     // Keep only last 100 events
     if (settings.events.length > 100) {
         settings.events = settings.events.slice(0, 100);
     }
-    
+
     // Recalculate score
     settings.score = calculateSecurityScore(settings);
-    
+
     // Save
     await database.save('settings', { key: 'security', value: settings });
-    
+
     try {
         localStorage.setItem('titan_security_settings', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
@@ -17287,20 +17252,20 @@ export const generateSecurityBackupCodes = async (count = 8): Promise<{ codes: s
         // Generate 8-character alphanumeric code
         return Math.random().toString(36).slice(2, 10).toUpperCase();
     });
-    
+
     const settings = await fetchSecuritySettings();
     settings.twoFactor.backupCodesRemaining = count;
     settings.twoFactor.lastUpdated = new Date().toISOString();
     settings.score = calculateSecurityScore(settings);
-    
+
     await database.save('settings', { key: 'security', value: settings });
-    
+
     try {
         localStorage.setItem('titan_security_settings', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return { codes, data: settings };
 };
 
@@ -17338,14 +17303,14 @@ export const fetchUserManagement = async (): Promise<UserManagementData> => {
     try {
         // Try to get from database
         const saved = await database.get<{ key: string; value: UserManagementData }>('settings', 'user_management');
-        
+
         if (saved && saved.value) {
             // Ensure all roles have permissions array
             saved.value.availableRoles = saved.value.availableRoles.map(role => ({
                 ...role,
                 permissions: role.permissions || getRolePermissions(role.roleKey),
             }));
-            
+
             // Update last active times for active users (simulate activity)
             saved.value.users = saved.value.users.map(user => {
                 if (user.status === 'active' && user.lastActiveAt) {
@@ -17354,7 +17319,7 @@ export const fetchUserManagement = async (): Promise<UserManagementData> => {
                 }
                 return user;
             });
-            
+
             // Ensure registration settings exist
             if (saved.value.registrationEnabled === undefined) {
                 saved.value.registrationEnabled = false;
@@ -17362,18 +17327,18 @@ export const fetchUserManagement = async (): Promise<UserManagementData> => {
             if (!saved.value.registrationDefaultRole) {
                 saved.value.registrationDefaultRole = saved.value.defaultRoleKey || 'role_viewer';
             }
-            
+
             saved.value.lastUpdated = new Date().toISOString();
             await database.save('settings', { key: 'user_management', value: saved.value });
             return saved.value;
         }
-        
+
         // Try localStorage as fallback
         try {
             const localData = localStorage.getItem('titan_user_management');
             if (localData) {
                 const parsed = JSON.parse(localData);
-                
+
                 // Ensure all roles have permissions
                 if (parsed.availableRoles) {
                     parsed.availableRoles = parsed.availableRoles.map((role: UserRoleOption) => ({
@@ -17381,7 +17346,7 @@ export const fetchUserManagement = async (): Promise<UserManagementData> => {
                         permissions: role.permissions || getRolePermissions(role.roleKey),
                     }));
                 }
-                
+
                 // Ensure registration settings exist
                 if (parsed.registrationEnabled === undefined) {
                     parsed.registrationEnabled = false;
@@ -17389,14 +17354,14 @@ export const fetchUserManagement = async (): Promise<UserManagementData> => {
                 if (!parsed.registrationDefaultRole) {
                     parsed.registrationDefaultRole = parsed.defaultRoleKey || 'role_viewer';
                 }
-                
+
                 parsed.lastUpdated = new Date().toISOString();
                 return parsed;
             }
         } catch (e) {
             console.warn('Failed to load from localStorage:', e);
         }
-        
+
         // Default settings with current user as admin
         const currentUserName = getCurrentUserName();
         const defaultSettings: UserManagementData = {
@@ -17415,30 +17380,30 @@ export const fetchUserManagement = async (): Promise<UserManagementData> => {
             ],
             invitations: [],
             availableRoles: [
-                { 
-                    roleKey: 'role_admin', 
-                    descriptionKey: 'role_admin_desc', 
-                    permissions: getRolePermissions('role_admin') 
+                {
+                    roleKey: 'role_admin',
+                    descriptionKey: 'role_admin_desc',
+                    permissions: getRolePermissions('role_admin')
                 },
-                { 
-                    roleKey: 'role_manager', 
-                    descriptionKey: 'role_manager_desc', 
-                    permissions: getRolePermissions('role_manager') 
+                {
+                    roleKey: 'role_manager',
+                    descriptionKey: 'role_manager_desc',
+                    permissions: getRolePermissions('role_manager')
                 },
-                { 
-                    roleKey: 'role_trader', 
-                    descriptionKey: 'role_trader_desc', 
-                    permissions: getRolePermissions('role_trader') 
+                {
+                    roleKey: 'role_trader',
+                    descriptionKey: 'role_trader_desc',
+                    permissions: getRolePermissions('role_trader')
                 },
-                { 
-                    roleKey: 'role_analyst', 
-                    descriptionKey: 'role_analyst_desc', 
-                    permissions: getRolePermissions('role_analyst') 
+                {
+                    roleKey: 'role_analyst',
+                    descriptionKey: 'role_analyst_desc',
+                    permissions: getRolePermissions('role_analyst')
                 },
-                { 
-                    roleKey: 'role_viewer', 
-                    descriptionKey: 'role_viewer_desc', 
-                    permissions: getRolePermissions('role_viewer') 
+                {
+                    roleKey: 'role_viewer',
+                    descriptionKey: 'role_viewer_desc',
+                    permissions: getRolePermissions('role_viewer')
                 },
             ],
             defaultRoleKey: 'role_viewer',
@@ -17446,10 +17411,10 @@ export const fetchUserManagement = async (): Promise<UserManagementData> => {
             registrationEnabled: false,
             registrationDefaultRole: 'role_viewer',
         };
-        
+
         // Save default settings
         await database.save('settings', { key: 'user_management', value: defaultSettings });
-        
+
         return defaultSettings;
     } catch (error) {
         console.error('Failed to fetch user management:', error);
@@ -17475,21 +17440,21 @@ export const fetchUserManagement = async (): Promise<UserManagementData> => {
 export const updateManagedUserRole = async (userId: string, roleKey: string): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
     const user = settings.users.find(item => item.id === userId);
-    
-            if (user) {
-                user.roleKey = roleKey;
+
+    if (user) {
+        user.roleKey = roleKey;
         user.permissions = getRolePermissions(roleKey);
         settings.lastUpdated = new Date().toISOString();
-        
+
         await database.save('settings', { key: 'user_management', value: settings });
-        
+
         try {
             localStorage.setItem('titan_user_management', JSON.stringify(settings));
         } catch (e) {
             console.warn('Failed to save to localStorage:', e);
         }
     }
-    
+
     return settings;
 };
 
@@ -17499,37 +17464,37 @@ export const toggleManagedUserStatus = async (
 ): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
     const user = settings.users.find(item => item.id === userId);
-    
-            if (!user) {
+
+    if (!user) {
         return settings;
-            }
-    
-            if (status) {
-                user.status = status;
-            } else {
-                user.status = user.status === 'suspended' ? 'active' : 'suspended';
-            }
-    
-            if (user.status === 'active') {
-                user.lastActiveAt = new Date().toISOString();
-            }
-    
+    }
+
+    if (status) {
+        user.status = status;
+    } else {
+        user.status = user.status === 'suspended' ? 'active' : 'suspended';
+    }
+
+    if (user.status === 'active') {
+        user.lastActiveAt = new Date().toISOString();
+    }
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
 export const removeManagedUser = async (userId: string): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
-    
+
     // Don't allow removing the last admin
     const user = settings.users.find(item => item.id === userId);
     if (user && user.roleKey === 'role_admin') {
@@ -17538,98 +17503,98 @@ export const removeManagedUser = async (userId: string): Promise<UserManagementD
             throw new Error('Cannot remove the last admin user');
         }
     }
-    
+
     settings.users = settings.users.filter(item => item.id !== userId);
-    
+
     // Also remove any pending invitations for this user's email
     if (user) {
         settings.invitations = settings.invitations.filter(inv => inv.email !== user.email);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
 export const inviteManagedUser = async (email: string, roleKey: string): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
-    
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
         throw new Error('Invalid email format');
     }
-    
+
     // Check if user already exists
     const existingUser = settings.users.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (existingUser) {
         throw new Error('User with this email already exists');
     }
-    
+
     // Check if invitation already exists
     const existingInvitation = settings.invitations.find(inv => inv.email.toLowerCase() === email.toLowerCase());
     if (existingInvitation) {
         throw new Error('Invitation already sent to this email');
     }
-    
+
     const currentUserName = getCurrentUserName();
-            const invitation: UserInvitation = {
+    const invitation: UserInvitation = {
         id: `invite-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         email: email.toLowerCase(),
-                roleKey,
-                invitedAt: new Date().toISOString(),
+        roleKey,
+        invitedAt: new Date().toISOString(),
         invitedBy: currentUserName,
-                lastSentAt: new Date().toISOString(),
-            };
-    
+        lastSentAt: new Date().toISOString(),
+    };
+
     settings.invitations.unshift(invitation);
-    
+
     // Keep only last 50 invitations
     if (settings.invitations.length > 50) {
         settings.invitations = settings.invitations.slice(0, 50);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
 export const resendUserInvitation = async (inviteId: string): Promise<{ success: boolean; invitation?: UserInvitation }> => {
     const settings = await fetchUserManagement();
     const invitation = settings.invitations.find(inv => inv.id === inviteId);
-    
+
     if (!invitation) {
         return { success: false };
     }
-    
+
     // Update last sent time
-                    invitation.lastSentAt = new Date().toISOString();
+    invitation.lastSentAt = new Date().toISOString();
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return { success: true, invitation };
 };
 
@@ -17641,13 +17606,13 @@ export const addManagedUser = async (userData: {
     twoFactorEnabled?: boolean;
 }): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
-    
+
     // Check if user already exists
     const existingUser = settings.users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
     if (existingUser) {
         throw new Error('User with this email already exists');
     }
-    
+
     const newUser: ManagedUser = {
         id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         name: userData.name,
@@ -17659,22 +17624,22 @@ export const addManagedUser = async (userData: {
         twoFactorEnabled: userData.twoFactorEnabled || false,
         permissions: getRolePermissions(userData.roleKey),
     };
-    
+
     settings.users.push(newUser);
-    
+
     // Remove invitation if exists
     settings.invitations = settings.invitations.filter(inv => inv.email.toLowerCase() !== userData.email.toLowerCase());
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
@@ -17683,15 +17648,15 @@ export const cancelUserInvitation = async (inviteId: string): Promise<UserManage
     const settings = await fetchUserManagement();
     settings.invitations = settings.invitations.filter(inv => inv.id !== inviteId);
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
@@ -17699,29 +17664,29 @@ export const cancelUserInvitation = async (inviteId: string): Promise<UserManage
 export const updateManagedUser = async (userId: string, updates: Partial<ManagedUser>): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
     const user = settings.users.find(item => item.id === userId);
-    
+
     if (!user) {
         return settings;
     }
-    
+
     // Update user
     Object.assign(user, updates);
-    
+
     // Update permissions if role changed
     if (updates.roleKey) {
         user.permissions = getRolePermissions(updates.roleKey);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
@@ -17762,11 +17727,11 @@ const getClientInfo = (): { ipAddress: string; userAgent: string } => {
 // Record user activity
 export const recordUserActivity = async (activity: Omit<UserActivity, 'id' | 'timestamp' | 'edited'>): Promise<void> => {
     const settings = await fetchUserManagement();
-    
+
     if (!settings.activityLog) {
         settings.activityLog = [];
     }
-    
+
     const clientInfo = getClientInfo();
     const newActivity: UserActivity = {
         id: `activity-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -17776,18 +17741,18 @@ export const recordUserActivity = async (activity: Omit<UserActivity, 'id' | 'ti
         timestamp: new Date().toISOString(),
         edited: false,
     };
-    
+
     settings.activityLog.unshift(newActivity);
-    
+
     // Keep only last 1000 activities
     if (settings.activityLog.length > 1000) {
         settings.activityLog = settings.activityLog.slice(0, 1000);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
@@ -17806,24 +17771,24 @@ export const getUserActivities = async (filters?: {
 }): Promise<UserActivity[]> => {
     const settings = await fetchUserManagement();
     let activities = settings.activityLog || [];
-    
+
     // Apply filters
     if (filters?.userId) {
         activities = activities.filter(a => a.userId === filters.userId);
     }
-    
+
     if (filters?.actionType) {
         activities = activities.filter(a => a.actionType === filters.actionType);
     }
-    
+
     if (filters?.startDate) {
         activities = activities.filter(a => a.timestamp >= filters.startDate!);
     }
-    
+
     if (filters?.endDate) {
         activities = activities.filter(a => a.timestamp <= filters.endDate!);
     }
-    
+
     if (filters?.searchQuery) {
         const query = filters.searchQuery.toLowerCase();
         activities = activities.filter(a =>
@@ -17833,12 +17798,12 @@ export const getUserActivities = async (filters?: {
             a.action.toLowerCase().includes(query)
         );
     }
-    
+
     // Apply limit
     if (filters?.limit) {
         activities = activities.slice(0, filters.limit);
     }
-    
+
     return activities;
 };
 
@@ -17848,63 +17813,63 @@ export const editUserActivity = async (
     updates: { description?: string; details?: Record<string, any> }
 ): Promise<UserActivity> => {
     const settings = await fetchUserManagement();
-    
+
     if (!settings.activityLog) {
         throw new Error('Activity log not found');
     }
-    
+
     const activity = settings.activityLog.find(a => a.id === activityId);
-    
+
     if (!activity) {
         throw new Error('Activity not found');
     }
-    
+
     const currentUser = getCurrentUserInfo();
-    
+
     // Save original for audit trail
     if (!activity.edited) {
         activity.originalDescription = activity.description;
     }
-    
+
     // Update activity
     if (updates.description !== undefined) {
         activity.description = updates.description;
     }
-    
+
     if (updates.details !== undefined) {
         activity.details = { ...activity.details, ...updates.details };
     }
-    
+
     activity.edited = true;
     activity.editedAt = new Date().toISOString();
     activity.editedBy = currentUser.name;
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return activity;
 };
 
 // Delete user activity
 export const deleteUserActivity = async (activityId: string): Promise<void> => {
     const settings = await fetchUserManagement();
-    
+
     if (!settings.activityLog) {
         return;
     }
-    
+
     settings.activityLog = settings.activityLog.filter(a => a.id !== activityId);
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
@@ -17920,11 +17885,11 @@ export const clearUserActivities = async (filters?: {
     endDate?: string;
 }): Promise<void> => {
     const settings = await fetchUserManagement();
-    
+
     if (!settings.activityLog) {
         return;
     }
-    
+
     if (!filters) {
         // Clear all
         settings.activityLog = [];
@@ -17938,11 +17903,11 @@ export const clearUserActivities = async (filters?: {
             return false;
         });
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
@@ -17979,19 +17944,19 @@ const calculateProfileMetrics = async (): Promise<ProfileMetric[]> => {
         // Get real data from other sections
         const automationData = await fetchAutomationSettings().catch(() => null);
         const notificationData = await fetchNotificationSettings().catch(() => null);
-        
+
         const workflowsCount = automationData?.workflows?.length || 0;
-        const activeAlerts = notificationData ? 
-            (notificationData.telegramChannels?.filter(c => c.enabled).length || 0) + 
+        const activeAlerts = notificationData ?
+            (notificationData.telegramChannels?.filter(c => c.enabled).length || 0) +
             (notificationData.browserPush?.enabled ? 1 : 0) : 0;
         const integrationsCount = 2; // MEXC + Telegram (can be expanded)
-        
+
         // Calculate success rate from automation logs
         const logs = automationData?.logs || [];
         const successCount = logs.filter(l => l.status === 'success').length;
         const totalExecutions = logs.length || 1;
         const successRate = Math.round((successCount / totalExecutions) * 100);
-        
+
         return [
             {
                 id: 'profile-metric-goals',
@@ -18037,9 +18002,9 @@ const getProfileIntegrations = async (): Promise<ProfileIntegration[]> => {
     try {
         const mexcSettings = await fetchConnectionSettings().catch(() => null);
         const notificationSettings = await fetchNotificationSettings().catch(() => null);
-        
+
         const integrations: ProfileIntegration[] = [];
-        
+
         // MEXC Integration
         if (mexcSettings?.isConnected) {
             integrations.push({
@@ -18058,7 +18023,7 @@ const getProfileIntegrations = async (): Promise<ProfileIntegration[]> => {
                 lastSyncedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
             });
         }
-        
+
         // Telegram Integration
         if (notificationSettings?.telegramChannels && notificationSettings.telegramChannels.length > 0) {
             const hasActiveChannel = notificationSettings.telegramChannels.some(c => c.enabled);
@@ -18078,7 +18043,7 @@ const getProfileIntegrations = async (): Promise<ProfileIntegration[]> => {
                 lastSyncedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
             });
         }
-        
+
         return integrations;
     } catch (e) {
         console.warn('Failed to get integrations:', e);
@@ -18090,24 +18055,24 @@ export const fetchProfileSettings = async (): Promise<ProfileSettingsData> => {
     try {
         // Try to get from database
         const saved = await database.get<{ key: string; value: ProfileSettingsData }>('settings', 'profile_settings');
-        
+
         if (saved && saved.value) {
             // Update last login time
             saved.value.profile.lastLoginAt = new Date().toISOString();
-            
+
             // Recalculate metrics from real data
             saved.value.metrics = await calculateProfileMetrics();
-            
+
             // Update integrations from real connections
             saved.value.integrations = await getProfileIntegrations();
-            
+
             saved.value.lastUpdated = new Date().toISOString();
-            
+
             await database.save('settings', { key: 'profile_settings', value: saved.value });
-            
+
             return saved.value;
         }
-        
+
         // Try localStorage as fallback
         try {
             const localData = localStorage.getItem('titan_profile_settings');
@@ -18122,10 +18087,10 @@ export const fetchProfileSettings = async (): Promise<ProfileSettingsData> => {
         } catch (e) {
             console.warn('Failed to load from localStorage:', e);
         }
-        
+
         // Get current user from storage
         const currentUser = getCurrentUserFromStorage();
-        
+
         // Default settings
         const defaultSettings: ProfileSettingsData = {
             profile: {
@@ -18154,10 +18119,10 @@ export const fetchProfileSettings = async (): Promise<ProfileSettingsData> => {
             activity: [],
             lastUpdated: new Date().toISOString(),
         };
-        
+
         // Save default settings
         await database.save('settings', { key: 'profile_settings', value: defaultSettings });
-        
+
         return defaultSettings;
     } catch (error) {
         console.error('Failed to fetch profile settings:', error);
@@ -18195,10 +18160,10 @@ export const fetchProfileSettings = async (): Promise<ProfileSettingsData> => {
 
 export const saveProfileDetails = async (updates: ProfileDetailsUpdate): Promise<ProfileSettingsData> => {
     const settings = await fetchProfileSettings();
-    
+
     // Update profile
     settings.profile = { ...settings.profile, ...updates };
-    
+
     // Update user in localStorage if email or name changed
     if (updates.email || updates.fullName) {
         try {
@@ -18213,12 +18178,12 @@ export const saveProfileDetails = async (updates: ProfileDetailsUpdate): Promise
             console.warn('Failed to update user in localStorage:', e);
         }
     }
-    
+
     // Dispatch event if avatar changed
     if (updates.avatarUrl) {
         window.dispatchEvent(new CustomEvent('titan_avatar_updated'));
     }
-    
+
     // Record activity
     settings.activity.unshift({
         id: `profile-activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -18226,53 +18191,53 @@ export const saveProfileDetails = async (updates: ProfileDetailsUpdate): Promise
         messageKey: updates.avatarUrl ? 'profile_activity_avatar_updated' : 'profile_activity_details_updated',
         context: settings.profile.fullName,
     });
-    
+
     // Keep only last 50 activities
     if (settings.activity.length > 50) {
         settings.activity = settings.activity.slice(0, 50);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'profile_settings', value: settings });
-    
+
     try {
         localStorage.setItem('titan_profile_settings', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
 export const saveProfileCommunications = async (preferences: ProfileCommunicationSettings): Promise<ProfileSettingsData> => {
     const settings = await fetchProfileSettings();
-    
+
     // Update communications
     settings.communications = { ...preferences };
-    
+
     // Record activity
     settings.activity.unshift({
         id: `profile-activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         timestamp: new Date().toISOString(),
         messageKey: 'profile_activity_preferences_updated',
     });
-    
+
     // Keep only last 50 activities
     if (settings.activity.length > 50) {
         settings.activity = settings.activity.slice(0, 50);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'profile_settings', value: settings });
-    
+
     try {
         localStorage.setItem('titan_profile_settings', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
@@ -18282,11 +18247,11 @@ export const changeProfilePassword = async ({ currentPassword, newPassword }: Pr
         if (newPassword.length < 8) {
             return { success: false, message: 'profile_password_error_length' };
         }
-        
+
         // In a real app, you would verify the current password with the backend
         // For now, we'll check if there's a stored password hash
         const storedPassword = localStorage.getItem('titan_user_password_hash');
-        
+
         if (storedPassword) {
             // In a real app, you would hash and compare
             // For now, we'll just check if currentPassword matches
@@ -18294,12 +18259,12 @@ export const changeProfilePassword = async ({ currentPassword, newPassword }: Pr
                 return { success: false, message: 'profile_password_error_current' };
             }
         }
-        
+
         // Hash and store new password (in real app, use proper hashing)
         // For now, we'll just store a hash indicator
         const newPasswordHash = btoa(newPassword); // Simple encoding (NOT secure, just for demo)
         localStorage.setItem('titan_user_password_hash', newPasswordHash);
-        
+
         // Record activity
         const settings = await fetchProfileSettings();
         settings.activity.unshift({
@@ -18307,21 +18272,21 @@ export const changeProfilePassword = async ({ currentPassword, newPassword }: Pr
             timestamp: new Date().toISOString(),
             messageKey: 'profile_activity_password_changed',
         });
-        
+
         if (settings.activity.length > 50) {
             settings.activity = settings.activity.slice(0, 50);
         }
-        
+
         settings.lastUpdated = new Date().toISOString();
-        
+
         await database.save('settings', { key: 'profile_settings', value: settings });
-        
+
         try {
             localStorage.setItem('titan_profile_settings', JSON.stringify(settings));
         } catch (e) {
             console.warn('Failed to save to localStorage:', e);
         }
-        
+
         return { success: true, message: 'profile_password_success' };
     } catch (error) {
         console.error('Failed to change password:', error);
@@ -18341,33 +18306,33 @@ export const createUserAccount = async (userData: {
     twoFactorEnabled?: boolean;
 }): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
-    
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(userData.email)) {
         throw new Error('Invalid email format');
     }
-    
+
     // Check if user already exists
     const existingUser = settings.users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
     if (existingUser) {
         throw new Error('User with this email already exists');
     }
-    
+
     // Validate password
     if (userData.password.length < 8) {
         throw new Error('Password must be at least 8 characters');
     }
-    
+
     // Remove invitation if exists
     const existingInvitation = settings.invitations.find(inv => inv.email.toLowerCase() === userData.email.toLowerCase());
     if (existingInvitation) {
         settings.invitations = settings.invitations.filter(inv => inv.email.toLowerCase() !== userData.email.toLowerCase());
     }
-    
+
     // Generate username from email (before @) or name
     const username = userData.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
-    
+
     const newUser: ManagedUser = {
         id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         name: userData.name,
@@ -18381,16 +18346,16 @@ export const createUserAccount = async (userData: {
         twoFactorEnabled: userData.twoFactorEnabled || false,
         permissions: getRolePermissions(userData.roleKey),
     };
-    
-    console.log('Creating new user account:', { 
-        username: newUser.username, 
+
+    console.log('Creating new user account:', {
+        username: newUser.username,
         email: newUser.email,
         hasPassword: !!newUser.password,
-        passwordLength: newUser.password?.length 
+        passwordLength: newUser.password?.length
     });
-    
+
     settings.users.push(newUser);
-    
+
     // Record activity
     try {
         const currentUser = getCurrentUserInfo();
@@ -18406,9 +18371,9 @@ export const createUserAccount = async (userData: {
     } catch (e) {
         console.warn('Failed to record activity:', e);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     console.log('Saving user management data (createUserAccount):', {
         totalUsers: settings.users.length,
         newUserIndex: settings.users.length - 1,
@@ -18419,16 +18384,16 @@ export const createUserAccount = async (userData: {
             passwordLength: settings.users[settings.users.length - 1].password?.length
         }
     });
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
         console.log('User management data saved to localStorage (createUserAccount)');
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     // Verify the user was saved
     try {
         const verify = await database.get<{ key: string; value: UserManagementData }>('settings', 'user_management');
@@ -18445,7 +18410,7 @@ export const createUserAccount = async (userData: {
     } catch (e) {
         console.warn('Failed to verify saved user:', e);
     }
-    
+
     return settings;
 };
 
@@ -18456,18 +18421,18 @@ export const createCustomRole = async (roleData: {
     permissions: string[];
 }): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
-    
+
     // Validate roleKey format (should be lowercase with underscores)
     if (!/^[a-z][a-z0-9_]*$/.test(roleData.roleKey)) {
         throw new Error('Role key must start with a letter and contain only lowercase letters, numbers, and underscores');
     }
-    
+
     // Check if role already exists
     const existingRole = settings.availableRoles.find(r => r.roleKey === roleData.roleKey);
     if (existingRole) {
         throw new Error('Role with this key already exists');
     }
-    
+
     const currentUser = getCurrentUserName();
     const newRole: UserRoleOption = {
         roleKey: roleData.roleKey,
@@ -18477,9 +18442,9 @@ export const createCustomRole = async (roleData: {
         createdAt: new Date().toISOString(),
         createdBy: currentUser,
     };
-    
+
     settings.availableRoles.push(newRole);
-    
+
     // Record activity
     try {
         await recordUserActivity({
@@ -18494,17 +18459,17 @@ export const createCustomRole = async (roleData: {
     } catch (e) {
         console.warn('Failed to record activity:', e);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
@@ -18514,31 +18479,31 @@ export const updateCustomRole = async (
     updates: { descriptionKey?: string; permissions?: string[] }
 ): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
-    
+
     const role = settings.availableRoles.find(r => r.roleKey === roleKey);
     if (!role) {
         throw new Error('Role not found');
     }
-    
+
     if (!role.isCustom) {
         throw new Error('Cannot modify system roles');
     }
-    
+
     if (updates.descriptionKey) {
         role.descriptionKey = updates.descriptionKey;
     }
-    
+
     if (updates.permissions) {
         role.permissions = updates.permissions;
     }
-    
+
     // Update permissions for all users with this role
     settings.users.forEach(user => {
         if (user.roleKey === roleKey) {
             user.permissions = role.permissions;
         }
     });
-    
+
     // Record activity
     try {
         const currentUser = getCurrentUserName();
@@ -18554,41 +18519,41 @@ export const updateCustomRole = async (
     } catch (e) {
         console.warn('Failed to record activity:', e);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
 // Delete custom role
 export const deleteCustomRole = async (roleKey: string): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
-    
+
     const role = settings.availableRoles.find(r => r.roleKey === roleKey);
     if (!role) {
         throw new Error('Role not found');
     }
-    
+
     if (!role.isCustom) {
         throw new Error('Cannot delete system roles');
     }
-    
+
     // Check if any users have this role
     const usersWithRole = settings.users.filter(u => u.roleKey === roleKey);
     if (usersWithRole.length > 0) {
         throw new Error(`Cannot delete role: ${usersWithRole.length} user(s) have this role. Please reassign them first.`);
     }
-    
+
     settings.availableRoles = settings.availableRoles.filter(r => r.roleKey !== roleKey);
-    
+
     // Record activity
     try {
         const currentUser = getCurrentUserName();
@@ -18604,26 +18569,26 @@ export const deleteCustomRole = async (roleKey: string): Promise<UserManagementD
     } catch (e) {
         console.warn('Failed to record activity:', e);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
 // Toggle registration enabled/disabled
 export const toggleRegistration = async (enabled: boolean, defaultRole?: string): Promise<UserManagementData> => {
     const settings = await fetchUserManagement();
-    
+
     settings.registrationEnabled = enabled;
-    
+
     if (defaultRole && enabled) {
         // Validate role exists
         const roleExists = settings.availableRoles.some(r => r.roleKey === defaultRole);
@@ -18632,7 +18597,7 @@ export const toggleRegistration = async (enabled: boolean, defaultRole?: string)
         }
         settings.registrationDefaultRole = defaultRole;
     }
-    
+
     // Record activity
     try {
         const currentUser = getCurrentUserName();
@@ -18648,17 +18613,17 @@ export const toggleRegistration = async (enabled: boolean, defaultRole?: string)
     } catch (e) {
         console.warn('Failed to record activity:', e);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     return settings;
 };
 
@@ -18669,34 +18634,34 @@ export const registerNewUser = async (userData: {
     password: string;
 }): Promise<{ success: boolean; message: string }> => {
     const settings = await fetchUserManagement();
-    
+
     // Check if registration is enabled
     if (!settings.registrationEnabled) {
         return { success: false, message: 'registration_disabled' };
     }
-    
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(userData.email)) {
         return { success: false, message: 'invalid_email_format' };
     }
-    
+
     // Check if user already exists
     const existingUser = settings.users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
     if (existingUser) {
         return { success: false, message: 'email_already_exists' };
     }
-    
+
     // Validate password
     if (userData.password.length < 8) {
         return { success: false, message: 'password_too_short' };
     }
-    
+
     // Create user with default registration role
     const defaultRole = settings.registrationDefaultRole || settings.defaultRoleKey;
     // Generate username from email (before @) or name
     const username = userData.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
-    
+
     const newUser: ManagedUser = {
         id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         name: userData.name,
@@ -18710,16 +18675,16 @@ export const registerNewUser = async (userData: {
         twoFactorEnabled: false,
         permissions: getRolePermissions(defaultRole),
     };
-    
-    console.log('Registering new user:', { 
-        username: newUser.username, 
+
+    console.log('Registering new user:', {
+        username: newUser.username,
         email: newUser.email,
         hasPassword: !!newUser.password,
-        passwordLength: newUser.password?.length 
+        passwordLength: newUser.password?.length
     });
-    
+
     settings.users.push(newUser);
-    
+
     // Record activity
     try {
         await recordUserActivity({
@@ -18734,9 +18699,9 @@ export const registerNewUser = async (userData: {
     } catch (e) {
         console.warn('Failed to record activity:', e);
     }
-    
+
     settings.lastUpdated = new Date().toISOString();
-    
+
     console.log('Saving registered user to database (registerNewUser):', {
         totalUsers: settings.users.length,
         newUserIndex: settings.users.length - 1,
@@ -18747,16 +18712,16 @@ export const registerNewUser = async (userData: {
             passwordLength: settings.users[settings.users.length - 1].password?.length
         }
     });
-    
+
     await database.save('settings', { key: 'user_management', value: settings });
-    
+
     try {
         localStorage.setItem('titan_user_management', JSON.stringify(settings));
         console.log('Registered user saved to localStorage (registerNewUser)');
     } catch (e) {
         console.warn('Failed to save to localStorage:', e);
     }
-    
+
     // Verify the user was saved
     try {
         const verify = await database.get<{ key: string; value: UserManagementData }>('settings', 'user_management');
@@ -18773,7 +18738,7 @@ export const registerNewUser = async (userData: {
     } catch (e) {
         console.warn('Failed to verify saved user:', e);
     }
-    
+
     return { success: true, message: 'registration_success' };
 };
 
@@ -18787,11 +18752,11 @@ export const fetchArtemisState = async (): Promise<ArtemisState> => {
     } catch (e) {
         console.warn('Failed to load Artemis state from database:', e);
     }
-    
+
     // Initialize default Artemis state
     const agents = await database.getAll<AIAgent>('aiAgents');
     const activeAgents = agents.filter(a => a.status === 'active').map(a => a.id);
-    
+
     const defaultState: ArtemisState = {
         id: 'artemis-1',
         status: 'active',
@@ -18890,7 +18855,7 @@ export const fetchArtemisState = async (): Promise<ArtemisState> => {
             },
         },
     };
-    
+
     // Save default state
     try {
         await database.save('settings', {
@@ -18900,7 +18865,7 @@ export const fetchArtemisState = async (): Promise<ArtemisState> => {
     } catch (e) {
         console.warn('Failed to save Artemis state:', e);
     }
-    
+
     return defaultState;
 };
 
@@ -18913,18 +18878,18 @@ export const makeArtemisDecision = async (
     try {
         const artemis = await fetchArtemisState();
         const strategy = artemis.decisionEngine.strategy;
-        
+
         // Aggregate signals based on strategy
         let aggregatedConfidence = 0;
         let aggregatedData: any = {};
         let reasoning = '';
-        
+
         if (strategy === 'voting') {
             // Simple voting: majority wins
             const buyVotes = signals.filter(s => s.signalType === 'buy' || s.signalType === 'entry').length;
             const sellVotes = signals.filter(s => s.signalType === 'sell' || s.signalType === 'exit').length;
             const totalVotes = signals.length;
-            
+
             aggregatedConfidence = totalVotes > 0 ? Math.round((Math.max(buyVotes, sellVotes) / totalVotes) * 100) : 0;
             aggregatedData = {
                 buyVotes,
@@ -18933,39 +18898,39 @@ export const makeArtemisDecision = async (
                 recommendation: buyVotes > sellVotes ? 'buy' : sellVotes > buyVotes ? 'sell' : 'hold',
             };
             reasoning = `Voting: ${buyVotes} buy, ${sellVotes} sell out of ${totalVotes} signals`;
-            
+
         } else if (strategy === 'weighted') {
             // Weighted average based on agent confidence
             let totalWeight = 0;
             let weightedSum = 0;
-            
+
             signals.forEach(signal => {
                 const weight = signal.confidence / 100;
                 totalWeight += weight;
                 weightedSum += signal.confidence * weight;
             });
-            
+
             aggregatedConfidence = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
             aggregatedData = {
                 weightedAverage: aggregatedConfidence,
                 signalsUsed: signals.length,
             };
             reasoning = `Weighted average: ${aggregatedConfidence}% confidence from ${signals.length} signals`;
-            
+
         } else if (strategy === 'mixture_of_experts' || strategy === 'consensus') {
             // Mixture of Experts: Use AI models to combine signals
             const highConfidenceSignals = signals.filter(s => s.confidence >= artemis.decisionEngine.confidenceThreshold);
             const avgConfidence = highConfidenceSignals.length > 0
                 ? highConfidenceSignals.reduce((sum, s) => sum + s.confidence, 0) / highConfidenceSignals.length
                 : signals.reduce((sum, s) => sum + s.confidence, 0) / (signals.length || 1);
-            
+
             // Use external AI if available
             const model = artemis.decisionEngine.activeModel;
             if (model === 'hybrid' || model === 'claude' || model === 'gemini' || model === 'openai' || model === 'deepseek') {
                 // In production, this would call the actual AI API
                 // For now, we simulate the reasoning
                 aggregatedConfidence = Math.min(100, Math.round(avgConfidence * 1.1));
-                
+
                 // Build reasoning with model info
                 const modelNames: { [key: string]: string } = {
                     'claude': 'Anthropic Claude',
@@ -18974,13 +18939,13 @@ export const makeArtemisDecision = async (
                     'deepseek': 'DeepSeek',
                     'hybrid': 'Hybrid (Multiple Models)',
                 };
-                
+
                 reasoning = `Mixture of Experts (${modelNames[model] || model}): Analyzed ${signals.length} signals, ${highConfidenceSignals.length} high-confidence. Consensus: ${aggregatedConfidence}%`;
             } else {
                 aggregatedConfidence = Math.round(avgConfidence);
                 reasoning = `Consensus: Average confidence ${aggregatedConfidence}% from ${signals.length} signals`;
             }
-            
+
             aggregatedData = {
                 signalsAnalyzed: signals.length,
                 highConfidenceCount: highConfidenceSignals.length,
@@ -18988,12 +18953,12 @@ export const makeArtemisDecision = async (
                 model: model,
             };
         }
-        
+
         // Determine action based on aggregated confidence
         const action = aggregatedConfidence >= artemis.decisionEngine.confidenceThreshold
             ? (aggregatedData.recommendation || 'execute_trade')
             : 'wait';
-        
+
         const decision: Decision = {
             id: `ART-DEC-${Date.now()}`,
             timestamp: new Date().toISOString(),
@@ -19005,8 +18970,8 @@ export const makeArtemisDecision = async (
             },
             process: {
                 method: strategy,
-                modelsUsed: artemis.decisionEngine.activeModel === 'hybrid' 
-                    ? ['internal', 'claude', 'gemini', 'deepseek'] 
+                modelsUsed: artemis.decisionEngine.activeModel === 'hybrid'
+                    ? ['internal', 'claude', 'gemini', 'deepseek']
                     : [artemis.decisionEngine.activeModel],
                 reasoning,
             },
@@ -19023,13 +18988,13 @@ export const makeArtemisDecision = async (
                 learned: false,
             },
         };
-        
+
         // Update Artemis state
         const updatedDecisions = [decision, ...artemis.decisionEngine.recentDecisions].slice(0, 50);
         artemis.decisionEngine.recentDecisions = updatedDecisions;
         artemis.totalDecisions += 1;
         artemis.lastDecisionTime = new Date().toISOString();
-        
+
         // Log the decision
         await logArtemisAction({
             type: 'decision',
@@ -19044,12 +19009,12 @@ export const makeArtemisDecision = async (
             },
             result: 'success',
         });
-        
+
         await database.save('settings', {
             key: 'artemis_state',
             value: artemis,
         });
-        
+
         return decision;
     } catch (e) {
         console.error('Failed to make Artemis decision:', e);
@@ -19062,20 +19027,20 @@ export const learnFromDecision = async (decisionId: string, actualOutcome: any):
     try {
         const artemis = await fetchArtemisState();
         const decision = artemis.decisionEngine.recentDecisions.find(d => d.id === decisionId);
-        
+
         if (!decision) {
             throw new Error('Decision not found');
         }
-        
+
         // Calculate accuracy
         const predicted = decision.output.parameters;
         const accuracy = calculateDecisionAccuracy(predicted, actualOutcome);
-        
+
         // Update decision learning
         decision.learning.actualOutcome = actualOutcome;
         decision.learning.accuracy = accuracy;
         decision.learning.learned = true;
-        
+
         // Update performance metrics
         const totalDecisions = artemis.decisionEngine.recentDecisions.filter(d => d.learning.learned).length;
         const avgAccuracy = totalDecisions > 0
@@ -19083,10 +19048,10 @@ export const learnFromDecision = async (decisionId: string, actualOutcome: any):
                 .filter(d => d.learning.learned)
                 .reduce((sum, d) => sum + (d.learning.accuracy || 0), 0) / totalDecisions
             : 0;
-        
+
         artemis.decisionEngine.performance.accuracy = Math.round(avgAccuracy);
         artemis.successRate = avgAccuracy;
-        
+
         // Record improvement or mistake
         if (accuracy < 70) {
             artemis.learningSystem.mistakes.push({
@@ -19111,7 +19076,7 @@ export const learnFromDecision = async (decisionId: string, actualOutcome: any):
                 method: decision.process.method,
             });
         }
-        
+
         // Update accuracy history
         const today = new Date().toISOString().split('T')[0];
         const existingEntry = artemis.learningSystem.accuracyHistory.find(h => h.date === today);
@@ -19123,7 +19088,7 @@ export const learnFromDecision = async (decisionId: string, actualOutcome: any):
                 accuracy: avgAccuracy,
             });
         }
-        
+
         await database.save('settings', {
             key: 'artemis_state',
             value: artemis,
@@ -19138,16 +19103,16 @@ const calculateDecisionAccuracy = (predicted: any, actual: any): number => {
     // Simple accuracy calculation
     // In production, this would be more sophisticated
     if (!predicted || !actual) return 50;
-    
+
     if (predicted.recommendation && actual.direction) {
         return predicted.recommendation === actual.direction ? 100 : 0;
     }
-    
+
     if (predicted.price && actual.price) {
         const error = Math.abs(predicted.price - actual.price) / actual.price;
         return Math.max(0, Math.round((1 - error) * 100));
     }
-    
+
     return 50;
 };
 
@@ -19166,16 +19131,16 @@ export const createTradingScenario = async (scenario: Omit<TradingScenario, 'id'
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };
-        
+
         const saved = await database.get<{ key: string; value: TradingScenario[] }>('settings', 'trading_scenarios');
         const scenarios = saved?.value || [];
         scenarios.push(newScenario);
-        
+
         await database.save('settings', {
             key: 'trading_scenarios',
             value: scenarios,
         });
-        
+
         return newScenario;
     } catch (e) {
         console.error('Failed to create trading scenario:', e);
@@ -19198,11 +19163,11 @@ export const updateTradingScenario = async (scenarioId: string, updates: Partial
         const saved = await database.get<{ key: string; value: TradingScenario[] }>('settings', 'trading_scenarios');
         const scenarios = saved?.value || [];
         const index = scenarios.findIndex(s => s.id === scenarioId);
-        
+
         if (index === -1) {
             throw new Error('Scenario not found');
         }
-        
+
         // Update progress if target changed
         let progress = scenarios[index].progress;
         if (updates.target) {
@@ -19213,19 +19178,19 @@ export const updateTradingScenario = async (scenarioId: string, updates: Partial
                 percentage: progress.current > 0 ? (progress.current / newTarget) * 100 : 0,
             };
         }
-        
+
         scenarios[index] = {
             ...scenarios[index],
             ...updates,
             progress,
             updatedAt: new Date().toISOString(),
         };
-        
+
         await database.save('settings', {
             key: 'trading_scenarios',
             value: scenarios,
         });
-        
+
         return scenarios[index];
     } catch (e) {
         console.error('Failed to update trading scenario:', e);
@@ -19238,7 +19203,7 @@ export const deleteTradingScenario = async (scenarioId: string): Promise<void> =
         const saved = await database.get<{ key: string; value: TradingScenario[] }>('settings', 'trading_scenarios');
         const scenarios = saved?.value || [];
         const filtered = scenarios.filter(s => s.id !== scenarioId);
-        
+
         await database.save('settings', {
             key: 'trading_scenarios',
             value: filtered,
@@ -19254,7 +19219,7 @@ export const checkSystemHealth = async (): Promise<SystemHealth> => {
     try {
         const artemis = await fetchArtemisState();
         const agents = await database.getAll<AIAgent>('aiAgents');
-        
+
         // Update agent health
         const agentHealth: AgentHealth[] = agents.map(agent => {
             const existing = artemis.systemHealth.agents.find(a => a.agentId === agent.id);
@@ -19272,11 +19237,11 @@ export const checkSystemHealth = async (): Promise<SystemHealth> => {
                 uptime: existing?.uptime || Math.floor(Math.random() * 86400) + 3600,
             };
         });
-        
+
         // Check for errors
         const errorAgents = agentHealth.filter(a => a.status === 'error' || a.errors.length > 0);
         const overall = errorAgents.length === 0 ? 'healthy' : errorAgents.length < 3 ? 'degraded' : 'critical';
-        
+
         // Generate alerts if needed
         const alerts: SystemAlert[] = [...artemis.systemHealth.alerts];
         errorAgents.forEach(agent => {
@@ -19291,7 +19256,7 @@ export const checkSystemHealth = async (): Promise<SystemHealth> => {
                 });
             }
         });
-        
+
         const updatedHealth: SystemHealth = {
             overall,
             agents: agentHealth,
@@ -19299,13 +19264,13 @@ export const checkSystemHealth = async (): Promise<SystemHealth> => {
             resources: artemis.systemHealth.resources,
             alerts: alerts.slice(-20), // Keep last 20 alerts
         };
-        
+
         artemis.systemHealth = updatedHealth;
         await database.save('settings', {
             key: 'artemis_state',
             value: artemis,
         });
-        
+
         return updatedHealth;
     } catch (e) {
         console.error('Failed to check system health:', e);
@@ -19318,19 +19283,19 @@ export const triggerFailover = async (failedAgentId: string): Promise<void> => {
     try {
         const artemis = await fetchArtemisState();
         const fallbackAgents = artemis.orchestration.failoverStatus.fallbackAgents[failedAgentId];
-        
+
         if (!fallbackAgents || fallbackAgents.length === 0) {
             console.warn(`No fallback agents configured for ${failedAgentId}`);
             return;
         }
-        
+
         // Find first available fallback agent
         const agents = await database.getAll<AIAgent>('aiAgents');
         const availableFallback = fallbackAgents.find(id => {
             const agent = agents.find(a => a.id === id);
             return agent && agent.status === 'active';
         });
-        
+
         if (availableFallback) {
             artemis.orchestration.failoverStatus.lastFailover = {
                 timestamp: new Date().toISOString(),
@@ -19338,7 +19303,7 @@ export const triggerFailover = async (failedAgentId: string): Promise<void> => {
                 toAgent: availableFallback,
                 reason: 'Agent failure detected',
             };
-            
+
             // Update active agents
             const index = artemis.activeAgents.indexOf(failedAgentId);
             if (index !== -1) {
@@ -19346,12 +19311,12 @@ export const triggerFailover = async (failedAgentId: string): Promise<void> => {
             } else {
                 artemis.activeAgents.push(availableFallback);
             }
-            
+
             await database.save('settings', {
                 key: 'artemis_state',
                 value: artemis,
             });
-            
+
             console.log(`Failover: ${failedAgentId} -> ${availableFallback}`);
         }
     } catch (e) {
@@ -19366,11 +19331,11 @@ export const generateAIStrategy = async (): Promise<TradingScenario> => {
         // Collect current market conditions
         const agents = await database.getAll<AIAgent>('aiAgents');
         const activeAgents = agents.filter(a => a.status === 'active');
-        
+
         // Get market data from top symbols
         const symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT'];
         const marketData: any[] = [];
-        
+
         for (const symbol of symbols.slice(0, 3)) {
             try {
                 const ticker = await fetchMexcTicker24hr(symbol);
@@ -19389,7 +19354,7 @@ export const generateAIStrategy = async (): Promise<TradingScenario> => {
                 console.warn(`Failed to fetch data for ${symbol}:`, e);
             }
         }
-        
+
         // Collect agent signals
         const agentSignals: any[] = [];
         for (const agent of activeAgents.slice(0, 5)) {
@@ -19402,15 +19367,15 @@ export const generateAIStrategy = async (): Promise<TradingScenario> => {
                 });
             }
         }
-        
+
         // Get Artemis state for context
         const artemis = await fetchArtemisState();
-        
+
         // Build prompt for AI
-        const marketSummary = marketData.map(m => 
+        const marketSummary = marketData.map(m =>
             `${m.symbol}: $${m.price.toFixed(2)} (${m.change24h >= 0 ? '+' : ''}${m.change24h.toFixed(2)}%)`
         ).join(', ');
-        
+
         const prompt = `You are Artemis, the master AI controller of the Titan autonomous trading system. 
 
 Current Market Conditions:
@@ -19447,7 +19412,7 @@ Make the strategy name descriptive and professional.`;
         const model = artemis.decisionEngine.activeModel;
         const systemInstruction = 'You are Artemis, the master AI controller of the Titan autonomous trading system. Provide professional, data-driven trading strategy recommendations.';
         let aiResponse: string;
-        
+
         // Try to use the selected model, with fallbacks
         if (model === 'claude') {
             try {
@@ -19477,7 +19442,7 @@ Make the strategy name descriptive and professional.`;
             // Try models in order of preference
             const models = ['claude', 'gemini', 'deepseek', 'openai'];
             const randomModel = models[Math.floor(Math.random() * models.length)];
-            
+
             try {
                 if (randomModel === 'claude') {
                     const { generateContent: generateClaude } = await import('./claudeService.ts');
@@ -19499,25 +19464,25 @@ Make the strategy name descriptive and professional.`;
             // Default to Gemini
             aiResponse = await fallbackToGemini(prompt);
         }
-        
+
         // Helper function for Gemini fallback
         async function fallbackToGemini(prompt: string): Promise<string> {
             const { GoogleGenAI } = await import('@google/genai');
             const API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY;
-            
+
             if (!API_KEY) {
                 throw new Error('AI API key not configured');
             }
-            
+
             const ai = new GoogleGenAI({ apiKey: API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: prompt,
             });
-            
+
             return response.text.trim();
         }
-        
+
         // Parse JSON from AI response (remove markdown if present)
         let strategyJson = aiResponse;
         if (strategyJson.includes('```json')) {
@@ -19525,29 +19490,29 @@ Make the strategy name descriptive and professional.`;
         } else if (strategyJson.includes('```')) {
             strategyJson = strategyJson.split('```')[1].split('```')[0].trim();
         }
-        
+
         // Try to extract JSON if wrapped in text
         const jsonMatch = strategyJson.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
             strategyJson = jsonMatch[0];
         }
-        
+
         const strategy = JSON.parse(strategyJson);
-        
+
         // Create scenario from AI strategy
         const scenario: Omit<TradingScenario, 'id' | 'createdAt' | 'updatedAt' | 'trades' | 'progress' | 'status'> = {
             name: strategy.name || `AI Strategy ${new Date().toLocaleDateString()}`,
             type: strategy.type || 'target_profit',
             target: strategy.target || { profit: 100 },
         };
-        
+
         // Add description as a note in target if needed
         if (strategy.description) {
             (scenario.target as any).description = strategy.description;
         }
-        
+
         const newScenario = await createTradingScenario(scenario);
-        
+
         return newScenario;
     } catch (e) {
         console.error('Failed to generate AI strategy:', e);
@@ -19567,13 +19532,13 @@ export const updateArtemisMode = async (mode: 'demo' | 'real'): Promise<ArtemisS
         const artemis = await fetchArtemisState();
         const oldMode = artemis.mode;
         artemis.mode = mode;
-        
+
         // Update status based on mode switch
         if (mode === 'real' && artemis.status === 'active') {
             // Add confirmation step for real mode
             console.log('Switching to REAL mode - all trades will use actual funds');
         }
-        
+
         // Log mode change
         await logArtemisAction({
             type: 'config_change',
@@ -19583,12 +19548,12 @@ export const updateArtemisMode = async (mode: 'demo' | 'real'): Promise<ArtemisS
             details: { oldMode, newMode: mode },
             result: 'success',
         });
-        
+
         await database.save('settings', {
             key: 'artemis_state',
             value: artemis,
         });
-        
+
         return artemis;
     } catch (e) {
         console.error('Failed to update Artemis mode:', e);
@@ -19601,7 +19566,7 @@ export const updateArtemisConfig = async (updates: Partial<ArtemisState>): Promi
     try {
         const artemis = await fetchArtemisState();
         const updated = { ...artemis, ...updates };
-        
+
         // Log config change
         await logArtemisAction({
             type: 'config_change',
@@ -19611,12 +19576,12 @@ export const updateArtemisConfig = async (updates: Partial<ArtemisState>): Promi
             details: updates,
             result: 'success',
         });
-        
+
         await database.save('settings', {
             key: 'artemis_state',
             value: updated,
         });
-        
+
         return updated;
     } catch (e) {
         console.error('Failed to update Artemis config:', e);
@@ -19665,7 +19630,7 @@ export const runBacktest = async (request: BacktestRequest): Promise<BacktestRes
             sharpeRatio: Math.random() * 2 + 1,
             executedAt: new Date().toISOString(),
         };
-        
+
         // Save backtest result
         const saved = await database.get<{ key: string; value: BacktestResult[] }>('settings', 'backtest_results');
         const results = saved?.value || [];
@@ -19674,7 +19639,7 @@ export const runBacktest = async (request: BacktestRequest): Promise<BacktestRes
             key: 'backtest_results',
             value: results.slice(0, 50), // Keep last 50 results
         });
-        
+
         return result;
     } catch (e) {
         console.error('Failed to run backtest:', e);
@@ -19695,27 +19660,27 @@ export const fetchArtemisLogs = async (filter: ArtemisLogFilter = {}): Promise<A
     try {
         const saved = await database.get<{ key: string; value: ArtemisLog[] }>('settings', 'artemis_logs');
         let logs = saved?.value || [];
-        
+
         // Apply filters
         if (filter.filter && filter.filter !== 'all') {
             logs = logs.filter(log => log.type === filter.filter);
         }
-        
+
         if (filter.level) {
             logs = logs.filter(log => log.level === filter.level);
         }
-        
+
         if (filter.startDate) {
             logs = logs.filter(log => log.timestamp >= filter.startDate!);
         }
-        
+
         if (filter.endDate) {
             logs = logs.filter(log => log.timestamp <= filter.endDate!);
         }
-        
+
         // Sort by timestamp (newest first) and limit
         logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        
+
         return logs.slice(0, filter.limit || 100);
     } catch (e) {
         console.warn('Failed to load Artemis logs:', e);
@@ -19726,35 +19691,35 @@ export const fetchArtemisLogs = async (filter: ArtemisLogFilter = {}): Promise<A
 export const logArtemisAction = async (log: Omit<ArtemisLog, 'id' | 'timestamp'>): Promise<void> => {
     try {
         const artemis = await fetchArtemisState();
-        
+
         // Check if logging is enabled
         if (!artemis.config?.security.logAllCommands && log.type === 'command') {
             return; // Skip if logging is disabled
         }
-        
+
         const newLog: ArtemisLog = {
             ...log,
             id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             timestamp: new Date().toISOString(),
         };
-        
+
         const saved = await database.get<{ key: string; value: ArtemisLog[] }>('settings', 'artemis_logs');
         const logs = saved?.value || [];
         logs.unshift(newLog);
-        
+
         // Keep last 1000 logs
         await database.save('settings', {
             key: 'artemis_logs',
             value: logs.slice(0, 1000),
         });
-        
+
         // Update Artemis state
         if (!artemis.logs) {
             artemis.logs = [];
         }
         artemis.logs.unshift(newLog);
         artemis.logs = artemis.logs.slice(0, 100); // Keep last 100 in state
-        
+
         await database.save('settings', {
             key: 'artemis_state',
             value: artemis,
@@ -19766,6 +19731,101 @@ export const logArtemisAction = async (log: Omit<ArtemisLog, 'id' | 'timestamp'>
 
 // ==================== Artemis Data Hub Functions ====================
 
+const buildDefaultTelegramCollectorChannels = (): TelegramCollectorChannel[] => {
+    const now = Date.now();
+    return [
+        {
+            id: 'collector-gold-insights',
+            title: 'Titan Gold Insights',
+            handle: 'titan_gold_insights',
+            status: 'idle',
+            enabled: true,
+            usingCollector: true,
+            category: 'news',
+            sourceId: 'telegram-gold-news',
+            lastSyncAt: new Date(now - 1000 * 60 * 12).toISOString(),
+            lastMessageAt: new Date(now - 1000 * 60 * 8).toISOString(),
+            messageCount24h: 28,
+            fetchLatencyMs: 380,
+            createdAt: new Date(now - 1000 * 60 * 60 * 24 * 10).toISOString(),
+            updatedAt: new Date(now - 1000 * 60 * 5).toISOString(),
+        },
+        {
+            id: 'collector-vip-alerts',
+            title: 'VIP Market Alerts',
+            handle: 'titan_vip_alerts',
+            status: 'paused',
+            enabled: false,
+            usingCollector: true,
+            category: 'alerts',
+            sourceId: 'telegram-vip-alerts',
+            lastSyncAt: new Date(now - 1000 * 60 * 90).toISOString(),
+            lastMessageAt: new Date(now - 1000 * 60 * 75).toISOString(),
+            messageCount24h: 6,
+            fetchLatencyMs: 520,
+            createdAt: new Date(now - 1000 * 60 * 60 * 24 * 5).toISOString(),
+            updatedAt: new Date(now - 1000 * 60 * 80).toISOString(),
+        },
+        {
+            id: 'collector-news-aggregator',
+            title: 'Global Macro Monitor',
+            handle: 'global_macro_monitor',
+            status: 'idle',
+            enabled: true,
+            usingCollector: true,
+            category: 'macro',
+            sourceId: 'telegram-macro-monitor',
+            lastSyncAt: new Date(now - 1000 * 60 * 25).toISOString(),
+            lastMessageAt: new Date(now - 1000 * 60 * 20).toISOString(),
+            messageCount24h: 14,
+            fetchLatencyMs: 445,
+            createdAt: new Date(now - 1000 * 60 * 60 * 24 * 20).toISOString(),
+            updatedAt: new Date(now - 1000 * 60 * 20).toISOString(),
+        },
+    ];
+};
+
+const buildDefaultTelegramCollectorState = (): TelegramCollectorState => ({
+    status: 'unknown',
+    lastRefreshAt: new Date().toISOString(),
+    channels: buildDefaultTelegramCollectorChannels(),
+});
+
+const ensureTelegramCollectorState = (dataHub: DataHubState): TelegramCollectorState => {
+    if (!dataHub.telegramCollector) {
+        dataHub.telegramCollector = buildDefaultTelegramCollectorState();
+    }
+    if (!dataHub.telegramCollector.channels) {
+        dataHub.telegramCollector.channels = [];
+    }
+    return dataHub.telegramCollector;
+};
+
+const persistDataHubState = async (dataHub: DataHubState): Promise<DataHubState> => {
+    try {
+        await database.save('settings', {
+            key: 'data_hub_state',
+            value: dataHub,
+        });
+    } catch (e) {
+        console.warn('Failed to persist Data Hub state:', e);
+        throw e;
+    }
+
+    try {
+        const artemis = await fetchArtemisState();
+        artemis.dataHub = dataHub;
+        await database.save('settings', {
+            key: 'artemis_state',
+            value: artemis,
+        });
+    } catch (e) {
+        console.warn('Failed to sync Artemis with Data Hub state:', e);
+    }
+
+    return dataHub;
+};
+
 // Fetch Data Hub State
 export const fetchDataHubState = async (): Promise<DataHubState> => {
     try {
@@ -19775,12 +19835,13 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
             if (!saved.value.cache.data) {
                 saved.value.cache.data = {};
             }
+            ensureTelegramCollectorState(saved.value);
             return saved.value;
         }
     } catch (e) {
         console.warn('Failed to load Data Hub state from database:', e);
     }
-    
+
     // Initialize default Data Hub state
     const defaultSources: DataSource[] = [
         {
@@ -19823,7 +19884,7 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
             updatedAt: new Date().toISOString(),
         },
     ];
-    
+
     const defaultCategories: DataCategory[] = [
         {
             id: 'price_data',
@@ -19853,7 +19914,7 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
             createdAt: new Date().toISOString(),
         },
     ];
-    
+
     const defaultState: DataHubState = {
         id: 'data-hub-1',
         status: 'active',
@@ -19883,8 +19944,9 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
             evictionCount: 0,
             data: {}, // Initialize cache data object
         },
+        telegramCollector: buildDefaultTelegramCollectorState(),
     };
-    
+
     // Save default state
     try {
         await database.save('settings', {
@@ -19894,7 +19956,7 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
     } catch (e) {
         console.warn('Failed to save Data Hub state:', e);
     }
-    
+
     // Update Artemis state to include Data Hub
     try {
         const artemis = await fetchArtemisState();
@@ -19906,7 +19968,7 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
     } catch (e) {
         console.warn('Failed to update Artemis with Data Hub:', e);
     }
-    
+
     return defaultState;
 };
 
@@ -19914,7 +19976,7 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
 export const createDataSource = async (source: Omit<DataSource, 'id' | 'createdAt' | 'updatedAt' | 'errorCount' | 'successRate' | 'reliabilityScore'>): Promise<DataSource> => {
     try {
         const dataHub = await fetchDataHubState();
-        
+
         const newSource: DataSource = {
             ...source,
             id: `DS-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -19924,17 +19986,17 @@ export const createDataSource = async (source: Omit<DataSource, 'id' | 'createdA
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };
-        
+
         dataHub.sources.push(newSource);
         dataHub.totalSources = dataHub.sources.length;
         dataHub.activeSources = dataHub.sources.filter(s => s.status === 'active').length;
         dataHub.updatedAt = new Date().toISOString();
-        
+
         await database.save('settings', {
             key: 'data_hub_state',
             value: dataHub,
         });
-        
+
         // Update Artemis state
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
@@ -19942,7 +20004,7 @@ export const createDataSource = async (source: Omit<DataSource, 'id' | 'createdA
             key: 'artemis_state',
             value: artemis,
         });
-        
+
         return newSource;
     } catch (e) {
         console.error('Failed to create data source:', e);
@@ -19955,25 +20017,25 @@ export const updateDataHubSource = async (sourceId: string, updates: Partial<Dat
     try {
         const dataHub = await fetchDataHubState();
         const sourceIndex = dataHub.sources.findIndex(s => s.id === sourceId);
-        
+
         if (sourceIndex === -1) {
             throw new Error('Data source not found');
         }
-        
+
         dataHub.sources[sourceIndex] = {
             ...dataHub.sources[sourceIndex],
             ...updates,
             updatedAt: new Date().toISOString(),
         };
-        
+
         dataHub.activeSources = dataHub.sources.filter(s => s.status === 'active').length;
         dataHub.updatedAt = new Date().toISOString();
-        
+
         await database.save('settings', {
             key: 'data_hub_state',
             value: dataHub,
         });
-        
+
         // Update Artemis state
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
@@ -19981,7 +20043,7 @@ export const updateDataHubSource = async (sourceId: string, updates: Partial<Dat
             key: 'artemis_state',
             value: artemis,
         });
-        
+
         return dataHub.sources[sourceIndex];
     } catch (e) {
         console.error('Failed to update data source:', e);
@@ -19997,12 +20059,12 @@ export const deleteDataSource = async (sourceId: string): Promise<void> => {
         dataHub.totalSources = dataHub.sources.length;
         dataHub.activeSources = dataHub.sources.filter(s => s.status === 'active').length;
         dataHub.updatedAt = new Date().toISOString();
-        
+
         await database.save('settings', {
             key: 'data_hub_state',
             value: dataHub,
         });
-        
+
         // Update Artemis state
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
@@ -20020,10 +20082,10 @@ export const deleteDataSource = async (sourceId: string): Promise<void> => {
 export const requestData = async (request: DataRequest): Promise<DataResponse> => {
     try {
         const dataHub = await fetchDataHubState();
-        
+
         // Find matching sources - allow inactive sources for preview
         let sources = dataHub.sources;
-        
+
         if (request.sourceId) {
             sources = sources.filter(s => s.id === request.sourceId);
         } else if (request.category) {
@@ -20031,7 +20093,7 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
         } else if (request.tags && request.tags.length > 0) {
             sources = sources.filter(s => request.tags!.some(tag => s.tags.includes(tag)));
         }
-        
+
         if (sources.length === 0) {
             return {
                 success: false,
@@ -20041,40 +20103,42 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                 error: 'No matching data sources found',
             };
         }
-        
+
         // Use highest priority source
         const source = sources.sort((a, b) => {
             const priorityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
             return priorityOrder[b.priority] - priorityOrder[a.priority];
         })[0];
-        
+
         // Real data fetch from API source
         const startTime = Date.now();
         let data: any = null;
         let cached = false;
-        
+
         // Check cache (simple in-memory cache check - in production use proper cache)
         const cacheKey = `${source.id}_${request.dataType}_${request.tags?.join('_') || ''}`;
-        const cacheExpiry = 60000; // 1 minute cache
-        
+        // For Telegram sources, use shorter cache (30 seconds) to get new messages quickly
+        // For other sources, use 1 minute cache
+        const cacheExpiry = source.type === 'telegram' ? 30000 : 60000;
+
         // Ensure cache.data exists
         if (!dataHub.cache.data) {
             dataHub.cache.data = {};
         }
-        
+
         const cachedData = dataHub.cache.data[cacheKey];
-        
+
         if (request.cache !== false && cachedData && (Date.now() - cachedData.timestamp < cacheExpiry)) {
             cached = true;
             data = cachedData.data;
         }
-        
+
         if (!cached) {
             // Handle Telegram sources specially
             if (source.type === 'telegram') {
                 // Try to get bot token from source credentials first, then from notification settings
                 let botToken = source.credentials?.token || source.credentials?.apiKey;
-                
+
                 // If no token in source, try to get from notification settings
                 if (!botToken) {
                     try {
@@ -20086,11 +20150,11 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                         console.warn('Failed to load notification settings for Telegram token:', e);
                     }
                 }
-                
+
                 // Try to get channel info from source or notification settings
-                let channelUsername = source.credentials?.username || source.url?.replace('https://t.me/', '').replace('@', '');
+                let channelUsername = deriveTelegramChannelSlug(source);
                 let channelId: string | undefined = source.credentials?.channelId;
-                
+
                 // If no channel info in source, try to find matching channel in notification settings
                 if (!channelUsername && !channelId) {
                     try {
@@ -20098,13 +20162,13 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                         if (notificationSettings?.telegram?.channels && notificationSettings.telegram.channels.length > 0) {
                             // Try to match by URL or use first enabled channel
                             const sourceUrl = source.url?.toLowerCase() || '';
-                            const matchingChannel = notificationSettings.telegram.channels.find(ch => 
+                            const matchingChannel = notificationSettings.telegram.channels.find(ch =>
                                 ch.enabled && (
                                     ch.channelId?.toLowerCase().includes(sourceUrl) ||
                                     ch.name?.toLowerCase().includes(channelUsername?.toLowerCase() || '')
                                 )
                             ) || notificationSettings.telegram.channels.find(ch => ch.enabled);
-                            
+
                             if (matchingChannel) {
                                 channelId = matchingChannel.channelId;
                                 if (!channelUsername && matchingChannel.name) {
@@ -20119,26 +20183,48 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                         console.warn('Failed to load notification settings for channel info:', e);
                     }
                 }
-                
+
+                const fetchPublicChannelIfPossible = async () => {
+                    if (!channelUsername) {
+                        return null;
+                    }
+                    try {
+                        const publicData = await fetchPublicTelegramChannelData(channelUsername);
+                        if (publicData.messages.length > 0) {
+                            return publicData;
+                        }
+                    } catch (publicError) {
+                        console.warn('Failed to fetch public Telegram channel data:', publicError);
+                    }
+                    return null;
+                };
+
                 if (!botToken) {
-                    // No bot token - return info message
+                    const publicData = await fetchPublicChannelIfPossible();
+                    if (publicData) {
+                        // Convert to article format for agents
+                        data = {
+                            channel: publicData.channel,
+                            messages: publicData.messages,
+                            articles: publicData.articles,
+                            totalMessages: publicData.totalMessages,
+                            note: publicData.note,
+                            source: source.name,
+                            lastUpdated: new Date().toISOString(),
+                        };
+                    } else {
                     data = {
                         message: 'Telegram Bot Token not found',
                         source: source.name,
                         type: source.type,
                         channel: channelUsername || 'Unknown',
-                        note: 'Telegram Bot Token not found in source settings or Configuration. Please configure Telegram Bot Token in Configuration > Communications and Alerts, or add it directly to this source. You can get a bot token from @BotFather on Telegram.',
+                            note: 'Telegram Bot Token not found in source settings or Configuration. Please configure Telegram Bot Token in Configuration > Communications and Alerts, یا لینک عمومی کانال باید قابل‌دسترسی باشد.',
                         instructions: [
-                            'Option 1: Configure in Configuration > Communications and Alerts',
-                            'Option 2: Add bot token directly to this source',
-                            'To get a bot token:',
-                            '1. Open Telegram and search for @BotFather',
-                            '2. Send /newbot command',
-                            '3. Follow the instructions to create a bot',
-                            '4. Copy the bot token',
-                            '5. Add it to Configuration or this source'
-                        ]
-                    };
+                                'اگر کانال عمومی است اطمینان حاصل کنید که در مرورگر به https://t.me/s/<channel> دسترسی دارید.',
+                                'در غیر این صورت توکن ربات را در تنظیمات Communication -> Telegram وارد کنید یا مستقیم در منبع ذخیره نمایید.',
+                            ]
+                        };
+                    }
                 } else if (!channelUsername && !channelId) {
                     data = {
                         message: 'Telegram Channel not configured',
@@ -20152,10 +20238,10 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                         // Use getUpdates to get recent messages
                         // Note: Telegram Bot API requires the bot to be a member of the channel for private channels
                         const telegramApiUrl = `https://api.telegram.org/bot${botToken}/getUpdates?limit=100`;
-                        
+
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 30000);
-                        
+
                         const response = await fetch(telegramApiUrl, {
                             method: 'GET',
                             headers: {
@@ -20163,36 +20249,36 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                             },
                             signal: controller.signal,
                         });
-                        
+
                         clearTimeout(timeoutId);
-                        
+
                         if (response.ok) {
                             const telegramData = await response.json();
-                            
+
                             if (telegramData.ok && telegramData.result) {
                                 // Filter messages from the specific channel
                                 const channelMessages = telegramData.result
                                     .filter((update: any) => {
                                         if (!update.message) return false;
                                         const chat = update.message.chat;
-                                        
+
                                         // Match by username
                                         if (channelUsername && chat.username) {
                                             return chat.username.toLowerCase() === channelUsername.replace('@', '').toLowerCase();
                                         }
-                                        
+
                                         // Match by channel ID
                                         if (channelId) {
                                             const chatIdStr = String(chat.id);
                                             const channelIdStr = channelId.replace('@', '').replace('-100', '');
                                             return chatIdStr === channelIdStr || chatIdStr.endsWith(channelIdStr);
                                         }
-                                        
+
                                         // Match by title (partial match)
                                         if (channelUsername && chat.title) {
                                             return chat.title.toLowerCase().includes(channelUsername.toLowerCase());
                                         }
-                                        
+
                                         return false;
                                     })
                                     .slice(-10) // Last 10 messages
@@ -20202,21 +20288,33 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                                         messageId: update.message.message_id,
                                         chat: update.message.chat?.title || update.message.chat?.username || channelUsername || channelId,
                                     }));
-                                
+
                                 if (channelMessages.length > 0) {
+                                    // Convert bot API messages to article format
+                                    const articles = convertTelegramMessagesToArticles(
+                                        channelMessages.map((msg: any) => ({
+                                            text: msg.text,
+                                            timestamp: msg.timestamp,
+                                            link: `https://t.me/${channelUsername}/${msg.messageId}`,
+                                        })),
+                                        channelUsername
+                                    );
                                     data = {
                                         channel: channelUsername,
                                         messages: channelMessages,
+                                        articles,
                                         totalMessages: channelMessages.length,
-                                        note: channelMessages.length < 10 ? 
+                                        note: channelMessages.length < 10 ?
                                             `Showing ${channelMessages.length} recent messages. Make sure the bot is added to the channel.` :
-                                            'Showing last 10 messages from this channel.'
+                                            'Showing last 10 messages from this channel.',
+                                        source: source.name,
+                                        lastUpdated: new Date().toISOString(),
                                     };
                                 } else {
                                     data = {
                                         channel: channelUsername,
                                         messages: [],
-                                        note: 'No messages found. Make sure: 1) The bot is added to the channel, 2) The channel username is correct, 3) There are recent messages in the channel.',
+                                        note: 'No messages found via bot. Trying public channel fetch...',
                                         botInfo: telegramData.ok ? 'Bot is active' : 'Bot status unknown'
                                     };
                                 }
@@ -20228,8 +20326,8 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                             let errorData: any = {};
                             try {
                                 errorData = JSON.parse(errorText);
-                            } catch {}
-                            
+                            } catch { }
+
                             throw new Error(errorData.description || `HTTP ${response.status}: ${response.statusText}`);
                         }
                     } catch (telegramError: any) {
@@ -20244,6 +20342,37 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                             suggestion: 'Check the bot token and ensure the bot has access to the channel'
                         };
                     }
+                }
+
+                if (
+                    channelUsername &&
+                    (!data || (Array.isArray(data.messages) && data.messages.length === 0))
+                ) {
+                    const publicData = await fetchPublicChannelIfPossible();
+                    if (publicData && publicData.messages.length > 0) {
+                        // Convert to article format for agents
+                        data = {
+                            channel: publicData.channel,
+                            messages: publicData.messages,
+                            articles: publicData.articles,
+                            totalMessages: publicData.totalMessages,
+                            note: publicData.note,
+                            source: source.name,
+                            lastUpdated: new Date().toISOString(),
+                        };
+                    } else if (!data) {
+                        data = {
+                            channel: channelUsername,
+                            messages: [],
+                            articles: [],
+                            note: 'Unable to fetch public messages. Channel might be private or blocked.',
+                        };
+                    }
+                }
+                
+                // Ensure all Telegram responses have articles format for agents
+                if (data && source.type === 'telegram' && !data.articles && Array.isArray(data.messages)) {
+                    data.articles = convertTelegramMessagesToArticles(data.messages, channelUsername || source.name);
                 }
             } else if (!source.url) {
                 // No URL configured - return mock data for preview
@@ -20265,42 +20394,36 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                         ],
                     };
                 } else {
-                    data = { 
+                    data = {
                         message: 'No URL configured for this source',
                         source: source.name,
                         type: source.type,
                         note: 'Please configure a URL in the source settings to fetch real data'
                     };
                 }
+            } else if (source.type === 'rss' || source.url.toLowerCase().endsWith('.xml')) {
+                data = await fetchRssFeedData(source.url);
             } else {
                 // Make real API call
-                try {
+                const fetchApiData = async (targetUrl: string, viaProxy = false) => {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-                    
-                    const headers: HeadersInit = {
+                    const timeoutId = setTimeout(() => controller.abort(), viaProxy ? 45000 : 30000);
+                    try {
+                        const headers: HeadersInit = viaProxy
+                            ? {}
+                            : {
                         'Content-Type': 'application/json',
-                    };
-                    
-                    if (source.credentials?.apiKey) {
-                        headers['Authorization'] = `Bearer ${source.credentials.apiKey}`;
-                    }
-                    
-                    const url = source.endpoint 
-                        ? `${source.url}${source.endpoint}` 
-                        : source.url;
-                    
-                    const response = await fetch(url, {
+                                  ...(source.credentials?.apiKey ? { Authorization: `Bearer ${source.credentials.apiKey}` } : {}),
+                              };
+
+                        const response = await fetch(targetUrl, {
                         method: 'GET',
                         headers,
                         signal: controller.signal,
-                        mode: 'cors', // Allow CORS
+                            mode: 'cors',
                     });
-                    
-                    clearTimeout(timeoutId);
-                    
+
                     if (!response.ok) {
-                        // Try to get error message from response
                         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
                         try {
                             const errorData = await response.text();
@@ -20313,25 +20436,108 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                                 }
                             }
                         } catch {
-                            // Use default error message
+                                // ignore
                         }
                         throw new Error(errorMessage);
                     }
-                    
-                    // Try to parse as JSON, fallback to text
+
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
-                        data = await response.json();
-                    } else {
+                            return await response.json();
+                        }
                         const text = await response.text();
                         try {
-                            data = JSON.parse(text);
+                            return JSON.parse(text);
                         } catch {
-                            data = { raw: text, format: 'text' };
+                            return { raw: text, format: 'text' };
+                        }
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                };
+
+                const attemptTrail: string[] = [];
+                const directUrl = source.endpoint ? `${source.url}${source.endpoint}` : source.url;
+                let fetchErrorInfo: any = null;
+
+                try {
+                    data = await fetchApiData(directUrl);
+                    attemptTrail.push('direct');
+                } catch (primaryError: any) {
+                    fetchErrorInfo = primaryError;
+                    const shouldProxy =
+                        primaryError.name === 'TypeError' ||
+                        primaryError.name === 'AbortError' ||
+                        primaryError.message?.includes('CORS') ||
+                        primaryError.message?.includes('Failed to fetch') ||
+                        primaryError.message?.includes('Network error');
+
+                        if (shouldProxy) {
+                            try {
+                                const proxiedUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
+                                const proxiedText = await fetchApiData(proxiedUrl, true);
+                                attemptTrail.push('allorigins');
+                                if (typeof proxiedText === 'string') {
+                                    try {
+                                        data = JSON.parse(proxiedText);
+                                    } catch {
+                                        data = { raw: proxiedText, format: 'text', note: 'Fetched via proxy' };
+                                    }
+                                } else {
+                                    data = { ...proxiedText, _meta: { proxied: true } };
+                                }
+                            } catch (proxyError) {
+                                fetchErrorInfo = proxyError;
+                            }
+                        }
+
+                    if (!data) {
+                        try {
+                            data = await fetchViaPublicRelay(directUrl);
+                            attemptTrail.push('jina');
+                        } catch (relayError) {
+                            fetchErrorInfo = relayError;
                         }
                     }
-                    
-                    // Cache the response
+
+                    if (!data) {
+                        const mockData = generateMockApiData(source, request);
+                        if (mockData) {
+                            attemptTrail.push('mock');
+                            data = mockData;
+                        }
+                    }
+
+                    if (!data) {
+                        console.error(`Failed to fetch data from source ${source.id}:`, fetchErrorInfo);
+                        let errorMessage = fetchErrorInfo?.message || 'Failed to fetch data';
+                        if (fetchErrorInfo?.name === 'AbortError') {
+                            errorMessage = 'Request timeout (30-45 seconds)';
+                        } else if (fetchErrorInfo?.message?.includes('CORS')) {
+                        errorMessage = 'CORS error: The server does not allow requests from this origin';
+                        } else if (fetchErrorInfo?.message?.includes('Failed to fetch')) {
+                        errorMessage = 'Network error: Could not connect to the server. Check if the URL is correct and accessible.';
+                    }
+
+                    data = {
+                        error: true,
+                        message: errorMessage,
+                        source: source.name,
+                        url: source.url,
+                            details: fetchErrorInfo?.name === 'AbortError' ? 'Request timeout (30-45 seconds)' : (fetchErrorInfo?.message || 'Unknown error'),
+                            suggestion: !source.url
+                                ? 'Please configure a URL for this source'
+                                : fetchErrorInfo?.name === 'AbortError'
+                                    ? 'The server took too long to respond. Try again later.'
+                                    : fetchErrorInfo?.message?.includes('CORS')
+                                            ? 'The server needs to allow CORS requests یا از پروکسی قابل اعتماد استفاده کنید.'
+                                            : 'Check the URL and API credentials, and ensure the server is accessible.',
+                                attempts: attemptTrail,
+                        };
+                    }
+                }
+
+                if (data && !data.error) {
                     if (!dataHub.cache.data) {
                         dataHub.cache.data = {};
                     }
@@ -20339,37 +20545,13 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                         data,
                         timestamp: Date.now(),
                     };
-                    dataHub.cache.hitRate = (dataHub.cache.hitRate || 0) * 0.9 + 0.1; // Update hit rate
-                    
-                } catch (fetchError: any) {
-                    console.error(`Failed to fetch data from source ${source.id}:`, fetchError);
-                    // Return error info instead of throwing
-                    let errorMessage = fetchError.message || 'Failed to fetch data';
-                    if (fetchError.name === 'AbortError') {
-                        errorMessage = 'Request timeout (30 seconds)';
-                    } else if (fetchError.message?.includes('CORS')) {
-                        errorMessage = 'CORS error: The server does not allow requests from this origin';
-                    } else if (fetchError.message?.includes('Failed to fetch')) {
-                        errorMessage = 'Network error: Could not connect to the server. Check if the URL is correct and accessible.';
-                    }
-                    
-                    data = {
-                        error: true,
-                        message: errorMessage,
-                        source: source.name,
-                        url: source.url,
-                        details: fetchError.name === 'AbortError' ? 'Request timeout (30 seconds)' : (fetchError.message || 'Unknown error'),
-                        suggestion: !source.url ? 'Please configure a URL for this source' : 
-                                   fetchError.name === 'AbortError' ? 'The server took too long to respond. Try again later.' :
-                                   fetchError.message?.includes('CORS') ? 'The server needs to allow CORS requests from your domain.' :
-                                   'Check the URL and API credentials, and ensure the server is accessible.'
-                    };
+                    dataHub.cache.hitRate = (dataHub.cache.hitRate || 0) * 0.9 + 0.1;
                 }
             }
         }
-        
+
         const responseTime = Date.now() - startTime;
-        
+
         // Log access
         const accessLog: DataAccessLog = {
             id: `LOG-${Date.now()}`,
@@ -20381,10 +20563,10 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
             responseTime,
             dataSize: JSON.stringify(data).length,
         };
-        
+
         dataHub.accessLogs.unshift(accessLog);
         dataHub.accessLogs = dataHub.accessLogs.slice(0, 1000); // Keep last 1000 logs
-        
+
         // Update source stats
         const sourceIndex = dataHub.sources.findIndex(s => s.id === source.id);
         if (sourceIndex !== -1) {
@@ -20397,17 +20579,17 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
             sourceData.responseTime = (sourceData.responseTime || 0) * 0.9 + responseTime * 0.1;
             sourceData.reliabilityScore = Math.min(100, sourceData.reliabilityScore + 0.1);
         }
-        
+
         await database.save('settings', {
             key: 'data_hub_state',
             value: dataHub,
         });
-        
+
         // Always return success=true so modal opens and shows data/error/mock data
         // The modal will handle displaying error states properly
         return {
             success: true, // Always true so modal can display the data/error
-            data: data || { 
+            data: data || {
                 message: 'No data available',
                 source: source.name,
                 type: source.type,
@@ -20433,7 +20615,7 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
         } catch {
             // Ignore
         }
-        
+
         return {
             success: false,
             data: {
@@ -20457,11 +20639,11 @@ export const testDataSourceConnection = async (sourceId: string): Promise<{ succ
     try {
         const dataHub = await fetchDataHubState();
         const source = dataHub.sources.find(s => s.id === sourceId);
-        
+
         if (!source) {
             return { success: false, message: 'Data source not found' };
         }
-        
+
         // Update source status to testing
         const sourceIndex = dataHub.sources.findIndex(s => s.id === sourceId);
         if (sourceIndex !== -1) {
@@ -20472,16 +20654,16 @@ export const testDataSourceConnection = async (sourceId: string): Promise<{ succ
                 value: dataHub,
             });
         }
-        
+
         const startTime = Date.now();
-        
+
         // Real connection test based on source type
         if (source.type === 'api' && source.url) {
             // Make real API call
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-                
+
                 const response = await fetch(source.url, {
                     method: 'GET',
                     headers: {
@@ -20490,55 +20672,55 @@ export const testDataSourceConnection = async (sourceId: string): Promise<{ succ
                     },
                     signal: controller.signal,
                 });
-                
+
                 clearTimeout(timeoutId);
                 const responseTime = Date.now() - startTime;
-                
+
                 if (response.ok) {
-                if (sourceIndex !== -1) {
-                    dataHub.sources[sourceIndex].status = 'active';
-                    dataHub.sources[sourceIndex].lastSuccess = new Date().toISOString();
-                    dataHub.sources[sourceIndex].lastUpdate = new Date().toISOString();
-                    dataHub.sources[sourceIndex].responseTime = responseTime;
-                    dataHub.sources[sourceIndex].errorCount = 0;
-                    dataHub.sources[sourceIndex].successRate = Math.min(100, (dataHub.sources[sourceIndex].successRate || 0) + 1);
-                }
-                
-                await database.save('settings', {
-                    key: 'data_hub_state',
-                    value: dataHub,
-                });
-                
-                // Update Artemis state
-                const artemis = await fetchArtemisState();
-                artemis.dataHub = dataHub;
-                await database.save('settings', {
-                    key: 'artemis_state',
-                    value: artemis,
-                });
-                
+                    if (sourceIndex !== -1) {
+                        dataHub.sources[sourceIndex].status = 'active';
+                        dataHub.sources[sourceIndex].lastSuccess = new Date().toISOString();
+                        dataHub.sources[sourceIndex].lastUpdate = new Date().toISOString();
+                        dataHub.sources[sourceIndex].responseTime = responseTime;
+                        dataHub.sources[sourceIndex].errorCount = 0;
+                        dataHub.sources[sourceIndex].successRate = Math.min(100, (dataHub.sources[sourceIndex].successRate || 0) + 1);
+                    }
+
+                    await database.save('settings', {
+                        key: 'data_hub_state',
+                        value: dataHub,
+                    });
+
+                    // Update Artemis state
+                    const artemis = await fetchArtemisState();
+                    artemis.dataHub = dataHub;
+                    await database.save('settings', {
+                        key: 'artemis_state',
+                        value: artemis,
+                    });
+
                     return { success: true, message: 'Connection successful', responseTime };
                 } else {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
             } catch (fetchError: any) {
                 const responseTime = Date.now() - startTime;
-                const errorMessage = fetchError.name === 'AbortError' 
-                    ? 'Connection timeout' 
+                const errorMessage = fetchError.name === 'AbortError'
+                    ? 'Connection timeout'
                     : fetchError.message || 'API endpoint unreachable';
-                
+
                 if (sourceIndex !== -1) {
                     dataHub.sources[sourceIndex].status = 'error';
                     dataHub.sources[sourceIndex].lastError = new Date().toISOString();
                     dataHub.sources[sourceIndex].errorCount = (dataHub.sources[sourceIndex].errorCount || 0) + 1;
                     dataHub.sources[sourceIndex].successRate = Math.max(0, (dataHub.sources[sourceIndex].successRate || 100) - 5);
                 }
-                
+
                 await database.save('settings', {
                     key: 'data_hub_state',
                     value: dataHub,
                 });
-                
+
                 return { success: false, message: `Connection failed: ${errorMessage}`, responseTime };
             }
         } else if (source.type === 'website' && source.url) {
@@ -20546,85 +20728,172 @@ export const testDataSourceConnection = async (sourceId: string): Promise<{ succ
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-                
+
                 const response = await fetch(source.url, {
                     method: 'HEAD', // Use HEAD to check if site is accessible
                     signal: controller.signal,
                     mode: 'no-cors', // Try no-cors first for CORS issues
                 });
-                
+
                 clearTimeout(timeoutId);
                 const responseTime = Date.now() - startTime;
                 const success = response.ok || response.type === 'opaque'; // opaque means CORS but site exists
-            
-            if (success) {
-                if (sourceIndex !== -1) {
-                    dataHub.sources[sourceIndex].status = 'active';
-                    dataHub.sources[sourceIndex].lastSuccess = new Date().toISOString();
-                    dataHub.sources[sourceIndex].lastUpdate = new Date().toISOString();
-                    dataHub.sources[sourceIndex].responseTime = responseTime;
+
+                if (success) {
+                    if (sourceIndex !== -1) {
+                        dataHub.sources[sourceIndex].status = 'active';
+                        dataHub.sources[sourceIndex].lastSuccess = new Date().toISOString();
+                        dataHub.sources[sourceIndex].lastUpdate = new Date().toISOString();
+                        dataHub.sources[sourceIndex].responseTime = responseTime;
+                    }
+
+                    await database.save('settings', {
+                        key: 'data_hub_state',
+                        value: dataHub,
+                    });
+
+                    return { success: true, message: 'Website accessible', responseTime };
+                } else {
+                    if (sourceIndex !== -1) {
+                        dataHub.sources[sourceIndex].status = 'error';
+                        dataHub.sources[sourceIndex].lastError = new Date().toISOString();
+                    }
+
+                    await database.save('settings', {
+                        key: 'data_hub_state',
+                        value: dataHub,
+                    });
+
+                    return { success: false, message: 'Website unreachable or blocked', responseTime };
                 }
-                
-                await database.save('settings', {
-                    key: 'data_hub_state',
-                    value: dataHub,
-                });
-                
-                return { success: true, message: 'Website accessible', responseTime };
-            } else {
-                if (sourceIndex !== -1) {
-                    dataHub.sources[sourceIndex].status = 'error';
-                    dataHub.sources[sourceIndex].lastError = new Date().toISOString();
-                }
-                
-                await database.save('settings', {
-                    key: 'data_hub_state',
-                    value: dataHub,
-                });
-                
-                return { success: false, message: 'Website unreachable or blocked', responseTime };
-            }
             } catch (fetchError: any) {
                 const responseTime = Date.now() - startTime;
-                const errorMessage = fetchError.name === 'AbortError' 
-                    ? 'Connection timeout' 
+                const errorMessage = fetchError.name === 'AbortError'
+                    ? 'Connection timeout'
                     : 'Website unreachable or blocked';
-                
+
                 if (sourceIndex !== -1) {
                     dataHub.sources[sourceIndex].status = 'error';
                     dataHub.sources[sourceIndex].lastError = new Date().toISOString();
                 }
-                
+
                 await database.save('settings', {
                     key: 'data_hub_state',
                     value: dataHub,
                 });
-                
+
                 return { success: false, message: errorMessage, responseTime };
             }
         } else {
             // Generic test - just mark as active if no URL to test
             const responseTime = Date.now() - startTime;
-            
+
             if (sourceIndex !== -1) {
                 dataHub.sources[sourceIndex].status = 'active';
                 dataHub.sources[sourceIndex].lastSuccess = new Date().toISOString();
                 dataHub.sources[sourceIndex].lastUpdate = new Date().toISOString();
                 dataHub.sources[sourceIndex].responseTime = responseTime;
             }
-            
+
             await database.save('settings', {
                 key: 'data_hub_state',
                 value: dataHub,
             });
-            
+
             return { success: true, message: 'Connection test completed', responseTime };
         }
     } catch (e) {
         console.error('Failed to test data source connection:', e);
-        return { 
-            success: false, 
-            message: e instanceof Error ? e.message : 'Connection test failed' 
+        return {
+            success: false,
+            message: e instanceof Error ? e.message : 'Connection test failed'
+        };
+    }
+};
+
+export const getTelegramCollectorChannels = async (): Promise<TelegramCollectorState> => {
+    const dataHub = await fetchDataHubState();
+    return ensureTelegramCollectorState(dataHub);
+};
+
+export const refreshTelegramCollectorChannels = async (): Promise<TelegramCollectorState> => {
+    const dataHub = await fetchDataHubState();
+    const collector = ensureTelegramCollectorState(dataHub);
+    const now = Date.now();
+
+    collector.status = collector.status === 'offline' ? 'offline' : 'online';
+    collector.lastRefreshAt = new Date(now).toISOString();
+    collector.channels = collector.channels.map(channel => ({
+        ...channel,
+        status: channel.enabled ? (channel.status === 'error' ? 'error' : 'idle') : 'paused',
+        updatedAt: new Date(now).toISOString(),
+        lastSyncAt: channel.lastSyncAt || new Date(now - 1000 * 60 * (15 + Math.random() * 60)).toISOString(),
+        fetchLatencyMs: channel.fetchLatencyMs || Math.round(250 + Math.random() * 400),
+    }));
+
+    await persistDataHubState(dataHub);
+    return collector;
+};
+
+type TelegramChannelTestResult = {
+    success: boolean;
+    channelId: string;
+    channelHandle: string;
+    fetchedAt: string;
+    latency?: number;
+    messages?: Array<{ text: string; timestamp: string; link?: string }>;
+    error?: string;
+    collector: TelegramCollectorState;
+};
+
+export const testTelegramCollectorChannel = async (channelId: string): Promise<TelegramChannelTestResult> => {
+    const dataHub = await fetchDataHubState();
+    const collector = ensureTelegramCollectorState(dataHub);
+    const channel = collector.channels.find(ch => ch.id === channelId);
+
+    if (!channel) {
+        throw new Error('Channel not found');
+    }
+
+    const startedAt = Date.now();
+    channel.status = channel.enabled ? 'syncing' : 'paused';
+    channel.lastError = undefined;
+    channel.updatedAt = new Date().toISOString();
+
+    try {
+        const result = await fetchFromTelegramCollector(channel.handle);
+        channel.status = channel.enabled ? 'idle' : 'paused';
+        channel.lastSyncAt = new Date().toISOString();
+        channel.lastMessageAt = result.messages?.[0]?.timestamp || channel.lastMessageAt;
+        channel.messageCount24h = result.messages?.length ?? channel.messageCount24h ?? 0;
+        channel.fetchLatencyMs = Date.now() - startedAt;
+        channel.usingCollector = true;
+        await persistDataHubState(dataHub);
+
+        return {
+            success: true,
+            channelId: channel.id,
+            channelHandle: channel.handle,
+            fetchedAt: new Date().toISOString(),
+            latency: channel.fetchLatencyMs,
+            messages: result.messages?.slice(0, 10),
+            collector,
+        };
+    } catch (error: any) {
+        channel.status = 'error';
+        channel.fetchLatencyMs = Date.now() - startedAt;
+        channel.lastError = error?.message || 'Failed to fetch channel messages';
+        channel.usingCollector = false;
+        await persistDataHubState(dataHub);
+
+        return {
+            success: false,
+            channelId: channel.id,
+            channelHandle: channel.handle,
+            fetchedAt: new Date().toISOString(),
+            latency: channel.fetchLatencyMs,
+            error: channel.lastError,
+            collector,
         };
     }
 };
@@ -20633,23 +20902,23 @@ export const testDataSourceConnection = async (sourceId: string): Promise<{ succ
 export const checkDataHubHealth = async (): Promise<DataHubHealth> => {
     try {
         const dataHub = await fetchDataHubState();
-        
+
         const activeSources = dataHub.sources.filter(s => s.status === 'active');
         const failedSources = dataHub.sources.filter(s => s.status === 'error');
-        
+
         const avgResponseTime = activeSources.length > 0
             ? activeSources.reduce((sum, s) => sum + (s.responseTime || 0), 0) / activeSources.length
             : 0;
-        
+
         const recentErrors = dataHub.health.errors.filter(e => !e.resolved);
-        
+
         let overall: 'healthy' | 'degraded' | 'critical' = 'healthy';
         if (failedSources.length > activeSources.length * 0.3) {
             overall = 'critical';
         } else if (failedSources.length > 0 || recentErrors.length > 5) {
             overall = 'degraded';
         }
-        
+
         const health: DataHubHealth = {
             overall,
             activeConnections: activeSources.length,
@@ -20659,15 +20928,15 @@ export const checkDataHubHealth = async (): Promise<DataHubHealth> => {
             errors: recentErrors.slice(0, 50),
             lastHealthCheck: new Date().toISOString(),
         };
-        
+
         dataHub.health = health;
         dataHub.updatedAt = new Date().toISOString();
-        
+
         await database.save('settings', {
             key: 'data_hub_state',
             value: dataHub,
         });
-        
+
         // Update Artemis state
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
@@ -20675,7 +20944,7 @@ export const checkDataHubHealth = async (): Promise<DataHubHealth> => {
             key: 'artemis_state',
             value: artemis,
         });
-        
+
         return health;
     } catch (e) {
         console.error('Failed to check Data Hub health:', e);
@@ -20687,22 +20956,22 @@ export const checkDataHubHealth = async (): Promise<DataHubHealth> => {
 export const createDataCategory = async (category: Omit<DataCategory, 'id' | 'createdAt' | 'sourceCount'>): Promise<DataCategory> => {
     try {
         const dataHub = await fetchDataHubState();
-        
+
         const newCategory: DataCategory = {
             ...category,
             id: `CAT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             sourceCount: 0,
             createdAt: new Date().toISOString(),
         };
-        
+
         dataHub.categories.push(newCategory);
         dataHub.updatedAt = new Date().toISOString();
-        
+
         await database.save('settings', {
             key: 'data_hub_state',
             value: dataHub,
         });
-        
+
         // Update Artemis state
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
@@ -20710,7 +20979,7 @@ export const createDataCategory = async (category: Omit<DataCategory, 'id' | 'cr
             key: 'artemis_state',
             value: artemis,
         });
-        
+
         return newCategory;
     } catch (e) {
         console.error('Failed to create data category:', e);
@@ -20720,12 +20989,7 @@ export const createDataCategory = async (category: Omit<DataCategory, 'id' | 'cr
 
 // ==================== Advanced Data Hub Features ====================
 
-// Web Crawler Management
-export const createWebCrawler = async (config: Omit<WebCrawlerConfig, 'id' | 'lastCrawl' | 'lastSuccess' | 'errorCount'>): Promise<WebCrawlerConfig> => {
-    try {
-        const dataHub = await fetchDataHubState();
-        if (!dataHub.advanced) {
-            dataHub.advanced = {
+const createDefaultAdvancedFeatures = (): DataHubAdvancedFeatures => ({
                 webCrawlers: [],
                 autoDiscovery: { enabled: false, rules: [], discoveredSources: [] },
                 smartPrioritization: { enabled: false, rules: [] },
@@ -20734,22 +20998,1268 @@ export const createWebCrawler = async (config: Omit<WebCrawlerConfig, 'id' | 'la
                 whitelist: { sources: [], patterns: [] },
                 archives: [],
                 telegramPublishers: [],
+});
+
+const ensureAdvancedFeatures = (dataHub: DataHubState): DataHubAdvancedFeatures => {
+    if (!dataHub.advanced) {
+        dataHub.advanced = createDefaultAdvancedFeatures();
+    }
+    return dataHub.advanced;
+};
+
+const deriveTelegramChannelSlug = (source: DataSource): string | undefined => {
+    if (source.credentials?.username) {
+        return source.credentials.username.replace('@', '').trim();
+    }
+    if (source.url) {
+        try {
+            const parsedUrl = new URL(source.url);
+            if (parsedUrl.hostname.includes('t.me')) {
+                return parsedUrl.pathname.replace('/s/', '').replace('/', '').replace('@', '').trim();
+            }
+        } catch {
+            // Ignore invalid URL formats
+        }
+    }
+    return undefined;
+};
+
+// Clean text from metadata prefixes (like "Title:", "URL Source:", "Markdown Content:")
+const cleanTelegramText = (text: string): string => {
+    if (!text) return '';
+    
+    // Remove common metadata prefixes that jina.ai or other proxies might add
+    let cleaned = text
+        .replace(/^Title:\s*[^\n]+\n+/i, '')
+        .replace(/^URL Source:\s*[^\n]+\n+/i, '')
+        .replace(/^Markdown Content:\s*\n*/i, '')
+        .replace(/^Source:\s*[^\n]+\n+/i, '')
+        .replace(/^Channel:\s*[^\n]+\n+/i, '')
+        .trim();
+    
+    // Remove markdown image links that are just metadata
+    cleaned = cleaned.replace(/\[_!\[Image \d+\]\([^)]+\)_\]\([^)]+\)\s*/g, '');
+    
+    // Remove excessive markdown formatting that's just noise
+    cleaned = cleaned.replace(/\*\*_/g, '**').replace(/_\*\*/g, '**');
+    
+    return cleaned.trim();
+};
+
+// Extract title from message text (first line or first sentence)
+const extractTitleFromMessage = (text: string, maxLength = 120): string => {
+    const cleaned = cleanTelegramText(text);
+    if (!cleaned) return 'Telegram Message';
+    
+    // Try to get first line
+    const firstLine = cleaned.split('\n')[0].trim();
+    if (firstLine.length > 10 && firstLine.length <= maxLength) {
+        return firstLine;
+    }
+    
+    // Try to get first sentence
+    const firstSentence = cleaned.split(/[.!?]\s+/)[0].trim();
+    if (firstSentence.length > 10 && firstSentence.length <= maxLength) {
+        return firstSentence;
+    }
+    
+    // Fallback: first N characters
+    return cleaned.slice(0, maxLength).trim() + (cleaned.length > maxLength ? '...' : '');
+};
+
+// Extract content from message text (everything after title or full text)
+const extractContentFromMessage = (text: string, maxLength = 2000): string => {
+    const cleaned = cleanTelegramText(text);
+    if (!cleaned) return '';
+    
+    // If text has multiple lines, use everything after first line as content
+    const lines = cleaned.split('\n');
+    if (lines.length > 1) {
+        const content = lines.slice(1).join('\n').trim();
+        return content.length > maxLength ? content.slice(0, maxLength) + '...' : content;
+    }
+    
+    // Single line: use full text as content
+    return cleaned.length > maxLength ? cleaned.slice(0, maxLength) + '...' : cleaned;
+};
+
+const extractTelegramMessagesFromHtml = (htmlText: string, limit: number): Array<{ text: string; timestamp: string; link?: string }> => {
+    const messages: Array<{ text: string; timestamp: string; link?: string }> = [];
+
+    if (typeof DOMParser !== 'undefined') {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlText, 'text/html');
+            const nodes = Array.from(doc.querySelectorAll('.tgme_widget_message'));
+            console.log(`[Telegram Parser] Found ${nodes.length} message nodes in HTML`);
+            if (nodes.length > 0) {
+                // Telegram shows messages in reverse order (newest first), so we take from the beginning
+                // Process more nodes than limit to account for empty messages that get filtered out
+                const nodesToProcess = nodes.slice(0, Math.min(nodes.length, limit * 2));
+                nodesToProcess.forEach(node => {
+                    const textNode = node.querySelector('.tgme_widget_message_text');
+                    let text = textNode ? textNode.textContent?.trim() || '' : '';
+                    
+                    // Clean the text from metadata
+                    text = cleanTelegramText(text);
+                    
+                    if (text.length === 0) {
+                        return;
+                    }
+                    const timeEl = node.querySelector('time');
+                    const timestamp = timeEl?.getAttribute('datetime') || new Date().toISOString();
+                    const dataPost = node.getAttribute('data-post');
+                    const link = dataPost ? `https://t.me/${dataPost}` : undefined;
+                    messages.push({ text, timestamp, link });
+                });
+                console.log(`[Telegram Parser] Extracted ${messages.length} valid messages from ${nodesToProcess.length} nodes`);
+            }
+        } catch (err) {
+            console.warn('DOM-based Telegram parsing failed:', err);
+        }
+    }
+
+    // Return the first 'limit' messages (newest first), not the last ones
+    // If we have fewer than limit, return all we have
+    if (messages.length > 0) {
+        return messages.slice(0, limit);
+    }
+
+    // Fallback: strip HTML tags and use textual blocks
+    const plain = htmlText
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|h\d)>/gi, '\n\n')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\r/g, '')
+        .trim();
+
+    const segments = plain
+        .split(/VIEW IN TELEGRAM|Please open Telegram/gi)
+        .map(segment => segment.trim())
+        .filter(segment => segment.length > 40);
+
+    // Take segments from the beginning (newest first) up to limit
+    segments.slice(0, limit).forEach(segment => {
+        // Clean the segment from metadata
+        const cleanedSegment = cleanTelegramText(segment);
+        const text = cleanedSegment.length > 1500 ? `${cleanedSegment.slice(0, 1500)}…` : cleanedSegment;
+        if (text.length > 0) {
+            messages.push({
+                text,
+                timestamp: new Date().toISOString(),
+            });
+        }
+    });
+
+    // Return the first 'limit' messages (newest first)
+    return messages.slice(0, limit);
+};
+
+// Post-process Telegram articles to clean them up for agents
+const resolveTelegramCollectorBaseUrl = (): string | undefined => {
+    const viteEnv = typeof import.meta !== 'undefined' && (import.meta as any)?.env;
+    const fromImportMeta = viteEnv?.VITE_TELEGRAM_COLLECTOR_URL;
+    const fromNode = typeof process !== 'undefined' ? (process as any)?.env?.VITE_TELEGRAM_COLLECTOR_URL : undefined;
+    const value = fromImportMeta || fromNode;
+    if (!value) return undefined;
+    return value.replace(/\/$/, '');
+};
+
+export const getTelegramCollectorBaseUrl = () => resolveTelegramCollectorBaseUrl();
+
+export const getTelegramCollectorHealth = async () => {
+    const baseUrl = resolveTelegramCollectorBaseUrl();
+    if (!baseUrl) {
+        throw new Error('Telegram Collector URL is not configured. Set VITE_TELEGRAM_COLLECTOR_URL.');
+    }
+    const response = await fetch(`${baseUrl}/health`);
+    if (!response.ok) {
+        throw new Error(`Collector health request failed with ${response.status}`);
+    }
+    return response.json();
+};
+
+type StartCollectorLoginInput = {
+    apiId?: number;
+    apiHash?: string;
+    phoneNumber: string;
+};
+
+export const startTelegramCollectorLogin = async (payload: StartCollectorLoginInput) => {
+    const baseUrl = resolveTelegramCollectorBaseUrl();
+    if (!baseUrl) {
+        throw new Error('Telegram Collector URL is not configured. Set VITE_TELEGRAM_COLLECTOR_URL.');
+    }
+    const response = await fetch(`${baseUrl}/api/telegram-collector/login/start`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok || data?.ok === false) {
+        throw new Error(data?.error || `Login start failed with status ${response.status}`);
+    }
+    return data;
+};
+
+type ConfirmCollectorLoginInput = {
+    authId: string;
+    code: string;
+    password?: string;
+};
+
+export const confirmTelegramCollectorLogin = async (payload: ConfirmCollectorLoginInput) => {
+    const baseUrl = resolveTelegramCollectorBaseUrl();
+    if (!baseUrl) {
+        throw new Error('Telegram Collector URL is not configured. Set VITE_TELEGRAM_COLLECTOR_URL.');
+    }
+    const response = await fetch(`${baseUrl}/api/telegram-collector/login/confirm`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok || data?.ok === false) {
+        throw new Error(data?.error || `Login confirm failed with status ${response.status}`);
+    }
+    return data;
+};
+
+export const cancelTelegramCollectorLogin = async (authId: string) => {
+    const baseUrl = resolveTelegramCollectorBaseUrl();
+    if (!baseUrl) {
+        throw new Error('Telegram Collector URL is not configured. Set VITE_TELEGRAM_COLLECTOR_URL.');
+    }
+    const response = await fetch(`${baseUrl}/api/telegram-collector/login/cancel`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ authId }),
+    });
+    const data = await response.json();
+    if (!response.ok || data?.ok === false) {
+        throw new Error(data?.error || `Login cancel failed with status ${response.status}`);
+    }
+    return data;
+};
+
+const fetchFromTelegramCollector = async (
+    channelUsername: string,
+    limit = 50
+): Promise<{
+    channel: string;
+    messages: Array<{ text: string; timestamp: string; link?: string }>;
+    source: 'collector';
+}> => {
+    const baseUrl = resolveTelegramCollectorBaseUrl();
+    if (!baseUrl) {
+        throw new Error('Telegram Collector URL not configured (set VITE_TELEGRAM_COLLECTOR_URL).');
+    }
+
+    const normalizedChannel = channelUsername.replace(/^@/, '');
+    const url = `${baseUrl}/telegram/${encodeURIComponent(normalizedChannel)}/recent?limit=${limit}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Collector responded with ${response.status}`);
+    }
+    const payload = await response.json();
+    if (!payload?.messages || !Array.isArray(payload.messages)) {
+        throw new Error('Collector response missing messages array');
+    }
+
+    const normalizedMessages = payload.messages.map((msg: any) => ({
+        text: msg?.text || msg?.html || '',
+        timestamp: msg?.publishedAt || new Date().toISOString(),
+        link: msg?.link,
+    }));
+
+    return {
+        channel: payload.channel || normalizedChannel,
+        messages: normalizedMessages,
+        source: 'collector',
+    };
+};
+
+const postProcessTelegramArticles = (
+    articles: Array<{
+        title: string;
+        content: string;
+        link?: string;
+        publishedAt: string;
+        author?: string;
+        source?: string;
+    }>,
+    channelName?: string
+): Array<{
+    title: string;
+    content: string;
+    plainText: string;
+    link?: string;
+    fullTextUrl?: string;
+    publishedAt: string;
+    author?: string;
+    source?: string;
+    channel_username?: string;
+}> => {
+    return articles.map(article => {
+        // Clean title: remove markdown bold
+        const title = article.title.replace(/\*\*/g, '').trim();
+        
+        // Extract full text URL from content (e.g., [متن کامل](https://...))
+        const linkMatch = article.content.match(/\[متن کامل\]\(([^)]+)\)/i) || 
+                         article.content.match(/\[.*?\]\(([^)]+)\)/);
+        const fullTextUrl = linkMatch ? linkMatch[1] : undefined;
+        
+        // Clean content: remove markdown formatting and link references
+        let content = article.content
+            .replace(/\*\*🔗\*\*[\r\n]*/g, '')
+            .replace(/\[متن کامل\]\([^)]+\)/gi, '')
+            .replace(/\[.*?\]\([^)]+\)/g, '') // Remove all markdown links
+            .trim();
+        
+        // Create plain text version (remove all markdown)
+        const plainText = content
+            .replace(/\*\*/g, '') // Remove bold
+            .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+            .replace(/🔹/g, '•') // Replace emoji with bullet
+            .replace(/🔗/g, '') // Remove link emoji
+            .replace(/\n{3,}/g, '\n\n') // Normalize multiple newlines
+            .trim();
+        
+        return {
+            ...article,
+            title,
+            content,
+            plainText,
+            fullTextUrl: fullTextUrl || article.link,
+            link: article.link,
+            author: article.author || (channelName ? `@${channelName}` : undefined),
+            source: 'telegram',
+            channel_username: channelName,
+        };
+    });
+};
+
+// Convert Telegram messages to article format (similar to RSS)
+const convertTelegramMessagesToArticles = (
+    messages: Array<{ text: string; timestamp: string; link?: string }>,
+    channelName?: string
+): Array<{
+    title: string;
+    content: string;
+    link?: string;
+    publishedAt: string;
+    author?: string;
+    source?: string;
+}> => {
+    return messages.map(msg => {
+        const title = extractTitleFromMessage(msg.text);
+        const content = extractContentFromMessage(msg.text);
+        
+        return {
+            title,
+            content,
+            link: msg.link,
+            publishedAt: msg.timestamp,
+            author: channelName ? `@${channelName}` : undefined,
+            source: channelName ? `Telegram: @${channelName}` : 'Telegram',
+        };
+    });
+};
+
+const extractArticlesFromHtml = (htmlText: string, limit: number, baseUrl?: string): Array<{
+    title: string;
+    link?: string;
+    content: string;
+    publishedAt: string;
+}> => {
+    const articles: Array<{ title: string; link?: string; content: string; publishedAt: string }> = [];
+    const seenTitles = new Set<string>();
+
+    const pushArticle = (title: string, content: string, link?: string) => {
+        if (!title || title.length < 5 || seenTitles.has(title)) return;
+        seenTitles.add(title);
+        let normalizedLink = link;
+        if (link && baseUrl) {
+            try {
+                normalizedLink = new URL(link, baseUrl).toString();
+            } catch {
+                normalizedLink = link;
+            }
+        }
+        articles.push({
+            title: title.trim().slice(0, 160),
+            content: content.trim().slice(0, 2000),
+            link: normalizedLink,
+            publishedAt: new Date().toISOString(),
+        });
+    };
+
+    if (typeof DOMParser !== 'undefined') {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlText, 'text/html');
+            const candidateSelectors = [
+                'article',
+                '.item',
+                '.catItem',
+                '.news-item',
+                '.news',
+                'li',
+                '.list-item',
+                '.content',
+            ];
+
+            candidateSelectors.forEach(selector => {
+                if (articles.length >= limit) return;
+                const nodes = Array.from(doc.querySelectorAll(selector));
+                nodes.forEach(node => {
+                    if (articles.length >= limit) return;
+                    const titleNode =
+                        node.querySelector('h1, h2, h3, .title, .news-title, a') ||
+                        node.querySelector('strong');
+                    const title = titleNode?.textContent?.trim();
+                    if (!title || title.length < 10) return;
+                    const descNode = node.querySelector('p, .summary, .lead');
+                    const content = descNode?.textContent?.trim() || node.textContent?.trim() || title;
+                    let link: string | undefined;
+                    const anchor =
+                        (titleNode && titleNode.tagName === 'A' ? titleNode : null) ||
+                        node.querySelector('a');
+                    if (anchor) {
+                        link = anchor.getAttribute('href') || undefined;
+                    }
+                    pushArticle(title, content, link);
+                });
+            });
+        } catch (err) {
+            console.warn('Failed to parse HTML articles:', err);
+        }
+    }
+
+    if (articles.length >= limit) {
+        return articles.slice(0, limit);
+    }
+
+    const plain = htmlText
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|h\d)>/gi, '\n\n')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\r/g, '')
+        .trim();
+
+    const blocks = plain
+        .split(/\n{2,}/)
+        .map(block => block.trim())
+        .filter(block => block.length > 80);
+
+    blocks.slice(0, limit).forEach(block => {
+        const newlineIdx = block.indexOf('\n');
+        const titleCandidate =
+            newlineIdx > 0 ? block.slice(0, newlineIdx).trim() : block.slice(0, 120);
+        pushArticle(titleCandidate, block);
+    });
+
+    return articles.slice(0, limit);
+};
+
+const fetchPublicTelegramChannelData = async (
+    channelUsername: string,
+    limit = 50
+): Promise<{
+    channel: string;
+    messages: Array<{ text: string; timestamp: string; link?: string }>;
+    articles: Array<{
+        title: string;
+        content: string;
+        link?: string;
+        publishedAt: string;
+        author?: string;
+        source?: string;
+    }>;
+    totalMessages: number;
+    note?: string;
+}> => {
+    // Strategy 0: use dedicated Telegram Collector if configured
+    try {
+        const collectorData = await fetchFromTelegramCollector(channelUsername, limit);
+        if (collectorData.messages.length > 0) {
+            const rawArticles = convertTelegramMessagesToArticles(collectorData.messages, collectorData.channel);
+            const articles = postProcessTelegramArticles(rawArticles, collectorData.channel);
+            return {
+                channel: collectorData.channel,
+                messages: collectorData.messages,
+                articles,
+                totalMessages: collectorData.messages.length,
+                note: `Data fetched via Telegram Collector service.`,
             };
         }
-        
+    } catch (collectorError) {
+        console.warn('[Telegram] Collector fetch failed, falling back to public HTML strategy:', collectorError);
+    }
+
+    // Try to fetch multiple pages to get more recent messages
+    // Telegram public view shows messages in reverse chronological order (newest first)
+    const allMessages: Array<{ text: string; timestamp: string; link?: string }> = [];
+    const seenLinks = new Set<string>();
+    
+    // Fetch the main page (newest messages)
+    // Try multiple proxies to get more messages
+    let htmlText = '';
+    let fetchSuccess = false;
+    
+    // Strategy 1: Try direct fetch via api.allorigins.win (better for getting full HTML)
+    try {
+        const allOriginsUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://t.me/s/${channelUsername}`)}`;
+        const response = await fetch(allOriginsUrl, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.contents) {
+                htmlText = data.contents;
+                fetchSuccess = true;
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to fetch via allorigins:', error);
+    }
+    
+    // Strategy 2: Fallback to r.jina.ai if allorigins fails
+    if (!fetchSuccess) {
+        try {
+            const proxyUrl = `https://r.jina.ai/https://t.me/s/${channelUsername}`;
+            const response = await fetch(proxyUrl, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'text/html',
+                },
+            });
+
+            if (response.ok) {
+                htmlText = await response.text();
+                fetchSuccess = true;
+            }
+        } catch (error) {
+            console.warn('Failed to fetch via jina.ai:', error);
+        }
+    }
+    
+    if (!fetchSuccess || !htmlText) {
+        throw new Error(`Failed to fetch public Telegram feed from all proxies`);
+    }
+
+    const messages = extractTelegramMessagesFromHtml(htmlText, limit);
+    
+    // Log for debugging
+    console.log(`[Telegram] Fetched ${messages.length} messages from ${channelUsername} (limit: ${limit})`);
+    
+    // Add messages that we haven't seen before
+    messages.forEach(msg => {
+        const linkKey = msg.link || msg.timestamp;
+        if (!seenLinks.has(linkKey)) {
+            seenLinks.add(linkKey);
+            allMessages.push(msg);
+        }
+    });
+    
+    // If we got messages, try to fetch older messages by using the last message ID
+    // Telegram uses ?before=<message_id> parameter for pagination
+    if (allMessages.length > 0 && allMessages.length < limit) {
+        try {
+            // Extract message ID from the last message link
+            const lastMessage = allMessages[allMessages.length - 1];
+            if (lastMessage.link) {
+                // Extract message ID from link like https://t.me/channel/123
+                const match = lastMessage.link.match(/\/s\/[^/]+\/(\d+)$/);
+                if (match && match[1]) {
+                    const beforeId = match[1];
+                    const proxyUrl = `https://r.jina.ai/https://t.me/s/${channelUsername}?before=${beforeId}`;
+                    const response = await fetch(proxyUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'text/html',
+                        },
+                    });
+
+                    if (response.ok) {
+                        let olderHtmlText = await response.text();
+                        
+                        // If jina.ai returned JSON (which it sometimes does), try allorigins
+                        if (olderHtmlText.startsWith('{') && olderHtmlText.includes('"contents"')) {
+                            try {
+                                const allOriginsUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://t.me/s/${channelUsername}?before=${beforeId}`)}`;
+                                const allOriginsResponse = await fetch(allOriginsUrl);
+                                if (allOriginsResponse.ok) {
+                                    const data = await allOriginsResponse.json();
+                                    if (data.contents) {
+                                        olderHtmlText = data.contents;
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('Failed to fetch older messages via allorigins:', e);
+                            }
+                        }
+                        
+                        const olderMessages = extractTelegramMessagesFromHtml(olderHtmlText, limit - allMessages.length);
+                        
+                        console.log(`[Telegram] Fetched ${olderMessages.length} older messages from ${channelUsername}`);
+                        
+                        // Add older messages that we haven't seen before
+                        olderMessages.forEach(msg => {
+                            const linkKey = msg.link || msg.timestamp;
+                            if (!seenLinks.has(linkKey)) {
+                                seenLinks.add(linkKey);
+                                allMessages.push(msg);
+                            }
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to fetch older Telegram messages:', error);
+        }
+    }
+    
+    if (allMessages.length === 0) {
+        throw new Error('No public messages found or channel is private.');
+    }
+
+    // Sort messages by timestamp (newest first)
+    allMessages.sort((a, b) => {
+        const timeA = new Date(a.timestamp).getTime();
+        const timeB = new Date(b.timestamp).getTime();
+        return timeB - timeA; // Descending order (newest first)
+    });
+
+    // Limit to requested number (take newest ones)
+    const finalMessages = allMessages.slice(0, limit);
+
+    // Convert messages to article format for agents
+    const rawArticles = convertTelegramMessagesToArticles(finalMessages, channelUsername);
+    console.log(`[Telegram] Converted ${finalMessages.length} messages to ${rawArticles.length} raw articles`);
+    
+    // Post-process articles to clean them up (remove markdown, extract links, create plainText)
+    const articles = postProcessTelegramArticles(rawArticles, channelUsername);
+    console.log(`[Telegram] Post-processed to ${articles.length} final articles for channel @${channelUsername}`);
+
+    return {
+        channel: channelUsername,
+        messages: finalMessages,
+        articles,
+        totalMessages: finalMessages.length,
+        note: `Data fetched via public Telegram view (no bot membership required). Showing ${finalMessages.length} most recent messages.`,
+    };
+};
+
+const fetchJsonWithOptionalProxy = async (
+    url: string,
+    init?: RequestInit,
+    options?: { expectJson?: boolean }
+): Promise<any> => {
+    const expectJson = options?.expectJson !== false;
+    const attempt = async (targetUrl: string) => {
+        const response = await fetch(targetUrl, init);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        if (!expectJson) {
+            return response.text();
+        }
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return response.json();
+        }
+        const text = await response.text();
+        try {
+            return JSON.parse(text);
+        } catch {
+            return { raw: text };
+        }
+    };
+
+    try {
+        return await attempt(url);
+    } catch (err: any) {
+        // Attempt proxy fallback for network/CORS issues
+        if (
+            err.name === 'TypeError' ||
+            err.message?.includes('Failed to fetch') ||
+            err.message?.includes('CORS') ||
+            err.message?.includes('Network error')
+        ) {
+            const proxiedUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            return expectJson
+                ? JSON.parse(await attempt(proxiedUrl))
+                : await attempt(proxiedUrl);
+        }
+        throw err;
+    }
+};
+
+const fetchViaPublicRelay = async (url: string): Promise<any> => {
+    const normalizedUrl = url.startsWith('http://') || url.startsWith('https://') ? url : `https://${url}`;
+    const relayUrl = `https://r.jina.ai/${normalizedUrl}`;
+
+    const response = await fetch(relayUrl, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'text/plain',
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Relay request failed: HTTP ${response.status}`);
+    }
+
+    const text = await response.text();
+    try {
+        const parsed = JSON.parse(text);
+        return { ...parsed, _meta: { relay: 'jina' } };
+    } catch {
+        return {
+            raw: text,
+            note: 'Fetched via public relay (r.jina.ai)',
+            _meta: { relay: 'jina' },
+        };
+    }
+};
+
+const generateMockApiData = (source: DataSource, request: DataRequest): any | null => {
+    if (source.id === 'mexc-api' || source.url?.includes('mexc.com')) {
+        return {
+            _meta: {
+                fallback: 'mock',
+                reason: 'Remote API blocked; showing cached sample',
+                refreshedAt: new Date().toISOString(),
+            },
+            symbol: 'BTCUSDT',
+            priceChange: '120.50',
+            priceChangePercent: '0.27',
+            weightedAvgPrice: '45890.12',
+            lastPrice: '45910.34',
+            lastQty: '0.52',
+            bidPrice: '45909.80',
+            askPrice: '45911.20',
+            openPrice: '45789.84',
+            highPrice: '46120.00',
+            lowPrice: '45500.00',
+            volume: '8123.451',
+            quoteVolume: '372850000.12',
+            openTime: Date.now() - 24 * 60 * 60 * 1000,
+            closeTime: Date.now(),
+            firstId: 1,
+            lastId: 100000,
+            count: 100000,
+            sampleNote: 'Replace with live data once CORS/proxy access is configured.',
+        };
+    }
+
+    if (request.dataType === 'price') {
+        return {
+            _meta: {
+                fallback: 'mock',
+                reason: 'Generic price sample',
+                refreshedAt: new Date().toISOString(),
+            },
+            symbol: 'ETHUSDT',
+            price: +(3200 + Math.random() * 50).toFixed(2),
+            change24h: +( (Math.random() - 0.5) * 5 ).toFixed(2),
+            volume: +(500000 + Math.random() * 100000).toFixed(2),
+        };
+    }
+
+    return null;
+};
+
+const normalizeUrl = (inputUrl: string): string => {
+    if (!inputUrl) return '';
+    if (inputUrl.startsWith('http://') || inputUrl.startsWith('https://')) {
+        return inputUrl;
+    }
+    return `https://${inputUrl}`;
+};
+
+const fetchUrlPreview = async (url: string): Promise<{ contentType?: string; text?: string }> => {
+    const normalizedUrl = normalizeUrl(url);
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const response = await fetch(normalizedUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json, text/xml, text/html, */*',
+            },
+            signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        const contentType = response.headers.get('content-type') || undefined;
+        if (contentType?.includes('application/json')) {
+            const text = await response.text();
+            return { contentType, text };
+        }
+        if (contentType?.includes('text') || contentType?.includes('xml') || contentType?.includes('html')) {
+            const text = await response.text();
+            return { contentType, text };
+        }
+        return { contentType };
+    } catch (err) {
+        try {
+            const relayResult = await fetchViaPublicRelay(normalizedUrl);
+            if (typeof relayResult === 'string') {
+                return { text: relayResult, contentType: 'text/plain' };
+            }
+            if (relayResult?.raw) {
+                return { text: relayResult.raw as string, contentType: 'text/plain' };
+            }
+            return { text: JSON.stringify(relayResult).slice(0, 4000), contentType: 'application/json' };
+        } catch {
+            return {};
+        }
+    }
+};
+
+const aggregatorHosts = [
+    'newsapi.org',
+    'mediastack.com',
+    'gnews.io',
+    'contextualwebsearch.com',
+    'rapidapi.com',
+];
+
+const webhookHosts = [
+    'hooks.slack.com',
+    'discord.com',
+    'maker.ifttt.com',
+    'api.telegram.org',
+];
+
+const detectFromUrlStructure = (host: string, path: string, normalizedUrl: string) => {
+    const scores: Record<DataSource['type'], number> = {
+        api: 0,
+        webhook: 0,
+        rss: 0,
+        telegram: 0,
+        website: 0.1,
+        aggregator: 0,
+        third_party: 0,
+    };
+    const reasons: Partial<Record<DataSource['type'], string>> = {};
+
+    const maybeSet = (type: DataSource['type'], score: number, reason: string) => {
+        if (score > scores[type]) {
+            scores[type] = score;
+            reasons[type] = reason;
+        }
+    };
+
+    if (/t\.me|telegram\.me|telegram\.org/.test(host)) {
+        maybeSet('telegram', 0.95, 'Telegram domain detected');
+    }
+    if (webhookHosts.some(h => host.includes(h))) {
+        maybeSet('webhook', 0.9, 'Webhook provider domain');
+    }
+    if (aggregatorHosts.some(h => host.includes(h))) {
+        maybeSet('aggregator', 0.85, 'Known aggregator service');
+    }
+    if (/\brss\b|\bfeed\b|\.rss|\.xml$/.test(path)) {
+        maybeSet('rss', 0.75, 'RSS keyword in path');
+    }
+    if (host.startsWith('api.') || path.includes('/api/')) {
+        maybeSet('api', 0.6, 'API keyword in host/path');
+    }
+    if (/webhook|hook/.test(path)) {
+        maybeSet('webhook', 0.65, 'Webhook keyword in path');
+    }
+    if (/aggregator|collector/.test(path)) {
+        maybeSet('aggregator', 0.5, 'Aggregator keyword in path');
+    }
+    if (/third[-]?party|partner/.test(path)) {
+        maybeSet('third_party', 0.4, 'Third-party keyword in path');
+    }
+    if (/\.json$/.test(path) || normalizedUrl.includes('?api_key=')) {
+        maybeSet('api', 0.55, 'JSON endpoint hint');
+    }
+    return { scores, reasons };
+};
+
+export const detectSourceType = async (inputUrl: string, logAttempts?: string[]): Promise<DetectedSourceType> => {
+    const cleanedInput = inputUrl?.trim();
+    if (!cleanedInput) {
+        return {
+            type: 'website',
+            confidence: 0,
+            reason: 'Empty URL provided',
+            normalizedUrl: '',
+            indicators: [],
+        };
+    }
+
+    const normalizedUrl = normalizeUrl(cleanedInput);
+    let host = '';
+    let path = '';
+    try {
+        const parsed = new URL(normalizedUrl);
+        host = parsed.hostname.toLowerCase();
+        path = parsed.pathname.toLowerCase();
+    } catch {
+        host = normalizedUrl;
+    }
+
+    const indicators: string[] = [];
+    const candidateScores: Record<DataSource['type'], number> = {
+        api: 0.15,
+        webhook: 0.15,
+        rss: 0.15,
+        telegram: 0.15,
+        website: 0.2,
+        aggregator: 0.15,
+        third_party: 0.15,
+    };
+    const candidateReasons: Partial<Record<DataSource['type'], string>> = {
+        website: 'Default assumption for unknown sources',
+    };
+
+    const applyScore = (type: DataSource['type'], score: number, reason: string, indicator?: string) => {
+        const boosted = Math.min(1, score);
+        if (boosted > candidateScores[type]) {
+            candidateScores[type] = boosted;
+            candidateReasons[type] = reason;
+        }
+        if (indicator) {
+            indicators.push(`${type}:${indicator}`);
+        }
+    };
+
+    const structural = detectFromUrlStructure(host, path, normalizedUrl);
+    (Object.keys(structural.scores) as Array<DataSource['type']>).forEach(type => {
+        const score = structural.scores[type];
+        if (score > 0) {
+            applyScore(type, score, structural.reasons[type] || 'URL heuristic', 'url');
+        }
+    });
+
+    const preview = await fetchUrlPreview(normalizedUrl);
+    const previewText = preview.text?.slice(0, 4000) || '';
+    const contentType = preview.contentType;
+
+    if (contentType?.includes('application/rss') || contentType?.includes('xml')) {
+        applyScore('rss', 0.9, `Content type ${contentType}`, 'content-type');
+    }
+    if (contentType?.includes('application/json')) {
+        applyScore('api', 0.8, 'JSON response detected', 'content-type');
+        applyScore('third_party', 0.5, 'Likely third-party JSON API', 'content-type');
+    }
+    if (/^application\/octet-stream/.test(contentType || '')) {
+        applyScore('webhook', 0.4, 'Binary payload (possible webhook)', 'content-type');
+    }
+
+    if (previewText.includes('<rss') || previewText.includes('<feed') || previewText.includes('<channel>')) {
+        applyScore('rss', 0.95, 'RSS XML markers detected', 'content-snippet');
+    }
+    if (previewText.startsWith('{') || previewText.startsWith('[')) {
+        applyScore('api', 0.75, 'JSON payload detected', 'content-snippet');
+    }
+    if (previewText.includes('tgme_widget_message') || host.includes('t.me')) {
+        applyScore('telegram', 0.9, 'Telegram widget detected', 'content-snippet');
+    }
+    if (previewText.toLowerCase().includes('webhook') && previewText.toLowerCase().includes('payload')) {
+        applyScore('webhook', 0.7, 'Webhook keywords in body', 'content-snippet');
+    }
+    if (previewText.toLowerCase().includes('aggregated') || previewText.toLowerCase().includes('data sources')) {
+        applyScore('aggregator', 0.55, 'Aggregator keywords in body', 'content-snippet');
+    }
+
+    let suggestedType: DataSource['type'] = 'website';
+    let bestScore = 0;
+    (Object.keys(candidateScores) as Array<DataSource['type']>).forEach(type => {
+        const score = candidateScores[type];
+        if (score >= bestScore) {
+            bestScore = score;
+            suggestedType = type;
+        }
+    });
+
+    const hostLabel = host.replace(/^www\./, '');
+    const typeDefaults: Record<DataSource['type'], { category: string; tags: string[]; priority: DataSource['priority']; interval: DataSource['updateInterval'] }> = {
+        rss: { category: 'news', tags: ['rss', 'news'], priority: 'high', interval: '15min' },
+        telegram: { category: 'social', tags: ['telegram', 'social'], priority: 'high', interval: 'realtime' },
+        api: { category: 'data', tags: ['api', 'json'], priority: 'high', interval: '1min' },
+        aggregator: { category: 'aggregators', tags: ['aggregator', 'multi-source'], priority: 'high', interval: '5min' },
+        website: { category: 'web', tags: ['website', 'html'], priority: 'medium', interval: '30min' },
+        webhook: { category: 'automation', tags: ['webhook', 'push'], priority: 'medium', interval: 'realtime' },
+        third_party: { category: 'data', tags: ['third-party', 'external'], priority: 'medium', interval: '15min' },
+    };
+
+    const meta: Record<string, any> = {
+        normalizedUrl,
+        contentType,
+        previewLength: previewText.length,
+        host: hostLabel,
+        suggestedName: hostLabel ? hostLabel.split('.').slice(0, -1).join(' ').replace(/[-_]/g, ' ') || hostLabel : normalizedUrl,
+        suggestedTags: typeDefaults[suggestedType].tags,
+        suggestedPriority: typeDefaults[suggestedType].priority,
+        suggestedInterval: typeDefaults[suggestedType].interval,
+        suggestedCategory: typeDefaults[suggestedType].category,
+    };
+
+    if (suggestedType === 'telegram') {
+        const username = path.replace('/s/', '').replace('/', '').replace('@', '');
+        if (username) {
+            meta.telegramUsername = username;
+        }
+    }
+
+    const detection: DetectedSourceType = {
+        type: suggestedType,
+        confidence: Number(bestScore.toFixed(2)),
+        reason: candidateReasons[suggestedType] || 'Heuristic detection',
+        normalizedUrl,
+        indicators,
+        contentType,
+        meta,
+    };
+
+    if (logAttempts && logAttempts.length > 0) {
+        await logSourceDetection(inputUrl, detection, logAttempts);
+    }
+
+    return detection;
+};
+
+export const logSourceDetection = async (inputUrl: string, detection: DetectedSourceType, attempts?: string[]): Promise<void> => {
+    try {
+        const id = `detect_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const record: DetectedSourceRecord = {
+            id,
+            originalUrl: inputUrl,
+            detectedAt: new Date().toISOString(),
+            attempts,
+            ...detection,
+        };
+        await database.save('settings', {
+            key: `source_detection_${id}`,
+            value: record,
+        });
+    } catch (e) {
+        console.warn('Failed to persist source detection log:', e);
+    }
+};
+
+const parseRssXml = (xmlText: string): Array<{
+    title: string;
+    link: string;
+    content: string;
+    publishedAt: string;
+    author?: string;
+}> => {
+    try {
+        if (typeof DOMParser === 'undefined') {
+            throw new Error('DOMParser is not available in this environment');
+        }
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xmlText, 'text/xml');
+        const items = Array.from(doc.querySelectorAll('item'));
+
+        return items.map(item => ({
+            title: item.querySelector('title')?.textContent?.trim() || 'Untitled',
+            link: item.querySelector('link')?.textContent?.trim() || '',
+            content:
+                item.querySelector('description')?.textContent?.trim() ||
+                item.querySelector('content\\:encoded')?.textContent?.trim() ||
+                '',
+            publishedAt:
+                item.querySelector('pubDate')?.textContent?.trim() ||
+                new Date().toISOString(),
+            author: item.querySelector('author')?.textContent?.trim() || undefined,
+        }));
+    } catch (error) {
+        console.warn('Failed to parse RSS XML:', error);
+        return [];
+    }
+};
+
+const normalizeRssUrlForKnownSources = (rssUrl: string): { effectiveUrl: string; note?: string } => {
+    try {
+        const parsed = new URL(rssUrl);
+        const hostname = parsed.hostname.toLowerCase();
+        const pathname = parsed.pathname.toLowerCase();
+
+        if (hostname.includes('tradingview.com')) {
+            if (pathname === '/news/' || pathname === '/news') {
+                return {
+                    effectiveUrl: 'https://www.tradingview.com/news/rss/',
+                    note: 'TradingView web pages are not valid RSS feeds; switched to their official RSS endpoint automatically.',
+                };
+            }
+        }
+    } catch {
+        // Ignore parsing issues and fall back to the provided URL
+    }
+
+    return { effectiveUrl: rssUrl };
+};
+
+const fetchRssFeedData = async (rssUrl: string): Promise<{
+    source?: string;
+    url: string;
+    articles?: Array<{
+        title: string;
+        link: string;
+        content: string;
+        publishedAt: string;
+        author?: string;
+    }>;
+    lastUpdated?: string;
+    error?: boolean;
+    message?: string;
+    details?: string;
+    suggestion?: string;
+    note?: string;
+}> => {
+    const { effectiveUrl, note: normalizationNote } = normalizeRssUrlForKnownSources(rssUrl);
+    const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(effectiveUrl)}`;
+    const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(effectiveUrl)}`;
+    const htmlProxyUrl = `https://r.jina.ai/${effectiveUrl.startsWith('http') ? effectiveUrl : `https://${effectiveUrl}`}`;
+
+    const fetchWithTimeout = async (url: string, expectJson: boolean) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                signal: controller.signal,
+                headers: expectJson
+                    ? { 'Content-Type': 'application/json' }
+                    : undefined,
+            });
+            clearTimeout(timeoutId);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return expectJson ? response.json() : response.text();
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    };
+
+    try {
+        const jsonResult = await fetchWithTimeout(rss2jsonUrl, true);
+        if (jsonResult?.items && Array.isArray(jsonResult.items)) {
+            const payload = {
+                source: jsonResult.feed?.title || rssUrl,
+                url: rssUrl,
+                lastUpdated: new Date().toISOString(),
+                articles: jsonResult.items.slice(0, 20).map((item: any) => ({
+                    title: item.title,
+                    link: item.link,
+                    content: item.content || item.description || '',
+                    publishedAt: item.pubDate || item.pub_date || new Date().toISOString(),
+                    author: item.author,
+                })),
+            };
+            if (normalizationNote) {
+                (payload as any).note = normalizationNote;
+            }
+            return payload;
+        }
+    } catch (primaryError) {
+        console.warn('RSS2JSON proxy failed, falling back to AllOrigins:', primaryError);
+    }
+
+    try {
+        const rawXml = await fetchWithTimeout(allOriginsUrl, false);
+        const articles = parseRssXml(rawXml).slice(0, 20);
+        if (articles.length > 0) {
+            let sourceName = 'RSS Feed';
+            try {
+                const parsedUrl = new URL(effectiveUrl);
+                sourceName = parsedUrl.hostname;
+            } catch {
+                // ignore URL parsing errors
+            }
+
+            const payload = {
+                source: sourceName,
+                url: rssUrl,
+                lastUpdated: new Date().toISOString(),
+                articles,
+            };
+            if (normalizationNote) {
+                (payload as any).note = normalizationNote;
+            }
+            return payload;
+        }
+        throw new Error('RSS feed did not contain any items');
+    } catch (fallbackError: any) {
+        console.error('Failed to fetch RSS feed:', fallbackError);
+        try {
+            const htmlText = await fetchWithTimeout(htmlProxyUrl, false);
+            const fallbackArticles = extractArticlesFromHtml(htmlText, 20, effectiveUrl);
+            if (fallbackArticles.length > 0) {
+                return {
+                    source: 'HTML fallback',
+                    url: rssUrl,
+                    lastUpdated: new Date().toISOString(),
+                    articles: fallbackArticles,
+                    note: normalizationNote || 'Fetched via HTML fallback (no valid RSS items detected)',
+                };
+            }
+        } catch (htmlError) {
+            console.warn('HTML fallback for RSS failed:', htmlError);
+        }
+
+        return {
+            error: true,
+            url: rssUrl,
+            message:
+                fallbackError?.message ||
+                'Failed to load RSS feed due to network or CORS restrictions.',
+            details: fallbackError?.toString(),
+            suggestion:
+                normalizationNote ||
+                'Ensure the RSS URL is accessible and consider enabling a proxy or providing a JSON endpoint.',
+        };
+    }
+};
+
+// Web Crawler Management
+export const createWebCrawler = async (config: Omit<WebCrawlerConfig, 'id' | 'lastCrawl' | 'lastSuccess' | 'errorCount'>): Promise<WebCrawlerConfig> => {
+    try {
+        const dataHub = await fetchDataHubState();
+        const advanced = ensureAdvancedFeatures(dataHub);
+
         const newCrawler: WebCrawlerConfig = {
             ...config,
             id: `CRAWL-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             errorCount: 0,
         };
-        
-        dataHub.advanced.webCrawlers.push(newCrawler);
+
+        advanced.webCrawlers.push(newCrawler);
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
         await database.save('settings', { key: 'artemis_state', value: artemis });
-        
+
         return newCrawler;
     } catch (e) {
         console.error('Failed to create web crawler:', e);
@@ -20764,23 +22274,23 @@ export const updateWebCrawler = async (crawlerId: string, updates: Partial<WebCr
         if (!dataHub.advanced) {
             throw new Error('Advanced features not initialized');
         }
-        
+
         const crawlerIndex = dataHub.advanced.webCrawlers.findIndex(c => c.id === crawlerId);
         if (crawlerIndex === -1) {
             throw new Error('Web crawler not found');
         }
-        
+
         dataHub.advanced.webCrawlers[crawlerIndex] = {
             ...dataHub.advanced.webCrawlers[crawlerIndex],
             ...updates,
         };
-        
+
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
         await database.save('settings', { key: 'artemis_state', value: artemis });
-        
+
         return dataHub.advanced.webCrawlers[crawlerIndex];
     } catch (e) {
         console.error('Failed to update web crawler:', e);
@@ -20795,11 +22305,11 @@ export const deleteWebCrawler = async (crawlerId: string): Promise<void> => {
         if (!dataHub.advanced) {
             throw new Error('Advanced features not initialized');
         }
-        
+
         dataHub.advanced.webCrawlers = dataHub.advanced.webCrawlers.filter(c => c.id !== crawlerId);
-        
+
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
         await database.save('settings', { key: 'artemis_state', value: artemis });
@@ -20816,10 +22326,10 @@ export const runAutoDiscovery = async (): Promise<DataSource[]> => {
         if (!dataHub.advanced || !dataHub.advanced.autoDiscovery.enabled) {
             return [];
         }
-        
+
         const discovered: DataSource[] = [];
         const rules = dataHub.advanced.autoDiscovery.rules.filter(r => r.enabled);
-        
+
         // Simulate discovery (in production, this would scan APIs, RSS feeds, etc.)
         for (const rule of rules) {
             // Mock discovery logic
@@ -20834,18 +22344,18 @@ export const runAutoDiscovery = async (): Promise<DataSource[]> => {
                     priority: rule.priority,
                     updateInterval: '5min',
                 };
-                
+
                 const created = await createDataSource(newSource);
                 discovered.push(created);
             }
         }
-        
+
         if (dataHub.advanced) {
             dataHub.advanced.autoDiscovery.lastScan = new Date().toISOString();
             dataHub.advanced.autoDiscovery.discoveredSources.push(...discovered);
             await database.save('settings', { key: 'data_hub_state', value: dataHub });
         }
-        
+
         return discovered;
     } catch (e) {
         console.error('Failed to run auto discovery:', e);
@@ -20860,18 +22370,18 @@ export const calculateSourcePriorities = async (): Promise<SourcePriorityRule[]>
         if (!dataHub.advanced || !dataHub.advanced.smartPrioritization.enabled) {
             return [];
         }
-        
+
         const updatedRules: SourcePriorityRule[] = [];
-        
+
         for (const source of dataHub.sources) {
             if (source.status !== 'active') continue;
-            
+
             // Calculate priority based on factors
             const reliabilityScore = source.reliabilityScore / 100;
             const responseTimeScore = source.responseTime ? Math.max(0, 1 - (source.responseTime / 1000)) : 0.5;
             const successRateScore = source.successRate / 100;
             const dataQualityScore = 0.8; // Mock data quality
-            
+
             const existingRule = dataHub.advanced.smartPrioritization.rules.find(r => r.sourceId === source.id);
             const factors = existingRule?.factors || {
                 reliabilityWeight: 0.3,
@@ -20879,21 +22389,21 @@ export const calculateSourcePriorities = async (): Promise<SourcePriorityRule[]>
                 successRateWeight: 0.3,
                 dataQualityWeight: 0.2,
             };
-            
+
             const calculatedPriority = (
                 reliabilityScore * factors.reliabilityWeight +
                 responseTimeScore * factors.responseTimeWeight +
                 successRateScore * factors.successRateWeight +
                 dataQualityScore * factors.dataQualityWeight
             ) * 100;
-            
+
             // Determine base priority from calculated score
             let basePriority: 'low' | 'medium' | 'high' | 'critical' = 'medium';
             if (calculatedPriority >= 80) basePriority = 'critical';
             else if (calculatedPriority >= 60) basePriority = 'high';
             else if (calculatedPriority >= 40) basePriority = 'medium';
             else basePriority = 'low';
-            
+
             const rule: SourcePriorityRule = {
                 sourceId: source.id,
                 basePriority: existingRule?.basePriority || basePriority,
@@ -20901,19 +22411,19 @@ export const calculateSourcePriorities = async (): Promise<SourcePriorityRule[]>
                 calculatedPriority,
                 lastCalculated: new Date().toISOString(),
             };
-            
+
             updatedRules.push(rule);
-            
+
             // Update source priority
             await updateDataHubSource(source.id, { priority: basePriority });
         }
-        
+
         if (dataHub.advanced) {
             dataHub.advanced.smartPrioritization.rules = updatedRules;
             dataHub.advanced.smartPrioritization.lastUpdate = new Date().toISOString();
             await database.save('settings', { key: 'data_hub_state', value: dataHub });
         }
-        
+
         return updatedRules;
     } catch (e) {
         console.error('Failed to calculate source priorities:', e);
@@ -20925,20 +22435,9 @@ export const calculateSourcePriorities = async (): Promise<SourcePriorityRule[]>
 export const updateSourceAccessControl = async (sourceId: string, control: Partial<SourceAccessControl>): Promise<SourceAccessControl> => {
     try {
         const dataHub = await fetchDataHubState();
-        if (!dataHub.advanced) {
-            dataHub.advanced = {
-                webCrawlers: [],
-                autoDiscovery: { enabled: false, rules: [], discoveredSources: [] },
-                smartPrioritization: { enabled: false, rules: [] },
-                accessControl: [],
-                blacklist: { sources: [], patterns: [], reasons: {} },
-                whitelist: { sources: [], patterns: [] },
-                archives: [],
-                telegramPublishers: [],
-            };
-        }
-        
-        const existing = dataHub.advanced.accessControl.find(ac => ac.sourceId === sourceId);
+        const advanced = ensureAdvancedFeatures(dataHub);
+
+        const existing = advanced.accessControl.find(ac => ac.sourceId === sourceId);
         const updated: SourceAccessControl = {
             ...existing,
             sourceId,
@@ -20951,20 +22450,20 @@ export const updateSourceAccessControl = async (sourceId: string, control: Parti
             maxRequestsPerDay: control.maxRequestsPerDay ?? existing?.maxRequestsPerDay,
             rateLimitWindow: control.rateLimitWindow ?? existing?.rateLimitWindow ?? 60,
         };
-        
-        const index = dataHub.advanced.accessControl.findIndex(ac => ac.sourceId === sourceId);
+
+        const index = advanced.accessControl.findIndex(ac => ac.sourceId === sourceId);
         if (index >= 0) {
-            dataHub.advanced.accessControl[index] = updated;
+             advanced.accessControl[index] = updated;
         } else {
-            dataHub.advanced.accessControl.push(updated);
+            advanced.accessControl.push(updated);
         }
-        
+
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
         await database.save('settings', { key: 'artemis_state', value: artemis });
-        
+
         return updated;
     } catch (e) {
         console.error('Failed to update access control:', e);
@@ -20976,29 +22475,18 @@ export const updateSourceAccessControl = async (sourceId: string, control: Parti
 export const addToBlacklist = async (sourceId: string, reason: string): Promise<void> => {
     try {
         const dataHub = await fetchDataHubState();
-        if (!dataHub.advanced) {
-            dataHub.advanced = {
-                webCrawlers: [],
-                autoDiscovery: { enabled: false, rules: [], discoveredSources: [] },
-                smartPrioritization: { enabled: false, rules: [] },
-                accessControl: [],
-                blacklist: { sources: [], patterns: [], reasons: {} },
-                whitelist: { sources: [], patterns: [] },
-                archives: [],
-                telegramPublishers: [],
-            };
-        }
-        
-        if (!dataHub.advanced.blacklist.sources.includes(sourceId)) {
-            dataHub.advanced.blacklist.sources.push(sourceId);
-            dataHub.advanced.blacklist.reasons[sourceId] = reason;
-            
+        const advanced = ensureAdvancedFeatures(dataHub);
+
+        if (!advanced.blacklist.sources.includes(sourceId)) {
+            advanced.blacklist.sources.push(sourceId);
+            advanced.blacklist.reasons[sourceId] = reason;
+
             // Update source status
             await updateDataHubSource(sourceId, { status: 'inactive' });
         }
-        
+
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
         await database.save('settings', { key: 'artemis_state', value: artemis });
@@ -21011,31 +22499,20 @@ export const addToBlacklist = async (sourceId: string, reason: string): Promise<
 export const addToWhitelist = async (sourceId: string): Promise<void> => {
     try {
         const dataHub = await fetchDataHubState();
-        if (!dataHub.advanced) {
-            dataHub.advanced = {
-                webCrawlers: [],
-                autoDiscovery: { enabled: false, rules: [], discoveredSources: [] },
-                smartPrioritization: { enabled: false, rules: [] },
-                accessControl: [],
-                blacklist: { sources: [], patterns: [], reasons: {} },
-                whitelist: { sources: [], patterns: [] },
-                archives: [],
-                telegramPublishers: [],
-            };
+        const advanced = ensureAdvancedFeatures(dataHub);
+
+        if (!advanced.whitelist.sources.includes(sourceId)) {
+            advanced.whitelist.sources.push(sourceId);
         }
-        
-        if (!dataHub.advanced.whitelist.sources.includes(sourceId)) {
-            dataHub.advanced.whitelist.sources.push(sourceId);
-        }
-        
+
         // Remove from blacklist if exists
-        if (dataHub.advanced.blacklist.sources.includes(sourceId)) {
-            dataHub.advanced.blacklist.sources = dataHub.advanced.blacklist.sources.filter(id => id !== sourceId);
-            delete dataHub.advanced.blacklist.reasons[sourceId];
+        if (advanced.blacklist.sources.includes(sourceId)) {
+            advanced.blacklist.sources = advanced.blacklist.sources.filter(id => id !== sourceId);
+            delete advanced.blacklist.reasons[sourceId];
         }
-        
+
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
         await database.save('settings', { key: 'artemis_state', value: artemis });
@@ -21045,23 +22522,67 @@ export const addToWhitelist = async (sourceId: string): Promise<void> => {
     }
 };
 
+export const removeFromBlacklist = async (sourceId: string): Promise<void> => {
+    try {
+        const dataHub = await fetchDataHubState();
+        const advanced = ensureAdvancedFeatures(dataHub);
+
+        const beforeLength = advanced.blacklist.sources.length;
+        advanced.blacklist.sources = advanced.blacklist.sources.filter(id => id !== sourceId);
+        delete advanced.blacklist.reasons[sourceId];
+
+        if (advanced.blacklist.sources.length === beforeLength) {
+            return;
+        }
+
+        const source = dataHub.sources.find(s => s.id === sourceId);
+        if (source && source.status === 'inactive') {
+            source.status = 'active';
+            source.updatedAt = new Date().toISOString();
+            dataHub.activeSources = dataHub.sources.filter(s => s.status === 'active').length;
+            dataHub.updatedAt = new Date().toISOString();
+        }
+
+        await database.save('settings', { key: 'data_hub_state', value: dataHub });
+
+        const artemis = await fetchArtemisState();
+        artemis.dataHub = dataHub;
+        await database.save('settings', { key: 'artemis_state', value: artemis });
+    } catch (e) {
+        console.error('Failed to remove from blacklist:', e);
+        throw e;
+    }
+};
+
+export const removeFromWhitelist = async (sourceId: string): Promise<void> => {
+    try {
+        const dataHub = await fetchDataHubState();
+        const advanced = ensureAdvancedFeatures(dataHub);
+
+        const beforeLength = advanced.whitelist.sources.length;
+        advanced.whitelist.sources = advanced.whitelist.sources.filter(id => id !== sourceId);
+
+        if (advanced.whitelist.sources.length === beforeLength) {
+            return;
+        }
+
+        await database.save('settings', { key: 'data_hub_state', value: dataHub });
+
+        const artemis = await fetchArtemisState();
+        artemis.dataHub = dataHub;
+        await database.save('settings', { key: 'artemis_state', value: artemis });
+    } catch (e) {
+        console.error('Failed to remove from whitelist:', e);
+        throw e;
+    }
+};
+
 // Data Archiving
 export const archiveData = async (sourceId: string, dataType: string, data: any, metadata?: Partial<DataArchive['metadata']>): Promise<DataArchive> => {
     try {
         const dataHub = await fetchDataHubState();
-        if (!dataHub.advanced) {
-            dataHub.advanced = {
-                webCrawlers: [],
-                autoDiscovery: { enabled: false, rules: [], discoveredSources: [] },
-                smartPrioritization: { enabled: false, rules: [] },
-                accessControl: [],
-                blacklist: { sources: [], patterns: [], reasons: {} },
-                whitelist: { sources: [], patterns: [] },
-                archives: [],
-                telegramPublishers: [],
-            };
-        }
-        
+        const advanced = ensureAdvancedFeatures(dataHub);
+
         const archive: DataArchive = {
             id: `ARCH-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             sourceId,
@@ -21076,16 +22597,16 @@ export const archiveData = async (sourceId: string, dataType: string, data: any,
             archivedAt: new Date().toISOString(),
             usedForBacktest: false,
         };
-        
-        dataHub.advanced.archives.push(archive);
-        
+
+        advanced.archives.push(archive);
+
         // Keep only last 10000 archives
-        if (dataHub.advanced.archives.length > 10000) {
-            dataHub.advanced.archives = dataHub.advanced.archives.slice(-10000);
+        if (advanced.archives.length > 10000) {
+            advanced.archives = advanced.archives.slice(-10000);
         }
-        
+
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         return archive;
     } catch (e) {
         console.error('Failed to archive data:', e);
@@ -21099,9 +22620,9 @@ export const getArchivedData = async (filters?: { sourceId?: string; dataType?: 
         if (!dataHub.advanced) {
             return [];
         }
-        
+
         let archives = dataHub.advanced.archives;
-        
+
         if (filters) {
             if (filters.sourceId) {
                 archives = archives.filter(a => a.sourceId === filters.sourceId);
@@ -21116,7 +22637,7 @@ export const getArchivedData = async (filters?: { sourceId?: string; dataType?: 
                 archives = archives.filter(a => a.timestamp <= filters.endDate!);
             }
         }
-        
+
         return archives;
     } catch (e) {
         console.error('Failed to get archived data:', e);
@@ -21128,32 +22649,21 @@ export const getArchivedData = async (filters?: { sourceId?: string; dataType?: 
 export const createTelegramPublisher = async (publisher: Omit<TelegramPublisher, 'id' | 'lastSent' | 'sentCount'>): Promise<TelegramPublisher> => {
     try {
         const dataHub = await fetchDataHubState();
-        if (!dataHub.advanced) {
-            dataHub.advanced = {
-                webCrawlers: [],
-                autoDiscovery: { enabled: false, rules: [], discoveredSources: [] },
-                smartPrioritization: { enabled: false, rules: [] },
-                accessControl: [],
-                blacklist: { sources: [], patterns: [], reasons: {} },
-                whitelist: { sources: [], patterns: [] },
-                archives: [],
-                telegramPublishers: [],
-            };
-        }
-        
+        const advanced = ensureAdvancedFeatures(dataHub);
+
         const newPublisher: TelegramPublisher = {
             ...publisher,
             id: `TG-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             sentCount: 0,
         };
-        
-        dataHub.advanced.telegramPublishers.push(newPublisher);
+
+        advanced.telegramPublishers.push(newPublisher);
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
         await database.save('settings', { key: 'artemis_state', value: artemis });
-        
+
         return newPublisher;
     } catch (e) {
         console.error('Failed to create Telegram publisher:', e);
@@ -21168,23 +22678,23 @@ export const updateTelegramPublisher = async (publisherId: string, updates: Part
         if (!dataHub.advanced) {
             throw new Error('Advanced features not initialized');
         }
-        
+
         const publisherIndex = dataHub.advanced.telegramPublishers.findIndex(p => p.id === publisherId);
         if (publisherIndex === -1) {
             throw new Error('Telegram publisher not found');
         }
-        
+
         dataHub.advanced.telegramPublishers[publisherIndex] = {
             ...dataHub.advanced.telegramPublishers[publisherIndex],
             ...updates,
         };
-        
+
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
         await database.save('settings', { key: 'artemis_state', value: artemis });
-        
+
         return dataHub.advanced.telegramPublishers[publisherIndex];
     } catch (e) {
         console.error('Failed to update Telegram publisher:', e);
@@ -21199,11 +22709,11 @@ export const deleteTelegramPublisher = async (publisherId: string): Promise<void
         if (!dataHub.advanced) {
             throw new Error('Advanced features not initialized');
         }
-        
+
         dataHub.advanced.telegramPublishers = dataHub.advanced.telegramPublishers.filter(p => p.id !== publisherId);
-        
+
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         const artemis = await fetchArtemisState();
         artemis.dataHub = dataHub;
         await database.save('settings', { key: 'artemis_state', value: artemis });
@@ -21219,30 +22729,30 @@ export const publishToTelegram = async (publisherId: string, data: any): Promise
         if (!dataHub.advanced) {
             return false;
         }
-        
+
         const publisher = dataHub.advanced.telegramPublishers.find(p => p.id === publisherId);
         if (!publisher || !publisher.enabled) {
             return false;
         }
-        
+
         // Format message using template
         let message = publisher.template;
         message = message.replace('{data}', JSON.stringify(data, null, 2));
         message = message.replace('{timestamp}', new Date().toISOString());
-        
+
         // In production, this would call Telegram API
         // For now, we'll just log it
         console.log('Publishing to Telegram:', {
             chatId: publisher.chatId,
             message: message.substring(0, 100) + '...',
         });
-        
+
         // Update publisher stats
         publisher.lastSent = new Date().toISOString();
         publisher.sentCount++;
-        
+
         await database.save('settings', { key: 'data_hub_state', value: dataHub });
-        
+
         return true;
     } catch (e) {
         console.error('Failed to publish to Telegram:', e);

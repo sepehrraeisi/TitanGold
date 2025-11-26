@@ -4049,6 +4049,35 @@ export interface DataHubState {
   health: DataHubHealth;
   cache: DataCacheStats;
   advanced?: DataHubAdvancedFeatures;
+  telegramCollector?: TelegramCollectorState;
+}
+
+export type TelegramCollectorChannelStatus = 'idle' | 'syncing' | 'error' | 'paused';
+
+export interface TelegramCollectorChannel {
+  id: string;
+  title: string;
+  handle: string;
+  status: TelegramCollectorChannelStatus;
+  enabled: boolean;
+  usingCollector: boolean;
+  sourceId?: string;
+  category?: string;
+  lastSyncAt?: string;
+  lastMessageAt?: string;
+  messageCount24h?: number;
+  fetchLatencyMs?: number;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TelegramCollectorState {
+  status: 'unknown' | 'online' | 'offline' | 'login_required';
+  sessionUser?: string;
+  lastLoginAt?: string;
+  lastRefreshAt?: string;
+  channels: TelegramCollectorChannel[];
 }
 
 export interface DataSource {
@@ -4279,6 +4308,23 @@ export interface DataHubAdvancedFeatures {
   };
   archives: DataArchive[];
   telegramPublishers: TelegramPublisher[];
+}
+
+export interface DetectedSourceType {
+    type: DataSource['type'];
+    confidence: number;
+    reason: string;
+    normalizedUrl: string;
+    indicators: string[];
+    contentType?: string;
+    meta?: Record<string, any>;
+}
+
+export interface DetectedSourceRecord extends DetectedSourceType {
+    id: string;
+    originalUrl: string;
+    detectedAt: string;
+    attempts?: string[];
 }
 
 // Trading Scenario

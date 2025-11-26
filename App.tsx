@@ -4,6 +4,7 @@ import Login from './components/Login.tsx';
 import { LanguageProvider } from './context/LanguageContext.tsx';
 import { AppProvider, useAppContext } from './context/AppContext.tsx';
 import { checkSession, login } from './services/api.ts';
+import { loginWithBackend, checkSessionStorage, logoutUser } from './services/api-auth.ts';
 import LoadingScreen from './components/LoadingScreen.tsx';
 import type { User } from './types.ts';
 import { database } from './services/database.ts';
@@ -31,9 +32,13 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const validateSession = async () => {
-      const sessionUser = await checkSession();
+      // Try to check session from backend token
+      const sessionUser = await checkSessionStorage();
       if (sessionUser) {
+        console.log('✅ Session restored:', sessionUser);
         setUser(sessionUser);
+      } else {
+        console.log('⚠️ No session found');
       }
       setIsLoading(false);
     };
@@ -42,17 +47,24 @@ const AppContent: React.FC = () => {
 
   const handleLogin = async (username: string, pass: string) => {
     setAuthError(null);
-    const loggedInUser = await login(username, pass);
+    console.log('🔐 Attempting login with backend API...');
+    
+    // Use real backend API for login
+    const loggedInUser = await loginWithBackend(username, pass);
+    
     if (loggedInUser) {
+      console.log('✅ Login successful, user:', loggedInUser);
       setUser(loggedInUser);
     } else {
+      console.error('❌ Login failed');
       setAuthError('invalid_credentials');
     }
   };
   
   const handleLogout = () => {
+    console.log('👋 Logging out...');
+    logoutUser(); // Clear session storage
     setUser(null);
-    // Here you would also call an API to invalidate the session on the backend
   };
 
   if (isLoading) {

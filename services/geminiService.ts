@@ -31,9 +31,36 @@ function getChatInstance(): Chat {
     return chatInstance;
 }
 
+// Replaced direct API call with Backend API call for security
 export const getChatResponseStream = async (message: string) => {
-    const chat = getChatInstance();
-    return chat.sendMessageStream({ message });
+    // Note: Currently returning a simulated stream from the full response
+    // In a future update, we can implement real SSE for true streaming
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch('http://localhost:5002/api/ai-agents/chat', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ message })
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to get response from Artemis');
+    }
+
+    const data = await response.json();
+
+    // Simulate stream generator
+    async function* streamGenerator() {
+        const words = data.text.split(' ');
+        for (const word of words) {
+            yield { text: word + ' ' };
+            await new Promise(resolve => setTimeout(resolve, 20)); // smooth typing effect
+        }
+    }
+
+    return streamGenerator();
 };
 
 export const analyzeImage = async (prompt: string, imageBase64: string, mimeType: string): Promise<string> => {
@@ -46,13 +73,13 @@ export const analyzeImage = async (prompt: string, imageBase64: string, mimeType
     const textPart = {
         text: prompt,
     };
-    
+
     const ai = getAIInstance();
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: { parts: [imagePart, textPart] },
     });
-    
+
     return response.text;
 };
 
@@ -130,7 +157,7 @@ export const getGroundedResponse = async (prompt: string): Promise<{ text: strin
             tools: [{ googleSearch: {} }],
         },
     });
-    
+
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     return { text: response.text, sources };
 };

@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import { database } from '../../services/database.ts';
-import { AIManagerOverview, ArtemisState, TradingScenario, ArtemisConfig, ArtemisLog, DataHubState, DataSource, DataCategory, DataHubAdvancedFeatures } from '../../types.ts';
+import { AIManagerOverview, ArtemisState, TradingScenario, ArtemisConfig, ArtemisLog, DataHubState, DataSource, DataCategory, DataHubAdvancedFeatures, DetectedSourceType } from '../../types.ts';
 import { Backtesting, SystemLogs, ArtemisSettings } from './ArtemisComponents.tsx';
-
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
         {children}
@@ -87,6 +86,9 @@ const AIManager: React.FC = () => {
             console.error('Failed to refresh Artemis state:', e);
         }
     };
+    
+    const telegramCollectorState = dataHub.telegramCollector;
+    const telegramChannels = telegramCollectorState?.channels || [];
     
     return (
         <div className="space-y-6">
@@ -993,7 +995,9 @@ const EditScenarioModal: React.FC<{
                 
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm text-muted-foreground mb-1">{t('name') || 'Name'} *</label>
+                        <label className="block text-sm text-muted-foreground mb-1">
+                            {t('name') || 'Name'} * {autoBadge('name')}
+                        </label>
                         <input
                             type="text"
                             value={name}
@@ -1228,13 +1232,37 @@ const Metric: React.FC<{label: string, value: React.ReactNode}> = ({label, value
 const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onRefresh: () => void }> = ({ artemis, t, onRefresh }) => {
     const [dataHub, setDataHub] = useState<DataHubState | null>(artemis.dataHub || null);
     const [isLoading, setIsLoading] = useState(false);
-    const [activeView, setActiveView] = useState<'sources' | 'categories' | 'health' | 'logs' | 'advanced'>('sources');
+    const [activeView, setActiveView] = useState<'sources' | 'categories' | 'health' | 'logs' | 'advanced' | 'telegram'>('sources');
     const [showCreateSourceModal, setShowCreateSourceModal] = useState(false);
     const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false);
     const [editingSource, setEditingSource] = useState<DataSource | null>(null);
     const [viewingSourceData, setViewingSourceData] = useState<DataSource | null>(null);
     const [sourceData, setSourceData] = useState<any>(null);
     const [isLoadingData, setIsLoadingData] = useState(false);
+    const [collectorHealth, setCollectorHealth] = useState<any>(null);
+    const [isLoadingCollector, setIsLoadingCollector] = useState(false);
+    const [collectorMessage, setCollectorMessage] = useState<string | null>(null);
+    const [collectorError, setCollectorError] = useState<string | null>(null);
+    const [collectorAuthId, setCollectorAuthId] = useState<string | null>(null);
+    const [collectorForm, setCollectorForm] = useState({
+        apiId: '',
+        apiHash: '',
+        phoneNumber: '',
+        code: '',
+        password: '',
+    });
+    const [testingChannelId, setTestingChannelId] = useState<string | null>(null);
+    const [channelTestPreview, setChannelTestPreview] = useState<{
+        channelId: string;
+        channelHandle: string;
+        fetchedAt: string;
+        latency?: number;
+        messages?: Array<{ text: string; timestamp: string; link?: string }>;
+        success: boolean;
+        error?: string;
+    } | null>(null);
+    const [isRefreshingChannels, setIsRefreshingChannels] = useState(false);
+    const telegramCollectorUrl = typeof api.getTelegramCollectorBaseUrl === 'function' ? api.getTelegramCollectorBaseUrl() : undefined;
     
     useEffect(() => {
         const loadDataHub = async () => {
@@ -1265,6 +1293,148 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             alert(t('health_check_failed') || 'Failed to check health');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleCollectorHealth = async () => {
+        if (!telegramCollectorUrl) {
+            setCollectorError('VITE_TELEGRAM_COLLECTOR_URL تنظیم نشده است.');
+            return;
+        }
+        setIsLoadingCollector(true);
+        setCollectorError(null);
+        try {
+            const health = await api.getTelegramCollectorHealth();
+            setCollectorHealth(health);
+            setCollectorMessage('وضعیت کلکتور به‌روزرسانی شد.');
+        } catch (error: any) {
+            setCollectorError(error?.message || 'خطا در دریافت وضعیت کلکتور تلگرام.');
+        } finally {
+            setIsLoadingCollector(false);
+        }
+    };
+
+    const handleCollectorInputChange = (field: keyof typeof collectorForm, value: string) => {
+        setCollectorForm(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleStartCollectorLogin = async () => {
+        if (!collectorForm.phoneNumber.trim()) {
+            setCollectorError('شماره تلفن الزامی است.');
+            return;
+        }
+        setIsLoadingCollector(true);
+        setCollectorError(null);
+        setCollectorMessage(null);
+        try {
+            const payload: any = {
+                phoneNumber: collectorForm.phoneNumber.trim(),
+            };
+            if (collectorForm.apiId) {
+                payload.apiId = Number(collectorForm.apiId);
+            }
+            if (collectorForm.apiHash) {
+                payload.apiHash = collectorForm.apiHash.trim();
+            }
+            const response = await api.startTelegramCollectorLogin(payload);
+            setCollectorAuthId(response.authId);
+            setCollectorMessage('کد تایید ارسال شد. لطفاً کد را از تلگرام وارد کنید.');
+        } catch (error: any) {
+            setCollectorError(error?.message || 'خطا در شروع فرآیند لاگین.');
+        } finally {
+            setIsLoadingCollector(false);
+        }
+    };
+
+    const handleConfirmCollectorLogin = async () => {
+        if (!collectorAuthId) {
+            setCollectorError('ابتدا باید درخواست ارسال کد را ثبت کنید.');
+            return;
+        }
+        if (!collectorForm.code.trim()) {
+            setCollectorError('کد تایید را وارد کنید.');
+            return;
+        }
+        setIsLoadingCollector(true);
+        setCollectorError(null);
+        setCollectorMessage(null);
+        try {
+            await api.confirmTelegramCollectorLogin({
+                authId: collectorAuthId,
+                code: collectorForm.code.trim(),
+                password: collectorForm.password.trim() || undefined,
+            });
+            setCollectorMessage('ورود تلگرام با موفقیت انجام شد و session ذخیره گردید.');
+            setCollectorAuthId(null);
+            setCollectorForm(prev => ({ ...prev, code: '', password: '' }));
+            await handleCollectorHealth();
+        } catch (error: any) {
+            setCollectorError(error?.message || 'خطا در تایید کد.');
+        } finally {
+            setIsLoadingCollector(false);
+        }
+    };
+
+    const handleCancelCollectorLogin = async () => {
+        if (!collectorAuthId) {
+            setCollectorError('درخواست فعالی برای لغو وجود ندارد.');
+            return;
+        }
+        setIsLoadingCollector(true);
+        setCollectorError(null);
+        try {
+            await api.cancelTelegramCollectorLogin(collectorAuthId);
+            setCollectorAuthId(null);
+            setCollectorForm(prev => ({ ...prev, code: '', password: '' }));
+            setCollectorMessage('درخواست ورود لغو شد.');
+        } catch (error: any) {
+            setCollectorError(error?.message || 'خطا در لغو درخواست.');
+        } finally {
+            setIsLoadingCollector(false);
+        }
+    };
+    
+    const handleRefreshCollectorChannels = async () => {
+        setIsRefreshingChannels(true);
+        setCollectorError(null);
+        try {
+            const collectorState = await api.refreshTelegramCollectorChannels();
+            setDataHub(prev => prev ? { ...prev, telegramCollector: collectorState } : prev);
+            setCollectorMessage(t('collector_channels_refreshed') || 'Channel statuses updated.');
+        } catch (error: any) {
+            setCollectorError(error?.message || t('collector_channels_refresh_failed') || 'Failed to refresh channels.');
+        } finally {
+            setIsRefreshingChannels(false);
+        }
+    };
+    
+    const handleTestCollectorChannel = async (channelId: string) => {
+        setTestingChannelId(channelId);
+        setCollectorError(null);
+        setCollectorMessage(null);
+        try {
+            const result = await api.testTelegramCollectorChannel(channelId);
+            if (result.collector) {
+                setDataHub(prev => prev ? { ...prev, telegramCollector: result.collector } : prev);
+            }
+            setChannelTestPreview({
+                channelId: result.channelId,
+                channelHandle: result.channelHandle,
+                fetchedAt: result.fetchedAt,
+                latency: result.latency,
+                messages: result.messages,
+                success: result.success,
+                error: result.error,
+            });
+            if (result.success) {
+                setCollectorMessage(t('collector_channel_test_success') || 'Collector fetched fresh messages.');
+            } else {
+                setCollectorError(result.error || t('collector_channel_test_failed') || 'Test fetch failed.');
+            }
+        } catch (error: any) {
+            setCollectorError(error?.message || t('collector_channel_test_failed') || 'Test fetch failed.');
+        } finally {
+            setTestingChannelId(null);
         }
     };
     
@@ -1397,6 +1567,16 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                     }`}
                 >
                     {t('advanced_features') || 'Advanced'}
+                </button>
+                <button
+                    onClick={() => setActiveView('telegram')}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${
+                        activeView === 'telegram' 
+                            ? 'border-b-2 border-purple-500 text-purple-400' 
+                            : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                >
+                    {t('telegram_collector') || 'Telegram Collector'}
                 </button>
             </div>
             
@@ -1706,6 +1886,289 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             {activeView === 'advanced' && dataHub && (
                 <AdvancedFeatures dataHub={dataHub} setDataHub={setDataHub} onRefresh={onRefresh} t={t} />
             )}
+
+            {activeView === 'telegram' && (
+                <Card>
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                        <div>
+                            <h3 className="font-semibold text-foreground">{t('telegram_collector') || 'Telegram Collector'}</h3>
+                            <p className="text-xs text-muted-foreground">
+                                {telegramCollectorUrl
+                                    ? `${t('service_url') || 'Service URL'}: ${telegramCollectorUrl}`
+                                    : 'VITE_TELEGRAM_COLLECTOR_URL تنظیم نشده است.'}
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleCollectorHealth}
+                            disabled={isLoadingCollector || !telegramCollectorUrl}
+                            className="text-xs px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded"
+                        >
+                            {isLoadingCollector ? (t('loading') || 'Loading...') : (t('refresh_health') || 'Refresh Health')}
+                        </button>
+                    </div>
+                    {collectorMessage && (
+                        <div className="mb-3 p-2 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-300">
+                            {collectorMessage}
+                        </div>
+                    )}
+                    {collectorError && (
+                        <div className="mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-300">
+                            {collectorError}
+                        </div>
+                    )}
+                    {collectorHealth && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 text-sm">
+                            <div className="bg-secondary/50 rounded p-3">
+                                <p className="text-muted-foreground text-xs mb-1">{t('status') || 'Status'}</p>
+                                <p className="font-semibold text-foreground">{collectorHealth.status}</p>
+                            </div>
+                            <div className="bg-secondary/50 rounded p-3">
+                                <p className="text-muted-foreground text-xs mb-1">{t('uptime') || 'Uptime'}</p>
+                                <p className="font-semibold text-foreground">
+                                    {collectorHealth.uptime ? `${Math.floor(collectorHealth.uptime / 1000)}s` : '-'}
+                                </p>
+                            </div>
+                            <div className="bg-secondary/50 rounded p-3">
+                                <p className="text-muted-foreground text-xs mb-1">{t('tracked_channels') || 'Tracked Channels'}</p>
+                                <p className="font-semibold text-foreground">{collectorHealth.channelsTracked ?? '-'}</p>
+                            </div>
+                        </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="border border-border rounded-lg p-4">
+                            <h4 className="font-semibold text-sm text-foreground mb-3">{t('start_login_flow') || 'Start Login Flow'}</h4>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs text-muted-foreground mb-1 block">{t('telegram_api_id') || 'Telegram API ID'}</label>
+                                    <input
+                                        type="number"
+                                        value={collectorForm.apiId}
+                                        onChange={e => handleCollectorInputChange('apiId', e.target.value)}
+                                        placeholder={t('optional') || 'Optional'}
+                                        className="w-full px-3 py-2 bg-background border border-border rounded text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-muted-foreground mb-1 block">{t('telegram_api_hash') || 'Telegram API Hash'}</label>
+                                    <input
+                                        value={collectorForm.apiHash}
+                                        onChange={e => handleCollectorInputChange('apiHash', e.target.value)}
+                                        placeholder={t('optional') || 'Optional'}
+                                        className="w-full px-3 py-2 bg-background border border-border rounded text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-muted-foreground mb-1 block">{t('phone_number') || 'Phone Number'}</label>
+                                    <input
+                                        value={collectorForm.phoneNumber}
+                                        onChange={e => handleCollectorInputChange('phoneNumber', e.target.value)}
+                                        placeholder="+98912..."
+                                        className="w-full px-3 py-2 bg-background border border-border rounded text-sm"
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleStartCollectorLogin}
+                                    disabled={isLoadingCollector || !telegramCollectorUrl}
+                                    className="w-full text-xs px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded"
+                                >
+                                    {t('send_verification_code') || 'Send Verification Code'}
+                                </button>
+                                <p className="text-[11px] text-muted-foreground">
+                                    {t('telegram_login_hint') || 'Collector stores session securely on the server. API credentials are optional if already configured.'}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="border border-border rounded-lg p-4">
+                            <h4 className="font-semibold text-sm text-foreground mb-3">{t('confirm_login_flow') || 'Confirm Code'}</h4>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs text-muted-foreground mb-1 block">{t('verification_code') || 'Verification Code'}</label>
+                                    <input
+                                        value={collectorForm.code}
+                                        onChange={e => handleCollectorInputChange('code', e.target.value)}
+                                        placeholder="12345"
+                                        className="w-full px-3 py-2 bg-background border border-border rounded text-sm"
+                                        disabled={!collectorAuthId}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-muted-foreground mb-1 block">{t('telegram_password_optional') || 'Telegram Password (2FA)'}</label>
+                                    <input
+                                        type="password"
+                                        value={collectorForm.password}
+                                        onChange={e => handleCollectorInputChange('password', e.target.value)}
+                                        placeholder={t('optional') || 'Optional'}
+                                        className="w-full px-3 py-2 bg-background border border-border rounded text-sm"
+                                        disabled={!collectorAuthId}
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleConfirmCollectorLogin}
+                                        disabled={isLoadingCollector || !collectorAuthId}
+                                        className="flex-1 text-xs px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded"
+                                    >
+                                        {t('confirm_login') || 'Confirm Login'}
+                                    </button>
+                                    <button
+                                        onClick={handleCancelCollectorLogin}
+                                        disabled={isLoadingCollector || !collectorAuthId}
+                                        className="text-xs px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded"
+                                    >
+                                        {t('cancel') || 'Cancel'}
+                                    </button>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground">
+                                    {collectorAuthId
+                                        ? t('code_sent_status') || 'Code sent. Complete login before it expires.'
+                                        : t('no_active_login') || 'No active login request.'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="mt-6 border border-border rounded-lg p-4">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                            <div>
+                                <h4 className="font-semibold text-sm text-foreground">{t('collector_channels_overview') || 'Tracked Telegram Channels'}</h4>
+                                <p className="text-xs text-muted-foreground">
+                                    {telegramCollectorState?.lastRefreshAt
+                                        ? `${t('collector_last_refresh') || 'Last refresh'}: ${formatTimeAgo(telegramCollectorState.lastRefreshAt)}`
+                                        : t('collector_channels_hint') || 'Monitor channels synced through the collector.'}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    onClick={handleRefreshCollectorChannels}
+                                    disabled={isRefreshingChannels}
+                                    className="text-xs px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded"
+                                >
+                                    {isRefreshingChannels ? (t('loading') || 'Loading...') : (t('refresh_channels') || 'Refresh Channels')}
+                                </button>
+                            </div>
+                        </div>
+                        {telegramChannels.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">{t('collector_channels_empty') || 'No Telegram channels have been registered yet.'}</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-xs">
+                                    <thead>
+                                        <tr className="text-left text-muted-foreground border-b border-border">
+                                            <th className="py-2 pr-4">{t('collector_channel_label') || 'Channel'}</th>
+                                            <th className="py-2 pr-4">{t('collector_channel_status') || 'Status'}</th>
+                                            <th className="py-2 pr-4">{t('collector_last_sync') || 'Last Sync'}</th>
+                                            <th className="py-2 pr-4">{t('collector_messages_24h') || 'Messages (24h)'}</th>
+                                            <th className="py-2 pr-4">{t('collector_avg_latency') || 'Latency'}</th>
+                                            <th className="py-2 pr-4">{t('collector_source') || 'Source'}</th>
+                                            <th className="py-2">{t('collector_actions') || 'Actions'}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {telegramChannels.map(channel => (
+                                            <tr key={channel.id} className="border-b border-border last:border-b-0">
+                                                <td className="py-3 pr-4">
+                                                    <p className="font-semibold text-foreground">{channel.title}</p>
+                                                    <p className="text-muted-foreground">@{channel.handle.replace(/^@/, '')}</p>
+                                                    {channel.lastError && (
+                                                        <p className="text-[11px] text-red-400 mt-1">
+                                                            {t('collector_last_error') || 'Last error'}: {channel.lastError}
+                                                        </p>
+                                                    )}
+                                                </td>
+                                                <td className="py-3 pr-4">
+                                                    <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
+                                                        channel.status === 'error' ? 'bg-red-500/20 text-red-300' :
+                                                        channel.status === 'syncing' ? 'bg-yellow-500/20 text-yellow-300' :
+                                                        channel.status === 'paused' ? 'bg-slate-500/20 text-slate-300' :
+                                                        'bg-green-500/20 text-green-300'
+                                                    }`}>
+                                                        {t(`collector_status_${channel.status}`) || channel.status}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 pr-4">
+                                                    <p className="text-foreground">{channel.lastSyncAt ? formatTimeAgo(channel.lastSyncAt) : t('never') || 'Never'}</p>
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        {channel.lastMessageAt ? `${t('collector_last_message') || 'Last message'}: ${formatTimeAgo(channel.lastMessageAt)}` : ''}
+                                                    </p>
+                                                </td>
+                                                <td className="py-3 pr-4">
+                                                    <p className="text-foreground">{channel.messageCount24h ?? '-'}</p>
+                                                </td>
+                                                <td className="py-3 pr-4">
+                                                    <p className="text-foreground">{channel.fetchLatencyMs ? `${channel.fetchLatencyMs} ms` : '-'}</p>
+                                                </td>
+                                                <td className="py-3 pr-4">
+                                                    <span className={`px-2 py-1 rounded text-[11px] font-semibold ${
+                                                        channel.usingCollector ? 'bg-purple-500/20 text-purple-300' : 'bg-orange-500/20 text-orange-300'
+                                                    }`}>
+                                                        {channel.usingCollector
+                                                            ? (t('collector_source_collector') || 'Collector')
+                                                            : (t('collector_source_fallback') || 'Fallback')}
+                                                    </span>
+                                                    {channel.sourceId && (
+                                                        <p className="text-[11px] text-muted-foreground mt-1">
+                                                            {t('collector_linked_source') || 'Linked data source'}: {channel.sourceId}
+                                                        </p>
+                                                    )}
+                                                </td>
+                                                <td className="py-3">
+                                                    <div className="flex flex-col gap-2">
+                                                        <button
+                                                            onClick={() => handleTestCollectorChannel(channel.id)}
+                                                            disabled={testingChannelId === channel.id || !telegramCollectorUrl}
+                                                            className="text-[11px] px-3 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded"
+                                                        >
+                                                            {testingChannelId === channel.id
+                                                                ? (t('testing') || 'Testing...')
+                                                                : (t('collector_test_fetch') || 'Test Fetch')}
+                                                        </button>
+                                                        <a
+                                                            href={`https://t.me/${channel.handle.replace(/^@/, '')}`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="text-[11px] px-3 py-1 text-center border border-border rounded hover:bg-secondary/40 transition"
+                                                        >
+                                                            {t('collector_open_channel') || 'Open channel'}
+                                                        </a>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                        {channelTestPreview && (
+                            <div className={`mt-4 p-3 rounded border text-xs ${
+                                channelTestPreview.success ? 'border-green-500/30 bg-green-500/5 text-green-200' : 'border-red-500/30 bg-red-500/5 text-red-200'
+                            }`}>
+                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                                    <p className="font-semibold">@{channelTestPreview.channelHandle.replace(/^@/, '')}</p>
+                                    <div className="flex gap-3 text-[11px]">
+                                        <span>{t('collector_fetched_at') || 'Fetched'}: {new Date(channelTestPreview.fetchedAt).toLocaleTimeString()}</span>
+                                        {channelTestPreview.latency && <span>{t('collector_latency') || 'Latency'}: {channelTestPreview.latency} ms</span>}
+                                    </div>
+                                </div>
+                                {channelTestPreview.success && channelTestPreview.messages && channelTestPreview.messages.length > 0 ? (
+                                    <div className="mt-2 space-y-2">
+                                        {channelTestPreview.messages.slice(0, 3).map((msg, idx) => (
+                                            <div key={`${msg.timestamp}-${idx}`} className="p-2 bg-background/40 rounded text-foreground">
+                                                <p className="text-[11px] text-muted-foreground mb-1">{new Date(msg.timestamp).toLocaleString()}</p>
+                                                <p className="leading-relaxed">{msg.text?.slice(0, 220) || '-'}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    channelTestPreview.error && (
+                                        <p className="mt-2 text-[11px]">
+                                            {channelTestPreview.error}
+                                        </p>
+                                    )
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </Card>
+            )}
             
             {/* Create/Edit Source Modal */}
             {showCreateSourceModal && (
@@ -1821,6 +2284,10 @@ const CreateSourceModal: React.FC<{
     const [priority, setPriority] = useState<DataSource['priority']>(source?.priority || 'medium');
     const [updateInterval, setUpdateInterval] = useState<DataSource['updateInterval']>(source?.updateInterval || '5min');
     const [isSaving, setIsSaving] = useState(false);
+    const [isDetectingType, setIsDetectingType] = useState(false);
+    const [autoDetection, setAutoDetection] = useState<DetectedSourceType | null>(null);
+    const [detectionError, setDetectionError] = useState<string | null>(null);
+    const [autoFields, setAutoFields] = useState<Record<string, boolean>>({});
     
     // Telegram specific fields
     const [telegramUsername, setTelegramUsername] = useState(source?.credentials?.username || '');
@@ -1832,6 +2299,180 @@ const CreateSourceModal: React.FC<{
     
     // Webhook specific
     const [webhookUrl, setWebhookUrl] = useState(source?.url || '');
+    
+    useEffect(() => {
+        if (!url || url.length < 6) {
+            setAutoDetection(null);
+            setDetectionError(null);
+            return;
+        }
+        if (source && url === source.url) {
+            return;
+        }
+        const handle = setTimeout(() => {
+            detectTypeForUrl(url, 'ui-auto-detect');
+        }, 800);
+        return () => clearTimeout(handle);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [url]);
+    
+    const markAutoField = (field: string) => {
+        setAutoFields(prev => ({ ...prev, [field]: true }));
+    };
+
+    const detectTypeForUrl = async (targetUrl?: string, context: string = 'ui-auto-detect') => {
+        const value = targetUrl || url;
+        if (!value || value.length < 4) return;
+        setIsDetectingType(true);
+        setDetectionError(null);
+        try {
+            const result = await api.detectSourceType(value, [context]);
+            setAutoDetection(result);
+            if (!source) {
+                applyDetectionSuggestion(result, false);
+            }
+        } catch (err: any) {
+            setAutoDetection(null);
+            setDetectionError(err?.message || 'Failed to detect type');
+        } finally {
+            setIsDetectingType(false);
+        }
+    };
+    
+    const defaultCategoryForType = (detType: DataSource['type']): string => {
+        switch (detType) {
+            case 'rss':
+                return 'news';
+            case 'telegram':
+                return 'social';
+            case 'api':
+            case 'third_party':
+                return 'data';
+            case 'aggregator':
+                return 'aggregators';
+            case 'webhook':
+                return 'automation';
+            default:
+                return category || '';
+        }
+    };
+    
+    const defaultTagsForType = (detType: DataSource['type'], metaTags?: string[]) => {
+        if (metaTags && metaTags.length > 0) return metaTags.join(', ');
+        switch (detType) {
+            case 'rss':
+                return 'rss,news';
+            case 'telegram':
+                return 'telegram,social';
+            case 'api':
+                return 'api,json,data';
+            case 'aggregator':
+                return 'aggregator,multi-source';
+            case 'webhook':
+                return 'webhook,push';
+            case 'third_party':
+                return 'third-party,data';
+            default:
+                return 'website,html';
+        }
+    };
+
+    const defaultPriorityForType = (detType: DataSource['type'], metaPriority?: DataSource['priority']): DataSource['priority'] => {
+        if (metaPriority) return metaPriority;
+        switch (detType) {
+            case 'rss':
+            case 'telegram':
+            case 'api':
+            case 'aggregator':
+                return 'high';
+            case 'webhook':
+            case 'third_party':
+                return 'medium';
+            default:
+                return 'medium';
+        }
+    };
+
+    const defaultIntervalForType = (detType: DataSource['type'], metaInterval?: DataSource['updateInterval']): DataSource['updateInterval'] => {
+        if (metaInterval) return metaInterval;
+        switch (detType) {
+            case 'telegram':
+            case 'webhook':
+                return 'realtime';
+            case 'api':
+            case 'aggregator':
+                return '1min';
+            case 'rss':
+                return '15min';
+            default:
+                return '30min';
+        }
+    };
+
+    const deriveNameFromDetection = (result: DetectedSourceType): string => {
+        if (result.meta?.suggestedName) return result.meta.suggestedName;
+        if (result.meta?.host) return result.meta.host;
+        try {
+            const parsed = new URL(result.normalizedUrl);
+            return parsed.hostname.replace(/^www\./, '');
+        } catch {
+            return result.normalizedUrl;
+        }
+    };
+    
+    const autoBadge = (field: string) => (
+        autoFields[field]
+            ? <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded border border-purple-500/40 bg-purple-500/15 text-purple-200">
+                {t('auto') || 'Auto'}
+            </span>
+            : null
+    );
+
+    const applyDetectionSuggestion = (result: DetectedSourceType | null, manual = true) => {
+        if (!result) return;
+        if (type !== result.type) {
+            setType(result.type);
+            markAutoField('type');
+        }
+        if (!source && result.normalizedUrl && (!url || url.length < 6 || manual) && url !== result.normalizedUrl) {
+            setUrl(result.normalizedUrl);
+            markAutoField('url');
+        }
+        if (!source && !category) {
+            const suggestedCategory = defaultCategoryForType(result.type);
+            if (suggestedCategory && suggestedCategory !== category) {
+                setCategory(suggestedCategory);
+                markAutoField('category');
+            }
+        } else if (!source && manual && result.meta?.suggestedCategory && category !== result.meta.suggestedCategory) {
+            setCategory(result.meta.suggestedCategory);
+            markAutoField('category');
+        }
+        const derivedName = deriveNameFromDetection(result);
+        if (!source && (!name || manual) && name !== derivedName) {
+            setName(derivedName);
+            markAutoField('name');
+        }
+        const suggestedTags = defaultTagsForType(result.type, result.meta?.suggestedTags);
+        if (!source && (!tags || manual) && tags !== suggestedTags) {
+            setTags(suggestedTags);
+            markAutoField('tags');
+        }
+        const suggestedPriority = defaultPriorityForType(result.type, result.meta?.suggestedPriority);
+        if (!source && (manual || !priority) && priority !== suggestedPriority) {
+            setPriority(suggestedPriority);
+            markAutoField('priority');
+        }
+        const suggestedInterval = defaultIntervalForType(result.type, result.meta?.suggestedInterval);
+        if (!source && (manual || !updateInterval) && updateInterval !== suggestedInterval) {
+            setUpdateInterval(suggestedInterval);
+            markAutoField('updateInterval');
+        }
+        if (result.type === 'telegram' && result.meta?.telegramUsername && telegramUsername !== result.meta.telegramUsername) {
+            setTelegramUsername(result.meta.telegramUsername);
+            markAutoField('telegramUsername');
+        }
+    };
     
     // Initialize fields from source when editing
     useEffect(() => {
@@ -1851,6 +2492,10 @@ const CreateSourceModal: React.FC<{
             setWebhookUrl(source.url || '');
         }
     }, [source]);
+    
+    useEffect(() => {
+        setAutoFields({});
+    }, [source?.id]);
     
     // Reset fields when type changes (only for new sources)
     useEffect(() => {
@@ -1960,7 +2605,9 @@ const CreateSourceModal: React.FC<{
                     
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm text-muted-foreground mb-1">{t('type') || 'Type'} *</label>
+                            <label className="block text-sm text-muted-foreground mb-1">
+                                {t('type') || 'Type'} * {autoBadge('type')}
+                            </label>
                             <select
                                 value={type}
                                 onChange={(e) => setType(e.target.value as DataSource['type'])}
@@ -1977,7 +2624,9 @@ const CreateSourceModal: React.FC<{
                         </div>
                         
                         <div>
-                            <label className="block text-sm text-muted-foreground mb-1">{t('category') || 'Category'} *</label>
+                            <label className="block text-sm text-muted-foreground mb-1">
+                                {t('category') || 'Category'} * {autoBadge('category')}
+                            </label>
                             <select
                                 value={category}
                                 onChange={(e) => setCategory(e.target.value)}
@@ -1996,7 +2645,7 @@ const CreateSourceModal: React.FC<{
                         <>
                             <div>
                                 <label className="block text-sm text-muted-foreground mb-1">
-                                    {t('telegram_channel_username') || 'Telegram Channel Username'} *
+                                    {t('telegram_channel_username') || 'Telegram Channel Username'} * {autoBadge('telegramUsername')}
                                 </label>
                                 <div className="flex items-center gap-2">
                                     <span className="text-muted-foreground">@</span>
@@ -2052,13 +2701,14 @@ const CreateSourceModal: React.FC<{
                         <>
                             <div>
                                 <label className="block text-sm text-muted-foreground mb-1">
-                                    {t('url') || 'URL'} {type === 'api' || type === 'rss' || type === 'website' ? '*' : ''}
+                                    {t('url') || 'URL'} {type === 'api' || type === 'rss' || type === 'website' ? '*' : ''} {autoBadge('url')}
                                 </label>
+                                <div className="flex gap-2">
                                 <input
                                     type="url"
                                     value={url}
                                     onChange={(e) => setUrl(e.target.value)}
-                                    className="w-full p-2 bg-secondary border border-border rounded text-foreground"
+                                        className="flex-1 p-2 bg-secondary border border-border rounded text-foreground"
                                     placeholder={
                                         type === 'api' ? 'https://api.example.com' :
                                         type === 'rss' ? 'https://example.com/feed.xml' :
@@ -2066,6 +2716,44 @@ const CreateSourceModal: React.FC<{
                                         'https://example.com'
                                     }
                                 />
+                                    <button
+                                        type="button"
+                                        onClick={() => detectTypeForUrl(url, 'ui-manual-detect')}
+                                        disabled={isDetectingType || !url}
+                                        className="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded"
+                                    >
+                                        {isDetectingType ? (t('detecting') || 'Detecting...') : t('auto_detect') || 'Auto Detect'}
+                                    </button>
+                                </div>
+                                {autoDetection && (
+                                    <div className="mt-2 text-xs border border-border rounded-md p-2 bg-secondary/40">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <p className="font-semibold">
+                                                    {t('suggested_type') || 'Suggested type'}: <span className="text-purple-300">{autoDetection.type}</span>
+                                                </p>
+                                                <p className="text-muted-foreground">
+                                                    {(t('confidence') || 'Confidence')}: {(autoDetection.confidence * 100).toFixed(0)}% • {autoDetection.reason}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => applyDetectionSuggestion(autoDetection)}
+                                                className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded"
+                                            >
+                                                {t('apply') || 'Apply'}
+                                            </button>
+                                        </div>
+                                        {autoDetection.meta?.contentType && (
+                                            <p className="text-muted-foreground mt-1">
+                                                {t('content_type') || 'Content'}: {autoDetection.meta.contentType}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                {detectionError && (
+                                    <p className="text-xs text-red-400 mt-1">{detectionError}</p>
+                                )}
                             </div>
                             
                             {type === 'api' && (
@@ -2117,7 +2805,9 @@ const CreateSourceModal: React.FC<{
                     )}
                     
                     <div>
-                        <label className="block text-sm text-muted-foreground mb-1">{t('tags') || 'Tags'} (comma-separated)</label>
+                        <label className="block text-sm text-muted-foreground mb-1">
+                            {t('tags') || 'Tags'} (comma-separated) {autoBadge('tags')}
+                        </label>
                         <input
                             type="text"
                             value={tags}
@@ -2129,7 +2819,9 @@ const CreateSourceModal: React.FC<{
                     
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm text-muted-foreground mb-1">{t('priority') || 'Priority'}</label>
+                            <label className="block text-sm text-muted-foreground mb-1">
+                                {t('priority') || 'Priority'} {autoBadge('priority')}
+                            </label>
                             <select
                                 value={priority}
                                 onChange={(e) => setPriority(e.target.value as DataSource['priority'])}
@@ -2143,7 +2835,9 @@ const CreateSourceModal: React.FC<{
                         </div>
                         
                         <div>
-                            <label className="block text-sm text-muted-foreground mb-1">{t('update_interval') || 'Update Interval'}</label>
+                            <label className="block text-sm text-muted-foreground mb-1">
+                                {t('update_interval') || 'Update Interval'} {autoBadge('updateInterval')}
+                            </label>
                             <select
                                 value={updateInterval}
                                 onChange={(e) => setUpdateInterval(e.target.value as DataSource['updateInterval'])}
@@ -3440,6 +4134,7 @@ const ViewSourceDataModal: React.FC<{
     
     const formatNewsData = (data: any) => {
         if (!data) return null;
+        // For Telegram sources, prefer articles format (structured for agents)
         if (data.articles && Array.isArray(data.articles)) {
             return data.articles;
         }
@@ -3448,6 +4143,9 @@ const ViewSourceDataModal: React.FC<{
     
     const priceData = formatPriceData(data);
     const newsData = formatNewsData(data);
+    
+    // For Telegram sources, check if we have articles (structured format for agents)
+    const telegramArticles = source.type === 'telegram' && data?.articles && Array.isArray(data.articles) ? data.articles : null;
     
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -3534,6 +4232,58 @@ const ViewSourceDataModal: React.FC<{
                                     </pre>
                                 </div>
                             )}
+                        </div>
+                    ) : telegramArticles && telegramArticles.length > 0 ? (
+                        <div className="space-y-4">
+                            <div className="bg-secondary/50 rounded-lg p-4">
+                                <h4 className="font-semibold text-foreground mb-3">
+                                    {t('telegram_articles') || 'Telegram Articles'}
+                                    {data.channel && ` - @${data.channel}`}
+                                </h4>
+                                {data.totalMessages && (
+                                    <p className="text-xs text-muted-foreground mb-3">
+                                        {t('total_articles') || 'Total Articles'}: {telegramArticles.length}
+                                    </p>
+                                )}
+                                <div className="space-y-3">
+                                    {telegramArticles.map((article: any, idx: number) => (
+                                        <div key={idx} className="border border-border rounded p-3 hover:bg-secondary/30 transition-colors">
+                                            <h5 className="font-semibold text-foreground mb-2">{article.title}</h5>
+                                            <p className="text-sm text-muted-foreground mb-3 whitespace-pre-wrap">{article.content}</p>
+                                            <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                                <div className="flex gap-3">
+                                                    {article.author && <span>{article.author}</span>}
+                                                    {article.source && <span>{article.source}</span>}
+                                                </div>
+                                                <div className="flex gap-3">
+                                                    {article.link && (
+                                                        <a 
+                                                            href={article.link} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="text-blue-400 hover:text-blue-300"
+                                                        >
+                                                            {t('view_message') || 'View Message'}
+                                                        </a>
+                                                    )}
+                                                    <span>{new Date(article.publishedAt).toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {data.note && (
+                                    <div className="mt-3 p-2 bg-blue-500/10 border border-blue-500/30 rounded">
+                                        <p className="text-xs text-blue-400">{data.note}</p>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="bg-secondary/30 rounded-lg p-4">
+                                <h4 className="font-semibold text-foreground mb-2 text-sm">{t('raw_data') || 'Raw Data'}</h4>
+                                <pre className="text-xs text-muted-foreground overflow-x-auto max-h-64 overflow-y-auto">
+                                    {formatData(data)}
+                                </pre>
+                            </div>
                         </div>
                     ) : data.messages && Array.isArray(data.messages) ? (
                         <div className="space-y-4">
