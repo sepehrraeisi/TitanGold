@@ -87,8 +87,6 @@ const AIManager: React.FC = () => {
         }
     };
     
-    const telegramCollectorState = dataHub.telegramCollector;
-    const telegramChannels = telegramCollectorState?.channels || [];
     
     return (
         <div className="space-y-6">
