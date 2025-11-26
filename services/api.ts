@@ -21240,6 +21240,10 @@ export const cancelTelegramCollectorLogin = async (authId: string) => {
     }
     return data;
 };
+export const fetchTelegramChannelMessages = async (
+    channelUsername: string,
+    limit: number = 20
+
 
 ): Promise<{
     channel: string;
