@@ -130,24 +130,30 @@ const LiquidityAgentControl: React.FC<LiquidityAgentControlProps> = ({ agent, on
                 <StatusBar agent={agent} analysis={analysis} metrics={metrics} onCommand={handleControlCommand} t={t} />
 
                 <nav className="flex flex-wrap gap-4 px-6 border-b border-gray-800 bg-[#0B1017]">
-                    {TAB_ITEMS.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                                activeTab === tab.id
-                                    ? 'border-cyan-500 text-cyan-300'
-                                    : 'border-transparent text-gray-400 hover:text-white hover:border-gray-700'
-                            }`}
-                        >
-                            {t(tab.labelKey)}
-                        </button>
-                    ))}
+                    {TAB_ITEMS.map(tab => {
+                        const translation = t(tab.labelKey);
+                        const label = (translation && translation !== tab.labelKey) 
+                            ? translation 
+                            : tab.labelKey.replace('tab_', '').replace(/_/g, ' ');
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === tab.id
+                                        ? 'border-cyan-500 text-cyan-300'
+                                        : 'border-transparent text-gray-400 hover:text-white hover:border-gray-700'
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
                 </nav>
 
-                <div className="p-6 bg-[#0F151D] overflow-y-auto h-full">
+                <div className="p-6 bg-[#0F151D] overflow-y-auto" style={{ maxHeight: 'calc(92vh - 200px)' }}>
                     {activeTab === 'overview' && analysis && metrics && (
-                        <OverviewTab analysis={analysis} metrics={metrics} history={history} liquidityMap={liquidityMap} t={t} />
+                        <OverviewTab agent={agent} analysis={analysis} metrics={metrics} history={history} liquidityMap={liquidityMap} t={t} />
                     )}
                     {activeTab === 'map' && <LiquidityMapTab liquidityMap={liquidityMap} t={t} />}
                     {activeTab === 'orderbook' && <OrderBookTab snapshots={snapshots} t={t} />}
@@ -263,12 +269,13 @@ const StatusBar: React.FC<{
 );
 
 const OverviewTab: React.FC<{
+    agent: AIAgent;
     analysis: LiquidityAnalysisResult;
     metrics: LiquidityAnalysisMetrics;
     history: LiquidityAnalysisMetrics['history'];
     liquidityMap: LiquidityHeatmapEntry[];
     t: (key: string) => string;
-}> = ({ analysis, metrics, history, liquidityMap, t }) => {
+}> = ({ agent, analysis, metrics, history, liquidityMap, t }) => {
     const statCards = [
         {
             label: t('liquidity_ratio') || 'Liquidity ratio',
@@ -348,6 +355,9 @@ const OverviewTab: React.FC<{
                     <EmptyState message={t('no_history') || 'No history tracked yet.'} />
                 )}
             </SectionCard>
+
+            {/* Agent Capabilities */}
+            <CapabilitiesSection agent={agent} />
         </div>
     );
 };
@@ -947,5 +957,61 @@ const EmptyState: React.FC<{ message: string }> = ({ message }) => (
         <p>{message}</p>
     </div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const LIQUIDITY_CAPABILITY_KEYS = [
+    'liquidity_capability_realtime_monitoring',
+    'liquidity_capability_auto_alerts',
+    'liquidity_capability_slippage_analysis',
+    'liquidity_capability_market_comparison',
+    'liquidity_capability_hybrid_data',
+    'liquidity_capability_custom_filters',
+    'liquidity_capability_agent_coordination',
+    'liquidity_capability_reporting',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isLiquidityAgent = agent.id === '8' || agent.role === 'Liquidity Analysis';
+    const capabilityItems = isLiquidityAgent
+        ? LIQUIDITY_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('liquidity_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isLiquidityAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-cyan-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-cyan-500/20 text-cyan-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default LiquidityAgentControl;

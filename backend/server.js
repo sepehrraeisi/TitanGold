@@ -7,6 +7,8 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import pool from './database/db.js';
 import { autopilot } from './engine/autopilot.js';
+import { scheduler } from './engine/scheduler.js';
+import { tradingEngine } from './engine/tradingEngine.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -20,6 +22,9 @@ import dataSourceRoutes from './routes/data-sources.js';
 import notificationRoutes from './routes/notifications.js';
 import favoriteRoutes from './routes/favorites.js';
 import settingsRoutes from './routes/settings.js';
+import emailRoutes from './routes/email.js';
+import schedulerRoutes from './routes/scheduler.js';
+import tradingEngineRoutes from './routes/trading-engine.js';
 
 dotenv.config();
 
@@ -100,6 +105,9 @@ app.use('/api/data-sources', dataSourceRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/email', emailRoutes);
+app.use('/api/scheduler', schedulerRoutes);
+app.use('/api/trading-engine', tradingEngineRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -143,6 +151,12 @@ app.listen(PORT, () => {
 
   // Start Autopilot Engine
   autopilot.start();
+  
+  // Start 24/7 Scheduler Service
+  scheduler.start();
+  
+  // Start Trading Engine
+  tradingEngine.start();
 });
 
 // Handle graceful shutdown

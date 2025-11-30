@@ -200,7 +200,12 @@ const OptimizationAgentControl: React.FC<OptimizationAgentControlProps> = ({ age
                             { id: 'suggestions', key: 'tab_suggestions' },
                             { id: 'settings', key: 'tab_settings' },
                             { id: 'integration', key: 'tab_integration' },
-                        ] as const).map(tab => (
+                        ] as const).map(tab => {
+                            const translation = t(tab.key);
+                            const label = (translation && translation !== tab.key) 
+                                ? translation 
+                                : tab.key.replace('tab_', '').replace(/_/g, ' ');
+                            return (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as OptimizationTab)}
@@ -210,15 +215,16 @@ const OptimizationAgentControl: React.FC<OptimizationAgentControlProps> = ({ age
                                         : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
                                 }`}
                             >
-                                {t(tab.key) || tab.id.replace(/_/g, ' ')}
+                                    {label}
                             </button>
-                        ))}
+                            );
+                        })}
                     </nav>
                 </div>
 
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(92vh - 300px)' }}>
                     {activeTab === 'overview' && analysis && metrics && (
-                        <OptimizationOverview analysis={analysis} metrics={metrics} t={t} />
+                        <OptimizationOverview agent={agent} analysis={analysis} metrics={metrics} t={t} />
                     )}
                     {activeTab === 'current_vs_optimized' && <CurrentVsOptimizedTab data={currentVsOptimized} t={t} />}
                     {activeTab === 'log' && <OptimizationLogTab log={optimizationLog} t={t} />}
@@ -253,10 +259,11 @@ const OptimizationAgentControl: React.FC<OptimizationAgentControlProps> = ({ age
 };
 
 const OptimizationOverview: React.FC<{
+    agent: AIAgent;
     analysis: OptimizationResult;
     metrics: OptimizationMetrics;
     t: (key: string) => string;
-}> = ({ analysis, metrics, t }) => (
+}> = ({ agent, analysis, metrics, t }) => (
     <div className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <OverviewCard
@@ -328,6 +335,9 @@ const OptimizationOverview: React.FC<{
                 )}
             </div>
         </div>
+
+        {/* Agent Capabilities */}
+        <CapabilitiesSection agent={agent} />
     </div>
 );
 
@@ -948,6 +958,62 @@ const IntegrationRow: React.FC<{ label: string; enabled?: boolean }> = ({ label,
         </span>
     </div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const OPTIMIZATION_CAPABILITY_KEYS = [
+    'optimization_capability_automation',
+    'optimization_capability_comparison',
+    'optimization_capability_backtest',
+    'optimization_capability_suggestions',
+    'optimization_capability_multicriteria',
+    'optimization_capability_learning',
+    'optimization_capability_reports',
+    'optimization_capability_customization',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isOptimizationAgent = agent.id === '10' || agent.role === 'Optimization';
+    const capabilityItems = isOptimizationAgent
+        ? OPTIMIZATION_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('optimization_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isOptimizationAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-purple-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default OptimizationAgentControl;
 

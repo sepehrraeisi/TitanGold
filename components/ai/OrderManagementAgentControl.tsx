@@ -183,7 +183,12 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
                             { id: 'settings', key: 'tab_settings' },
                             { id: 'alerts', key: 'tab_alerts' },
                             { id: 'integration', key: 'tab_integration' },
-                        ] as const).map(tab => (
+                        ] as const).map(tab => {
+                            const translation = t(tab.key);
+                            const label = (translation && translation !== tab.key) 
+                                ? translation 
+                                : tab.key.replace('tab_', '').replace(/_/g, ' ');
+                            return (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as OrderTab)}
@@ -193,15 +198,16 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
                                         : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
                                 }`}
                             >
-                                {t(tab.key) || tab.id.replace(/_/g, ' ')}
+                                    {label}
                             </button>
-                        ))}
+                            );
+                        })}
                     </nav>
                 </div>
 
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(92vh - 300px)' }}>
                     {activeTab === 'overview' && analysis && metrics && (
-                        <OrderOverview analysis={analysis} metrics={metrics} t={t} />
+                        <OrderOverview agent={agent} analysis={analysis} metrics={metrics} t={t} />
                     )}
                     {activeTab === 'open_orders' && <OpenOrdersTab orders={openOrders} executions={executions} t={t} />}
                     {activeTab === 'history' && <OrderHistoryTab history={orderHistory} t={t} />}
@@ -222,7 +228,7 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
     );
 };
 
-const OrderOverview: React.FC<{ analysis: OrderManagementResult; metrics: OrderManagementMetrics; t: (key: string) => string }> = ({ analysis, metrics, t }) => (
+const OrderOverview: React.FC<{ agent: AIAgent; analysis: OrderManagementResult; metrics: OrderManagementMetrics; t: (key: string) => string }> = ({ agent, analysis, metrics, t }) => (
     <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <MetricCard label={t('tickets_total') || 'Tickets'} value={analysis.summary.totalTickets} />
@@ -258,6 +264,9 @@ const OrderOverview: React.FC<{ analysis: OrderManagementResult; metrics: OrderM
                 </ul>
             </div>
         )}
+
+        {/* Agent Capabilities */}
+        <CapabilitiesSection agent={agent} />
     </div>
 );
 
@@ -755,6 +764,62 @@ const MetricCard: React.FC<{ label: string; value: string | number }> = ({ label
         <p className="text-2xl font-bold text-white">{value}</p>
     </div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const ORDER_CAPABILITY_KEYS = [
+    'order_management_capability_routing',
+    'order_management_capability_execution',
+    'order_management_capability_splitting',
+    'order_management_capability_monitoring',
+    'order_management_capability_risk',
+    'order_management_capability_learning',
+    'order_management_capability_integration',
+    'order_management_capability_alerts',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isOrderAgent = agent.id === '11' || agent.role === 'Order Management';
+    const capabilityItems = isOrderAgent
+        ? ORDER_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('order_management_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isOrderAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-emerald-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default OrderManagementAgentControl;
 

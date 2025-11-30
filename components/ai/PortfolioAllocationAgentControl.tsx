@@ -127,24 +127,30 @@ const PortfolioAllocationAgentControl: React.FC<PortfolioAllocationAgentControlP
                 <StatusBar agent={agent} metrics={metrics} analysis={analysis} onCommand={handleControlCommand} t={t} />
 
                 <nav className="flex flex-wrap gap-4 px-6 border-b border-gray-800 bg-[#0B1017]">
-                    {TAB_ITEMS.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                                activeTab === tab.id
-                                    ? 'border-cyan-500 text-cyan-300'
-                                    : 'border-transparent text-gray-400 hover:text-white hover:border-gray-700'
-                            }`}
-                        >
-                            {t(tab.labelKey)}
-                        </button>
-                    ))}
+                    {TAB_ITEMS.map(tab => {
+                        const translation = t(tab.labelKey);
+                        const label = (translation && translation !== tab.labelKey) 
+                            ? translation 
+                            : tab.labelKey.replace('tab_', '').replace(/_/g, ' ');
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === tab.id
+                                        ? 'border-cyan-500 text-cyan-300'
+                                        : 'border-transparent text-gray-400 hover:text-white hover:border-gray-700'
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
                 </nav>
 
-                <div className="p-6 bg-[#0F151D] overflow-y-auto h-full">
+                <div className="p-6 bg-[#0F151D] overflow-y-auto" style={{ maxHeight: 'calc(92vh - 200px)' }}>
                     {activeTab === 'overview' && analysis && metrics && (
-                        <OverviewTab analysis={analysis} metrics={metrics} liquidityAlerts={liquidityAlerts} t={t} />
+                        <OverviewTab agent={agent} analysis={analysis} metrics={metrics} liquidityAlerts={liquidityAlerts} t={t} />
                     )}
                     {activeTab === 'suggestion' && analysis && (
                         <SuggestionTab analysis={analysis} actions={recommendedActions} roiProjections={roiProjections} t={t} />
@@ -267,11 +273,12 @@ const StatusMetric: React.FC<{ label: string; value: string | number }> = ({ lab
 );
 
 const OverviewTab: React.FC<{
+    agent: AIAgent;
     analysis: PortfolioAllocationResult;
     metrics: PortfolioAllocationMetrics;
     liquidityAlerts: AllocationLiquidityAlert[];
     t: (key: string) => string;
-}> = ({ analysis, metrics, liquidityAlerts, t }) => {
+}> = ({ agent, analysis, metrics, liquidityAlerts, t }) => {
     const summaryCards = [
         { label: t('total_value') || 'Total Value', value: `$${analysis.totalValueUSDT.toLocaleString()}` },
         { label: t('drift_score') || 'Drift Score', value: `${analysis.driftScore.toFixed(2)}%` },
@@ -306,7 +313,7 @@ const OverviewTab: React.FC<{
                     {analysis.rebalanceSignal ? (
                         <div className="space-y-2">
                             <InfoBadge
-                                label={t(`rebalance_action_${analysis.rebalanceSignal.action}`) || analysis.rebalanceSignal.action}
+                                label={t(`rebalance_action_${analysis.rebalanceSignal.action}`) || analysis.rebalanceSignal.action || 'N/A'}
                                 tone={analysis.rebalanceSignal.action === 'rebalance' ? 'warning' : 'info'}
                             />
                             <p className="text-sm text-white font-semibold">{analysis.rebalanceSignal.reason}</p>
@@ -339,6 +346,9 @@ const OverviewTab: React.FC<{
                     <EmptyState message={t('no_liquidity_alerts') || 'No liquidity warnings detected.'} />
                 )}
             </SectionCard>
+
+            {/* Agent Capabilities */}
+            <CapabilitiesSection agent={agent} />
         </div>
     );
 };
@@ -904,7 +914,7 @@ const IntegrationTab: React.FC<{ config: PortfolioAllocationConfig; t: (key: str
             <SectionCard title={t('allocation_goals') || 'Portfolio goals'}>
                 <div className="flex flex-wrap gap-2">
                     {config.goals.map(goal => (
-                        <InfoBadge key={goal} label={t(`goal_${goal}`) || goal} tone="info" />
+                        <InfoBadge key={goal} label={t(`goal_${goal}`) || goal || 'N/A'} tone="info" />
                     ))}
                 </div>
             </SectionCard>
@@ -940,7 +950,7 @@ const RebalanceActionsList: React.FC<{ actions: RebalanceAction[]; t: (key: stri
                         <div className="flex gap-6 text-sm">
                             <MiniStat label={t('difference') || 'Difference'} value={`${action.differencePercent.toFixed(2)}%`} />
                             <MiniStat label={t('required_amount') || 'Required (USDT)'} value={formatCurrency(action.requiredAmountUSDT)} />
-                            <MiniStat label={t('priority') || 'Priority'} value={t(action.priority) || action.priority} />
+                            <MiniStat label={t('priority') || 'Priority'} value={t(action.priority) || action.priority || 'N/A'} />
                         </div>
                     </div>
                 ))}
@@ -1033,6 +1043,62 @@ const ToggleField: React.FC<{ label: string; checked: boolean; onChange: (value:
 const formatCurrency = (value?: number) => {
     if (value === undefined || Number.isNaN(value)) return '--';
     return `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+};
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const ALLOCATION_CAPABILITY_KEYS = [
+    'allocation_capability_optimal_allocation',
+    'allocation_capability_visualization',
+    'allocation_capability_rebalance_signal',
+    'allocation_capability_focus_diversify',
+    'allocation_capability_collaboration',
+    'allocation_capability_customization',
+    'allocation_capability_liquidity_alerts',
+    'allocation_capability_auto_manual',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isAllocationAgent = agent.id === '7' || agent.role === 'Portfolio Allocation';
+    const capabilityItems = isAllocationAgent
+        ? ALLOCATION_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('allocation_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isAllocationAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-cyan-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-cyan-500/20 text-cyan-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 };
 
 export default PortfolioAllocationAgentControl;

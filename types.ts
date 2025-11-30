@@ -4050,6 +4050,10 @@ export interface DataHubState {
   cache: DataCacheStats;
   advanced?: DataHubAdvancedFeatures;
   telegramCollector?: TelegramCollectorState;
+  pipelineSnapshot?: DataPipelineSnapshot;
+  pipelineHistory?: DataPipelineHistoryEntry[];
+  normalizedData?: NormalizedDataRecord[];
+  normalizationSummary?: DataNormalizationSummary;
 }
 
 export type TelegramCollectorChannelStatus = 'idle' | 'syncing' | 'error' | 'paused';
@@ -4068,6 +4072,8 @@ export interface TelegramCollectorChannel {
   messageCount24h?: number;
   fetchLatencyMs?: number;
   lastError?: string;
+  lastTestAt?: string;
+  lastTestStatus?: 'success' | 'failed';
   createdAt: string;
   updatedAt: string;
 }
@@ -4078,6 +4084,17 @@ export interface TelegramCollectorState {
   lastLoginAt?: string;
   lastRefreshAt?: string;
   channels: TelegramCollectorChannel[];
+  healthSummary?: TelegramCollectorHealthSummary;
+}
+
+export interface TelegramCollectorHealthSummary {
+  status: 'online' | 'offline' | 'degraded' | 'unknown';
+  channelsTracked: number;
+  channelsWithErrors: number;
+  avgLatencyMs?: number;
+  uptimeMs?: number;
+  lastRefreshAt?: string;
+  lastError?: string;
 }
 
 export interface DataSource {
@@ -4164,6 +4181,11 @@ export interface DataHubError {
   resolved: boolean;
 }
 
+export interface DataCacheEntry {
+  data: any;
+  timestamp: number;
+}
+
 export interface DataCacheStats {
   totalEntries: number;
   hitRate: number;
@@ -4172,6 +4194,70 @@ export interface DataCacheStats {
   oldestEntry: string;
   newestEntry: string;
   evictionCount: number;
+  data: Record<string, DataCacheEntry>;
+}
+
+export interface DataPipelineSourceSnapshot {
+  sourceId: string;
+  name: string;
+  category: string;
+  lastDataType: string;
+  lastStatus: DataAccessLog['status'];
+  lastResponseTime?: number;
+  lastChecked?: string;
+  issues?: string[];
+}
+
+export interface DataPipelineCategorySnapshot {
+  categoryId: string;
+  name: string;
+  inflow: number;
+  passRate: number;
+}
+
+export interface DataPipelineSnapshot {
+  lastRefreshed: string;
+  totalRequests24h: number;
+  passed24h: number;
+  failed24h: number;
+  pending24h: number;
+  sources: DataPipelineSourceSnapshot[];
+  categories: DataPipelineCategorySnapshot[];
+}
+
+export interface DataPipelineHistoryEntry {
+  id: string;
+  generatedAt: string;
+  snapshot: DataPipelineSnapshot;
+}
+
+export type NormalizedDataStatus = 'ready' | 'warning' | 'rejected';
+
+export interface NormalizedDataRecord {
+  id: string;
+  sourceId: string;
+  category: string;
+  dataType: string;
+  tags: string[];
+  payload: {
+    title?: string;
+    content?: string;
+    value?: number;
+    metadata?: Record<string, any>;
+  };
+  qualityScore: number;
+  issues: string[];
+  status: NormalizedDataStatus;
+  receivedAt: string;
+  normalizedAt: string;
+}
+
+export interface DataNormalizationSummary {
+  totalProcessed: number;
+  passed: number;
+  warnings: number;
+  rejected: number;
+  lastProcessedAt?: string;
 }
 
 export interface DataRequest {
@@ -4277,10 +4363,89 @@ export interface TelegramPublisher {
     categories?: string[];
     dataTypes?: string[];
     priority?: 'low' | 'medium' | 'high' | 'critical';
+    agentIds?: string[];
   };
   template: string; // Message template
   lastSent?: string;
   sentCount: number;
+}
+
+export interface AgentTopicRouteStats {
+  last24h: {
+    inflow: number;
+    approved: number;
+    published: number;
+    passRate: number;
+  };
+  totalPublished?: number;
+}
+
+export interface AgentTopicRoute {
+  id: string;
+  agentId: string;
+  agentName?: string;
+  title: string;
+  description?: string;
+  categoryIds: string[];
+  dataTypes: string[];
+  tags: string[];
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  minPassRate?: number;
+  minQualityScore?: number;
+  includeStatuses: NormalizedDataStatus[];
+  publisherTargets: string[];
+  enabled: boolean;
+  lastEvaluated?: string;
+  lastPublishedAt?: string;
+  stats?: AgentTopicRouteStats;
+}
+
+export interface AutomationScheduleConfig {
+  enabled: boolean;
+  intervalMinutes: number; // 1, 5, 15, 30, 60, 120, 240
+  lastRun?: string;
+  nextRun?: string;
+  maxItemsPerRun: number; // 1-50
+}
+
+export interface DataAutomationConfig {
+  lastSync?: string;
+  agentTopics: AgentTopicRoute[];
+  schedule?: AutomationScheduleConfig;
+}
+
+export type PublisherQueueStatus = 'pending' | 'processing';
+
+export interface PublisherQueueItem {
+  id: string;
+  recordId: string;
+  topicId: string;
+  publisherId: string;
+  agentId: string;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  status: PublisherQueueStatus;
+  createdAt: string;
+  scheduledAt?: string;
+  payloadPreview: string;
+  category: string;
+  dataType: string;
+  qualityScore: number;
+  normalizedStatus: NormalizedDataStatus;
+}
+
+export type PublisherHistoryStatus = 'sent' | 'failed';
+
+export interface PublisherHistoryItem {
+  id: string;
+  queueId: string;
+  recordId: string;
+  topicId: string;
+  publisherId: string;
+  agentId: string;
+  status: PublisherHistoryStatus;
+  sentAt: string;
+  latencyMs?: number;
+  payloadPreview: string;
 }
 
 export interface DataHubAdvancedFeatures {
@@ -4308,6 +4473,9 @@ export interface DataHubAdvancedFeatures {
   };
   archives: DataArchive[];
   telegramPublishers: TelegramPublisher[];
+  automation?: DataAutomationConfig;
+  publisherQueue: PublisherQueueItem[];
+  publisherHistory: PublisherHistoryItem[];
 }
 
 export interface DetectedSourceType {
@@ -4500,6 +4668,26 @@ export interface AITrainingConfig {
     };
 }
 
+export interface APIKeyEntry {
+    id: string;
+    key: string;
+    secret?: string;
+    label?: string; // User-friendly label like "Free Tier", "Paid Tier 1", etc.
+    isActive: boolean;
+    usageCount: number;
+    lastUsed?: string;
+    lastTested?: string;
+    config?: any; // Additional configuration for services (SMTP, On-chain, News, etc.)
+    rateLimit?: {
+        requestsPerMinute: number;
+        requestsPerDay: number;
+        tokensPerMonth?: number;
+    };
+    costPerRequest?: number;
+    status: 'active' | 'rate_limited' | 'error' | 'disabled';
+    errorMessage?: string;
+}
+
 export interface APIServiceIntegration {
     id: string;
     name: string;
@@ -4509,6 +4697,22 @@ export interface APIServiceIntegration {
     maskedKey: string;
     lastTestedAt?: string;
     issues?: string;
+    // Multiple API keys support
+    apiKeys?: APIKeyEntry[];
+    // Load balancing settings
+    loadBalancing?: {
+        strategy: 'round_robin' | 'least_used' | 'random' | 'weighted';
+        weights?: { [keyId: string]: number };
+    };
+    // Mixture agents settings (for AI services)
+    mixtureAgents?: {
+        enabled: boolean;
+        models: Array<{
+            serviceId: string;
+            weight: number;
+            minConfidence?: number;
+        }>;
+    };
 }
 
 export interface AIAPIConfigData {

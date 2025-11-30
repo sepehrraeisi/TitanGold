@@ -68,6 +68,52 @@ class MexcService {
       throw error;
     }
   }
+
+  async fetchTicker(symbol) {
+    try {
+      const ticker = await this.exchange.fetchTicker(symbol);
+      return ticker;
+    } catch (error) {
+      console.error(`MEXC fetchTicker error for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  async getExchangeInfo() {
+    try {
+      await this.loadMarkets();
+      return {
+        symbols: Object.values(this.markets).map(market => ({
+          symbol: market.symbol,
+          baseAsset: market.base,
+          quoteAsset: market.quote,
+          status: market.active ? 'TRADING' : 'INACTIVE',
+        }))
+      };
+    } catch (error) {
+      console.error('MEXC getExchangeInfo error:', error);
+      return { symbols: [] };
+    }
+  }
+
+  async fetchPerpetualTicker(symbol) {
+    try {
+      // Create futures exchange instance
+      const futuresExchange = new ccxt.mexc({
+        apiKey: process.env.MEXC_ACCESS_KEY,
+        secret: process.env.MEXC_SECRET_KEY,
+        options: {
+          defaultType: 'swap', // Perpetual futures
+        },
+      });
+
+      const ticker = await futuresExchange.fetchTicker(symbol);
+      return ticker;
+    } catch (error) {
+      console.error(`MEXC fetchPerpetualTicker error for ${symbol}:`, error);
+      return null;
+    }
+  }
 }
 
 export const mexcService = new MexcService();

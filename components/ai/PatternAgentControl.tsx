@@ -162,25 +162,31 @@ const PatternAgentControl: React.FC<PatternAgentControlProps> = ({ agent, onClos
 
                 <div className="border-b border-gray-800">
                     <nav className="flex space-x-6 px-6">
-                        {(['overview', 'patterns', 'performance', 'settings'] as const).map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                                    activeTab === tab
-                                        ? 'border-amber-500 text-amber-400'
-                                        : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
-                                }`}
-                            >
-                                {t(`tab_${tab}`) || (tab.charAt(0).toUpperCase() + tab.slice(1))}
-                            </button>
-                        ))}
+                        {(['overview', 'patterns', 'performance', 'settings'] as const).map(tab => {
+                            const translation = t(`tab_${tab}`);
+                            const label = (translation && translation !== `tab_${tab}`) 
+                                ? translation 
+                                : tab.charAt(0).toUpperCase() + tab.slice(1);
+                            return (
+                                <button
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                        activeTab === tab
+                                            ? 'border-amber-500 text-amber-400'
+                                            : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
                     </nav>
                 </div>
 
                 <div className="p-6">
                     {activeTab === 'overview' && lastAnalysis && metrics && (
-                        <PatternOverview analysis={lastAnalysis} metrics={metrics} t={t} />
+                        <PatternOverview agent={agent} analysis={lastAnalysis} metrics={metrics} t={t} />
                     )}
                     {activeTab === 'patterns' && lastAnalysis && (
                         <PatternList patterns={lastAnalysis.detectedPatterns} t={t} />
@@ -202,7 +208,7 @@ const PatternAgentControl: React.FC<PatternAgentControlProps> = ({ agent, onClos
     );
 };
 
-const PatternOverview: React.FC<{ analysis: PatternAnalysisResult; metrics: PatternMetrics; t: (key: string) => string }> = ({ analysis, metrics, t }) => (
+const PatternOverview: React.FC<{ agent: AIAgent; analysis: PatternAnalysisResult; metrics: PatternMetrics; t: (key: string) => string }> = ({ agent, analysis, metrics, t }) => (
     <div className="space-y-6">
         <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -213,15 +219,15 @@ const PatternOverview: React.FC<{ analysis: PatternAnalysisResult; metrics: Patt
                 </div>
                 <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
-                        <p className="text-xs text-gray-400 uppercase">{t('bullish')}</p>
+                        <p className="text-xs text-gray-400 uppercase">{t('bullish') || 'Bullish'}</p>
                         <p className="text-green-400 text-xl font-bold">{analysis.stats.bullish}</p>
                     </div>
                     <div>
-                        <p className="text-xs text-gray-400 uppercase">{t('bearish')}</p>
+                        <p className="text-xs text-gray-400 uppercase">{t('bearish') || 'Bearish'}</p>
                         <p className="text-red-400 text-xl font-bold">{analysis.stats.bearish}</p>
                     </div>
                     <div>
-                        <p className="text-xs text-gray-400 uppercase">{t('neutral')}</p>
+                        <p className="text-xs text-gray-400 uppercase">{t('neutral') || 'Neutral'}</p>
                         <p className="text-yellow-400 text-xl font-bold">{analysis.stats.neutral}</p>
                     </div>
                 </div>
@@ -233,6 +239,9 @@ const PatternOverview: React.FC<{ analysis: PatternAnalysisResult; metrics: Patt
             <MetricCard label={t('confirmed_patterns') || 'Confirmed Patterns'} value={metrics.confirmedPatterns} />
             <MetricCard label={t('accuracy') || 'Accuracy'} value={`${metrics.accuracy.toFixed(1)}%`} />
         </div>
+
+        {/* Agent Capabilities */}
+        <CapabilitiesSection agent={agent} />
     </div>
 );
 
@@ -250,7 +259,7 @@ const PatternList: React.FC<{ patterns: DetectedPattern[]; t: (key: string) => s
                         <p className={`text-sm font-semibold ${
                             pattern.direction === 'bullish' ? 'text-green-400' : 'text-red-400'
                         }`}>
-                            {t(pattern.direction)}
+                            {t(pattern.direction) || pattern.direction}
                         </p>
                         <p className="text-xs text-gray-400">{t('confidence') || 'Confidence'}: {pattern.confidence}%</p>
                     </div>
@@ -350,6 +359,62 @@ const MetricCard: React.FC<{ label: string; value: string | number; color?: stri
         <p className={`text-2xl font-bold ${color}`}>{value}</p>
     </div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const PATTERN_CAPABILITY_KEYS = [
+    'pattern_capability_detection',
+    'pattern_capability_breakout_visuals',
+    'pattern_capability_detection_score',
+    'pattern_capability_multitimeframe',
+    'pattern_capability_history_stats',
+    'pattern_capability_customization',
+    'pattern_capability_integrations',
+    'pattern_capability_trade_signals',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isPatternAgent = agent.id === '4' || agent.role === 'Pattern Recognition';
+    const capabilityItems = isPatternAgent
+        ? PATTERN_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('pattern_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isPatternAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-amber-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default PatternAgentControl;
 

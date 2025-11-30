@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import StatCard from './StatCard.tsx';
+import TradingEngineDashboard from './TradingEngineDashboard.tsx';
 import {
     emergencyStopAutopilot,
     fetchAutopilotState,
@@ -539,6 +540,11 @@ const ProfessionalAutopilot: React.FC = () => {
                         </div>
                     </ControlCard>
                 </div>
+            </div>
+
+            {/* Trading Engine Dashboard */}
+            <div className="mt-8">
+                <TradingEngineDashboard />
             </div>
         </div>
     );

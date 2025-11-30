@@ -127,24 +127,30 @@ const SentimentAgentControl: React.FC<SentimentAgentControlProps> = ({ agent, on
                 <StatusBar agent={agent} metrics={metrics} analysis={lastAnalysis} onCommand={handleControlCommand} t={t} />
 
                 <nav className="flex flex-wrap gap-4 px-6 border-b border-gray-800 bg-[#0B1017]">
-                    {TAB_ITEMS.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                                activeTab === tab.id
-                                    ? 'border-emerald-500 text-emerald-400'
-                                    : 'border-transparent text-gray-500 hover:text-white hover:border-gray-600'
-                            }`}
-                        >
-                            {t(tab.labelKey)}
-                        </button>
-                    ))}
+                    {TAB_ITEMS.map(tab => {
+                        const translation = t(tab.labelKey);
+                        const label = (translation && translation !== tab.labelKey) 
+                            ? translation 
+                            : tab.labelKey.replace('tab_', '').replace(/_/g, ' ');
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === tab.id
+                                        ? 'border-emerald-500 text-emerald-400'
+                                        : 'border-transparent text-gray-500 hover:text-white hover:border-gray-600'
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
                 </nav>
 
                 <div className="p-6 bg-[#101722] overflow-y-auto h-full">
                     {activeTab === 'overview' && lastAnalysis && metrics && (
-                        <OverviewTab analysis={lastAnalysis} metrics={metrics} alerts={activeAlerts} t={t} />
+                        <OverviewTab agent={agent} analysis={lastAnalysis} metrics={metrics} alerts={activeAlerts} t={t} />
                     )}
                     {activeTab === 'newsSocial' && lastAnalysis && <NewsSocialTab analysis={lastAnalysis} config={config} t={t} />}
                     {activeTab === 'history' && metrics && <HistoryTab history={metrics.history ?? []} t={t} />}
@@ -262,11 +268,12 @@ const StatusBar: React.FC<{
 );
 
 const OverviewTab: React.FC<{
+    agent: AIAgent;
     analysis: SentimentAnalysisResult;
     metrics: SentimentMetrics;
     alerts: SentimentImpactAlert[];
     t: (key: string) => string;
-}> = ({ analysis, metrics, alerts, t }) => {
+}> = ({ agent, analysis, metrics, alerts, t }) => {
     const alertsTriggered = metrics.alertsTriggered ?? 0;
     const trendShiftAlerts = metrics.trendShiftAlerts ?? 0;
     const sentimentMomentumValue = metrics.sentimentMomentum ?? 0;
@@ -353,6 +360,9 @@ const OverviewTab: React.FC<{
                     <EmptyState message={t('no_alerts') || 'No alerts generated for the latest run.'} />
                 )}
             </SectionCard>
+
+            {/* Agent Capabilities */}
+            <CapabilitiesSection agent={agent} />
         </div>
     );
 };
@@ -379,7 +389,7 @@ const NewsSocialTab: React.FC<{
                                             : 'text-yellow-400'
                                     }`}
                                 >
-                                    {t(article.sentiment.toLowerCase())}
+                                    {t(article.sentiment.toLowerCase()) || article.sentiment}
                                 </span>
                             </div>
                             <a
@@ -451,7 +461,7 @@ const HistoryTab: React.FC<{ history: SentimentHistoryPoint[]; t: (key: string) 
                         </div>
                         <div className="text-right">
                             <p className="text-2xl text-white font-bold">{point.overallScore.toFixed(1)}</p>
-                            <p className="text-xs text-gray-400">{t(point.bias.toLowerCase())}</p>
+                            <p className="text-xs text-gray-400">{t(point.bias.toLowerCase()) || point.bias}</p>
                         </div>
                     </div>
                 ))}
@@ -499,7 +509,7 @@ const TrendingTab: React.FC<{ assets: SentimentTrendingAsset[]; t: (key: string)
                                 {asset.change24h >= 0 ? '+' : ''}
                                 {asset.change24h.toFixed(2)}%
                             </p>
-                            <p className="text-xs text-gray-400">{t(asset.sentiment.toLowerCase())}</p>
+                            <p className="text-xs text-gray-400">{t(asset.sentiment.toLowerCase()) || asset.sentiment}</p>
                             {asset.socialVolumeChange !== undefined && (
                                 <p className="text-xs text-gray-500 mt-1">
                                     {t('social_volume_change') || 'Social Δ'}: {asset.socialVolumeChange.toFixed(1)}%
@@ -960,6 +970,62 @@ const EmptyState: React.FC<{ message: string }> = ({ message }) => (
         {message}
     </div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const SENTIMENT_CAPABILITY_KEYS = [
+    'sentiment_capability_market_mood',
+    'sentiment_capability_trend_shift',
+    'sentiment_capability_news_monitoring',
+    'sentiment_capability_social_tracking',
+    'sentiment_capability_alerting',
+    'sentiment_capability_onchain_context',
+    'sentiment_capability_customization',
+    'sentiment_capability_integrations',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isSentimentAgent = agent.id === '3' || agent.role === 'Sentiment Analysis';
+    const capabilityItems = isSentimentAgent
+        ? SENTIMENT_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('sentiment_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isSentimentAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-emerald-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default SentimentAgentControl;
 

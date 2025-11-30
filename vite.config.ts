@@ -9,6 +9,11 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
         proxy: {
+          '/api/telegram-collector': {
+            target: 'http://localhost:3002',
+            changeOrigin: true,
+            secure: false,
+          },
           '/api/telegram': {
             target: 'https://api.telegram.org',
             changeOrigin: true,

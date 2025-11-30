@@ -67,12 +67,13 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
         }
     };
 
-    const handleRunAnalysis = async () => {
+    const handleRunAnalysis = async (symbol?: string, timeframe?: Timeframe) => {
         setIsAnalyzing(true);
         try {
-            const result = await api.runTechnicalAnalysis(agent.id);
+            const result = await api.runTechnicalAnalysis(agent.id, symbol, timeframe);
             setLastAnalysis(result);
             // Refresh agent data
+            await loadAgentData();
             const updatedAgents = await api.fetchAIAgents();
             const currentAgent = updatedAgents.find(a => a.id === agent.id);
             if (currentAgent) {
@@ -80,7 +81,8 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
             }
         } catch (error) {
             console.error('Failed to run analysis:', error);
-            alert(t('analysis_failed') || 'Analysis failed');
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            alert((t('analysis_failed') || 'Analysis failed') + (errorMessage ? `: ${errorMessage}` : ''));
         } finally {
             setIsAnalyzing(false);
         }
@@ -245,6 +247,9 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
                     {activeTab === 'performance' && (
                         <PerformanceTab performance={performance} />
                     )}
+                    {activeTab === 'learning' && (
+                        <LearningTab agent={agent} />
+                    )}
                     {activeTab === 'settings' && (
                         config ? (
                             <SettingsTab
@@ -312,11 +317,20 @@ const OverviewTab: React.FC<{
             {/* Last Analysis Result */}
             {lastAnalysis && (
                 <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-white mb-4">{t('last_analysis') || 'Last Analysis'}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-white">{t('last_analysis') || 'Last Analysis'}</h3>
+                        <span className="text-xs text-gray-400">
+                            {new Date(lastAnalysis.timestamp).toLocaleString()}
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                         <div>
                             <p className="text-sm text-gray-400 mb-1">{t('symbol') || 'Symbol'}</p>
                             <p className="text-white font-semibold">{lastAnalysis.symbol}</p>
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-400 mb-1">{t('timeframe') || 'Timeframe'}</p>
+                            <p className="text-white font-semibold">{lastAnalysis.timeframe}</p>
                         </div>
                         <div>
                             <p className="text-sm text-gray-400 mb-1">{t('signal') || 'Signal'}</p>
@@ -349,10 +363,25 @@ const OverviewTab: React.FC<{
                             </>
                         )}
                     </div>
+                    {lastAnalysis.indicators && lastAnalysis.indicators.length > 0 && (
+                        <div className="mt-4">
+                            <p className="text-sm text-gray-400 mb-2">{t('indicator_signals') || 'Indicator Signals'}</p>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                {lastAnalysis.indicators.map((ind, idx) => (
+                                    <div key={idx} className="p-2 bg-gray-800/50 rounded text-xs">
+                                        <p className="text-white font-semibold">{ind.indicatorId}</p>
+                                        <p className="text-gray-400">
+                                            {t(ind.signal) || ind.signal} ({ind.value.toFixed(2)})
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                     {lastAnalysis.reasoning && (
                         <div className="mt-4">
                             <p className="text-sm text-gray-400 mb-2">{t('reasoning') || 'Reasoning'}</p>
-                            <p className="text-white text-sm">{lastAnalysis.reasoning}</p>
+                            <p className="text-white text-sm bg-gray-800/50 p-3 rounded">{lastAnalysis.reasoning}</p>
                         </div>
                     )}
                 </div>
@@ -368,10 +397,17 @@ const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
     const { t } = useLanguage();
     const isTechnicalAgent = agent.id === '1' || agent.role === 'Technical Analysis';
     const capabilityItems = isTechnicalAgent
-        ? TECHNICAL_CAPABILITY_KEYS.map(key => ({
+        ? TECHNICAL_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              // Check if translation was found (if t returns the key itself, translation not found)
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('technical_capability_', '').replace(/_/g, ' ');
+              return {
               key,
-              label: t(key),
-          }))
+                  label,
+              };
+          })
         : agent.capabilities.map(cap => ({ key: cap, label: cap }));
 
     return (
@@ -426,6 +462,18 @@ const IndicatorsTab: React.FC<{
         onUpdate(updated);
     };
 
+    const toggleTimeframe = (timeframe: Timeframe) => {
+        const updated = {
+            ...config,
+            timeframes: config.timeframes.includes(timeframe)
+                ? config.timeframes.filter(t => t !== timeframe)
+                : [...config.timeframes, timeframe],
+        };
+        onUpdate(updated);
+    };
+
+    const availableTimeframes: Timeframe[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'];
+
     return (
         <div className="space-y-4">
             <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
@@ -444,7 +492,9 @@ const IndicatorsTab: React.FC<{
                                     <div>
                                         <p className="text-white font-semibold">{indicator.name}</p>
                                         <p className="text-xs text-gray-400">
-                                            {Object.entries(indicator.parameters).map(([key, value]) => `${key}: ${value}`).join(', ')}
+                                            {Object.entries(indicator.parameters).length > 0
+                                                ? Object.entries(indicator.parameters).map(([key, value]) => `${key}: ${value}`).join(', ')
+                                                : t('no_parameters') || 'No parameters'}
                                         </p>
                                     </div>
                                 </div>
@@ -464,6 +514,28 @@ const IndicatorsTab: React.FC<{
                         </div>
                     ))}
                 </div>
+            </div>
+            
+            <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">{t('timeframes') || 'Timeframes'}</h3>
+                <div className="flex flex-wrap gap-2">
+                    {availableTimeframes.map(timeframe => (
+                        <button
+                            key={timeframe}
+                            onClick={() => toggleTimeframe(timeframe)}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                                config.timeframes.includes(timeframe)
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                            }`}
+                        >
+                            {timeframe}
+                        </button>
+                    ))}
+                </div>
+                {config.timeframes.length === 0 && (
+                    <p className="text-xs text-yellow-400 mt-2">{t('at_least_one_timeframe') || 'At least one timeframe must be selected'}</p>
+                )}
             </div>
         </div>
     );
@@ -515,19 +587,30 @@ const StrategiesTab: React.FC<{
                             min="0"
                             max="100"
                             value={config.minConfidence}
-                            onChange={(e) => onUpdate({ ...config, minConfidence: parseFloat(e.target.value) || 0 })}
+                            onChange={(e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                const clamped = Math.max(0, Math.min(100, value));
+                                onUpdate({ ...config, minConfidence: clamped });
+                            }}
                             className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
                         />
+                        <p className="text-xs text-gray-500 mt-1">{t('min_confidence_desc') || 'Minimum confidence level required for signals (0-100%)'}</p>
                     </div>
                     <div className="p-4 bg-gray-800/50 rounded-lg">
                         <label className="block text-sm text-gray-400 mb-2">{t('max_positions') || 'Maximum Positions'}</label>
                         <input
                             type="number"
                             min="1"
+                            max="20"
                             value={config.maxPositions}
-                            onChange={(e) => onUpdate({ ...config, maxPositions: parseInt(e.target.value) || 1 })}
+                            onChange={(e) => {
+                                const value = parseInt(e.target.value) || 1;
+                                const clamped = Math.max(1, Math.min(20, value));
+                                onUpdate({ ...config, maxPositions: clamped });
+                            }}
                             className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
                         />
+                        <p className="text-xs text-gray-500 mt-1">{t('max_positions_desc') || 'Maximum number of concurrent positions (1-20)'}</p>
                     </div>
                 </div>
             </div>
@@ -587,6 +670,92 @@ const PerformanceTab: React.FC<{
                             <p className="text-xs text-gray-400">{performance.recentPerformance.last30d.winRate.toFixed(1)}% {t('win_rate')}</p>
                         </div>
                     </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Learning Tab Component
+const LearningTab: React.FC<{
+    agent: AIAgent;
+}> = ({ agent }) => {
+    const { t } = useLanguage();
+    
+    return (
+        <div className="space-y-6">
+            {/* Learning Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <StatCard
+                    label={t('training_progress') || 'Training Progress'}
+                    value={`${agent.trainingProgress.toFixed(1)}%`}
+                    icon="📈"
+                />
+                <StatCard
+                    label={t('learning_time_hours') || 'Learning Time'}
+                    value={`${agent.learningTime.toFixed(1)}h`}
+                    icon="⏱️"
+                />
+                <StatCard
+                    label={t('knowledge_size_mb') || 'Knowledge Size'}
+                    value={`${agent.knowledgeSize.toFixed(1)}MB`}
+                    icon="🧠"
+                />
+                <StatCard
+                    label={t('level') || 'Level'}
+                    value={agent.level}
+                    icon="⭐"
+                />
+            </div>
+            
+            {/* Learning Data */}
+            {agent.learningData && (
+                <>
+                    {agent.learningData.mistakes && agent.learningData.mistakes.length > 0 && (
+                        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+                            <h3 className="text-lg font-semibold text-white mb-4">{t('recent_mistakes') || 'Recent Mistakes'}</h3>
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                                {agent.learningData.mistakes.slice(-10).map((mistake, idx) => (
+                                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg text-sm">
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex-1">
+                                                <p className="text-white font-semibold">{t('error') || 'Error'}: {mistake.error.toFixed(2)}%</p>
+                                                <p className="text-xs text-gray-400 mt-1">
+                                                    {new Date(mistake.timestamp).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    
+                    {agent.learningData.improvements && agent.learningData.improvements.length > 0 && (
+                        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+                            <h3 className="text-lg font-semibold text-white mb-4">{t('recent_improvements') || 'Recent Improvements'}</h3>
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                                {agent.learningData.improvements.slice(-10).map((improvement, idx) => (
+                                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg text-sm">
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex-1">
+                                                <p className="text-white font-semibold">{t('accuracy_gain') || 'Accuracy Gain'}: +{improvement.accuracyGain.toFixed(2)}%</p>
+                                                <p className="text-xs text-gray-400 mt-1">
+                                                    {new Date(improvement.timestamp).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+            
+            {(!agent.learningData || (agent.learningData.mistakes?.length === 0 && agent.learningData.improvements?.length === 0)) && (
+                <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6 text-center">
+                    <p className="text-gray-400">{t('no_learning_data') || 'No learning data available yet'}</p>
                 </div>
             )}
         </div>

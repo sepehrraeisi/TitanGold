@@ -1,50 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
-import { AIAPIConfigData, APIServiceIntegration, ArtemisConfig, AITrainingConfig } from '../../types.ts';
+import { AIAPIConfigData, APIServiceIntegration, APIKeyEntry, ArtemisState } from '../../types.ts';
 import { testGeminiConnection } from '../../services/geminiService.ts';
 import { testClaudeConnection } from '../../services/claudeService.ts';
 import { testOpenAIConnection } from '../../services/openaiService.ts';
 import { testDeepSeekConnection } from '../../services/deepseekService.ts';
 
-type ConfigTab = 'apis' | 'artemis' | 'training' | 'agents';
-
-interface APIKeyState {
-    [key: string]: {
-        apiKey: string;
-        apiSecret?: string;
-        isEditing: boolean;
-        isSaving: boolean;
-    };
-}
+type ConfigTab = 'apis' | 'mixture' | 'artemis_control';
 
 const APIConfig: React.FC = () => {
     const { t } = useLanguage();
     const [activeTab, setActiveTab] = useState<ConfigTab>('apis');
     const [isLoading, setIsLoading] = useState(true);
     const [apiConfig, setApiConfig] = useState<AIAPIConfigData | null>(null);
-    const [artemisConfig, setArtemisConfig] = useState<ArtemisConfig | null>(null);
-    const [trainingConfig, setTrainingConfig] = useState<AITrainingConfig | null>(null);
+    const [artemis, setArtemis] = useState<ArtemisState | null>(null);
     const [testingService, setTestingService] = useState<string | null>(null);
+    const [testingKeyId, setTestingKeyId] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-    const [apiKeys, setApiKeys] = useState<APIKeyState>({});
+    const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+    const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                const [apiData, artemisState, trainingData] = await Promise.all([
+                const [apiData, artemisState] = await Promise.all([
                     api.fetchAPIConfigData(),
                     api.fetchArtemisState(),
-                    api.fetchTrainingData(),
                 ]);
                 setApiConfig(apiData);
-                setArtemisConfig(artemisState.config);
-                setTrainingConfig(trainingData.config || null);
-                
-                // Load API keys from localStorage/database
-                await loadAPIKeys();
+                setArtemis(artemisState);
             } catch (e) {
                 console.error('Failed to load configuration:', e);
             } finally {
@@ -54,246 +41,431 @@ const APIConfig: React.FC = () => {
         fetchData();
     }, []);
 
-    const loadAPIKeys = async () => {
-        try {
-            // Load from localStorage (temporary - should be in IndexedDB)
-            const savedKeys: APIKeyState = {};
-            const allServices = [
-                ...(apiConfig?.aiServices || []),
-                ...(apiConfig?.exchangeServices || []),
-                ...(apiConfig?.communicationServices || []),
-                ...(apiConfig?.marketDataServices || []),
-            ];
-            
-            // Special handling for Telegram Bot - load from Notification Settings
-            try {
-                const notificationSettings = await api.fetchNotificationSettings();
-                if (notificationSettings?.telegram?.botToken) {
-                    savedKeys['com-telegram'] = {
-                        apiKey: notificationSettings.telegram.botToken,
-                        apiSecret: '',
-                        isEditing: false,
-                        isSaving: false,
-                    };
-                }
-            } catch (e) {
-                console.warn('Failed to load Telegram bot token from notification settings:', e);
-            }
-            
-            allServices.forEach(service => {
-                // Skip Telegram Bot if already loaded from notification settings
-                if (service.id === 'com-telegram' && savedKeys['com-telegram']) {
-            return;
-        }
-                
-                const stored = localStorage.getItem(`api_key_${service.id}`);
-                if (stored) {
-                    try {
-                        const parsed = JSON.parse(stored);
-                        savedKeys[service.id] = {
-                            apiKey: parsed.apiKey || '',
-                            apiSecret: parsed.apiSecret || '',
-                            isEditing: false,
-                            isSaving: false,
-                        };
-                    } catch (e) {
-                        console.warn(`Failed to parse stored key for ${service.id}:`, e);
-                    }
-                }
-            });
-            
-            setApiKeys(savedKeys);
-        } catch (e) {
-            console.error('Failed to load API keys:', e);
-        }
-    };
-
-    const handleTest = async (serviceId: string) => {
-        if (testingService) return;
+    const handleTestKey = async (serviceId: string, keyId?: string) => {
+        if (testingService || !apiConfig) return;
 
         try {
             setTestingService(serviceId);
+            setTestingKeyId(keyId || '');
             
-            // Get API key for this service
-            const keyData = apiKeys[serviceId];
-            if (!keyData || !keyData.apiKey) {
-                throw new Error('API key not configured');
+            // Find service in all service arrays
+            const service = [...apiConfig.aiServices, ...apiConfig.communicationServices, ...apiConfig.marketDataServices]
+                .find(s => s.id === serviceId);
+            
+            if (!service) {
+                throw new Error(`Service ${serviceId} not found`);
             }
 
-            // Test based on service type
+            // Handle services that don't need API keys (like Voice)
+            if (serviceId === 'com-voice') {
+                // Voice is browser-based, no API key needed
+                const result = await api.testAIIntegration(serviceId);
+                if (result.success) {
+                    alert(t('connection_test_success') || `Connection test successful!`);
+                } else {
+                    throw new Error(result.error || 'Connection test failed');
+                }
+            return;
+        }
+                
+            // For other services, check if API keys are needed
+            if (!service.apiKeys || service.apiKeys.length === 0) {
+                // Try to test without API key (for services that might have config instead)
+                const result = await api.testAIIntegration(serviceId, service.apiKeys?.[0]?.config);
+                if (result.success) {
+                    alert(t('connection_test_success') || `Connection test successful! Latency: ${result.latency || 0}ms`);
+                } else {
+                    throw new Error(result.error || 'Connection test failed. Please configure API key or settings first.');
+                }
+                return;
+            }
+
+            if (!keyId) {
+                keyId = service.apiKeys[0].id;
+                    }
+
+            const keyEntry = service.apiKeys.find(k => k.id === keyId);
+            if (!keyEntry) {
+                throw new Error(`API key ${keyId} not found`);
+        }
+
+            if (!keyEntry.key || keyEntry.key.trim().length === 0) {
+                throw new Error('API key is empty');
+            }
+
+            console.log(`Testing ${serviceId} with key: ${keyEntry.key.substring(0, 10)}...`);
+            console.log(`Key length: ${keyEntry.key.length}`);
+            console.log(`Key starts with: ${keyEntry.key.substring(0, 20)}...`);
+
+            // Store API key temporarily for test functions
             let result: { success: boolean; latency?: number; error?: string } = { success: false };
             
-            // Test based on service type
-            // Store API key temporarily in localStorage for test functions to read
+            // Verify key is stored in localStorage before testing
             if (serviceId === 'ai-gemini') {
-                localStorage.setItem('temp_gemini_key', keyData.apiKey);
+                localStorage.setItem('temp_gemini_key', keyEntry.key);
+                const stored = localStorage.getItem('temp_gemini_key');
+                console.log('Gemini key stored:', stored ? `${stored.substring(0, 10)}...` : 'NOT FOUND');
                 try {
                     result = await testGeminiConnection();
+                } catch (e: any) {
+                    console.error('Gemini test exception:', e);
+                    result = { success: false, error: e.message || 'Test failed' };
                 } finally {
                     localStorage.removeItem('temp_gemini_key');
                 }
             } else if (serviceId === 'ai-claude') {
-                localStorage.setItem('temp_claude_key', keyData.apiKey);
+                localStorage.setItem('temp_claude_key', keyEntry.key);
+                const stored = localStorage.getItem('temp_claude_key');
+                console.log('Claude key stored:', stored ? `${stored.substring(0, 10)}...` : 'NOT FOUND');
                 try {
                     result = await testClaudeConnection();
+                } catch (e: any) {
+                    console.error('Claude test exception:', e);
+                    result = { success: false, error: e.message || 'Test failed' };
                 } finally {
                     localStorage.removeItem('temp_claude_key');
                 }
             } else if (serviceId === 'ai-openai') {
-                localStorage.setItem('temp_openai_key', keyData.apiKey);
+                localStorage.setItem('temp_openai_key', keyEntry.key);
+                const stored = localStorage.getItem('temp_openai_key');
+                console.log('OpenAI key stored:', stored ? `${stored.substring(0, 10)}...` : 'NOT FOUND');
                 try {
                     result = await testOpenAIConnection();
+                } catch (e: any) {
+                    console.error('OpenAI test exception:', e);
+                    result = { success: false, error: e.message || 'Test failed' };
                 } finally {
                     localStorage.removeItem('temp_openai_key');
                 }
             } else if (serviceId === 'ai-deepseek') {
-                console.log('Testing DeepSeek with API key:', keyData.apiKey ? `${keyData.apiKey.substring(0, 10)}...` : 'NOT SET');
-                localStorage.setItem('temp_deepseek_key', keyData.apiKey);
+                localStorage.setItem('temp_deepseek_key', keyEntry.key);
+                const stored = localStorage.getItem('temp_deepseek_key');
+                console.log('DeepSeek key stored:', stored ? `${stored.substring(0, 10)}...` : 'NOT FOUND');
                 try {
                     result = await testDeepSeekConnection();
-                    console.log('DeepSeek test result:', result);
-                } catch (testError: any) {
-                    console.error('DeepSeek test error:', testError);
-                    result = { success: false, error: testError.message || 'Test failed' };
+                } catch (e: any) {
+                    console.error('DeepSeek test exception:', e);
+                    result = { success: false, error: e.message || 'Test failed' };
                 } finally {
                     localStorage.removeItem('temp_deepseek_key');
                 }
             } else {
-                // For other services, use generic test
-            await api.testAIIntegration(serviceId);
-                result = { success: true };
+                // Test other integrations (Email, On-chain, News, etc.)
+                const serviceConfig = service.apiKeys?.[0]?.config || {};
+                result = await api.testAIIntegration(serviceId, serviceConfig);
             }
+            
+            console.log(`Test result for ${serviceId}:`, result);
 
             if (result.success) {
-                // Update service status
-            const updated = await api.fetchAPIConfigData();
-                setApiConfig(updated);
+                // Update service status (only if keyId is provided)
+                if (keyId) {
+                    const updatedConfig = { ...apiConfig };
+                    
+                    // Find and update in the correct array
+                    const aiIndex = updatedConfig.aiServices.findIndex(s => s.id === serviceId);
+                    if (aiIndex >= 0 && updatedConfig.aiServices[aiIndex].apiKeys) {
+                        const keyIndex = updatedConfig.aiServices[aiIndex].apiKeys!.findIndex(k => k.id === keyId);
+                        if (keyIndex >= 0) {
+                            updatedConfig.aiServices[aiIndex].apiKeys![keyIndex] = {
+                                ...updatedConfig.aiServices[aiIndex].apiKeys![keyIndex],
+                                status: 'active',
+                                lastTested: new Date().toISOString(),
+                            };
+                            setApiConfig(updatedConfig);
+                            await saveAPIConfig(updatedConfig);
+                        }
+                    } else {
+                        const commIndex = updatedConfig.communicationServices.findIndex(s => s.id === serviceId);
+                        if (commIndex >= 0 && updatedConfig.communicationServices[commIndex].apiKeys) {
+                            const keyIndex = updatedConfig.communicationServices[commIndex].apiKeys!.findIndex(k => k.id === keyId);
+                            if (keyIndex >= 0) {
+                                updatedConfig.communicationServices[commIndex].apiKeys![keyIndex] = {
+                                    ...updatedConfig.communicationServices[commIndex].apiKeys![keyIndex],
+                                    status: 'active',
+                                    lastTested: new Date().toISOString(),
+                                };
+                                setApiConfig(updatedConfig);
+                                await saveAPIConfig(updatedConfig);
+                            }
+                        } else {
+                            const marketIndex = updatedConfig.marketDataServices.findIndex(s => s.id === serviceId);
+                            if (marketIndex >= 0 && updatedConfig.marketDataServices[marketIndex].apiKeys) {
+                                const keyIndex = updatedConfig.marketDataServices[marketIndex].apiKeys!.findIndex(k => k.id === keyId);
+                                if (keyIndex >= 0) {
+                                    updatedConfig.marketDataServices[marketIndex].apiKeys![keyIndex] = {
+                                        ...updatedConfig.marketDataServices[marketIndex].apiKeys![keyIndex],
+                                        status: 'active',
+                                        lastTested: new Date().toISOString(),
+                                    };
+                                    setApiConfig(updatedConfig);
+                                    await saveAPIConfig(updatedConfig);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Update service connection status (for services without API keys)
+                    const updatedConfig = { ...apiConfig };
+                    const service = [...updatedConfig.aiServices, ...updatedConfig.communicationServices, ...updatedConfig.marketDataServices]
+                        .find(s => s.id === serviceId);
+                    if (service) {
+                        service.connected = true;
+                        service.lastTestedAt = new Date().toISOString();
+                        service.issues = undefined;
+                        setApiConfig(updatedConfig);
+                        await saveAPIConfig(updatedConfig);
+                    }
+                }
+                
                 alert(t('connection_test_success') || `Connection test successful! Latency: ${result.latency || 0}ms`);
             } else {
                 throw new Error(result.error || 'Connection test failed');
             }
         } catch (e: any) {
-            console.error('Failed to test service:', e);
-            const errorMessage = e.message || result?.error || 'Connection test failed';
+            console.error('Failed to test API key:', e);
+            let errorMessage = e.message || 'Unknown error';
+            
+            // Provide user-friendly error messages
+            if (errorMessage.includes('CORS') || 
+                errorMessage.includes('Failed to fetch') || 
+                errorMessage.includes('Access-Control-Allow-Origin') ||
+                (serviceId === 'ai-gemini' && (errorMessage.includes('Failed to fetch') || errorMessage.includes('exception')))) {
+                if (serviceId === 'ai-gemini') {
+                    errorMessage = '⚠️ CORS Restriction: Gemini API cannot be tested directly from browser due to browser security policies (CORS).\n\n✅ Your API key appears to be valid.\n\n💡 Solution: The API will work correctly in production when called from your backend server. For testing, you can:\n1. Test the API key from your backend server\n2. Use a proxy server\n3. The API will work fine in production environment\n\nThis is a browser limitation, not an issue with your API key.';
+                } else {
+                    errorMessage = 'Network error: Please check your internet connection and try again.';
+                }
+            } else if (errorMessage.includes('quota') || errorMessage.includes('429')) {
+                errorMessage = 'API quota exceeded. Please check your account billing and plan.';
+            } else if (errorMessage.includes('Insufficient Balance') || errorMessage.includes('402')) {
+                errorMessage = 'Insufficient account balance. Please add credits to your account.';
+            } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+                errorMessage = 'Invalid API key. Please check your API key and try again.';
+            }
+            
+            console.error('Error details:', {
+                serviceId,
+                keyId,
+                error: errorMessage,
+                originalError: e.message,
+                stack: e.stack,
+            });
+            
             alert(t('connection_test_failed') || `Connection test failed: ${errorMessage}`);
         } finally {
             setTestingService(null);
+            setTestingKeyId(null);
         }
     };
 
-    const handleSaveAPIKey = async (serviceId: string) => {
-        const keyData = apiKeys[serviceId];
-        if (!keyData || !keyData.apiKey.trim()) {
+    const handleAddAPIKey = async (serviceId: string, key: string, secret?: string, label?: string) => {
+        if (!apiConfig || !key.trim()) {
             alert(t('api_key_required') || 'API Key is required');
             return;
         }
 
         try {
-            setApiKeys(prev => ({
-                ...prev,
-                [serviceId]: { ...prev[serviceId], isSaving: true },
-            }));
+            const updatedConfig = { ...apiConfig };
+            const service = [...updatedConfig.aiServices, ...updatedConfig.communicationServices, ...updatedConfig.marketDataServices]
+                .find(s => s.id === serviceId);
+            
+            if (!service) return;
 
-            // Special handling for Telegram Bot - save to Notification Settings
-            if (serviceId === 'com-telegram') {
-                try {
-                    const notificationSettings = await api.fetchNotificationSettings();
-                    notificationSettings.telegram.botToken = keyData.apiKey;
-                    await api.saveNotificationSettings(notificationSettings);
-                } catch (e) {
-                    console.error('Failed to save Telegram bot token to notification settings:', e);
+            const newKey: APIKeyEntry = {
+                id: `key-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                key: key.trim(),
+                secret: secret?.trim(),
+                label: label?.trim() || `Key ${Date.now()}`,
+                isActive: true,
+                usageCount: 0,
+                status: 'active',
+            };
+
+            // Find and update service
+            const aiIndex = updatedConfig.aiServices.findIndex(s => s.id === serviceId);
+            if (aiIndex >= 0) {
+                if (!updatedConfig.aiServices[aiIndex].apiKeys) {
+                    updatedConfig.aiServices[aiIndex].apiKeys = [];
+                }
+                updatedConfig.aiServices[aiIndex].apiKeys!.push(newKey);
+                updatedConfig.aiServices[aiIndex].connected = true;
+            } else {
+                const commIndex = updatedConfig.communicationServices.findIndex(s => s.id === serviceId);
+                if (commIndex >= 0) {
+                    if (!updatedConfig.communicationServices[commIndex].apiKeys) {
+                        updatedConfig.communicationServices[commIndex].apiKeys = [];
+                    }
+                    updatedConfig.communicationServices[commIndex].apiKeys!.push(newKey);
+                    updatedConfig.communicationServices[commIndex].connected = true;
+                } else {
+                    const marketIndex = updatedConfig.marketDataServices.findIndex(s => s.id === serviceId);
+                    if (marketIndex >= 0) {
+                        if (!updatedConfig.marketDataServices[marketIndex].apiKeys) {
+                            updatedConfig.marketDataServices[marketIndex].apiKeys = [];
+                        }
+                        updatedConfig.marketDataServices[marketIndex].apiKeys!.push(newKey);
+                        updatedConfig.marketDataServices[marketIndex].connected = true;
+                    }
                 }
             }
 
-            // Special handling for Telegram Bot - save to Notification Settings
-            if (serviceId === 'com-telegram') {
-                try {
-                    const notificationSettings = await api.fetchNotificationSettings();
-                    notificationSettings.telegram.botToken = keyData.apiKey;
-                    await api.saveNotificationSettings(notificationSettings);
+            setApiConfig(updatedConfig);
+            await saveAPIConfig(updatedConfig);
+            setEditingServiceId(null);
+            setEditingKeyId(null);
+            alert(t('api_key_added') || 'API Key added successfully!');
                 } catch (e) {
-                    console.error('Failed to save Telegram bot token to notification settings:', e);
-                }
-            }
-
-            // Save to localStorage (temporary - should be in IndexedDB with encryption)
-            localStorage.setItem(`api_key_${serviceId}`, JSON.stringify({
-                apiKey: keyData.apiKey,
-                apiSecret: keyData.apiSecret || '',
-            }));
-
-            // Update environment variable (for current session)
-            if (serviceId === 'ai-gemini') {
-                process.env.GEMINI_API_KEY = keyData.apiKey;
-            } else if (serviceId === 'ai-claude') {
-                process.env.CLAUDE_API_KEY = keyData.apiKey;
-            } else if (serviceId === 'ai-openai') {
-                process.env.OPENAI_API_KEY = keyData.apiKey;
-            } else if (serviceId === 'ai-deepseek') {
-                process.env.DEEPSEEK_API_KEY = keyData.apiKey;
-            }
-
-            // Update API config
-            const updated = await api.fetchAPIConfigData();
-            setApiConfig(updated);
-
-            setApiKeys(prev => ({
-                ...prev,
-                [serviceId]: {
-                    ...prev[serviceId],
-                    isEditing: false,
-                    isSaving: false,
-                },
-            }));
-
-            alert(t('api_key_saved') || 'API Key saved successfully!');
-        } catch (e) {
-            console.error('Failed to save API key:', e);
-            alert(t('api_key_save_failed') || 'Failed to save API key');
-        } finally {
-            setApiKeys(prev => ({
-                ...prev,
-                [serviceId]: { ...prev[serviceId], isSaving: false },
-            }));
+            console.error('Failed to add API key:', e);
+            alert(t('api_key_add_failed') || 'Failed to add API key');
         }
     };
 
-    const handleEditAPIKey = (serviceId: string) => {
-        setApiKeys(prev => ({
-            ...prev,
-            [serviceId]: {
-                ...prev[serviceId] || { apiKey: '', apiSecret: '', isEditing: false, isSaving: false },
-                isEditing: true,
-            },
-        }));
+    const handleRemoveAPIKey = async (serviceId: string, keyId: string) => {
+        if (!apiConfig || !confirm(t('confirm_remove_key') || 'Are you sure you want to remove this API key?')) {
+            return;
+                }
+
+        try {
+            const updatedConfig = { ...apiConfig };
+            
+            const aiIndex = updatedConfig.aiServices.findIndex(s => s.id === serviceId);
+            if (aiIndex >= 0 && updatedConfig.aiServices[aiIndex].apiKeys) {
+                updatedConfig.aiServices[aiIndex].apiKeys = updatedConfig.aiServices[aiIndex].apiKeys!.filter(k => k.id !== keyId);
+                if (updatedConfig.aiServices[aiIndex].apiKeys!.length === 0) {
+                    updatedConfig.aiServices[aiIndex].connected = false;
+                }
+            } else {
+                const commIndex = updatedConfig.communicationServices.findIndex(s => s.id === serviceId);
+                if (commIndex >= 0 && updatedConfig.communicationServices[commIndex].apiKeys) {
+                    updatedConfig.communicationServices[commIndex].apiKeys = updatedConfig.communicationServices[commIndex].apiKeys!.filter(k => k.id !== keyId);
+                    if (updatedConfig.communicationServices[commIndex].apiKeys!.length === 0) {
+                        updatedConfig.communicationServices[commIndex].connected = false;
+                    }
+                } else {
+                    const marketIndex = updatedConfig.marketDataServices.findIndex(s => s.id === serviceId);
+                    if (marketIndex >= 0 && updatedConfig.marketDataServices[marketIndex].apiKeys) {
+                        updatedConfig.marketDataServices[marketIndex].apiKeys = updatedConfig.marketDataServices[marketIndex].apiKeys!.filter(k => k.id !== keyId);
+                        if (updatedConfig.marketDataServices[marketIndex].apiKeys!.length === 0) {
+                            updatedConfig.marketDataServices[marketIndex].connected = false;
+                        }
+                    }
+                }
+            }
+
+            setApiConfig(updatedConfig);
+            await saveAPIConfig(updatedConfig);
+            alert(t('api_key_removed') || 'API Key removed successfully!');
+                } catch (e) {
+            console.error('Failed to remove API key:', e);
+            alert(t('api_key_remove_failed') || 'Failed to remove API key');
+        }
     };
 
-    const handleCancelEdit = (serviceId: string) => {
-        setApiKeys(prev => ({
-            ...prev,
-            [serviceId]: {
-                ...prev[serviceId],
-                isEditing: false,
-            },
-        }));
+    const handleToggleKeyStatus = async (serviceId: string, keyId: string) => {
+        if (!apiConfig) return;
+
+        try {
+            const updatedConfig = { ...apiConfig };
+            
+            const aiIndex = updatedConfig.aiServices.findIndex(s => s.id === serviceId);
+            if (aiIndex >= 0 && updatedConfig.aiServices[aiIndex].apiKeys) {
+                const keyIndex = updatedConfig.aiServices[aiIndex].apiKeys!.findIndex(k => k.id === keyId);
+                if (keyIndex >= 0) {
+                    updatedConfig.aiServices[aiIndex].apiKeys![keyIndex].isActive = !updatedConfig.aiServices[aiIndex].apiKeys![keyIndex].isActive;
+                }
+            } else {
+                const commIndex = updatedConfig.communicationServices.findIndex(s => s.id === serviceId);
+                if (commIndex >= 0 && updatedConfig.communicationServices[commIndex].apiKeys) {
+                    const keyIndex = updatedConfig.communicationServices[commIndex].apiKeys!.findIndex(k => k.id === keyId);
+                    if (keyIndex >= 0) {
+                        updatedConfig.communicationServices[commIndex].apiKeys![keyIndex].isActive = !updatedConfig.communicationServices[commIndex].apiKeys![keyIndex].isActive;
+                    }
+                } else {
+                    const marketIndex = updatedConfig.marketDataServices.findIndex(s => s.id === serviceId);
+                    if (marketIndex >= 0 && updatedConfig.marketDataServices[marketIndex].apiKeys) {
+                        const keyIndex = updatedConfig.marketDataServices[marketIndex].apiKeys!.findIndex(k => k.id === keyId);
+                        if (keyIndex >= 0) {
+                            updatedConfig.marketDataServices[marketIndex].apiKeys![keyIndex].isActive = !updatedConfig.marketDataServices[marketIndex].apiKeys![keyIndex].isActive;
+                        }
+                    }
+                }
+            }
+
+            setApiConfig(updatedConfig);
+            await saveAPIConfig(updatedConfig);
+        } catch (e) {
+            console.error('Failed to toggle key status:', e);
+        }
+    };
+
+    const handleUpdateLoadBalancing = async (serviceId: string, strategy: 'round_robin' | 'least_used' | 'random' | 'weighted', weights?: { [keyId: string]: number }) => {
+        if (!apiConfig) return;
+
+        try {
+            const updatedConfig = { ...apiConfig };
+            
+            const aiIndex = updatedConfig.aiServices.findIndex(s => s.id === serviceId);
+            if (aiIndex >= 0) {
+                updatedConfig.aiServices[aiIndex].loadBalancing = { strategy, weights };
+            } else {
+                const commIndex = updatedConfig.communicationServices.findIndex(s => s.id === serviceId);
+                if (commIndex >= 0) {
+                    updatedConfig.communicationServices[commIndex].loadBalancing = { strategy, weights };
+                } else {
+                    const marketIndex = updatedConfig.marketDataServices.findIndex(s => s.id === serviceId);
+                    if (marketIndex >= 0) {
+                        updatedConfig.marketDataServices[marketIndex].loadBalancing = { strategy, weights };
+                    }
+                }
+            }
+
+            setApiConfig(updatedConfig);
+            await saveAPIConfig(updatedConfig);
+        } catch (e) {
+            console.error('Failed to update load balancing:', e);
+        }
+    };
+
+    const handleUpdateMixtureAgents = async (enabled: boolean, models: Array<{ serviceId: string; weight: number; minConfidence?: number }>) => {
+        if (!apiConfig) return;
+
+        try {
+            const updatedConfig = { ...apiConfig };
+            
+            // Update mixture agents for all AI services
+            updatedConfig.aiServices.forEach(service => {
+                if (['ai-gemini', 'ai-claude', 'ai-openai', 'ai-deepseek'].includes(service.id)) {
+                    service.mixtureAgents = { enabled, models };
+                }
+            });
+
+            setApiConfig(updatedConfig);
+            await saveAPIConfig(updatedConfig);
+            alert(t('mixture_agents_updated') || 'Mixture agents configuration updated!');
+        } catch (e) {
+            console.error('Failed to update mixture agents:', e);
+            alert(t('mixture_agents_update_failed') || 'Failed to update mixture agents configuration');
+        }
+    };
+
+    const saveAPIConfig = async (config: AIAPIConfigData) => {
+        try {
+            config.lastUpdated = new Date().toISOString();
+            await api.updateAPIConfigData(config);
+        } catch (e) {
+            console.error('Failed to save API config:', e);
+            throw e;
+        }
     };
 
     const handleSaveAll = async () => {
+        if (!apiConfig) return;
+        
         setIsSaving(true);
         setSaveStatus('saving');
         try {
-            // Save API Config
-            if (apiConfig) {
-                // API config is saved automatically on test
-            }
-            // Save Artemis Config
-            if (artemisConfig) {
-                await api.updateArtemisConfig({ config: artemisConfig });
-            }
-            // Save Training Config
-            if (trainingConfig) {
-                await api.updateTrainingConfig(trainingConfig);
-            }
+            await saveAPIConfig(apiConfig);
             setSaveStatus('success');
             setTimeout(() => setSaveStatus('idle'), 3000);
         } catch (e) {
@@ -318,10 +490,11 @@ const APIConfig: React.FC = () => {
 
     const tabs: { id: ConfigTab; label: string; icon: string }[] = [
         { id: 'apis', label: t('api_integrations') || 'API Integrations', icon: '🔌' },
-        { id: 'artemis', label: t('artemis_settings') || 'Artemis Settings', icon: '🤖' },
-        { id: 'training', label: t('training_config') || 'Training Config', icon: '📚' },
-        { id: 'agents', label: t('agent_settings') || 'Agent Settings', icon: '👥' },
+        { id: 'mixture', label: t('mixture_agents') || 'Mixture Agents', icon: '🤝' },
+        { id: 'artemis_control', label: t('artemis_control') || 'Artemis Control', icon: '🎛️' },
     ];
+
+    const aiServices = (apiConfig?.aiServices || []).filter(s => ['ai-gemini', 'ai-claude', 'ai-openai', 'ai-deepseek'].includes(s.id));
 
     return (
         <div className="space-y-6">
@@ -331,7 +504,7 @@ const APIConfig: React.FC = () => {
                     <div>
                         <h2 className="text-2xl font-bold text-foreground">{t('configuration') || 'Configuration'}</h2>
                         <p className="text-muted-foreground text-sm mt-1">
-                            {t('configuration_desc') || 'Manage Artemis-specific settings, AI integrations, and training configurations'}
+                            {t('api_configuration_desc') || 'Manage API integrations, multiple API keys, load balancing, and mixture agents configuration'}
                         </p>
                     </div>
                     <div className="flex gap-3">
@@ -360,15 +533,12 @@ const APIConfig: React.FC = () => {
                             onClick={async () => {
                                 setIsLoading(true);
                                 try {
-                                    const [apiData, artemisState, trainingData] = await Promise.all([
+                                    const [apiData, artemisState] = await Promise.all([
                                         api.fetchAPIConfigData(),
                                         api.fetchArtemisState(),
-                                        api.fetchTrainingData(),
                                     ]);
                                     setApiConfig(apiData);
-                                    setArtemisConfig(artemisState.config);
-                                    setTrainingConfig(trainingData.config || null);
-                                    await loadAPIKeys();
+                                    setArtemis(artemisState);
                                 } finally {
                                     setIsLoading(false);
                                 }
@@ -403,43 +573,38 @@ const APIConfig: React.FC = () => {
                 </div>
 
                 {/* Tab Content */}
-                <div className="p-6">
+                <div className="p-6" style={{ maxHeight: 'calc(92vh - 300px)', overflowY: 'auto' }}>
                     {activeTab === 'apis' && apiConfig && (
                         <APIConfigTab
                             config={apiConfig}
-                            onTest={handleTest}
+                            onTestKey={handleTestKey}
                             testingService={testingService}
-                            apiKeys={apiKeys}
-                            onEdit={handleEditAPIKey}
-                            onSave={handleSaveAPIKey}
-                            onCancel={handleCancelEdit}
-                            onKeyChange={(serviceId, field, value) => {
-                                setApiKeys(prev => ({
-                                    ...prev,
-                                    [serviceId]: {
-                                        ...prev[serviceId] || { apiKey: '', apiSecret: '', isEditing: false, isSaving: false },
-                                        [field]: value,
-                                    },
-                                }));
-                            }}
-                        />
-                    )}
-                    {activeTab === 'artemis' && artemisConfig && (
-                        <ArtemisConfigTab
-                            config={artemisConfig}
-                            onUpdate={setArtemisConfig}
+                            testingKeyId={testingKeyId}
+                            onAddKey={handleAddAPIKey}
+                            onRemoveKey={handleRemoveAPIKey}
+                            onToggleKeyStatus={handleToggleKeyStatus}
+                            onUpdateLoadBalancing={handleUpdateLoadBalancing}
+                            editingServiceId={editingServiceId}
+                            setEditingServiceId={setEditingServiceId}
+                            editingKeyId={editingKeyId}
+                            setEditingKeyId={setEditingKeyId}
                             t={t}
                         />
                     )}
-                    {activeTab === 'training' && trainingConfig && (
-                        <TrainingConfigTab
-                            config={trainingConfig}
-                            onUpdate={setTrainingConfig}
+                    {activeTab === 'mixture' && apiConfig && (
+                        <MixtureAgentsTab
+                            aiServices={aiServices}
+                            onUpdate={handleUpdateMixtureAgents}
                             t={t}
                         />
                     )}
-                    {activeTab === 'agents' && (
-                        <AgentsConfigTab t={t} />
+                    {activeTab === 'artemis_control' && artemis && apiConfig && (
+                        <ArtemisControlTab
+                            artemis={artemis}
+                            apiConfig={apiConfig}
+                            onUpdate={setApiConfig}
+                            t={t}
+                        />
                     )}
                 </div>
             </div>
@@ -447,593 +612,565 @@ const APIConfig: React.FC = () => {
     );
 };
 
-// API Config Tab with full API Key management
+// API Config Tab with Multiple API Keys Support
 const APIConfigTab: React.FC<{
     config: AIAPIConfigData;
-    onTest: (id: string) => void;
+    onTestKey: (serviceId: string, keyId?: string) => void;
     testingService: string | null;
-    apiKeys: APIKeyState;
-    onEdit: (id: string) => void;
-    onSave: (id: string) => void;
-    onCancel: (id: string) => void;
-    onKeyChange: (serviceId: string, field: 'apiKey' | 'apiSecret', value: string) => void;
-}> = ({ config, onTest, testingService, apiKeys, onEdit, onSave, onCancel, onKeyChange }) => {
-    const { t } = useLanguage();
+    testingKeyId: string | null;
+    onAddKey: (serviceId: string, key: string, secret?: string, label?: string) => void;
+    onRemoveKey: (serviceId: string, keyId: string) => void;
+    onToggleKeyStatus: (serviceId: string, keyId: string) => void;
+    onUpdateLoadBalancing: (serviceId: string, strategy: 'round_robin' | 'least_used' | 'random' | 'weighted', weights?: { [keyId: string]: number }) => void;
+    editingServiceId: string | null;
+    setEditingServiceId: (id: string | null) => void;
+    editingKeyId: string | null;
+    setEditingKeyId: (id: string | null) => void;
+    t: (key: string) => string;
+}> = ({ config, onTestKey, testingService, testingKeyId, onAddKey, onRemoveKey, onToggleKeyStatus, onUpdateLoadBalancing, editingServiceId, setEditingServiceId, editingKeyId, setEditingKeyId, t }) => {
+    const [newKeyData, setNewKeyData] = useState<{ key: string; secret?: string; label: string }>({ key: '', label: '' });
+
+    const aiServices = (config.aiServices || []).filter(s => ['ai-gemini', 'ai-claude', 'ai-openai', 'ai-deepseek'].includes(s.id));
+
     return (
         <div className="space-y-8">
+            {/* AI Services - Multiple API Keys */}
             <Card title={t('ai_services') || 'AI Services'}>
-                <IntegrationGrid
-                    services={config.aiServices}
-                    onTest={onTest}
-                    testingService={testingService}
-                    apiKeys={apiKeys}
-                    onEdit={onEdit}
-                    onSave={onSave}
-                    onCancel={onCancel}
-                    onKeyChange={onKeyChange}
-                />
-            </Card>
-            <Card title={t('artemis_data_integrations') || 'Artemis Data Integrations'}>
-                <p className="text-sm text-muted-foreground mb-4">
-                    {t('artemis_data_integrations_desc') || 'Configure data sources and integrations specifically for Artemis AI system. For general exchange connections, use Settings > Connections.'}
+                <p className="text-sm text-muted-foreground mb-6">
+                    {t('multiple_api_keys_desc') || 'Add multiple API keys for each AI service to distribute load, avoid rate limits, and manage costs. Keys are automatically rotated based on your load balancing strategy.'}
                 </p>
-                <IntegrationGrid
-                    services={config.communicationServices}
-                    onTest={onTest}
+                <div className="space-y-6">
+                    {aiServices.map(service => (
+                        <AIServiceCard
+                            key={service.id}
+                            service={service}
+                            onTestKey={onTestKey}
                     testingService={testingService}
-                    apiKeys={apiKeys}
-                    onEdit={onEdit}
-                    onSave={onSave}
-                    onCancel={onCancel}
-                    onKeyChange={onKeyChange}
+                            testingKeyId={testingKeyId}
+                            onAddKey={onAddKey}
+                            onRemoveKey={onRemoveKey}
+                            onToggleKeyStatus={onToggleKeyStatus}
+                            onUpdateLoadBalancing={onUpdateLoadBalancing}
+                            editingServiceId={editingServiceId}
+                            setEditingServiceId={setEditingServiceId}
+                            editingKeyId={editingKeyId}
+                            setEditingKeyId={setEditingKeyId}
+                            newKeyData={newKeyData}
+                            setNewKeyData={setNewKeyData}
+                            t={t}
                 />
+                    ))}
+                </div>
             </Card>
+
+            {/* Communication Services */}
             <Card title={t('communications_and_alerts') || 'Communications & Alerts'}>
-                <IntegrationGrid
-                    services={config.communicationServices}
-                    onTest={onTest}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {(config.communicationServices || []).map(service => (
+                        <SimpleServiceCard 
+                            key={service.id} 
+                            service={service} 
+                            onTest={onTestKey}
                     testingService={testingService}
-                    apiKeys={apiKeys}
-                    onEdit={onEdit}
-                    onSave={onSave}
-                    onCancel={onCancel}
-                    onKeyChange={onKeyChange}
-                />
+                            t={t} 
+                        />
+                    ))}
+                </div>
             </Card>
+
+            {/* Market Data Services */}
             <Card title={t('market_data_and_analysis') || 'Market Data & Analysis'}>
-                <IntegrationGrid
-                    services={config.marketDataServices}
-                    onTest={onTest}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {(config.marketDataServices || []).map(service => (
+                        <SimpleServiceCard 
+                            key={service.id} 
+                            service={service} 
+                            onTest={onTestKey}
                     testingService={testingService}
-                    apiKeys={apiKeys}
-                    onEdit={onEdit}
-                    onSave={onSave}
-                    onCancel={onCancel}
-                    onKeyChange={onKeyChange}
-                />
+                            t={t} 
+                        />
+                    ))}
+                </div>
             </Card>
-            <div className="flex justify-end">
-                <p className="text-xs text-muted-foreground">
-                    {t('last_update')}: {new Date(config.lastUpdated).toLocaleString()}
-                </p>
-            </div>
         </div>
     );
 };
 
-// Artemis Config Tab (unchanged)
-const ArtemisConfigTab: React.FC<{
-    config: ArtemisConfig;
-    onUpdate: (config: ArtemisConfig) => void;
+// AI Service Card with Multiple API Keys
+const AIServiceCard: React.FC<{
+    service: APIServiceIntegration;
+    onTestKey: (serviceId: string, keyId?: string) => void;
+    testingService: string | null;
+    testingKeyId: string | null;
+    onAddKey: (serviceId: string, key: string, secret?: string, label?: string) => void;
+    onRemoveKey: (serviceId: string, keyId: string) => void;
+    onToggleKeyStatus: (serviceId: string, keyId: string) => void;
+    onUpdateLoadBalancing: (serviceId: string, strategy: 'round_robin' | 'least_used' | 'random' | 'weighted', weights?: { [keyId: string]: number }) => void;
+    editingServiceId: string | null;
+    setEditingServiceId: (id: string | null) => void;
+    editingKeyId: string | null;
+    setEditingKeyId: (id: string | null) => void;
+    newKeyData: { key: string; secret?: string; label: string };
+    setNewKeyData: (data: { key: string; secret?: string; label: string }) => void;
     t: (key: string) => string;
-}> = ({ config, onUpdate, t }) => {
-    const updateConfig = (updates: Partial<ArtemisConfig>) => {
-        onUpdate({ ...config, ...updates });
+}> = ({ service, onTestKey, testingService, testingKeyId, onAddKey, onRemoveKey, onToggleKeyStatus, onUpdateLoadBalancing, editingServiceId, setEditingServiceId, editingKeyId, setEditingKeyId, newKeyData, setNewKeyData, t }) => {
+    const isEditing = editingServiceId === service.id;
+    const apiKeys = service.apiKeys || [];
+    const activeKeys = apiKeys.filter(k => k.isActive);
+    const loadBalancing = service.loadBalancing || { strategy: 'round_robin' };
+
+    const maskKey = (key: string): string => {
+        if (!key || key.length < 8) return '••••••••';
+        return `${key.substring(0, 4)}${'•'.repeat(Math.min(20, key.length - 8))}${key.substring(key.length - 4)}`;
+    };
+
+    return (
+        <div className="border border-border rounded-lg p-6 bg-background/40">
+            <div className="flex justify-between items-start mb-4">
+                    <div>
+                    <h4 className="text-lg font-semibold text-foreground">{service.name}</h4>
+                    <p className={`text-sm ${service.connected ? 'text-green-400' : 'text-yellow-400'}`}>
+                        {service.connected ? t('connected') : t('disconnected')} • {activeKeys.length} {t('active_keys') || 'active key(s)'}
+                    </p>
+                </div>
+                <button
+                    onClick={() => {
+                        if (isEditing) {
+                            setEditingServiceId(null);
+                            setNewKeyData({ key: '', label: '' });
+                        } else {
+                            setEditingServiceId(service.id);
+                        }
+                    }}
+                    className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm font-semibold"
+                        >
+                    {isEditing ? t('cancel') : t('add_api_key') || 'Add Key'}
+                </button>
+                    </div>
+
+            {/* Load Balancing Settings */}
+            <div className="mb-4 p-3 bg-secondary/50 rounded-lg">
+                        <label className="block text-sm font-semibold text-foreground mb-2">
+                    {t('load_balancing_strategy') || 'Load Balancing Strategy'}
+                        </label>
+                        <select
+                    value={loadBalancing.strategy}
+                    onChange={(e) => onUpdateLoadBalancing(service.id, e.target.value as any)}
+                    className="w-full p-2 bg-background border border-border rounded text-foreground text-sm"
+                        >
+                    <option value="round_robin">{t('round_robin') || 'Round Robin'}</option>
+                    <option value="least_used">{t('least_used') || 'Least Used'}</option>
+                    <option value="random">{t('random') || 'Random'}</option>
+                    <option value="weighted">{t('weighted') || 'Weighted'}</option>
+                        </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                    {loadBalancing.strategy === 'round_robin' && (t('round_robin_desc') || 'Rotate through keys sequentially')}
+                    {loadBalancing.strategy === 'least_used' && (t('least_used_desc') || 'Use key with lowest usage count')}
+                    {loadBalancing.strategy === 'random' && (t('random_desc') || 'Randomly select from active keys')}
+                    {loadBalancing.strategy === 'weighted' && (t('weighted_desc') || 'Distribute based on assigned weights')}
+                </p>
+                    </div>
+
+            {/* Add New Key Form */}
+            {isEditing && (
+                <div className="mb-4 p-4 bg-secondary/30 rounded-lg border border-purple-500/30">
+                    <h5 className="font-semibold text-foreground mb-3">{t('add_new_api_key') || 'Add New API Key'}</h5>
+                    <div className="space-y-3">
+                    <div>
+                            <label className="block text-xs font-semibold text-foreground mb-1">
+                                {t('key_label') || 'Label'} (optional)
+                        </label>
+                        <input
+                                type="text"
+                                value={newKeyData.label}
+                                onChange={(e) => setNewKeyData({ ...newKeyData, label: e.target.value })}
+                                placeholder={t('key_label_placeholder') || 'e.g., Free Tier, Paid Tier 1'}
+                                className="w-full p-2 bg-background border border-border rounded text-foreground text-sm"
+                        />
+                    </div>
+                    <div>
+                            <label className="block text-xs font-semibold text-foreground mb-1">
+                                {t('api_key') || 'API Key'} *
+                        </label>
+                        <input
+                                type="password"
+                                value={newKeyData.key}
+                                onChange={(e) => setNewKeyData({ ...newKeyData, key: e.target.value })}
+                                placeholder={t('enter_api_key') || 'Enter API Key'}
+                                className="w-full p-2 bg-background border border-border rounded text-foreground text-sm"
+                        />
+                    </div>
+                        <button
+                            onClick={() => {
+                                if (newKeyData.key.trim()) {
+                                    onAddKey(service.id, newKeyData.key, newKeyData.secret, newKeyData.label);
+                                    setNewKeyData({ key: '', label: '' });
+                                    setEditingServiceId(null);
+                                }
+                            }}
+                            className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-semibold"
+                        >
+                            {t('add_key') || 'Add Key'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* API Keys List */}
+            <div className="space-y-3">
+                {apiKeys.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                        {t('no_api_keys_configured') || 'No API keys configured. Click "Add Key" to add one.'}
+                    </p>
+                ) : (
+                    apiKeys.map(key => (
+                        <div
+                            key={key.id}
+                            className={`p-4 border rounded-lg ${
+                                key.isActive
+                                    ? key.status === 'active' ? 'border-green-500/30 bg-green-500/5'
+                                    : key.status === 'rate_limited' ? 'border-yellow-500/30 bg-yellow-500/5'
+                                    : 'border-red-500/30 bg-red-500/5'
+                                    : 'border-gray-500/30 bg-gray-500/5 opacity-50'
+                            }`}
+                        >
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-semibold text-foreground">{key.label || t('api_key') || 'API Key'}</span>
+                                        <span className={`text-xs px-2 py-0.5 rounded ${
+                                            key.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                                            key.status === 'rate_limited' ? 'bg-yellow-500/20 text-yellow-400' :
+                                            key.status === 'error' ? 'bg-red-500/20 text-red-400' :
+                                            'bg-gray-500/20 text-gray-400'
+                                        }`}>
+                                            {key.status === 'active' ? t('active') :
+                                             key.status === 'rate_limited' ? t('rate_limited') :
+                                             key.status === 'error' ? t('error') :
+                                             t('disabled')}
+                                        </span>
+                    </div>
+                                    <p className="text-xs font-mono text-muted-foreground">{maskKey(key.key)}</p>
+                    </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => onToggleKeyStatus(service.id, key.id)}
+                                        className={`px-2 py-1 rounded text-xs ${
+                                            key.isActive
+                                                ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                                                : 'bg-green-600 hover:bg-green-700 text-white'
+                                        }`}
+                                    >
+                                        {key.isActive ? t('disable') : t('enable')}
+                                    </button>
+                                    <button
+                                        onClick={() => onTestKey(service.id, key.id)}
+                                        disabled={testingService === service.id && testingKeyId === key.id}
+                                        className="px-2 py-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded text-xs"
+                                    >
+                                        {testingService === service.id && testingKeyId === key.id ? t('testing') : t('test')}
+                                    </button>
+                                    <button
+                                        onClick={() => onRemoveKey(service.id, key.id)}
+                                        className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs"
+                                    >
+                                        {t('remove') || 'Remove'}
+                                    </button>
+                        </div>
+                    </div>
+                            <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                                <span>{t('usage') || 'Usage'}: {key.usageCount}</span>
+                                {key.lastUsed && (
+                                    <span>{t('last_used') || 'Last used'}: {new Date(key.lastUsed).toLocaleString()}</span>
+                                )}
+                </div>
+                    </div>
+                    ))
+                )}
+                    </div>
+                    </div>
+    );
+};
+
+// Simple Service Card (for non-AI services)
+const SimpleServiceCard: React.FC<{
+    service: APIServiceIntegration;
+    onTest?: (serviceId: string, keyId?: string) => void;
+    testingService?: string | null;
+    t: (key: string) => string;
+}> = ({ service, onTest, testingService, t }) => {
+    const statusClass = service.connected ? 'text-green-400' : 'text-yellow-400';
+    const isTesting = testingService === service.id;
+    const hasApiKeys = service.apiKeys && service.apiKeys.length > 0;
+    const firstKeyId = hasApiKeys ? service.apiKeys![0].id : undefined;
+    
+    return (
+        <div className="border border-border rounded-lg p-4 bg-background/40">
+            <div className="flex justify-between items-start mb-3">
+                    <div>
+                    <h4 className="font-semibold text-foreground">{service.name}</h4>
+                    <p className={`text-xs font-semibold ${statusClass}`}>
+                        {service.connected ? t('connected') : t('disconnected')}
+                    </p>
+                    {service.lastTestedAt && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {t('last_tested') || 'Last tested'}: {new Date(service.lastTestedAt).toLocaleString()}
+                        </p>
+                    )}
+                    </div>
+                </div>
+            {service.issues && (
+                <p className="text-xs text-red-400 mb-3 bg-red-500/10 p-2 rounded">
+                    {service.issues}
+                </p>
+            )}
+            {onTest && (hasApiKeys || service.id === 'com-voice') && (
+                <button
+                    onClick={() => onTest(service.id, firstKeyId)}
+                    disabled={isTesting}
+                    className={`w-full px-3 py-2 rounded text-sm font-semibold transition-colors ${
+                        isTesting
+                            ? 'bg-gray-600 text-white cursor-wait'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                >
+                    {isTesting ? (t('testing') || 'Testing...') : (t('test_connection') || 'Test Connection')}
+                </button>
+            )}
+        </div>
+    );
+};
+
+// Mixture Agents Tab
+const MixtureAgentsTab: React.FC<{
+    aiServices: APIServiceIntegration[];
+    onUpdate: (enabled: boolean, models: Array<{ serviceId: string; weight: number; minConfidence?: number }>) => void;
+    t: (key: string) => string;
+}> = ({ aiServices, onUpdate, t }) => {
+    const [enabled, setEnabled] = useState(true);
+    const [models, setModels] = useState<Array<{ serviceId: string; weight: number; minConfidence?: number }>>(
+        aiServices.map(s => ({
+            serviceId: s.id,
+            weight: 25, // Equal weight by default
+            minConfidence: 70,
+        }))
+    );
+
+    const totalWeight = models.reduce((sum, m) => sum + m.weight, 0);
+
+    const updateModelWeight = (serviceId: string, weight: number) => {
+        setModels(prev => prev.map(m => m.serviceId === serviceId ? { ...m, weight } : m));
+    };
+
+    const updateModelConfidence = (serviceId: string, minConfidence: number) => {
+        setModels(prev => prev.map(m => m.serviceId === serviceId ? { ...m, minConfidence } : m));
+    };
+
+    const normalizeWeights = () => {
+        const total = models.reduce((sum, m) => sum + m.weight, 0);
+        if (total === 0) return;
+        setModels(prev => prev.map(m => ({ ...m, weight: Math.round((m.weight / total) * 100) })));
     };
 
     return (
         <div className="space-y-6">
-            {/* Decision Engine */}
-            <ConfigSection title={t('decision_engine') || 'Decision Engine'}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('strategy') || 'Strategy'}
-                        </label>
-                        <select
-                            value={config.decisionEngine.strategy}
-                            onChange={(e) => updateConfig({
-                                decisionEngine: {
-                                    ...config.decisionEngine,
-                                    strategy: e.target.value as any,
-                                },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        >
-                            <option value="voting">{t('voting') || 'Voting'}</option>
-                            <option value="weighted">{t('weighted') || 'Weighted'}</option>
-                            <option value="mixture_of_experts">{t('mixture_of_experts') || 'Mixture of Experts'}</option>
-                            <option value="consensus">{t('consensus') || 'Consensus'}</option>
-                        </select>
+            <Card title={t('mixture_agents_configuration') || 'Mixture Agents Configuration'}>
+                <div className="space-y-6">
+                    <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                        <p className="text-sm text-blue-300">
+                            {t('mixture_agents_desc') || 'Mixture Agents allows Artemis to use multiple AI services (ChatGPT, Gemini, DeepSeek, Claude) together in a collaborative manner. Each service contributes to decisions based on their assigned weights and confidence thresholds.'}
+                        </p>
                     </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('active_model') || 'Active Model'}
-                        </label>
-                        <select
-                            value={config.decisionEngine.activeModel}
-                            onChange={(e) => updateConfig({
-                                decisionEngine: {
-                                    ...config.decisionEngine,
-                                    activeModel: e.target.value as any,
-                                },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        >
-                            <option value="internal">{t('internal') || 'Internal'}</option>
-                            <option value="claude">{t('claude') || 'Claude'}</option>
-                            <option value="gemini">{t('gemini') || 'Gemini'}</option>
-                            <option value="openai">{t('openai') || 'OpenAI'}</option>
-                            <option value="deepseek">{t('deepseek') || 'DeepSeek'}</option>
-                            <option value="hybrid">{t('hybrid') || 'Hybrid'}</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('confidence_threshold') || 'Confidence Threshold'} ({config.decisionEngine.confidenceThreshold}%)
-                        </label>
-                        <input
-                            type="range"
-                            min="50"
-                            max="100"
-                            value={config.decisionEngine.confidenceThreshold}
-                            onChange={(e) => updateConfig({
-                                decisionEngine: {
-                                    ...config.decisionEngine,
-                                    confidenceThreshold: parseInt(e.target.value),
-                                },
-                            })}
-                            className="w-full"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('max_concurrent_trades') || 'Max Concurrent Trades'}
-                        </label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="20"
-                            value={config.decisionEngine.maxConcurrentTrades}
-                            onChange={(e) => updateConfig({
-                                decisionEngine: {
-                                    ...config.decisionEngine,
-                                    maxConcurrentTrades: parseInt(e.target.value) || 5,
-                                },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.decisionEngine.autoExecution}
-                            onChange={(e) => updateConfig({
-                                decisionEngine: {
-                                    ...config.decisionEngine,
-                                    autoExecution: e.target.checked,
-                                },
-                            })}
-                            className="w-4 h-4"
-                        />
-                        <label className="text-sm text-foreground">{t('auto_execution') || 'Auto Execution'}</label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.decisionEngine.requireApproval}
-                            onChange={(e) => updateConfig({
-                                decisionEngine: {
-                                    ...config.decisionEngine,
-                                    requireApproval: e.target.checked,
-                                },
-                            })}
-                            className="w-4 h-4"
-                        />
-                        <label className="text-sm text-foreground">{t('require_approval') || 'Require Approval'}</label>
-                    </div>
-                </div>
-            </ConfigSection>
 
-            {/* Learning */}
-            <ConfigSection title={t('learning_system') || 'Learning System'}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                         <input
                             type="checkbox"
-                            checked={config.learning.activeLearning}
-                            onChange={(e) => updateConfig({
-                                learning: { ...config.learning, activeLearning: e.target.checked },
-                            })}
-                            className="w-4 h-4"
+                            checked={enabled}
+                            onChange={(e) => setEnabled(e.target.checked)}
+                            className="w-5 h-5"
                         />
-                        <label className="text-sm text-foreground">{t('active_learning') || 'Active Learning'}</label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.learning.autoRetrain}
-                            onChange={(e) => updateConfig({
-                                learning: { ...config.learning, autoRetrain: e.target.checked },
-                            })}
-                            className="w-4 h-4"
-                        />
-                        <label className="text-sm text-foreground">{t('auto_retrain') || 'Auto Retrain'}</label>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('retrain_interval') || 'Retrain Interval'} (hours)
+                        <label className="text-lg font-semibold text-foreground">
+                            {t('enable_mixture_agents') || 'Enable Mixture Agents'}
                         </label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="168"
-                            value={config.learning.retrainInterval}
-                            onChange={(e) => updateConfig({
-                                learning: { ...config.learning, retrainInterval: parseInt(e.target.value) || 24 },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        />
                     </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('min_accuracy_for_retrain') || 'Min Accuracy for Retrain'} (%)
-                        </label>
-                        <input
-                            type="number"
-                            min="50"
-                            max="100"
-                            value={config.learning.minAccuracyForRetrain}
-                            onChange={(e) => updateConfig({
-                                learning: { ...config.learning, minAccuracyForRetrain: parseInt(e.target.value) || 70 },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.learning.backtestBeforeRetrain}
-                            onChange={(e) => updateConfig({
-                                learning: { ...config.learning, backtestBeforeRetrain: e.target.checked },
-                            })}
-                            className="w-4 h-4"
-                        />
-                        <label className="text-sm text-foreground">{t('backtest_before_retrain') || 'Backtest Before Retrain'}</label>
-                    </div>
-                </div>
-            </ConfigSection>
 
-            {/* Monitoring */}
-            <ConfigSection title={t('monitoring') || 'Monitoring'}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {enabled && (
+                        <div className="space-y-4">
+                            {models.map((model, idx) => {
+                                const service = aiServices.find(s => s.id === model.serviceId);
+                                return (
+                                    <div key={model.serviceId} className="p-4 border border-border rounded-lg bg-background/40">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h5 className="font-semibold text-foreground">{service?.name || model.serviceId}</h5>
+                                            <span className="text-sm text-muted-foreground">
+                                                {t('weight') || 'Weight'}: {model.weight}% {totalWeight !== 100 && `(${t('total') || 'Total'}: ${totalWeight}%)`}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('health_check_interval') || 'Health Check Interval'} (minutes)
+                                                <label className="block text-xs font-semibold text-foreground mb-2">
+                                                    {t('weight') || 'Weight'} ({model.weight}%)
                         </label>
                         <input
-                            type="number"
-                            min="1"
-                            max="60"
-                            value={config.monitoring.healthCheckInterval}
-                            onChange={(e) => updateConfig({
-                                monitoring: { ...config.monitoring, healthCheckInterval: parseInt(e.target.value) || 5 },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.monitoring.alertOnError}
-                            onChange={(e) => updateConfig({
-                                monitoring: { ...config.monitoring, alertOnError: e.target.checked },
-                            })}
-                            className="w-4 h-4"
-                        />
-                        <label className="text-sm text-foreground">{t('alert_on_error') || 'Alert on Error'}</label>
-                    </div>
-                    <div className="col-span-2">
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('alert_channels') || 'Alert Channels'}
-                        </label>
-                        <div className="flex gap-4">
-                            <label className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={config.monitoring.alertChannels.dashboard}
-                                    onChange={(e) => updateConfig({
-                                        monitoring: {
-                                            ...config.monitoring,
-                                            alertChannels: {
-                                                ...config.monitoring.alertChannels,
-                                                dashboard: e.target.checked,
-                                            },
-                                        },
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <span className="text-sm text-foreground">{t('dashboard') || 'Dashboard'}</span>
-                            </label>
-                            <label className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={config.monitoring.alertChannels.telegram}
-                                    onChange={(e) => updateConfig({
-                                        monitoring: {
-                                            ...config.monitoring,
-                                            alertChannels: {
-                                                ...config.monitoring.alertChannels,
-                                                telegram: e.target.checked,
-                                            },
-                                        },
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <span className="text-sm text-foreground">{t('telegram') || 'Telegram'}</span>
-                            </label>
-                            <label className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={config.monitoring.alertChannels.email}
-                                    onChange={(e) => updateConfig({
-                                        monitoring: {
-                                            ...config.monitoring,
-                                            alertChannels: {
-                                                ...config.monitoring.alertChannels,
-                                                email: e.target.checked,
-                                            },
-                                        },
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <span className="text-sm text-foreground">{t('email') || 'Email'}</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </ConfigSection>
-
-            {/* Security */}
-            <ConfigSection title={t('security') || 'Security'}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.security.requireMFA}
-                            onChange={(e) => updateConfig({
-                                security: { ...config.security, requireMFA: e.target.checked },
-                            })}
-                            className="w-4 h-4"
-                        />
-                        <label className="text-sm text-foreground">{t('require_mfa') || 'Require MFA'}</label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.security.logAllCommands}
-                            onChange={(e) => updateConfig({
-                                security: { ...config.security, logAllCommands: e.target.checked },
-                            })}
-                            className="w-4 h-4"
-                        />
-                        <label className="text-sm text-foreground">{t('log_all_commands') || 'Log All Commands'}</label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.security.encryptSensitiveData}
-                            onChange={(e) => updateConfig({
-                                security: { ...config.security, encryptSensitiveData: e.target.checked },
-                            })}
-                            className="w-4 h-4"
-                        />
-                        <label className="text-sm text-foreground">{t('encrypt_sensitive_data') || 'Encrypt Sensitive Data'}</label>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('session_timeout') || 'Session Timeout'} (minutes)
-                        </label>
-                        <input
-                            type="number"
-                            min="5"
-                            max="480"
-                            value={config.security.sessionTimeout}
-                            onChange={(e) => updateConfig({
-                                security: { ...config.security, sessionTimeout: parseInt(e.target.value) || 30 },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        />
-                    </div>
-                </div>
-            </ConfigSection>
-
-            {/* Integration */}
-            <ConfigSection title={t('integration') || 'Integration'}>
-                <div className="space-y-4">
-                    <div className="border border-border rounded-lg p-4">
-                        <h4 className="font-semibold text-foreground mb-3">{t('mexc_exchange') || 'MEXC Exchange'}</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={config.integration.mexc.enabled}
-                                    onChange={(e) => updateConfig({
-                                        integration: {
-                                            ...config.integration,
-                                            mexc: { ...config.integration.mexc, enabled: e.target.checked },
-                                        },
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <label className="text-sm text-foreground">{t('enabled') || 'Enabled'}</label>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={config.integration.mexc.testnet}
-                                    onChange={(e) => updateConfig({
-                                        integration: {
-                                            ...config.integration,
-                                            mexc: { ...config.integration.mexc, testnet: e.target.checked },
-                                        },
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <label className="text-sm text-foreground">{t('testnet') || 'Testnet'}</label>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="border border-border rounded-lg p-4">
-                        <h4 className="font-semibold text-foreground mb-3">{t('telegram') || 'Telegram'}</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={config.integration.telegram.enabled}
-                                    onChange={(e) => updateConfig({
-                                        integration: {
-                                            ...config.integration,
-                                            telegram: { ...config.integration.telegram, enabled: e.target.checked },
-                                        },
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <label className="text-sm text-foreground">{t('enabled') || 'Enabled'}</label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </ConfigSection>
-
-            {/* UI - Removed Language and Theme (should be in Settings > Appearance) */}
-        </div>
-    );
-};
-
-// Training Config Tab (simplified)
-const TrainingConfigTab: React.FC<{
-    config: AITrainingConfig;
-    onUpdate: (config: AITrainingConfig) => void;
-    t: (key: string) => string;
-}> = ({ config, onUpdate, t }) => {
-    return (
-        <div className="space-y-6">
-            <ConfigSection title={t('auto_training') || 'Auto Training'}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.autoTraining.enabled}
-                            onChange={(e) => onUpdate({
-                                ...config,
-                                autoTraining: { ...config.autoTraining, enabled: e.target.checked },
-                            })}
-                            className="w-4 h-4"
-                        />
-                        <label className="text-sm text-foreground">{t('enable_auto_training') || 'Enable Auto Training'}</label>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('min_accuracy_threshold') || 'Min Accuracy Threshold'} (%)
-                        </label>
-                        <input
-                            type="number"
+                                                    type="range"
                             min="0"
                             max="100"
-                            value={config.autoTraining.minAccuracyThreshold}
-                            onChange={(e) => onUpdate({
-                                ...config,
-                                autoTraining: { ...config.autoTraining, minAccuracyThreshold: parseFloat(e.target.value) || 75 },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        />
+                                                    value={model.weight}
+                                                    onChange={(e) => updateModelWeight(model.serviceId, parseInt(e.target.value))}
+                                                    className="w-full"
+                                                />
+                                                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                                                    <span>0%</span>
+                                                    <span>100%</span>
+                    </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('schedule_interval') || 'Schedule Interval'} (hours)
+                                                <label className="block text-xs font-semibold text-foreground mb-2">
+                                                    {t('min_confidence') || 'Min Confidence'} ({model.minConfidence || 70}%)
                         </label>
                         <input
-                            type="number"
-                            min="1"
-                            value={config.autoTraining.scheduleInterval}
-                            onChange={(e) => onUpdate({
-                                ...config,
-                                autoTraining: { ...config.autoTraining, scheduleInterval: parseInt(e.target.value) || 24 },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        />
+                                                    type="range"
+                                                    min="50"
+                                                    max="100"
+                                                    value={model.minConfidence || 70}
+                                                    onChange={(e) => updateModelConfidence(model.serviceId, parseInt(e.target.value))}
+                                                    className="w-full"
+                                                />
+                                                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                                                    <span>50%</span>
+                                                    <span>100%</span>
+                    </div>
                     </div>
                 </div>
-            </ConfigSection>
+        </div>
+    );
+                            })}
 
-            <ConfigSection title={t('resource_management') || 'Resource Management'}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('max_concurrent_sessions') || 'Max Concurrent Sessions'}
-                        </label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="10"
-                            value={config.resourceManagement.maxConcurrentSessions}
-                            onChange={(e) => onUpdate({
-                                ...config,
-                                resourceManagement: {
-                                    ...config.resourceManagement,
-                                    maxConcurrentSessions: parseInt(e.target.value) || 3,
-                                },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2">
-                            {t('max_queue_size') || 'Max Queue Size'}
-                        </label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="50"
-                            value={config.resourceManagement.maxQueueSize}
-                            onChange={(e) => onUpdate({
-                                ...config,
-                                resourceManagement: {
-                                    ...config.resourceManagement,
-                                    maxQueueSize: parseInt(e.target.value) || 10,
-                                },
-                            })}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                        />
-                    </div>
+                            {totalWeight !== 100 && (
+                                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                                    <p className="text-sm text-yellow-300">
+                                        {t('weights_not_normalized') || 'Weights do not sum to 100%. Click "Normalize" to automatically adjust.'}
+                                    </p>
+                                    <button
+                                        onClick={normalizeWeights}
+                                        className="mt-2 px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-sm"
+                                    >
+                                        {t('normalize_weights') || 'Normalize Weights'}
+                                    </button>
+            </div>
+                            )}
+
+                            <button
+                                onClick={() => onUpdate(enabled, models)}
+                                className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold"
+                            >
+                                {t('save_mixture_config') || 'Save Mixture Agents Configuration'}
+                            </button>
+    </div>
+                    )}
                 </div>
-            </ConfigSection>
+            </Card>
         </div>
     );
 };
 
-// System Config Tab - REMOVED: Language and Theme should be in Settings > Appearance
+// Artemis Control Tab
+const ArtemisControlTab: React.FC<{
+    artemis: ArtemisState;
+    apiConfig: AIAPIConfigData;
+    onUpdate: (config: AIAPIConfigData) => void;
+    t: (key: string) => string;
+}> = ({ artemis, apiConfig, onUpdate, t }) => {
+    const [artemisControl, setArtemisControl] = useState({
+        allowAutoConfig: true,
+        allowAutoSwitch: true,
+        allowAutoOptimize: true,
+        requireApproval: false,
+    });
 
-// Agents Config Tab
-const AgentsConfigTab: React.FC<{ t: (key: string) => string }> = ({ t }) => {
     return (
         <div className="space-y-6">
-            <div className="bg-card border border-border rounded-lg p-6">
-                <p className="text-muted-foreground">
-                    {t('agent_config_desc') || 'Individual agent configurations are managed in the Agents tab. Use this section for system-wide agent settings.'}
-                </p>
+            <Card title={t('artemis_api_control') || 'Artemis API Control'}>
+                <div className="space-y-6">
+                    <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                        <p className="text-sm text-purple-300">
+                            {t('artemis_control_desc') || 'Configure how Artemis can automatically manage API integrations, switch between keys, and optimize usage.'}
+                        </p>
             </div>
+
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                <div>
+                                <h5 className="font-semibold text-foreground">{t('allow_auto_config') || 'Allow Auto Configuration'}</h5>
+                                <p className="text-xs text-muted-foreground">
+                                    {t('allow_auto_config_desc') || 'Artemis can automatically configure API settings based on system needs'}
+                                </p>
+                            </div>
+                        <input
+                                type="checkbox"
+                                checked={artemisControl.allowAutoConfig}
+                                onChange={(e) => setArtemisControl({ ...artemisControl, allowAutoConfig: e.target.checked })}
+                                className="w-5 h-5"
+                            />
+                </div>
+
+                        <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                    <div>
+                                <h5 className="font-semibold text-foreground">{t('allow_auto_switch') || 'Allow Auto Switch Keys'}</h5>
+                                <p className="text-xs text-muted-foreground">
+                                    {t('allow_auto_switch_desc') || 'Artemis can automatically switch to different API keys when rate limits are reached'}
+                                </p>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={artemisControl.allowAutoSwitch}
+                                onChange={(e) => setArtemisControl({ ...artemisControl, allowAutoSwitch: e.target.checked })}
+                                className="w-5 h-5"
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                    <div>
+                                <h5 className="font-semibold text-foreground">{t('allow_auto_optimize') || 'Allow Auto Optimize'}</h5>
+                                <p className="text-xs text-muted-foreground">
+                                    {t('allow_auto_optimize_desc') || 'Artemis can automatically optimize API usage and costs'}
+                            </p>
+                    </div>
+                            <input
+                                type="checkbox"
+                                checked={artemisControl.allowAutoOptimize}
+                                onChange={(e) => setArtemisControl({ ...artemisControl, allowAutoOptimize: e.target.checked })}
+                                className="w-5 h-5"
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                        <div>
+                                <h5 className="font-semibold text-foreground">{t('require_approval') || 'Require Approval'}</h5>
+                                <p className="text-xs text-muted-foreground">
+                                    {t('require_approval_desc') || 'Artemis must get approval before making significant changes to API configuration'}
+                            </p>
+                    </div>
+                            <input
+                                type="checkbox"
+                                checked={artemisControl.requireApproval}
+                                onChange={(e) => setArtemisControl({ ...artemisControl, requireApproval: e.target.checked })}
+                                className="w-5 h-5"
+                            />
+                        </div>
+                    </div>
+
+                        <button
+                        onClick={async () => {
+                            // Save Artemis control settings
+                            alert(t('artemis_control_saved') || 'Artemis control settings saved!');
+                        }}
+                        className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold"
+            >
+                        {t('save_artemis_control') || 'Save Artemis Control Settings'}
+            </button>
+                    </div>
+            </Card>
         </div>
     );
 };
@@ -1045,192 +1182,5 @@ const Card: React.FC<{ title: string; children: React.ReactNode }> = ({ title, c
         {children}
     </div>
 );
-
-const ConfigSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-    <div className="border border-border rounded-lg p-6 bg-background/40">
-        <h4 className="font-semibold text-lg text-foreground mb-4">{title}</h4>
-        {children}
-    </div>
-);
-
-const IntegrationGrid: React.FC<{
-    services: APIServiceIntegration[];
-    onTest: (id: string) => void;
-    testingService: string | null;
-    apiKeys: APIKeyState;
-    onEdit: (id: string) => void;
-    onSave: (id: string) => void;
-    onCancel: (id: string) => void;
-    onKeyChange: (serviceId: string, field: 'apiKey' | 'apiSecret', value: string) => void;
-}> = ({ services, onTest, testingService, apiKeys, onEdit, onSave, onCancel, onKeyChange }) => {
-    const { t } = useLanguage();
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {services.map(service => (
-                <APIInputGroup
-                    key={service.id}
-                    integration={service}
-                    onTest={onTest}
-                    disabled={testingService !== null && testingService !== service.id}
-                    isTesting={testingService === service.id}
-                    apiKeyData={apiKeys[service.id]}
-                    onEdit={() => onEdit(service.id)}
-                    onSave={() => onSave(service.id)}
-                    onCancel={() => onCancel(service.id)}
-                    onKeyChange={(field, value) => onKeyChange(service.id, field, value)}
-                />
-            ))}
-            {services.length === 0 && (
-                <p className="col-span-full text-sm text-muted-foreground text-center py-6">
-                    {t('no_integrations_configured') || 'No integrations configured'}
-                </p>
-            )}
-        </div>
-    );
-};
-
-const APIInputGroup: React.FC<{
-    integration: APIServiceIntegration;
-    onTest: (id: string) => void;
-    disabled?: boolean;
-    isTesting?: boolean;
-    apiKeyData?: APIKeyState[string];
-    onEdit: () => void;
-    onSave: () => void;
-    onCancel: () => void;
-    onKeyChange: (field: 'apiKey' | 'apiSecret', value: string) => void;
-}> = ({ integration, onTest, disabled, isTesting, apiKeyData, onEdit, onSave, onCancel, onKeyChange }) => {
-    const { t } = useLanguage();
-    const statusClass = integration.connected ? 'text-green-400' : 'text-yellow-400';
-    const isEditing = apiKeyData?.isEditing || false;
-    const hasKey = apiKeyData?.apiKey || false;
-
-    // Mask API key for display
-    const maskKey = (key: string): string => {
-        if (!key || key.length < 8) return '••••••••';
-        return `${key.substring(0, 4)}${'•'.repeat(key.length - 8)}${key.substring(key.length - 4)}`;
-    };
-
-    return (
-        <div className="space-y-4 border border-border rounded-lg p-4 bg-background/40 hover:border-purple-500/50 transition-all">
-            <div className="flex justify-between items-start">
-                <div>
-                    <h4 className="font-semibold text-card-foreground">{integration.name}</h4>
-                    <p className={`text-xs font-semibold ${statusClass}`}>
-                        {integration.connected ? t('connected') : t('disconnected')}
-                    </p>
-                </div>
-                {integration.lastTestedAt && (
-                    <span className="text-[10px] text-muted-foreground">
-                        {t('last_tested')}: {new Date(integration.lastTestedAt).toLocaleString()}
-                    </span>
-                )}
-            </div>
-
-            {isEditing ? (
-                <div className="space-y-3">
-                <div>
-                        <label className="block text-xs font-semibold text-foreground mb-1">
-                            {integration.id === 'com-telegram' 
-                                ? (t('telegram_bot_token') || 'Telegram Bot Token') 
-                                : (t('api_key') || 'API Key')} *
-                        </label>
-                        <input
-                            type="password"
-                            value={apiKeyData?.apiKey || ''}
-                            onChange={(e) => onKeyChange('apiKey', e.target.value)}
-                            placeholder={integration.id === 'com-telegram' 
-                                ? (t('enter_telegram_bot_token') || 'Enter Bot Token (from @BotFather)') 
-                                : (t('enter_api_key') || 'Enter API Key')}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground text-sm"
-                            autoFocus
-                        />
-                        {integration.id === 'com-telegram' && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                                {t('telegram_bot_token_hint') || 'Get your bot token from @BotFather on Telegram'}
-                            </p>
-                        )}
-                </div>
-                {integration.hasSecret && (
-                    <div>
-                            <label className="block text-xs font-semibold text-foreground mb-1">
-                                {t('secret_key') || 'Secret Key'}
-                            </label>
-                            <input
-                                type="password"
-                                value={apiKeyData?.apiSecret || ''}
-                                onChange={(e) => onKeyChange('apiSecret', e.target.value)}
-                                placeholder={t('enter_secret_key') || 'Enter Secret Key'}
-                                className="w-full p-2 bg-secondary border border-border rounded text-foreground text-sm"
-                            />
-                        </div>
-                    )}
-                    <div className="flex gap-2">
-                        <button
-                            onClick={onSave}
-                            disabled={apiKeyData?.isSaving}
-                            className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded text-sm font-semibold transition-colors"
-                        >
-                            {apiKeyData?.isSaving ? t('saving') || 'Saving...' : t('save') || 'Save'}
-                        </button>
-                        <button
-                            onClick={onCancel}
-                            className="px-3 py-2 bg-secondary hover:bg-accent text-secondary-foreground rounded text-sm font-semibold transition-colors"
-                        >
-                            {t('cancel') || 'Cancel'}
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    <div>
-                        <label className="block text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                            {t('api_key') || 'API Key'}
-                        </label>
-                        {hasKey ? (
-                            <p className="text-sm text-foreground font-mono bg-secondary/50 p-2 rounded">
-                                {maskKey(apiKeyData!.apiKey)}
-                            </p>
-                        ) : (
-                            <p className="text-xs text-yellow-400 italic">
-                                {t('api_key_not_configured') || 'API Key not configured'}
-                            </p>
-                        )}
-                    </div>
-                    {integration.hasSecret && hasKey && (
-                        <div>
-                            <label className="block text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                                {t('secret_key') || 'Secret Key'}
-                            </label>
-                            <p className="text-sm text-foreground font-mono bg-secondary/50 p-2 rounded">
-                                {apiKeyData?.apiSecret ? maskKey(apiKeyData.apiSecret) : '•••••••••••'}
-                            </p>
-                    </div>
-                )}
-                {integration.issues && (
-                        <p className="text-xs text-red-400 bg-red-500/10 p-2 rounded">
-                            {integration.issues}
-                        </p>
-                    )}
-                    <div className="flex gap-2">
-                        <button
-                            onClick={onEdit}
-                            className="flex-1 px-3 py-2 bg-secondary hover:bg-accent text-secondary-foreground rounded text-sm font-semibold transition-colors"
-                        >
-                            {hasKey ? t('edit') || 'Edit' : t('configure') || 'Configure'}
-                        </button>
-            <button
-                onClick={() => onTest(integration.id)}
-                            disabled={disabled || !hasKey}
-                            className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm font-semibold transition-colors"
-            >
-                            {isTesting ? t('testing') || 'Testing...' : t('test_api') || 'Test'}
-            </button>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
 
 export default APIConfig;

@@ -110,7 +110,12 @@ const TimingAgentControl: React.FC<Props> = ({ agent, onClose, onUpdate }) => {
 
                 <div className="border-b border-gray-800 overflow-x-auto">
                     <nav className="flex space-x-6 px-6 min-w-max">
-                        {tabs.map(tab => (
+                        {tabs.map(tab => {
+                            const translation = t(`timing_tab_${tab}`);
+                            const label = (translation && translation !== `timing_tab_${tab}`) 
+                                ? translation 
+                                : tab.replace(/_/g, ' ');
+                            return (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -120,15 +125,16 @@ const TimingAgentControl: React.FC<Props> = ({ agent, onClose, onUpdate }) => {
                                         : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
                                 }`}
                             >
-                                {t(`timing_tab_${tab}`) || tab}
+                                    {label}
                             </button>
-                        ))}
+                            );
+                        })}
                     </nav>
                 </div>
 
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(92vh - 300px)' }}>
                     {activeTab === 'overview' && analysis && (
-                        <TimingOverview analysis={analysis} metrics={metrics} t={t} />
+                        <TimingOverview agent={agent} analysis={analysis} metrics={metrics} t={t} />
                     )}
                     {activeTab === 'signal_stream' && (
                         <TimingSignalStream signals={signals} analysis={analysis} t={t} />
@@ -231,10 +237,11 @@ const TimingHeader: React.FC<{
 );
 
 const TimingOverview: React.FC<{
+    agent: AIAgent;
     analysis: TimingAnalysisResult;
     metrics: TimingAnalysisMetrics | null;
     t: (key: string) => string;
-}> = ({ analysis, metrics, t }) => (
+}> = ({ agent, analysis, metrics, t }) => (
     <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <MetricCard label={t('timing_entry_accuracy') || 'Entry accuracy'} value={`${analysis.performance.entryAccuracy.toFixed(1)}%`} />
@@ -295,6 +302,9 @@ const TimingOverview: React.FC<{
                 </div>
             </div>
         )}
+
+        {/* Agent Capabilities */}
+        <CapabilitiesSection agent={agent} />
     </div>
 );
 
@@ -810,6 +820,62 @@ const MetricCard: React.FC<{ label: string; value: string | number }> = ({ label
         <p className="text-lg font-semibold text-white">{value}</p>
     </div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const TIMING_CAPABILITY_KEYS = [
+    'timing_capability_entry_exit',
+    'timing_capability_multi_timeframe',
+    'timing_capability_indicators',
+    'timing_capability_confirmation',
+    'timing_capability_countdowns',
+    'timing_capability_performance',
+    'timing_capability_alerts',
+    'timing_capability_integration',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isTimingAgent = agent.id === '15' || agent.role === 'Timing';
+    const capabilityItems = isTimingAgent
+        ? TIMING_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('timing_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isTimingAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-sky-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-sky-500/20 text-sky-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default TimingAgentControl;
 

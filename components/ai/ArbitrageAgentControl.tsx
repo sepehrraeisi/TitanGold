@@ -116,24 +116,30 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
                 <StatusBar agent={agent} metrics={metrics} scan={scan} onCommand={handleControlCommand} t={t} />
 
                 <nav className="flex flex-wrap gap-4 px-6 border-b border-gray-800 bg-[#0B1017]">
-                    {TAB_ITEMS.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                                activeTab === tab.id
-                                    ? 'border-emerald-500 text-emerald-400'
-                                    : 'border-transparent text-gray-400 hover:text-white hover:border-gray-700'
-                            }`}
-                        >
-                            {t(tab.labelKey)}
-                        </button>
-                    ))}
+                    {TAB_ITEMS.map(tab => {
+                        const translation = t(tab.labelKey);
+                        const label = (translation && translation !== tab.labelKey) 
+                            ? translation 
+                            : tab.labelKey.replace('tab_', '').replace(/_/g, ' ');
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === tab.id
+                                        ? 'border-emerald-500 text-emerald-400'
+                                        : 'border-transparent text-gray-400 hover:text-white hover:border-gray-700'
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
                 </nav>
 
-                <div className="p-6 bg-[#0F151D] overflow-y-auto h-full">
+                <div className="p-6 bg-[#0F151D] overflow-y-auto" style={{ maxHeight: 'calc(92vh - 200px)' }}>
                     {activeTab === 'overview' && (
-                        <OverviewTab scan={scan} metrics={metrics} opportunities={opportunities.slice(0, 4)} t={t} />
+                        <OverviewTab agent={agent} scan={scan} metrics={metrics} opportunities={opportunities.slice(0, 4)} t={t} />
                     )}
 
                     {activeTab === 'opportunities' && (
@@ -254,11 +260,12 @@ const StatusBar: React.FC<{
 );
 
 const OverviewTab: React.FC<{
+    agent: AIAgent;
     scan: ArbitrageScanResult | null;
     metrics: ArbitrageMetrics | null;
     opportunities: ArbitrageOpportunity[];
     t: (key: string) => string;
-}> = ({ scan, metrics, opportunities, t }) => (
+}> = ({ agent, scan, metrics, opportunities, t }) => (
     <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <MetricCard label={t('last_scan_at') || 'Last scan'} value={scan ? new Date(scan.timestamp).toLocaleString() : '--'} />
@@ -288,6 +295,9 @@ const OverviewTab: React.FC<{
                 </div>
             </SectionCard>
         </div>
+
+        {/* Agent Capabilities */}
+        <CapabilitiesSection agent={agent} />
     </div>
 );
 
@@ -1046,6 +1056,62 @@ const updateStrategy = (
         ...prev,
         strategies: prev.strategies.map(s => (s.type === strategy.type ? { ...s, [field]: nextValue } : s)),
     }));
+};
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const ARBITRAGE_CAPABILITY_KEYS = [
+    'arbitrage_capability_detection',
+    'arbitrage_capability_net_profit',
+    'arbitrage_capability_execution',
+    'arbitrage_capability_risk_alerts',
+    'arbitrage_capability_history',
+    'arbitrage_capability_customization',
+    'arbitrage_capability_collaboration',
+    'arbitrage_capability_notifications',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isArbitrageAgent = agent.id === '6' || agent.role === 'Arbitrage';
+    const capabilityItems = isArbitrageAgent
+        ? ARBITRAGE_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('arbitrage_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isArbitrageAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-emerald-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 };
 
 export default ArbitrageAgentControl;

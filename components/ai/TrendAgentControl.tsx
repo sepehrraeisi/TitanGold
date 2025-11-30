@@ -130,7 +130,12 @@ const TrendAgentControl: React.FC<TrendAgentControlProps> = ({ agent, onClose, o
                 <StatusBar agent={agent} analysis={analysis} metrics={metrics} onCommand={handleControlCommand} t={t} />
 
                 <nav className="flex flex-wrap gap-4 px-6 border-b border-gray-800 bg-[#0B1017]">
-                    {TAB_ITEMS.map(tab => (
+                    {TAB_ITEMS.map(tab => {
+                        const translation = t(tab.labelKey);
+                        const label = (translation && translation !== tab.labelKey) 
+                            ? translation 
+                            : tab.labelKey.replace('tab_', '').replace(/_/g, ' ');
+                        return (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
@@ -140,14 +145,15 @@ const TrendAgentControl: React.FC<TrendAgentControlProps> = ({ agent, onClose, o
                                     : 'border-transparent text-gray-400 hover:text-white hover:border-gray-700'
                             }`}
                         >
-                            {t(tab.labelKey)}
+                                {label}
                         </button>
-                    ))}
+                        );
+                    })}
                 </nav>
 
-                <div className="p-6 bg-[#0F151D] overflow-y-auto h-full">
+                <div className="p-6 bg-[#0F151D] overflow-y-auto" style={{ maxHeight: 'calc(92vh - 200px)' }}>
                     {activeTab === 'overview' && analysis && metrics && (
-                        <OverviewTab analysis={analysis} metrics={metrics} t={t} />
+                        <OverviewTab agent={agent} analysis={analysis} metrics={metrics} t={t} />
                     )}
                     {activeTab === 'trend_map' && <TrendMapTab trendMap={trendMap} t={t} />}
                     {activeTab === 'history' && <HistoryTab history={history} t={t} />}
@@ -262,10 +268,11 @@ const StatusBar: React.FC<{
 );
 
 const OverviewTab: React.FC<{
+    agent: AIAgent;
     analysis: TrendDetectionResult;
     metrics: TrendDetectionMetrics;
     t: (key: string) => string;
-}> = ({ analysis, metrics, t }) => {
+}> = ({ agent, analysis, metrics, t }) => {
     const summary = analysis.summary || { bullish: 0, bearish: 0, sideways: 0, strong: 0 };
     const statCards = [
         {
@@ -321,6 +328,9 @@ const OverviewTab: React.FC<{
                     </div>
                 </SectionCard>
             )}
+
+            {/* Agent Capabilities */}
+            <CapabilitiesSection agent={agent} />
         </div>
     );
 };
@@ -754,5 +764,61 @@ const EmptyState: React.FC<{ message: string }> = ({ message }) => (
         <p>{message}</p>
     </div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const TREND_CAPABILITY_KEYS = [
+    'trend_capability_detection',
+    'trend_capability_heatmap',
+    'trend_capability_alerts',
+    'trend_capability_multiframe',
+    'trend_capability_validation',
+    'trend_capability_customization',
+    'trend_capability_integration',
+    'trend_capability_dashboard',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isTrendAgent = agent.id === '9' || agent.role === 'Trend Detection';
+    const capabilityItems = isTrendAgent
+        ? TREND_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('trend_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isTrendAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-blue-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default TrendAgentControl;

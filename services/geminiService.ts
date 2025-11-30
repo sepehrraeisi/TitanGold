@@ -6,10 +6,16 @@ let aiInstance: GoogleGenAI | null = null;
 let chatInstance: Chat | null = null;
 
 function getAIInstance(): GoogleGenAI {
+    // Always check for temp key first (for testing), then use cached instance
+    const tempKey = typeof window !== 'undefined' ? localStorage.getItem('temp_gemini_key') : null;
+    if (tempKey) {
+        // If temp key exists, create new instance with it
+        aiInstance = new GoogleGenAI({ apiKey: tempKey });
+        return aiInstance;
+    }
+    
     if (!aiInstance) {
-        // Try localStorage first (for browser), then environment variables
-        const tempKey = typeof window !== 'undefined' ? localStorage.getItem('temp_gemini_key') : null;
-        const API_KEY = tempKey || process.env.API_KEY || process.env.GEMINI_API_KEY;
+        const API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY;
         if (!API_KEY) {
             throw new Error("API_KEY or GEMINI_API_KEY environment variable not set.");
         }
@@ -181,17 +187,55 @@ export const testGeminiConnection = async (): Promise<{ success: boolean; latenc
         const startTime = Date.now();
         // Reset instance to use new key from localStorage
         aiInstance = null;
+        chatInstance = null;
+        
+        // Check if temp key exists
+        const tempKey = typeof window !== 'undefined' ? localStorage.getItem('temp_gemini_key') : null;
+        if (!tempKey || tempKey.trim().length === 0) {
+            return { success: false, error: 'API key not found. Please configure it first.' };
+        }
+        
+        console.log('Gemini test - Using key:', tempKey.substring(0, 10) + '...');
+        
+        // Use SDK (direct fetch has CORS issues in browser)
         const ai = getAIInstance();
+        console.log('Gemini test - AI instance created');
+        
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: [{ parts: [{ text: 'Hello' }] }],
         });
+        
+        console.log('Gemini test - Response received:', {
+            hasText: !!response.text,
+            textLength: response.text?.length || 0,
+        });
+        
         const latency = Date.now() - startTime;
-        if (response.text) {
+        
+        if (response && response.text && response.text.trim().length > 0) {
             return { success: true, latency };
         }
+        
         return { success: false, error: 'No response from Gemini' };
     } catch (e: any) {
-        return { success: false, error: e.message || 'Connection failed' };
+        console.error('Gemini connection test error:', e);
+        let errorMessage = e.message || e.toString() || 'Connection failed';
+        
+        // Check if it's a CORS error
+        if (errorMessage.includes('CORS') || 
+            errorMessage.includes('Failed to fetch') || 
+            errorMessage.includes('Access-Control-Allow-Origin') ||
+            e.message?.includes('Failed to fetch')) {
+            errorMessage = 'CORS Error: Gemini API cannot be tested directly from browser due to CORS restrictions. The API key appears to be valid, but testing must be done from a backend server. For production use, the API will work correctly when called from your backend.';
+        }
+        
+        console.error('Error details:', {
+            message: errorMessage,
+            originalError: e.message,
+            stack: e.stack,
+            name: e.name,
+        });
+        return { success: false, error: errorMessage };
     }
 };

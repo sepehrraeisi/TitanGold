@@ -186,7 +186,12 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
                             { id: 'fair_value', key: 'tab_fair_value' },
                             { id: 'settings', key: 'tab_settings' },
                             { id: 'integration', key: 'tab_integration' },
-                        ] as const).map(tab => (
+                        ] as const).map(tab => {
+                            const translation = t(tab.key);
+                            const label = (translation && translation !== tab.key) 
+                                ? translation 
+                                : tab.key.replace('tab_', '').replace(/_/g, ' ');
+                            return (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as FundamentalTab)}
@@ -196,15 +201,16 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
                                         : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
                                 }`}
                             >
-                                {t(tab.key) || tab.id.replace(/_/g, ' ')}
+                                    {label}
                             </button>
-                        ))}
+                            );
+                        })}
                     </nav>
                 </div>
 
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(92vh - 300px)' }}>
                     {activeTab === 'overview' && analysis && metrics && (
-                        <FundamentalOverview analysis={analysis} metrics={metrics} signals={signals} t={t} />
+                        <FundamentalOverview agent={agent} analysis={analysis} metrics={metrics} signals={signals} t={t} />
                     )}
                     {activeTab === 'company_data' && <CompanyDataTab data={companyData} t={t} />}
                     {activeTab === 'financial_ratios' && <FinancialRatiosTab signals={signals} t={t} />}
@@ -226,7 +232,7 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
     );
 };
 
-const FundamentalOverview: React.FC<{ analysis: FundamentalAnalysisResult; metrics: FundamentalAnalysisMetrics; signals: FundamentalSignal[]; t: (key: string) => string }> = ({ analysis, metrics, signals, t }) => {
+const FundamentalOverview: React.FC<{ agent: AIAgent; analysis: FundamentalAnalysisResult; metrics: FundamentalAnalysisMetrics; signals: FundamentalSignal[]; t: (key: string) => string }> = ({ agent, analysis, metrics, signals, t }) => {
     const undervaluedCount = signals.filter(s => s.valuationStatus === 'undervalued').length;
     const overvaluedCount = signals.filter(s => s.valuationStatus === 'overvalued').length;
     return (
@@ -293,6 +299,9 @@ const FundamentalOverview: React.FC<{ analysis: FundamentalAnalysisResult; metri
                 </div>
             </div>
         )}
+
+        {/* Agent Capabilities */}
+        <CapabilitiesSection agent={agent} />
     </div>
     );
 };
@@ -901,6 +910,63 @@ const MetricCard: React.FC<{ label: string; value: string | number }> = ({ label
         <p className="text-2xl font-bold text-white">{value}</p>
     </div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const FUNDAMENTAL_CAPABILITY_KEYS = [
+    'fundamental_capability_analysis',
+    'fundamental_capability_valuation',
+    'fundamental_capability_ratios',
+    'fundamental_capability_events',
+    'fundamental_capability_recommendations',
+    'fundamental_capability_data',
+    'fundamental_capability_history',
+    'fundamental_capability_coordination',
+    'fundamental_capability_alerts',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isFundamentalAgent = agent.id === '12' || agent.role === 'Fundamental Analysis';
+    const capabilityItems = isFundamentalAgent
+        ? FUNDAMENTAL_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('fundamental_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isFundamentalAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-orange-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-orange-500/20 text-orange-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default FundamentalAgentControl;
 

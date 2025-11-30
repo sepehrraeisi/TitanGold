@@ -30,10 +30,14 @@ interface DeepSeekResponse {
 let apiKey: string | null = null;
 
 function getApiKey(): string {
+    // Always check for temp key first (for testing)
+    const tempKey = typeof window !== 'undefined' ? localStorage.getItem('temp_deepseek_key') : null;
+    if (tempKey) {
+        return tempKey;
+    }
+    
     if (!apiKey) {
-        // Try localStorage first (for browser), then environment variables
-        const tempKey = typeof window !== 'undefined' ? localStorage.getItem('temp_deepseek_key') : null;
-        apiKey = tempKey || process.env.DEEPSEEK_API_KEY || process.env.API_KEY;
+        apiKey = process.env.DEEPSEEK_API_KEY || process.env.API_KEY;
         if (!apiKey) {
             throw new Error("DEEPSEEK_API_KEY or API_KEY environment variable not set.");
         }
@@ -101,12 +105,25 @@ export const generateContent = async (
             const errorText = await response.text();
             console.error('DeepSeek API Error Response:', errorText);
             let errorMessage = `DeepSeek API error: ${response.status}`;
+            
             try {
                 const errorJson = JSON.parse(errorText);
-                errorMessage = errorJson.error?.message || errorJson.error?.code || errorJson.message || errorText;
+                if (errorJson.error) {
+                    // Handle specific error types
+                    if (errorJson.error.message?.includes('Insufficient Balance') || response.status === 402) {
+                        errorMessage = 'Insufficient balance. Please add credits to your DeepSeek account.';
+                    } else if (errorJson.error.message) {
+                        errorMessage = errorJson.error.message;
+                    } else {
+                        errorMessage = errorJson.error.code || errorMessage;
+                    }
+                } else {
+                    errorMessage = errorText || errorMessage;
+                }
             } catch {
                 errorMessage = errorText || `HTTP ${response.status} - ${response.statusText}`;
             }
+            
             throw new Error(errorMessage);
         }
         
@@ -218,26 +235,22 @@ export const testDeepSeekConnection = async (): Promise<{ success: boolean; late
         
         // Check if API key is available
         const tempKey = typeof window !== 'undefined' ? localStorage.getItem('temp_deepseek_key') : null;
-        console.log('DeepSeek test - tempKey from localStorage:', tempKey ? `${tempKey.substring(0, 10)}...` : 'NOT FOUND');
         
-        if (!tempKey && !process.env.DEEPSEEK_API_KEY && !process.env.API_KEY) {
+        if (!tempKey) {
             return { success: false, error: 'API key not found. Please configure it first.' };
         }
         
-        console.log('Calling DeepSeek generateContent...');
         const response = await generateContent('Hello', 'You are a helpful assistant.', 'deepseek-chat');
-        console.log('DeepSeek response received:', response ? 'Success' : 'Empty');
+        
+        if (!response || response.trim().length === 0) {
+            return { success: false, error: 'Empty response from DeepSeek' };
+        }
         
         const latency = Date.now() - startTime;
         return { success: true, latency };
     } catch (e: any) {
         console.error('DeepSeek connection test error:', e);
         const errorMsg = e.message || 'Connection failed';
-        console.error('Error details:', {
-            message: e.message,
-            stack: e.stack,
-            name: e.name,
-        });
         return { success: false, error: errorMsg };
     }
 };

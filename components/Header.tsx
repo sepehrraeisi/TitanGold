@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import { useAppContext } from '../context/AppContext.tsx';
+import * as api from '../services/api.ts';
+import type { ArtemisState } from '../types.ts';
+import { Toast } from './ui/toast.tsx';
+import { ConfirmModal } from './ui/confirm-modal.tsx';
 
 interface HeaderProps {
     activeView: string;
@@ -21,7 +25,7 @@ const NavLink: React.FC<{ text: string; view: string; activeView: string; onClic
     </button>
 );
 
-const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: () => void;}> = ({ setActiveView, onLogout }) => {
+const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: () => void; dailyPnL?: number;}> = ({ setActiveView, onLogout, dailyPnL = 0 }) => {
     const { t } = useLanguage();
     const { user, isDemoMode, toggleDemoMode, avatarUrl } = useAppContext();
     const [isOpen, setIsOpen] = useState(false);
@@ -39,7 +43,7 @@ const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: (
     };
 
     // Function to load avatar from all sources
-    const loadAvatar = () => {
+    const loadAvatar = useCallback(() => {
         // Reset error state
         setAvatarError(false);
 
@@ -69,12 +73,12 @@ const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: (
 
         // If no avatar found, set to null to show initials
         setCurrentAvatar(null);
-    };
+    }, [avatarUrl]);
 
     // Load avatar on mount and when avatarUrl changes
     useEffect(() => {
         loadAvatar();
-    }, [avatarUrl]);
+    }, [loadAvatar]);
 
     // Listen for avatar updates
     useEffect(() => {
@@ -103,7 +107,7 @@ const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: (
             window.removeEventListener('storage', handleStorageChange);
             clearInterval(interval);
         };
-    }, []);
+    }, [loadAvatar]);
 
     const handleNavigation = (view: string) => {
         setActiveView(view);
@@ -131,20 +135,16 @@ const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: (
                 )}
                 <div className="text-left hidden md:block">
                     <p className="text-sm font-semibold text-foreground">{user?.name}</p>
-                    <p className="text-xs text-muted-foreground">{user?.email || t('user_balance', { balance: '0' })}</p>
+                    <p className="text-xs text-muted-foreground">{user?.email || ''}</p>
                 </div>
-                <div className="text-left hidden lg:block border-l border-border pl-2 ml-2">
-                     <p className="text-sm font-semibold text-positive">+$0</p>
-                    <p className="text-xs text-muted-foreground">{t('today_pnl', { pnl: '0' })}</p>
-                </div>
-                <div className="text-left hidden lg:block border-l border-border pl-2 ml-2">
-                    <div className="flex items-center gap-2 cursor-pointer" onClick={(e) => { e.stopPropagation(); toggleDemoMode(); }}>
-                        <p className={`text-sm font-semibold ${isDemoMode ? 'text-yellow-500' : 'text-blue-500'}`}>{isDemoMode ? 'Demo' : 'Live'}</p>
-                        <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ${isDemoMode ? 'bg-yellow-500/30' : 'bg-blue-500/30'}`}>
-                            <div className={`w-3 h-3 rounded-full shadow-md transform duration-300 ${isDemoMode ? 'translate-x-0 bg-yellow-500' : 'translate-x-4 bg-blue-500'}`}/>
-                        </div>
+                {dailyPnL !== 0 && (
+                    <div className="text-left hidden lg:block border-l border-border pl-2 ml-2">
+                        <p className={`text-sm font-semibold ${dailyPnL >= 0 ? 'text-positive' : 'text-negative'}`}>
+                            {dailyPnL >= 0 ? '+' : ''}${dailyPnL.toFixed(2)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{t('today_pnl', { pnl: dailyPnL.toFixed(2) })}</p>
                     </div>
-                </div>
+                )}
                 <svg className={`h-5 w-5 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
             </button>
             {isOpen && (
@@ -173,25 +173,147 @@ const LanguageSwitcher: React.FC = () => {
     )
 }
 
-const MobileMenu: React.FC<{ navLinks: any[], activeView: string, setActiveView: (view: string) => void, isOpen: boolean, setIsOpen: (isOpen: boolean) => void }> = ({ navLinks, activeView, setActiveView, isOpen, setIsOpen }) => (
-    <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity lg:hidden ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsOpen(false)}>
-        <div className={`fixed top-0 left-0 h-full w-64 bg-card shadow-xl transition-transform transform ${isOpen ? 'translate-x-0' : '-translate-x-full'}`} onClick={e => e.stopPropagation()}>
-            <div className="p-4 border-b border-border">
-                <span className="text-xl font-bold text-foreground">TITAN</span>
+const DemoModeToggle: React.FC = () => {
+    const { t } = useLanguage();
+    const [artemis, setArtemis] = useState<ArtemisState | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isToggling, setIsToggling] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+    useEffect(() => {
+        const loadArtemis = async () => {
+            try {
+                const state = await api.fetchArtemisState();
+                setArtemis(state);
+            } catch (error) {
+                console.error('Failed to load Artemis state:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadArtemis();
+        
+        // Refresh every 10 seconds
+        const interval = setInterval(loadArtemis, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleToggle = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isToggling || !artemis) return;
+        setShowConfirm(true);
+    };
+
+    const handleConfirm = async () => {
+        if (!artemis) return;
+        
+        setShowConfirm(false);
+        setIsToggling(true);
+        
+        const newMode = artemis.mode === 'demo' ? 'real' : 'demo';
+        
+        try {
+            const updated = await api.updateArtemisMode(newMode);
+            setArtemis(updated);
+            setToast({
+                message: t('mode_switched') || `Mode switched to ${newMode.toUpperCase()}`,
+                type: 'success'
+            });
+        } catch (error) {
+            console.error('Failed to switch mode:', error);
+            setToast({
+                message: t('mode_switch_failed') || 'Failed to switch mode',
+                type: 'error'
+            });
+        } finally {
+            setIsToggling(false);
+        }
+    };
+
+    const confirmMessage = artemis?.mode === 'demo'
+        ? t('switch_to_real_mode_confirm') || 'Switch to REAL mode? This will use real funds and execute real trades. Are you sure?'
+        : t('switch_to_demo_mode_confirm') || 'Switch to DEMO mode? This will use virtual funds for testing.';
+
+    if (isLoading || !artemis) {
+        return (
+            <div className="flex items-center gap-2">
+                <div className="w-9 h-5 bg-gray-700 rounded-full animate-pulse" />
             </div>
-            <nav className="p-4 space-y-2">
-                {navLinks.map(link => (
-                    <NavLink key={link.view} {...link} activeView={activeView} onClick={(view) => { setActiveView(view); setIsOpen(false); }} isMobile />
-                ))}
-            </nav>
+        );
+    }
+
+    const isDemo = artemis.mode === 'demo';
+
+    return (
+        <>
+            <div 
+                className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" 
+                onClick={handleToggle}
+                title={t('click_to_switch_mode') || `Click to switch to ${isDemo ? 'REAL' : 'DEMO'} mode`}
+            >
+                <p className={`text-sm font-semibold ${isDemo ? 'text-yellow-500' : 'text-red-500'}`}>
+                    {isDemo ? '🟢 Demo' : '🔴 Live'}
+                </p>
+                <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ${isDemo ? 'bg-yellow-500/30' : 'bg-red-500/30'}`}>
+                    <div className={`w-3 h-3 rounded-full shadow-md transform duration-300 ${isDemo ? 'translate-x-0 bg-yellow-500' : 'translate-x-4 bg-red-500'}`}/>
+                </div>
+            </div>
+            <ConfirmModal
+                isOpen={showConfirm}
+                message={confirmMessage}
+                onConfirm={handleConfirm}
+                onCancel={() => setShowConfirm(false)}
+                type={artemis?.mode === 'demo' ? 'danger' : 'warning'}
+            />
+            {toast && (
+                <Toast
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast(null)}
+                />
+            )}
+        </>
+    );
+}
+
+const MobileMenu: React.FC<{ navLinks: any[], activeView: string, setActiveView: (view: string) => void, isOpen: boolean, setIsOpen: (isOpen: boolean) => void }> = ({ navLinks, activeView, setActiveView, isOpen, setIsOpen }) => {
+    const { t } = useLanguage();
+    return (
+        <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity lg:hidden ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsOpen(false)}>
+            <div className={`fixed top-0 left-0 h-full w-64 bg-card shadow-xl transition-transform transform ${isOpen ? 'translate-x-0' : '-translate-x-full'}`} onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b border-border">
+                    <span className="text-xl font-bold text-foreground">TITAN</span>
+                </div>
+                <nav className="p-4 space-y-2">
+                    {navLinks.map(link => (
+                        <NavLink key={link.view} {...link} activeView={activeView} onClick={(view) => { setActiveView(view); setIsOpen(false); }} isMobile />
+                    ))}
+                </nav>
+                <div className="p-4 border-t border-border">
+                    <div className="text-sm text-muted-foreground mb-2">{t('mode') || 'Mode'}:</div>
+                    <DemoModeToggle />
+                </div>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 
 const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) => {
     const { t } = useLanguage();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [statusData, setStatusData] = useState<{
+        aiAgents: { active: number; total: number; percentage: number };
+        connection: { status: string; text: string };
+        activeTrades: number;
+        dailyPnL: number;
+    }>({
+        aiAgents: { active: 0, total: 0, percentage: 0 },
+        connection: { status: 'checking', text: t('connection') || 'Connection...' },
+        activeTrades: 0,
+        dailyPnL: 0,
+    });
 
     const navLinks = [
         { text: t('dashboard'), view: 'dashboard' },
@@ -205,10 +327,72 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
         { text: t('settings'), view: 'settings' },
     ];
 
+    // Fetch real status data from API
+    useEffect(() => {
+        const loadStatusData = async () => {
+            try {
+                const [artemisState, tradingStatus, connectionSettings] = await Promise.all([
+                    api.fetchArtemisState().catch(() => null),
+                    api.fetchTradingEngineStatus().catch(() => null),
+                    api.fetchConnectionSettings().catch(() => null),
+                ]);
+
+                // Calculate AI agents status
+                let aiActive = 0;
+                let aiTotal = 0;
+                if (artemisState?.agents) {
+                    aiTotal = artemisState.agents.length;
+                    aiActive = artemisState.agents.filter(a => a.status === 'active').length;
+                }
+                const aiPercentage = aiTotal > 0 ? Math.round((aiActive / aiTotal) * 100) : 0;
+
+                // Get connection status
+                const isConnected = connectionSettings?.isConnected || false;
+                const connectionText = isConnected 
+                    ? (t('connected') || 'Connected') 
+                    : (t('disconnected') || 'Disconnected');
+
+                // Get active trades and daily PNL
+                const activeTrades = tradingStatus?.activeTrades || 0;
+                const dailyPnL = tradingStatus?.stats?.dailyProfit 
+                    ? tradingStatus.stats.dailyProfit - (tradingStatus.stats.dailyLoss || 0)
+                    : 0;
+
+                setStatusData({
+                    aiAgents: { active: aiActive, total: aiTotal, percentage: aiPercentage },
+                    connection: { status: isConnected ? 'connected' : 'disconnected', text: connectionText },
+                    activeTrades,
+                    dailyPnL,
+                });
+            } catch (error) {
+                console.error('Failed to load status data:', error);
+            }
+        };
+
+        loadStatusData();
+        // Refresh every 10 seconds
+        const interval = setInterval(loadStatusData, 10000);
+        return () => clearInterval(interval);
+    }, [t]);
+
     const statusIcons = [
-        { title: t('artemis_active'), icon: <svg className="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3.5a1.5 1.5 0 011.5 1.5v1.5a1.5 1.5 0 01-3 0V5A1.5 1.5 0 0110 3.5zM5.5 10a1.5 1.5 0 011.5-1.5h1.5a1.5 1.5 0 010 3H7A1.5 1.5 0 015.5 10zM10 14.5a1.5 1.5 0 01-1.5-1.5v-1.5a1.5 1.5 0 013 0V13A1.5 1.5 0 0110 14.5zM14.5 10a1.5 1.5 0 01-1.5 1.5h-1.5a1.5 1.5 0 010-3H13A1.5 1.5 0 0114.5 10z" /></svg>, text: "AI: 15 (87%)" },
-        { title: t('connection'), icon: <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.586 2.586a2 2 0 012.828 0L18 5.172a2 2 0 010 2.828l-2.586 2.586a2 2 0 01-2.828 0L10 8.000l-2.586 2.586a2 2 0 01-2.828-2.828L7.172 5.172a2 2 0 012.828 0L12.586 2.586zM10 10l-2.586 2.586a2 2 0 01-2.828 0L2 10l2.586-2.586a2 2 0 012.828 0L10 10z" clipRule="evenodd" /></svg>, text: "Connection..." },
-        { title: t('active_trades_header', { count: 0 }), icon: <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" /><path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" /></svg>, text: t('active_trades_header', { count: 0 }) },
+        { 
+            title: t('artemis_active'), 
+            icon: <svg className="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3.5a1.5 1.5 0 011.5 1.5v1.5a1.5 1.5 0 01-3 0V5A1.5 1.5 0 0110 3.5zM5.5 10a1.5 1.5 0 011.5-1.5h1.5a1.5 1.5 0 010 3H7A1.5 1.5 0 015.5 10zM10 14.5a1.5 1.5 0 01-1.5-1.5v-1.5a1.5 1.5 0 013 0V13A1.5 1.5 0 0110 14.5zM14.5 10a1.5 1.5 0 01-1.5 1.5h-1.5a1.5 1.5 0 010-3H13A1.5 1.5 0 0114.5 10z" /></svg>, 
+            text: statusData.aiAgents.total > 0 
+                ? `AI: ${statusData.aiAgents.active} (${statusData.aiAgents.percentage}%)` 
+                : 'AI: 0 (0%)'
+        },
+        { 
+            title: t('connection'), 
+            icon: <svg className={`h-5 w-5 ${statusData.connection.status === 'connected' ? 'text-green-400' : 'text-red-400'}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.586 2.586a2 2 0 012.828 0L18 5.172a2 2 0 010 2.828l-2.586 2.586a2 2 0 01-2.828 0L10 8.000l-2.586 2.586a2 2 0 01-2.828-2.828L7.172 5.172a2 2 0 012.828 0L12.586 2.586zM10 10l-2.586 2.586a2 2 0 01-2.828 0L2 10l2.586-2.586a2 2 0 012.828 0L10 10z" clipRule="evenodd" /></svg>, 
+            text: statusData.connection.text
+        },
+        { 
+            title: t('active_trades_header', { count: statusData.activeTrades }), 
+            icon: <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" /><path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" /></svg>, 
+            text: t('active_trades_header', { count: statusData.activeTrades })
+        },
     ];
 
     return (
@@ -243,7 +427,11 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
                         ))}
                         <LanguageSwitcher />
                     </div>
-                    <UserDropdown setActiveView={setActiveView} onLogout={onLogout} />
+                    {/* Demo/Real Mode Toggle - Always visible */}
+                    <div className="border-r border-border pr-4">
+                        <DemoModeToggle />
+                    </div>
+                    <UserDropdown setActiveView={setActiveView} onLogout={onLogout} dailyPnL={statusData.dailyPnL} />
                 </div>
             </header>
             <MobileMenu navLinks={navLinks} activeView={activeView} setActiveView={setActiveView} isOpen={isMobileMenuOpen} setIsOpen={setIsMobileMenuOpen} />

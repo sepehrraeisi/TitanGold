@@ -192,7 +192,12 @@ const MarketIntelligenceAgentControl: React.FC<MarketIntelligenceAgentControlPro
                             { id: 'correlation', key: 'tab_correlation' },
                             { id: 'settings', key: 'tab_settings' },
                             { id: 'integration', key: 'tab_integration' },
-                        ] as const).map(tab => (
+                        ] as const).map(tab => {
+                            const translation = t(tab.key);
+                            const label = (translation && translation !== tab.key) 
+                                ? translation 
+                                : tab.key.replace('tab_', '').replace(/_/g, ' ');
+                            return (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as MITab)}
@@ -202,15 +207,16 @@ const MarketIntelligenceAgentControl: React.FC<MarketIntelligenceAgentControlPro
                                         : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
                                 }`}
                             >
-                                {t(tab.key) || tab.id.replace(/_/g, ' ')}
+                                    {label}
                             </button>
-                        ))}
+                            );
+                        })}
                     </nav>
                 </div>
 
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(92vh - 300px)' }}>
                     {activeTab === 'market_landscape' && marketOverview && (
-                        <MarketLandscapeTab overview={marketOverview} analysis={analysis} t={t} />
+                        <MarketLandscapeTab agent={agent} overview={marketOverview} analysis={analysis} t={t} />
                     )}
                     {activeTab === 'macro_trend' && <MacroTrendTab signals={macroTrendSignals} t={t} />}
                     {activeTab === 'flow_activity' && <FlowActivityTab data={flowActivity} t={t} />}
@@ -714,7 +720,7 @@ const MetricCard: React.FC<{ label: string; value: string | number }> = ({ label
     </div>
 );
 
-const MarketLandscapeTab: React.FC<{ overview: MarketOverview; analysis: MarketIntelligenceResult | null; t: (key: string) => string }> = ({ overview, analysis, t }) => (
+const MarketLandscapeTab: React.FC<{ agent: AIAgent; overview: MarketOverview; analysis: MarketIntelligenceResult | null; t: (key: string) => string }> = ({ agent, overview, analysis, t }) => (
     <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <MetricCard label={t('market_status') || 'Market Status'} value={t(overview.overallStatus) || overview.overallStatus} />
@@ -749,6 +755,9 @@ const MarketLandscapeTab: React.FC<{ overview: MarketOverview; analysis: MarketI
                 <MetricCard label={t('risk_reward') || 'Risk/Reward'} value={analysis.summary.riskReward.toFixed(2)} />
             </div>
         )}
+
+        {/* Agent Capabilities */}
+        <CapabilitiesSection agent={agent} />
     </div>
 );
 
@@ -1043,6 +1052,62 @@ const IntegrationRow: React.FC<{ label: string; enabled?: boolean }> = ({ label,
         </span>
     </div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const MARKET_INTELLIGENCE_CAPABILITY_KEYS = [
+    'market_intelligence_capability_signals',
+    'market_intelligence_capability_macro',
+    'market_intelligence_capability_flow',
+    'market_intelligence_capability_alerts',
+    'market_intelligence_capability_events',
+    'market_intelligence_capability_correlation',
+    'market_intelligence_capability_ai',
+    'market_intelligence_capability_integration',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isMIAgent = agent.id === '13' || agent.role === 'Market Intelligence';
+    const capabilityItems = isMIAgent
+        ? MARKET_INTELLIGENCE_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('market_intelligence_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isMIAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-purple-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default MarketIntelligenceAgentControl;
 

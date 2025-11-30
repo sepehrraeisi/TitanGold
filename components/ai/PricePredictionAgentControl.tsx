@@ -122,24 +122,30 @@ const PricePredictionAgentControl: React.FC<PricePredictionAgentControlProps> = 
                 <StatusBar agent={agent} prediction={prediction} metrics={metrics} onCommand={handleControlCommand} t={t} />
 
                 <nav className="flex flex-wrap gap-4 px-6 border-b border-gray-800 bg-[#0B1017]">
-                    {TAB_ITEMS.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                                activeTab === tab.id
-                                    ? 'border-indigo-500 text-indigo-400'
-                                    : 'border-transparent text-gray-400 hover:text-white hover:border-gray-700'
-                            }`}
-                        >
-                            {t(tab.labelKey)}
-                        </button>
-                    ))}
+                    {TAB_ITEMS.map(tab => {
+                        const translation = t(tab.labelKey);
+                        const label = (translation && translation !== tab.labelKey) 
+                            ? translation 
+                            : tab.labelKey.replace('tab_', '').replace(/_/g, ' ');
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === tab.id
+                                        ? 'border-indigo-500 text-indigo-400'
+                                        : 'border-transparent text-gray-400 hover:text-white hover:border-gray-700'
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
                 </nav>
 
-                <div className="p-6 bg-[#0F151D] overflow-y-auto h-full">
+                <div className="p-6 bg-[#0F151D] overflow-y-auto" style={{ maxHeight: 'calc(92vh - 200px)' }}>
                     {activeTab === 'overview' && prediction && metrics && (
-                        <OverviewTab prediction={prediction} metrics={metrics} scenarioDistribution={scenarioDistribution} t={t} />
+                        <OverviewTab agent={agent} prediction={prediction} metrics={metrics} scenarioDistribution={scenarioDistribution} t={t} />
                     )}
                     {activeTab === 'chart' && prediction && <PredictionChartTab prediction={prediction} t={t} />}
                     {activeTab === 'scenarios' && prediction && <ScenariosTab prediction={prediction} t={t} />}
@@ -250,11 +256,12 @@ const StatusBar: React.FC<{
 );
 
 const OverviewTab: React.FC<{
+    agent: AIAgent;
     prediction: PricePredictionResult;
     metrics: PricePredictionMetrics;
     scenarioDistribution: { bullish: number; neutral: number; bearish: number };
     t: (key: string) => string;
-}> = ({ prediction, metrics, scenarioDistribution, t }) => {
+}> = ({ agent, prediction, metrics, scenarioDistribution, t }) => {
     const overviewStats = [
         {
             label: t('predicted_price') || 'Predicted price',
@@ -263,7 +270,7 @@ const OverviewTab: React.FC<{
         },
         {
             label: t('trend_direction') || 'Trend direction',
-            value: prediction.trendPrediction ? t(prediction.trendPrediction.direction) : t('unknown') || '—',
+            value: prediction.trendPrediction ? (t(prediction.trendPrediction.direction) || prediction.trendPrediction.direction) : (t('unknown') || '—'),
             helper: prediction.trendPrediction ? `${prediction.trendPrediction.probability}%` : '--',
         },
         {
@@ -307,6 +314,9 @@ const OverviewTab: React.FC<{
                     </div>
                 </SectionCard>
             </div>
+
+            {/* Agent Capabilities */}
+            <CapabilitiesSection agent={agent} />
         </div>
     );
 };
@@ -783,6 +793,62 @@ const InfoBadge: React.FC<{ label: string; tone?: InfoTone }> = ({ label, tone =
 const EmptyState: React.FC<{ message: string }> = ({ message }) => (
     <div className="text-center text-gray-400 py-10 border border-dashed border-gray-800 rounded-2xl bg-gray-900/20">{message}</div>
 );
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const PRICE_CAPABILITY_KEYS = [
+    'price_capability_ai_models',
+    'price_capability_scenarios',
+    'price_capability_confidence',
+    'price_capability_chart_analysis',
+    'price_capability_history_metrics',
+    'price_capability_customization',
+    'price_capability_integrations',
+    'price_capability_alerts',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isPriceAgent = agent.id === '5' || agent.role === 'Price Prediction';
+    const capabilityItems = isPriceAgent
+        ? PRICE_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('price_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isPriceAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-indigo-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default PricePredictionAgentControl;
 

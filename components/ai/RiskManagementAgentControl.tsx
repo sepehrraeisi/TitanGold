@@ -81,7 +81,8 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
             }
         } catch (error) {
             console.error('Risk assessment failed:', error);
-            alert(t('assessment_failed') || 'Risk assessment failed');
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            alert((t('assessment_failed') || 'Risk assessment failed') + (errorMessage ? `: ${errorMessage}` : ''));
         } finally {
             setIsAssessing(false);
         }
@@ -132,7 +133,12 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
 
                 <div className="border-b border-gray-800">
                     <nav className="flex flex-wrap gap-4 px-6">
-                        {TAB_ITEMS.map(tab => (
+                        {TAB_ITEMS.map(tab => {
+                            const translation = t(tab.labelKey);
+                            const label = (translation && translation !== tab.labelKey) 
+                                ? translation 
+                                : tab.labelKey.replace('tab_', '').replace(/_/g, ' ');
+                            return (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
@@ -142,9 +148,10 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
                                         : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
                                 }`}
                             >
-                                {t(tab.labelKey) || tab.id}
+                                    {label}
                             </button>
-                        ))}
+                            );
+                        })}
                     </nav>
                 </div>
 
@@ -264,6 +271,9 @@ const OverviewTab: React.FC<{
                     </div>
                 </SectionCard>
             )}
+
+            {/* Agent Capabilities */}
+            <CapabilitiesSection agent={agent} />
         </div>
     );
 };
@@ -671,6 +681,62 @@ const SettingsTab: React.FC<{ config: RiskManagementConfig; onUpdate: (config: R
                     ))}
                 </div>
             </SectionCard>
+        </div>
+    );
+};
+
+// ----------------------------------------------------------------------------- //
+// Capabilities Section
+// ----------------------------------------------------------------------------- //
+
+const RISK_CAPABILITY_KEYS = [
+    'risk_capability_control_limits',
+    'risk_capability_position_sizing',
+    'risk_capability_drawdown_monitoring',
+    'risk_capability_exposure_management',
+    'risk_capability_real_time_alerts',
+    'risk_capability_stop_management',
+    'risk_capability_diversification',
+    'risk_capability_agent_coordination',
+] as const;
+
+const CapabilitiesSection: React.FC<{ agent: AIAgent }> = ({ agent }) => {
+    const { t } = useLanguage();
+    const isRiskAgent = agent.id === '2' || agent.role === 'Risk Management';
+    const capabilityItems = isRiskAgent
+        ? RISK_CAPABILITY_KEYS.map(key => {
+              const translation = t(key);
+              const label = (translation && translation !== key) 
+                  ? translation 
+                  : key.replace('risk_capability_', '').replace(/_/g, ' ');
+              return {
+                  key,
+                  label,
+              };
+          })
+        : agent.capabilities.map(cap => ({ key: cap, label: cap }));
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">{t('capabilities') || 'Capabilities'}</h3>
+            {isRiskAgent ? (
+                <ul className="space-y-3 text-sm text-gray-300">
+                    {capabilityItems.map(item => (
+                        <li key={item.key} className="flex gap-3 items-start">
+                            <span className="text-red-400 mt-0.5">•</span>
+                            <span>{item.label}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {capabilityItems.map(item => (
+                        <span key={item.key} className="bg-red-500/20 text-red-300 px-3 py-1 rounded-full text-sm">
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
