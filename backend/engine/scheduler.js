@@ -2,7 +2,6 @@
 // Handles automatic execution of all AI components
 
 import { query } from '../database/db.js';
-import * as api from '../../services/api.ts';
 
 class SchedulerService {
     constructor() {
