@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
         proxy: {
+          // Specific external API proxies (must come first)
           '/api/telegram-collector': {
             target: 'http://localhost:3002',
             changeOrigin: true,
@@ -31,6 +32,17 @@ export default defineConfig(({ mode }) => {
                 if (req.headers['x-mexc-apikey']) {
                   proxyReq.setHeader('X-MEXC-APIKEY', req.headers['x-mexc-apikey'] as string);
                 }
+              });
+            }
+          },
+          // Proxy all other /api/* requests to backend server
+          '/api': {
+            target: 'http://localhost:5001',
+            changeOrigin: true,
+            secure: false,
+            configure: (proxy, _options) => {
+              proxy.on('error', (err, _req, _res) => {
+                console.log('Proxy error:', err);
               });
             }
           }

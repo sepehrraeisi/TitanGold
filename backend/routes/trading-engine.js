@@ -8,10 +8,45 @@ const router = express.Router();
 router.get('/status', authenticate, async (req, res) => {
   try {
     const status = tradingEngine.getStatus();
-    res.json(status);
+    // Ensure all required fields are present
+    const safeStatus = {
+      isRunning: status.isRunning || false,
+      mode: status.mode || 'demo',
+      activeTrades: status.activeTrades || 0,
+      maxConcurrentTrades: status.maxConcurrentTrades || 20,
+      queueSize: status.queueSize || 0,
+      stats: {
+        totalOpportunities: status.stats?.totalOpportunities || 0,
+        executedTrades: status.stats?.executedTrades || 0,
+        successfulTrades: status.stats?.successfulTrades || 0,
+        failedTrades: status.stats?.failedTrades || 0,
+        totalProfit: status.stats?.totalProfit || 0,
+        dailyProfit: status.stats?.dailyProfit || 0,
+        dailyLoss: status.stats?.dailyLoss || 0,
+      },
+      scanners: Array.isArray(status.scanners) ? status.scanners : [],
+    };
+    res.json(safeStatus);
   } catch (error) {
     console.error('Failed to get trading engine status:', error);
-    res.status(500).json({ error: 'Failed to get trading engine status' });
+    // Return safe default status instead of error
+    res.json({
+      isRunning: false,
+      mode: 'demo',
+      activeTrades: 0,
+      maxConcurrentTrades: 20,
+      queueSize: 0,
+      stats: {
+        totalOpportunities: 0,
+        executedTrades: 0,
+        successfulTrades: 0,
+        failedTrades: 0,
+        totalProfit: 0,
+        dailyProfit: 0,
+        dailyLoss: 0,
+      },
+      scanners: [],
+    });
   }
 });
 

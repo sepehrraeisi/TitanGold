@@ -147,12 +147,20 @@ class DatabaseService {
       const storageKey = `${STORAGE_PREFIX}${storeName}`;
       if (storeName === 'settings') {
         // For settings, try to get by key
-        const items = this.getFromLocalStorage<Array<{ key: string; value: any }>>(storageKey) || [];
+        const items = this.getFromLocalStorage<Array<{ key: string; value: any }>>(storageKey);
+        // Ensure items is an array
+        if (!items || !Array.isArray(items)) {
+          return null;
+        }
         const found = items.find((item: any) => item.key === key);
         return found ? (found as T) : null;
       } else {
         // For other stores, use id
-        const items = this.getFromLocalStorage<T[]>(storageKey) || [];
+        const items = this.getFromLocalStorage<T[]>(storageKey);
+        // Ensure items is an array
+        if (!items || !Array.isArray(items)) {
+          return null;
+        }
         return items.find((item: any) => (item as any).id === key) || null;
       }
     } catch (e) {

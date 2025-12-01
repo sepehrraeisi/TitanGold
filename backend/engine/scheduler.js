@@ -2,7 +2,6 @@
 // Handles automatic execution of all AI components
 
 import { query } from '../database/db.js';
-import * as api from '../../services/api.ts';
 
 class SchedulerService {
     constructor() {
@@ -45,20 +44,26 @@ class SchedulerService {
             return;
         }
 
-        this.isRunning = true;
-        console.log('🚀 24/7 Scheduler Service Started');
+        try {
+            this.isRunning = true;
+            console.log('🚀 24/7 Scheduler Service Started');
 
-        // Load configuration from database
-        await this.loadConfig();
+            // Load configuration from database
+            await this.loadConfig();
 
-        // Start all scheduled jobs
-        this.startAgentScheduler();
-        this.startDataHubScheduler();
-        this.startTrainingScheduler();
-        this.startAnalyticsScheduler();
-        this.startArtemisScheduler();
+            // Start all scheduled jobs
+            this.startAgentScheduler();
+            this.startDataHubScheduler();
+            this.startTrainingScheduler();
+            this.startAnalyticsScheduler();
+            this.startArtemisScheduler();
 
-        console.log('✅ All schedulers initialized');
+            console.log('✅ All schedulers initialized');
+        } catch (error) {
+            this.isRunning = false;
+            console.error('❌ Failed to start scheduler:', error);
+            throw error; // Re-throw to let the route handler catch it
+        }
     }
 
     async stop() {

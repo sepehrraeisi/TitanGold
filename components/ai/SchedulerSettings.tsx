@@ -49,6 +49,40 @@ const SchedulerSettings: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const getDefaultStatus = (): SchedulerStatus => ({
+        isRunning: false,
+        config: {
+            agents: {
+                enabled: true,
+                interval: 5 * 60 * 1000, // 5 minutes
+                agents: []
+            },
+            dataHub: {
+                enabled: true,
+                interval: 2 * 60 * 1000, // 2 minutes
+                autoRefresh: true,
+                autoNormalize: true
+            },
+            training: {
+                enabled: true,
+                interval: 30 * 60 * 1000, // 30 minutes
+                autoSchedule: false
+            },
+            analytics: {
+                enabled: true,
+                interval: 10 * 60 * 1000, // 10 minutes
+                autoRefresh: true
+            },
+            artemis: {
+                enabled: true,
+                interval: 1 * 60 * 1000, // 1 minute
+                autoDecisions: true
+            }
+        },
+        activeJobs: [],
+        intervals: []
+    });
+
     const fetchStatus = async () => {
         try {
             const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
@@ -60,37 +94,79 @@ const SchedulerSettings: React.FC = () => {
             if (response.ok) {
                 const data = await response.json();
                 setStatus(data);
+            } else {
+                // If API fails, use default status
+                console.warn('Failed to fetch scheduler status, using defaults');
+                setStatus(getDefaultStatus());
             }
         } catch (error) {
             console.error('Failed to fetch scheduler status:', error);
+            // Use default status on error
+            setStatus(getDefaultStatus());
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleToggleScheduler = async () => {
+        if (!status) return;
+        
         setIsSaving(true);
         try {
             const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-            const endpoint = status?.isRunning ? '/api/scheduler/stop' : '/api/scheduler/start';
+            if (!token) {
+                alert(t('operation_failed') || 'Operation failed: No authentication token found. Please log in again.');
+                setIsSaving(false);
+                return;
+            }
+            
+            const endpoint = status.isRunning ? '/api/scheduler/stop' : '/api/scheduler/start';
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
                 }
             });
+            
             if (response.ok) {
+                const result = await response.json();
                 await fetchStatus();
+                // Show success message
+                console.log('Scheduler toggled successfully:', result);
+            } else {
+                let errorMessage = 'Unknown error';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText}`;
+                } catch (e) {
+                    errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                }
+                
+                // More specific error messages
+                if (response.status === 401) {
+                    errorMessage = t('auth_required') || 'Authentication required. Please log in again.';
+                } else if (response.status === 403) {
+                    errorMessage = t('insufficient_permissions') || 'Insufficient permissions. You need admin or trader role.';
+                } else if (response.status === 500) {
+                    errorMessage = t('server_error') || 'Server error. Please check the console for details.';
+                }
+                
+                console.error('Failed to toggle scheduler:', response.status, errorMessage);
+                alert(t('operation_failed') || `Operation failed: ${errorMessage}`);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to toggle scheduler:', error);
-            alert(t('operation_failed') || 'Operation failed');
+            const errorMessage = error.message || 'Network error. Please check your connection.';
+            alert(t('operation_failed') || `Operation failed: ${errorMessage}`);
         } finally {
             setIsSaving(false);
         }
     };
 
     const handleUpdateConfig = async (section: string, updates: any) => {
+        if (!status) return;
+        
         setIsSaving(true);
         try {
             const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
@@ -104,11 +180,13 @@ const SchedulerSettings: React.FC = () => {
             });
             if (response.ok) {
                 await fetchStatus();
-                alert(t('config_updated') || 'Configuration updated');
+            } else {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                alert(t('update_failed') || `Update failed: ${errorData.error || 'Unknown error'}`);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to update config:', error);
-            alert(t('update_failed') || 'Update failed');
+            alert(t('update_failed') || `Update failed: ${error.message || 'Unknown error'}`);
         } finally {
             setIsSaving(false);
         }
@@ -124,7 +202,7 @@ const SchedulerSettings: React.FC = () => {
         return `${seconds}s`;
     };
 
-    if (isLoading || !status) {
+    if (isLoading) {
         return (
             <div className="text-center p-10">
                 <div className="animate-spin text-4xl mb-2">⚙️</div>
@@ -133,7 +211,9 @@ const SchedulerSettings: React.FC = () => {
         );
     }
 
-    const config = status.config;
+    // Use default status if status is null
+    const currentStatus = status || getDefaultStatus();
+    const config = currentStatus.config;
 
     return (
         <div className="space-y-6">
@@ -150,24 +230,24 @@ const SchedulerSettings: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-4">
                         <div className={`px-4 py-2 rounded-lg font-semibold ${
-                            status.isRunning 
+                            currentStatus.isRunning 
                                 ? 'bg-green-600 text-white' 
                                 : 'bg-gray-600 text-white'
                         }`}>
-                            {status.isRunning 
+                            {currentStatus.isRunning 
                                 ? t('scheduler_running') || '🟢 Running' 
                                 : t('scheduler_stopped') || '🔴 Stopped'}
                         </div>
                         <button
                             onClick={handleToggleScheduler}
                             disabled={isSaving}
-                            className={`px-6 py-2 rounded-lg font-semibold text-white ${
-                                status.isRunning
+                            className={`px-6 py-2 rounded-lg font-semibold text-white transition-colors ${
+                                currentStatus.isRunning
                                     ? 'bg-red-600 hover:bg-red-700'
                                     : 'bg-green-600 hover:bg-green-700'
-                            }`}
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
-                            {status.isRunning 
+                            {currentStatus.isRunning 
                                 ? t('stop_scheduler') || 'Stop Scheduler' 
                                 : t('start_scheduler') || 'Start Scheduler'}
                         </button>
@@ -208,7 +288,7 @@ const SchedulerSettings: React.FC = () => {
                                 interval: parseInt(e.target.value) * 60 * 1000 
                             })}
                             min="1"
-                            className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground"
                         />
                         <p className="text-xs text-muted-foreground mt-1">
                             {t('current_interval') || 'Current'}: {formatInterval(config.agents.interval)}
@@ -250,7 +330,7 @@ const SchedulerSettings: React.FC = () => {
                                 interval: parseInt(e.target.value) * 60 * 1000 
                             })}
                             min="1"
-                            className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground"
                         />
                         <p className="text-xs text-muted-foreground mt-1">
                             {t('current_interval') || 'Current'}: {formatInterval(config.dataHub.interval)}
@@ -312,8 +392,11 @@ const SchedulerSettings: React.FC = () => {
                                 interval: parseInt(e.target.value) * 60 * 1000 
                             })}
                             min="1"
-                            className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground"
                         />
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {t('current_interval') || 'Current'}: {formatInterval(config.training.interval)}
+                        </p>
                     </div>
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -360,9 +443,21 @@ const SchedulerSettings: React.FC = () => {
                                 interval: parseInt(e.target.value) * 60 * 1000 
                             })}
                             min="1"
-                            className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground"
                         />
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {t('current_interval') || 'Current'}: {formatInterval(config.analytics.interval)}
+                        </p>
                     </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={config.analytics.autoRefresh}
+                            onChange={(e) => handleUpdateConfig('analytics', { autoRefresh: e.target.checked })}
+                            className="w-4 h-4"
+                        />
+                        <span className="text-sm">{t('auto_refresh') || 'Auto Refresh'}</span>
+                    </label>
                 </div>
             </div>
 
@@ -399,9 +494,21 @@ const SchedulerSettings: React.FC = () => {
                                 interval: parseInt(e.target.value) * 1000 
                             })}
                             min="10"
-                            className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground"
                         />
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {t('current_interval') || 'Current'}: {formatInterval(config.artemis.interval)}
+                        </p>
                     </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={config.artemis.autoDecisions}
+                            onChange={(e) => handleUpdateConfig('artemis', { autoDecisions: e.target.checked })}
+                            className="w-4 h-4"
+                        />
+                        <span className="text-sm">{t('auto_decisions') || 'Auto Decisions'}</span>
+                    </label>
                 </div>
             </div>
         </div>

@@ -112,6 +112,7 @@ export interface ManualQuickTradeOrder {
     amountPercent: number;
     stopLossPercent?: number;
     takeProfitPercent?: number;
+    pair?: string; // Trading pair (e.g., 'BTC/USDT')
 }
 
 export interface ManualTradingRecommendation {

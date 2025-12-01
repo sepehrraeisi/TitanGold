@@ -1707,8 +1707,36 @@ export const fetchDashboardData = (): Promise<any> => {
 export const fetchTradingDashboardData = (): Promise<TradingDashboardData> =>
     withLatency(cloneTradingDashboard(ensureTradingDashboard()), 600);
 
-export const fetchManualTradingPageData = (): Promise<ManualTradingPageData> =>
-    withLatency(cloneManualTrading(ensureManualTrading()), 500);
+export const fetchManualTradingPageData = async (): Promise<ManualTradingPageData> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            console.warn('No authentication token found');
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/manual-trades/page-data', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Backend error:', response.status, errorText);
+            throw new Error(`Failed to fetch manual trading page data: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log('✅ Manual trading data loaded from backend:', data);
+        return data;
+    } catch (error) {
+        console.error('❌ Error fetching manual trading page data from backend:', error);
+        // Don't fallback to mock data - show error instead
+        throw error;
+    }
+};
 
 type SimulatedTradeInput = {
     pair: string;
@@ -1738,9 +1766,29 @@ const updateManualTradingStat = (
     }
 };
 
-export const executeManualQuickTrade = (
+export const executeManualQuickTrade = async (
     order: ManualQuickTradeOrder,
 ): Promise<ManualTradingPageData> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        const response = await fetch('/api/manual-trades/execute', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(order),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to execute trade' }));
+            throw new Error(errorData.error || 'Failed to execute trade');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error executing manual quick trade:', error);
+        // Fallback to mock data if backend is not available
     return withLatency(
         mutateManualTrading(draft => {
             const config = draft.quickTrade;
@@ -1794,9 +1842,28 @@ export const executeManualQuickTrade = (
         }),
         600,
     );
+    }
 };
 
-export const toggleManualStrategy = (strategyId: string): Promise<ManualTradingPageData> => {
+export const toggleManualStrategy = async (strategyId: string): Promise<ManualTradingPageData> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        const response = await fetch(`/api/manual-trades/strategies/${strategyId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to toggle strategy');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error toggling manual strategy:', error);
+        // Fallback to mock data if backend is not available
     return withLatency(
         mutateManualTrading(draft => {
             const strategy = draft.strategies.find(item => item.id === strategyId);
@@ -1820,6 +1887,7 @@ export const toggleManualStrategy = (strategyId: string): Promise<ManualTradingP
         }),
         450,
     );
+    }
 };
 
 export const createSimulatedTrade = (input?: Partial<SimulatedTradeInput>): Promise<TradingDashboardData> => {
@@ -5418,54 +5486,38 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
 };
 
 // Fetch API Config Data - REAL IMPLEMENTATION with IndexedDB
-export const fetchAPIConfigData = async (): Promise<AIAPIConfigData> => {
+export const fetchAPIConfigData = async (): Promise<AIAPIConfigData | null> => {
     try {
         const saved = await database.get<{ key: string; value: AIAPIConfigData }>('settings', 'ai_api_config');
         if (saved && saved.value) {
-            return saved.value;
+            // Only return exchanges that are actually configured and connected
+            const realConfig = {
+                ...saved.value,
+                exchangeServices: saved.value.exchangeServices.filter((ex: any) => {
+                    // Only show exchanges that have been configured (have maskedKey and it's not default)
+                    return ex.maskedKey && ex.maskedKey !== 'Not configured' && !ex.maskedKey.includes('***');
+                }).map((ex: any) => {
+                    // Check real connection status from connectionSettings
+                    return {
+                        ...ex,
+                        // Will be updated by checking real connection status
+                    };
+                }),
+            };
+            return realConfig;
         }
     } catch (e) {
         console.warn('Failed to load API config from database:', e);
     }
 
-    // Initialize with default API config
-    const defaultConfig: AIAPIConfigData = {
-        aiServices: [
-            { id: 'ai-gemini', name: 'Google Gemini', category: 'ai', hasSecret: false, connected: false, maskedKey: 'Not configured', lastTestedAt: undefined },
-            { id: 'ai-claude', name: 'Anthropic Claude', category: 'ai', hasSecret: false, connected: false, maskedKey: 'Not configured', lastTestedAt: undefined },
-            { id: 'ai-openai', name: 'OpenAI GPT', category: 'ai', hasSecret: false, connected: false, maskedKey: 'Not configured', lastTestedAt: undefined },
-            { id: 'ai-deepseek', name: 'DeepSeek', category: 'ai', hasSecret: false, connected: false, maskedKey: 'Not configured', lastTestedAt: undefined },
-        ],
-        exchangeServices: [
-            { id: 'ex-mexc', name: 'MEXC', category: 'exchange', hasSecret: true, connected: true, maskedKey: 'MX***001', lastTestedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
-            { id: 'ex-binance', name: 'Binance', category: 'exchange', hasSecret: true, connected: false, maskedKey: 'BN***221', issues: 'API key disabled due to region restrictions' },
-            { id: 'ex-kucoin', name: 'KuCoin', category: 'exchange', hasSecret: true, connected: false, maskedKey: 'KC***117', issues: 'Pending security verification' },
-            { id: 'ex-coinbase', name: 'Coinbase', category: 'exchange', hasSecret: true, connected: true, maskedKey: 'CB***908', lastTestedAt: new Date(Date.now() - 90 * 60 * 1000).toISOString() },
-        ],
-        communicationServices: [
-            { id: 'com-telegram', name: 'Telegram Bot', category: 'communication', hasSecret: false, connected: true, maskedKey: 'TG***321', lastTestedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
-            { id: 'com-voice', name: 'Realtime Voice', category: 'communication', hasSecret: false, connected: true, maskedKey: 'Voice Enabled' },
-            { id: 'com-email', name: 'Transactional Email', category: 'communication', hasSecret: false, connected: false, maskedKey: 'smtp@titan.ai', issues: 'SMTP credentials expired' },
-        ],
-        marketDataServices: [
-            { id: 'market-mexc', name: 'MEXC Market Data', category: 'market_data', hasSecret: false, connected: true, maskedKey: 'Premium Feed', lastTestedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString() },
-            { id: 'market-chain', name: 'On-chain Analytics', category: 'market_data', hasSecret: true, connected: true, maskedKey: 'ON***998', lastTestedAt: new Date(Date.now() - 120 * 60 * 1000).toISOString() },
-            { id: 'market-news', name: 'Verified News Grid', category: 'market_data', hasSecret: false, connected: true, maskedKey: 'Linked to News Engine', lastTestedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString() },
-        ],
+    // Don't return default/mock data - return null or empty config
+    return {
+        aiServices: [],
+        exchangeServices: [],
+        communicationServices: [],
+        marketDataServices: [],
         lastUpdated: new Date().toISOString(),
     };
-
-    // Save default config
-    try {
-        await database.save('settings', {
-            key: 'ai_api_config',
-            value: defaultConfig,
-        });
-    } catch (e) {
-        console.warn('Failed to save API config:', e);
-    }
-
-    return defaultConfig;
 };
 
 // Update API Config Data
@@ -24859,13 +24911,52 @@ export const fetchTradingEngineStatus = async (): Promise<{
         });
         
         if (!response.ok) {
+            // If 500 error, return safe default instead of throwing
+            if (response.status === 500) {
+                console.warn('Trading engine status returned 500, using safe defaults');
+                return {
+                    isRunning: false,
+                    mode: 'demo',
+                    activeTrades: 0,
+                    maxConcurrentTrades: 20,
+                    queueSize: 0,
+                    stats: {
+                        totalOpportunities: 0,
+                        executedTrades: 0,
+                        successfulTrades: 0,
+                        failedTrades: 0,
+                        totalProfit: 0,
+                        dailyProfit: 0,
+                        dailyLoss: 0,
+                    },
+                    scanners: [],
+                };
+            }
             throw new Error('Failed to fetch trading engine status');
         }
         
-        return await response.json();
+        const data = await response.json();
+        // Validate and ensure all fields are present
+        return {
+            isRunning: data.isRunning || false,
+            mode: data.mode || 'demo',
+            activeTrades: data.activeTrades || 0,
+            maxConcurrentTrades: data.maxConcurrentTrades || 20,
+            queueSize: data.queueSize || 0,
+            stats: {
+                totalOpportunities: data.stats?.totalOpportunities || 0,
+                executedTrades: data.stats?.executedTrades || 0,
+                successfulTrades: data.stats?.successfulTrades || 0,
+                failedTrades: data.stats?.failedTrades || 0,
+                totalProfit: data.stats?.totalProfit || 0,
+                dailyProfit: data.stats?.dailyProfit || 0,
+                dailyLoss: data.stats?.dailyLoss || 0,
+            },
+            scanners: Array.isArray(data.scanners) ? data.scanners : [],
+        };
     } catch (error) {
         console.error('Error fetching trading engine status:', error);
-        // Return mock data for development
+        // Return safe default instead of throwing
         return {
             isRunning: false,
             mode: 'demo',

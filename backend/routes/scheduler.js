@@ -22,7 +22,11 @@ router.post('/start', authenticate, authorize('admin', 'trader'), async (req, re
     res.json({ success: true, message: 'Scheduler started' });
   } catch (error) {
     console.error('Failed to start scheduler:', error);
-    res.status(500).json({ error: 'Failed to start scheduler' });
+    const errorMessage = error.message || 'Failed to start scheduler';
+    res.status(500).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -33,7 +37,11 @@ router.post('/stop', authenticate, authorize('admin', 'trader'), async (req, res
     res.json({ success: true, message: 'Scheduler stopped' });
   } catch (error) {
     console.error('Failed to stop scheduler:', error);
-    res.status(500).json({ error: 'Failed to stop scheduler' });
+    const errorMessage = error.message || 'Failed to stop scheduler';
+    res.status(500).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

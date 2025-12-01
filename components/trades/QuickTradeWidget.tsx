@@ -34,6 +34,7 @@ const QuickTradeWidget: React.FC<QuickTradeWidgetProps> = ({ data, onSubmit, dis
             amountPercent: selectedPercent,
             stopLossPercent: stopLossValue,
             takeProfitPercent: takeProfitValue,
+            pair: data.pair, // Include pair in order
         });
     };
 

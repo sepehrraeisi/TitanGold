@@ -7,7 +7,7 @@ import { Toast } from './ui/toast.tsx';
 import { ConfirmModal } from './ui/confirm-modal.tsx';
 
 interface HeaderProps {
-    activeView: string;
+    activeView: string | 'dashboard' | 'favorites' | 'trades' | 'portfolio' | 'analysis' | 'news' | 'ai' | 'gold' | 'settings' | 'profile' | 'wallet';
     setActiveView: (view: string) => void;
     onLogout: () => void;
 }
@@ -138,12 +138,12 @@ const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: (
                     <p className="text-xs text-muted-foreground">{user?.email || ''}</p>
                 </div>
                 {dailyPnL !== 0 && (
-                    <div className="text-left hidden lg:block border-l border-border pl-2 ml-2">
+                <div className="text-left hidden lg:block border-l border-border pl-2 ml-2">
                         <p className={`text-sm font-semibold ${dailyPnL >= 0 ? 'text-positive' : 'text-negative'}`}>
                             {dailyPnL >= 0 ? '+' : ''}${dailyPnL.toFixed(2)}
                         </p>
                         <p className="text-xs text-muted-foreground">{t('today_pnl', { pnl: dailyPnL.toFixed(2) })}</p>
-                    </div>
+                </div>
                 )}
                 <svg className={`h-5 w-5 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
             </button>
@@ -210,7 +210,7 @@ const DemoModeToggle: React.FC = () => {
         
         setShowConfirm(false);
         setIsToggling(true);
-        
+
         const newMode = artemis.mode === 'demo' ? 'real' : 'demo';
         
         try {
@@ -247,18 +247,18 @@ const DemoModeToggle: React.FC = () => {
 
     return (
         <>
-            <div 
-                className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" 
-                onClick={handleToggle}
-                title={t('click_to_switch_mode') || `Click to switch to ${isDemo ? 'REAL' : 'DEMO'} mode`}
-            >
-                <p className={`text-sm font-semibold ${isDemo ? 'text-yellow-500' : 'text-red-500'}`}>
-                    {isDemo ? '🟢 Demo' : '🔴 Live'}
-                </p>
-                <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ${isDemo ? 'bg-yellow-500/30' : 'bg-red-500/30'}`}>
-                    <div className={`w-3 h-3 rounded-full shadow-md transform duration-300 ${isDemo ? 'translate-x-0 bg-yellow-500' : 'translate-x-4 bg-red-500'}`}/>
-                </div>
+        <div 
+            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" 
+            onClick={handleToggle}
+            title={t('click_to_switch_mode') || `Click to switch to ${isDemo ? 'REAL' : 'DEMO'} mode`}
+        >
+            <p className={`text-sm font-semibold ${isDemo ? 'text-yellow-500' : 'text-red-500'}`}>
+                {isDemo ? '🟢 Demo' : '🔴 Live'}
+            </p>
+            <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ${isDemo ? 'bg-yellow-500/30' : 'bg-red-500/30'}`}>
+                <div className={`w-3 h-3 rounded-full shadow-md transform duration-300 ${isDemo ? 'translate-x-0 bg-yellow-500' : 'translate-x-4 bg-red-500'}`}/>
             </div>
+        </div>
             <ConfirmModal
                 isOpen={showConfirm}
                 message={confirmMessage}
@@ -280,23 +280,23 @@ const DemoModeToggle: React.FC = () => {
 const MobileMenu: React.FC<{ navLinks: any[], activeView: string, setActiveView: (view: string) => void, isOpen: boolean, setIsOpen: (isOpen: boolean) => void }> = ({ navLinks, activeView, setActiveView, isOpen, setIsOpen }) => {
     const { t } = useLanguage();
     return (
-        <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity lg:hidden ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsOpen(false)}>
-            <div className={`fixed top-0 left-0 h-full w-64 bg-card shadow-xl transition-transform transform ${isOpen ? 'translate-x-0' : '-translate-x-full'}`} onClick={e => e.stopPropagation()}>
-                <div className="p-4 border-b border-border">
-                    <span className="text-xl font-bold text-foreground">TITAN</span>
-                </div>
-                <nav className="p-4 space-y-2">
-                    {navLinks.map(link => (
-                        <NavLink key={link.view} {...link} activeView={activeView} onClick={(view) => { setActiveView(view); setIsOpen(false); }} isMobile />
-                    ))}
-                </nav>
-                <div className="p-4 border-t border-border">
-                    <div className="text-sm text-muted-foreground mb-2">{t('mode') || 'Mode'}:</div>
-                    <DemoModeToggle />
-                </div>
+    <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity lg:hidden ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsOpen(false)}>
+        <div className={`fixed top-0 left-0 h-full w-64 bg-card shadow-xl transition-transform transform ${isOpen ? 'translate-x-0' : '-translate-x-full'}`} onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-border">
+                <span className="text-xl font-bold text-foreground">TITAN</span>
+            </div>
+            <nav className="p-4 space-y-2">
+                {navLinks.map(link => (
+                    <NavLink key={link.view} {...link} activeView={activeView} onClick={(view) => { setActiveView(view); setIsOpen(false); }} isMobile />
+                ))}
+            </nav>
+            <div className="p-4 border-t border-border">
+                <div className="text-sm text-muted-foreground mb-2">{t('mode') || 'Mode'}:</div>
+                <DemoModeToggle />
             </div>
         </div>
-    );
+    </div>
+);
 };
 
 

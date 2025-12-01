@@ -22,11 +22,19 @@ const ManualTrades: React.FC = () => {
     const loadData = useCallback(async () => {
         try {
             setIsLoading(true);
+            setFeedback(null); // Clear previous errors
+            console.log('🔄 Loading manual trading data from backend...');
             const response = await fetchManualTradingPageData();
+            console.log('✅ Manual trading data received:', response);
             setData(response);
-        } catch (error) {
-            console.error('Failed to load manual trading data', error);
-            setFeedback({ type: 'error', message: t('manual_trades_error_loading') });
+        } catch (error: any) {
+            console.error('❌ Failed to load manual trading data:', error);
+            const errorMessage = error?.message || t('manual_trades_error_loading');
+            setFeedback({ 
+                type: 'error', 
+                message: `${t('manual_trades_error_loading')}: ${errorMessage}. Please ensure backend is running and MEXC API keys are configured.` 
+            });
+            setData(null); // Clear data on error
         } finally {
             setIsLoading(false);
         }
@@ -34,7 +42,14 @@ const ManualTrades: React.FC = () => {
 
     useEffect(() => {
         void loadData();
-    }, [loadData]);
+        // Refresh data every 10 seconds for real-time updates
+        const interval = setInterval(() => {
+            if (!isActionPending) {
+                void loadData();
+            }
+        }, 10000);
+        return () => clearInterval(interval);
+    }, [loadData, isActionPending]);
 
     useEffect(() => {
         if (!feedback) {
