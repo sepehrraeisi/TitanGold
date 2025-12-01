@@ -1605,19 +1605,16 @@ export const checkSession = (): Promise<User | null> => {
         const sessionUser = sessionStorage.getItem('titan_user') || localStorage.getItem('titan_user');
         
         if (token && sessionUser) {
-            // Validate token with backend
             try {
                 const response = await fetch('/api/auth/verify', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (response.ok) {
                     resolve(JSON.parse(sessionUser));
                     return;
                 }
             } catch (error) {
-                console.warn('Token validation failed, clearing session:', error);
+                console.warn('Token validation failed:', error);
             }
         }
         
@@ -1629,26 +1626,21 @@ export const checkSession = (): Promise<User | null> => {
     });
 };
 
-
 export const login = async (username: string, pass: string): Promise<User | null> => {
     try {
-        console.log('🔐 Login attempt:', { username, passLength: pass.length });
+        console.log('🔐 Login attempt:', { username });
         
-        // Try Backend API first
         try {
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password: pass }),
             });
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Backend login successful:', { user: data.user?.email });
+                console.log('✅ Backend login successful');
                 
-                // Store token and user data
                 if (data.token) {
                     localStorage.setItem('titan_token', data.token);
                     sessionStorage.setItem('titan_token', data.token);
@@ -1668,25 +1660,20 @@ export const login = async (username: string, pass: string): Promise<User | null
                     localStorage.setItem('titan_user', JSON.stringify(userToStore));
                     return userToStore;
                 }
-            } else {
-                console.log('⚠️ Backend login failed, trying fallback...');
             }
         } catch (apiError) {
-            console.warn('⚠️ Backend API not available, using fallback:', apiError);
+            console.warn('⚠️ Backend unavailable, using fallback');
         }
 
-        // Fallback to mock data if Backend fails
         const userManagement = await fetchUserManagement();
         const managedUser = userManagement.users.find(u => {
-            const userUsername = u.username || u.email.split('@')[0] || u.name.toLowerCase().replace(/\s+/g, '_');
+            const userUsername = u.username || u.email.split('@')[0];
             const usernameMatches = userUsername.toLowerCase() === username.toLowerCase() || u.email.toLowerCase() === username.toLowerCase();
-            const passwordMatches = u.password === pass;
-            const isActive = u.status === 'active';
-            return usernameMatches && passwordMatches && isActive;
+            return usernameMatches && u.password === pass && u.status === 'active';
         });
 
         if (managedUser) {
-            const roleMap: { [key: string]: 'Admin' | 'Trader' | 'Viewer' } = {
+            const roleMap: Record<string, 'Admin' | 'Trader' | 'Viewer'> = {
                 'role_admin': 'Admin', 'role_trader': 'Trader', 'role_viewer': 'Viewer'
             };
             const userToStore: User = {
@@ -1704,27 +1691,22 @@ export const login = async (username: string, pass: string): Promise<User | null
         console.error('❌ Login error:', error);
         return null;
     }
+};
 
 export const logout = async (): Promise<void> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        
-        // Call backend logout API if token exists
         if (token) {
             try {
                 await fetch('/api/auth/logout', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 });
             } catch (error) {
                 console.warn('Backend logout failed:', error);
             }
         }
     } finally {
-        // Clear all stored data regardless of API call result
         localStorage.removeItem('titan_token');
         localStorage.removeItem('titan_refresh_token');
         localStorage.removeItem('titan_user');
@@ -1733,7 +1715,7 @@ export const logout = async (): Promise<void> => {
         console.log('✅ Session cleared');
     }
 };
-};
+
 
 
 export const fetchDashboardData = (): Promise<any> => {
