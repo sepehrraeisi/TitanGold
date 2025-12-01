@@ -1600,92 +1600,100 @@ const mutateFavoritesState = (
 // --- API FUNCTIONS ---
 
 export const checkSession = (): Promise<User | null> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const sessionUser = sessionStorage.getItem('titan_user');
-            if (sessionUser) {
-                resolve(JSON.parse(sessionUser));
-            } else {
-                resolve(null);
+    return new Promise(async (resolve) => {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        const sessionUser = sessionStorage.getItem('titan_user') || localStorage.getItem('titan_user');
+        
+        if (token && sessionUser) {
+            // Validate token with backend
+            try {
+                const response = await fetch('/api/auth/verify', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (response.ok) {
+                    resolve(JSON.parse(sessionUser));
+                    return;
+                }
+            } catch (error) {
+                console.warn('Token validation failed, clearing session:', error);
             }
-        }, 300);
+        }
+        
+        if (sessionUser) {
+            resolve(JSON.parse(sessionUser));
+        } else {
+            resolve(null);
+        }
     });
 };
 
+
 export const login = async (username: string, pass: string): Promise<User | null> => {
     try {
-        // First, try to find user in UserManagementData (real users)
-        const userManagement = await fetchUserManagement();
-        console.log('Login attempt:', { username, passLength: pass.length });
-        console.log('Available users:', userManagement.users.map(u => ({
-            email: u.email,
-            username: u.username,
-            hasPassword: !!u.password,
-            status: u.status
-        })));
-
-        const managedUser = userManagement.users.find(u => {
-            // Check by username, email, or name (converted to username format)
-            const userUsername = u.username || u.email.split('@')[0] || u.name.toLowerCase().replace(/\s+/g, '_');
-            const nameAsUsername = u.name.toLowerCase().replace(/\s+/g, '_');
-            const emailPrefix = u.email.split('@')[0].toLowerCase();
-
-            const usernameMatches = (
-                userUsername.toLowerCase() === username.toLowerCase() ||
-                nameAsUsername === username.toLowerCase() ||
-                emailPrefix === username.toLowerCase() ||
-                u.email.toLowerCase() === username.toLowerCase()
-            );
-
-            const passwordMatches = u.password === pass;
-            const isActive = u.status === 'active';
-
-            console.log(`Checking user ${u.email}:`, {
-                usernameMatches,
-                passwordMatches,
-                isActive,
-                storedPassword: u.password,
-                inputPassword: pass
+        console.log('🔐 Login attempt:', { username, passLength: pass.length });
+        
+        // Try Backend API first
+        try {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password: pass }),
             });
 
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ Backend login successful:', { user: data.user?.email });
+                
+                // Store token and user data
+                if (data.token) {
+                    localStorage.setItem('titan_token', data.token);
+                    sessionStorage.setItem('titan_token', data.token);
+                }
+                if (data.refreshToken) {
+                    localStorage.setItem('titan_refresh_token', data.refreshToken);
+                }
+                if (data.user) {
+                    const userToStore: User = {
+                        id: data.user.id,
+                        name: data.user.full_name || data.user.username,
+                        email: data.user.email,
+                        username: data.user.username,
+                        role: data.user.role === 'admin' ? 'Admin' : data.user.role === 'trader' ? 'Trader' : 'Viewer',
+                    };
+                    sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
+                    localStorage.setItem('titan_user', JSON.stringify(userToStore));
+                    return userToStore;
+                }
+            } else {
+                console.log('⚠️ Backend login failed, trying fallback...');
+            }
+        } catch (apiError) {
+            console.warn('⚠️ Backend API not available, using fallback:', apiError);
+        }
+
+        // Fallback to mock data if Backend fails
+        const userManagement = await fetchUserManagement();
+        const managedUser = userManagement.users.find(u => {
+            const userUsername = u.username || u.email.split('@')[0] || u.name.toLowerCase().replace(/\s+/g, '_');
+            const usernameMatches = userUsername.toLowerCase() === username.toLowerCase() || u.email.toLowerCase() === username.toLowerCase();
+            const passwordMatches = u.password === pass;
+            const isActive = u.status === 'active';
             return usernameMatches && passwordMatches && isActive;
         });
 
         if (managedUser) {
-            // Convert ManagedUser to User format
-            // Map roleKey to role (Admin, Trader, Viewer, etc.)
             const roleMap: { [key: string]: 'Admin' | 'Trader' | 'Viewer' } = {
-                'role_admin': 'Admin',
-                'role_trader': 'Trader',
-                'role_viewer': 'Viewer',
-                'role_manager': 'Admin',
-                'role_analyst': 'Viewer',
+                'role_admin': 'Admin', 'role_trader': 'Trader', 'role_viewer': 'Viewer'
             };
-
             const userToStore: User = {
-                id: managedUser.id,
-                name: managedUser.name,
-                email: managedUser.email,
-                username: managedUser.username || managedUser.email.split('@')[0] || managedUser.name.toLowerCase().replace(/\s+/g, '_'),
+                id: managedUser.id, name: managedUser.name, email: managedUser.email,
+                username: managedUser.username || managedUser.email.split('@')[0],
                 role: roleMap[managedUser.roleKey] || 'Viewer',
             };
-
-            // Update last active time
-            managedUser.lastActiveAt = new Date().toISOString();
-            await database.save('settings', { key: 'user_management', value: userManagement });
-
-            // Store in sessionStorage and localStorage
-            sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
-            localStorage.setItem('titan_user', JSON.stringify(userToStore));
-
-            return userToStore;
-        }
-
-        // Fallback to old mock database for backward compatibility
-        const user = db.users.find(u => u.name.toLowerCase().replace(' ', '_') === username.toLowerCase() && u.password === pass);
-        if (user) {
-            const userToStore = { ...user };
-            delete (userToStore as any).password;
             sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
             localStorage.setItem('titan_user', JSON.stringify(userToStore));
             return userToStore;
@@ -1693,10 +1701,40 @@ export const login = async (username: string, pass: string): Promise<User | null
 
         return null;
     } catch (error) {
-        console.error('Login error:', error);
+        console.error('❌ Login error:', error);
         return null;
     }
+
+export const logout = async (): Promise<void> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        
+        // Call backend logout API if token exists
+        if (token) {
+            try {
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+            } catch (error) {
+                console.warn('Backend logout failed:', error);
+            }
+        }
+    } finally {
+        // Clear all stored data regardless of API call result
+        localStorage.removeItem('titan_token');
+        localStorage.removeItem('titan_refresh_token');
+        localStorage.removeItem('titan_user');
+        sessionStorage.removeItem('titan_token');
+        sessionStorage.removeItem('titan_user');
+        console.log('✅ Session cleared');
+    }
 };
+};
+
 
 export const fetchDashboardData = (): Promise<any> => {
     return new Promise(resolve => {
