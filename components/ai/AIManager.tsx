@@ -596,6 +596,17 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
     const [selectedDecision, setSelectedDecision] = useState<Decision | null>(null);
     const [showConfigModal, setShowConfigModal] = useState(false);
     const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
+
+    const decisionSeries = useMemo(() => {
+        const decisions = artemis.decisionEngine?.recentDecisions || [];
+        return decisions.slice(-30).map((d, idx) => ({
+            index: idx,
+            confidence: d.output?.confidence ?? d.confidence ?? 0,
+            accuracy: d.learning?.accuracy ?? null,
+            wasSuccessful: d.learning?.learned ? (d.learning.accuracy ?? 0) >= 70 : null,
+            timestamp: d.createdAt || d.timestamp || d.id,
+        }));
+    }, [artemis.decisionEngine?.recentDecisions]);
     
     const handleMakeDecision = async () => {
         setIsMakingDecision(true);
@@ -787,6 +798,57 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
                     </select>
                 </div>
             </div>
+
+            {/* Decision Performance Chart */}
+            <Card>
+                <div className="flex items-center justify-between mb-3">
+                    <div>
+                        <h4 className="font-semibold text-foreground">{t('decision_performance') || 'Decision Performance'}</h4>
+                        <p className="text-xs text-muted-foreground">
+                            {t('decision_performance_desc') || 'Recent decisions confidence & success'}
+                        </p>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                        {t('last_n_decisions', { n: decisionSeries.length }) || `Last ${decisionSeries.length} decisions`}
+                    </div>
+                </div>
+                {decisionSeries.length >= 2 ? (
+                    <div className="h-48 w-full bg-[#0d0f19] rounded-md border border-border flex items-center justify-center">
+                        <svg width="100%" height="100%" viewBox="0 0 500 180" preserveAspectRatio="none">
+                            {/* Grid */}
+                            {[1,2,3,4,5].map(i => (
+                                <line key={`row-${i}`} x1="0" y1={i*30} x2="500" y2={i*30} stroke="#1f2434" strokeWidth="1" />
+                            ))}
+                            {/* Confidence line */}
+                            {(() => {
+                                const maxConf = Math.max(...decisionSeries.map(d => d.confidence), 100);
+                                const minConf = Math.min(...decisionSeries.map(d => d.confidence), 0);
+                                const range = maxConf - minConf || 1;
+                                const points = decisionSeries.map((d, i) => {
+                                    const x = (i / Math.max(decisionSeries.length - 1, 1)) * 500;
+                                    const y = 170 - ((d.confidence - minConf) / range) * 150;
+                                    return `${x},${y}`;
+                                }).join(' ');
+                                return <polyline points={points} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" />;
+                            })()}
+                            {/* Accuracy markers */}
+                            {(() => {
+                                const maxAcc = 100;
+                                const minAcc = 0;
+                                const range = maxAcc - minAcc || 1;
+                                return decisionSeries.map((d, i) => {
+                                    const x = (i / Math.max(decisionSeries.length - 1, 1)) * 500;
+                                    const y = 170 - (( (d.accuracy ?? d.confidence) - minAcc) / range) * 150;
+                                    const color = d.wasSuccessful === null ? '#9ca3af' : d.wasSuccessful ? '#22c55e' : '#ef4444';
+                                    return <circle key={`acc-${i}`} cx={x} cy={y} r={4} fill={color} opacity="0.9" />;
+                                });
+                            })()}
+                        </svg>
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">{t('not_enough_data') || 'Not enough data to render chart.'}</p>
+                )}
+            </Card>
             <input
                 type="text"
                 value={searchQuery}

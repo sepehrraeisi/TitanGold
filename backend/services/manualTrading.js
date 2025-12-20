@@ -881,6 +881,17 @@ class ManualTradingService {
    */
   async getOpenOrders(userId, pair = null) {
     try {
+      // Try to fetch from MEXC first (real-time data)
+      try {
+        const mexcOrders = await mexcService.fetchOpenOrders(userId, pair || undefined);
+        if (mexcOrders && mexcOrders.length > 0) {
+          return mexcOrders;
+        }
+      } catch (mexcError) {
+        console.warn('⚠️ Could not fetch open orders from MEXC, falling back to database:', mexcError.message);
+      }
+
+      // Fallback to database
       let queryText = `
         SELECT * FROM manual_trades 
         WHERE user_id = $1 AND status IN ('pending', 'open')
@@ -895,15 +906,15 @@ class ManualTradingService {
       queryText += ` ORDER BY created_at DESC`;
 
       const result = await query(queryText, params).catch(err => {
-        console.warn('⚠️ Could not fetch open orders:', err.message);
+        console.warn('⚠️ Could not fetch open orders from database:', err.message);
         return { rows: [] };
       });
 
       return result.rows.map(row => ({
-        id: row.id,
+        id: row.exchange_order_id || row.id.toString(), // Use exchange order ID if available
         pair: row.pair,
         side: row.side,
-        type: row.type,
+        type: row.type || 'limit',
         amount: parseFloat(row.amount || 0),
         price: row.price ? parseFloat(row.price) : null,
         stopPrice: row.stop_price ? parseFloat(row.stop_price) : null,
@@ -922,35 +933,64 @@ class ManualTradingService {
    */
   async cancelOrder(userId, orderId) {
     try {
-      // Get order from database
-      const orderResult = await query(
-        `SELECT * FROM manual_trades WHERE id = $1 AND user_id = $2`,
-        [orderId, userId]
-      );
+      // Try to cancel on MEXC first (if orderId is a valid MEXC order ID)
+      try {
+        // Check if we can find the order in database first to get the pair
+        const orderResult = await query(
+          `SELECT * FROM manual_trades WHERE (id::text = $1 OR exchange_order_id = $1) AND user_id = $2`,
+          [orderId, userId]
+        ).catch(() => ({ rows: [] }));
 
-      if (orderResult.rows.length === 0) {
-        throw new Error('Order not found');
-      }
+        if (orderResult.rows.length > 0) {
+          const order = orderResult.rows[0];
+          const exchangeOrderId = order.exchange_order_id || orderId;
+          
+          // Try to cancel on MEXC
+          try {
+            await mexcService.cancelOrder(userId, exchangeOrderId, order.pair);
+            console.log(`✅ Order ${exchangeOrderId} cancelled on MEXC`);
+          } catch (mexcError) {
+            console.warn('⚠️ Could not cancel order on MEXC:', mexcError.message);
+            // Continue with database update even if MEXC cancel fails
+          }
 
-      const order = orderResult.rows[0];
-
-      // Cancel order on MEXC if it has an exchange order ID
-      if (order.exchange_order_id) {
-        try {
-          await mexcService.exchange.cancelOrder(order.exchange_order_id, order.pair);
-        } catch (mexcError) {
-          console.warn('⚠️ Could not cancel order on MEXC:', mexcError.message);
-          // Continue with database update even if MEXC cancel fails
+          // Update order status in database
+          await query(
+            `UPDATE manual_trades SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
+            [order.id]
+          ).catch(err => {
+            console.warn('⚠️ Could not update order status in database:', err.message);
+          });
+        } else {
+          // Order not in database, try to cancel directly on MEXC (might be an exchange order ID)
+          // We need the pair, so try common pairs or fail gracefully
+          const commonPairs = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'];
+          let cancelled = false;
+          
+          for (const pair of commonPairs) {
+            try {
+              await mexcService.cancelOrder(userId, orderId, pair);
+              cancelled = true;
+              console.log(`✅ Order ${orderId} cancelled on MEXC for ${pair}`);
+              break;
+            } catch (e) {
+              // Try next pair
+            }
+          }
+          
+          if (!cancelled) {
+            throw new Error('Order not found in database or MEXC');
+          }
         }
+
+        return { success: true };
+      } catch (mexcError) {
+        // If MEXC cancel fails and we don't have the order in DB, throw error
+        if (mexcError.code === 'MEXC_NOT_CONFIGURED') {
+          throw new Error('MEXC API keys not configured. Please configure in Settings > Connections > Exchange API Keys');
+        }
+        throw mexcError;
       }
-
-      // Update order status in database
-      await query(
-        `UPDATE manual_trades SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
-        [orderId]
-      );
-
-      return { success: true };
     } catch (error) {
       console.error('Error cancelling order:', error);
       throw error;

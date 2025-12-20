@@ -41,6 +41,11 @@ const SecuritySettings: React.FC = () => {
     const [alerts, setAlerts] = useState<SecurityAlertSettings | null>(null);
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [showTwoFactorSetup, setShowTwoFactorSetup] = useState(false);
+    const [twoFactorQR, setTwoFactorQR] = useState<string | null>(null);
+    const [twoFactorSecret, setTwoFactorSecret] = useState<string | null>(null);
+    const [verificationCode, setVerificationCode] = useState('');
+    const [setupError, setSetupError] = useState<string | null>(null);
 
     useEffect(() => {
         const load = async () => {
@@ -54,11 +59,65 @@ const SecuritySettings: React.FC = () => {
     }, []);
 
     const handleToggle2fa = async () => {
-        setIsProcessing(true);
-        const updated = await api.toggleTwoFactorAuth();
-        setData(updated);
-        setAlerts(updated.alerts);
-        setIsProcessing(false);
+        if (!data) return;
+        
+        if (!data.twoFactor.enabled) {
+            // Enable 2FA - Show setup modal
+            try {
+                setIsProcessing(true);
+                setSetupError(null);
+                const setupResult = await api.setup2FA();
+                setTwoFactorQR(setupResult.qrCode);
+                setTwoFactorSecret(setupResult.manualEntryKey);
+                setShowTwoFactorSetup(true);
+            } catch (error: any) {
+                console.error('Failed to setup 2FA:', error);
+                setSetupError(error.message || 'Failed to setup 2FA');
+            } finally {
+                setIsProcessing(false);
+            }
+        } else {
+            // Disable 2FA
+            try {
+                setIsProcessing(true);
+                await api.disable2FA();
+                const updated = await api.fetchSecuritySettings();
+                setData(updated);
+                setAlerts(updated.alerts);
+            } catch (error: any) {
+                console.error('Failed to disable 2FA:', error);
+                setSetupError(error.message || 'Failed to disable 2FA');
+            } finally {
+                setIsProcessing(false);
+            }
+        }
+    };
+
+    const handleVerify2FA = async () => {
+        if (!verificationCode || verificationCode.length !== 6) {
+            setSetupError('Please enter a valid 6-digit code');
+            return;
+        }
+        
+        try {
+            setIsProcessing(true);
+            setSetupError(null);
+            await api.verify2FA(verificationCode);
+            setShowTwoFactorSetup(false);
+            setVerificationCode('');
+            setTwoFactorQR(null);
+            setTwoFactorSecret(null);
+            
+            // Refresh settings
+            const updated = await api.fetchSecuritySettings();
+            setData(updated);
+            setAlerts(updated.alerts);
+        } catch (error: any) {
+            console.error('Failed to verify 2FA:', error);
+            setSetupError(error.message || 'Invalid verification code. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const handleAlertChange = async (field: keyof SecurityAlertSettings, value: boolean) => {
@@ -195,6 +254,98 @@ const SecuritySettings: React.FC = () => {
                     ))}
                 </ul>
             </SettingsCard>
+
+            {/* 2FA Setup Modal */}
+            {showTwoFactorSetup && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-[#161B22] border border-gray-800 rounded-xl p-6 max-w-md w-full mx-4">
+                        <h3 className="text-xl font-semibold text-white mb-4">{t('setup_2fa') || 'Setup Two-Factor Authentication'}</h3>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-sm text-gray-400 mb-2">
+                                    {t('scan_qr_code') || 'Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):'}
+                                </p>
+                                {twoFactorQR ? (
+                                    <div className="flex justify-center p-4 bg-white rounded-lg">
+                                        <img src={twoFactorQR} alt="2FA QR Code" className="w-64 h-64" />
+                                    </div>
+                                ) : (
+                                    <div className="p-4 bg-gray-800 rounded-lg text-center text-gray-400">
+                                        {t('qr_code_unavailable') || 'QR code unavailable'}
+                                    </div>
+                                )}
+                            </div>
+
+                            {twoFactorSecret && (
+                                <div>
+                                    <p className="text-sm text-gray-400 mb-2">
+                                        {t('or_enter_manually') || 'Or enter this key manually:'}
+                                    </p>
+                                    <div className="p-3 bg-gray-800 rounded-lg font-mono text-sm text-gray-300 break-all">
+                                        {twoFactorSecret}
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(twoFactorSecret);
+                                        }}
+                                        className="mt-2 text-sm text-blue-400 hover:text-blue-300"
+                                    >
+                                        {t('copy_to_clipboard') || 'Copy to clipboard'}
+                                    </button>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                    {t('verification_code') || 'Enter verification code:'}
+                                </label>
+                                <input
+                                    type="text"
+                                    maxLength={6}
+                                    value={verificationCode}
+                                    onChange={(e) => {
+                                        const value = e.target.value.replace(/\D/g, '');
+                                        setVerificationCode(value);
+                                        setSetupError(null);
+                                    }}
+                                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="000000"
+                                />
+                            </div>
+
+                            {setupError && (
+                                <div className="p-3 bg-red-500/20 border border-red-500/40 rounded-lg text-red-300 text-sm">
+                                    {setupError}
+                                </div>
+                            )}
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={handleVerify2FA}
+                                    disabled={isProcessing || verificationCode.length !== 6}
+                                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg"
+                                >
+                                    {isProcessing ? (t('verifying') || 'Verifying...') : (t('verify_and_enable') || 'Verify and Enable')}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowTwoFactorSetup(false);
+                                        setVerificationCode('');
+                                        setTwoFactorQR(null);
+                                        setTwoFactorSecret(null);
+                                        setSetupError(null);
+                                    }}
+                                    disabled={isProcessing}
+                                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg"
+                                >
+                                    {t('cancel') || 'Cancel'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -6,6 +6,7 @@ import { AppProvider, useAppContext } from './context/AppContext.tsx';
 import { checkSession, login } from './services/api.ts';
 import { loginWithBackend, checkSessionStorage, logoutUser } from './services/api-auth.ts';
 import LoadingScreen from './components/LoadingScreen.tsx';
+import ErrorBoundary from './components/ErrorBoundary.tsx';
 import type { User } from './types.ts';
 import { database } from './services/database.ts';
 
@@ -81,11 +82,13 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <LanguageProvider>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
-    </LanguageProvider>
+    <ErrorBoundary>
+      <LanguageProvider>
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
+      </LanguageProvider>
+    </ErrorBoundary>
   );
 };
 

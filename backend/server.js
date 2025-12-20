@@ -9,6 +9,11 @@ import pool from './database/db.js';
 import { autopilot } from './engine/autopilot.js';
 import { scheduler } from './engine/scheduler.js';
 import { tradingEngine } from './engine/tradingEngine.js';
+import { messageQueue } from './services/messageQueue.js';
+import { requestContextMiddleware, performanceMiddleware, logger } from './services/logger.js';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './swagger.js';
+import { initWebsocket, broadcastNotification } from './services/websocket.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -28,6 +33,8 @@ import tradingEngineRoutes from './routes/trading-engine.js';
 import manualTradesRoutes from './routes/manual-trades.js';
 import connectionsRoutes from './routes/connections.js';
 import strategyRoutes from './routes/strategies.js';
+import securityRoutes from './routes/security.js';
+import exportRoutes from './routes/exports.js';
 
 dotenv.config();
 
@@ -37,6 +44,10 @@ const PORT = process.env.PORT || 5001;
 // ============================================================================
 // MIDDLEWARE
 // ============================================================================
+
+// Request context & performance metrics
+app.use(requestContextMiddleware);
+app.use(performanceMiddleware);
 
 // Security middleware
 app.use(helmet());
@@ -81,16 +92,20 @@ app.use('/api/', limiter);
 app.get('/health', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
+    const mqStatus = messageQueue.getStatus();
     res.json({
       status: 'healthy',
       timestamp: result.rows[0].now,
       database: 'connected',
+      messageQueue: mqStatus,
       uptime: process.uptime()
     });
   } catch (error) {
+    const mqStatus = messageQueue.getStatus();
     res.status(503).json({
       status: 'unhealthy',
       database: 'disconnected',
+      messageQueue: mqStatus,
       error: error.message
     });
   }
@@ -114,6 +129,10 @@ app.use('/api/trading-engine', tradingEngineRoutes);
 app.use('/api/manual-trades', manualTradesRoutes);
 app.use('/api/connections', connectionsRoutes);
 app.use('/api/strategies', strategyRoutes);
+app.use('/api/security', securityRoutes);
+app.use('/api/exports', exportRoutes);
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
 
 // 404 handler
 app.use((req, res) => {
@@ -125,7 +144,13 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
+  logger.error('❌ Error', {
+    requestId: req.requestId,
+    path: req.originalUrl || req.url,
+    method: req.method,
+    status: err.status || 500,
+    message: err.message,
+  });
 
   const status = err.status || 500;
   const message = err.message || 'Internal Server Error';
@@ -145,7 +170,7 @@ app.use((err, req, res, next) => {
 // START SERVER
 // ============================================================================
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log('');
   console.log('🚀 ============================================');
   console.log(`🚀 TitanGold Backend API`);
@@ -155,6 +180,14 @@ app.listen(PORT, () => {
   console.log('🚀 ============================================');
   console.log('');
 
+  // Initialize Message Queue
+  try {
+    await messageQueue.connect();
+    console.log('✅ Message Queue initialized');
+  } catch (error) {
+    console.warn('⚠️ Message Queue initialization failed, using fallback mode:', error.message);
+  }
+
   // Start Autopilot Engine
   autopilot.start();
   
@@ -163,19 +196,25 @@ app.listen(PORT, () => {
   
   // Start Trading Engine
   tradingEngine.start();
+
+  // Initialize WebSocket Notifications
+  initWebsocket(server);
+  console.log('✅ WebSocket notifications ready at /ws/notifications');
 });
 
 // Handle graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM signal received: closing HTTP server');
+  await messageQueue.close().catch(() => {});
   pool.end(() => {
     console.log('🛑 Database pool closed');
     process.exit(0);
   });
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('🛑 SIGINT signal received: closing HTTP server');
+  await messageQueue.close().catch(() => {});
   pool.end(() => {
     console.log('🛑 Database pool closed');
     process.exit(0);

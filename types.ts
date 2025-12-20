@@ -229,7 +229,9 @@ export interface FavoriteItem {
   price: number;
   change24h: number;
   volume: string;
+  volume24h?: number;
   hasAlert: boolean;
+  priceHistory?: number[];
   _priceChangeDirection?: 'up' | 'down' | null;
   _priceUpdateTime?: number;
 }

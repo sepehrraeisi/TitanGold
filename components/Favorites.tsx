@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import { FavoriteItem, MarketMover, CryptoAsset, FavoritesPageData, FavoriteAlertInput } from '../types.ts';
 import AddFavoriteModal from './modals/AddFavoriteModal.tsx';
 import SetAlertModal from './modals/SetAlertModal.tsx';
 import ActionMenu from './favorites/ActionMenu.tsx';
+import MiniChart from './favorites/MiniChart.tsx';
 import * as api from '../services/api.ts';
 
 // Market Stats Widget Component
@@ -149,6 +150,9 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     const [selectedAsset, setSelectedAsset] = useState<FavoriteItem | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [status, setStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change24h' | 'volume'>('symbol');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const [filterBy, setFilterBy] = useState<'all' | 'gainers' | 'decliners' | 'alerts'>('all');
 
     // Initial data fetch
     useEffect(() => {
@@ -203,11 +207,17 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                             const priceChanged = priceData.price !== fav.price;
                             const priceDirection = priceData.price > fav.price ? 'up' : priceData.price < fav.price ? 'down' : null;
                             
+                            // Build price history (last 20 prices)
+                            const existingHistory = fav.priceHistory || [];
+                            const newHistory = [...existingHistory, priceData.price].slice(-20); // Keep last 20 prices
+                            
                             return {
                                 ...fav,
                                 price: priceData.price,
                                 change24h: priceData.change24h,
                                 volume: priceData.volume,
+                                volume24h: priceData.volume24h,
+                                priceHistory: newHistory,
                                 _priceChangeDirection: priceChanged ? priceDirection : null,
                                 _priceUpdateTime: Date.now(),
                             };
@@ -282,11 +292,71 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
         setSelectedAsset(item);
         setIsAlertModalOpen(true);
     };
+
+    // Sort and filter logic
+    const filteredAndSortedItems = useMemo(() => {
+        if (!data?.favorites) return [];
+
+        let items = [...data.favorites];
+
+        // Filter by search term
+        if (searchTerm) {
+            items = items.filter(item =>
+                item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.symbol.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+
+        // Filter by type (gainers, decliners, alerts)
+        if (filterBy === 'gainers') {
+            items = items.filter(item => item.change24h > 0);
+        } else if (filterBy === 'decliners') {
+            items = items.filter(item => item.change24h < 0);
+        } else if (filterBy === 'alerts') {
+            items = items.filter(item => item.hasAlert);
+        }
+
+        // Sort items
+        items.sort((a, b) => {
+            let aValue: number | string;
+            let bValue: number | string;
+
+            switch (sortBy) {
+                case 'symbol':
+                    aValue = a.symbol.toLowerCase();
+                    bValue = b.symbol.toLowerCase();
+                    break;
+                case 'price':
+                    aValue = a.price || 0;
+                    bValue = b.price || 0;
+                    break;
+                case 'change24h':
+                    aValue = a.change24h || 0;
+                    bValue = b.change24h || 0;
+                    break;
+                case 'volume':
+                    aValue = a.volume24h || 0;
+                    bValue = b.volume24h || 0;
+                    break;
+                default:
+                    return 0;
+            }
+
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                return sortOrder === 'asc' 
+                    ? aValue.localeCompare(bValue)
+                    : bValue.localeCompare(aValue);
+            } else {
+                return sortOrder === 'asc'
+                    ? (aValue as number) - (bValue as number)
+                    : (bValue as number) - (aValue as number);
+            }
+        });
+
+        return items;
+    }, [data?.favorites, searchTerm, sortBy, sortOrder, filterBy]);
     
-    const filteredItems = data?.favorites.filter(item => 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        item.symbol.toLowerCase().includes(searchTerm.toLowerCase())
-    ) || [];
+    const filteredItems = filteredAndSortedItems;
 
     if (isLoading) {
         return <div className="text-center p-10">{t('loading')}</div>;
@@ -330,17 +400,69 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
             </div>
 
             <div className="bg-[#1c1e2f] border border-gray-700/50 rounded-lg">
-                <div className="p-4 border-b border-gray-700/50 flex justify-between items-center">
-                    <h2 className="font-semibold text-white">{t('real_time_prices')}</h2>
-                     <div className="relative">
-                        <input 
-                            type="text"
-                            placeholder={t('search_assets')}
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="bg-gray-800/50 border border-gray-700 rounded-lg py-1 px-3 pl-8 text-sm focus:ring-purple-500 focus:border-purple-500"
-                        />
-                        <svg className="h-4 w-4 text-gray-400 absolute top-1/2 left-2.5 -translate-y-1/2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>
+                <div className="p-4 border-b border-gray-700/50">
+                    <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
+                        <h2 className="font-semibold text-white">{t('real_time_prices')}</h2>
+                        <div className="flex flex-wrap gap-2">
+                            {/* Filter Buttons */}
+                            <div className="flex gap-1 bg-gray-800/50 rounded-lg p-1">
+                                {(['all', 'gainers', 'decliners', 'alerts'] as const).map(filter => (
+                                    <button
+                                        key={filter}
+                                        onClick={() => setFilterBy(filter)}
+                                        className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                            filterBy === filter
+                                                ? 'bg-purple-600 text-white'
+                                                : 'text-gray-400 hover:text-white'
+                                        }`}
+                                    >
+                                        {t(`filter_${filter}`) || filter}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-4 items-center">
+                        {/* Search */}
+                        <div className="relative flex-1 min-w-[200px]">
+                            <input 
+                                type="text"
+                                placeholder={t('search_assets')}
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full bg-gray-800/50 border border-gray-700 rounded-lg py-1 px-3 pl-8 text-sm focus:ring-purple-500 focus:border-purple-500"
+                            />
+                            <svg className="h-4 w-4 text-gray-400 absolute top-1/2 left-2.5 -translate-y-1/2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>
+                        </div>
+                        {/* Sort */}
+                        <div className="flex items-center gap-2">
+                            <label className="text-xs text-gray-400">{t('sort_by') || 'Sort by:'}</label>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                                className="bg-gray-800/50 border border-gray-700 rounded-lg py-1 px-2 text-sm text-white focus:ring-purple-500 focus:border-purple-500"
+                            >
+                                <option value="symbol">{t('symbol') || 'Symbol'}</option>
+                                <option value="price">{t('price') || 'Price'}</option>
+                                <option value="change24h">{t('change_24h') || '24h Change'}</option>
+                                <option value="volume">{t('volume') || 'Volume'}</option>
+                            </select>
+                            <button
+                                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                                className="p-1 text-gray-400 hover:text-white transition-colors"
+                                title={sortOrder === 'asc' ? t('sort_desc') || 'Descending' : t('sort_asc') || 'Ascending'}
+                            >
+                                {sortOrder === 'asc' ? (
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                ) : (
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -351,6 +473,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                                 <th className="px-6 py-3">{t('price')}</th>
                                 <th className="px-6 py-3">{t('change_24h')}</th>
                                 <th className="px-6 py-3">{t('volume')}</th>
+                                <th className="px-6 py-3">{t('chart') || 'Chart'}</th>
                                 <th className="px-6 py-3">{t('alert')}</th>
                                 <th className="px-6 py-3 text-right">{t('action')}</th>
                             </tr>
@@ -368,6 +491,12 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                                 </td>
                                 <td className={`px-6 py-4 font-semibold ${item.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>{item.change24h >= 0 ? '+' : ''}{item.change24h.toFixed(2)}%</td>
                                 <td className="px-6 py-4">{item.volume}</td>
+                                <td className="px-6 py-4">
+                                    <MiniChart 
+                                        prices={item.priceHistory || []} 
+                                        change24h={item.change24h || 0}
+                                    />
+                                </td>
                                 <td className="px-6 py-4">{item.hasAlert && <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" /></svg>}</td>
                                 <td className="px-6 py-4 text-right">
                                     <ActionMenu

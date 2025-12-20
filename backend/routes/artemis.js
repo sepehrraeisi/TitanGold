@@ -20,16 +20,130 @@ async function logDecision(level, message, metadata = {}) {
 
 router.get('/state', authenticate, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');
-    res.json(result.rows[0] || {});
+    const userId = req.user?.id;
+    
+    // Get Artemis state from database
+    let artemisState;
+    try {
+      const result = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');
+      artemisState = result.rows[0] || {};
+    } catch (dbError) {
+      if (dbError.code === 'ECONNREFUSED' || dbError.message?.includes('ECONNREFUSED') || dbError.message?.includes('relation') || dbError.message?.includes('does not exist')) {
+        console.warn('⚠️ Database unavailable, returning default Artemis state');
+        artemisState = {};
+      } else {
+        throw dbError;
+      }
+    }
+    
+    // Get AI agents status
+    let agents = [];
+    try {
+      const agentsResult = await query('SELECT id, name, type, status, performance_score, accuracy, is_enabled FROM ai_agents ORDER BY name');
+      agents = agentsResult.rows || [];
+    } catch (e) {
+      console.warn('⚠️ Failed to fetch AI agents:', e);
+    }
+    
+    // Get recent decisions count
+    let decisionStats = {
+      total: 0,
+      successful: 0,
+      recent: 0
+    };
+    try {
+      const decisionsResult = await query(
+        `SELECT 
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE was_successful = true) as successful,
+          COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') as recent
+         FROM ai_decisions`
+      );
+      if (decisionsResult.rows.length > 0) {
+        decisionStats = {
+          total: parseInt(decisionsResult.rows[0].total) || 0,
+          successful: parseInt(decisionsResult.rows[0].successful) || 0,
+          recent: parseInt(decisionsResult.rows[0].recent) || 0
+        };
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to fetch decision stats:', e);
+    }
+    
+    // Build full state object
+    const fullState = {
+      status: artemisState.status || 'active',
+      mode: artemisState.mode || 'demo',
+      strategy: artemisState.strategy || 'mixture_of_experts',
+      activeLearning: artemisState.active_learning !== false,
+      overallAccuracy: artemisState.overall_accuracy || 0,
+      totalDecisions: artemisState.total_decisions || decisionStats.total,
+      successfulDecisions: artemisState.successful_decisions || decisionStats.successful,
+      config: artemisState.config || {},
+      decisionEngine: {
+        strategy: artemisState.config?.decisionEngine?.strategy || 'mixture_of_experts',
+        activeModel: artemisState.config?.decisionEngine?.activeModel || 'hybrid',
+        confidenceThreshold: artemisState.config?.decisionEngine?.confidenceThreshold || 75,
+        mixture: artemisState.config?.decisionEngine?.mixture || { enabled: true, models: [] }
+      },
+      orchestration: {
+        activeAgents: agents.filter(a => a.is_enabled && a.status === 'active').length,
+        totalAgents: agents.length,
+        agents: agents.map(a => ({
+          id: a.id,
+          name: a.name,
+          type: a.type,
+          status: a.status,
+          performanceScore: parseFloat(a.performance_score) || 0,
+          accuracy: parseFloat(a.accuracy) || 0,
+          enabled: a.is_enabled !== false
+        }))
+      },
+      monitoring: {
+        recentDecisions: decisionStats.recent,
+        systemHealth: {
+          cpu: 45, // Placeholder - should be fetched from system metrics
+          memory: 62, // Placeholder
+          apiQuota: 85 // Placeholder
+        }
+      },
+      created_at: artemisState.created_at,
+      updated_at: artemisState.updated_at
+    };
+    
+    res.json(fullState);
   } catch (error) {
     console.error('Failed to fetch Artemis state:', error);
-    // If database is unavailable, return empty object instead of error
-    if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-      console.warn('⚠️ Database unavailable, returning empty Artemis state');
-      return res.json({});
-    }
-    res.status(500).json({ error: 'Failed to fetch Artemis state', message: error.message });
+    // Return default state on error
+    res.json({
+      status: 'active',
+      mode: 'demo',
+      strategy: 'mixture_of_experts',
+      activeLearning: true,
+      overallAccuracy: 0,
+      totalDecisions: 0,
+      successfulDecisions: 0,
+      config: {},
+      decisionEngine: {
+        strategy: 'mixture_of_experts',
+        activeModel: 'hybrid',
+        confidenceThreshold: 75,
+        mixture: { enabled: true, models: [] }
+      },
+      orchestration: {
+        activeAgents: 0,
+        totalAgents: 0,
+        agents: []
+      },
+      monitoring: {
+        recentDecisions: 0,
+        systemHealth: {
+          cpu: 0,
+          memory: 0,
+          apiQuota: 0
+        }
+      }
+    });
   }
 });
 

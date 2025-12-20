@@ -428,7 +428,7 @@ const Strategies: React.FC = () => {
                             >
                                 {isProcessing === 'allocate-portfolio' ? t('loading') || '...' : t('allocate_portfolio')}
                             </button>
-                        </div>
+                         </div>
                     </div>
                 </div>
             </div>

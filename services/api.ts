@@ -1600,87 +1600,92 @@ const mutateFavoritesState = (
 // --- API FUNCTIONS ---
 
 export const checkSession = (): Promise<User | null> => {
-    return new Promise(async (resolve) => {
-        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const sessionUser = sessionStorage.getItem('titan_user') || localStorage.getItem('titan_user');
-        
-        if (token && sessionUser) {
-            try {
-                const response = await fetch('/api/auth/verify', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (response.ok) {
-                    resolve(JSON.parse(sessionUser));
-                    return;
-                }
-            } catch (error) {
-                console.warn('Token validation failed:', error);
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const sessionUser = sessionStorage.getItem('titan_user');
+            if (sessionUser) {
+                resolve(JSON.parse(sessionUser));
+            } else {
+                resolve(null);
             }
-        }
-        
-        if (sessionUser) {
-            resolve(JSON.parse(sessionUser));
-        } else {
-            resolve(null);
-        }
+        }, 300);
     });
 };
 
 export const login = async (username: string, pass: string): Promise<User | null> => {
     try {
-        console.log('🔐 Login attempt:', { username });
-        
-        try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password: pass }),
+        // First, try to find user in UserManagementData (real users)
+        const userManagement = await fetchUserManagement();
+        console.log('Login attempt:', { username, passLength: pass.length });
+        console.log('Available users:', userManagement.users.map(u => ({
+            email: u.email,
+            username: u.username,
+            hasPassword: !!u.password,
+            status: u.status
+        })));
+
+        const managedUser = userManagement.users.find(u => {
+            // Check by username, email, or name (converted to username format)
+            const userUsername = u.username || u.email.split('@')[0] || u.name.toLowerCase().replace(/\s+/g, '_');
+            const nameAsUsername = u.name.toLowerCase().replace(/\s+/g, '_');
+            const emailPrefix = u.email.split('@')[0].toLowerCase();
+
+            const usernameMatches = (
+                userUsername.toLowerCase() === username.toLowerCase() ||
+                nameAsUsername === username.toLowerCase() ||
+                emailPrefix === username.toLowerCase() ||
+                u.email.toLowerCase() === username.toLowerCase()
+            );
+
+            const passwordMatches = u.password === pass;
+            const isActive = u.status === 'active';
+
+            console.log(`Checking user ${u.email}:`, {
+                usernameMatches,
+                passwordMatches,
+                isActive,
+                storedPassword: u.password,
+                inputPassword: pass
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                console.log('✅ Backend login successful');
-                
-                if (data.token) {
-                    localStorage.setItem('titan_token', data.token);
-                    sessionStorage.setItem('titan_token', data.token);
-                }
-                if (data.refreshToken) {
-                    localStorage.setItem('titan_refresh_token', data.refreshToken);
-                }
-                if (data.user) {
-                    const userToStore: User = {
-                        id: data.user.id,
-                        name: data.user.full_name || data.user.username,
-                        email: data.user.email,
-                        username: data.user.username,
-                        role: data.user.role === 'admin' ? 'Admin' : data.user.role === 'trader' ? 'Trader' : 'Viewer',
-                    };
-                    sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
-                    localStorage.setItem('titan_user', JSON.stringify(userToStore));
-                    return userToStore;
-                }
-            }
-        } catch (apiError) {
-            console.warn('⚠️ Backend unavailable, using fallback');
-        }
-
-        const userManagement = await fetchUserManagement();
-        const managedUser = userManagement.users.find(u => {
-            const userUsername = u.username || u.email.split('@')[0];
-            const usernameMatches = userUsername.toLowerCase() === username.toLowerCase() || u.email.toLowerCase() === username.toLowerCase();
-            return usernameMatches && u.password === pass && u.status === 'active';
+            return usernameMatches && passwordMatches && isActive;
         });
 
         if (managedUser) {
-            const roleMap: Record<string, 'Admin' | 'Trader' | 'Viewer'> = {
-                'role_admin': 'Admin', 'role_trader': 'Trader', 'role_viewer': 'Viewer'
+            // Convert ManagedUser to User format
+            // Map roleKey to role (Admin, Trader, Viewer, etc.)
+            const roleMap: { [key: string]: 'Admin' | 'Trader' | 'Viewer' } = {
+                'role_admin': 'Admin',
+                'role_trader': 'Trader',
+                'role_viewer': 'Viewer',
+                'role_manager': 'Admin',
+                'role_analyst': 'Viewer',
             };
+
             const userToStore: User = {
-                id: managedUser.id, name: managedUser.name, email: managedUser.email,
-                username: managedUser.username || managedUser.email.split('@')[0],
+                id: managedUser.id,
+                name: managedUser.name,
+                email: managedUser.email,
+                username: managedUser.username || managedUser.email.split('@')[0] || managedUser.name.toLowerCase().replace(/\s+/g, '_'),
                 role: roleMap[managedUser.roleKey] || 'Viewer',
             };
+
+            // Update last active time
+            managedUser.lastActiveAt = new Date().toISOString();
+            await database.save('settings', { key: 'user_management', value: userManagement });
+
+            // Store in sessionStorage and localStorage
+            sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
+            localStorage.setItem('titan_user', JSON.stringify(userToStore));
+
+            return userToStore;
+        }
+
+        // Fallback to old mock database for backward compatibility
+        const user = db.users.find(u => u.name.toLowerCase().replace(' ', '_') === username.toLowerCase() && u.password === pass);
+        if (user) {
+            const userToStore = { ...user };
+            delete (userToStore as any).password;
             sessionStorage.setItem('titan_user', JSON.stringify(userToStore));
             localStorage.setItem('titan_user', JSON.stringify(userToStore));
             return userToStore;
@@ -1688,35 +1693,10 @@ export const login = async (username: string, pass: string): Promise<User | null
 
         return null;
     } catch (error) {
-        console.error('❌ Login error:', error);
+        console.error('Login error:', error);
         return null;
     }
 };
-
-export const logout = async (): Promise<void> => {
-    try {
-        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        if (token) {
-            try {
-                await fetch('/api/auth/logout', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                });
-            } catch (error) {
-                console.warn('Backend logout failed:', error);
-            }
-        }
-    } finally {
-        localStorage.removeItem('titan_token');
-        localStorage.removeItem('titan_refresh_token');
-        localStorage.removeItem('titan_user');
-        sessionStorage.removeItem('titan_token');
-        sessionStorage.removeItem('titan_user');
-        console.log('✅ Session cleared');
-    }
-};
-
-
 
 export const fetchDashboardData = (): Promise<any> => {
     return new Promise(resolve => {
@@ -2210,11 +2190,19 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
 
                         console.log(`✅ Fetched real price for ${mexcSymbol}: $${price}, change: ${change24h}%`);
 
+                        // Initialize priceHistory with current price if not exists
+                        const existingHistory = fav.priceHistory || [];
+                        const priceHistory = existingHistory.length > 0 
+                            ? existingHistory 
+                            : [price]; // Start with current price
+
                         return {
                             ...fav,
                             price,
                             change24h,
                             volume,
+                            volume24h: parseFloat(t.volume || '0'),
+                            priceHistory,
                         };
                     } else {
                         console.warn(`⚠️ No valid price data for ${mexcSymbol}, using cached price`);
@@ -2330,7 +2318,10 @@ export const fetchFavoritesPageData = async (): Promise<FavoritesPageData> => {
         console.error('❌ Failed to fetch favorites page data from MEXC:', error);
         // Don't fallback to mock data - return saved favorites with cached prices
         // But still provide catalog with fallback assets
-        const fallbackFavorites = savedFavorites || [];
+        const fallbackFavorites = (savedFavorites || []).map(fav => ({
+            ...fav,
+            priceHistory: fav.priceHistory || (fav.price ? [fav.price] : []), // Initialize with current price if exists
+        }));
         const fallbackAlerts = savedAlerts || [];
         return {
             favorites: fallbackFavorites,
@@ -2445,11 +2436,31 @@ export const addFavorite = async (assetId: string): Promise<FavoritesPageData> =
 // Remove Favorite
 export const removeFavorite = async (itemId: string): Promise<FavoritesPageData> => {
     try {
-        // Remove from database
+        // Extract symbol from itemId (format: "BTCUSDT" or "BTC")
+        const symbol = itemId.replace('USDT', '').replace(/^.*_/, '');
+        
+        // Remove from backend
+        try {
+            const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+            if (!token) throw new Error('Authentication required');
+            
+            const response = await fetch(`/api/favorites/${symbol}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Failed to remove favorite' }));
+                throw new Error(errorData.error || 'Failed to remove favorite');
+            }
+        } catch (backendError) {
+            console.warn('Backend delete failed, trying IndexedDB fallback:', backendError);
+            // Fallback to IndexedDB
         try {
             await database.delete('favorites', itemId);
         } catch (e) {
             console.warn('Failed to delete from IndexedDB:', e);
+            }
         }
 
         // Remove alerts for this favorite
@@ -2477,7 +2488,33 @@ export const createFavoriteAlert = async (
     input: FavoriteAlertInput,
 ): Promise<FavoritesPageData> => {
     try {
-        // Load existing alerts
+        // Extract symbol from favoriteId (format: "BTCUSDT" or "BTC")
+        const symbol = favoriteId.replace('USDT', '').replace(/^.*_/, '');
+        
+        // Create alert via backend API
+        try {
+            const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+            if (!token) throw new Error('Authentication required');
+            
+            const response = await fetch(`/api/favorites/${symbol}/alert`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    targetPrice: input.targetPrice,
+                    condition: input.condition,
+                }),
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Failed to create alert' }));
+                throw new Error(errorData.error || 'Failed to create alert');
+            }
+        } catch (backendError) {
+            console.warn('Backend alert creation failed, using IndexedDB fallback:', backendError);
+            // Fallback to IndexedDB
         let alertsData = await database.get<{ alerts: FavoriteAlert[] }>('settings', 'watchlist_alerts');
         const alerts = alertsData?.alerts || [];
 
@@ -2502,6 +2539,7 @@ export const createFavoriteAlert = async (
 
         // Save to database
         await database.save('settings', { key: 'watchlist_alerts', alerts });
+        }
 
         // Return updated data
         return await fetchFavoritesPageData();
@@ -15573,22 +15611,35 @@ export const checkWalletConnectStatus = async (uri: string): Promise<{
 };
 
 // Setup WalletConnect Listeners v2
+// WalletConnect WebSocket Event Listeners
+// Improved version with comprehensive event handling
+let walletConnectListenersActive = false;
+
 export const setupWalletConnectListeners = (onConnect: (wallet: WalletConnection) => void, onError: (error: Error) => void) => {
     if (!walletConnectProvider) {
+        console.warn('WalletConnect: Provider not initialized, cannot setup listeners');
         return;
     }
 
-    // Remove any existing listeners to avoid duplicates
+    // Prevent duplicate listeners
+    if (walletConnectListenersActive) {
+        console.log('WalletConnect: Listeners already active, removing old ones');
     walletConnectProvider.removeAllListeners();
+    }
 
-    // Listen for connect event
-    walletConnectProvider.on('connect', async () => {
-        console.log('WalletConnect: connect event fired');
-        const accounts = walletConnectProvider.accounts;
-        if (accounts && accounts.length > 0) {
+    walletConnectListenersActive = true;
+
+    // Helper function to handle wallet connection
+    const handleWalletConnection = async (accounts: string[]) => {
+        if (!accounts || accounts.length === 0) {
+            return;
+        }
+
             const address = accounts[0];
+        console.log('WalletConnect: Handling wallet connection for', address);
 
             try {
+            // Try to get balance via WebSocket request
                 const balance = await walletConnectProvider.request({
                     method: 'eth_getBalance',
                     params: [address, 'latest']
@@ -15600,7 +15651,7 @@ export const setupWalletConnectListeners = (onConnect: (wallet: WalletConnection
                     type: 'walletconnect',
                     address: address,
                     status: 'connected',
-                    network: '0x1',
+                network: walletConnectProvider.chainId ? `0x${walletConnectProvider.chainId.toString(16)}` : '0x1',
                     balance: parseInt(balance, 16) / 1e18,
                     lastSyncedAt: new Date().toISOString(),
                     createdAt: new Date().toISOString()
@@ -15609,6 +15660,7 @@ export const setupWalletConnectListeners = (onConnect: (wallet: WalletConnection
                 await saveWalletConnection(wallet);
                 onConnect(wallet);
             } catch (err) {
+            console.warn('WalletConnect: Balance fetch failed, connecting without balance', err);
                 // Even if balance fetch fails, still connect
                 const wallet: WalletConnection = {
                     id: `walletconnect-${address}`,
@@ -15616,7 +15668,7 @@ export const setupWalletConnectListeners = (onConnect: (wallet: WalletConnection
                     type: 'walletconnect',
                     address: address,
                     status: 'connected',
-                    network: '0x1',
+                network: walletConnectProvider.chainId ? `0x${walletConnectProvider.chainId.toString(16)}` : '0x1',
                     balance: 0,
                     lastSyncedAt: new Date().toISOString(),
                     createdAt: new Date().toISOString()
@@ -15625,6 +15677,22 @@ export const setupWalletConnectListeners = (onConnect: (wallet: WalletConnection
                 await saveWalletConnection(wallet);
                 onConnect(wallet);
             }
+    };
+
+    // Listen for connect event (WebSocket connection established)
+    walletConnectProvider.on('connect', async () => {
+        console.log('WalletConnect: WebSocket connect event fired');
+        const accounts = walletConnectProvider.accounts;
+        if (accounts && accounts.length > 0) {
+            await handleWalletConnection(accounts);
+        } else {
+            // Wait a bit and check again
+            setTimeout(async () => {
+                const accounts = walletConnectProvider.accounts;
+                if (accounts && accounts.length > 0) {
+                    await handleWalletConnection(accounts);
+                }
+            }, 1000);
         }
     });
 
@@ -15634,105 +15702,50 @@ export const setupWalletConnectListeners = (onConnect: (wallet: WalletConnection
         if (error) {
             onError(new Error(error.message || 'Session request error'));
         } else {
-            // Session approved, check for accounts
+            // Session approved, wait for accounts via WebSocket
             setTimeout(async () => {
                 const accounts = walletConnectProvider.accounts;
                 if (accounts && accounts.length > 0) {
-                    const address = accounts[0];
-                    try {
-                        const balance = await walletConnectProvider.request({
-                            method: 'eth_getBalance',
-                            params: [address, 'latest']
-                        });
-
-                        const wallet: WalletConnection = {
-                            id: `walletconnect-${address}`,
-                            name: 'WalletConnect',
-                            type: 'walletconnect',
-                            address: address,
-                            status: 'connected',
-                            network: '0x1',
-                            balance: parseInt(balance, 16) / 1e18,
-                            lastSyncedAt: new Date().toISOString(),
-                            createdAt: new Date().toISOString()
-                        };
-
-                        await saveWalletConnection(wallet);
-                        onConnect(wallet);
-                    } catch (err) {
-                        const wallet: WalletConnection = {
-                            id: `walletconnect-${address}`,
-                            name: 'WalletConnect',
-                            type: 'walletconnect',
-                            address: address,
-                            status: 'connected',
-                            network: '0x1',
-                            balance: 0,
-                            lastSyncedAt: new Date().toISOString(),
-                            createdAt: new Date().toISOString()
-                        };
-
-                        await saveWalletConnection(wallet);
-                        onConnect(wallet);
-                    }
+                    await handleWalletConnection(accounts);
                 }
-            }, 1000);
+            }, 500);
         }
     });
 
-    // Listen for session_proposal event
-    walletConnectProvider.on('session_proposal', async (proposal: any) => {
-        console.log('WalletConnect: session_proposal event fired', proposal);
-        // This is when the mobile wallet sends a proposal
-    });
-
-    // Listen for disconnect event
-    walletConnectProvider.on('disconnect', () => {
-        console.log('WalletConnect: disconnect event fired');
-        walletConnectProvider = null;
-    });
-
-    // Listen for accountsChanged event
+    // Listen for accountsChanged event (when user switches accounts)
     walletConnectProvider.on('accountsChanged', async (accounts: string[]) => {
         console.log('WalletConnect: accountsChanged event fired', accounts);
         if (accounts && accounts.length > 0) {
-            const address = accounts[0];
-            try {
-                const balance = await walletConnectProvider.request({
-                    method: 'eth_getBalance',
-                    params: [address, 'latest']
-                });
+            await handleWalletConnection(accounts);
+        }
+    });
 
-                const wallet: WalletConnection = {
+    // Listen for chainChanged event (when user switches networks)
+    walletConnectProvider.on('chainChanged', (chainId: number) => {
+        console.log('WalletConnect: chainChanged event fired', chainId);
+        // Update network info if wallet is connected
+        if (walletConnectProvider.accounts && walletConnectProvider.accounts.length > 0) {
+            const address = walletConnectProvider.accounts[0];
+            // Update wallet connection with new network
+            saveWalletConnection({
                     id: `walletconnect-${address}`,
                     name: 'WalletConnect',
                     type: 'walletconnect',
                     address: address,
                     status: 'connected',
-                    network: '0x1',
-                    balance: parseInt(balance, 16) / 1e18,
+                network: `0x${chainId.toString(16)}`,
                     lastSyncedAt: new Date().toISOString(),
                     createdAt: new Date().toISOString()
-                };
+            }).catch(err => console.warn('Failed to update wallet network:', err));
+        }
+    });
 
-                await saveWalletConnection(wallet);
-                onConnect(wallet);
-            } catch (err) {
-                const wallet: WalletConnection = {
-                    id: `walletconnect-${address}`,
-                    name: 'WalletConnect',
-                    type: 'walletconnect',
-                    address: address,
-                    status: 'connected',
-                    network: '0x1',
-                    balance: 0,
-                    lastSyncedAt: new Date().toISOString(),
-                    createdAt: new Date().toISOString()
-                };
-
-                await saveWalletConnection(wallet);
-                onConnect(wallet);
-            }
+    // Listen for disconnect event (WebSocket disconnection)
+    walletConnectProvider.on('disconnect', (error: any) => {
+        console.log('WalletConnect: disconnect event fired', error);
+        walletConnectListenersActive = false;
+        if (error) {
+            onError(new Error(error.message || 'Wallet disconnected'));
         }
     });
 };
@@ -18365,11 +18378,106 @@ export const fetchSecuritySettings = async (): Promise<SecuritySettingsData> => 
     }
 };
 
+// Setup 2FA - Generate secret and QR code
+export const setup2FA = async (): Promise<{ secret: string; qrCode: string | null; manualEntryKey: string }> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) throw new Error('Authentication required');
+        
+        const response = await fetch('/api/security/2fa/setup', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to setup 2FA' }));
+            throw new Error(errorData.error || 'Failed to setup 2FA');
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error setting up 2FA:', error);
+        throw error;
+    }
+};
+
+// Verify 2FA token and enable 2FA
+export const verify2FA = async (token: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!authToken) throw new Error('Authentication required');
+        
+        const response = await fetch('/api/security/2fa/verify', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token }),
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to verify 2FA' }));
+            throw new Error(errorData.error || 'Failed to verify 2FA');
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error verifying 2FA:', error);
+        throw error;
+    }
+};
+
+// Disable 2FA
+export const disable2FA = async (token?: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!authToken) throw new Error('Authentication required');
+        
+        const response = await fetch('/api/security/2fa/disable', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token }),
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to disable 2FA' }));
+            throw new Error(errorData.error || 'Failed to disable 2FA');
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error disabling 2FA:', error);
+        throw error;
+    }
+};
+
 export const toggleTwoFactorAuth = async (enabled?: boolean): Promise<SecuritySettingsData> => {
     const settings = await fetchSecuritySettings();
     const next = typeof enabled === 'boolean' ? enabled : !settings.twoFactor.enabled;
 
-    settings.twoFactor.enabled = next;
+    // If enabling, call setup2FA first to get QR code
+    if (next && !settings.twoFactor.enabled) {
+        // This will be handled in the component
+        // For now, just update the state
+        settings.twoFactor.enabled = false; // Will be enabled after verification
+    } else if (!next && settings.twoFactor.enabled) {
+        // Disable 2FA
+        try {
+            await disable2FA();
+            settings.twoFactor.enabled = false;
+        } catch (error) {
+            console.error('Failed to disable 2FA:', error);
+            throw error;
+        }
+    }
+
     settings.twoFactor.lastUpdated = new Date().toISOString();
 
     if (next && settings.twoFactor.backupCodesRemaining === 0) {
@@ -20491,6 +20599,171 @@ export const makeArtemisDecision = async (
 };
 
 // Learn from decision outcome
+// Export AI Decisions to CSV
+export const exportDecisionsToCSV = async (params?: {
+  startDate?: string;
+  endDate?: string;
+  agentId?: string;
+}): Promise<void> => {
+  try {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) throw new Error('Authentication required');
+
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    if (params?.agentId) queryParams.append('agentId', params.agentId);
+
+    const url = `/api/exports/decisions${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Failed to export decisions' }));
+      throw new Error(errorData.error || 'Failed to export decisions');
+    }
+
+    // Download file
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `ai_decisions_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    console.error('Error exporting decisions:', error);
+    throw error;
+  }
+};
+
+// Export Trade History to CSV
+export const exportTradesToCSV = async (params?: {
+  startDate?: string;
+  endDate?: string;
+  symbol?: string;
+  status?: string;
+}): Promise<void> => {
+  try {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) throw new Error('Authentication required');
+
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    if (params?.symbol) queryParams.append('symbol', params.symbol);
+    if (params?.status) queryParams.append('status', params.status);
+
+    const url = `/api/exports/trades${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Failed to export trades' }));
+      throw new Error(errorData.error || 'Failed to export trades');
+    }
+
+    // Download file
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `trade_history_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    console.error('Error exporting trades:', error);
+    throw error;
+  }
+};
+
+// Export Manual Trades to CSV
+export const exportManualTradesToCSV = async (params?: {
+  startDate?: string;
+  endDate?: string;
+  pair?: string;
+  status?: string;
+}): Promise<void> => {
+  try {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) throw new Error('Authentication required');
+
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    if (params?.pair) queryParams.append('pair', params.pair);
+    if (params?.status) queryParams.append('status', params.status);
+
+    const url = `/api/exports/manual-trades${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Failed to export manual trades' }));
+      throw new Error(errorData.error || 'Failed to export manual trades');
+    }
+
+    // Download file
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `manual_trades_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    console.error('Error exporting manual trades:', error);
+    throw error;
+  }
+};
+
+// Subscribe to WebSocket notifications
+export const subscribeToNotifications = (
+  onMessage: (data: any) => void,
+  onError?: (err: Event) => void
+) => {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${protocol}://${window.location.host}/ws/notifications`;
+  const ws = new WebSocket(url);
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage(data);
+    } catch (e) {
+      console.warn('Failed to parse notification message:', e);
+    }
+  };
+
+  ws.onerror = (err) => {
+    if (onError) onError(err);
+    console.error('Notification WebSocket error:', err);
+  };
+
+  return () => ws.close();
+};
+
 export const learnFromDecision = async (decisionId: string, actualOutcome: any): Promise<void> => {
     try {
         const artemis = await fetchArtemisState();

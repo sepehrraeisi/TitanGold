@@ -270,17 +270,61 @@ const ConnectionsSettings: React.FC = () => {
             setColdWalletName('');
             setWalletMessage('✅ Cold wallet added successfully');
             
-            // Try to fetch balance
-            try {
-                const balance = await api.getWalletBalance(coldWalletAddress.trim());
-                if (balance !== undefined) {
-                    wallet.balance = balance;
-                    await api.saveWalletConnection(wallet);
-                    await loadWallets();
+            // Try to fetch balance with retry logic
+            const fetchBalanceWithRetry = async (address: string, maxRetries = 3): Promise<number | undefined> => {
+                let lastError: Error | null = null;
+                
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    try {
+                        const balance = await api.getWalletBalance(address);
+                        if (balance !== undefined) {
+                            return balance;
+                        }
+                    } catch (error) {
+                        console.warn(`Balance fetch attempt ${attempt + 1}/${maxRetries} failed:`, error);
+                        lastError = error instanceof Error ? error : new Error('Unknown error');
+                        
+                        // Wait before retry: exponential backoff (1s, 2s, 4s)
+                        if (attempt < maxRetries - 1) {
+                            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+                        }
+                    }
                 }
-            } catch (balanceError) {
-                console.error('Failed to fetch balance:', balanceError);
-            }
+                
+                throw lastError || new Error('Failed to fetch balance after retries');
+            };
+
+            // Fetch balance in background (non-blocking)
+            fetchBalanceWithRetry(coldWalletAddress.trim())
+                .then(balance => {
+                    if (balance !== undefined) {
+                        wallet.balance = balance;
+                        api.saveWalletConnection(wallet).then(() => {
+                            loadWallets();
+                            setWalletMessage(`✅ Cold wallet added with balance: ${balance.toFixed(4)} ETH`);
+                        });
+                    }
+                })
+                .catch(balanceError => {
+                    console.warn('⚠️ Failed to fetch balance after retries:', balanceError);
+                    setWalletMessage('⚠️ Cold wallet added but balance unavailable. Will retry in background.');
+                    
+                    // Schedule background retry after 30 seconds
+                    setTimeout(async () => {
+                        try {
+                            const balance = await fetchBalanceWithRetry(coldWalletAddress.trim(), 2);
+                            if (balance !== undefined) {
+                                wallet.balance = balance;
+                                await api.saveWalletConnection(wallet);
+                                await loadWallets();
+                                setWalletMessage(`✅ Balance updated: ${balance.toFixed(4)} ETH`);
+                                setTimeout(() => setWalletMessage(''), 3000);
+                            }
+                        } catch (retryError) {
+                            console.warn('Background balance fetch also failed:', retryError);
+                        }
+                    }, 30000); // Retry after 30 seconds
+                });
         } catch (error) {
             setWalletMessage(`❌ Failed to add cold wallet: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }

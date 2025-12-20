@@ -187,6 +187,133 @@ function safeParseJson(raw) {
   return null;
 }
 
+// Get manager overview (for AI Manager component)
+router.get('/manager-overview', authenticate, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    
+    // Get all agents
+    let agents = [];
+    try {
+      const agentsResult = await query('SELECT * FROM ai_agents ORDER BY name');
+      agents = agentsResult.rows || [];
+    } catch (e) {
+      console.warn('⚠️ Failed to fetch agents:', e);
+    }
+    
+    // Get decision statistics
+    let decisionStats = {
+      total: 0,
+      successful: 0,
+      accuracy: 0,
+      recent24h: 0,
+      recent7d: 0
+    };
+    try {
+      const statsResult = await query(`
+        SELECT 
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE was_successful = true) as successful,
+          AVG(CASE WHEN was_successful IS NOT NULL THEN (was_successful::int * 100) ELSE NULL END) as accuracy,
+          COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') as recent24h,
+          COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as recent7d
+        FROM ai_decisions
+      `);
+      if (statsResult.rows.length > 0 && statsResult.rows[0].total) {
+        decisionStats = {
+          total: parseInt(statsResult.rows[0].total) || 0,
+          successful: parseInt(statsResult.rows[0].successful) || 0,
+          accuracy: parseFloat(statsResult.rows[0].accuracy) || 0,
+          recent24h: parseInt(statsResult.rows[0].recent24h) || 0,
+          recent7d: parseInt(statsResult.rows[0].recent7d) || 0
+        };
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to fetch decision stats:', e);
+    }
+    
+    // Get Artemis state
+    let artemisState = {};
+    try {
+      const artemisResult = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');
+      artemisState = artemisResult.rows[0] || {};
+    } catch (e) {
+      console.warn('⚠️ Failed to fetch Artemis state:', e);
+    }
+    
+    // Calculate agent performance summary
+    const agentSummary = {
+      total: agents.length,
+      active: agents.filter(a => a.status === 'active' && a.is_enabled !== false).length,
+      idle: agents.filter(a => a.status === 'idle').length,
+      training: agents.filter(a => a.status === 'training').length,
+      error: agents.filter(a => a.status === 'error').length,
+      avgAccuracy: agents.length > 0 
+        ? agents.reduce((sum, a) => sum + (parseFloat(a.accuracy) || 0), 0) / agents.length 
+        : 0,
+      avgPerformance: agents.length > 0
+        ? agents.reduce((sum, a) => sum + (parseFloat(a.performance_score) || 0), 0) / agents.length
+        : 0
+    };
+    
+    const overview = {
+      artemis: {
+        status: artemisState.status || 'active',
+        mode: artemisState.mode || 'demo',
+        strategy: artemisState.strategy || 'mixture_of_experts',
+        overallAccuracy: parseFloat(artemisState.overall_accuracy) || decisionStats.accuracy,
+        totalDecisions: artemisState.total_decisions || decisionStats.total,
+        successfulDecisions: artemisState.successful_decisions || decisionStats.successful
+      },
+      agents: agentSummary,
+      decisions: decisionStats,
+      systemHealth: {
+        cpu: 45, // Placeholder
+        memory: 62, // Placeholder
+        apiQuota: 85 // Placeholder
+      },
+      lastUpdated: new Date().toISOString()
+    };
+    
+    res.json(overview);
+  } catch (error) {
+    console.error('Failed to fetch manager overview:', error);
+    // Return default overview on error
+    res.json({
+      artemis: {
+        status: 'active',
+        mode: 'demo',
+        strategy: 'mixture_of_experts',
+        overallAccuracy: 0,
+        totalDecisions: 0,
+        successfulDecisions: 0
+      },
+      agents: {
+        total: 0,
+        active: 0,
+        idle: 0,
+        training: 0,
+        error: 0,
+        avgAccuracy: 0,
+        avgPerformance: 0
+      },
+      decisions: {
+        total: 0,
+        successful: 0,
+        accuracy: 0,
+        recent24h: 0,
+        recent7d: 0
+      },
+      systemHealth: {
+        cpu: 0,
+        memory: 0,
+        apiQuota: 0
+      },
+      lastUpdated: new Date().toISOString()
+    });
+  }
+});
+
 // Get all AI agents
 router.get('/', authenticate, async (req, res) => {
   try {

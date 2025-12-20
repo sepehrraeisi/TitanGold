@@ -307,6 +307,52 @@ class MexcService {
       };
     }
   }
+
+  /**
+   * Cancel an order on MEXC
+   */
+  async cancelOrder(userId, orderId, symbol) {
+    try {
+      await this.getExchange(userId);
+      const result = await this.exchange.cancelOrder(orderId, symbol);
+      return result;
+    } catch (error) {
+      console.error(`MEXC cancelOrder error for ${orderId}:`, error);
+      if (error.code === 'MEXC_NOT_CONFIGURED') {
+        throw error;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch open orders from MEXC
+   */
+  async fetchOpenOrders(userId, symbol = null) {
+    try {
+      await this.getExchange(userId);
+      const orders = await this.exchange.fetchOpenOrders(symbol);
+      return orders.map(order => ({
+        id: order.id,
+        pair: order.symbol,
+        side: order.side,
+        type: order.type,
+        amount: order.amount,
+        price: order.price,
+        stopPrice: order.stopPrice,
+        limitPrice: order.price, // For limit orders
+        status: order.status,
+        createdAt: order.timestamp ? new Date(order.timestamp).toISOString() : new Date().toISOString(),
+        exchangeOrderId: order.id,
+      }));
+    } catch (error) {
+      console.error(`MEXC fetchOpenOrders error:`, error);
+      if (error.code === 'MEXC_NOT_CONFIGURED') {
+        throw error;
+      }
+      return [];
+    }
+  }
 }
 
 export const mexcService = new MexcService();

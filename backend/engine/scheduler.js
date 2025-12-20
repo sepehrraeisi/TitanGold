@@ -23,7 +23,7 @@ class SchedulerService {
             training: {
                 enabled: true,
                 interval: 30 * 60 * 1000, // 30 minutes
-                autoSchedule: false
+                autoSchedule: true // Enable auto-scheduling
             },
             analytics: {
                 enabled: true,
@@ -317,28 +317,28 @@ class SchedulerService {
 
     async fetchTrainingData() {
         try {
-            const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/training`);
-            if (response.ok) {
-                return await response.json();
-            }
-            return null;
+            // Import scheduleAutomaticTraining from artemisOrchestrator
+            const { scheduleAutomaticTraining } = await import('../services/artemisOrchestrator.js');
+            const result = await scheduleAutomaticTraining();
+            return {
+                recommendations: result.scheduled ? [{
+                    priority: 'high',
+                    agentIds: result.agents || [],
+                    mode: 'supervised'
+                }] : []
+            };
         } catch (error) {
             console.error('Failed to fetch training data:', error);
-            return null;
+            return { recommendations: [] };
         }
     }
 
     async scheduleTraining(agentIds, mode) {
         try {
-            await fetch(`http://localhost:${process.env.PORT || 5001}/api/training/schedule`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    agentIds,
-                    mode,
-                    priority: 'normal'
-                })
-            });
+            // Import triggerTrainingSession from artemisOrchestrator
+            const { triggerTrainingSession } = await import('../services/artemisOrchestrator.js');
+            await triggerTrainingSession(agentIds, mode);
+            console.log(`✅ Training scheduled for agents: ${agentIds.join(', ')}`);
         } catch (error) {
             console.error('Failed to schedule training:', error);
         }
