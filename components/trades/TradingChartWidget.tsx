@@ -1,13 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import type { ManualTradingChartPoint } from '../../types.ts';
 
 interface TradingChartWidgetProps {
     chart: ManualTradingChartPoint[];
+    onTimeframeChange?: (timeframe: string) => void;
 }
 
-const TradingChartWidget: React.FC<TradingChartWidgetProps> = ({ chart }) => {
+const TradingChartWidget: React.FC<TradingChartWidgetProps> = ({ chart, onTimeframeChange }) => {
     const { t } = useLanguage();
+    const [selectedTimeframe, setSelectedTimeframe] = useState<string>('1H');
 
     const { linePoints, candles, volumes } = useMemo(() => {
         if (chart.length === 0) {
@@ -89,7 +91,17 @@ const TradingChartWidget: React.FC<TradingChartWidgetProps> = ({ chart }) => {
                     {['1H', '4H', '1D', 'AI'].map(range => (
                         <button
                             key={range}
-                            className={`px-3 py-1 rounded-md border border-gray-700/70 ${range === 'AI' ? 'bg-purple-600/50 text-purple-200 border-purple-500/40' : 'bg-gray-700/40 text-gray-200 hover:bg-gray-700'}`}
+                            onClick={() => {
+                                setSelectedTimeframe(range);
+                                onTimeframeChange?.(range);
+                            }}
+                            className={`px-3 py-1 rounded-md border transition-colors ${
+                                selectedTimeframe === range
+                                    ? range === 'AI'
+                                        ? 'bg-purple-600/50 text-purple-200 border-purple-500/40'
+                                        : 'bg-purple-600/30 text-purple-200 border-purple-500/40'
+                                    : 'border-gray-700/70 bg-gray-700/40 text-gray-200 hover:bg-gray-700'
+                            }`}
                         >
                             {range === 'AI' ? t('ai_analysis') : range}
                         </button>

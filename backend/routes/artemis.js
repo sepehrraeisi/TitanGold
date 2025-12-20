@@ -1,15 +1,35 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import { getMixtureDecision } from '../services/artemisOrchestrator.js';
 
 const router = express.Router();
+
+// Helper: log decision to system_logs table for observability
+async function logDecision(level, message, metadata = {}) {
+  try {
+    await query(
+      'INSERT INTO system_logs (level, category, message, metadata) VALUES ($1, $2, $3, $4)',
+      [level, 'artemis_decision', message, JSON.stringify(metadata)]
+    );
+  } catch (e) {
+    // لاگ‌نویسی نباید تصمیم‌گیری را بشکند
+    console.error('Failed to log Artemis decision:', e);
+  }
+}
 
 router.get('/state', authenticate, async (req, res) => {
   try {
     const result = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');
     res.json(result.rows[0] || {});
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch Artemis state' });
+    console.error('Failed to fetch Artemis state:', error);
+    // If database is unavailable, return empty object instead of error
+    if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+      console.warn('⚠️ Database unavailable, returning empty Artemis state');
+      return res.json({});
+    }
+    res.status(500).json({ error: 'Failed to fetch Artemis state', message: error.message });
   }
 });
 
@@ -47,37 +67,79 @@ router.post('/decision', authenticate, async (req, res) => {
     const artemisState = stateResult.rows[0];
     
     if (!artemisState || artemisState.status !== 'active') {
-      return res.json({
+      const payload = {
         action: 'HOLD',
         approved: false,
         reason: 'Artemis is not active',
         confidence: 0,
+      };
+      await logDecision('warning', 'Artemis decision skipped: Artemis not active', {
+        opportunity,
+        context,
+        signals,
+        artemisStatus: artemisState?.status || 'unknown',
+        decision: payload,
       });
+      return res.json(payload);
     }
 
-    // Simple decision logic (can be enhanced with AI service)
-    // Check confidence threshold
-    const minConfidence = artemisState.config?.decisionEngine?.confidenceThreshold || 75;
-    const approved = opportunity.confidence >= minConfidence;
+    const decisionConfig = artemisState.config?.decisionEngine || {};
+    const minConfidence = decisionConfig.confidenceThreshold || 75;
+
+    // اگر استراتژی روی mixture_of_experts یا activeModel روی hybrid تنظیم شده،
+    // از اورکستریتور چند-مدلی استفاده می‌کنیم
+    let mixture = null;
+    const useMixture =
+      decisionConfig.strategy === 'mixture_of_experts' ||
+      decisionConfig.activeModel === 'hybrid';
+
+    if (useMixture) {
+      try {
+        mixture = await getMixtureDecision(
+          { opportunity, signals, context },
+          decisionConfig
+        );
+      } catch (e) {
+        console.error('Artemis mixture-of-experts error:', e);
+        mixture = null;
+      }
+    }
+
+    // منطق ساده قبلی به عنوان fallback
+    const baseApproved = opportunity.confidence >= minConfidence;
     
     // Check if we have enough capacity
     if (context && context.activeTrades >= context.maxTrades) {
-      return res.json({
+      const payload = {
         action: 'HOLD',
         approved: false,
         reason: 'Maximum concurrent trades reached',
         confidence: opportunity.confidence,
+      };
+      await logDecision('info', 'Artemis decision blocked: max concurrent trades reached', {
+        opportunity,
+        context,
+        signals,
+        decision: payload,
       });
+      return res.json(payload);
     }
 
     // Check risk limits
     if (context && context.dailyLoss && Math.abs(context.dailyLoss) > (context.portfolioValue * 0.05)) {
-      return res.json({
+      const payload = {
         action: 'HOLD',
         approved: false,
         reason: 'Daily loss limit reached',
         confidence: opportunity.confidence,
+      };
+      await logDecision('warning', 'Artemis decision blocked: daily loss limit reached', {
+        opportunity,
+        context,
+        signals,
+        decision: payload,
       });
+      return res.json(payload);
     }
 
     // Aggregate signals from agents
@@ -89,17 +151,69 @@ router.post('/decision', authenticate, async (req, res) => {
       totalConfidence = (opportunity.confidence + avgConfidence) / 2;
     }
 
-    const finalApproved = approved && totalConfidence >= minConfidence;
+    // اگر mixture نتیجه معتبر داد، از آن استفاده می‌کنیم
+    if (mixture && mixture.action) {
+      const finalApproved =
+        (mixture.action === 'BUY' || mixture.action === 'SELL') &&
+        mixture.confidence >= minConfidence;
 
-    return res.json({
-      action: finalApproved ? (opportunity.side === 'BUY' ? 'BUY' : 'SELL') : 'HOLD',
+      const payload = {
+        action: finalApproved ? mixture.action : 'HOLD',
+        approved: finalApproved,
+        reason:
+          mixture.reason ||
+          (finalApproved
+            ? 'Mixture-of-experts approved opportunity'
+            : 'Mixture-of-experts below confidence threshold'),
+        confidence: mixture.confidence,
+        signals: signalCount,
+        providers: mixture.providers,
+      };
+
+      await logDecision('info', 'Artemis mixture-of-experts decision', {
+        opportunity,
+        context,
+        signals,
+        strategy: decisionConfig.strategy,
+        activeModel: decisionConfig.activeModel,
+        mixture,
+        decision: payload,
+      });
+
+      return res.json(payload);
+    }
+
+    // Fallback: منطق جمع ساده confidence + سیگنال‌ها
+    const finalApproved = baseApproved && totalConfidence >= minConfidence;
+
+    const payload = {
+      action: finalApproved
+        ? opportunity.side === 'BUY'
+          ? 'BUY'
+          : 'SELL'
+        : 'HOLD',
       approved: finalApproved,
       reason: finalApproved 
-        ? `High confidence opportunity (${totalConfidence.toFixed(1)}%) with ${signalCount} agent signals`
-        : `Confidence ${totalConfidence.toFixed(1)}% below threshold ${minConfidence}%`,
+        ? `High confidence opportunity (${totalConfidence.toFixed(
+            1
+          )}%) with ${signalCount} agent signals`
+        : `Confidence ${totalConfidence.toFixed(
+            1
+          )}% below threshold ${minConfidence}%`,
       confidence: totalConfidence,
       signals: signalCount,
+    };
+
+    await logDecision('info', 'Artemis baseline decision (no mixture or mixture failed)', {
+      opportunity,
+      context,
+      signals,
+      strategy: decisionConfig.strategy,
+      activeModel: decisionConfig.activeModel,
+      decision: payload,
     });
+
+    return res.json(payload);
   } catch (error) {
     console.error('Artemis decision error:', error);
     res.status(500).json({ 
@@ -108,6 +222,68 @@ router.post('/decision', authenticate, async (req, res) => {
       reason: 'Decision engine error',
       confidence: 0,
     });
+  }
+});
+
+// Update decision engine config (used by Mixture Agents UI)
+router.patch('/config/decision-engine', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { useMixture, models } = req.body || {};
+
+    // Get latest Artemis state
+    const stateResult = await query('SELECT id, config FROM artemis_state ORDER BY created_at DESC LIMIT 1');
+    if (stateResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Artemis state not found' });
+    }
+
+    const { id, config } = stateResult.rows[0];
+    const currentConfig = config || {};
+    const currentDecision = currentConfig.decisionEngine || {};
+
+    let updatedDecision = { ...currentDecision };
+
+    if (useMixture === true) {
+      updatedDecision.strategy = 'mixture_of_experts';
+      updatedDecision.activeModel = 'hybrid';
+      updatedDecision.mixture = {
+        enabled: true,
+        models: Array.isArray(models) ? models : currentDecision.mixture?.models || [],
+      };
+    } else if (useMixture === false) {
+      // Disable mixture, fallback to safer defaults if necessary
+      updatedDecision.mixture = {
+        ...(currentDecision.mixture || {}),
+        enabled: false,
+        models: Array.isArray(models) ? models : currentDecision.mixture?.models || [],
+      };
+
+      if (updatedDecision.strategy === 'mixture_of_experts') {
+        updatedDecision.strategy = 'voting';
+      }
+      if (updatedDecision.activeModel === 'hybrid') {
+        updatedDecision.activeModel = 'internal';
+      }
+    }
+
+    const newConfig = {
+      ...currentConfig,
+      decisionEngine: updatedDecision,
+    };
+
+    const updateResult = await query(
+      'UPDATE artemis_state SET config = $1, updated_at = NOW() WHERE id = $2 RETURNING config',
+      [JSON.stringify(newConfig), id]
+    );
+
+    const updated = updateResult.rows[0]?.config?.decisionEngine || updatedDecision;
+
+    res.json({
+      message: 'Decision engine configuration updated',
+      decisionEngine: updated,
+    });
+  } catch (error) {
+    console.error('Failed to update decision engine config:', error);
+    res.status(500).json({ error: 'Failed to update decision engine configuration' });
   }
 });
 

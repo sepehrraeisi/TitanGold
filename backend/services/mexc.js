@@ -112,6 +112,39 @@ class MexcService {
     return this.markets;
   }
 
+  /**
+   * Convenience helpers for system-wide (non-user-specific) operations.
+   * These use environment variables or default connection and are intended
+   * for global services like TradingEngine / Autopilot.
+   */
+  async getSystemExchange() {
+    return this.getExchange(null);
+  }
+
+  async loadSystemMarkets() {
+    return this.loadMarkets(null);
+  }
+
+  async fetchSystemPrices(symbols = []) {
+    return this.fetchPrices(null, symbols);
+  }
+
+  async fetchSystemTicker(symbol) {
+    return this.fetchTicker(null, symbol);
+  }
+
+  async fetchSystemOHLCV(symbol, timeframe = '1h', limit = 100) {
+    return this.fetchOHLCV(null, symbol, timeframe, limit);
+  }
+
+  async getSystemExchangeInfo() {
+    return this.getExchangeInfo(null);
+  }
+
+  async fetchSystemPerpetualTicker(symbol) {
+    return this.fetchPerpetualTicker(null, symbol);
+  }
+
   async fetchPrices(userId, symbols = []) {
     try {
       await this.getExchange(userId);
@@ -241,6 +274,40 @@ class MexcService {
       return null;
     }
   }
+
+  /**
+   * System-level order execution helper (used by TradingEngine in live mode)
+   */
+  async createSystemOrder(symbol, type, side, amount, price = undefined) {
+    return this.createOrder(null, symbol, type, side, amount, price);
+  }
+
+  /**
+   * Fetch order book for a trading pair
+   */
+  async fetchOrderBook(userId, symbol, limit = 20) {
+    try {
+      await this.getExchange(userId);
+      const orderBook = await this.exchange.fetchOrderBook(symbol, limit);
+      return {
+        bids: orderBook.bids || [],
+        asks: orderBook.asks || [],
+        timestamp: orderBook.timestamp || Date.now(),
+      };
+    } catch (error) {
+      console.error(`MEXC fetchOrderBook error for ${symbol}:`, error);
+      if (error.code === 'MEXC_NOT_CONFIGURED') {
+        throw error;
+      }
+      // Return empty order book on error
+      return {
+        bids: [],
+        asks: [],
+        timestamp: Date.now(),
+      };
+    }
+  }
 }
 
 export const mexcService = new MexcService();
+

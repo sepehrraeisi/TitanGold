@@ -3,11 +3,15 @@ import { useLanguage } from '../../context/LanguageContext.tsx';
 import StatCard from './StatCard.tsx';
 import TradingChartWidget from './TradingChartWidget.tsx';
 import QuickTradeWidget from './QuickTradeWidget.tsx';
+import AdvancedOrderWidget from './AdvancedOrderWidget.tsx';
+import OrderBookWidget from './OrderBookWidget.tsx';
+import TradeHistoryWidget from './TradeHistoryWidget.tsx';
+import OpenOrdersWidget from './OpenOrdersWidget.tsx';
 import AIAssistantWidget from './AIAssistantWidget.tsx';
 import PortfolioDonutChartWidget from './PortfolioDonutChartWidget.tsx';
 import PerformanceAnalysisWidget from './PerformanceAnalysisWidget.tsx';
 import RecentTradesWidget from './RecentTradesWidget.tsx';
-import { executeManualQuickTrade, fetchManualTradingPageData, toggleManualStrategy } from '../../services/api.ts';
+import { executeManualQuickTrade, fetchManualTradingPageData, toggleManualStrategy, placeAdvancedOrder } from '../../services/api.ts';
 import type { ManualQuickTradeOrder, ManualTradingPageData, ManualTradingStat } from '../../types.ts';
 
 type FeedbackState = { type: 'success' | 'error'; message: string } | null;
@@ -18,6 +22,8 @@ const ManualTrades: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isActionPending, setIsActionPending] = useState(false);
     const [feedback, setFeedback] = useState<FeedbackState>(null);
+    const [selectedPair, setSelectedPair] = useState<string>('BTC/USDT');
+    const [activeView, setActiveView] = useState<'quick' | 'advanced'>('quick');
 
     const loadData = useCallback(async () => {
         try {
@@ -144,6 +150,34 @@ const ManualTrades: React.FC = () => {
         }
     }, [t]);
 
+    const handleAdvancedOrder = useCallback(async (order: {
+        type: 'market' | 'limit' | 'stop-loss' | 'take-profit' | 'stop-limit';
+        side: 'buy' | 'sell';
+        price?: number;
+        amount: number;
+        stopPrice?: number;
+        limitPrice?: number;
+    }) => {
+        setIsActionPending(true);
+        try {
+            const updated = await placeAdvancedOrder({
+                ...order,
+                pair: selectedPair,
+            });
+            setData(updated);
+            setFeedback({ type: 'success', message: t('order_placed_successfully') || 'Order placed successfully' });
+        } catch (error: any) {
+            console.error('Failed to place advanced order', error);
+            setFeedback({ type: 'error', message: error?.message || t('manual_trades_error_action') });
+        } finally {
+            setIsActionPending(false);
+        }
+    }, [selectedPair, t]);
+
+    const handleOrderCancel = useCallback(async () => {
+        await loadData();
+    }, [loadData]);
+
     if (isLoading) {
         return (
             <div className="space-y-6">
@@ -182,18 +216,18 @@ const ManualTrades: React.FC = () => {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 border border-purple-500/30 rounded-lg p-6">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="space-y-4 sm:space-y-6">
+            <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 border border-purple-500/30 rounded-lg p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
-                        <h2 className="text-xl font-bold text-white">{t('professional_manual_trades')}</h2>
-                        <p className="text-gray-400">{t('professional_manual_desc')}</p>
+                        <h2 className="text-lg sm:text-xl font-bold text-white">{t('professional_manual_trades')}</h2>
+                        <p className="text-gray-400 text-xs sm:text-sm">{t('professional_manual_desc')}</p>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-gray-300">
-                        <span>{lastUpdatedLabel}</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-xs text-gray-300">
+                        <span className="text-xs">{lastUpdatedLabel}</span>
                         <button
                             onClick={() => void loadData()}
-                            className="px-3 py-1 rounded-md border border-purple-400/40 text-purple-200 hover:bg-purple-500/20"
+                            className="px-3 py-1.5 rounded-md border border-purple-400/40 text-purple-200 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
                             disabled={isActionPending}
                         >
                             {t('refresh')}
@@ -226,27 +260,117 @@ const ManualTrades: React.FC = () => {
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                    <TradingChartWidget chart={data.chart} />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <QuickTradeWidget
-                            data={data.quickTrade}
-                            onSubmit={handleQuickTrade}
-                            disabled={isActionPending}
-                        />
-                        <AIAssistantWidget
-                            recommendations={data.recommendations}
-                            sentiment={data.sentiment}
-                            strategies={data.strategies}
-                            onToggleStrategy={handleStrategyToggle}
-                            disabled={isActionPending}
+            {/* Pair Selector */}
+            <div className="bg-[#1c1e2f] border border-gray-700/50 rounded-lg p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                    <label className="text-sm text-gray-400 whitespace-nowrap">{t('trading_pair')}:</label>
+                    <select
+                        value={selectedPair}
+                        onChange={e => setSelectedPair(e.target.value)}
+                        className="w-full sm:w-auto px-3 sm:px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                        <option value="BTC/USDT">BTC/USDT</option>
+                        <option value="ETH/USDT">ETH/USDT</option>
+                        <option value="BNB/USDT">BNB/USDT</option>
+                        <option value="SOL/USDT">SOL/USDT</option>
+                        <option value="XRP/USDT">XRP/USDT</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+                <div className="xl:col-span-2 space-y-4 sm:space-y-6">
+                    {/* Chart and Order Book */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div className="lg:col-span-2">
+                            <TradingChartWidget 
+                                chart={data.chart}
+                                onTimeframeChange={(timeframe) => {
+                                    console.log('Timeframe changed to:', timeframe);
+                                    // TODO: Fetch chart data for selected timeframe
+                                }}
+                            />
+                        </div>
+                        <div className="hidden lg:block">
+                            <OrderBookWidget 
+                                pair={selectedPair}
+                                onPriceSelect={(price) => {
+                                    // Set price in order widget when clicked
+                                    console.log('Price selected from order book:', price);
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Trading Widgets */}
+                    <div className="bg-[#1c1e2f] border border-gray-700/50 rounded-lg p-3 sm:p-4">
+                        <div className="flex flex-wrap gap-2 mb-4">
+                            <button
+                                onClick={() => setActiveView('quick')}
+                                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                                    activeView === 'quick'
+                                        ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50'
+                                        : 'bg-gray-700/40 text-gray-300 border border-gray-700 hover:bg-gray-700'
+                                }`}
+                            >
+                                {t('quick_trade')}
+                            </button>
+                            <button
+                                onClick={() => setActiveView('advanced')}
+                                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                                    activeView === 'advanced'
+                                        ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50'
+                                        : 'bg-gray-700/40 text-gray-300 border border-gray-700 hover:bg-gray-700'
+                                }`}
+                            >
+                                {t('advanced_orders')}
+                            </button>
+                        </div>
+                        {activeView === 'quick' ? (
+                            <QuickTradeWidget
+                                data={data.quickTrade}
+                                onSubmit={handleQuickTrade}
+                                disabled={isActionPending}
+                            />
+                        ) : (
+                            <AdvancedOrderWidget
+                                pair={selectedPair}
+                                currentPrice={data.quickTrade.price}
+                                availableBalance={data.quickTrade.availableBalance}
+                                onSubmit={handleAdvancedOrder}
+                                disabled={isActionPending}
+                            />
+                        )}
+                    </div>
+
+                    {/* AI Assistant */}
+                    <AIAssistantWidget
+                        recommendations={data.recommendations}
+                        sentiment={data.sentiment}
+                        strategies={data.strategies}
+                        onToggleStrategy={handleStrategyToggle}
+                        disabled={isActionPending}
+                    />
+
+                    {/* Trade History */}
+                    <TradeHistoryWidget pair={selectedPair} limit={20} />
+                </div>
+                <div className="space-y-4 sm:space-y-6">
+                    {/* Order Book for mobile */}
+                    <div className="lg:hidden">
+                        <OrderBookWidget 
+                            pair={selectedPair}
+                            onPriceSelect={(price) => {
+                                console.log('Price selected from order book:', price);
+                            }}
                         />
                     </div>
-                </div>
-                <div className="space-y-6">
                     <PortfolioDonutChartWidget portfolio={data.portfolio} />
                     <PerformanceAnalysisWidget performance={data.performance} />
+                    <OpenOrdersWidget 
+                        pair={selectedPair}
+                        onCancel={handleOrderCancel}
+                    />
                     <RecentTradesWidget trades={data.recentTrades} />
                 </div>
             </div>

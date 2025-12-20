@@ -27,6 +27,7 @@ import schedulerRoutes from './routes/scheduler.js';
 import tradingEngineRoutes from './routes/trading-engine.js';
 import manualTradesRoutes from './routes/manual-trades.js';
 import connectionsRoutes from './routes/connections.js';
+import strategyRoutes from './routes/strategies.js';
 
 dotenv.config();
 
@@ -112,6 +113,7 @@ app.use('/api/scheduler', schedulerRoutes);
 app.use('/api/trading-engine', tradingEngineRoutes);
 app.use('/api/manual-trades', manualTradesRoutes);
 app.use('/api/connections', connectionsRoutes);
+app.use('/api/strategies', strategyRoutes);
 
 // 404 handler
 app.use((req, res) => {

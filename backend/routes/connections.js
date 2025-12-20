@@ -34,7 +34,16 @@ router.get('/mexc', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to fetch MEXC connection:', error);
-    res.status(500).json({ error: 'Failed to fetch connection settings' });
+    // If database is unavailable, return empty connection instead of error
+    if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+      console.warn('⚠️ Database unavailable, returning empty connection settings');
+      return res.json({
+        apiKey: '',
+        apiSecret: '',
+        isConnected: false,
+      });
+    }
+    res.status(500).json({ error: 'Failed to fetch connection settings', message: error.message });
   }
 });
 

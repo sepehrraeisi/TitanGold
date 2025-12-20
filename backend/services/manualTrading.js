@@ -806,6 +806,156 @@ class ManualTradingService {
       return { USDT: 0, BTC: 0, ETH: 0 };
     }
   }
+
+  /**
+   * Place advanced order (limit, stop-loss, take-profit, etc.)
+   */
+  async placeAdvancedOrder(userId, order) {
+    try {
+      const { type, side, pair, amount, price, stopPrice, limitPrice } = order;
+
+      // Determine order type for MEXC
+      let mexcOrderType = 'limit';
+      if (type === 'market') {
+        mexcOrderType = 'market';
+      } else if (type === 'limit') {
+        mexcOrderType = 'limit';
+      } else if (type === 'stop-loss' || type === 'stop-limit') {
+        // For stop orders, we need to create a conditional order
+        // MEXC supports stop-limit orders
+        mexcOrderType = 'stop-limit';
+      }
+
+      // Execute order via MEXC
+      let mexcOrder;
+      if (mexcOrderType === 'market') {
+        mexcOrder = await mexcService.createOrder(userId, pair, 'market', side, amount);
+      } else if (mexcOrderType === 'limit') {
+        mexcOrder = await mexcService.createOrder(userId, pair, 'limit', side, amount, price);
+      } else if (mexcOrderType === 'stop-limit') {
+        // For stop-limit, use stopPrice as trigger and limitPrice as limit
+        mexcOrder = await mexcService.createOrder(
+          userId,
+          pair,
+          'stop-limit',
+          side,
+          amount,
+          limitPrice || price,
+          undefined,
+          { stopPrice }
+        );
+      }
+
+      // Save order to database
+      const orderResult = await query(
+        `INSERT INTO manual_trades 
+         (user_id, pair, side, type, amount, price, stop_price, limit_price, status, executed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+         RETURNING *`,
+        [
+          userId,
+          pair,
+          side,
+          type,
+          amount,
+          price || null,
+          stopPrice || null,
+          limitPrice || null,
+          mexcOrder?.status === 'closed' ? 'filled' : 'pending',
+        ]
+      ).catch(err => {
+        console.warn('⚠️ Could not save order to database:', err.message);
+        return { rows: [] };
+      });
+
+      // Return updated page data
+      return await this.getPageData(userId);
+    } catch (error) {
+      console.error('Error placing advanced order:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get open orders for user
+   */
+  async getOpenOrders(userId, pair = null) {
+    try {
+      let queryText = `
+        SELECT * FROM manual_trades 
+        WHERE user_id = $1 AND status IN ('pending', 'open')
+      `;
+      const params = [userId];
+
+      if (pair) {
+        queryText += ` AND pair = $2`;
+        params.push(pair);
+      }
+
+      queryText += ` ORDER BY created_at DESC`;
+
+      const result = await query(queryText, params).catch(err => {
+        console.warn('⚠️ Could not fetch open orders:', err.message);
+        return { rows: [] };
+      });
+
+      return result.rows.map(row => ({
+        id: row.id,
+        pair: row.pair,
+        side: row.side,
+        type: row.type,
+        amount: parseFloat(row.amount || 0),
+        price: row.price ? parseFloat(row.price) : null,
+        stopPrice: row.stop_price ? parseFloat(row.stop_price) : null,
+        limitPrice: row.limit_price ? parseFloat(row.limit_price) : null,
+        status: row.status,
+        createdAt: row.created_at,
+      }));
+    } catch (error) {
+      console.error('Error getting open orders:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Cancel an order
+   */
+  async cancelOrder(userId, orderId) {
+    try {
+      // Get order from database
+      const orderResult = await query(
+        `SELECT * FROM manual_trades WHERE id = $1 AND user_id = $2`,
+        [orderId, userId]
+      );
+
+      if (orderResult.rows.length === 0) {
+        throw new Error('Order not found');
+      }
+
+      const order = orderResult.rows[0];
+
+      // Cancel order on MEXC if it has an exchange order ID
+      if (order.exchange_order_id) {
+        try {
+          await mexcService.exchange.cancelOrder(order.exchange_order_id, order.pair);
+        } catch (mexcError) {
+          console.warn('⚠️ Could not cancel order on MEXC:', mexcError.message);
+          // Continue with database update even if MEXC cancel fails
+        }
+      }
+
+      // Update order status in database
+      await query(
+        `UPDATE manual_trades SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
+        [orderId]
+      );
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      throw error;
+    }
+  }
 }
 
 export const manualTradingService = new ManualTradingService();

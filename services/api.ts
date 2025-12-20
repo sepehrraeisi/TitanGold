@@ -1731,9 +1731,55 @@ export const fetchManualTradingPageData = async (): Promise<ManualTradingPageDat
         const data = await response.json();
         console.log('✅ Manual trading data loaded from backend:', data);
         return data;
-    } catch (error) {
+    } catch (error: any) {
         console.error('❌ Error fetching manual trading page data from backend:', error);
-        // Don't fallback to mock data - show error instead
+        
+        // If backend is not available (network error), return default data structure
+        if (
+            error?.message?.includes('ECONNREFUSED') ||
+            error?.message?.includes('Failed to fetch') ||
+            error?.name === 'TypeError' ||
+            error?.code === 'ECONNREFUSED'
+        ) {
+            console.warn('⚠️ Backend server not available, returning default manual trading data');
+            return {
+                stats: [
+                    { id: 'today_profit', labelKey: 'today_profit', value: 0, format: 'currency', decimals: 2, showSign: true },
+                    { id: 'total_profit', labelKey: 'total_profit', value: 0, format: 'currency', decimals: 2, showSign: true },
+                    { id: 'trades_volume', labelKey: 'trades_volume', value: 0, format: 'currency', decimals: 0 },
+                    { id: 'active_trades', labelKey: 'active_trades', value: 0, format: 'plain', decimals: 0 },
+                    { id: 'win_rate', labelKey: 'win_rate', value: 0, format: 'percent', decimals: 1 },
+                    { id: 'success_rate', labelKey: 'success_rate', value: 0, format: 'percent', decimals: 1 },
+                    { id: 'total_trades', labelKey: 'total_trades', value: 0, format: 'plain', decimals: 0 },
+                ],
+                chart: [],
+                quickTrade: {
+                    pair: 'BTC/USDT',
+                    baseAsset: 'BTC',
+                    quoteAsset: 'USDT',
+                    price: 0,
+                    changePercent: 0,
+                    availableBalance: 0,
+                    amountPresets: [10, 25, 50, 75, 100],
+                    defaultPreset: 25,
+                    stopLossPercent: 2,
+                    takeProfitPercent: 5,
+                    baseAssetPrecision: 8,
+                },
+                recommendations: [],
+                sentiment: {
+                    score: 50,
+                    labelKey: 'sentiment_neutral',
+                },
+                strategies: [],
+                portfolio: [],
+                performance: [],
+                recentTrades: [],
+                lastUpdated: new Date().toISOString(),
+            };
+        }
+        
+        // For other errors (auth, etc.), throw to show error message
         throw error;
     }
 };
@@ -1863,30 +1909,85 @@ export const toggleManualStrategy = async (strategyId: string): Promise<ManualTr
         return await response.json();
     } catch (error) {
         console.error('Error toggling manual strategy:', error);
-        // Fallback to mock data if backend is not available
-    return withLatency(
-        mutateManualTrading(draft => {
-            const strategy = draft.strategies.find(item => item.id === strategyId);
-            if (!strategy) {
-                return;
-            }
+        throw error;
+    }
+};
 
-            strategy.isActive = !strategy.isActive;
-            const performanceDelta = strategy.isActive ? Math.random() * 1.2 : -Math.random() * 1.2;
-            strategy.performance = Number((strategy.performance + performanceDelta).toFixed(1));
+export const placeAdvancedOrder = async (order: {
+    type: 'market' | 'limit' | 'stop-loss' | 'take-profit' | 'stop-limit';
+    side: 'buy' | 'sell';
+    pair: string;
+    amount: number;
+    price?: number;
+    stopPrice?: number;
+    limitPrice?: number;
+}): Promise<ManualTradingPageData> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        const response = await fetch('/api/manual-trades/order/advanced', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(order),
+        });
 
-            updateManualTradingStat(draft.stats, 'active_trades', stat => {
-                const delta = strategy.isActive ? 1 : -1;
-                stat.value = Math.max(0, Math.round(stat.value + delta));
-            });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to place order' }));
+            throw new Error(errorData.error || 'Failed to place order');
+        }
 
-            updateManualTradingStat(draft.stats, 'win_rate', stat => {
-                const delta = strategy.isActive ? Math.random() * 0.4 : -Math.random() * 0.4;
-                stat.value = Math.min(100, Math.max(0, Number((stat.value + delta).toFixed(stat.decimals ?? 1))));
-            });
-        }),
-        450,
-    );
+        return await response.json();
+    } catch (error) {
+        console.error('Error placing advanced order:', error);
+        throw error;
+    }
+};
+
+export const fetchOpenOrders = async (pair?: string): Promise<any[]> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        let url = '/api/manual-trades/orders/open';
+        if (pair) {
+            url += `?pair=${encodeURIComponent(pair)}`;
+        }
+
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch open orders');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching open orders:', error);
+        return [];
+    }
+};
+
+export const cancelOrder = async (orderId: string): Promise<void> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        const response = await fetch(`/api/manual-trades/orders/${orderId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to cancel order');
+        }
+    } catch (error) {
+        console.error('Error cancelling order:', error);
+        throw error;
     }
 };
 
@@ -2415,10 +2516,293 @@ export const deactivateFavoriteAlert = async (alertId: string): Promise<Favorite
 };
 
 
-export const fetchStrategies = (): Promise<Strategy[]> => {
-    return new Promise(resolve => {
-        setTimeout(() => resolve(db.strategies), FAKE_LATENCY);
-    });
+export const fetchStrategies = async (): Promise<Strategy[]> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/strategies', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            throw new Error(`Failed to fetch strategies: ${response.status} ${text}`);
+        }
+
+        const data = await response.json();
+        return Array.isArray(data) ? data as Strategy[] : [];
+    } catch (error: any) {
+        console.error('Error fetching strategies from backend:', error);
+        
+        // If backend is not available (network error), return empty array
+        if (
+            error?.message?.includes('ECONNREFUSED') ||
+            error?.message?.includes('Failed to fetch') ||
+            error?.name === 'TypeError' ||
+            error?.code === 'ECONNREFUSED'
+        ) {
+            console.warn('⚠️ Backend server not available, returning empty strategies array');
+            return [];
+        }
+        
+        // For other errors (auth, etc.), throw to show error message
+        throw error;
+    }
+};
+
+export const toggleStrategy = async (strategyId: string): Promise<Strategy[]> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch(`/api/strategies/${strategyId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to toggle strategy');
+        }
+
+        const data = await response.json();
+        return Array.isArray(data) ? data as Strategy[] : [];
+    } catch (error) {
+        console.error('Error toggling strategy:', error);
+        throw error;
+    }
+};
+
+export const createStrategy = async (name?: string, type?: string): Promise<Strategy[]> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/strategies', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name, type }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to create strategy' }));
+            throw new Error(errorData.error || 'Failed to create strategy');
+        }
+
+        const data = await response.json();
+        return Array.isArray(data) ? data as Strategy[] : [];
+    } catch (error) {
+        console.error('Error creating strategy:', error);
+        throw error;
+    }
+};
+
+export const generateAIStrategy = async (): Promise<Strategy[]> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/strategies/ai-generate', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to generate AI strategy' }));
+            throw new Error(errorData.error || 'Failed to generate AI strategy');
+        }
+
+        const data = await response.json();
+        return Array.isArray(data) ? data as Strategy[] : [];
+    } catch (error) {
+        console.error('Error generating AI strategy:', error);
+        throw error;
+    }
+};
+
+export const copyStrategy = async (strategyId: string): Promise<Strategy[]> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch(`/api/strategies/${strategyId}/copy`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to copy strategy');
+        }
+
+        const data = await response.json();
+        return Array.isArray(data) ? data as Strategy[] : [];
+    } catch (error) {
+        console.error('Error copying strategy:', error);
+        throw error;
+    }
+};
+
+export const updateStrategy = async (strategyId: string, { name, type }: { name?: string; type?: string }): Promise<Strategy[]> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch(`/api/strategies/${strategyId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name, type }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update strategy');
+        }
+
+        const data = await response.json();
+        return Array.isArray(data) ? data as Strategy[] : [];
+    } catch (error) {
+        console.error('Error updating strategy:', error);
+        throw error;
+    }
+};
+
+export const groupBacktestStrategies = async (strategyIds: string[], startDate: string, endDate: string, initialCapital: number): Promise<any> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/strategies/group-backtest', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ strategyIds, startDate, endDate, initialCapital }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to start group backtest');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error starting group backtest:', error);
+        throw error;
+    }
+};
+
+export const optimizeAllStrategies = async (): Promise<any> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/strategies/optimize-all', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to optimize strategies');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error optimizing strategies:', error);
+        throw error;
+    }
+};
+
+export const exportAllStrategies = async (): Promise<void> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/strategies/export/all', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to export strategies');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `strategies-${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error('Error exporting strategies:', error);
+        throw error;
+    }
+};
+
+export const allocatePortfolio = async (allocations: Record<string, number>): Promise<any> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/strategies/allocate-portfolio', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ allocations }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to allocate portfolio');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error allocating portfolio:', error);
+        throw error;
+    }
 };
 
 export const fetchPortfolioPageData = (): Promise<PortfolioPageData> =>
@@ -3575,12 +3959,47 @@ export const fetchAIManagerData = async (): Promise<AIManagerOverview> => {
 // Fetch AI Agents - REAL IMPLEMENTATION with IndexedDB
 export const fetchAIAgents = async (): Promise<AIAgent[]> => {
     try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/ai-agents', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            // If backend returns valid data (array), use it
+            if (Array.isArray(data) && data.length > 0) {
+                console.log('✅ AI agents loaded from backend:', data.length);
+                return data as AIAgent[];
+            }
+            // If empty array, return it (no fallback needed)
+            if (Array.isArray(data)) {
+                console.log('✅ AI agents loaded from backend (empty)');
+                return [];
+            }
+        } else if (response.status !== 500) {
+            // Only throw if it's not a server error (might be DB issue)
+            throw new Error(`Failed to fetch AI agents: ${response.status}`);
+        }
+    } catch (error) {
+        console.warn('⚠️ Failed to fetch AI agents from backend, using fallback:', error);
+    }
+
+    // Fallback: Try to load from IndexedDB
+    try {
         const agents = await database.getAll<AIAgent>('aiAgents');
         if (agents && agents.length > 0) {
+            console.log('✅ AI agents loaded from IndexedDB fallback');
             return agents;
         }
     } catch (e) {
-        console.warn('Failed to load agents from database:', e);
+        console.warn('Failed to load agents from IndexedDB:', e);
     }
 
     // Initialize with default agents if not exists
@@ -14138,11 +14557,43 @@ export const testAIIntegration = async (
 const MEXC_API_BASE = 'https://api.mexc.com';
 
 export const fetchConnectionSettings = async (): Promise<{ apiKey: string; apiSecret: string; isConnected: boolean }> => {
-    // Try to load from IndexedDB first
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/connections/mexc', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            // Backend returns: { apiKey, apiSecret, isConnected, ... } or { api_key, api_secret, is_active, ... }
+            if (data && (data.apiKey !== undefined || data.api_key !== undefined || data.isConnected !== undefined || data.is_active !== undefined)) {
+                console.log('✅ MEXC connection settings loaded from backend');
+                return {
+                    apiKey: data.apiKey || data.api_key || '',
+                    apiSecret: data.apiSecret || data.api_secret || '',
+                    isConnected: data.isConnected !== undefined ? data.isConnected : (data.is_active || false)
+                };
+            }
+        } else if (response.status !== 500) {
+            // Only throw if it's not a server error (might be DB issue)
+            throw new Error(`Failed to fetch connection settings: ${response.status}`);
+        }
+    } catch (error) {
+        console.warn('⚠️ Failed to fetch connection settings from backend, using fallback:', error);
+    }
+
+    // Fallback: Try to load from IndexedDB
     try {
         const saved = await database.get<{ apiKey: string; apiSecret: string; isConnected: boolean; id: string }>('connectionSettings', 'default');
         if (saved) {
-            console.log('✅ MEXC settings loaded from database');
+            console.log('✅ MEXC settings loaded from IndexedDB fallback');
             return {
                 apiKey: saved.apiKey || '',
                 apiSecret: saved.apiSecret || '',
@@ -14150,15 +14601,15 @@ export const fetchConnectionSettings = async (): Promise<{ apiKey: string; apiSe
             };
         }
     } catch (e) {
-        console.warn('Failed to load from database:', e);
+        console.warn('Failed to load from IndexedDB:', e);
     }
 
-    // Try localStorage as backup
+    // Fallback: Try localStorage
     try {
         const localData = localStorage.getItem('titan_mexc_settings');
         if (localData) {
             const parsed = JSON.parse(localData);
-            console.log('✅ MEXC settings loaded from localStorage');
+            console.log('✅ MEXC settings loaded from localStorage fallback');
             return {
                 apiKey: parsed.apiKey || '',
                 apiSecret: parsed.apiSecret || '',
@@ -14169,12 +14620,9 @@ export const fetchConnectionSettings = async (): Promise<{ apiKey: string; apiSe
         console.warn('Failed to load from localStorage:', e);
     }
 
-    // Fallback to memory
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve(db.connectionSettings || { apiKey: '', apiSecret: '', isConnected: false });
-        }, FAKE_LATENCY);
-    });
+    // Last resort: Return empty/default
+    console.warn('⚠️ No connection settings found, returning defaults');
+    return { apiKey: '', apiSecret: '', isConnected: false };
 };
 
 export const saveConnectionSettings = async (settings: { apiKey: string; apiSecret: string; isConnected: boolean }): Promise<void> => {
@@ -19503,16 +19951,46 @@ export const registerNewUser = async (userData: {
 // Artemis Central AI Controller Functions
 export const fetchArtemisState = async (): Promise<ArtemisState> => {
     try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch('/api/artemis/state', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            // If backend returns valid data, use it
+            if (data && (data.id || data.status)) {
+                console.log('✅ Artemis state loaded from backend');
+                return data as ArtemisState;
+            }
+        } else if (response.status !== 500) {
+            // Only throw if it's not a server error (might be DB issue)
+            throw new Error(`Failed to fetch Artemis state: ${response.status}`);
+        }
+    } catch (error) {
+        console.warn('⚠️ Failed to fetch Artemis state from backend, using fallback:', error);
+    }
+
+    // Fallback: Try to load from IndexedDB
+    try {
         const saved = await database.get<{ key: string; value: ArtemisState }>('settings', 'artemis_state');
         if (saved && saved.value) {
+            console.log('✅ Artemis state loaded from IndexedDB fallback');
             return saved.value;
         }
     } catch (e) {
-        console.warn('Failed to load Artemis state from database:', e);
+        console.warn('Failed to load Artemis state from IndexedDB:', e);
     }
 
-    // Initialize default Artemis state
-    const agents = await database.getAll<AIAgent>('aiAgents');
+    // Last resort: Initialize default Artemis state
+    const agents = await database.getAll<AIAgent>('aiAgents').catch(() => []);
     const activeAgents = agents.filter(a => a.status === 'active').map(a => a.id);
 
     const defaultState: ArtemisState = {
@@ -20296,7 +20774,7 @@ export const triggerFailover = async (failedAgentId: string): Promise<void> => {
 };
 
 // Generate AI Trading Strategy based on current market conditions
-export const generateAIStrategy = async (): Promise<TradingScenario> => {
+export const generateAITradingScenario = async (): Promise<TradingScenario> => {
     try {
         // Collect current market conditions
         const agents = await database.getAll<AIAgent>('aiAgents');

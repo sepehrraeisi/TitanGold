@@ -257,12 +257,12 @@ class TradingEngine {
     async scanArbitrageOpportunity(symbol) {
         try {
             // Get prices from MEXC (in future, compare with other exchanges)
-            const ticker = await mexcService.fetchTicker(symbol);
+            const ticker = await mexcService.fetchSystemTicker(symbol);
             if (!ticker) return null;
 
             // For now, check spot vs perpetual (future: check other exchanges)
             const spotPrice = parseFloat(ticker.lastPrice);
-            const perpTicker = await mexcService.fetchPerpetualTicker(symbol);
+            const perpTicker = await mexcService.fetchSystemPerpetualTicker(symbol);
             if (!perpTicker) return null;
 
             const perpPrice = parseFloat(perpTicker.lastPrice || perpTicker.fairPrice);
@@ -308,7 +308,7 @@ class TradingEngine {
 
                 for (const symbol of topSymbols) {
                     try {
-                        const ticker = await mexcService.fetchTicker(symbol);
+                        const ticker = await mexcService.fetchSystemTicker(symbol);
                         if (!ticker) continue;
 
                         const currentPrice = parseFloat(ticker.lastPrice);
@@ -367,7 +367,7 @@ class TradingEngine {
 
                 for (const symbol of topSymbols) {
                     try {
-                        const ticker = await mexcService.fetchTicker(symbol);
+                        const ticker = await mexcService.fetchSystemTicker(symbol);
                         if (!ticker) continue;
 
                         const currentVolume = parseFloat(ticker.quoteVolume || ticker.volume || 0);
@@ -491,6 +491,14 @@ class TradingEngine {
         if (this.opportunityQueue.length > 100) {
             this.opportunityQueue = this.opportunityQueue.slice(0, 100);
         }
+    }
+
+    /**
+     * Public helper for external modules (like Autopilot) to enqueue opportunities
+     * so that they pass through the full TradingEngine + Artemis + Agents pipeline.
+     */
+    async enqueueOpportunity(opportunity, priority = 'MEDIUM') {
+        await this.addOpportunity(opportunity, priority);
     }
 
     startOpportunityProcessor() {
@@ -866,8 +874,8 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                     console.log(`❌ [DEMO] Trade failed: Insufficient balance`);
                 }
             } else {
-                // Live mode - real execution
-                const order = await mexcService.createOrder(
+                // Live mode - real execution (system-level)
+                const order = await mexcService.createSystemOrder(
                     opportunity.symbol,
                     'market', // or 'limit'
                     opportunity.side.toLowerCase(),
@@ -929,7 +937,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
     async monitorTrade(trade) {
         try {
             // Get current price
-            const ticker = await mexcService.fetchTicker(trade.symbol);
+            const ticker = await mexcService.fetchSystemTicker(trade.symbol);
             if (!ticker) return;
 
             const currentPrice = parseFloat(ticker.lastPrice);
@@ -999,9 +1007,9 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 trade.closedAt = Date.now();
                 console.log(`📊 [DEMO] Trade closed: ${trade.symbol} @ ${trade.exitPrice} (${reason})`);
             } else {
-                // Live mode - execute opposite order
+                // Live mode - execute opposite order (system-level)
                 const exitSide = trade.side === 'BUY' ? 'SELL' : 'BUY';
-                const order = await mexcService.createOrder(
+                const order = await mexcService.createSystemOrder(
                     trade.symbol,
                     'market',
                     exitSide.toLowerCase(),
@@ -1106,7 +1114,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
     async getAllTradingSymbols() {
         try {
             // Get all USDT pairs from MEXC
-            const exchangeInfo = await mexcService.getExchangeInfo();
+            const exchangeInfo = await mexcService.getSystemExchangeInfo();
             if (exchangeInfo && exchangeInfo.symbols) {
                 return exchangeInfo.symbols
                     .filter(s => s.quoteAsset === 'USDT' && s.status === 'TRADING')

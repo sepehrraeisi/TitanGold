@@ -442,6 +442,29 @@ const APIConfig: React.FC = () => {
 
             setApiConfig(updatedConfig);
             await saveAPIConfig(updatedConfig);
+
+            // همچنین تنظیمات Mixture را به بک‌اند (ArtemisConfig.decisionEngine) هم ارسال می‌کنیم
+            try {
+                const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+                await fetch('http://localhost:5002/api/artemis/config/decision-engine', {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({
+                        useMixture: enabled,
+                        models: models.map(m => ({
+                            provider: m.serviceId,
+                            weight: m.weight,
+                            minConfidence: m.minConfidence,
+                        })),
+                    }),
+                });
+            } catch (err) {
+                console.error('Failed to sync mixture agents with backend Artemis config:', err);
+            }
+
             alert(t('mixture_agents_updated') || 'Mixture agents configuration updated!');
         } catch (e) {
             console.error('Failed to update mixture agents:', e);

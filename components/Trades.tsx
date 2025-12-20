@@ -12,15 +12,18 @@ const Trades: React.FC = () => {
     const [activeTab, setActiveTab] = useState<TradeView>('manual');
     const [isLoading, setIsLoading] = useState(true);
     
-    // Simulate fetching initial data needed for the trading views
+    // Optional pre-fetch; UI نباید در صورت خطا روی Loading بماند
     useEffect(() => {
         const loadTradeData = async () => {
-            // In a real app, you might pre-fetch common data here
-            // For now, it just sets up the view. The children will fetch their own data.
-            await api.fetchStrategies(); // Example pre-fetch
-            setIsLoading(false);
+            try {
+                // Children خودشان داده‌شان را از بک‌اند می‌گیرند؛
+                // این فقط یک pre-fetch سبک است و اگر خطا شود، صفحه باید باز هم رندر شود.
+                await api.fetchStrategies().catch(() => undefined);
+            } finally {
+                setIsLoading(false);
+            }
         };
-        loadTradeData();
+        void loadTradeData();
     }, []);
 
 

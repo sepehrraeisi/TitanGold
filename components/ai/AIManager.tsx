@@ -2556,7 +2556,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
     const handleGenerateAIStrategy = async () => {
         setIsGeneratingAI(true);
         try {
-            const newScenario = await api.generateAIStrategy();
+            const newScenario = await api.generateAITradingScenario();
             setScenarios([newScenario, ...scenarios]);
             alert(t('ai_strategy_generated') || `AI strategy "${newScenario.name}" generated successfully!`);
         } catch (e) {

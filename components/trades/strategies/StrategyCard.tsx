@@ -4,9 +4,14 @@ import { Strategy } from '../../../types.ts';
 
 interface StrategyCardProps {
     strategy: Strategy;
+    onToggle?: () => void;
+    isSelected?: boolean;
+    onEdit?: (strategy: Strategy) => void;
+    onBacktest?: (strategy: Strategy) => void;
+    onCopy?: (strategyId: string) => void;
 }
 
-const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
+const StrategyCard: React.FC<StrategyCardProps> = ({ strategy, onToggle, isSelected = false, onEdit, onBacktest, onCopy }) => {
     const { t } = useLanguage();
 
     const rankColor = {
@@ -27,7 +32,7 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
     );
     
     return (
-        <div className="bg-[#1c1e2f] border border-gray-700/50 rounded-lg p-4 flex flex-col md:flex-row gap-4">
+        <div className={`bg-[#1c1e2f] border ${isSelected ? 'border-purple-500/50' : 'border-gray-700/50'} rounded-lg p-4 flex flex-col md:flex-row gap-4 transition-all`}>
             <div className={`w-full md:w-10 flex md:flex-col items-center justify-center rounded-lg border-2 ${rankColor[strategy.rank]}`}>
                 <span className="font-bold text-2xl">{strategy.rank}</span>
             </div>
@@ -39,8 +44,16 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
                     </div>
                     {/* Toggle Switch */}
                     <div className="flex items-center gap-2">
-                        <span className={`text-xs font-semibold ${strategy.status === 'active' ? 'text-green-400' : 'text-gray-500'}`}>{t(strategy.status)}</span>
-                        <button className={`${strategy.status === 'active' ? 'bg-green-600' : 'bg-gray-600'} relative inline-flex items-center h-5 rounded-full w-9`}>
+                        <span className={`text-xs font-semibold ${strategy.status === 'active' ? 'text-green-400' : 'text-gray-500'}`}>
+                            {t(strategy.status) || strategy.status}
+                        </span>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggle?.();
+                            }}
+                            className={`${strategy.status === 'active' ? 'bg-green-600' : 'bg-gray-600'} relative inline-flex items-center h-5 rounded-full w-9 transition-colors`}
+                        >
                             <span className={`${strategy.status === 'active' ? 'translate-x-5' : 'translate-x-1'} inline-block w-3 h-3 transform bg-white rounded-full transition-transform`} />
                         </button>
                     </div>
@@ -66,9 +79,33 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
                      </svg>
                 </div>
                 <div className="flex w-full gap-2 text-xs">
-                    <button className="flex-1 p-1 bg-gray-700 hover:bg-gray-600 rounded-md">{t('edit')}</button>
-                    <button className="flex-1 p-1 bg-gray-700 hover:bg-gray-600 rounded-md">{t('backtest')}</button>
-                    <button className="flex-1 p-1 bg-gray-700 hover:bg-gray-600 rounded-md">{t('copy')}</button>
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit?.(strategy);
+                        }}
+                        className="flex-1 p-1 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"
+                    >
+                        {t('edit')}
+                    </button>
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onBacktest?.(strategy);
+                        }}
+                        className="flex-1 p-1 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"
+                    >
+                        {t('backtest')}
+                    </button>
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onCopy?.(strategy.id);
+                        }}
+                        className="flex-1 p-1 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"
+                    >
+                        {t('copy')}
+                    </button>
                 </div>
             </div>
         </div>

@@ -8,9 +8,10 @@ async function verify() {
     // 1. Test MEXC
     try {
         console.log('📡 Testing MEXC Connection...');
-        const prices = await mexcService.fetchPrices(['BTC/USDT']);
-        if (prices['BTC/USDT']) {
-            console.log('✅ MEXC Connected. BTC Price:', prices['BTC/USDT'].last);
+        const prices = await mexcService.fetchSystemPrices(['BTC/USDT']);
+        const btc = prices['BTC/USDT'];
+        if (btc) {
+            console.log('✅ MEXC Connected. BTC Price:', btc.last || btc.close || btc.price);
         } else {
             console.error('❌ MEXC Failed: No price data');
         }
