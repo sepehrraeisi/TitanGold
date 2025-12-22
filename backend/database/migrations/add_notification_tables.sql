@@ -1,7 +1,7 @@
 -- Notification settings table
 CREATE TABLE IF NOT EXISTS notification_settings (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   channel VARCHAR(20) NOT NULL, -- 'email', 'sms', 'push', 'in_app'
   category VARCHAR(50) NOT NULL, -- 'trading', 'price_alerts', 'system', 'ai'
   enabled BOOLEAN DEFAULT true,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS notification_settings (
 -- Notification history table
 CREATE TABLE IF NOT EXISTS notification_history (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   type VARCHAR(50) NOT NULL,
   category VARCHAR(50) NOT NULL,
   title VARCHAR(255) NOT NULL,

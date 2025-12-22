@@ -110,17 +110,13 @@ router.put('/settings', authenticate, async (req, res) => {
 router.get('/history', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { limit = '50', offset = '0', unreadOnly = 'false' } = req.query as {
-      limit?: string;
-      offset?: string;
-      unreadOnly?: string;
-    };
+    const { limit = '50', offset = '0', unreadOnly = 'false' } = req.query;
 
     let sql = `
       SELECT * FROM notification_history 
       WHERE user_id = $1
     `;
-    const params: any[] = [userId];
+    const params = [userId];
 
     if (unreadOnly === 'true') {
       sql += ' AND read_at IS NULL';

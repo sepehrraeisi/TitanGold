@@ -264,8 +264,8 @@ router.post('/2fa/backup-codes/generate', authenticate, async (req, res) => {
       return res.status(400).json({ error: '2FA must be enabled before generating backup codes' });
     }
 
-    const backupCodes: string[] = [];
-    const hashedCodes: Array<{ hash: string; used: boolean; created_at: string }> = [];
+    const backupCodes = [];
+    const hashedCodes = [];
 
     // Generate 10 one-time backup codes
     for (let i = 0; i < 10; i++) {
@@ -293,7 +293,7 @@ router.post('/2fa/backup-codes/generate', authenticate, async (req, res) => {
       message: 'Backup codes generated successfully. Save these codes in a safe place. You will not be able to see them again.',
       warning: 'Each code can only be used once. Generate new codes if you use all of them.',
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error generating backup codes:', error);
     res.status(500).json({ error: 'Failed to generate backup codes', message: error.message });
   }
@@ -320,7 +320,7 @@ router.post('/2fa/backup-codes/verify', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const backupCodes = JSON.parse(userResult.rows[0].two_factor_backup_codes || '[]');
+    const backupCodes = userResult.rows[0].two_factor_backup_codes || [];
 
     if (!Array.isArray(backupCodes) || backupCodes.length === 0) {
       return res.status(400).json({ error: 'No backup codes found. Please generate backup codes first.' });
@@ -355,7 +355,7 @@ router.post('/2fa/backup-codes/verify', async (req, res) => {
       [JSON.stringify(backupCodes), userId]
     );
 
-    const remainingCodes = backupCodes.filter((c: any) => !c.used).length;
+    const remainingCodes = backupCodes.filter((c) => !c.used).length;
 
     console.log(`[SECURITY] User ${userId} used a backup code. ${remainingCodes} codes remaining.`);
 
@@ -367,7 +367,7 @@ router.post('/2fa/backup-codes/verify', async (req, res) => {
         ? 'You have less than 3 backup codes remaining. Consider generating new codes.'
         : null,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error verifying backup code:', error);
     res.status(500).json({ error: 'Failed to verify backup code', message: error.message });
   }
@@ -385,21 +385,21 @@ router.get('/2fa/backup-codes/remaining', authenticate, async (req, res) => {
       [userId]
     );
 
-    const backupCodes = JSON.parse(userResult.rows[0]?.two_factor_backup_codes || '[]');
-    const remaining = backupCodes.filter((c: any) => !c.used).length;
+    const backupCodes = userResult.rows[0]?.two_factor_backup_codes || [];
+    const remaining = backupCodes.filter((c) => !c.used).length;
 
     res.json({
       total: backupCodes.length,
       remaining,
       used: backupCodes.length - remaining,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching backup codes info:', error);
     res.status(500).json({ error: 'Failed to fetch backup codes information', message: error.message });
   }
 });
 
-function generateRandomCode(length: number): string {
+function generateRandomCode(length) {
   const digits = '0123456789';
   let code = '';
   const randomBytes = crypto.randomBytes(length);

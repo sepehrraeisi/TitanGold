@@ -32,13 +32,13 @@ Analyze ${symbol || 'the asset'} on timeframe ${timeframe}.
 Return ONLY JSON with this schema:
 {
   "signal": "BUY" | "SELL" | "NEUTRAL",
-  "confidence": number,
+  "confidence",
   "indicators": {
     "trend": "bullish" | "bearish" | "sideways",
-    "rsi": number,
-    "macd": number,
-    "support": number | null,
-    "resistance": number | null
+    "rsi",
+    "macd",
+    "support" ,
+    "resistance" 
   }
 }
 `;
@@ -85,7 +85,7 @@ Assess the risk profile of ${symbol || 'the asset'}.
 Return ONLY JSON:
 {
   "recommendation": "REDUCE" | "HOLD" | "INCREASE",
-  "confidence": number,
+  "confidence",
   "riskLevel": "low" | "medium" | "high"
 }
 `;
@@ -125,7 +125,7 @@ Decide if NOW is a good time to enter or exit a position for ${symbol || 'the as
 Return ONLY JSON:
 {
   "signal": "ENTER" | "WAIT" | "EXIT",
-  "confidence": number,
+  "confidence",
   "timing": "immediate" | "soon" | "later"
 }
 `;
