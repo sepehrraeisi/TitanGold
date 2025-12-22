@@ -18,7 +18,46 @@
  * ============================================================================
  */
 
-import { api } from './api';
+// API wrapper for user preferences endpoints
+const api = {
+    get: async (url: string) => {
+        const token = localStorage.getItem('titan_token');
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': token ? `Bearer ${token}` : ''
+            }
+        });
+        return response.json();
+    },
+    
+    post: async (url: string, data: any) => {
+        const token = localStorage.getItem('titan_token');
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': token ? `Bearer ${token}` : ''
+            },
+            body: JSON.stringify(data)
+        });
+        return response.json();
+    },
+    
+    put: async (url: string, data: any) => {
+        const token = localStorage.getItem('titan_token');
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': token ? `Bearer ${token}` : ''
+            },
+            body: JSON.stringify(data)
+        });
+        return response.json();
+    }
+};
 
 // ============================================================================
 // TYPES & INTERFACES
