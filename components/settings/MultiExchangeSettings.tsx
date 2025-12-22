@@ -1,31 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import {
-    Card,
-    CardContent,
-    TextField,
-    Button,
-    Typography,
-    Box,
-    Chip,
-    Alert,
-    CircularProgress,
-    IconButton,
-    Collapse,
-    Grid,
-    Divider,
-} from '@mui/material';
-import {
-    Visibility,
-    VisibilityOff,
-    CheckCircle,
-    Error,
-    Warning,
-    Info,
-    ExpandMore,
-    ExpandLess,
-    Delete,
-} from '@mui/icons-material';
-import * as api from '../../services/api';
 
 interface ExchangeConnection {
     exchange: string;
@@ -87,7 +60,6 @@ export default function MultiExchangeSettings() {
     const loadConnections = async () => {
         try {
             setLoading(true);
-            // Call new multi-exchange endpoint
             const response = await fetch('/api/connections/exchanges', {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -155,7 +127,6 @@ export default function MultiExchangeSettings() {
                     [exchangeName]: { type: 'success', text: result.message }
                 }));
                 
-                // Update connection with permissions and account info
                 setConnections(prev => prev.map(c => 
                     c.exchange === exchangeName 
                         ? { 
@@ -167,7 +138,6 @@ export default function MultiExchangeSettings() {
                         : c
                 ));
                 
-                // Refresh health status
                 await loadHealthStatus();
             } else {
                 setMessages(prev => ({
@@ -218,7 +188,6 @@ export default function MultiExchangeSettings() {
                     [exchangeName]: { type: 'success', text: '✅ Connection successful!' }
                 }));
                 
-                // Update permissions if available
                 if (result.permissions) {
                     setConnections(prev => prev.map(c => 
                         c.exchange === exchangeName 
@@ -261,7 +230,6 @@ export default function MultiExchangeSettings() {
                     [exchangeName]: { type: 'info', text: 'Connection deleted' }
                 }));
                 
-                // Reset connection
                 setConnections(prev => prev.map(c => 
                     c.exchange === exchangeName 
                         ? { 
@@ -294,115 +262,127 @@ export default function MultiExchangeSettings() {
         const connection = connections.find(c => c.exchange === exchangeName);
         
         if (!connection?.isConnected) {
-            return <Chip label="Not Connected" size="small" color="default" />;
+            return <span className="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded">Not Connected</span>;
         }
         
         if (!health) {
-            return <Chip label="Unknown" size="small" color="default" />;
+            return <span className="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded">Unknown</span>;
         }
 
         const statusConfig = {
-            healthy: { label: 'Healthy', color: 'success' as const, icon: <CheckCircle fontSize="small" /> },
-            stale: { label: 'Stale', color: 'warning' as const, icon: <Warning fontSize="small" /> },
-            error: { label: 'Error', color: 'error' as const, icon: <Error fontSize="small" /> },
+            healthy: { label: 'Healthy', color: 'bg-green-500/20 text-green-400', icon: '✓' },
+            stale: { label: 'Stale', color: 'bg-yellow-500/20 text-yellow-400', icon: '⚠' },
+            error: { label: 'Error', color: 'bg-red-500/20 text-red-400', icon: '✕' },
         };
 
         const config = statusConfig[health.status];
         
         return (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Chip 
-                    label={config.label} 
-                    size="small" 
-                    color={config.color}
-                    icon={config.icon}
-                />
+            <div className="flex items-center gap-2">
+                <span className={`px-2 py-1 text-xs rounded ${config.color}`}>
+                    {config.icon} {config.label}
+                </span>
                 {health.minutesSinceSync !== null && (
-                    <Typography variant="caption" color="text.secondary">
+                    <span className="text-xs text-gray-400">
                         {health.minutesSinceSync < 1 
                             ? 'Just now' 
                             : `${health.minutesSinceSync}m ago`}
-                    </Typography>
+                    </span>
                 )}
-            </Box>
+            </div>
         );
     };
 
     if (loading) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                <CircularProgress />
-            </Box>
+            <div className="flex justify-center items-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
         );
     }
 
     return (
-        <Box>
-            <Typography variant="h6" gutterBottom>
-                Exchange Connections
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Connect your exchange accounts to enable automated trading. Your API keys are stored securely.
-            </Typography>
+        <div className="bg-[#161B22] border border-gray-800 rounded-lg">
+            <div className="p-6 border-b border-gray-800">
+                <h3 className="text-lg font-semibold text-white">Exchange Connections</h3>
+                <p className="text-sm text-gray-400 mt-1">
+                    Connect your exchange accounts to enable automated trading. Your API keys are stored securely.
+                </p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+                {connections.map((connection) => {
+                    const isExpanded = expandedExchange === connection.exchange;
+                    const showSecret = showSecrets[connection.exchange] || false;
+                    const message = messages[connection.exchange];
 
-            {connections.map((connection) => {
-                const isExpanded = expandedExchange === connection.exchange;
-                const showSecret = showSecrets[connection.exchange] || false;
-                const message = messages[connection.exchange];
+                    return (
+                        <div key={connection.exchange} className="bg-[#0D111C] border border-gray-700 rounded-lg overflow-hidden">
+                            {/* Header */}
+                            <div 
+                                className="p-4 cursor-pointer hover:bg-gray-800/50 transition-colors"
+                                onClick={() => setExpandedExchange(isExpanded ? null : connection.exchange)}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3 flex-1">
+                                        <span className="text-3xl">{EXCHANGE_ICONS[connection.exchange]}</span>
+                                        <div className="flex-1">
+                                            <h4 
+                                                className="font-semibold text-lg"
+                                                style={{ color: EXCHANGE_COLORS[connection.exchange] }}
+                                            >
+                                                {connection.exchange}
+                                            </h4>
+                                            {renderHealthIndicator(connection.exchange)}
+                                        </div>
+                                    </div>
 
-                return (
-                    <Card key={connection.exchange} sx={{ mb: 2 }}>
-                        <CardContent>
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: isExpanded ? 2 : 0 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
-                                    <Typography variant="h3" component="span">
-                                        {EXCHANGE_ICONS[connection.exchange]}
-                                    </Typography>
-                                    <Box>
-                                        <Typography variant="h6" sx={{ color: EXCHANGE_COLORS[connection.exchange] }}>
-                                            {connection.exchange}
-                                        </Typography>
-                                        {renderHealthIndicator(connection.exchange)}
-                                    </Box>
-                                </Box>
+                                    <div className="flex items-center gap-2">
+                                        {connection.isConnected && connection.permissions.length > 0 && (
+                                            <div className="flex gap-1 mr-2">
+                                                {connection.permissions.map(perm => (
+                                                    <span 
+                                                        key={perm} 
+                                                        className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded border border-blue-500/30"
+                                                    >
+                                                        {perm}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        
+                                        <svg 
+                                            className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                            fill="none" 
+                                            stroke="currentColor" 
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
 
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    {connection.isConnected && connection.permissions.length > 0 && (
-                                        <Box sx={{ display: 'flex', gap: 0.5, mr: 1 }}>
-                                            {connection.permissions.map(perm => (
-                                                <Chip 
-                                                    key={perm} 
-                                                    label={perm} 
-                                                    size="small" 
-                                                    variant="outlined"
-                                                />
-                                            ))}
-                                        </Box>
+                            {/* Expanded Content */}
+                            {isExpanded && (
+                                <div className="p-4 border-t border-gray-700 space-y-4">
+                                    {message && (
+                                        <div className={`p-3 rounded ${
+                                            message.type === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                                            message.type === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                                            'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                        }`}>
+                                            {message.text}
+                                        </div>
                                     )}
-                                    
-                                    <IconButton
-                                        onClick={() => setExpandedExchange(isExpanded ? null : connection.exchange)}
-                                        size="small"
-                                    >
-                                        {isExpanded ? <ExpandLess /> : <ExpandMore />}
-                                    </IconButton>
-                                </Box>
-                            </Box>
 
-                            <Collapse in={isExpanded}>
-                                <Divider sx={{ my: 2 }} />
-                                
-                                {message && (
-                                    <Alert severity={message.type} sx={{ mb: 2 }}>
-                                        {message.text}
-                                    </Alert>
-                                )}
-
-                                <Grid container spacing={2}>
-                                    <Grid item xs={12}>
-                                        <TextField
-                                            fullWidth
-                                            label="API Key"
+                                    {/* API Key Input */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                                            API Key
+                                        </label>
+                                        <input
+                                            type="text"
                                             value={connection.apiKey}
                                             onChange={(e) => {
                                                 setConnections(prev => prev.map(c =>
@@ -412,97 +392,106 @@ export default function MultiExchangeSettings() {
                                                 ));
                                             }}
                                             placeholder="Enter your API key"
+                                            className="w-full p-2 bg-[#0D111C] border border-gray-700 rounded-md focus:ring-blue-500 focus:border-blue-500 text-white"
                                         />
-                                    </Grid>
+                                    </div>
 
-                                    <Grid item xs={12}>
-                                        <TextField
-                                            fullWidth
-                                            label="API Secret"
-                                            type={showSecret ? 'text' : 'password'}
-                                            value={connection.apiSecret}
-                                            onChange={(e) => {
-                                                setConnections(prev => prev.map(c =>
-                                                    c.exchange === connection.exchange
-                                                        ? { ...c, apiSecret: e.target.value }
-                                                        : c
-                                                ));
-                                            }}
-                                            placeholder="Enter your API secret"
-                                            InputProps={{
-                                                endAdornment: (
-                                                    <IconButton
-                                                        onClick={() => setShowSecrets(prev => ({
-                                                            ...prev,
-                                                            [connection.exchange]: !showSecret
-                                                        }))}
-                                                        edge="end"
-                                                        size="small"
-                                                    >
-                                                        {showSecret ? <VisibilityOff /> : <Visibility />}
-                                                    </IconButton>
-                                                ),
-                                            }}
-                                        />
-                                    </Grid>
+                                    {/* API Secret Input */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                                            API Secret
+                                        </label>
+                                        <div className="relative">
+                                            <input
+                                                type={showSecret ? 'text' : 'password'}
+                                                value={connection.apiSecret}
+                                                onChange={(e) => {
+                                                    setConnections(prev => prev.map(c =>
+                                                        c.exchange === connection.exchange
+                                                            ? { ...c, apiSecret: e.target.value }
+                                                            : c
+                                                    ));
+                                                }}
+                                                placeholder="Enter your API secret"
+                                                className="w-full p-2 pr-10 bg-[#0D111C] border border-gray-700 rounded-md focus:ring-blue-500 focus:border-blue-500 text-white"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSecrets(prev => ({
+                                                    ...prev,
+                                                    [connection.exchange]: !showSecret
+                                                }))}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                                            >
+                                                {showSecret ? '👁️' : '👁️‍🗨️'}
+                                            </button>
+                                        </div>
+                                    </div>
 
+                                    {/* Account Info */}
                                     {connection.accountInfo?.currencies && connection.accountInfo.currencies.length > 0 && (
-                                        <Grid item xs={12}>
-                                            <Alert severity="info" icon={<Info />}>
-                                                <Typography variant="body2">
-                                                    <strong>Account Info:</strong> {connection.accountInfo.totalBalance || 0} assets with balance
-                                                </Typography>
-                                                <Typography variant="caption">
-                                                    Currencies: {connection.accountInfo.currencies.join(', ')}
-                                                </Typography>
-                                            </Alert>
-                                        </Grid>
+                                        <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded">
+                                            <div className="flex items-start gap-2">
+                                                <span className="text-blue-400">ℹ️</span>
+                                                <div className="flex-1">
+                                                    <p className="text-sm text-blue-400 font-medium">
+                                                        Account Info: {connection.accountInfo.totalBalance || 0} assets with balance
+                                                    </p>
+                                                    <p className="text-xs text-blue-300 mt-1">
+                                                        Currencies: {connection.accountInfo.currencies.join(', ')}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     )}
 
-                                    <Grid item xs={12}>
-                                        <Box sx={{ display: 'flex', gap: 2 }}>
-                                            <Button
-                                                variant="contained"
-                                                onClick={() => handleSaveConnection(connection.exchange)}
-                                                disabled={savingExchange === connection.exchange || !connection.apiKey || !connection.apiSecret}
-                                            >
-                                                {savingExchange === connection.exchange ? (
-                                                    <CircularProgress size={20} />
-                                                ) : (
-                                                    'Save & Test'
-                                                )}
-                                            </Button>
-
-                                            <Button
-                                                variant="outlined"
-                                                onClick={() => handleTestConnection(connection.exchange)}
-                                                disabled={testingExchange === connection.exchange || !connection.apiKey || !connection.apiSecret}
-                                            >
-                                                {testingExchange === connection.exchange ? (
-                                                    <CircularProgress size={20} />
-                                                ) : (
-                                                    'Test Connection'
-                                                )}
-                                            </Button>
-
-                                            {connection.isConnected && (
-                                                <Button
-                                                    variant="outlined"
-                                                    color="error"
-                                                    startIcon={<Delete />}
-                                                    onClick={() => handleDeleteConnection(connection.exchange)}
-                                                >
-                                                    Delete
-                                                </Button>
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-2 pt-2">
+                                        <button
+                                            onClick={() => handleSaveConnection(connection.exchange)}
+                                            disabled={savingExchange === connection.exchange || !connection.apiKey || !connection.apiSecret}
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-md transition-colors flex items-center gap-2"
+                                        >
+                                            {savingExchange === connection.exchange ? (
+                                                <>
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                                    Saving...
+                                                </>
+                                            ) : (
+                                                'Save & Test'
                                             )}
-                                        </Box>
-                                    </Grid>
-                                </Grid>
-                            </Collapse>
-                        </CardContent>
-                    </Card>
-                );
-            })}
-        </Box>
+                                        </button>
+
+                                        <button
+                                            onClick={() => handleTestConnection(connection.exchange)}
+                                            disabled={testingExchange === connection.exchange || !connection.apiKey || !connection.apiSecret}
+                                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-md transition-colors flex items-center gap-2"
+                                        >
+                                            {testingExchange === connection.exchange ? (
+                                                <>
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                                    Testing...
+                                                </>
+                                            ) : (
+                                                'Test Connection'
+                                            )}
+                                        </button>
+
+                                        {connection.isConnected && (
+                                            <button
+                                                onClick={() => handleDeleteConnection(connection.exchange)}
+                                                className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-md transition-colors border border-red-600/30"
+                                            >
+                                                🗑️ Delete
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
     );
 }
