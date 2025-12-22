@@ -9,6 +9,7 @@ import type {
 } from '../../types.ts';
 import Skeleton from '../ui/skeleton.tsx';
 import { useAppContext } from '../../context/AppContext.tsx';
+import TimezoneSelect from '../ui/timezone-select.tsx';
 
 const SettingsCard: React.FC<{ title: string, children: React.ReactNode, description?: string }> = ({ title, children, description }) => (
     <div className="bg-[#161B22] border border-gray-800 rounded-xl shadow-sm">
@@ -312,7 +313,7 @@ const ProfileSettings: React.FC = () => {
                     <TextField label={t('email_address')} id="email" type="email" value={details.email ?? ''} onChange={value => handleDetailChange('email', value)} />
                     <TextField label={t('job_title')} id="job_title" value={details.jobTitle ?? ''} onChange={value => handleDetailChange('jobTitle', value)} />
                     <TextField label={t('phone_number')} id="phone" value={details.phone ?? ''} onChange={value => handleDetailChange('phone', value)} />
-                    <TextField label={t('timezone')} id="timezone" value={details.timezone ?? ''} onChange={value => handleDetailChange('timezone', value)} />
+                    <TimezoneSelect label={t('timezone')} id="timezone" value={details.timezone ?? 'UTC'} onChange={value => handleDetailChange('timezone', value)} />
                     <TextField label={t('location')} id="location" value={details.location ?? ''} onChange={value => handleDetailChange('location', value)} />
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-400">
