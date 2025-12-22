@@ -160,15 +160,18 @@ const AppearanceSettings: React.FC = () => {
             }
             
             // 🚀 NEW: Dashboard settings - sync to Backend API instead of LocalStorage only
-            try {
-                await userPreferencesService.updatePreference('dashboard', settings.dashboard);
-                await userPreferencesService.updatePreference('notifications', settings.notifications);
-            } catch (error) {
-                console.warn('Failed to sync dashboard settings to backend:', error);
-                // Fallback to LocalStorage for offline mode
-                localStorage.setItem('titan_dashboard_settings', JSON.stringify(settings.dashboard));
-                localStorage.setItem('titan_notification_settings', JSON.stringify(settings.notifications));
-            }
+            // Use async IIFE (Immediately Invoked Function Expression) to handle await
+            (async () => {
+                try {
+                    await userPreferencesService.updatePreference('dashboard', settings.dashboard);
+                    await userPreferencesService.updatePreference('notifications', settings.notifications);
+                } catch (error) {
+                    console.warn('Failed to sync dashboard settings to backend:', error);
+                    // Fallback to LocalStorage for offline mode
+                    localStorage.setItem('titan_dashboard_settings', JSON.stringify(settings.dashboard));
+                    localStorage.setItem('titan_notification_settings', JSON.stringify(settings.notifications));
+                }
+            })();
         }
     }, [settings, setTheme]);
 
