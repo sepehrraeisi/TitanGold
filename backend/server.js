@@ -5,6 +5,8 @@ import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import pool from './database/db.js';
 import { autopilot } from './engine/autopilot.js';
 import { scheduler } from './engine/scheduler.js';
@@ -35,11 +37,17 @@ import connectionsRoutes from './routes/connections.js';
 import strategyRoutes from './routes/strategies.js';
 import securityRoutes from './routes/security.js';
 import exportRoutes from './routes/exports.js';
+import walletRoutes from './routes/wallet.js';
+import profileRoutes from './routes/profile.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+
+// Resolve __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ============================================================================
 // MIDDLEWARE
@@ -63,6 +71,9 @@ app.use(cors(corsOptions));
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Static files for uploads (avatars, etc.)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Compression middleware
 app.use(compression());
@@ -131,6 +142,8 @@ app.use('/api/connections', connectionsRoutes);
 app.use('/api/strategies', strategyRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/exports', exportRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/profile', profileRoutes);
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
 

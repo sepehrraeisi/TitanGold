@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
           },
           // Proxy all other /api/* requests to backend server
           '/api': {
-            target: 'http://localhost:5002',
+            target: 'http://localhost:5001',
             changeOrigin: true,
             secure: false,
             configure: (proxy, _options) => {

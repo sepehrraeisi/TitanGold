@@ -199,36 +199,27 @@ const ProfileSettings: React.FC = () => {
         }
 
         try {
-            // Convert to base64 for storage
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const base64String = reader.result as string;
-                
-                // Update preview
-                setAvatarPreview(base64String);
-                
-                // Update AppContext immediately
-                setAvatarUrl(base64String);
-                
-                // Save to profile
-                try {
-                    const updated = await api.saveProfileDetails({ avatarUrl: base64String });
-                    setData(updated);
-                    
-                    // Ensure event is dispatched (it should be in saveProfileDetails, but just in case)
-                    window.dispatchEvent(new CustomEvent('titan_avatar_updated'));
-                    
-                    setSuccess(t('avatar_updated'));
-                    setTimeout(() => setSuccess(null), 3000);
-                } catch (err) {
-                    setError(err instanceof Error ? err.message : 'Failed to save avatar');
-                }
-            };
-            reader.onerror = () => {
-                setError(t('failed_to_read_image'));
-            };
-            reader.readAsDataURL(file);
+            setError(null);
+            setSuccess(null);
+
+            // Upload to backend
+            const { avatarUrl } = await api.uploadAvatar(file);
+
+            // Update preview and AppContext immediately
+            setAvatarPreview(avatarUrl);
+            setAvatarUrl(avatarUrl);
+
+            // Persist avatar URL in profile settings (client-side profile store)
+            const updated = await api.saveProfileDetails({ avatarUrl });
+            setData(updated);
+
+            // Ensure event is dispatched (should also happen in saveProfileDetails)
+            window.dispatchEvent(new CustomEvent('titan_avatar_updated'));
+
+            setSuccess(t('avatar_updated'));
+            setTimeout(() => setSuccess(null), 3000);
         } catch (err) {
+            console.error('Failed to upload avatar:', err);
             setError(err instanceof Error ? err.message : 'Failed to upload avatar');
         }
     };

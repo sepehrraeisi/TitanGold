@@ -19544,6 +19544,35 @@ export const saveProfileDetails = async (updates: ProfileDetailsUpdate): Promise
     return settings;
 };
 
+// Upload profile avatar to backend and return avatar URL
+export const uploadAvatar = async (file: File): Promise<{ avatarUrl: string }> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const response = await fetch('/api/profile/avatar', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            // Let browser set Content-Type with boundary for multipart/form-data
+        } as any,
+        body: formData,
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error('Failed to upload avatar:', response.status, errorText);
+        throw new Error(errorText || `Failed to upload avatar (${response.status})`);
+    }
+
+    const data = await response.json();
+    return { avatarUrl: data.avatarUrl as string };
+};
+
 export const saveProfileCommunications = async (preferences: ProfileCommunicationSettings): Promise<ProfileSettingsData> => {
     const settings = await fetchProfileSettings();
 
