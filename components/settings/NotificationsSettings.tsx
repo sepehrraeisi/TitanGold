@@ -168,7 +168,8 @@ const NotificationsSettings: React.FC = () => {
             const data = await api.fetchNotificationSettings();
             setSettings(data);
             
-            if (data.telegram.botToken) {
+            // Add null/undefined checks before accessing nested properties
+            if (data && data.telegram && data.telegram.botToken) {
                 const botResult = await api.getTelegramBotInfo(data.telegram.botToken);
                 if (botResult.success) {
                     setBotInfo(botResult.data);
@@ -176,6 +177,13 @@ const NotificationsSettings: React.FC = () => {
             }
         } catch (error) {
             console.error('Failed to load settings:', error);
+            // Set default empty settings to prevent crashes
+            setSettings({
+                telegram: { botToken: '', channels: [] },
+                browser: { permission: 'default', enabled: false },
+                global: { enabled: true },
+                analytics: { enabled: true }
+            });
         } finally {
             setLoading(false);
         }
@@ -413,6 +421,19 @@ const NotificationsSettings: React.FC = () => {
 
     return (
         <div className="space-y-6">
+            {/* Loading State */}
+            {(loading || !settings) && (
+                <div className="bg-[#161B22] border border-gray-800 rounded-lg p-8">
+                    <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                        <span className="ml-3 text-gray-400">Loading notification settings...</span>
+                    </div>
+                </div>
+            )}
+            
+            {/* Main Content - Only show when loaded */}
+            {!loading && settings && (
+                <>
             {/* Tab Navigation */}
             <div className="flex gap-2 border-b border-gray-800">
                 <button
@@ -1309,6 +1330,8 @@ const NotificationsSettings: React.FC = () => {
                     {t('save_changes')}
                 </button>
             </div>
+            </>
+            )}
         </div>
     );
 };
