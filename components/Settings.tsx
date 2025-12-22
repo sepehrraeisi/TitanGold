@@ -113,7 +113,7 @@ const Settings: React.FC = () => {
         ...(userRole === 'Admin'
             ? [
                   {
-                      id: 'users' as SettingsTab,
+                      id: 'users',
                       label: t('settings_users'),
                       icon: (
                           <svg

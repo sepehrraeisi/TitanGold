@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import type { WalletConnection } from '../../services/api.ts';
+import MultiExchangeSettings from './MultiExchangeSettings.tsx';
 
 const SettingsCard: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
     <div className="bg-[#161B22] border border-gray-800 rounded-lg">
@@ -360,6 +361,9 @@ const ConnectionsSettings: React.FC = () => {
 
     return (
         <div className="space-y-6">
+            {/* Multi-Exchange Settings Component */}
+            <MultiExchangeSettings />
+            
             <SettingsCard title={t('exchange_api_keys')}>
                 {/* Connection Status Indicator */}
                 {isConnected && (

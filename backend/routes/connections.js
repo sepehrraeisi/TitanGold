@@ -1,8 +1,12 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import exchangesRouter from './exchanges.js';
 
 const router = express.Router();
+
+// Mount exchanges router
+router.use('/exchanges', exchangesRouter);
 
 // Get MEXC connection settings
 router.get('/mexc', authenticate, async (req, res) => {

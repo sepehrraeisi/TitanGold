@@ -15349,10 +15349,24 @@ export const connectWalletConnect = async (): Promise<{
             }
         });
 
-        // Set timeout for URI (5 seconds)
-        const uriTimeout = setTimeout(() => {
+        // Set timeout for URI – if چیزی دریافت نشد، سعی می‌کنیم از provider خودش URI را بخوانیم
+        const uriTimeout = setTimeout(async () => {
+            try {
+                // تلاش برای گرفتن URI از provider (در برخی محیط‌ها event دیر می‌آید)
+                const fallbackUri = walletConnectState?.uri 
+                    || (walletConnectProvider && (walletConnectProvider.session?.uri || walletConnectProvider.uri));
+
+                if (fallbackUri) {
+                    console.warn('WalletConnect: Using fallback URI after timeout');
+                    uriResolve(fallbackUri);
+                    return;
+                }
+            } catch (e) {
+                console.warn('WalletConnect: Failed to read fallback URI after timeout', e);
+            }
+
             uriReject(new Error('Timeout waiting for WalletConnect URI'));
-        }, 5000);
+        }, 45000); // افزایش تایم‌اوت به 45 ثانیه
 
         // Try to connect (this will trigger display_uri event)
         try {
@@ -15425,10 +15439,12 @@ export const connectWalletConnect = async (): Promise<{
                 };
             }
 
-            // If it's a timeout or other error, still try to return URI if available
+            console.error('WalletConnect: connect() error', connectError);
+            // If it's a timeout or other error and هیچ URI نداریم، می‌گذاریم بیرون هندل شود
             throw connectError;
         }
     } catch (error: any) {
+        console.error('WalletConnect: initialization error', error);
         // Check if we have a stored URI as fallback
         if (walletConnectState?.uri) {
             try {
