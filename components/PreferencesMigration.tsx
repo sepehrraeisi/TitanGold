@@ -159,7 +159,14 @@ const PreferencesMigrationModal: React.FC<MigrationModalProps> = ({ onComplete, 
                         )}
 
                         <button
-                            onClick={result.success ? onComplete : onSkip}
+                            onClick={() => {
+                                console.log('✅ Continue button clicked!', { result });
+                                if (result.success) {
+                                    onComplete();
+                                } else {
+                                    onSkip();
+                                }
+                            }}
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-md transition-colors"
                         >
                             {result.success ? 'Continue' : 'Close'}
