@@ -15349,10 +15349,10 @@ export const connectWalletConnect = async (): Promise<{
             }
         });
 
-        // Set timeout for URI (5 seconds)
+        // Set timeout for URI (15 seconds)
         const uriTimeout = setTimeout(() => {
             uriReject(new Error('Timeout waiting for WalletConnect URI'));
-        }, 5000);
+        }, 15000);
 
         // Try to connect (this will trigger display_uri event)
         try {
