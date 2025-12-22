@@ -7,6 +7,7 @@ import { checkSession, login } from './services/api.ts';
 import { loginWithBackend, checkSessionStorage, logoutUser } from './services/api-auth.ts';
 import LoadingScreen from './components/LoadingScreen.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
+import PreferencesMigration from './components/PreferencesMigration.tsx';
 import type { User } from './types.ts';
 import { database } from './services/database.ts';
 
@@ -74,7 +75,14 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {user ? <Dashboard onLogout={handleLogout} /> : <Login onLogin={handleLogin} errorKey={authError} />}
+      {user ? (
+        <>
+          <PreferencesMigration userId={user.id} />
+          <Dashboard onLogout={handleLogout} />
+        </>
+      ) : (
+        <Login onLogin={handleLogin} errorKey={authError} />
+      )}
     </div>
   );
 };

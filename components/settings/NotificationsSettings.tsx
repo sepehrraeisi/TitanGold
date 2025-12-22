@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
+import { userPreferencesService } from '../../services/userPreferences.ts';
 
 const SettingsCard: React.FC<{ title: string, description?: string, children: React.ReactNode, className?: string }> = ({ title, description, children, className = '' }) => (
     <div className={`bg-[#161B22] border border-gray-800 rounded-lg ${className}`}>
@@ -165,7 +166,16 @@ const NotificationsSettings: React.FC = () => {
     const loadSettings = async () => {
         try {
             setLoading(true);
-            const data = await api.fetchNotificationSettings();
+            
+            // 🚀 NEW: Load from Backend API instead of LocalStorage
+            const preferences = await userPreferencesService.getPreferences();
+            const data = preferences.notifications || {
+                telegram: { botToken: '', channels: [] },
+                browser: { permission: 'default', enabled: false },
+                global: { enabled: true },
+                analytics: { enabled: true }
+            };
+            
             setSettings(data);
             
             // Add null/undefined checks before accessing nested properties
@@ -194,7 +204,10 @@ const NotificationsSettings: React.FC = () => {
         
         try {
             setTestStatus('Saving...');
-            await api.saveNotificationSettings(settings);
+            
+            // 🚀 NEW: Save to Backend API instead of LocalStorage
+            await userPreferencesService.updatePreference('notifications', settings);
+            
             setTestStatus('✅ Settings saved successfully!');
             setTimeout(() => setTestStatus(''), 3000);
         } catch (error) {
