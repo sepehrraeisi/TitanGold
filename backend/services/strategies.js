@@ -369,7 +369,7 @@ class StrategyService {
         orig.sharpe || 0,
         orig.max_drawdown || 0,
         'N', // rank
-        orig.chart_data || '[]'::jsonb,
+        orig.chart_data || '[]',
       ],
     );
 
