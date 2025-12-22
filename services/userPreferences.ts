@@ -805,12 +805,15 @@ export function stopAutoSync() {
 // EXPORTS
 // ============================================================================
 
-export default {
+/**
+ * User Preferences Service API
+ */
+export const userPreferencesService = {
     // Main API
-    getAllPreferences,
+    getPreferences: getAllPreferences,
     getCategoryPreferences,
+    updatePreference: updateCategoryPreferences,
     updateAllPreferences,
-    updateCategoryPreferences,
     bulkUpdatePreferences,
     syncPreferences,
     getPreferenceHistory,
@@ -832,3 +835,6 @@ export default {
     startAutoSync,
     stopAutoSync
 };
+
+// Default export for backward compatibility
+export default userPreferencesService;
