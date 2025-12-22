@@ -21,6 +21,7 @@
 import express from 'express';
 import db from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
+import { preferencesLimiter } from '../middleware/rateLimits.js';
 import Joi from 'joi';
 
 const router = express.Router();
@@ -105,6 +106,10 @@ function validateBody(schema) {
 
 // Apply metadata middleware to all routes
 router.use(addRequestMetadata);
+
+// Apply rate limiting to all preference write operations (POST/PUT/DELETE)
+// GET requests are excluded via skip function in preferencesLimiter
+router.use(preferencesLimiter);
 
 // ============================================================================
 // GET ENDPOINTS

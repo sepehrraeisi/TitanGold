@@ -132,6 +132,42 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const SYNC_INTERVAL = 30 * 1000; // 30 seconds
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
+const RETRY_BACKOFF = 2; // exponential backoff multiplier
+
+// ============================================================================
+// RETRY HELPER
+// ============================================================================
+
+/**
+ * Retry a function with exponential backoff
+ * Only retries on network errors (5xx), not client errors (4xx)
+ */
+async function retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    retries = MAX_RETRIES,
+    delay = RETRY_DELAY,
+    attempt = 1
+): Promise<T> {
+    try {
+        return await fn();
+    } catch (error: any) {
+        if (attempt >= retries) {
+            console.error(`Failed after ${retries} retries:`, error);
+            throw error;
+        }
+        
+        // Only retry on network errors, not on 4xx client errors
+        if (error.response?.status >= 400 && error.response?.status < 500) {
+            throw error;
+        }
+        
+        const nextDelay = delay * Math.pow(RETRY_BACKOFF, attempt - 1);
+        console.warn(`Retry attempt ${attempt}/${retries} after ${nextDelay}ms...`);
+        
+        await new Promise(resolve => setTimeout(resolve, nextDelay));
+        return retryWithBackoff(fn, retries, delay, attempt + 1);
+    }
+}
 
 // Legacy keys to migrate from
 const LEGACY_KEYS = [
@@ -264,7 +300,8 @@ export async function getAllPreferences(useCache = true): Promise<PreferencesRes
     }
 
     try {
-        const response = await api.get('/api/user-preferences');
+        // 🚀 RETRY: Wrap API call with exponential backoff
+        const response = await retryWithBackoff(() => api.get('/api/user-preferences'));
         
         if (response.success && response.data) {
             cache.set(response.data.preferences, response.data.version);
@@ -315,7 +352,7 @@ export async function getCategoryPreferences(
     }
 
     try {
-        const response = await api.get(`/api/user-preferences/category/${category}`);
+        const response = await retryWithBackoff(() => api.get(`/api/user-preferences/category/${category}`));
         
         if (response.success && response.data) {
             cache.setCategory(category, response.data.preferences, response.data.version);
@@ -351,11 +388,11 @@ export async function updateAllPreferences(
     syncSource = 'web'
 ): Promise<PreferencesResponse> {
     try {
-        const response = await api.put('/api/user-preferences', {
+        const response = await retryWithBackoff(() => api.put('/api/user-preferences', {
             preferences,
             version: cache.getVersion(),
             syncSource
-        });
+        }));
         
         if (response.success && response.data) {
             cache.set(response.data.preferences, response.data.version);
@@ -377,11 +414,11 @@ export async function updateCategoryPreferences(
     syncSource = 'web'
 ): Promise<CategoryResponse> {
     try {
-        const response = await api.put(`/api/user-preferences/category/${category}`, {
+        const response = await retryWithBackoff(() => api.put(`/api/user-preferences/category/${category}`, {
             values,
             version: cache.getVersion(),
             syncSource
-        });
+        }));
         
         if (response.success && response.data) {
             cache.setCategory(category, values, response.data.version);
@@ -403,11 +440,11 @@ export async function bulkUpdatePreferences(
     syncSource = 'web'
 ): Promise<PreferencesResponse> {
     try {
-        const response = await api.put('/api/user-preferences/bulk', {
+        const response = await retryWithBackoff(() => api.put('/api/user-preferences/bulk', {
             updates,
             version: cache.getVersion(),
             syncSource
-        });
+        }));
         
         if (response.success && response.data) {
             cache.set(response.data.preferences, response.data.version);
@@ -430,12 +467,12 @@ export async function syncPreferences(
     localTimestamp?: string
 ): Promise<SyncResponse> {
     try {
-        const response = await api.post('/api/user-preferences/sync', {
+        const response = await retryWithBackoff(() => api.post('/api/user-preferences/sync', {
             localPreferences,
             localVersion,
             localTimestamp: localTimestamp || new Date().toISOString(),
             syncSource: 'web'
-        });
+        }));
         
         if (response.success && response.data) {
             cache.set(response.data.preferences, response.data.version);
@@ -469,7 +506,7 @@ export async function getPreferenceHistory(
             ...(category && { category })
         });
         
-        return await api.get(`/api/user-preferences/history?${params}`);
+        return await retryWithBackoff(() => api.get(`/api/user-preferences/history?${params}`));
     } catch (error: any) {
         console.error('Failed to get preference history:', error);
         throw error;
@@ -481,7 +518,7 @@ export async function getPreferenceHistory(
  */
 export async function getCategories() {
     try {
-        return await api.get('/api/user-preferences/categories');
+        return await retryWithBackoff(() => api.get('/api/user-preferences/categories'));
     } catch (error: any) {
         console.error('Failed to get categories:', error);
         throw error;
