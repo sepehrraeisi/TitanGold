@@ -118,7 +118,7 @@ router.use(addRequestMetadata);
  */
 router.get('/', authenticate, async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
 
         const result = await db.query(`
             SELECT 
@@ -188,7 +188,7 @@ router.get('/', authenticate, async (req, res) => {
  */
 router.get('/category/:category', authenticate, async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
         const { category } = req.params;
 
         // Validate category exists
@@ -247,7 +247,7 @@ router.get('/category/:category', authenticate, async (req, res) => {
  */
 router.get('/history', authenticate, async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
         const limit = Math.min(parseInt(req.query.limit) || 50, 200);
         const offset = parseInt(req.query.offset) || 0;
         const category = req.query.category;
@@ -363,7 +363,7 @@ router.get('/categories', authenticate, async (req, res) => {
  */
 router.post('/', authenticate, validateBody(preferenceUpdateSchema), async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
         const { preferences, syncSource, deviceFingerprint } = req.validatedBody;
         const { ipAddress, userAgent } = req.metadata;
 
@@ -428,7 +428,7 @@ router.post('/', authenticate, validateBody(preferenceUpdateSchema), async (req,
  */
 router.put('/', authenticate, validateBody(preferenceUpdateSchema), async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
         const { preferences, version: clientVersion, syncSource, deviceFingerprint } = req.validatedBody;
         const { ipAddress, userAgent } = req.metadata;
 
@@ -539,7 +539,7 @@ router.put('/', authenticate, validateBody(preferenceUpdateSchema), async (req, 
  */
 router.put('/category/:category', authenticate, async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
         const { category } = req.params;
         const { values, version: clientVersion, syncSource = 'web' } = req.body;
         const { ipAddress, userAgent, deviceFingerprint } = req.metadata;
@@ -566,50 +566,62 @@ router.put('/category/:category', authenticate, async (req, res) => {
             });
         }
 
-        const result = await db.query(`
-            UPDATE user_preferences
-            SET 
-                preferences = jsonb_set(
-                    COALESCE(preferences, '{}'::jsonb),
-                    $2::text[],
-                    $3::jsonb
-                ),
-                sync_source = $4,
-                device_fingerprint = $5,
-                ip_address = $6,
-                user_agent = $7,
-                updated_by = $8
-            WHERE user_id = $1 AND is_deleted = FALSE
-            RETURNING id, user_id, preferences, version, updated_at
-        `, [userId, `{${category}}`, JSON.stringify(values), syncSource, deviceFingerprint, ipAddress, userAgent, userId]);
+        // Get current preferences first
+        const currentResult = await db.query(
+            'SELECT preferences FROM user_preferences WHERE user_id = $1 AND is_deleted = FALSE',
+            [userId]
+        );
 
-        if (result.rows.length === 0) {
-            // Create if doesn't exist
-            const newResult = await db.query(`
-                INSERT INTO user_preferences (
-                    user_id, preferences, sync_source, device_fingerprint,
-                    ip_address, user_agent, updated_by
-                ) VALUES ($1, $2, $3, $4, $5, $6, $1)
-                RETURNING id, user_id, preferences, version, updated_at
-            `, [
-                userId,
-                JSON.stringify({ [category]: values }),
-                syncSource,
-                deviceFingerprint,
-                ipAddress,
-                userAgent
-            ]);
-
-            console.log(`✅ Category '${category}' preferences created for user ${userId}`);
-
-            return res.json({
-                success: true,
-                data: newResult.rows[0],
-                message: 'Category preferences created successfully'
-            });
+        let updatedPreferences;
+        if (currentResult.rows.length === 0) {
+            // No preferences exist, create new with just this category
+            updatedPreferences = { [category]: values };
+        } else {
+            // Merge with existing preferences
+            updatedPreferences = {
+                ...currentResult.rows[0].preferences,
+                [category]: values
+            };
         }
 
-        console.log(`✅ Category '${category}' updated for user ${userId}`);
+        // UPSERT (Insert or Update)
+        console.log('🔍 DEBUG - About to UPSERT preferences:');
+        console.log('   userId:', userId);
+        console.log('   updatedPreferences:', updatedPreferences);
+        console.log('   syncSource:', syncSource);
+        console.log('   deviceFingerprint:', deviceFingerprint);
+        console.log('   ipAddress:', ipAddress);
+        console.log('   userAgent:', userAgent ? userAgent.substring(0, 50) : 'null');
+
+        const result = await db.query(`
+            INSERT INTO user_preferences (
+                user_id, 
+                preferences, 
+                sync_source, 
+                device_fingerprint,
+                ip_address, 
+                user_agent, 
+                updated_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $1)
+            ON CONFLICT (user_id) 
+            DO UPDATE SET
+                preferences = EXCLUDED.preferences,
+                sync_source = EXCLUDED.sync_source,
+                device_fingerprint = EXCLUDED.device_fingerprint,
+                ip_address = EXCLUDED.ip_address,
+                user_agent = EXCLUDED.user_agent,
+                updated_by = EXCLUDED.updated_by
+            RETURNING id, user_id, preferences, version, updated_at
+        `, [
+            userId, 
+            JSON.stringify(updatedPreferences), 
+            syncSource, 
+            deviceFingerprint, 
+            ipAddress, 
+            userAgent
+        ]);
+
+        console.log(`✅ Category '${category}' updated for user ${userId}, version: ${result.rows[0].version}`);
 
         res.json({
             success: true,
@@ -636,61 +648,48 @@ router.put('/category/:category', authenticate, async (req, res) => {
  */
 router.put('/bulk', authenticate, validateBody(bulkUpdateSchema), async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
         const { updates, version: clientVersion, syncSource } = req.validatedBody;
         const { ipAddress, userAgent, deviceFingerprint } = req.metadata;
 
-        const client = await db.pool.connect();
-        try {
-            await client.query('BEGIN');
+        // Get current preferences
+        const current = await db.query(
+            'SELECT preferences FROM user_preferences WHERE user_id = $1 AND is_deleted = FALSE',
+            [userId]
+        );
 
-            // Get current preferences
-            const current = await client.query(
-                'SELECT preferences FROM user_preferences WHERE user_id = $1 AND is_deleted = FALSE FOR UPDATE',
-                [userId]
-            );
+        let mergedPrefs = current.rows.length > 0 ? current.rows[0].preferences : {};
 
-            let mergedPrefs = current.rows.length > 0 ? current.rows[0].preferences : {};
-
-            // Apply all updates
-            for (const update of updates) {
-                mergedPrefs[update.category] = { ...mergedPrefs[update.category], ...update.values };
-            }
-
-            // Update or insert
-            const result = await client.query(`
-                INSERT INTO user_preferences (
-                    user_id, preferences, sync_source, device_fingerprint,
-                    ip_address, user_agent, updated_by
-                ) VALUES ($1, $2, $3, $4, $5, $6, $1)
-                ON CONFLICT (user_id) 
-                DO UPDATE SET
-                    preferences = EXCLUDED.preferences,
-                    sync_source = EXCLUDED.sync_source,
-                    device_fingerprint = EXCLUDED.device_fingerprint,
-                    ip_address = EXCLUDED.ip_address,
-                    user_agent = EXCLUDED.user_agent,
-                    updated_by = EXCLUDED.updated_by,
-                    updated_at = NOW()
-                RETURNING id, user_id, preferences, version, updated_at
-            `, [userId, JSON.stringify(mergedPrefs), syncSource, deviceFingerprint, ipAddress, userAgent]);
-
-            await client.query('COMMIT');
-
-            console.log(`✅ Bulk update completed for user ${userId}, ${updates.length} categories updated`);
-
-            res.json({
-                success: true,
-                data: result.rows[0],
-                message: `${updates.length} categories updated successfully`
-            });
-
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
+        // Apply all updates
+        for (const update of updates) {
+            mergedPrefs[update.category] = { ...mergedPrefs[update.category], ...update.values };
         }
+
+        // UPSERT
+        const result = await db.query(`
+            INSERT INTO user_preferences (
+                user_id, preferences, sync_source, device_fingerprint,
+                ip_address, user_agent, updated_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $1)
+            ON CONFLICT (user_id) 
+            DO UPDATE SET
+                preferences = EXCLUDED.preferences,
+                sync_source = EXCLUDED.sync_source,
+                device_fingerprint = EXCLUDED.device_fingerprint,
+                ip_address = EXCLUDED.ip_address,
+                user_agent = EXCLUDED.user_agent,
+                updated_by = EXCLUDED.updated_by,
+                updated_at = NOW()
+            RETURNING id, user_id, preferences, version, updated_at
+        `, [userId, JSON.stringify(mergedPrefs), syncSource, deviceFingerprint, ipAddress, userAgent]);
+
+        console.log(`✅ Bulk update completed for user ${userId}, ${updates.length} categories updated, version: ${result.rows[0].version}`);
+
+        res.json({
+            success: true,
+            data: result.rows[0],
+            message: `${updates.length} categories updated successfully`
+        });
 
     } catch (error) {
         console.error('❌ Error bulk updating preferences:', error);
@@ -714,7 +713,7 @@ router.put('/bulk', authenticate, validateBody(bulkUpdateSchema), async (req, re
  */
 router.delete('/', authenticate, async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
 
         const result = await db.query(`
             UPDATE user_preferences
@@ -759,7 +758,7 @@ router.delete('/', authenticate, async (req, res) => {
  */
 router.delete('/category/:category', authenticate, async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
         const { category } = req.params;
 
         const result = await db.query(`
@@ -811,7 +810,7 @@ router.delete('/category/:category', authenticate, async (req, res) => {
  */
 router.post('/sync', authenticate, async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.id;
         const { localPreferences, localVersion, localTimestamp, syncSource = 'web' } = req.body;
         const { ipAddress, userAgent, deviceFingerprint } = req.metadata;
 
