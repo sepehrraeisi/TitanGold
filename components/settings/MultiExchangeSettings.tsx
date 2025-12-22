@@ -60,20 +60,31 @@ export default function MultiExchangeSettings() {
     const loadConnections = async () => {
         try {
             setLoading(true);
+            console.log('MultiExchange: Loading connections...');
             const response = await fetch('/api/connections/exchanges', {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,
                 },
             });
             
+            console.log('MultiExchange: Response status:', response.status);
+            
             if (response.ok) {
                 const data = await response.json();
+                console.log('MultiExchange: Loaded connections:', data);
                 setConnections(data.connections || []);
+            } else {
+                console.error('MultiExchange: Failed to load, status:', response.status);
+                // Set empty connections to show UI anyway
+                setConnections([]);
             }
         } catch (error) {
             console.error('Failed to load exchange connections:', error);
+            // Set empty connections to show UI anyway
+            setConnections([]);
         } finally {
             setLoading(false);
+            console.log('MultiExchange: Loading complete, loading =', false);
         }
     };
 
@@ -294,12 +305,18 @@ export default function MultiExchangeSettings() {
     };
 
     if (loading) {
+        console.log('MultiExchange: Rendering loading state');
         return (
-            <div className="flex justify-center items-center p-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <div className="bg-[#161B22] border border-gray-800 rounded-lg p-8">
+                <div className="flex justify-center items-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    <span className="ml-3 text-gray-400">Loading exchanges...</span>
+                </div>
             </div>
         );
     }
+
+    console.log('MultiExchange: Rendering main content, connections:', connections.length);
 
     return (
         <div className="bg-[#161B22] border border-gray-800 rounded-lg">

@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       server: {
-        port: 3000,
+        port: 5173,
         host: '0.0.0.0',
         proxy: {
           // Specific external API proxies (must come first)
@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
           },
           // Proxy all other /api/* requests to backend server
           '/api': {
-            target: 'http://localhost:5001',
+            target: 'http://localhost:5002',
             changeOrigin: true,
             secure: false,
             configure: (proxy, _options) => {
