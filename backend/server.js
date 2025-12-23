@@ -16,6 +16,7 @@ import { requestContextMiddleware, performanceMiddleware, logger } from './servi
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
 import { initWebsocket, broadcastNotification } from './services/websocket.js';
+import favoritesWebSocketService from './services/favoritesWebSocket.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -223,12 +224,20 @@ const server = app.listen(PORT, async () => {
   // Initialize WebSocket Notifications
   initWebsocket(server);
   console.log('✅ WebSocket notifications ready at /ws/notifications');
+  
+  // Initialize Favorites WebSocket for real-time price updates
+  favoritesWebSocketService.initialize(server);
+  console.log('✅ Favorites WebSocket ready at /ws/favorites');
 });
 
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM signal received: closing HTTP server');
+  
+  // Shutdown services
+  favoritesWebSocketService.shutdown();
   await messageQueue.close().catch(() => {});
+  
   pool.end(() => {
     console.log('🛑 Database pool closed');
     process.exit(0);
