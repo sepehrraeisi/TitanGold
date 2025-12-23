@@ -160,7 +160,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
 
     // 🚀 NEW: WebSocket for Real-time Price Updates
     const { isConnected, isConnecting, error: wsError } = useWebSocket({
-        url: 'ws://188.40.209.82:5002/ws/favorites',
+        url: typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/favorites` : 'ws://localhost:5002/ws/favorites',
         token: localStorage.getItem('token') || undefined,
         autoConnect: true,
         onMessage: (message: WebSocketMessage) => {

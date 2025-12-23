@@ -1,5 +1,6 @@
 // Backend API Configuration
-const BACKEND_API_URL = 'http://188.40.209.82:5002/api';
+// Use relative path to leverage Nginx proxy and avoid Mixed Content errors
+const BACKEND_API_URL = '/api';
 
 export interface User {
   id: string;
