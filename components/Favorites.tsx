@@ -6,6 +6,7 @@ import SetAlertModal from './modals/SetAlertModal.tsx';
 import ActionMenu from './favorites/ActionMenu.tsx';
 import MiniChart from './favorites/MiniChart.tsx';
 import * as api from '../services/api.ts';
+import favoritesService from '../services/favorites.ts';
 
 // Market Stats Widget Component
 const MarketStatsWidget: React.FC = () => {
@@ -154,19 +155,54 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [filterBy, setFilterBy] = useState<'all' | 'gainers' | 'decliners' | 'alerts'>('all');
 
+    // Helper function to refresh favorites data
+    const refreshFavorites = async (): Promise<void> => {
+        try {
+            // Fetch favorites from backend
+            const backendFavorites = await favoritesService.getAllFavorites();
+            
+            // Fetch full page data (for catalog, gainers, losers, prices)
+            const favoritesData = await api.fetchFavoritesPageData();
+            
+            // Merge backend favorites with price data
+            const mergedFavorites: FavoriteItem[] = backendFavorites.map(fav => {
+                const existing = favoritesData.favorites.find(
+                    f => f.id === fav.asset_id || f.symbol === fav.symbol
+                );
+                
+                return {
+                    id: fav.asset_id,
+                    symbol: fav.symbol,
+                    name: fav.name,
+                    price: existing?.price || 0,
+                    change24h: existing?.change24h || 0,
+                    volume: existing?.volume || '0',
+                    volume24h: existing?.volume24h,
+                    hasAlert: existing?.hasAlert || false,
+                    priceHistory: existing?.priceHistory || [],
+                    _priceChangeDirection: existing?._priceChangeDirection,
+                    _priceUpdateTime: existing?._priceUpdateTime
+                };
+            });
+            
+            // Update state
+            setData({
+                ...favoritesData,
+                favorites: mergedFavorites
+            });
+        } catch (error) {
+            console.error('Failed to refresh favorites:', error);
+            throw error;
+        }
+    };
+
     // Initial data fetch
     useEffect(() => {
         const fetchData = async () => {
             try {
-                console.log('🔄 Fetching favorites page data...');
-                const favoritesData = await api.fetchFavoritesPageData();
-                console.log('✅ Favorites data received:', {
-                    favorites: favoritesData.favorites.length,
-                    catalog: favoritesData.catalog.length,
-                    gainers: favoritesData.gainers.length,
-                    losers: favoritesData.losers.length
-                });
-                setData(favoritesData);
+                console.log('🔄 Fetching favorites from backend...');
+                await refreshFavorites();
+                console.log('✅ Favorites loaded successfully');
             } catch (error) {
                 console.error('❌ Failed to load favorites', error);
             } finally {
@@ -255,8 +291,12 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     
     const handleAddFavorite = async (asset: CryptoAsset) => {
         try {
-            const updated = await api.addFavorite(asset.id);
-            setData(updated);
+            // Add to backend
+            await favoritesService.addFavorite(asset.id, asset.symbol, asset.name);
+            
+            // Refresh data
+            await refreshFavorites();
+            
             setStatus({ type: 'success', text: t('favorite_added', { asset: asset.symbol }) });
             setIsAddModalOpen(false); // Close modal after successful add
         } catch (error) {
@@ -267,8 +307,12 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
 
     const handleRemoveFavorite = async (item: FavoriteItem) => {
         try {
-            const updated = await api.removeFavorite(item.id);
-            setData(updated);
+            // Remove from backend by asset ID
+            await favoritesService.removeFavoriteByAssetId(item.id);
+            
+            // Refresh data
+            await refreshFavorites();
+            
             setStatus({ type: 'success', text: t('favorite_removed', { asset: item.symbol }) });
         } catch (error) {
             console.error('Failed to remove favorite', error);
