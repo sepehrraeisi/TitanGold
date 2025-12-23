@@ -40,6 +40,8 @@ import exportRoutes from './routes/exports.js';
 import walletRoutes from './routes/wallet.js';
 import profileRoutes from './routes/profile.js';
 import userPreferencesRoutes from './routes/userPreferences.js';
+import favoritesRoutes from './routes/favorites.js';
+import favoriteAlertsRoutes from './routes/favoriteAlerts.js';
 
 dotenv.config();
 
@@ -150,6 +152,8 @@ app.use('/api/exports', exportRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/user-preferences', userPreferencesRoutes);
+app.use('/api/favorites', favoritesRoutes);
+app.use('/api/favorites', favoriteAlertsRoutes); // Alerts are nested under favorites
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
 
