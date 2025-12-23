@@ -9,6 +9,7 @@
 import express from 'express';
 import pool from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
+import favoritesAlertMonitor from '../services/favoritesAlertMonitor.js';
 
 const router = express.Router();
 
@@ -380,6 +381,66 @@ router.post('/alerts/:alertId/trigger', authenticate, async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to trigger alert'
+        });
+    }
+});
+
+// ============================================================================
+// GET /api/favorites/alerts/monitor/stats - Get alert monitor statistics
+// ============================================================================
+router.get('/monitor/stats', authenticate, async (req, res) => {
+    try {
+        const stats = favoritesAlertMonitor.getStats();
+        
+        // Get active alerts count
+        const result = await pool.query(
+            'SELECT COUNT(*) as count FROM favorite_alerts WHERE is_active = true'
+        );
+        
+        res.json({
+            success: true,
+            monitor: stats,
+            activeAlerts: parseInt(result.rows[0].count)
+        });
+    } catch (error) {
+        console.error('Error fetching monitor stats:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch monitor statistics'
+        });
+    }
+});
+
+// ============================================================================
+// POST /api/favorites/alerts/:alertId/test - Test a specific alert
+// ============================================================================
+router.post('/alerts/:alertId/test', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { alertId } = req.params;
+
+        // Verify ownership
+        const check = await pool.query(
+            'SELECT id FROM favorite_alerts WHERE id = $1 AND user_id = $2',
+            [alertId, userId]
+        );
+
+        if (check.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Alert not found or unauthorized'
+            });
+        }
+
+        // Test the alert
+        const result = await favoritesAlertMonitor.checkSpecificAlert(alertId);
+        
+        res.json(result);
+    } catch (error) {
+        console.error('Error testing alert:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to test alert'
         });
     }
 });

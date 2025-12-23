@@ -17,6 +17,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
 import { initWebsocket, broadcastNotification } from './services/websocket.js';
 import favoritesWebSocketService from './services/favoritesWebSocket.js';
+import favoritesAlertMonitor from './services/favoritesAlertMonitor.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -228,6 +229,10 @@ const server = app.listen(PORT, async () => {
   // Initialize Favorites WebSocket for real-time price updates
   favoritesWebSocketService.initialize(server);
   console.log('✅ Favorites WebSocket ready at /ws/favorites');
+  
+  // Start Favorites Alert Monitor
+  favoritesAlertMonitor.start();
+  console.log('✅ Favorites Alert Monitor started (10s interval)');
 });
 
 // Handle graceful shutdown
@@ -236,6 +241,7 @@ process.on('SIGTERM', async () => {
   
   // Shutdown services
   favoritesWebSocketService.shutdown();
+  favoritesAlertMonitor.stop();
   await messageQueue.close().catch(() => {});
   
   pool.end(() => {
