@@ -16,6 +16,8 @@ import { requestContextMiddleware, performanceMiddleware, logger } from './servi
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
 import { initWebsocket, broadcastNotification } from './services/websocket.js';
+import favoritesWebSocketService from './services/favoritesWebSocket.js';
+import favoritesAlertMonitor from './services/favoritesAlertMonitor.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -39,6 +41,9 @@ import securityRoutes from './routes/security.js';
 import exportRoutes from './routes/exports.js';
 import walletRoutes from './routes/wallet.js';
 import profileRoutes from './routes/profile.js';
+import userPreferencesRoutes from './routes/userPreferences.js';
+import favoritesRoutes from './routes/favorites.js';
+import favoriteAlertsRoutes from './routes/favoriteAlerts.js';
 
 dotenv.config();
 
@@ -85,13 +90,17 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
-// Rate limiting
+// Rate limiting - Increased for development/heavy dashboard usage
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 500, // Increased from 100 to 500
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks and read operations
+    return req.path === '/health' || req.method === 'GET';
+  }
 });
 app.use('/api/', limiter);
 
@@ -144,6 +153,9 @@ app.use('/api/security', securityRoutes);
 app.use('/api/exports', exportRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/user-preferences', userPreferencesRoutes);
+app.use('/api/favorites', favoritesRoutes);
+app.use('/api/favorites', favoriteAlertsRoutes); // Alerts are nested under favorites
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
 
@@ -213,12 +225,25 @@ const server = app.listen(PORT, async () => {
   // Initialize WebSocket Notifications
   initWebsocket(server);
   console.log('✅ WebSocket notifications ready at /ws/notifications');
+  
+  // Initialize Favorites WebSocket for real-time price updates
+  favoritesWebSocketService.initialize(server);
+  console.log('✅ Favorites WebSocket ready at /ws/favorites');
+  
+  // Start Favorites Alert Monitor
+  favoritesAlertMonitor.start();
+  console.log('✅ Favorites Alert Monitor started (10s interval)');
 });
 
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM signal received: closing HTTP server');
+  
+  // Shutdown services
+  favoritesWebSocketService.shutdown();
+  favoritesAlertMonitor.stop();
   await messageQueue.close().catch(() => {});
+  
   pool.end(() => {
     console.log('🛑 Database pool closed');
     process.exit(0);

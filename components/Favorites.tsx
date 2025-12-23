@@ -5,7 +5,10 @@ import AddFavoriteModal from './modals/AddFavoriteModal.tsx';
 import SetAlertModal from './modals/SetAlertModal.tsx';
 import ActionMenu from './favorites/ActionMenu.tsx';
 import MiniChart from './favorites/MiniChart.tsx';
+import FavoritesAnalytics from './favorites/FavoritesAnalytics.tsx';
 import * as api from '../services/api.ts';
+import favoritesService from '../services/favorites.ts';
+import { useWebSocket, WebSocketMessage } from '../hooks/useWebSocket.ts';
 
 // Market Stats Widget Component
 const MarketStatsWidget: React.FC = () => {
@@ -153,20 +156,117 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change24h' | 'volume'>('symbol');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [filterBy, setFilterBy] = useState<'all' | 'gainers' | 'decliners' | 'alerts'>('all');
+    const [showAnalytics, setShowAnalytics] = useState(false);
+
+    // 🚀 NEW: WebSocket for Real-time Price Updates
+    const { isConnected, isConnecting, error: wsError } = useWebSocket({
+        url: 'ws://188.40.209.82:5002/ws/favorites',
+        token: localStorage.getItem('token') || undefined,
+        autoConnect: true,
+        onMessage: (message: WebSocketMessage) => {
+            if (message.type === 'price_update' && message.data) {
+                console.log('💹 Real-time price update:', message.data);
+                
+                // Update prices in real-time
+                setData(prevData => {
+                    if (!prevData) return prevData;
+                    
+                    const updatedFavorites = prevData.favorites.map(fav => {
+                        // Find matching price update
+                        const priceUpdate = message.data.prices?.find(
+                            (p: any) => p.symbol === fav.symbol || p.asset_id === fav.id
+                        );
+                        
+                        if (priceUpdate) {
+                            // Track price change direction for animation
+                            const priceChanged = priceUpdate.price !== fav.price;
+                            const priceDirection = priceUpdate.price > fav.price ? 'up' : priceUpdate.price < fav.price ? 'down' : null;
+                            
+                            // Build price history (last 20 prices)
+                            const existingHistory = fav.priceHistory || [];
+                            const newHistory = [...existingHistory, priceUpdate.price].slice(-20);
+                            
+                            return {
+                                ...fav,
+                                price: priceUpdate.price,
+                                change24h: priceUpdate.change24h || fav.change24h,
+                                volume: priceUpdate.volume || fav.volume,
+                                volume24h: priceUpdate.volume24h || fav.volume24h,
+                                priceHistory: newHistory,
+                                _priceChangeDirection: priceChanged ? priceDirection : null,
+                                _priceUpdateTime: Date.now(),
+                            };
+                        }
+                        return fav;
+                    });
+                    
+                    return {
+                        ...prevData,
+                        favorites: updatedFavorites,
+                        lastUpdated: new Date().toISOString(),
+                    };
+                });
+            }
+        },
+        onConnect: () => {
+            console.log('✅ WebSocket connected to Favorites');
+        },
+        onDisconnect: () => {
+            console.log('🔌 WebSocket disconnected from Favorites');
+        },
+        onError: (error) => {
+            console.error('❌ WebSocket error:', error);
+        },
+    });
+
+    // Helper function to refresh favorites data
+    const refreshFavorites = async (): Promise<void> => {
+        try {
+            // Fetch favorites from backend
+            const backendFavorites = await favoritesService.getAllFavorites();
+            
+            // Fetch full page data (for catalog, gainers, losers, prices)
+            const favoritesData = await api.fetchFavoritesPageData();
+            
+            // Merge backend favorites with price data
+            const mergedFavorites: FavoriteItem[] = backendFavorites.map(fav => {
+                const existing = favoritesData.favorites.find(
+                    f => f.id === fav.asset_id || f.symbol === fav.symbol
+                );
+                
+                return {
+                    id: fav.asset_id,
+                    symbol: fav.symbol,
+                    name: fav.name,
+                    price: existing?.price || 0,
+                    change24h: existing?.change24h || 0,
+                    volume: existing?.volume || '0',
+                    volume24h: existing?.volume24h,
+                    hasAlert: existing?.hasAlert || false,
+                    priceHistory: existing?.priceHistory || [],
+                    _priceChangeDirection: existing?._priceChangeDirection,
+                    _priceUpdateTime: existing?._priceUpdateTime
+                };
+            });
+            
+            // Update state
+            setData({
+                ...favoritesData,
+                favorites: mergedFavorites
+            });
+        } catch (error) {
+            console.error('Failed to refresh favorites:', error);
+            throw error;
+        }
+    };
 
     // Initial data fetch
     useEffect(() => {
         const fetchData = async () => {
             try {
-                console.log('🔄 Fetching favorites page data...');
-                const favoritesData = await api.fetchFavoritesPageData();
-                console.log('✅ Favorites data received:', {
-                    favorites: favoritesData.favorites.length,
-                    catalog: favoritesData.catalog.length,
-                    gainers: favoritesData.gainers.length,
-                    losers: favoritesData.losers.length
-                });
-                setData(favoritesData);
+                console.log('🔄 Fetching favorites from backend...');
+                await refreshFavorites();
+                console.log('✅ Favorites loaded successfully');
             } catch (error) {
                 console.error('❌ Failed to load favorites', error);
             } finally {
@@ -255,8 +355,12 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     
     const handleAddFavorite = async (asset: CryptoAsset) => {
         try {
-            const updated = await api.addFavorite(asset.id);
-            setData(updated);
+            // Add to backend
+            await favoritesService.addFavorite(asset.id, asset.symbol, asset.name);
+            
+            // Refresh data
+            await refreshFavorites();
+            
             setStatus({ type: 'success', text: t('favorite_added', { asset: asset.symbol }) });
             setIsAddModalOpen(false); // Close modal after successful add
         } catch (error) {
@@ -267,8 +371,12 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
 
     const handleRemoveFavorite = async (item: FavoriteItem) => {
         try {
-            const updated = await api.removeFavorite(item.id);
-            setData(updated);
+            // Remove from backend by asset ID
+            await favoritesService.removeFavoriteByAssetId(item.id);
+            
+            // Refresh data
+            await refreshFavorites();
+            
             setStatus({ type: 'success', text: t('favorite_removed', { asset: item.symbol }) });
         } catch (error) {
             console.error('Failed to remove favorite', error);
@@ -381,17 +489,55 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                     {status.text}
                 </div>
             )}
+            
+            {/* 🚀 NEW: WebSocket Connection Indicator */}
+            <div className="flex items-center justify-end gap-2 text-xs">
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+                    isConnected ? 'bg-green-500/20 text-green-400' : 
+                    isConnecting ? 'bg-yellow-500/20 text-yellow-400' : 
+                    'bg-red-500/20 text-red-400'
+                }`}>
+                    <div className={`w-2 h-2 rounded-full ${
+                        isConnected ? 'bg-green-400 animate-pulse' : 
+                        isConnecting ? 'bg-yellow-400 animate-pulse' : 
+                        'bg-red-400'
+                    }`}></div>
+                    <span>
+                        {isConnected ? 'Live' : isConnecting ? 'Connecting...' : 'Disconnected'}
+                    </span>
+                </div>
+                {wsError && (
+                    <span className="text-red-400">{wsError}</span>
+                )}
+            </div>
+            
              <div className="flex flex-wrap justify-between items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-white">{t('favorites_list')}</h1>
                     <p className="text-gray-400 mt-1">{t('favorites_desc')}</p>
                 </div>
-                <button onClick={() => setIsAddModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
-                    <span>{t('add_new')}</span>
-                </button>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setShowAnalytics(!showAnalytics)} 
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        <span>{showAnalytics ? t('show_favorites') || 'Show Favorites' : t('show_analytics') || 'Show Analytics'}</span>
+                    </button>
+                    <button onClick={() => setIsAddModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+                        <span>{t('add_new')}</span>
+                    </button>
+                </div>
             </div>
             
+            {/* Conditional Rendering: Analytics or Favorites List */}
+            {showAnalytics ? (
+                <FavoritesAnalytics />
+            ) : (
+                <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <SummaryCard title={t('total_items')} value={summary.totalItems} icon={<svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>} />
                 <SummaryCard title={t('active_alerts')} value={summary.activeAlerts} icon={<svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>} />
@@ -539,6 +685,8 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                     </div>
                 </div>
             </div>
+            </>
+            )}
             
             {isAddModalOpen && data && (
                 <AddFavoriteModal

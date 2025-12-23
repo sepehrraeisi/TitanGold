@@ -3,6 +3,7 @@ import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import { AIManagerOverview, ArtemisState, TradingScenario, ArtemisConfig, ArtemisLog, DataHubState, DataSource, DataCategory, DataHubAdvancedFeatures, DetectedSourceType, DataPipelineSourceSnapshot, DataPipelineCategorySnapshot, DataNormalizationSummary, AIAgent, AgentTopicRoute, NormalizedDataStatus, TelegramPublisher, PublisherQueueItem, NormalizedDataRecord, AgentHealth, AgentTask, ResourceAllocation, Decision, DecisionEngineState, AgentSignal } from '../../types.ts';
 import { Backtesting, SystemLogs, ArtemisSettings } from './ArtemisComponents.tsx';
+import { useArtemisState } from './hooks/useArtemisState.ts';
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
         {children}
@@ -15,7 +16,7 @@ const AIManager: React.FC = () => {
     const { t } = useLanguage();
     const [isLoading, setIsLoading] = useState(true);
     const [data, setData] = useState<AIManagerOverview | null>(null);
-    const [artemis, setArtemis] = useState<ArtemisState | null>(null);
+    const { state: artemis, loading: artemisLoading, error: artemisError, reload: reloadArtemis, setSafeState: setArtemis } = useArtemisState();
     const [activeTab, setActiveTab] = useState<ArtemisTab>('overview');
     const [error, setError] = useState<string | null>(null);
     
@@ -29,8 +30,7 @@ const AIManager: React.FC = () => {
                 if (managerData.artemis) {
                     setArtemis(managerData.artemis);
                 } else {
-                    const artemisState = await api.fetchArtemisState();
-                    setArtemis(artemisState);
+                    await reloadArtemis();
                 }
             } catch (e) {
                 console.error('Failed to load AIManager data:', e);
@@ -40,16 +40,17 @@ const AIManager: React.FC = () => {
             }
         };
         fetchData();
-    }, []);
+    }, [reloadArtemis, setArtemis]);
 
-    if (isLoading) {
+    if (isLoading || artemisLoading) {
         return <div className="text-center p-10">{t('loading')}</div>;
     }
 
-    if (error) {
+    const combinedError = error || artemisError;
+    if (combinedError) {
         return (
             <div className="text-center p-10">
-                <p className="text-red-400 mb-4">{t('error_loading') || 'Error loading data'}: {error}</p>
+                <p className="text-red-400 mb-4">{t('error_loading') || 'Error loading data'}: {combinedError}</p>
                 <button 
                     onClick={() => window.location.reload()} 
                     className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
@@ -79,8 +80,7 @@ const AIManager: React.FC = () => {
     
     const refreshArtemis = async () => {
         try {
-            const updated = await api.fetchArtemisState();
-            setArtemis(updated);
+            await reloadArtemis();
         } catch (e) {
             console.error('Failed to refresh Artemis state:', e);
         }

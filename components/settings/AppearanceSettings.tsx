@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { useAppContext } from '../../context/AppContext.tsx';
 import * as api from '../../services/api.ts';
+import { userPreferencesService } from '../../services/userPreferences.ts';
 
 const SettingsCard: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
     <div className="bg-gray-800/50 border border-gray-700 rounded-lg">
@@ -158,15 +159,37 @@ const AppearanceSettings: React.FC = () => {
                 root.removeAttribute('data-tooltips');
             }
             
-            // Dashboard settings - store in localStorage for other components to use
-            localStorage.setItem('titan_dashboard_settings', JSON.stringify(settings.dashboard));
-            localStorage.setItem('titan_notification_settings', JSON.stringify(settings.notifications));
+            // 🚀 NEW: Dashboard settings - sync to Backend API instead of LocalStorage only
+            // Use async IIFE (Immediately Invoked Function Expression) to handle await
+            (async () => {
+                try {
+                    await userPreferencesService.updatePreference('dashboard', settings.dashboard);
+                    await userPreferencesService.updatePreference('notifications', settings.notifications);
+                } catch (error) {
+                    console.warn('Failed to sync dashboard settings to backend:', error);
+                    // Fallback to LocalStorage for offline mode
+                    localStorage.setItem('titan_dashboard_settings', JSON.stringify(settings.dashboard));
+                    localStorage.setItem('titan_notification_settings', JSON.stringify(settings.notifications));
+                }
+            })();
         }
     }, [settings, setTheme]);
 
     const loadSettings = async () => {
         setIsLoading(true);
         try {
+            // 🚀 NEW: Try loading from Backend API first
+            try {
+                const preferences = await userPreferencesService.getPreferences();
+                if (preferences.appearance) {
+                    setSettings(preferences.appearance as api.AppearanceSettingsData);
+                    return;
+                }
+            } catch (backendError) {
+                console.warn('Backend API unavailable, falling back to legacy API:', backendError);
+            }
+            
+            // Fallback: Use legacy API
             const data = await api.fetchAppearanceSettings();
             setSettings(data);
         } catch (error) {
@@ -181,7 +204,12 @@ const AppearanceSettings: React.FC = () => {
         if (!settings) return;
         setIsSaving(true);
         try {
+            // 🚀 NEW: Save to Backend API first
+            await userPreferencesService.updatePreference('appearance', settings);
+            
+            // Also save to legacy API for backward compatibility
             await api.saveAppearanceSettings(settings);
+            
             setStatusMessage('✅ Settings saved successfully!');
             setTimeout(() => setStatusMessage(''), 3000);
         } catch (error) {

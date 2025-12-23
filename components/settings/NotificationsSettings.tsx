@@ -2,6 +2,165 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
+import { userPreferencesService } from '../../services/userPreferences.ts';
+
+// ============================================================================
+// DEFAULT SETTINGS - Complete structure to prevent undefined access
+// ============================================================================
+const DEFAULT_SETTINGS = {
+    telegram: {
+        enabled: false,
+        botToken: '',
+        chatId: '',
+        channels: [],
+        parseMode: 'Markdown' as 'Markdown' | 'HTML' | 'None',
+        disableNotifications: false,
+        rateLimit: {
+            enabled: true,
+            messagesPerMinute: 20
+        },
+        retryPolicy: {
+            enabled: true,
+            maxRetries: 3,
+            retryDelay: 1000
+        },
+        messageTemplates: {
+            trades: '🔔 Trade Alert: {symbol} - {action} at {price}',
+            alerts: '⚠️ Alert: {message}',
+            news: '📰 News: {title}',
+            predictions: '🔮 Prediction: {message}',
+            errors: '❌ Error: {message}'
+        }
+    },
+    browser: {
+        permission: 'default' as NotificationPermission,
+        enabled: false,
+        sound: true,
+        badge: true,
+        requireInteraction: false,
+        priority: 'normal' as 'low' | 'normal' | 'high' | 'urgent',
+        grouping: {
+            enabled: true,
+            tag: 'titan-notifications'
+        },
+        richNotifications: {
+            enabled: true,
+            showImage: true,
+            showActions: true
+        },
+        notificationTypes: {
+            trades: true,
+            alerts: true,
+            news: true,
+            predictions: true,
+            errors: true
+        }
+    },
+    global: {
+        enabled: true,
+        quietHours: {
+            enabled: false,
+            start: '22:00',
+            end: '08:00',
+            days: [0, 1, 2, 3, 4, 5, 6]
+        },
+        doNotDisturb: {
+            enabled: false,
+            until: undefined as string | undefined
+        }
+    },
+    analytics: {
+        enabled: true,
+        telegram: {
+            totalSent: 0,
+            totalFailed: 0,
+            successRate: 100,
+            averageResponseTime: 0,
+            last24h: 0
+        },
+        browser: {
+            totalSent: 0,
+            totalClicked: 0,
+            clickRate: 0,
+            last24h: 0
+        }
+    },
+    history: {
+        telegram: [] as any[],
+        browser: [] as any[]
+    }
+};
+
+// ============================================================================
+// Merge function - Safely merge user data with defaults
+// ============================================================================
+const mergeWithDefaults = (data: any): typeof DEFAULT_SETTINGS => {
+    if (!data) return { ...DEFAULT_SETTINGS };
+    
+    return {
+        telegram: {
+            ...DEFAULT_SETTINGS.telegram,
+            ...(data.telegram || {}),
+            rateLimit: {
+                ...DEFAULT_SETTINGS.telegram.rateLimit,
+                ...(data.telegram?.rateLimit || {})
+            },
+            retryPolicy: {
+                ...DEFAULT_SETTINGS.telegram.retryPolicy,
+                ...(data.telegram?.retryPolicy || {})
+            },
+            messageTemplates: {
+                ...DEFAULT_SETTINGS.telegram.messageTemplates,
+                ...(data.telegram?.messageTemplates || {})
+            },
+            channels: data.telegram?.channels || []
+        },
+        browser: {
+            ...DEFAULT_SETTINGS.browser,
+            ...(data.browser || {}),
+            grouping: {
+                ...DEFAULT_SETTINGS.browser.grouping,
+                ...(data.browser?.grouping || {})
+            },
+            richNotifications: {
+                ...DEFAULT_SETTINGS.browser.richNotifications,
+                ...(data.browser?.richNotifications || {})
+            },
+            notificationTypes: {
+                ...DEFAULT_SETTINGS.browser.notificationTypes,
+                ...(data.browser?.notificationTypes || {})
+            }
+        },
+        global: {
+            ...DEFAULT_SETTINGS.global,
+            ...(data.global || {}),
+            quietHours: {
+                ...DEFAULT_SETTINGS.global.quietHours,
+                ...(data.global?.quietHours || {})
+            },
+            doNotDisturb: {
+                ...DEFAULT_SETTINGS.global.doNotDisturb,
+                ...(data.global?.doNotDisturb || {})
+            }
+        },
+        analytics: {
+            ...DEFAULT_SETTINGS.analytics,
+            ...(data.analytics || {}),
+            telegram: {
+                ...DEFAULT_SETTINGS.analytics.telegram,
+                ...(data.analytics?.telegram || {})
+            },
+            browser: {
+                ...DEFAULT_SETTINGS.analytics.browser,
+                ...(data.analytics?.browser || {})
+            }
+        },
+        history: {
+            telegram: data.history?.telegram || [],
+            browser: data.history?.browser || []
+        }
+    };
+};
 
 const SettingsCard: React.FC<{ title: string, description?: string, children: React.ReactNode, className?: string }> = ({ title, description, children, className = '' }) => (
     <div className={`bg-[#161B22] border border-gray-800 rounded-lg ${className}`}>
@@ -151,31 +310,53 @@ const NotificationsSettings: React.FC = () => {
 
     useEffect(() => {
         loadSettings();
-        if ('Notification' in window) {
-            const permission = Notification.permission;
-            if (settings) {
-                setSettings((prev: any) => ({
-                    ...prev,
-                    browser: { ...prev.browser, permission }
-                }));
-            }
-        }
     }, []);
 
     const loadSettings = async () => {
         try {
             setLoading(true);
-            const data = await api.fetchNotificationSettings();
-            setSettings(data);
             
-            if (data.telegram.botToken) {
-                const botResult = await api.getTelegramBotInfo(data.telegram.botToken);
-                if (botResult.success) {
-                    setBotInfo(botResult.data);
+            // Load from Backend API
+            const preferences = await userPreferencesService.getPreferences();
+            
+            // Merge with defaults to ensure all fields exist
+            const merged = mergeWithDefaults(preferences.notifications);
+            
+            // Sync browser notification permission
+            if ('Notification' in window) {
+                merged.browser.permission = Notification.permission;
+                if (Notification.permission === 'granted') {
+                    merged.browser.enabled = true;
+                }
+            }
+            
+            setSettings(merged);
+            
+            // Load bot info only if token exists
+            if (merged.telegram.botToken) {
+                try {
+                    const botResult = await api.getTelegramBotInfo(merged.telegram.botToken);
+                    if (botResult.success) {
+                        setBotInfo(botResult.data);
+                    }
+                } catch (error) {
+                    console.warn('Failed to load Telegram bot info:', error);
                 }
             }
         } catch (error) {
             console.error('Failed to load settings:', error);
+            // Fallback to complete defaults
+            const defaults = { ...DEFAULT_SETTINGS };
+            
+            // Sync browser permission even in error case
+            if ('Notification' in window) {
+                defaults.browser.permission = Notification.permission;
+                if (Notification.permission === 'granted') {
+                    defaults.browser.enabled = true;
+                }
+            }
+            
+            setSettings(defaults);
         } finally {
             setLoading(false);
         }
@@ -186,7 +367,10 @@ const NotificationsSettings: React.FC = () => {
         
         try {
             setTestStatus('Saving...');
-            await api.saveNotificationSettings(settings);
+            
+            // 🚀 NEW: Save to Backend API instead of LocalStorage
+            await userPreferencesService.updatePreference('notifications', settings);
+            
             setTestStatus('✅ Settings saved successfully!');
             setTimeout(() => setTestStatus(''), 3000);
         } catch (error) {
@@ -196,31 +380,34 @@ const NotificationsSettings: React.FC = () => {
     };
 
     const handleTestBot = async () => {
-        if (!settings?.telegram.botToken) {
-            setTestStatus('⚠️ Please enter bot token first');
+        if (!settings?.telegram.botToken || !settings?.telegram.chatId) {
+            setTestStatus('⚠️ Please enter both bot token and chat ID first');
             return;
         }
         
         try {
             setTesting(true);
-            setTestStatus('Testing bot...');
-            console.log('Testing bot with token:', settings.telegram.botToken.substring(0, 10) + '...');
+            setTestStatus('Testing Telegram notification...');
+            console.log('Testing Telegram with botToken:', settings.telegram.botToken.substring(0, 10) + '...');
             
-            const result = await api.getTelegramBotInfo(settings.telegram.botToken);
+            // 🚀 NEW: Call Backend API to test Telegram
+            const response = await fetch('/api/user-preferences/telegram/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    botToken: settings.telegram.botToken,
+                    chatId: settings.telegram.chatId
+                })
+            });
             
-            console.log('Bot test result:', result);
-            
-            // Update state in correct order
-            if (result.success) {
-                setBotInfo(result.data);
-                setSettings((prev: any) => ({
-                    ...prev,
-                    telegram: { ...prev.telegram, botInfo: result.data }
-                }));
-            }
+            const result = await response.json();
+            console.log('Telegram test result:', result);
             
             // Set status and then disable testing
-            setTestStatus(result.message || (result.success ? '✅ Bot verified successfully!' : '❌ Failed to test bot'));
+            setTestStatus(result.message || (result.success ? '✅ Telegram notification sent successfully!' : '❌ Failed to send Telegram notification'));
             setTesting(false);
             
             // Auto-clear status after 5 seconds
@@ -228,7 +415,7 @@ const NotificationsSettings: React.FC = () => {
                 setTestStatus('');
             }, 5000);
         } catch (error) {
-            console.error('Error testing bot:', error);
+            console.error('Error testing Telegram:', error);
             setTestStatus(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
             setTesting(false);
             
@@ -413,6 +600,19 @@ const NotificationsSettings: React.FC = () => {
 
     return (
         <div className="space-y-6">
+            {/* Loading State */}
+            {(loading || !settings) && (
+                <div className="bg-[#161B22] border border-gray-800 rounded-lg p-8">
+                    <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                        <span className="ml-3 text-gray-400">Loading notification settings...</span>
+                    </div>
+                </div>
+            )}
+            
+            {/* Main Content - Only show when loaded */}
+            {!loading && settings && (
+                <>
             {/* Tab Navigation */}
             <div className="flex gap-2 border-b border-gray-800">
                 <button
@@ -494,7 +694,7 @@ const NotificationsSettings: React.FC = () => {
                     />
 
                     <InputField 
-                        label={t('telegram_bot_token')} 
+                        label="Bot Token" 
                         id="bot_token" 
                         type="text" 
                         placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz" 
@@ -504,6 +704,21 @@ const NotificationsSettings: React.FC = () => {
                             telegram: { ...settings.telegram, botToken: e.target.value }
                         })}
                         disabled={!settings.telegram.enabled}
+                        helpText="Get this from @BotFather on Telegram"
+                    />
+
+                    <InputField 
+                        label="Chat ID" 
+                        id="chat_id" 
+                        type="text" 
+                        placeholder="Your Chat ID (e.g., 123456789 or @channel)" 
+                        value={settings.telegram.chatId || ''} 
+                        onChange={e => setSettings({
+                            ...settings,
+                            telegram: { ...settings.telegram, chatId: e.target.value }
+                        })}
+                        disabled={!settings.telegram.enabled}
+                        helpText="Get this from @userinfobot on Telegram"
                     />
 
                     {botInfo && (
@@ -520,14 +735,14 @@ const NotificationsSettings: React.FC = () => {
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            if (!testing && settings?.telegram.botToken) {
+                            if (!testing && settings?.telegram.botToken && settings?.telegram.chatId) {
                                 handleTestBot();
                             }
                         }}
-                        disabled={testing || !settings?.telegram.botToken}
+                        disabled={testing || !settings?.telegram.botToken || !settings?.telegram.chatId}
                         className="w-full bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold py-2 px-4 rounded-md transition-colors"
                     >
-                        {testing ? 'Testing...' : 'Test Bot'}
+                        {testing ? 'Sending Test...' : 'Send Test Notification'}
                     </button>
 
                     {/* Channels Management */}
@@ -1309,6 +1524,8 @@ const NotificationsSettings: React.FC = () => {
                     {t('save_changes')}
                 </button>
             </div>
+            </>
+            )}
         </div>
     );
 };

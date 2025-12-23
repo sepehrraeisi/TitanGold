@@ -66,7 +66,10 @@ export function performanceMiddleware(req, res, next) {
       userAgent: req.headers['user-agent'],
     });
 
-    res.setHeader('x-response-time-ms', durationMs.toFixed(2));
+    // Only set header if response hasn't been sent yet
+    if (!res.headersSent) {
+      res.setHeader('x-response-time-ms', durationMs.toFixed(2));
+    }
   });
 
   next();
