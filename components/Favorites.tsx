@@ -7,6 +7,7 @@ import ActionMenu from './favorites/ActionMenu.tsx';
 import MiniChart from './favorites/MiniChart.tsx';
 import * as api from '../services/api.ts';
 import favoritesService from '../services/favorites.ts';
+import { useWebSocket, WebSocketMessage } from '../hooks/useWebSocket.ts';
 
 // Market Stats Widget Component
 const MarketStatsWidget: React.FC = () => {
@@ -154,6 +155,67 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change24h' | 'volume'>('symbol');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [filterBy, setFilterBy] = useState<'all' | 'gainers' | 'decliners' | 'alerts'>('all');
+
+    // 🚀 NEW: WebSocket for Real-time Price Updates
+    const { isConnected, isConnecting, error: wsError } = useWebSocket({
+        url: 'ws://188.40.209.82:5002/ws/favorites',
+        token: localStorage.getItem('token') || undefined,
+        autoConnect: true,
+        onMessage: (message: WebSocketMessage) => {
+            if (message.type === 'price_update' && message.data) {
+                console.log('💹 Real-time price update:', message.data);
+                
+                // Update prices in real-time
+                setData(prevData => {
+                    if (!prevData) return prevData;
+                    
+                    const updatedFavorites = prevData.favorites.map(fav => {
+                        // Find matching price update
+                        const priceUpdate = message.data.prices?.find(
+                            (p: any) => p.symbol === fav.symbol || p.asset_id === fav.id
+                        );
+                        
+                        if (priceUpdate) {
+                            // Track price change direction for animation
+                            const priceChanged = priceUpdate.price !== fav.price;
+                            const priceDirection = priceUpdate.price > fav.price ? 'up' : priceUpdate.price < fav.price ? 'down' : null;
+                            
+                            // Build price history (last 20 prices)
+                            const existingHistory = fav.priceHistory || [];
+                            const newHistory = [...existingHistory, priceUpdate.price].slice(-20);
+                            
+                            return {
+                                ...fav,
+                                price: priceUpdate.price,
+                                change24h: priceUpdate.change24h || fav.change24h,
+                                volume: priceUpdate.volume || fav.volume,
+                                volume24h: priceUpdate.volume24h || fav.volume24h,
+                                priceHistory: newHistory,
+                                _priceChangeDirection: priceChanged ? priceDirection : null,
+                                _priceUpdateTime: Date.now(),
+                            };
+                        }
+                        return fav;
+                    });
+                    
+                    return {
+                        ...prevData,
+                        favorites: updatedFavorites,
+                        lastUpdated: new Date().toISOString(),
+                    };
+                });
+            }
+        },
+        onConnect: () => {
+            console.log('✅ WebSocket connected to Favorites');
+        },
+        onDisconnect: () => {
+            console.log('🔌 WebSocket disconnected from Favorites');
+        },
+        onError: (error) => {
+            console.error('❌ WebSocket error:', error);
+        },
+    });
 
     // Helper function to refresh favorites data
     const refreshFavorites = async (): Promise<void> => {
@@ -425,6 +487,28 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                     {status.text}
                 </div>
             )}
+            
+            {/* 🚀 NEW: WebSocket Connection Indicator */}
+            <div className="flex items-center justify-end gap-2 text-xs">
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+                    isConnected ? 'bg-green-500/20 text-green-400' : 
+                    isConnecting ? 'bg-yellow-500/20 text-yellow-400' : 
+                    'bg-red-500/20 text-red-400'
+                }`}>
+                    <div className={`w-2 h-2 rounded-full ${
+                        isConnected ? 'bg-green-400 animate-pulse' : 
+                        isConnecting ? 'bg-yellow-400 animate-pulse' : 
+                        'bg-red-400'
+                    }`}></div>
+                    <span>
+                        {isConnected ? 'Live' : isConnecting ? 'Connecting...' : 'Disconnected'}
+                    </span>
+                </div>
+                {wsError && (
+                    <span className="text-red-400">{wsError}</span>
+                )}
+            </div>
+            
              <div className="flex flex-wrap justify-between items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-white">{t('favorites_list')}</h1>
