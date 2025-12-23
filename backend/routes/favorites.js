@@ -351,4 +351,93 @@ router.post('/sync', authenticate, async (req, res) => {
     }
 });
 
+// ============================================================================
+// GET /api/favorites/analytics - Get Favorites Analytics
+// ============================================================================
+router.get('/analytics', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Most favorited assets (across all users)
+        const mostFavorited = await pool.query(
+            `SELECT 
+                asset_id,
+                symbol,
+                name,
+                COUNT(*) as favorite_count
+            FROM favorites
+            GROUP BY asset_id, symbol, name
+            ORDER BY favorite_count DESC
+            LIMIT 10`
+        );
+
+        // User's most viewed favorites
+        const mostViewed = await pool.query(
+            `SELECT 
+                asset_id,
+                symbol,
+                name,
+                view_count,
+                last_viewed_at
+            FROM favorites
+            WHERE user_id = $1
+            ORDER BY view_count DESC
+            LIMIT 10`,
+            [userId]
+        );
+
+        // Alert statistics
+        const alertStats = await pool.query(
+            `SELECT 
+                condition,
+                COUNT(*) as count,
+                COUNT(*) FILTER (WHERE is_active = true) as active_count,
+                COUNT(*) FILTER (WHERE triggered_at IS NOT NULL) as triggered_count
+            FROM favorite_alerts
+            WHERE user_id = $1
+            GROUP BY condition`,
+            [userId]
+        );
+
+        // User engagement metrics
+        const engagementMetrics = await pool.query(
+            `SELECT 
+                COUNT(*) as total_favorites,
+                AVG(view_count) as avg_view_count,
+                MAX(view_count) as max_view_count,
+                COUNT(*) FILTER (WHERE view_count > 0) as viewed_favorites
+            FROM favorites
+            WHERE user_id = $1`,
+            [userId]
+        );
+
+        // Recent favorites (last 7 days)
+        const recentFavorites = await pool.query(
+            `SELECT COUNT(*) as count
+            FROM favorites
+            WHERE user_id = $1 AND added_at >= NOW() - INTERVAL '7 days'`,
+            [userId]
+        );
+
+        res.json({
+            success: true,
+            analytics: {
+                mostFavorited: mostFavorited.rows,
+                mostViewed: mostViewed.rows,
+                alertStats: alertStats.rows,
+                engagement: {
+                    ...engagementMetrics.rows[0],
+                    recentAdditions: parseInt(recentFavorites.rows[0].count)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching analytics:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch analytics'
+        });
+    }
+});
+
 export default router;
