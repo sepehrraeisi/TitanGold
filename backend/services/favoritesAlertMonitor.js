@@ -185,8 +185,31 @@ class FavoritesAlertMonitor {
         // Send Telegram notification
         if (alert.notify_telegram) {
             try {
-                await telegramService.sendMessage(message);
-                console.log(`📱 Telegram notification sent for ${alert.symbol}`);
+                // Get user's Telegram config from preferences
+                const telegramResult = await pool.query(
+                    `SELECT preferences->'notifications'->'telegram' as telegram_config
+                     FROM user_preferences
+                     WHERE user_id = $1`,
+                    [alert.user_id]
+                );
+
+                const telegramConfig = telegramResult.rows[0]?.telegram_config;
+
+                if (telegramConfig && telegramConfig.enabled && telegramConfig.botToken && telegramConfig.chatId) {
+                    // Send using user's bot
+                    const TelegramBot = (await import('node-telegram-bot-api')).default;
+                    const bot = new TelegramBot(telegramConfig.botToken);
+                    
+                    await bot.sendMessage(
+                        telegramConfig.chatId,
+                        message,
+                        { parse_mode: 'Markdown' }
+                    );
+                    
+                    console.log(`📱 Telegram notification sent to user ${alert.username} for ${alert.symbol}`);
+                } else {
+                    console.warn(`⚠️ Telegram not configured for user ${alert.username}`);
+                }
             } catch (error) {
                 console.error('❌ Telegram notification failed:', error);
             }
