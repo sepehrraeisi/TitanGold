@@ -178,7 +178,7 @@ router.get('/details', authenticate, async (req, res) => {
 
     // Get connected integrations
     const integrationsResult = await query(
-      `SELECT id, exchange_name as name, status, last_synced_at 
+      `SELECT id, exchange as name, is_active, last_sync_at as last_synced_at 
        FROM exchange_connections WHERE user_id = $1`,
       [userId]
     );
@@ -187,7 +187,7 @@ router.get('/details', authenticate, async (req, res) => {
       id: integration.id,
       nameKey: `integration_${integration.name.toLowerCase()}`,
       type: 'exchange',
-      status: integration.status || 'disconnected',
+      status: integration.is_active ? 'connected' : 'disconnected',
       lastSyncedAt: integration.last_synced_at || new Date().toISOString(),
     }));
 
