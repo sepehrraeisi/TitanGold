@@ -170,7 +170,7 @@ const NotificationsSettings: React.FC = () => {
             // 🚀 NEW: Load from Backend API instead of LocalStorage
             const preferences = await userPreferencesService.getPreferences();
             const data = preferences.notifications || {
-                telegram: { botToken: '', channels: [] },
+                telegram: { enabled: false, botToken: '', chatId: '', channels: [] },
                 browser: { permission: 'default', enabled: false },
                 global: { enabled: true },
                 analytics: { enabled: true }
@@ -189,7 +189,7 @@ const NotificationsSettings: React.FC = () => {
             console.error('Failed to load settings:', error);
             // Set default empty settings to prevent crashes
             setSettings({
-                telegram: { botToken: '', channels: [] },
+                telegram: { enabled: false, botToken: '', chatId: '', channels: [] },
                 browser: { permission: 'default', enabled: false },
                 global: { enabled: true },
                 analytics: { enabled: true }
@@ -217,31 +217,34 @@ const NotificationsSettings: React.FC = () => {
     };
 
     const handleTestBot = async () => {
-        if (!settings?.telegram.botToken) {
-            setTestStatus('⚠️ Please enter bot token first');
+        if (!settings?.telegram.botToken || !settings?.telegram.chatId) {
+            setTestStatus('⚠️ Please enter both bot token and chat ID first');
             return;
         }
         
         try {
             setTesting(true);
-            setTestStatus('Testing bot...');
-            console.log('Testing bot with token:', settings.telegram.botToken.substring(0, 10) + '...');
+            setTestStatus('Testing Telegram notification...');
+            console.log('Testing Telegram with botToken:', settings.telegram.botToken.substring(0, 10) + '...');
             
-            const result = await api.getTelegramBotInfo(settings.telegram.botToken);
+            // 🚀 NEW: Call Backend API to test Telegram
+            const response = await fetch('/api/user-preferences/telegram/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    botToken: settings.telegram.botToken,
+                    chatId: settings.telegram.chatId
+                })
+            });
             
-            console.log('Bot test result:', result);
-            
-            // Update state in correct order
-            if (result.success) {
-                setBotInfo(result.data);
-                setSettings((prev: any) => ({
-                    ...prev,
-                    telegram: { ...prev.telegram, botInfo: result.data }
-                }));
-            }
+            const result = await response.json();
+            console.log('Telegram test result:', result);
             
             // Set status and then disable testing
-            setTestStatus(result.message || (result.success ? '✅ Bot verified successfully!' : '❌ Failed to test bot'));
+            setTestStatus(result.message || (result.success ? '✅ Telegram notification sent successfully!' : '❌ Failed to send Telegram notification'));
             setTesting(false);
             
             // Auto-clear status after 5 seconds
@@ -249,7 +252,7 @@ const NotificationsSettings: React.FC = () => {
                 setTestStatus('');
             }, 5000);
         } catch (error) {
-            console.error('Error testing bot:', error);
+            console.error('Error testing Telegram:', error);
             setTestStatus(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
             setTesting(false);
             
@@ -528,7 +531,7 @@ const NotificationsSettings: React.FC = () => {
                     />
 
                     <InputField 
-                        label={t('telegram_bot_token')} 
+                        label="Bot Token" 
                         id="bot_token" 
                         type="text" 
                         placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz" 
@@ -538,6 +541,21 @@ const NotificationsSettings: React.FC = () => {
                             telegram: { ...settings.telegram, botToken: e.target.value }
                         })}
                         disabled={!settings.telegram.enabled}
+                        helpText="Get this from @BotFather on Telegram"
+                    />
+
+                    <InputField 
+                        label="Chat ID" 
+                        id="chat_id" 
+                        type="text" 
+                        placeholder="Your Chat ID (e.g., 123456789 or @channel)" 
+                        value={settings.telegram.chatId || ''} 
+                        onChange={e => setSettings({
+                            ...settings,
+                            telegram: { ...settings.telegram, chatId: e.target.value }
+                        })}
+                        disabled={!settings.telegram.enabled}
+                        helpText="Get this from @userinfobot on Telegram"
                     />
 
                     {botInfo && (
@@ -554,14 +572,14 @@ const NotificationsSettings: React.FC = () => {
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            if (!testing && settings?.telegram.botToken) {
+                            if (!testing && settings?.telegram.botToken && settings?.telegram.chatId) {
                                 handleTestBot();
                             }
                         }}
-                        disabled={testing || !settings?.telegram.botToken}
+                        disabled={testing || !settings?.telegram.botToken || !settings?.telegram.chatId}
                         className="w-full bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold py-2 px-4 rounded-md transition-colors"
                     >
-                        {testing ? 'Testing...' : 'Test Bot'}
+                        {testing ? 'Sending Test...' : 'Send Test Notification'}
                     </button>
 
                     {/* Channels Management */}
