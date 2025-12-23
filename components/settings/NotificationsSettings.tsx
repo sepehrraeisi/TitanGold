@@ -4,6 +4,164 @@ import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import { userPreferencesService } from '../../services/userPreferences.ts';
 
+// ============================================================================
+// DEFAULT SETTINGS - Complete structure to prevent undefined access
+// ============================================================================
+const DEFAULT_SETTINGS = {
+    telegram: {
+        enabled: false,
+        botToken: '',
+        chatId: '',
+        channels: [],
+        parseMode: 'Markdown' as 'Markdown' | 'HTML' | 'None',
+        disableNotifications: false,
+        rateLimit: {
+            enabled: true,
+            messagesPerMinute: 20
+        },
+        retryPolicy: {
+            enabled: true,
+            maxRetries: 3,
+            retryDelay: 1000
+        },
+        messageTemplates: {
+            trades: '🔔 Trade Alert: {symbol} - {action} at {price}',
+            alerts: '⚠️ Alert: {message}',
+            news: '📰 News: {title}',
+            predictions: '🔮 Prediction: {message}',
+            errors: '❌ Error: {message}'
+        }
+    },
+    browser: {
+        permission: 'default' as NotificationPermission,
+        enabled: false,
+        sound: true,
+        badge: true,
+        requireInteraction: false,
+        priority: 'normal' as 'low' | 'normal' | 'high' | 'urgent',
+        grouping: {
+            enabled: true,
+            tag: 'titan-notifications'
+        },
+        richNotifications: {
+            enabled: true,
+            showImage: true,
+            showActions: true
+        },
+        notificationTypes: {
+            trades: true,
+            alerts: true,
+            news: true,
+            predictions: true,
+            errors: true
+        }
+    },
+    global: {
+        enabled: true,
+        quietHours: {
+            enabled: false,
+            start: '22:00',
+            end: '08:00',
+            days: [0, 1, 2, 3, 4, 5, 6]
+        },
+        doNotDisturb: {
+            enabled: false,
+            until: undefined as string | undefined
+        }
+    },
+    analytics: {
+        enabled: true,
+        telegram: {
+            totalSent: 0,
+            totalFailed: 0,
+            successRate: 100,
+            averageResponseTime: 0,
+            last24h: 0
+        },
+        browser: {
+            totalSent: 0,
+            totalClicked: 0,
+            clickRate: 0,
+            last24h: 0
+        }
+    },
+    history: {
+        telegram: [] as any[],
+        browser: [] as any[]
+    }
+};
+
+// ============================================================================
+// Merge function - Safely merge user data with defaults
+// ============================================================================
+const mergeWithDefaults = (data: any): typeof DEFAULT_SETTINGS => {
+    if (!data) return { ...DEFAULT_SETTINGS };
+    
+    return {
+        telegram: {
+            ...DEFAULT_SETTINGS.telegram,
+            ...(data.telegram || {}),
+            rateLimit: {
+                ...DEFAULT_SETTINGS.telegram.rateLimit,
+                ...(data.telegram?.rateLimit || {})
+            },
+            retryPolicy: {
+                ...DEFAULT_SETTINGS.telegram.retryPolicy,
+                ...(data.telegram?.retryPolicy || {})
+            },
+            messageTemplates: {
+                ...DEFAULT_SETTINGS.telegram.messageTemplates,
+                ...(data.telegram?.messageTemplates || {})
+            },
+            channels: data.telegram?.channels || []
+        },
+        browser: {
+            ...DEFAULT_SETTINGS.browser,
+            ...(data.browser || {}),
+            grouping: {
+                ...DEFAULT_SETTINGS.browser.grouping,
+                ...(data.browser?.grouping || {})
+            },
+            richNotifications: {
+                ...DEFAULT_SETTINGS.browser.richNotifications,
+                ...(data.browser?.richNotifications || {})
+            },
+            notificationTypes: {
+                ...DEFAULT_SETTINGS.browser.notificationTypes,
+                ...(data.browser?.notificationTypes || {})
+            }
+        },
+        global: {
+            ...DEFAULT_SETTINGS.global,
+            ...(data.global || {}),
+            quietHours: {
+                ...DEFAULT_SETTINGS.global.quietHours,
+                ...(data.global?.quietHours || {})
+            },
+            doNotDisturb: {
+                ...DEFAULT_SETTINGS.global.doNotDisturb,
+                ...(data.global?.doNotDisturb || {})
+            }
+        },
+        analytics: {
+            ...DEFAULT_SETTINGS.analytics,
+            ...(data.analytics || {}),
+            telegram: {
+                ...DEFAULT_SETTINGS.analytics.telegram,
+                ...(data.analytics?.telegram || {})
+            },
+            browser: {
+                ...DEFAULT_SETTINGS.analytics.browser,
+                ...(data.analytics?.browser || {})
+            }
+        },
+        history: {
+            telegram: data.history?.telegram || [],
+            browser: data.history?.browser || []
+        }
+    };
+};
+
 const SettingsCard: React.FC<{ title: string, description?: string, children: React.ReactNode, className?: string }> = ({ title, description, children, className = '' }) => (
     <div className={`bg-[#161B22] border border-gray-800 rounded-lg ${className}`}>
         <div className="p-6 border-b border-gray-800">
@@ -152,48 +310,53 @@ const NotificationsSettings: React.FC = () => {
 
     useEffect(() => {
         loadSettings();
-        if ('Notification' in window) {
-            const permission = Notification.permission;
-            if (settings) {
-                setSettings((prev: any) => ({
-                    ...prev,
-                    browser: { ...prev.browser, permission }
-                }));
-            }
-        }
     }, []);
 
     const loadSettings = async () => {
         try {
             setLoading(true);
             
-            // 🚀 NEW: Load from Backend API instead of LocalStorage
+            // Load from Backend API
             const preferences = await userPreferencesService.getPreferences();
-            const data = preferences.notifications || {
-                telegram: { enabled: false, botToken: '', chatId: '', channels: [] },
-                browser: { permission: 'default', enabled: false },
-                global: { enabled: true },
-                analytics: { enabled: true }
-            };
             
-            setSettings(data);
+            // Merge with defaults to ensure all fields exist
+            const merged = mergeWithDefaults(preferences.notifications);
             
-            // Add null/undefined checks before accessing nested properties
-            if (data && data.telegram && data.telegram.botToken) {
-                const botResult = await api.getTelegramBotInfo(data.telegram.botToken);
-                if (botResult.success) {
-                    setBotInfo(botResult.data);
+            // Sync browser notification permission
+            if ('Notification' in window) {
+                merged.browser.permission = Notification.permission;
+                if (Notification.permission === 'granted') {
+                    merged.browser.enabled = true;
+                }
+            }
+            
+            setSettings(merged);
+            
+            // Load bot info only if token exists
+            if (merged.telegram.botToken) {
+                try {
+                    const botResult = await api.getTelegramBotInfo(merged.telegram.botToken);
+                    if (botResult.success) {
+                        setBotInfo(botResult.data);
+                    }
+                } catch (error) {
+                    console.warn('Failed to load Telegram bot info:', error);
                 }
             }
         } catch (error) {
             console.error('Failed to load settings:', error);
-            // Set default empty settings to prevent crashes
-            setSettings({
-                telegram: { enabled: false, botToken: '', chatId: '', channels: [] },
-                browser: { permission: 'default', enabled: false },
-                global: { enabled: true },
-                analytics: { enabled: true }
-            });
+            // Fallback to complete defaults
+            const defaults = { ...DEFAULT_SETTINGS };
+            
+            // Sync browser permission even in error case
+            if ('Notification' in window) {
+                defaults.browser.permission = Notification.permission;
+                if (Notification.permission === 'granted') {
+                    defaults.browser.enabled = true;
+                }
+            }
+            
+            setSettings(defaults);
         } finally {
             setLoading(false);
         }
