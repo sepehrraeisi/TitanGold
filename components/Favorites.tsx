@@ -5,6 +5,7 @@ import AddFavoriteModal from './modals/AddFavoriteModal.tsx';
 import SetAlertModal from './modals/SetAlertModal.tsx';
 import ActionMenu from './favorites/ActionMenu.tsx';
 import MiniChart from './favorites/MiniChart.tsx';
+import FavoritesAnalytics from './favorites/FavoritesAnalytics.tsx';
 import * as api from '../services/api.ts';
 import favoritesService from '../services/favorites.ts';
 import { useWebSocket, WebSocketMessage } from '../hooks/useWebSocket.ts';
@@ -155,6 +156,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     const [sortBy, setSortBy] = useState<'symbol' | 'price' | 'change24h' | 'volume'>('symbol');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [filterBy, setFilterBy] = useState<'all' | 'gainers' | 'decliners' | 'alerts'>('all');
+    const [showAnalytics, setShowAnalytics] = useState(false);
 
     // 🚀 NEW: WebSocket for Real-time Price Updates
     const { isConnected, isConnecting, error: wsError } = useWebSocket({
@@ -514,12 +516,28 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                     <h1 className="text-2xl font-bold text-white">{t('favorites_list')}</h1>
                     <p className="text-gray-400 mt-1">{t('favorites_desc')}</p>
                 </div>
-                <button onClick={() => setIsAddModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
-                    <span>{t('add_new')}</span>
-                </button>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setShowAnalytics(!showAnalytics)} 
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        <span>{showAnalytics ? t('show_favorites') || 'Show Favorites' : t('show_analytics') || 'Show Analytics'}</span>
+                    </button>
+                    <button onClick={() => setIsAddModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+                        <span>{t('add_new')}</span>
+                    </button>
+                </div>
             </div>
             
+            {/* Conditional Rendering: Analytics or Favorites List */}
+            {showAnalytics ? (
+                <FavoritesAnalytics />
+            ) : (
+                <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <SummaryCard title={t('total_items')} value={summary.totalItems} icon={<svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>} />
                 <SummaryCard title={t('active_alerts')} value={summary.activeAlerts} icon={<svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>} />
@@ -667,6 +685,8 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                     </div>
                 </div>
             </div>
+            </>
+            )}
             
             {isAddModalOpen && data && (
                 <AddFavoriteModal
