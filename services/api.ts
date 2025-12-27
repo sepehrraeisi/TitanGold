@@ -3225,7 +3225,7 @@ export const publishGoldToTelegram = async (payload: {
         return '';
     }).join('\n\n');
 
-    await fetch('http://localhost:5002/api/data-sources/publish-telegram', {
+    await fetch('/api/data-sources/publish-telegram', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

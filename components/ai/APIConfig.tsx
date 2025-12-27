@@ -459,7 +459,7 @@ const APIConfig: React.FC = () => {
             // همچنین تنظیمات Mixture را به بک‌اند (ArtemisConfig.decisionEngine) هم ارسال می‌کنیم
             try {
                 const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-                await fetch('http://localhost:5002/api/artemis/config/decision-engine', {
+                await fetch('/api/artemis/config/decision-engine', {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
