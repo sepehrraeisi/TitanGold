@@ -19,6 +19,11 @@ class MessageQueue {
       trading_signals: [],
       notifications: [],
     };
+    this.fallbackIntervals = {
+      ai_agent_tasks: null,
+      trading_signals: null,
+      notifications: null,
+    };
   }
 
   /**
@@ -100,7 +105,11 @@ class MessageQueue {
       }
     } else {
       // Fallback: پردازش در-memory queue
-      setInterval(() => {
+      // Clear existing interval to prevent memory leak
+      if (this.fallbackIntervals.ai_agent_tasks) {
+        clearInterval(this.fallbackIntervals.ai_agent_tasks);
+      }
+      this.fallbackIntervals.ai_agent_tasks = setInterval(() => {
         if (this.fallbackQueue.ai_agent_tasks.length > 0) {
           const task = this.fallbackQueue.ai_agent_tasks.shift();
           callback(task);
@@ -152,7 +161,11 @@ class MessageQueue {
         return false;
       }
     } else {
-      setInterval(() => {
+      // Clear existing interval to prevent memory leak
+      if (this.fallbackIntervals.trading_signals) {
+        clearInterval(this.fallbackIntervals.trading_signals);
+      }
+      this.fallbackIntervals.trading_signals = setInterval(() => {
         if (this.fallbackQueue.trading_signals.length > 0) {
           const signal = this.fallbackQueue.trading_signals.shift();
           callback(signal);
@@ -204,7 +217,11 @@ class MessageQueue {
         return false;
       }
     } else {
-      setInterval(() => {
+      // Clear existing interval to prevent memory leak
+      if (this.fallbackIntervals.notifications) {
+        clearInterval(this.fallbackIntervals.notifications);
+      }
+      this.fallbackIntervals.notifications = setInterval(() => {
         if (this.fallbackQueue.notifications.length > 0) {
           const notification = this.fallbackQueue.notifications.shift();
           callback(notification);
@@ -218,6 +235,16 @@ class MessageQueue {
    * بستن اتصال
    */
   async close() {
+    // Clear all fallback intervals
+    Object.values(this.fallbackIntervals).forEach(interval => {
+      if (interval) clearInterval(interval);
+    });
+    this.fallbackIntervals = {
+      ai_agent_tasks: null,
+      trading_signals: null,
+      notifications: null,
+    };
+    
     if (this.channel) {
       await this.channel.close();
     }
@@ -246,10 +273,6 @@ class MessageQueue {
 
 export const messageQueue = new MessageQueue();
 
-// Auto-connect on module load (optional - can be called manually)
-if (process.env.AUTO_CONNECT_MQ !== 'false') {
-  messageQueue.connect().catch(err => {
-    console.warn('⚠️ Auto-connect to RabbitMQ failed, will use fallback mode:', err.message);
-  });
-}
+// Auto-connect disabled - will be called manually from server.js
+// This prevents duplicate connections and memory leaks
 
