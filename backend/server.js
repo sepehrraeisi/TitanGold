@@ -268,24 +268,39 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     }
 
     // Start Autopilot Engine
-    try {
-      autopilot.start();
-    } catch (error) {
-      console.error('❌ Failed to start Autopilot:', error);
+    if (process.env.AUTOPILOT_ENABLED === 'true') {
+      try {
+        autopilot.start();
+        console.log('✅ Autopilot started');
+      } catch (error) {
+        console.error('❌ Failed to start Autopilot:', error);
+      }
+    } else {
+      console.log('⏸️ Autopilot disabled (AUTOPILOT_ENABLED != true)');
     }
     
     // Start 24/7 Scheduler Service
-    try {
-      scheduler.start();
-    } catch (error) {
-      console.error('❌ Failed to start Scheduler:', error);
+    if (process.env.SCHEDULER_ENABLED === 'true') {
+      try {
+        scheduler.start();
+        console.log('✅ Scheduler started');
+      } catch (error) {
+        console.error('❌ Failed to start Scheduler:', error);
+      }
+    } else {
+      console.log('⏸️ Scheduler disabled (SCHEDULER_ENABLED != true)');
     }
     
     // Start Trading Engine
-    try {
-      tradingEngine.start();
-    } catch (error) {
-      console.error('❌ Failed to start Trading Engine:', error);
+    if (process.env.TRADING_ENGINE_ENABLED === 'true') {
+      try {
+        tradingEngine.start();
+        console.log('✅ Trading Engine started');
+      } catch (error) {
+        console.error('❌ Failed to start Trading Engine:', error);
+      }
+    } else {
+      console.log('⏸️ Trading Engine disabled (TRADING_ENGINE_ENABLED != true)');
     }
 
     // Start Engine Worker (if enabled)

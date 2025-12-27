@@ -10,6 +10,7 @@ class RateLimiter {
     this.minDelay = config.minDelay || 100; // 100ms
     this.maxDelay = config.maxDelay || 60000; // 60s
     this.jitterFactor = config.jitterFactor || 0.1; // 10%
+    this.maxCacheSize = config.maxCacheSize || 50; // Limit cache entries
     
     // Track requests per endpoint
     this.requests = new Map();
@@ -99,7 +100,7 @@ class RateLimiter {
   /**
    * Execute function with rate limiting
    */
-  async execute(key, fn, useCache = false, cacheTtl = 300000) {
+  async execute(key, fn, useCache = false, cacheTtl = 60000) { // Reduced from 300s to 60s
     // Check cache first
     if (useCache) {
       const cached = this.cache.get(key);
@@ -124,6 +125,13 @@ class RateLimiter {
       
       // Cache successful result
       if (useCache) {
+        // Enforce max cache size
+        if (this.cache.size >= this.maxCacheSize) {
+          // Remove oldest entry
+          const firstKey = this.cache.keys().next().value;
+          this.cache.delete(firstKey);
+        }
+        
         this.cache.set(key, {
           data: result,
           timestamp: Date.now(),
@@ -169,12 +177,17 @@ class RateLimiter {
   /**
    * Clear expired cache entries
    */
-  cleanupCache(maxAge = 600000) {
+  cleanupCache(maxAge = 120000) { // Reduced from 600s to 120s (2 minutes)
     const now = Date.now();
+    let cleanedCount = 0;
     for (const [key, value] of this.cache.entries()) {
       if (now - value.timestamp > maxAge) {
         this.cache.delete(key);
+        cleanedCount++;
       }
+    }
+    if (cleanedCount > 0) {
+      console.log(`🧹 Cleaned ${cleanedCount} expired cache entries`);
     }
   }
 }
@@ -197,10 +210,10 @@ export const exchangeLimiter = new RateLimiter({
   jitterFactor: 0.1,
 });
 
-// Cleanup expired cache every 5 minutes
+// Cleanup expired cache every 1 minute (reduced from 5 minutes)
 setInterval(() => {
   mexcLimiter.cleanupCache();
   exchangeLimiter.cleanupCache();
-}, 300000);
+}, 60000);
 
 export default RateLimiter;

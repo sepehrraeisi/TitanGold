@@ -4,8 +4,8 @@
       "name": "titan-backend",
       "script": "./server.js",
       "cwd": "/home/ubuntu/webapp/TitanGold/backend",
-      "instances": 2,
-      "exec_mode": "cluster",
+      "instances": 1,
+      "exec_mode": "fork",
       "env": {
         "NODE_ENV": "production",
         "PORT": 5002
