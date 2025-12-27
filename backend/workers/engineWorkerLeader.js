@@ -20,9 +20,6 @@ console.log("🚀 engineWorkerLeader booting", {
 
 import dotenv from 'dotenv';
 import { query } from '../database/db.js';
-import { autopilot } from '../engine/autopilot.js';
-import { scheduler } from '../engine/scheduler.js';
-import { tradingEngine } from '../engine/tradingEngine.js';
 import { messageQueue } from '../services/messageQueue.js';
 
 dotenv.config();
@@ -33,6 +30,11 @@ const IDLE_BACKOFF_LEVELS = [5000, 15000, 60000, 300000]; // 5s → 15s → 1min
 let currentBackoffLevel = 0;
 let isIdle = false;
 let consecutiveIdleChecks = 0;
+
+// Engine instances (loaded dynamically)
+let autopilot = null;
+let scheduler = null;
+let tradingEngine = null;
 
 class EngineWorkerLeader {
   constructor() {
@@ -170,44 +172,81 @@ class EngineWorkerLeader {
   }
 
   /**
-   * شروع Engines
+   * شروع Engines با Dynamic Import (فقط یک‌بار)
    */
   async startEngines() {
-    if (this.enginesStarted) return;
+    if (this.enginesStarted) {
+      console.log('⚠️ Engines already started');
+      return;
+    }
 
-    console.log('🚀 Starting engines...');
+    console.log('⚙️ Starting engines (dynamic import)...');
+    
+    try {
+      // Dynamic import to avoid side-effects on module load
+      const [
+        { autopilot: autopilotModule },
+        { scheduler: schedulerModule },
+        { tradingEngine: tradingEngineModule }
+      ] = await Promise.all([
+        import('../engine/autopilot.js'),
+        import('../engine/scheduler.js'),
+        import('../engine/tradingEngine.js')
+      ]);
 
-    // Start Autopilot
-    if (process.env.AUTOPILOT_ENABLED === 'true') {
-      try {
+      // Store references
+      autopilot = autopilotModule;
+      scheduler = schedulerModule;
+      tradingEngine = tradingEngineModule;
+
+      // Start engines based on env
+      if (process.env.AUTOPILOT_ENABLED === 'true') {
         autopilot.start();
         console.log('✅ Autopilot started');
-      } catch (error) {
-        console.error('❌ Failed to start Autopilot:', error);
+      } else {
+        console.log('⏸️ Autopilot disabled');
       }
-    }
 
-    // Start Scheduler
-    if (process.env.SCHEDULER_ENABLED === 'true') {
-      try {
+      if (process.env.SCHEDULER_ENABLED === 'true') {
         scheduler.start();
         console.log('✅ Scheduler started');
-      } catch (error) {
-        console.error('❌ Failed to start Scheduler:', error);
+      } else {
+        console.log('⏸️ Scheduler disabled');
       }
-    }
 
-    // Start Trading Engine
-    if (process.env.TRADING_ENGINE_ENABLED === 'true') {
-      try {
+      if (process.env.TRADING_ENGINE_ENABLED === 'true') {
         tradingEngine.start();
         console.log('✅ Trading Engine started');
-      } catch (error) {
-        console.error('❌ Failed to start Trading Engine:', error);
+      } else {
+        console.log('⏸️ Trading Engine disabled');
       }
+
+      this.enginesStarted = true;
+      console.log('✅ All engines initialized');
+      
+    } catch (error) {
+      console.error('❌ Failed to start engines:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * توقف Engines
+   */
+  async stopEngines() {
+    if (!this.enginesStarted) return;
+
+    console.log('🛑 Stopping engines...');
+
+    try {
+      if (autopilot && autopilot.stop) autopilot.stop();
+      if (scheduler && scheduler.stop) scheduler.stop();
+      if (tradingEngine && tradingEngine.stop) tradingEngine.stop();
+    } catch (error) {
+      console.error('Error stopping engines:', error);
     }
 
-    this.enginesStarted = true;
+    this.enginesStarted = false;
   }
 
   /**
@@ -222,13 +261,7 @@ class EngineWorkerLeader {
     }
 
     // Stop engines
-    try {
-      if (autopilot.stop) autopilot.stop();
-      if (scheduler.stop) scheduler.stop();
-      if (tradingEngine.stop) tradingEngine.stop();
-    } catch (error) {
-      console.error('Error stopping engines:', error);
-    }
+    await this.stopEngines();
 
     // Close message queue
     try {
