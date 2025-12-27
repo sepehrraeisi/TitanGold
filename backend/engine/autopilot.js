@@ -25,6 +25,13 @@ class AutopilotEngine {
 
     async runLoop() {
         try {
+            // 🚨 Circuit Breaker: Skip if trading engine is overloaded
+            const queueSize = await tradingEngine.getQueueSize?.() || 0;
+            if (queueSize > 500) {
+                console.warn(`⚠️ Autopilot Circuit Breaker: Trading engine overloaded (queue: ${queueSize})`);
+                return;
+            }
+
             // 1. Check if Autopilot is enabled in DB
             const stateResult = await query('SELECT status, config FROM artemis_state ORDER BY created_at DESC LIMIT 1');
             const row = stateResult.rows[0];

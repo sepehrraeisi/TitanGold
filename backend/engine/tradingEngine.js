@@ -228,6 +228,12 @@ class TradingEngine {
         const intervalId = setInterval(async () => {
             if (!this.isRunning || !this.config.scanners.arbitrage.enabled) return;
 
+            // 🚨 Circuit Breaker: Skip tick if too many pending operations
+            if (this.opportunityQueue.length > 200) {
+                console.warn(`⚠️ Circuit Breaker: Skipping arbitrage scan (queue: ${this.opportunityQueue.length})`);
+                return;
+            }
+
             try {
                 // Get all trading pairs from MEXC
                 const symbols = await this.getAllTradingSymbols();
@@ -302,6 +308,12 @@ class TradingEngine {
         const intervalId = setInterval(async () => {
             if (!this.isRunning || !this.config.scanners.priceMovement.enabled) return;
 
+            // 🚨 Circuit Breaker: Skip tick if too many pending operations
+            if (this.opportunityQueue.length > 200) {
+                console.warn(`⚠️ Circuit Breaker: Skipping price movement scan (queue: ${this.opportunityQueue.length})`);
+                return;
+            }
+
             try {
                 const symbols = await this.getAllTradingSymbols();
                 const topSymbols = symbols.slice(0, 200); // Scan top 200
@@ -360,6 +372,12 @@ class TradingEngine {
 
         const intervalId = setInterval(async () => {
             if (!this.isRunning || !this.config.scanners.volumeSpike.enabled) return;
+
+            // 🚨 Circuit Breaker: Skip tick if too many pending operations
+            if (this.opportunityQueue.length > 200) {
+                console.warn(`⚠️ Circuit Breaker: Skipping volume spike scan (queue: ${this.opportunityQueue.length})`);
+                return;
+            }
 
             try {
                 const symbols = await this.getAllTradingSymbols();
@@ -1288,6 +1306,10 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
 
     getOpportunityQueue() {
         return this.opportunityQueue;
+    }
+
+    getQueueSize() {
+        return this.opportunityQueue.length;
     }
 }
 
