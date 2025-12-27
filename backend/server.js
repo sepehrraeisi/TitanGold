@@ -272,7 +272,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     // All engines run in separate titan-engine-worker process
     console.log('🔧 Engines disabled in backend API - running in separate titan-engine-worker');
     console.log('📊 Backend cluster mode: API requests only');
-  })();
 
     // Start Engine Worker (if enabled)
     if (process.env.ENGINE_ENABLED === 'true') {
