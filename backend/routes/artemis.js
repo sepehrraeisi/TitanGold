@@ -401,4 +401,121 @@ router.patch('/config/decision-engine', authenticate, authorize('admin'), async 
   }
 });
 
+// Get Artemis decision logs
+router.get('/logs', authenticate, async (req, res) => {
+  try {
+    const { limit = 50, offset = 0, level, category } = req.query;
+    
+    let whereClause = "category = 'artemis_decision'";
+    const params = [parseInt(limit), parseInt(offset)];
+    
+    if (level) {
+      whereClause += " AND level = $3";
+      params.push(level);
+    }
+    
+    const result = await query(
+      `SELECT id, level, category, message, metadata, created_at 
+       FROM system_logs 
+       WHERE ${whereClause}
+       ORDER BY created_at DESC 
+       LIMIT $1 OFFSET $2`,
+      params
+    );
+    
+    // Also get AI decisions for decision-specific logs
+    const decisionsResult = await query(
+      `SELECT id, agent_id, input, output, was_successful, confidence, created_at 
+       FROM ai_decisions 
+       ORDER BY created_at DESC 
+       LIMIT $1`,
+      [parseInt(limit)]
+    );
+    
+    res.json({
+      systemLogs: result.rows || [],
+      decisions: decisionsResult.rows || [],
+      total: result.rows?.length || 0,
+    });
+  } catch (error) {
+    console.error('Failed to fetch Artemis logs:', error);
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
+// Clear Artemis logs
+router.delete('/logs', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    
+    // Delete old system logs
+    const systemResult = await query(
+      `DELETE FROM system_logs 
+       WHERE category = 'artemis_decision' 
+       AND created_at < NOW() - INTERVAL '${parseInt(days)} days'
+       RETURNING id`
+    );
+    
+    // Delete old AI decisions
+    const decisionsResult = await query(
+      `DELETE FROM ai_decisions 
+       WHERE created_at < NOW() - INTERVAL '${parseInt(days)} days'
+       RETURNING id`
+    );
+    
+    res.json({
+      message: 'Logs cleared successfully',
+      systemLogsDeleted: systemResult.rows?.length || 0,
+      decisionsDeleted: decisionsResult.rows?.length || 0,
+    });
+  } catch (error) {
+    console.error('Failed to clear logs:', error);
+    res.status(500).json({ error: 'Failed to clear logs' });
+  }
+});
+
+// General config update (used by Settings tabs)
+router.put('/config', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const updates = req.body;
+    
+    // Get latest Artemis state
+    const stateResult = await query('SELECT id, config FROM artemis_state ORDER BY created_at DESC LIMIT 1');
+    
+    if (stateResult.rows.length === 0) {
+      // Create initial state if not exists
+      const createResult = await query(
+        `INSERT INTO artemis_state (status, mode, strategy, config) 
+         VALUES ('active', 'demo', 'mixture_of_experts', $1) 
+         RETURNING *`,
+        [JSON.stringify(updates)]
+      );
+      return res.json(createResult.rows[0]);
+    }
+    
+    const { id, config } = stateResult.rows[0];
+    const currentConfig = config || {};
+    
+    // Deep merge configs
+    const newConfig = {
+      ...currentConfig,
+      ...updates,
+      decisionEngine: {
+        ...(currentConfig.decisionEngine || {}),
+        ...(updates.decisionEngine || {}),
+      },
+    };
+    
+    const updateResult = await query(
+      'UPDATE artemis_state SET config = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [JSON.stringify(newConfig), id]
+    );
+    
+    res.json(updateResult.rows[0]);
+  } catch (error) {
+    console.error('Failed to update Artemis config:', error);
+    res.status(500).json({ error: 'Failed to update configuration' });
+  }
+});
+
 export default router;
