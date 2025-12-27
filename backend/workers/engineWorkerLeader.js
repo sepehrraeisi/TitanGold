@@ -4,6 +4,20 @@
  * با قابلیت Idle Mode: وقتی کاری نیست، backoff می‌کند (نه query storm)
  */
 
+// 🔍 BOOT LOG - Must be first!
+console.log("🚀 engineWorkerLeader booting", {
+  pid: process.pid,
+  node: process.version,
+  cwd: process.cwd(),
+  env: {
+    IDLE_MODE_ENABLED: process.env.IDLE_MODE_ENABLED,
+    IDLE_CHECK_INTERVAL_MS: process.env.IDLE_CHECK_INTERVAL_MS,
+    AUTOPILOT_ENABLED: process.env.AUTOPILOT_ENABLED,
+    SCHEDULER_ENABLED: process.env.SCHEDULER_ENABLED,
+    TRADING_ENGINE_ENABLED: process.env.TRADING_ENGINE_ENABLED,
+  }
+});
+
 import dotenv from 'dotenv';
 import { query } from '../database/db.js';
 import { autopilot } from '../engine/autopilot.js';
