@@ -23,15 +23,26 @@ const AIAgents: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [agents, setAgents] = useState<AIAgent[]>([]);
     const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            setIsLoading(true);
+    const fetchData = async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
             const agentData = await api.fetchAIAgents();
             setAgents(agentData);
+        } catch (e: any) {
+            console.error('Failed to load AI agents:', e);
+            const message = e?.message || e?.toString() || 'Unknown error';
+            setError(message);
+        } finally {
             setIsLoading(false);
-        };
+        }
+    };
+
+    useEffect(() => {
         fetchData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleAgentUpdate = (updatedAgent: AIAgent) => {
@@ -41,6 +52,22 @@ const AIAgents: React.FC = () => {
 
     if (isLoading) {
         return <div className="text-center p-10">{t('loading')}</div>;
+    }
+
+    if (error) {
+        return (
+            <div className="text-center p-10 space-y-3">
+                <p className="text-sm text-red-400">
+                    {t('failed_to_load_data') || 'Failed to load AI agents.'}
+                </p>
+                <button
+                    onClick={fetchData}
+                    className="inline-flex items-center px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold"
+                >
+                    {t('retry') || 'Retry'}
+                </button>
+            </div>
+        );
     }
 
     return (

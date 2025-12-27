@@ -159,9 +159,11 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     const [showAnalytics, setShowAnalytics] = useState(false);
 
     // 🚀 NEW: WebSocket for Real-time Price Updates
+    // Token: align with rest of app (titan_token), fallback to sessionStorage, optional for cookie-based auth
+    const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token') || undefined;
     const { isConnected, isConnecting, error: wsError } = useWebSocket({
         url: 'ws://188.40.209.82:5002/ws/favorites',
-        token: localStorage.getItem('token') || undefined,
+        token: authToken,
         autoConnect: true,
         onMessage: (message: WebSocketMessage) => {
             if (message.type === 'price_update' && message.data) {
@@ -611,7 +613,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                         </div>
                     </div>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto lg:overflow-visible relative">
                     <table className="w-full text-sm text-left">
                         <thead className="text-xs text-gray-400 uppercase">
                             <tr>

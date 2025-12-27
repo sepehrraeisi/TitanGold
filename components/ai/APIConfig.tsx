@@ -6,6 +6,7 @@ import { testGeminiConnection } from '../../services/geminiService.ts';
 import { testClaudeConnection } from '../../services/claudeService.ts';
 import { testOpenAIConnection } from '../../services/openaiService.ts';
 import { testDeepSeekConnection } from '../../services/deepseekService.ts';
+import { testOpenRouterConnection } from '../../services/openrouterService.ts';
 
 type ConfigTab = 'apis' | 'mixture' | 'artemis_control';
 
@@ -21,10 +22,12 @@ const APIConfig: React.FC = () => {
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
     const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
     const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
             setIsLoading(true);
+            setLoadError(null);
             try {
                 const [apiData, artemisState] = await Promise.all([
                     api.fetchAPIConfigData(),
@@ -32,10 +35,12 @@ const APIConfig: React.FC = () => {
                 ]);
                 setApiConfig(apiData);
                 setArtemis(artemisState);
-            } catch (e) {
+            } catch (e: any) {
                 console.error('Failed to load configuration:', e);
+                const message = e?.message || e?.toString() || 'Unknown error';
+                setLoadError(message);
             } finally {
-            setIsLoading(false);
+                setIsLoading(false);
             }
         };
         fetchData();
@@ -93,10 +98,6 @@ const APIConfig: React.FC = () => {
                 throw new Error('API key is empty');
             }
 
-            console.log(`Testing ${serviceId} with key: ${keyEntry.key.substring(0, 10)}...`);
-            console.log(`Key length: ${keyEntry.key.length}`);
-            console.log(`Key starts with: ${keyEntry.key.substring(0, 20)}...`);
-
             // Store API key temporarily for test functions
             let result: { success: boolean; latency?: number; error?: string } = { success: false };
             
@@ -148,6 +149,18 @@ const APIConfig: React.FC = () => {
                     result = { success: false, error: e.message || 'Test failed' };
                 } finally {
                     localStorage.removeItem('temp_deepseek_key');
+                }
+            } else if (serviceId === 'ai-openrouter') {
+                localStorage.setItem('temp_openrouter_key', keyEntry.key);
+                const stored = localStorage.getItem('temp_openrouter_key');
+                console.log('OpenRouter key stored:', stored ? `${stored.substring(0, 10)}...` : 'NOT FOUND');
+                try {
+                    result = await testOpenRouterConnection();
+                } catch (e: any) {
+                    console.error('OpenRouter test exception:', e);
+                    result = { success: false, error: e.message || 'Test failed' };
+                } finally {
+                    localStorage.removeItem('temp_openrouter_key');
                 }
             } else {
                 // Test other integrations (Email, On-chain, News, etc.)
@@ -435,7 +448,7 @@ const APIConfig: React.FC = () => {
             
             // Update mixture agents for all AI services
             updatedConfig.aiServices.forEach(service => {
-                if (['ai-gemini', 'ai-claude', 'ai-openai', 'ai-deepseek'].includes(service.id)) {
+                if (['ai-gemini', 'ai-claude', 'ai-openai', 'ai-deepseek', 'ai-openrouter'].includes(service.id)) {
                     service.mixtureAgents = { enabled, models };
                 }
             });
@@ -517,7 +530,7 @@ const APIConfig: React.FC = () => {
         { id: 'artemis_control', label: t('artemis_control') || 'Artemis Control', icon: '🎛️' },
     ];
 
-    const aiServices = (apiConfig?.aiServices || []).filter(s => ['ai-gemini', 'ai-claude', 'ai-openai', 'ai-deepseek'].includes(s.id));
+    const aiServices = (apiConfig?.aiServices || []).filter(s => ['ai-gemini', 'ai-claude', 'ai-openai', 'ai-deepseek', 'ai-openrouter'].includes(s.id));
 
     return (
         <div className="space-y-6">
@@ -573,6 +586,12 @@ const APIConfig: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {loadError && !apiConfig && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg px-4 py-3">
+                    {t('failed_to_load_data') || 'Failed to load API configuration.'}
+                </div>
+            )}
 
             {/* Tabs */}
             <div className="bg-card border border-border rounded-lg">
@@ -653,7 +672,7 @@ const APIConfigTab: React.FC<{
 }> = ({ config, onTestKey, testingService, testingKeyId, onAddKey, onRemoveKey, onToggleKeyStatus, onUpdateLoadBalancing, editingServiceId, setEditingServiceId, editingKeyId, setEditingKeyId, t }) => {
     const [newKeyData, setNewKeyData] = useState<{ key: string; secret?: string; label: string }>({ key: '', label: '' });
 
-    const aiServices = (config.aiServices || []).filter(s => ['ai-gemini', 'ai-claude', 'ai-openai', 'ai-deepseek'].includes(s.id));
+    const aiServices = (config.aiServices || []).filter(s => ['ai-gemini', 'ai-claude', 'ai-openai', 'ai-deepseek', 'ai-openrouter'].includes(s.id));
 
     return (
         <div className="space-y-8">

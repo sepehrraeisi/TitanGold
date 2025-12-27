@@ -45,11 +45,10 @@ const FavoritesAnalytics: React.FC = () => {
             setLoading(true);
             setError(null);
             
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token') || undefined;
             const response = await fetch('/api/favorites/analytics', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                credentials: 'include', // allow cookie-based auth if in use
             });
             
             const data = await response.json();

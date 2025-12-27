@@ -726,7 +726,7 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
                     </button>
                 </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center">
                     <div>
                         <p className="text-sm text-muted-foreground mb-1">{t('strategy') || 'Strategy'}</p>
                         <p className="font-semibold text-foreground">{t(artemis.decisionEngine.strategy) || artemis.decisionEngine.strategy}</p>
@@ -1086,6 +1086,7 @@ const DecisionConfigModal: React.FC<{
                             <option value="gemini">{t('gemini') || 'Gemini'}</option>
                             <option value="openai">{t('openai') || 'OpenAI'}</option>
                             <option value="deepseek">{t('deepseek') || 'DeepSeek'}</option>
+                            <option value="openrouter">{t('openrouter') || 'OpenRouter'}</option>
                             <option value="hybrid">{t('hybrid') || 'Hybrid'}</option>
                         </select>
                     </div>
@@ -1212,7 +1213,7 @@ const Orchestration: React.FC<{ artemis: ArtemisState; t: (key: string) => strin
                     </p>
                 </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center">
                 <Stat value={artemis.orchestration.activeAgents} label={t('active_agents') || 'Active Agents'} />
                 <Stat value={artemis.orchestration.agentTasks.length} label={t('total_tasks') || 'Total Tasks'} />
                 <Stat value={Object.keys(artemis.orchestration.resourceAllocation).length} label={t('allocated_resources') || 'Allocated Resources'} />

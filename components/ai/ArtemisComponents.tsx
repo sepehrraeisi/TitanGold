@@ -960,6 +960,7 @@ export const ArtemisSettings: React.FC<{ artemis: ArtemisState; t: (key: string)
                                         <option value="gemini">{t('gemini') || 'Gemini'}</option>
                                         <option value="openai">{t('openai') || 'OpenAI'}</option>
                                         <option value="deepseek">{t('deepseek') || 'DeepSeek'}</option>
+                                        <option value="openrouter">{t('openrouter') || 'OpenRouter'}</option>
                                         <option value="hybrid">{t('hybrid') || 'Hybrid'}</option>
                                     </select>
                                 </div>

@@ -4015,6 +4015,71 @@ export const fetchAIManagerData = async (): Promise<AIManagerOverview> => {
 };
 
 // Fetch AI Agents - REAL IMPLEMENTATION with IndexedDB
+const sanitizeAIAgents = (raw: unknown): AIAgent[] => {
+    if (!Array.isArray(raw)) {
+        console.warn('sanitizeAIAgents: expected array, got', typeof raw);
+        return [];
+    }
+
+    const sanitized: AIAgent[] = [];
+    let dropped = 0;
+    let corrected = 0;
+
+    for (const item of raw) {
+        if (!item || typeof item !== 'object') {
+            dropped++;
+            continue;
+        }
+        const anyItem: any = item;
+        const id = String(anyItem.id ?? '').trim();
+        const name = String(anyItem.name ?? '').trim();
+        if (!id || !name) {
+            // Without stable id/name we can't safely render or update this agent
+            dropped++;
+            continue;
+        }
+
+        const toNumber = (val: any, fallback = 0): number => {
+            if (typeof val === 'number' && Number.isFinite(val)) return val;
+            const n = Number(val);
+            return Number.isFinite(n) ? n : fallback;
+        };
+
+        const base: AIAgent = {
+            id,
+            name,
+            role: String(anyItem.role ?? '') || 'Agent',
+            status: anyItem.status === 'active' || anyItem.status === 'training' ? anyItem.status : 'inactive',
+            accuracy: toNumber(anyItem.accuracy, 0),
+            trainingProgress: toNumber(anyItem.trainingProgress, 0),
+            decisions: toNumber(anyItem.decisions, 0),
+            learningTime: toNumber(anyItem.learningTime, 0),
+            knowledgeSize: toNumber(anyItem.knowledgeSize, 0),
+            level: anyItem.level === 'Advanced' || anyItem.level === 'Intermediate' ? anyItem.level : 'Expert',
+            capabilities: Array.isArray(anyItem.capabilities) ? anyItem.capabilities.map((c: any) => String(c)) : [],
+            lastUpdate: anyItem.lastUpdate || new Date().toISOString(),
+        };
+
+        if (
+            base.accuracy !== anyItem.accuracy ||
+            base.trainingProgress !== anyItem.trainingProgress ||
+            base.decisions !== anyItem.decisions ||
+            base.learningTime !== anyItem.learningTime ||
+            base.knowledgeSize !== anyItem.knowledgeSize
+        ) {
+            corrected++;
+        }
+
+        sanitized.push({ ...anyItem, ...base });
+    }
+
+    if (dropped || corrected) {
+        console.warn('sanitizeAIAgents: corrected entries=', corrected, 'dropped entries=', dropped);
+    }
+
+    return sanitized;
+};
+
 export const fetchAIAgents = async (): Promise<AIAgent[]> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
@@ -4031,10 +4096,11 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
 
         if (response.ok) {
             const data = await response.json();
-            // If backend returns valid data (array), use it
+            // If backend returns valid data (array), use it (sanitized)
             if (Array.isArray(data) && data.length > 0) {
-                console.log('✅ AI agents loaded from backend:', data.length);
-                return data as AIAgent[];
+                const agents = sanitizeAIAgents(data);
+                console.log('✅ AI agents loaded from backend:', agents.length);
+                return agents;
             }
             // If empty array, return it (no fallback needed)
             if (Array.isArray(data)) {
@@ -4053,26 +4119,43 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
     try {
         const agents = await database.getAll<AIAgent>('aiAgents');
         if (agents && agents.length > 0) {
-            console.log('✅ AI agents loaded from IndexedDB fallback');
-            return agents;
+            const sanitized = sanitizeAIAgents(agents);
+            console.log('✅ AI agents loaded from IndexedDB fallback:', sanitized.length);
+            return sanitized;
         }
     } catch (e) {
         console.warn('Failed to load agents from IndexedDB:', e);
     }
 
-    // Initialize with default agents if not exists
-    const roles = ['Technical Analysis', 'Risk Management', 'Sentiment Analysis', 'Pattern Recognition', 'Price Prediction', 'Arbitrage', 'Liquidity Analysis', 'Portfolio Management', 'Trend Detection', 'Optimization', 'Order Management', 'Fundamental Analysis', 'Market Intelligence', 'Volume Analysis', 'Timing'];
+    // Initialize with deterministic default agents if not exists (no mock randomness)
+    const roles = [
+        'Technical Analysis',
+        'Risk Management',
+        'Sentiment Analysis',
+        'Pattern Recognition',
+        'Price Prediction',
+        'Arbitrage',
+        'Liquidity Analysis',
+        'Portfolio Management',
+        'Trend Detection',
+        'Optimization',
+        'Order Management',
+        'Fundamental Analysis',
+        'Market Intelligence',
+        'Volume Analysis',
+        'Timing',
+    ];
     const defaultAgents: AIAgent[] = Array.from({ length: 15 }, (_, i) => {
         const agent: AIAgent = {
             id: `${i + 1}`,
             name: `Agent ${i + 1}`,
             role: roles[i],
-            status: i < 12 ? 'active' : i < 14 ? 'training' : 'inactive',
-            accuracy: 85 + Math.random() * 15,
-            trainingProgress: Math.random() * 100,
-            decisions: Math.floor(Math.random() * 50000),
-            learningTime: Math.floor(Math.random() * 4000),
-            knowledgeSize: Math.random() * 4000,
+            status: 'inactive',
+            accuracy: 0,
+            trainingProgress: 0,
+            decisions: 0,
+            learningTime: 0,
+            knowledgeSize: 0,
             level: 'Expert' as const,
             capabilities: ['Capability A', 'Capability B', 'Capability C'],
             lastUpdate: new Date().toISOString(),
@@ -5816,8 +5899,8 @@ export const fetchTrainingData = async (): Promise<AITrainingStats> => {
         console.warn('Failed to load training data from database:', e);
     }
 
-    // Initialize with default data - calculate from actual agents
-    let defaultAvgAccuracy = 89.7;
+    // Initialize with default data - calculate from actual agents (no mock defaults)
+    let defaultAvgAccuracy = 0;
     try {
         const allAgents = await fetchAIAgents();
         if (allAgents.length > 0) {
@@ -5828,7 +5911,7 @@ export const fetchTrainingData = async (): Promise<AITrainingStats> => {
     }
 
     const config = await fetchTrainingConfig();
-    const defaultStats: AITrainingStats = {
+    return {
         sessions: 0,
         avgAccuracy: Math.min(100, Math.max(0, defaultAvgAccuracy)), // Ensure between 0-100%
         activeTrainingAgents: 0,
@@ -5838,8 +5921,6 @@ export const fetchTrainingData = async (): Promise<AITrainingStats> => {
         lastUpdated: new Date().toISOString(),
         config,
     };
-
-    return defaultStats;
 };
 
 // Fetch Analytics Data - REAL IMPLEMENTATION with IndexedDB
@@ -5862,12 +5943,14 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
         const trainingAgents = agents.filter(a => a.status === 'training').length;
         const offlineAgents = agents.filter(a => a.status === 'inactive').length;
 
-        const totalDecisions = agents.reduce((sum, a) => sum + a.decisions, 0);
-        const totalLearningHours = agents.reduce((sum, a) => sum + a.learningTime, 0);
-        const avgAccuracy = agents.length > 0 ? agents.reduce((sum, a) => sum + a.accuracy, 0) / agents.length : 0;
+        const totalDecisions = agents.reduce((sum, a) => sum + (a.decisions || 0), 0);
+        const totalLearningHours = agents.reduce((sum, a) => sum + (a.learningTime || 0), 0);
+        const avgAccuracy = agents.length > 0 ? agents.reduce((sum, a) => sum + (a.accuracy || 0), 0) / agents.length : 0;
 
-        // Calculate decision rate (decisions per minute) - simulate based on total decisions
-        const decisionRate = totalDecisions > 0 ? (totalDecisions / (totalLearningHours * 60)) : 1.2;
+        // Calculate decision rate (decisions per minute) based on available data (no magic defaults)
+        const decisionRate = totalDecisions > 0 && totalLearningHours > 0
+            ? totalDecisions / (totalLearningHours * 60)
+            : 0;
 
         // Calculate success rate from agent accuracy
         const successRate = avgAccuracy;
@@ -5882,13 +5965,13 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
             });
         const monthlyImprovement = recentCompleted.length > 0
             ? recentCompleted.reduce((sum, s) => sum + (s.accuracyGain || 0), 0) / recentCompleted.length
-            : 2.3;
+            : 0;
 
         const analytics: AIAnalyticsMetrics = {
             realtime: {
                 decisionRate: Math.round(decisionRate * 10) / 10,
                 successRate: Math.round(successRate * 10) / 10,
-                systemUptime: 99.8,
+                systemUptime: 0,
                 agentDistribution: {
                     active: activeAgents,
                     training: trainingAgents,
@@ -5902,18 +5985,18 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
                 monthlyImprovement: Math.round(monthlyImprovement * 10) / 10,
             },
             resourceUsage: {
-                cpu: 67,
-                gpu: 91.8,
-                memory: 52,
-                precision: [0.9, 0.92, 0.91, 0.93, 0.94, 0.93, 0.942],
-                recall: [0.88, 0.89, 0.88, 0.9, 0.91, 0.9, 0.918],
+                cpu: 0,
+                gpu: 0,
+                memory: 0,
+                precision: [],
+                recall: [],
             },
             agentMatrix: agents.slice(0, 12).map(a => ({
                 id: a.id,
                 name: a.role.substring(0, 15) + (a.role.length > 15 ? '...' : ''),
-                accuracy: Math.round(a.accuracy * 10) / 10,
-                successRate: Math.round((a.accuracy - Math.random() * 5) * 10) / 10,
-                progress: Math.round(a.trainingProgress * 10) / 10,
+                accuracy: Math.round((a.accuracy || 0) * 10) / 10,
+                successRate: Math.round((a.accuracy || 0) * 10) / 10,
+                progress: Math.round((a.trainingProgress || 0) * 10) / 10,
                 status: a.status as 'active' | 'training' | 'error',
             })),
             lastUpdated: new Date().toISOString(),
@@ -5934,26 +6017,26 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
         console.warn('Failed to calculate analytics:', e);
     }
 
-    // Default analytics
+    // Default analytics (no mock numbers, neutral zero/empty values)
     const defaultAnalytics: AIAnalyticsMetrics = {
         realtime: {
-            decisionRate: 1.2,
-            successRate: 89.3,
-            systemUptime: 99.8,
-            agentDistribution: { active: 15, training: 0, offline: 0 },
+            decisionRate: 0,
+            successRate: 0,
+            systemUptime: 0,
+            agentDistribution: { active: 0, training: 0, offline: 0 },
         },
         performance: {
-            totalDecisions: 354574,
-            totalLearningHours: 26755,
-            avgAccuracy: 89.3,
-            monthlyImprovement: 2.3,
+            totalDecisions: 0,
+            totalLearningHours: 0,
+            avgAccuracy: 0,
+            monthlyImprovement: 0,
         },
         resourceUsage: {
-            cpu: 67,
-            gpu: 91.8,
-            memory: 52,
-            precision: [0.9, 0.92, 0.91, 0.93, 0.94, 0.93, 0.942],
-            recall: [0.88, 0.89, 0.88, 0.9, 0.91, 0.9, 0.918],
+            cpu: 0,
+            gpu: 0,
+            memory: 0,
+            precision: [],
+            recall: [],
         },
         agentMatrix: [],
         lastUpdated: new Date().toISOString(),
@@ -20162,110 +20245,9 @@ export const fetchArtemisState = async (): Promise<ArtemisState> => {
         console.warn('Failed to load Artemis state from IndexedDB:', e);
     }
 
-    // Last resort: Initialize default Artemis state
-    const agents = await database.getAll<AIAgent>('aiAgents').catch(() => []);
-    const activeAgents = agents.filter(a => a.status === 'active').map(a => a.id);
-
-    const defaultState: ArtemisState = {
-        id: 'artemis-1',
-        status: 'active',
-        mode: 'demo',
-        lastDecisionTime: new Date().toISOString(),
-        totalDecisions: 0,
-        successRate: 0,
-        systemHealth: {
-            overall: 'healthy',
-            agents: agents.map(agent => ({
-                agentId: agent.id,
-                status: agent.status,
-                lastUpdate: agent.lastUpdate || new Date().toISOString(),
-                performance: agent.accuracy,
-                resourceUsage: {
-                    cpu: Math.random() * 30 + 10,
-                    memory: Math.random() * 40 + 20,
-                    apiCalls: Math.floor(Math.random() * 100),
-                },
-                errors: [],
-                uptime: Math.floor(Math.random() * 86400) + 3600,
-            })),
-            integrations: [
-                {
-                    type: 'exchange',
-                    name: 'MEXC',
-                    status: 'connected',
-                    lastCheck: new Date().toISOString(),
-                    latency: Math.floor(Math.random() * 50) + 10,
-                    errorRate: Math.random() * 2,
-                },
-                {
-                    type: 'ai_provider',
-                    name: 'Google Gemini',
-                    status: 'connected',
-                    lastCheck: new Date().toISOString(),
-                    latency: Math.floor(Math.random() * 200) + 100,
-                },
-                {
-                    type: 'ai_provider',
-                    name: 'Anthropic Claude',
-                    status: 'connected',
-                    lastCheck: new Date().toISOString(),
-                    latency: Math.floor(Math.random() * 300) + 150,
-                },
-                {
-                    type: 'ai_provider',
-                    name: 'DeepSeek',
-                    status: 'connected',
-                    lastCheck: new Date().toISOString(),
-                    latency: Math.floor(Math.random() * 250) + 100,
-                },
-            ],
-            resources: {
-                cpu: Math.random() * 30 + 40,
-                memory: Math.random() * 20 + 50,
-                network: Math.random() * 10 + 5,
-                storage: Math.random() * 15 + 60,
-                apiQuota: {
-                    used: Math.floor(Math.random() * 5000) + 1000,
-                    limit: 10000,
-                    resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-                },
-            },
-            alerts: [],
-        },
-        activeAgents,
-        decisionEngine: {
-            strategy: 'mixture_of_experts',
-            activeModel: 'hybrid',
-            confidenceThreshold: 75,
-            recentDecisions: [],
-            performance: {
-                accuracy: 0,
-                avgConfidence: 0,
-                avgExecutionTime: 0,
-            },
-        },
-        learningSystem: {
-            totalDecisions: 0,
-            totalTrades: 0,
-            accuracyHistory: [],
-            improvements: [],
-            mistakes: [],
-            activeLearning: true,
-            lastTraining: new Date().toISOString(),
-            modelVersions: [],
-        },
-        orchestration: {
-            activeAgents: activeAgents.length,
-            agentTasks: [],
-            resourceAllocation: {},
-            failoverStatus: {
-                enabled: true,
-                fallbackAgents: {},
-            },
-        },
-    };
-
-    // Save default state
+    // Last resort: use deterministic, empty Artemis state (no random/mock data)
+    console.warn('⚠️ Using DEFAULT_ARTEMIS_STATE as last-resort fallback for Artemis');
+    const defaultState = DEFAULT_ARTEMIS_STATE();
     try {
         await database.save('settings', {
             key: 'artemis_state',
@@ -20274,7 +20256,6 @@ export const fetchArtemisState = async (): Promise<ArtemisState> => {
     } catch (e) {
         console.warn('Failed to save Artemis state:', e);
     }
-
     return defaultState;
 };
 
@@ -21141,7 +21122,7 @@ export const generateAITradingScenario = async (): Promise<TradingScenario> => {
             }
         }
 
-        // Collect agent signals
+        // Collect agent signals (kept for future use / debugging)
         const agentSignals: any[] = [];
         for (const agent of activeAgents.slice(0, 5)) {
             if (agent.lastTechnicalAnalysis) {
@@ -21154,8 +21135,16 @@ export const generateAITradingScenario = async (): Promise<TradingScenario> => {
             }
         }
 
-        // Get Artemis state for context
+        // Get Artemis state for context (decision engine, learning, health)
         const artemis = await fetchArtemisState();
+        const riskProfile = artemis.decisionEngine?.riskProfile;
+        const mode = riskProfile?.mode || artemis.decisionEngine?.mode || 'balanced';
+        const maxPositionSize = riskProfile?.maxPositionSize;
+        const maxDailyLoss = riskProfile?.maxDailyLoss;
+
+        const learningStats = artemis.learningSystem?.metrics;
+        const recentImprovements = artemis.learningSystem?.recentImprovements?.length || 0;
+        const recentMistakes = artemis.learningSystem?.recentMistakes?.length || 0;
 
         // Build prompt for AI
         const marketSummary = marketData.map(m =>
@@ -21169,16 +21158,19 @@ ${marketSummary}
 
 Active Agents: ${activeAgents.length} agents with average accuracy of ${agents.length > 0 ? (agents.reduce((sum, a) => sum + a.accuracy, 0) / agents.length).toFixed(1) : 0}%
 Artemis Decision Engine: ${artemis.decisionEngine.strategy} strategy, ${artemis.decisionEngine.activeModel} model
-System Health: ${artemis.systemHealth.overall}
+Risk Profile Mode: ${mode}${maxPositionSize ? `, Max Position Size: ${maxPositionSize}` : ''}${maxDailyLoss ? `, Max Daily Loss: ${maxDailyLoss}` : ''}
+System Health: ${artemis.systemHealth.overall}, API Quota Used: ${artemis.systemHealth.resources.apiQuota.used}/${artemis.systemHealth.resources.apiQuota.limit}
 Success Rate: ${artemis.successRate}%
+Learning System: ${learningStats ? `overall accuracy ${learningStats.overallAccuracy}%, last training ${learningStats.lastTrainingRun || 'N/A'}` : 'no recent training stats'}; recent improvements: ${recentImprovements}, recent mistakes: ${recentMistakes}
 
-Based on the current market conditions, agent signals, and system state, generate an optimal trading strategy scenario.
+Based on the current market conditions, agent signals, decision engine risk profile, learning system performance, and current system health, generate an optimal trading strategy scenario.
 
 The strategy should be:
 1. Realistic and achievable based on current market volatility
-2. Risk-appropriate for the current market conditions
-3. Leveraging the strengths of our AI agents
-4. Adaptive to current trends
+2. Strictly aligned with the current risk profile mode (${mode})
+3. Leveraging the strengths of our best-performing AI agents and recent successful patterns
+4. Avoiding patterns that recently led to mistakes
+5. Adaptive to current trends while respecting system health and API quota limits
 
 Return ONLY a JSON object in this exact format (no markdown, no code blocks, just the JSON):
 {
@@ -21285,30 +21277,102 @@ Make the strategy name descriptive and professional.`;
 
         const strategy = JSON.parse(strategyJson);
 
-        // Create scenario from AI strategy
+        // Create scenario from AI strategy (no mock fallbacks here; handled in catch)
         const scenario: Omit<TradingScenario, 'id' | 'createdAt' | 'updatedAt' | 'trades' | 'progress' | 'status'> = {
             name: strategy.name || `AI Strategy ${new Date().toLocaleDateString()}`,
             type: strategy.type || 'target_profit',
-            target: strategy.target || { profit: 100 },
+            target: strategy.target || {},
         };
 
-        // Add description as a note in target if needed
-        if (strategy.description) {
-            (scenario.target as any).description = strategy.description;
+        const target = scenario.target as any;
+
+        if (!target.profit && !target.maxTrades && !target.riskRewardRatio) {
+            if (mode === 'conservative') {
+                target.profit = 100;
+                target.riskRewardRatio = 2.0;
+                target.maxTrades = 5;
+            } else if (mode === 'aggressive') {
+                target.profit = 400;
+                target.riskRewardRatio = 1.5;
+                target.maxTrades = 20;
+            } else {
+                // balanced / default
+                target.profit = 200;
+                target.riskRewardRatio = 1.8;
+                target.maxTrades = 10;
+            }
         }
+
+        const descParts: string[] = [];
+        if (strategy.description) {
+            descParts.push(strategy.description);
+        }
+        descParts.push(
+            `Risk mode: ${mode}, success rate: ${artemis.successRate}%, system health: ${artemis.systemHealth.overall}.`
+        );
+        if (learningStats) {
+            descParts.push(
+                `Learning system accuracy: ${learningStats.overallAccuracy}%, recent improvements: ${recentImprovements}, recent mistakes: ${recentMistakes}.`
+            );
+        }
+        target.description = descParts.join(' ');
 
         const newScenario = await createTradingScenario(scenario);
 
         return newScenario;
     } catch (e) {
         console.error('Failed to generate AI strategy:', e);
-        // Fallback: create a simple default strategy
+
+        // Fallback: بر اساس تنظیمات واقعی Artemis یک استراتژی ساده و بدون تصادف می‌سازیم
+        try {
+            const artemis = await fetchArtemisState();
+            const riskProfile = artemis.decisionEngine?.riskProfile;
+            const mode = riskProfile?.mode || artemis.decisionEngine?.mode || 'balanced';
+
+            let fallbackProfit: number;
+            let fallbackMaxTrades: number;
+            let fallbackRR: number;
+
+            if (mode === 'conservative') {
+                fallbackProfit = 100;
+                fallbackMaxTrades = 5;
+                fallbackRR = 2.0;
+            } else if (mode === 'aggressive') {
+                fallbackProfit = 400;
+                fallbackMaxTrades = 20;
+                fallbackRR = 1.5;
+            } else {
+                fallbackProfit = 200;
+                fallbackMaxTrades = 10;
+                fallbackRR = 1.8;
+            }
+
         const fallbackScenario: Omit<TradingScenario, 'id' | 'createdAt' | 'updatedAt' | 'trades' | 'progress' | 'status'> = {
             name: `AI Strategy ${new Date().toLocaleDateString()} (Fallback)`,
             type: 'target_profit',
-            target: { profit: 200 },
+                target: {
+                    profit: fallbackProfit,
+                    maxTrades: fallbackMaxTrades,
+                    riskRewardRatio: fallbackRR,
+                    description: `Rule-based fallback derived from Artemis risk mode "${mode}" with profit ${fallbackProfit}, max trades ${fallbackMaxTrades}, RR ${fallbackRR}.`,
+                } as any,
+            };
+
+            return await createTradingScenario(fallbackScenario);
+        } catch {
+            // آخرین راه‌حل: یک استراتژی محافظه‌کار و ثابت، باز هم بدون هیچ تصادف
+            const fallbackScenario: Omit<TradingScenario, 'id' | 'createdAt' | 'updatedAt' | 'trades' | 'progress' | 'status'> = {
+                name: `AI Strategy ${new Date().toLocaleDateString()} (Safe Fallback)`,
+                type: 'target_profit',
+                target: {
+                    profit: 150,
+                    maxTrades: 5,
+                    riskRewardRatio: 1.8,
+                    description: 'Safe fallback strategy used because AI and Artemis state were unavailable.',
+                } as any,
         };
         return await createTradingScenario(fallbackScenario);
+        }
     }
 };
 
@@ -22017,7 +22081,19 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
     try {
         const saved = await database.get<{ key: string; value: DataHubState }>('settings', 'data_hub_state');
         if (saved && saved.value) {
-            if (!saved.value.cache.data) {
+            // Backward-compatibility: older records may miss cache or cache.data
+            if (!saved.value.cache) {
+                saved.value.cache = {
+                    totalEntries: 0,
+                    hitRate: 0,
+                    missRate: 0,
+                    totalSize: 0,
+                    oldestEntry: new Date().toISOString(),
+                    newestEntry: new Date().toISOString(),
+                    evictionCount: 0,
+                    data: {},
+                };
+            } else if (!saved.value.cache.data) {
                 saved.value.cache.data = {};
             }
             ensureTelegramCollectorState(saved.value);

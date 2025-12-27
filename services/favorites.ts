@@ -65,14 +65,20 @@ const RETRY_DELAY = 1000; // 1 second
 // ============================================================================
 
 /**
- * Get auth token from localStorage
+ * Get auth token:
+ * - Primary: titan_token (set by backend login)
+ * - Fallback: token inside titan_user (legacy)
+ * If nothing is found, return null (allow cookie-based auth).
  */
 function getAuthToken(): string | null {
     try {
-        const userStr = localStorage.getItem('titan_user');
+        const direct = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (direct) return direct;
+
+        const userStr = localStorage.getItem('titan_user') || sessionStorage.getItem('titan_user');
         if (!userStr) return null;
         const user = JSON.parse(userStr);
-        return user.token || null;
+        return user.token || user?.value?.token || null;
     } catch (error) {
         console.error('Failed to get auth token:', error);
         return null;
@@ -87,19 +93,18 @@ async function apiRequest(
     options: RequestInit = {}
 ): Promise<Response> {
     const token = getAuthToken();
-    if (!token) {
-        throw new Error('Not authenticated');
-    }
-
-    const headers = {
+    const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
+        ...options.headers as Record<string, string>,
     };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
 
     const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
         headers,
+        credentials: 'include', // allow cookie-based auth
     });
 
     if (!response.ok) {
@@ -139,35 +144,16 @@ async function retryWithBackoff<T>(
  */
 const cache = {
     get(): Favorite[] | null {
-        try {
-            const cached = localStorage.getItem(CACHE_KEY);
-            if (!cached) return null;
-            
-            const { data, timestamp } = JSON.parse(cached);
-            if (Date.now() - timestamp > CACHE_TTL) {
-                this.clear();
-                return null;
-            }
-            
-            return data;
-        } catch {
-            return null;
-        }
+        // Disabled localStorage caching per requirement; always fetch fresh
+        return null;
     },
 
     set(data: Favorite[]): void {
-        try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({
-                data,
-                timestamp: Date.now()
-            }));
-        } catch (error) {
-            console.warn('Failed to cache favorites:', error);
-        }
+        // No-op (caching disabled)
     },
 
     clear(): void {
-        localStorage.removeItem(CACHE_KEY);
+        // No-op (caching disabled)
     }
 };
 

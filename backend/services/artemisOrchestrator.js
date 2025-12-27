@@ -8,18 +8,75 @@ dotenv.config();
 /**
  * Artemis Orchestrator
  * --------------------
- * این سرویس تصمیم نهایی را با استفاده از چند LLM (Gemini, Claude, OpenAI, DeepSeek)
+ * این سرویس تصمیم نهایی را با استفاده از چند LLM (Gemini, Claude, OpenAI, DeepSeek, OpenRouter)
  * و استراتژی تعریف شده در ArtemisConfig می‌گیرد.
  *
  * توجه: فعلاً فقط Gemini (internal) به صورت کامل پیاده شده؛
  * بقیه LLMها در صورت تنظیم کلید محیطی استفاده می‌شوند، در غیر این صورت نادیده گرفته می‌شوند.
  */
 
+/**
+ * Key Pool Helper - Multi-API-key support with round-robin
+ * Supports both single key (PROVIDER_API_KEY) and multiple keys (PROVIDER_API_KEYS=key1,key2,key3)
+ */
+const keyPools = {};
+const keyPoolIndices = {};
+
+function getNextKey(providerName) {
+  // Check if pool already initialized
+  if (!keyPools[providerName]) {
+    const multiKeyEnv = process.env[`${providerName.toUpperCase()}_API_KEYS`];
+    let singleKeyEnv = process.env[`${providerName.toUpperCase()}_API_KEY`];
+    
+    // Fallback to legacy env var names for backward compatibility
+    if (!singleKeyEnv) {
+      if (providerName === 'claude') {
+        singleKeyEnv = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+      } else if (providerName === 'openai') {
+        singleKeyEnv = process.env.CHATGPT_API_KEY;
+      } else if (providerName === 'deepseek') {
+        singleKeyEnv = process.env.API_KEY;
+      }
+    }
+    
+    if (multiKeyEnv) {
+      // Multiple keys: comma-separated
+      keyPools[providerName] = multiKeyEnv.split(',').map(k => k.trim()).filter(k => k);
+      keyPoolIndices[providerName] = 0;
+    } else if (singleKeyEnv) {
+      // Single key
+      keyPools[providerName] = [singleKeyEnv.trim()];
+      keyPoolIndices[providerName] = 0;
+    } else {
+      // No key available
+      keyPools[providerName] = [];
+      keyPoolIndices[providerName] = 0;
+    }
+  }
+  
+  if (keyPools[providerName].length === 0) {
+    return null;
+  }
+  
+  // Round-robin selection
+  const currentIndex = keyPoolIndices[providerName];
+  const key = keyPools[providerName][currentIndex];
+  keyPoolIndices[providerName] = (currentIndex + 1) % keyPools[providerName].length;
+  
+  // Log key index only (never log key value)
+  if (keyPools[providerName].length > 1) {
+    console.log(`[KeyPool] ${providerName}: using key index ${currentIndex}/${keyPools[providerName].length - 1}`);
+  }
+  
+  return key;
+}
+
 const PROVIDERS = {
   gemini: 'gemini',
   claude: 'claude',
   openai: 'openai',
   deepseek: 'deepseek',
+  openrouter: 'openrouter',
 };
 
 async function callGemini(prompt, systemInstruction) {
@@ -29,7 +86,7 @@ async function callGemini(prompt, systemInstruction) {
 }
 
 async function callClaude(prompt, systemInstruction) {
-  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+  const apiKey = getNextKey('claude');
   if (!apiKey) return null;
 
   const body = {
@@ -63,7 +120,7 @@ async function callClaude(prompt, systemInstruction) {
 }
 
 async function callOpenAI(prompt, systemInstruction) {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.CHATGPT_API_KEY;
+  const apiKey = getNextKey('openai');
   if (!apiKey) return null;
 
   const messages = [];
@@ -97,7 +154,7 @@ async function callOpenAI(prompt, systemInstruction) {
 }
 
 async function callDeepSeek(prompt, systemInstruction) {
-  const apiKey = process.env.DEEPSEEK_API_KEY || process.env.API_KEY;
+  const apiKey = getNextKey('deepseek');
   if (!apiKey) return null;
 
   const messages = [];
@@ -123,6 +180,52 @@ async function callDeepSeek(prompt, systemInstruction) {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     console.error('DeepSeek API error:', res.status, text);
+    return null;
+  }
+
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content || null;
+}
+
+async function callOpenRouter(prompt, systemInstruction) {
+  const apiKey = getNextKey('openrouter');
+  if (!apiKey) return null;
+
+  const messages = [];
+  if (systemInstruction) {
+    messages.push({ role: 'system', content: systemInstruction });
+  }
+  messages.push({ role: 'user', content: prompt });
+
+  const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+  };
+  
+  // Optional headers from env
+  if (process.env.OPENROUTER_HTTP_REFERER) {
+    headers['HTTP-Referer'] = process.env.OPENROUTER_HTTP_REFERER;
+  }
+  if (process.env.OPENROUTER_X_TITLE) {
+    headers['X-Title'] = process.env.OPENROUTER_X_TITLE;
+  }
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.3,
+      max_tokens: 1024,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    console.error('OpenRouter API error:', res.status, text);
     return null;
   }
 
@@ -255,6 +358,9 @@ You MUST return ONLY JSON with this schema:
   if (activeModel === 'deepseek' || activeModel === 'hybrid') {
     providersToUse.push(PROVIDERS.deepseek);
   }
+  if (activeModel === 'openrouter' || activeModel === 'hybrid') {
+    providersToUse.push(PROVIDERS.openrouter);
+  }
 
   if (!providersToUse.length) {
     // پیش‌فرض: فقط internal
@@ -272,6 +378,8 @@ You MUST return ONLY JSON with this schema:
         raw = await callOpenAI(basePrompt, systemInstruction);
       } else if (provider === PROVIDERS.deepseek) {
         raw = await callDeepSeek(basePrompt, systemInstruction);
+      } else if (provider === PROVIDERS.openrouter) {
+        raw = await callOpenRouter(basePrompt, systemInstruction);
       }
 
       const parsed = parseDecisionJson(raw);

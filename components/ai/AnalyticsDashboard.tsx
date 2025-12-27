@@ -119,7 +119,7 @@ const AnalyticsDashboard: React.FC = () => {
     const trendData = useMemo(() => {
         if (!data) return { precision: [], recall: [], accuracy: [] };
         
-        // Generate trend data from precision/recall arrays
+        // Generate trend data from precision/recall arrays (no random jitter)
         const days = data.resourceUsage.precision.length;
         return {
             precision: data.resourceUsage.precision.map((p, i) => ({
@@ -132,7 +132,7 @@ const AnalyticsDashboard: React.FC = () => {
             })),
             accuracy: Array.from({ length: days }, (_, i) => ({
                 day: i + 1,
-                value: data.performance.avgAccuracy + (Math.random() * 2 - 1),
+                value: data.performance.avgAccuracy,
             })),
         };
     }, [data]);

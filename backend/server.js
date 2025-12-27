@@ -48,7 +48,7 @@ import favoriteAlertsRoutes from './routes/favoriteAlerts.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = Number(process.env.PORT) || 5001;
 
 // Resolve __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -108,27 +108,66 @@ app.use('/api/', limiter);
 // ROUTES
 // ============================================================================
 
-// Health check
+// Health check - Safe endpoint (no DB required)
 app.get('/health', async (req, res) => {
+  // Always return JSON, even if DB/Redis are down
+  const health = {
+    status: 'healthy',
+    api: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  };
+
+  // Check database (non-blocking)
   try {
     const result = await pool.query('SELECT NOW()');
-    const mqStatus = messageQueue.getStatus();
-    res.json({
-      status: 'healthy',
-      timestamp: result.rows[0].now,
-      database: 'connected',
-      messageQueue: mqStatus,
-      uptime: process.uptime()
-    });
+    health.database = 'connected';
+    health.dbTimestamp = result.rows[0].now;
   } catch (error) {
-    const mqStatus = messageQueue.getStatus();
-    res.status(503).json({
-      status: 'unhealthy',
-      database: 'disconnected',
-      messageQueue: mqStatus,
-      error: error.message
-    });
+    health.database = 'disconnected';
+    health.dbError = error.message;
+    health.status = 'degraded'; // Degraded but API is still up
   }
+
+  // Check message queue (non-blocking, always safe)
+  try {
+    health.messageQueue = messageQueue.getStatus();
+  } catch (error) {
+    health.messageQueue = { connected: false, fallbackMode: true, error: error.message };
+  }
+
+  // Get engine heartbeat if enabled (non-blocking)
+  if (process.env.ENGINE_ENABLED === 'true') {
+    try {
+      const { engineWorker } = await import('./workers/engineWorker.js');
+      const engineHeartbeat = engineWorker.getHeartbeat();
+      
+      if (engineHeartbeat && engineHeartbeat.timestamp) {
+        const heartbeatAge = Date.now() - new Date(engineHeartbeat.timestamp).getTime();
+        engineHeartbeat.isFresh = heartbeatAge < 120000; // 2 minutes
+      }
+      
+      health.engine = {
+        enabled: true,
+        isRunning: engineHeartbeat?.isRunning || false,
+        lastSuccessfulCycle: engineHeartbeat?.lastSuccessfulCycle || null,
+        lastError: engineHeartbeat?.lastError || null,
+        cycleCount: engineHeartbeat?.cycleCount || 0,
+        heartbeatFresh: engineHeartbeat?.isFresh !== false,
+      };
+    } catch (error) {
+      health.engine = {
+        enabled: true,
+        error: 'Failed to get heartbeat',
+      };
+    }
+  } else {
+    health.engine = { enabled: false };
+  }
+
+  // Return 200 even if DB is down (API is still serving)
+  const statusCode = health.database === 'connected' ? 200 : 503;
+  res.status(statusCode).json(health);
 });
 
 // API routes
@@ -195,49 +234,119 @@ app.use((err, req, res, next) => {
 // START SERVER
 // ============================================================================
 
-const server = app.listen(PORT, async () => {
+// GUARANTEE HTTP LISTEN - Always execute, even if background services fail
+const server = app.listen(PORT, '0.0.0.0', () => {
+  // Log actual bound address and port AFTER listen succeeds
+  const address = server.address();
+  const boundAddress = address ? `${address.address}:${address.port}` : `0.0.0.0:${PORT}`;
+  
   console.log('');
   console.log('🚀 ============================================');
   console.log(`🚀 TitanGold Backend API`);
-  console.log(`🚀 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🚀 Server listening on ${boundAddress}`);
   console.log(`🚀 Health check: http://localhost:${PORT}/health`);
   console.log('🚀 ============================================');
   console.log('');
 
-  // Initialize Message Queue
-  try {
-    await messageQueue.connect();
-    console.log('✅ Message Queue initialized');
-  } catch (error) {
-    console.warn('⚠️ Message Queue initialization failed, using fallback mode:', error.message);
+  // Initialize background services (non-blocking, wrapped in try/catch)
+  // These MUST NOT prevent the server from listening
+  (async () => {
+    // Initialize Message Queue
+    try {
+      await messageQueue.connect();
+      console.log('✅ Message Queue initialized');
+    } catch (error) {
+      console.warn('⚠️ Message Queue initialization failed, using fallback mode:', error.message);
+    }
+
+    // Start Autopilot Engine
+    try {
+      autopilot.start();
+    } catch (error) {
+      console.error('❌ Failed to start Autopilot:', error);
+    }
+    
+    // Start 24/7 Scheduler Service
+    try {
+      scheduler.start();
+    } catch (error) {
+      console.error('❌ Failed to start Scheduler:', error);
+    }
+    
+    // Start Trading Engine
+    try {
+      tradingEngine.start();
+    } catch (error) {
+      console.error('❌ Failed to start Trading Engine:', error);
+    }
+
+    // Start Engine Worker (if enabled)
+    if (process.env.ENGINE_ENABLED === 'true') {
+      try {
+        const { engineWorker } = await import('./workers/engineWorker.js');
+        await engineWorker.start();
+        console.log('✅ Engine Worker started');
+      } catch (error) {
+        console.error('❌ Failed to start Engine Worker:', error);
+        // Don't crash server if engine fails to start
+      }
+    } else {
+      console.log('⏸️ Engine Worker disabled (ENGINE_ENABLED != true)');
+    }
+
+    // Initialize WebSocket Notifications
+    try {
+      initWebsocket(server);
+      console.log('✅ WebSocket notifications ready at /ws/notifications');
+    } catch (error) {
+      console.error('❌ Failed to initialize WebSocket:', error);
+    }
+    
+    // Initialize Favorites WebSocket for real-time price updates
+    try {
+      favoritesWebSocketService.initialize(server);
+      console.log('✅ Favorites WebSocket ready at /ws/favorites');
+    } catch (error) {
+      console.error('❌ Failed to initialize Favorites WebSocket:', error);
+    }
+    
+    // Start Favorites Alert Monitor
+    try {
+      favoritesAlertMonitor.start();
+      console.log('✅ Favorites Alert Monitor started (10s interval)');
+    } catch (error) {
+      console.error('❌ Failed to start Favorites Alert Monitor:', error);
+    }
+  })().catch(error => {
+    console.error('❌ Error initializing background services:', error);
+    // Server is already listening, so we continue
+  });
+});
+
+// Handle listen errors
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use`);
+  } else {
+    console.error('❌ Server error:', error);
   }
-
-  // Start Autopilot Engine
-  autopilot.start();
-  
-  // Start 24/7 Scheduler Service
-  scheduler.start();
-  
-  // Start Trading Engine
-  tradingEngine.start();
-
-  // Initialize WebSocket Notifications
-  initWebsocket(server);
-  console.log('✅ WebSocket notifications ready at /ws/notifications');
-  
-  // Initialize Favorites WebSocket for real-time price updates
-  favoritesWebSocketService.initialize(server);
-  console.log('✅ Favorites WebSocket ready at /ws/favorites');
-  
-  // Start Favorites Alert Monitor
-  favoritesAlertMonitor.start();
-  console.log('✅ Favorites Alert Monitor started (10s interval)');
+  process.exit(1);
 });
 
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM signal received: closing HTTP server');
+  
+  // Shutdown Engine Worker if running
+  if (process.env.ENGINE_ENABLED === 'true') {
+    try {
+      const { engineWorker } = await import('./workers/engineWorker.js');
+      await engineWorker.stop();
+    } catch (error) {
+      console.error('Error stopping engine worker:', error);
+    }
+  }
   
   // Shutdown services
   favoritesWebSocketService.shutdown();

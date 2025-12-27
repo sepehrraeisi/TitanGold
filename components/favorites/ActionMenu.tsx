@@ -36,7 +36,7 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ onSetAlert, onTrade, onRemove }
                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
             </button>
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-36 bg-[#2a2d42] border border-gray-700 rounded-md shadow-lg z-10">
+                <div className="absolute right-0 mt-2 w-36 bg-[#2a2d42] border border-gray-700 rounded-md shadow-2xl z-50">
                     {menuItems.map(menuItem => (
                         <button
                             key={menuItem.label}

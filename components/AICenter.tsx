@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
-import AIManager from './ai/AIManager.tsx';
+import AIManager from './ai/AIManager/index.tsx';
 import AIAgents from './ai/AIAgents.tsx';
 import TrainingCenter from './ai/TrainingCenter.tsx';
 import AnalyticsDashboard from './ai/AnalyticsDashboard.tsx';
@@ -13,16 +13,28 @@ const AICenter: React.FC = () => {
     const { t } = useLanguage();
     const [activeTab, setActiveTab] = useState<AITab>('manager');
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
-    useEffect(() => {
         const prefetchData = async () => {
             setIsLoading(true);
+        setLoadError(null);
+        try {
             // This is a placeholder pre-fetch to simulate loading the section.
             // Each child component will fetch its own specific data.
             await api.fetchAIManagerData(); 
+        } catch (e: any) {
+            // We only show a minimal inline error; details go to console.
+            console.error('Failed to prefetch AI manager data:', e);
+            const message = e?.message || e?.toString() || 'Unknown error';
+            setLoadError(message);
+        } finally {
             setIsLoading(false);
+        }
         };
+
+    useEffect(() => {
         prefetchData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const renderContent = () => {
@@ -74,7 +86,23 @@ const AICenter: React.FC = () => {
             </div>
             
             <div className="mt-6">
-                {isLoading ? <div className="text-center p-10">{t('loading')}</div> : renderContent()}
+                {isLoading ? (
+                    <div className="text-center p-10">{t('loading')}</div>
+                ) : loadError ? (
+                    <div className="text-center p-6 space-y-3">
+                        <p className="text-sm text-red-400">
+                            {t('failed_to_load_data') || 'Failed to load AI center data.'}
+                        </p>
+                        <button
+                            onClick={prefetchData}
+                            className="inline-flex items-center px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold"
+                        >
+                            {t('retry') || 'Retry'}
+                        </button>
+                    </div>
+                ) : (
+                    renderContent()
+                )}
             </div>
         </div>
     );
