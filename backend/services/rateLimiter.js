@@ -1,6 +1,11 @@
 /**
- * Rate Limiter با Exponential Backoff + Jitter + Cache
+ * Rate Limiter با Exponential Backoff + Jitter + LRU Cache
  * برای مدیریت درخواست‌های API صرافی‌ها
+ * 
+ * Cache Strategy:
+ * - Markets: 15min TTL (infrequent changes)
+ * - Prices: 30s TTL (UI responsiveness)
+ * - LRU eviction: max 100 entries
  */
 
 class RateLimiter {
@@ -10,12 +15,13 @@ class RateLimiter {
     this.minDelay = config.minDelay || 100; // 100ms
     this.maxDelay = config.maxDelay || 60000; // 60s
     this.jitterFactor = config.jitterFactor || 0.1; // 10%
-    this.maxCacheSize = config.maxCacheSize || 50; // Limit cache entries
+    this.maxCacheSize = config.maxCacheSize || 100; // Increased from 50
     
     // Track requests per endpoint
     this.requests = new Map();
     this.backoffDelays = new Map();
     this.cache = new Map();
+    this.cacheAccessOrder = []; // For LRU
   }
 
   /**
@@ -99,13 +105,31 @@ class RateLimiter {
 
   /**
    * Execute function with rate limiting
+   * 
+   * @param {string} key - Cache key
+   * @param {function} fn - Function to execute
+   * @param {boolean} useCache - Enable caching
+   * @param {number} cacheTtl - Cache TTL in ms (default: context-specific)
    */
-  async execute(key, fn, useCache = false, cacheTtl = 60000) { // Reduced from 300s to 60s
+  async execute(key, fn, useCache = false, cacheTtl = null) {
+    // Auto-detect TTL based on key pattern if not specified
+    if (cacheTtl === null) {
+      if (key.includes('loadMarkets') || key.includes('markets')) {
+        cacheTtl = 900000; // 15 minutes for markets
+      } else if (key.includes('ticker') || key.includes('price')) {
+        cacheTtl = 30000; // 30 seconds for prices
+      } else {
+        cacheTtl = 60000; // 1 minute default
+      }
+    }
+
     // Check cache first
     if (useCache) {
       const cached = this.cache.get(key);
       if (cached && Date.now() - cached.timestamp < cacheTtl) {
-        console.log(`✅ Cache hit for ${key}`);
+        // Update LRU access order
+        this.updateLRU(key);
+        // console.log(`✅ Cache hit for ${key} (age: ${Math.floor((Date.now() - cached.timestamp) / 1000)}s)`);
         return cached.data;
       }
     }
@@ -123,19 +147,9 @@ class RateLimiter {
       const result = await fn();
       this.recordRequest(key);
       
-      // Cache successful result
+      // Cache successful result with LRU eviction
       if (useCache) {
-        // Enforce max cache size
-        if (this.cache.size >= this.maxCacheSize) {
-          // Remove oldest entry
-          const firstKey = this.cache.keys().next().value;
-          this.cache.delete(firstKey);
-        }
-        
-        this.cache.set(key, {
-          data: result,
-          timestamp: Date.now(),
-        });
+        this.setCacheWithLRU(key, result, cacheTtl);
       }
       
       return result;
@@ -147,6 +161,43 @@ class RateLimiter {
       }
       throw error;
     }
+  }
+
+  /**
+   * Set cache entry with LRU eviction
+   */
+  setCacheWithLRU(key, data, ttl) {
+    // Enforce max cache size with LRU eviction
+    if (this.cache.size >= this.maxCacheSize) {
+      // Remove least recently used entry
+      const lruKey = this.cacheAccessOrder.shift();
+      if (lruKey && this.cache.has(lruKey)) {
+        this.cache.delete(lruKey);
+        // console.log(`🗑️ LRU evicted: ${lruKey}`);
+      }
+    }
+    
+    this.cache.set(key, {
+      data: data,
+      timestamp: Date.now(),
+      ttl: ttl,
+    });
+    
+    // Add to access order (most recent at end)
+    this.updateLRU(key);
+  }
+
+  /**
+   * Update LRU access order
+   */
+  updateLRU(key) {
+    // Remove from current position
+    const index = this.cacheAccessOrder.indexOf(key);
+    if (index > -1) {
+      this.cacheAccessOrder.splice(index, 1);
+    }
+    // Add to end (most recently used)
+    this.cacheAccessOrder.push(key);
   }
 
   /**
@@ -177,18 +228,53 @@ class RateLimiter {
   /**
    * Clear expired cache entries
    */
-  cleanupCache(maxAge = 120000) { // Reduced from 600s to 120s (2 minutes)
+  cleanupCache(maxAge = 900000) { // Increased from 120s to 15min
     const now = Date.now();
     let cleanedCount = 0;
     for (const [key, value] of this.cache.entries()) {
-      if (now - value.timestamp > maxAge) {
+      const age = now - value.timestamp;
+      const ttl = value.ttl || maxAge;
+      if (age > ttl) {
         this.cache.delete(key);
+        // Remove from LRU order
+        const index = this.cacheAccessOrder.indexOf(key);
+        if (index > -1) {
+          this.cacheAccessOrder.splice(index, 1);
+        }
         cleanedCount++;
       }
     }
     if (cleanedCount > 0) {
       console.log(`🧹 Cleaned ${cleanedCount} expired cache entries`);
     }
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats() {
+    const stats = {
+      size: this.cache.size,
+      maxSize: this.maxCacheSize,
+      utilizationPercent: Math.round((this.cache.size / this.maxCacheSize) * 100),
+      entries: [],
+      totalRequests: Array.from(this.requests.values()).reduce(
+        (sum, log) => sum + log.length,
+        0
+      ),
+    };
+
+    // Add cache entry details
+    for (const [key, value] of this.cache.entries()) {
+      const age = Date.now() - value.timestamp;
+      stats.entries.push({
+        key,
+        ageSeconds: Math.floor(age / 1000),
+        ttlSeconds: Math.floor((value.ttl || 60000) / 1000),
+      });
+    }
+
+    return stats;
   }
 }
 
@@ -210,10 +296,11 @@ export const exchangeLimiter = new RateLimiter({
   jitterFactor: 0.1,
 });
 
-// Cleanup expired cache every 1 minute (reduced from 5 minutes)
+// Cleanup expired cache every 2 minutes (reduced from 1 minute)
+// Less frequent cleanup since we have longer TTLs
 setInterval(() => {
   mexcLimiter.cleanupCache();
   exchangeLimiter.cleanupCache();
-}, 60000);
+}, 120000);
 
 export default RateLimiter;

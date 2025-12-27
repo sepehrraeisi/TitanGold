@@ -267,40 +267,45 @@ const server = app.listen(PORT, '0.0.0.0', () => {
       console.warn('⚠️ Message Queue initialization failed, using fallback mode:', error.message);
     }
 
-    // Start Autopilot Engine
-    if (process.env.AUTOPILOT_ENABLED === 'true') {
-      try {
-        autopilot.start();
-        console.log('✅ Autopilot started');
-      } catch (error) {
-        console.error('❌ Failed to start Autopilot:', error);
+    // Engines disabled in backend API - run in separate titan-engine-worker
+    if (process.env.DISABLE_ENGINES !== 'true') {
+      // Start Autopilot Engine
+      if (process.env.AUTOPILOT_ENABLED === 'true') {
+        try {
+          autopilot.start();
+          console.log('✅ Autopilot started');
+        } catch (error) {
+          console.error('❌ Failed to start Autopilot:', error);
+        }
+      } else {
+        console.log('⏸️ Autopilot disabled (AUTOPILOT_ENABLED != true)');
+      }
+      
+      // Start 24/7 Scheduler Service
+      if (process.env.SCHEDULER_ENABLED === 'true') {
+        try {
+          scheduler.start();
+          console.log('✅ Scheduler started');
+        } catch (error) {
+          console.error('❌ Failed to start Scheduler:', error);
+        }
+      } else {
+        console.log('⏸️ Scheduler disabled (SCHEDULER_ENABLED != true)');
+      }
+      
+      // Start Trading Engine
+      if (process.env.TRADING_ENGINE_ENABLED === 'true') {
+        try {
+          tradingEngine.start();
+          console.log('✅ Trading Engine started');
+        } catch (error) {
+          console.error('❌ Failed to start Trading Engine:', error);
+        }
+      } else {
+        console.log('⏸️ Trading Engine disabled (TRADING_ENGINE_ENABLED != true)');
       }
     } else {
-      console.log('⏸️ Autopilot disabled (AUTOPILOT_ENABLED != true)');
-    }
-    
-    // Start 24/7 Scheduler Service
-    if (process.env.SCHEDULER_ENABLED === 'true') {
-      try {
-        scheduler.start();
-        console.log('✅ Scheduler started');
-      } catch (error) {
-        console.error('❌ Failed to start Scheduler:', error);
-      }
-    } else {
-      console.log('⏸️ Scheduler disabled (SCHEDULER_ENABLED != true)');
-    }
-    
-    // Start Trading Engine
-    if (process.env.TRADING_ENGINE_ENABLED === 'true') {
-      try {
-        tradingEngine.start();
-        console.log('✅ Trading Engine started');
-      } catch (error) {
-        console.error('❌ Failed to start Trading Engine:', error);
-      }
-    } else {
-      console.log('⏸️ Trading Engine disabled (TRADING_ENGINE_ENABLED != true)');
+      console.log('🔧 Engines disabled in backend - running in separate titan-engine-worker');
     }
 
     // Start Engine Worker (if enabled)

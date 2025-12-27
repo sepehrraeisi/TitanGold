@@ -4,11 +4,12 @@
       "name": "titan-backend",
       "script": "./server.js",
       "cwd": "/home/ubuntu/webapp/TitanGold/backend",
-      "instances": 1,
-      "exec_mode": "fork",
+      "instances": 2,
+      "exec_mode": "cluster",
       "env": {
         "NODE_ENV": "production",
-        "PORT": 5002
+        "PORT": 5002,
+        "DISABLE_ENGINES": "true"
       },
       "env_file": "/home/ubuntu/webapp/TitanGold/backend/.env",
       "error_file": "/home/ubuntu/.pm2/logs/titan-backend-error.log",
@@ -17,13 +18,42 @@
       "merge_logs": true,
       "autorestart": true,
       "watch": false,
-      "max_memory_restart": "750M",
+      "max_memory_restart": "1G",
       "max_restarts": 10,
       "min_uptime": "10s",
       "exp_backoff_restart_delay": 100,
       "kill_timeout": 5000,
       "listen_timeout": 10000,
       "shutdown_with_message": true,
+      "restart_delay": 1000
+    },
+    {
+      "name": "titan-engine-worker",
+      "script": "./workers/engineWorkerLeader.js",
+      "cwd": "/home/ubuntu/webapp/TitanGold/backend",
+      "instances": 1,
+      "exec_mode": "fork",
+      "env": {
+        "NODE_ENV": "production",
+        "ENGINE_MODE": "leader",
+        "AUTOPILOT_ENABLED": "true",
+        "SCHEDULER_ENABLED": "true",
+        "TRADING_ENGINE_ENABLED": "true",
+        "IDLE_MODE_ENABLED": "true",
+        "IDLE_CHECK_INTERVAL_MS": "5000"
+      },
+      "env_file": "/home/ubuntu/webapp/TitanGold/backend/.env",
+      "error_file": "/home/ubuntu/.pm2/logs/titan-engine-error.log",
+      "out_file": "/home/ubuntu/.pm2/logs/titan-engine-out.log",
+      "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+      "merge_logs": true,
+      "autorestart": true,
+      "watch": false,
+      "max_memory_restart": "1G",
+      "max_restarts": 10,
+      "min_uptime": "10s",
+      "exp_backoff_restart_delay": 100,
+      "kill_timeout": 5000,
       "restart_delay": 1000
     }
   ]
