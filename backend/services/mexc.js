@@ -1,6 +1,7 @@
 import ccxt from 'ccxt';
 import dotenv from 'dotenv';
 import { query } from '../database/db.js';
+import { mexcLimiter } from './rateLimiter.js';
 
 dotenv.config();
 
@@ -106,10 +107,19 @@ class MexcService {
     if (!this.exchange) {
       await this.getExchange(userId);
     }
-    if (!this.markets) {
-      this.markets = await this.exchange.loadMarkets();
-    }
-    return this.markets;
+    
+    // Use rate limiter with 15-minute cache
+    return await mexcLimiter.execute(
+      'mexc:loadMarkets',
+      async () => {
+        if (!this.markets) {
+          this.markets = await this.exchange.loadMarkets();
+        }
+        return this.markets;
+      },
+      true, // use cache
+      900000 // 15 minutes
+    );
   }
 
   /**
@@ -146,21 +156,29 @@ class MexcService {
   }
 
   async fetchPrices(userId, symbols = []) {
-    try {
-      await this.getExchange(userId);
-      // If symbols is empty, fetch all tickers (careful with rate limits)
-      // Better to fetch specific list
-      if (symbols.length === 0) {
-        const tickers = await this.exchange.fetchTickers();
-        return tickers;
-      } else {
-        const tickers = await this.exchange.fetchTickers(symbols);
-        return tickers;
-      }
-    } catch (error) {
+    const cacheKey = symbols.length === 0 
+      ? 'mexc:fetchPrices:all' 
+      : `mexc:fetchPrices:${symbols.join(',')}`;
+    
+    return await mexcLimiter.execute(
+      cacheKey,
+      async () => {
+        await this.getExchange(userId);
+        
+        if (symbols.length === 0) {
+          const tickers = await this.exchange.fetchTickers();
+          return tickers;
+        } else {
+          const tickers = await this.exchange.fetchTickers(symbols);
+          return tickers;
+        }
+      },
+      true, // use cache
+      60000 // 1 minute cache for prices
+    ).catch(error => {
       console.error('MEXC fetchPrices error:', error);
       throw error;
-    }
+    });
   }
 
   async getBalance(userId) {

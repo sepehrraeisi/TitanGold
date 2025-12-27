@@ -1,0 +1,26 @@
+{
+  "apps": [
+    {
+      "name": "titan-backend",
+      "script": "./server.js",
+      "cwd": "/home/ubuntu/webapp/TitanGold/backend",
+      "instances": 2,
+      "exec_mode": "cluster",
+      "env": {
+        "NODE_ENV": "production",
+        "PORT": 5002
+      },
+      "env_file": "/home/ubuntu/webapp/TitanGold/backend/.env",
+      "error_file": "/home/ubuntu/.pm2/logs/titan-backend-error.log",
+      "out_file": "/home/ubuntu/.pm2/logs/titan-backend-out.log",
+      "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+      "merge_logs": true,
+      "autorestart": true,
+      "watch": false,
+      "max_memory_restart": "500M",
+      "kill_timeout": 5000,
+      "listen_timeout": 10000,
+      "shutdown_with_message": true
+    }
+  ]
+}
