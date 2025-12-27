@@ -45,6 +45,8 @@ import userPreferencesRoutes from './routes/userPreferences.js';
 import favoritesRoutes from './routes/favorites.js';
 import favoriteAlertsRoutes from './routes/favoriteAlerts.js';
 import healthRoutes from './routes/health.js';
+import backtestRoutes from './routes/backtest.js';
+import scenariosRoutes from './routes/scenarios.js';
 
 dotenv.config();
 
@@ -198,6 +200,8 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/user-preferences', userPreferencesRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/favorites', favoriteAlertsRoutes); // Alerts are nested under favorites
+app.use('/api/backtest', backtestRoutes);
+app.use('/api/scenarios', scenariosRoutes);
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
 
