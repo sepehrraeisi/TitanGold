@@ -19,7 +19,7 @@ try {
  * Basic health check (fast)
  * Returns 200 if service is running
  */
-router.get('/health', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const health = {
       status: 'ok',
@@ -49,6 +49,7 @@ router.get('/health', async (req, res) => {
 /**
  * Readiness check (includes DB + dependencies)
  * Returns 200 only if all critical services are ready
+ * Accessible via both /api/ready and /api/health/ready
  */
 router.get('/ready', async (req, res) => {
   const checks = {
@@ -112,6 +113,7 @@ router.get('/ready', async (req, res) => {
 
 /**
  * Detailed status (admin only - includes sensitive info)
+ * Accessible via /api/health/status
  */
 router.get('/status', async (req, res) => {
   try {
