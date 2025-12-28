@@ -183,10 +183,15 @@ Return ONLY JSON with this schema:
   }
 }
 `;
-        const raw = await aiService.askArtemis(prompt);
+        // Timeout wrapper (30s)
+        const raw = await withTimeout(
+          aiService.askArtemis(prompt),
+          30000,
+          'Agent-1 timeout after 30s'
+        );
         const parsed = safeParseJson(raw);
         if (parsed) {
-          return res.json({
+          const result = {
             agentId: id,
             function: funcName || 'runTechnicalAnalysis',
             signal: parsed.signal || 'NEUTRAL',
@@ -194,14 +199,20 @@ Return ONLY JSON with this schema:
             indicators: parsed.indicators || {},
             symbol,
             timeframe
-          });
+          };
+          // Cache for 30s
+          setCache(cacheKey, result, 30000);
+          return res.json(result);
         }
       } catch (e) {
         console.error('Agent-1 AI error:', e);
+        if (e.message?.includes('timeout')) {
+          return sendError(res, 'AI_TIMEOUT', 'Technical Analysis agent timed out', 504);
+        }
       }
 
       // Fallback
-      return res.json({
+      const fallback1 = {
         agentId: id,
         function: funcName || 'runTechnicalAnalysis',
         signal: 'NEUTRAL',
@@ -213,7 +224,9 @@ Return ONLY JSON with this schema:
         },
         symbol,
         timeframe
-      });
+      };
+      setCache(cacheKey, fallback1, 30000);
+      return res.json(fallback1);
     }
 
     // Agent 2: Risk Management
@@ -230,30 +243,43 @@ Return ONLY JSON:
   "riskLevel": "low" | "medium" | "high"
 }
 `;
-        const raw = await aiService.askArtemis(prompt);
+        // Timeout wrapper (30s)
+        const raw = await withTimeout(
+          aiService.askArtemis(prompt),
+          30000,
+          'Agent-2 timeout after 30s'
+        );
         const parsed = safeParseJson(raw);
         if (parsed) {
-          return res.json({
+          const result = {
             agentId: id,
             function: funcName || 'runRiskAssessment',
             recommendation: parsed.recommendation || 'HOLD',
             confidence: parsed.confidence ?? 60,
             riskLevel: parsed.riskLevel || 'medium',
             symbol
-          });
+          };
+          // Cache for 30s
+          setCache(cacheKey, result, 30000);
+          return res.json(result);
         }
       } catch (e) {
         console.error('Agent-2 AI error:', e);
+        if (e.message?.includes('timeout')) {
+          return sendError(res, 'AI_TIMEOUT', 'Risk Management agent timed out', 504);
+        }
       }
 
-      return res.json({
+      const fallback2 = {
         agentId: id,
         function: funcName || 'runRiskAssessment',
         recommendation: 'HOLD',
         confidence: 60,
         riskLevel: 'medium',
         symbol
-      });
+      };
+      setCache(cacheKey, fallback2, 30000);
+      return res.json(fallback2);
     }
 
     // Agent 15: Timing
@@ -270,30 +296,43 @@ Return ONLY JSON:
   "timing": "immediate" | "soon" | "later"
 }
 `;
-        const raw = await aiService.askArtemis(prompt);
+        // Timeout wrapper (30s)
+        const raw = await withTimeout(
+          aiService.askArtemis(prompt),
+          30000,
+          'Agent-15 timeout after 30s'
+        );
         const parsed = safeParseJson(raw);
         if (parsed) {
-          return res.json({
+          const result = {
             agentId: id,
             function: funcName || 'runTimingAnalysis',
             signal: parsed.signal || 'WAIT',
             confidence: parsed.confidence ?? 55,
             timing: parsed.timing || 'neutral',
             symbol
-          });
+          };
+          // Cache for 30s
+          setCache(cacheKey, result, 30000);
+          return res.json(result);
         }
       } catch (e) {
         console.error('Agent-15 AI error:', e);
+        if (e.message?.includes('timeout')) {
+          return sendError(res, 'AI_TIMEOUT', 'Timing agent timed out', 504);
+        }
       }
 
-      return res.json({
+      const fallback15 = {
         agentId: id,
         function: funcName || 'runTimingAnalysis',
         signal: 'WAIT',
         confidence: 55,
         timing: 'neutral',
         symbol
-      });
+      };
+      setCache(cacheKey, fallback15, 30000);
+      return res.json(fallback15);
     }
 
     // Generic fallback for other agents – safe NO-OP style response
@@ -306,7 +345,10 @@ Return ONLY JSON:
     });
   } catch (error) {
     console.error('Failed to run AI agent:', error);
-    res.status(500).json({ error: 'Failed to run AI agent' });
+    if (error.message?.includes('timeout')) {
+      return sendError(res, 'AI_TIMEOUT', 'AI agent timed out', 504);
+    }
+    return sendError(res, 'AI_ERROR', 'Failed to run AI agent', 500, { error: error.message });
   }
 });
 
