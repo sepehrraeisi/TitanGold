@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useLanguage } from '../../context/LanguageContext.tsx';
 
 interface SchedulerConfig {
     agents: {
@@ -37,8 +36,13 @@ interface SchedulerStatus {
     intervals: string[];
 }
 
-const SchedulerSettings: React.FC = () => {
-    const { t } = useLanguage();
+interface Props {
+    t?: (key: string) => string;
+}
+
+const SchedulerSettings: React.FC<Props> = ({ t: tProp }) => {
+    // Fallback to identity function if t is not provided
+    const t = tProp || ((key: string) => key);
     const [status, setStatus] = useState<SchedulerStatus | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);

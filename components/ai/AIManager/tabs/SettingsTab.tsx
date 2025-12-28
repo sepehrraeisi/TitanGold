@@ -612,7 +612,7 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     {/* Scheduler */}
                     {activeTab === 'scheduler' && (
                         <div className="space-y-6">
-                            <SchedulerSettings />
+                            <SchedulerSettings t={t} />
                         </div>
                     )}
 
