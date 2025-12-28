@@ -93,9 +93,13 @@ $ pm2 describe titan-engine-worker | grep restart
 │ unstable restarts │ 0                        │  ← Manual restart confirmed
 ```
 
-**Clarification**: This restart was during validation (`pm2 restart titan-engine-worker --update-env`). 
+**Clarification**: This restart was during validation (`pm2 restart titan-engine-worker --update-env` after `pm2 flush` to verify boot logs). 
 
-**Future Metric**: Track **unexpected restarts** (unstable_restarts) not total restarts.
+**Production Metric**: 
+- **Total Restarts**: 1 (manual during validation) ✅
+- **Unexpected Restarts**: 0 (no crashes) ✅
+
+**Future Monitoring**: Track **unexpected restarts** (`unstable_restarts`) as the primary stability metric, not total restarts.
 
 ---
 
