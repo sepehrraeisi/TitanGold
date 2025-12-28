@@ -1,30 +1,50 @@
-import React, { useMemo, useState } from 'react';
-import { ArtemisState, LearningSystemState, Improvement, Mistake } from '../../../../types.ts';
+import React, { useEffect, useState, useMemo } from 'react';
+import * as api from '../../../../services/api.ts';
 
 type Props = {
-    artemis: ArtemisState;
     t: (key: string) => string;
-    onRefresh: () => void;
     Card: React.FC<{ children: React.ReactNode; className?: string }>;
 };
 
-const LearningTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
-    const learning: LearningSystemState | undefined = artemis.learningSystem;
+const LearningTab: React.FC<Props> = ({ t, Card }) => {
+    const [data, setData] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [improvementFilter, setImprovementFilter] = useState<'all' | string>('all');
     const [mistakeFilter, setMistakeFilter] = useState<'all' | 'learned' | 'pending'>('all');
     const [searchQuery, setSearchQuery] = useState('');
 
-    if (!learning) {
-        return <Card><p className="text-sm text-muted-foreground">{t('no_data') || 'No data available'}</p></Card>;
-    }
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const result = await api.fetchLearningState();
+            setData(result);
+        } catch (err: any) {
+            console.error('Failed to load learning system:', err);
+            setError(err.message || 'Failed to load learning system');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+        // Auto-refresh every 15 seconds
+        const interval = setInterval(fetchData, 15000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const improvements = data?.improvements || [];
+    const mistakes = data?.mistakes || [];
 
     const improvementAreas = useMemo(() => {
-        const areas = new Set(learning.improvements.map(i => i.area));
+        const areas = new Set(improvements.map((i: any) => i.area));
         return Array.from(areas);
-    }, [learning.improvements]);
+    }, [improvements]);
 
-    const filteredImprovements: Improvement[] = useMemo(() => {
-        return learning.improvements.filter(improvement => {
+    const filteredImprovements = useMemo(() => {
+        return improvements.filter((improvement: any) => {
             if (improvementFilter !== 'all' && improvement.area !== improvementFilter) return false;
             if (searchQuery.trim()) {
                 const query = searchQuery.trim().toLowerCase();
@@ -35,22 +55,52 @@ const LearningTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
             }
             return true;
         });
-    }, [learning.improvements, improvementFilter, searchQuery]);
+    }, [improvements, improvementFilter, searchQuery]);
 
-    const filteredMistakes: Mistake[] = useMemo(() => {
-        return learning.mistakes.filter(mistake => {
+    const filteredMistakes = useMemo(() => {
+        return mistakes.filter((mistake: any) => {
             if (mistakeFilter === 'learned' && !mistake.learned) return false;
             if (mistakeFilter === 'pending' && mistake.learned) return false;
             if (searchQuery.trim()) {
                 const query = searchQuery.trim().toLowerCase();
                 if (!mistake.type.toLowerCase().includes(query) &&
-                    !mistake.correction.toLowerCase().includes(query)) {
+                    !(mistake.correction || '').toLowerCase().includes(query)) {
                     return false;
                 }
             }
             return true;
         });
-    }, [learning.mistakes, mistakeFilter, searchQuery]);
+    }, [mistakes, mistakeFilter, searchQuery]);
+
+    const handleMarkLearned = async (mistakeId: string) => {
+        try {
+            await api.markMistakeAsLearned(mistakeId);
+            await fetchData(); // Refresh
+        } catch (err: any) {
+            console.error('Failed to mark mistake as learned:', err);
+            alert(t('failed_to_update') || 'Failed to update mistake');
+        }
+    };
+
+    if (loading && !data) {
+        return <Card><div className="text-center p-4">{t('loading') || 'Loading...'}</div></Card>;
+    }
+
+    if (error && !data) {
+        return (
+            <Card>
+                <div className="text-center p-4">
+                    <p className="text-red-400 mb-3">{error}</p>
+                    <button
+                        onClick={fetchData}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                    >
+                        {t('retry') || 'Retry'}
+                    </button>
+                </div>
+            </Card>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -58,181 +108,153 @@ const LearningTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 <div className="flex justify-between items-center mb-4">
                     <div>
                         <h3 className="font-semibold text-foreground">{t('learning_system_status') || 'Learning System Status'}</h3>
-                        <p className="text-xs text-muted-foreground">{t('learning_desc') || 'Models, training history, and improvements'}</p>
+                        <p className="text-xs text-muted-foreground">{t('learning_desc') || 'Auto-generated from real AI decisions'}</p>
                     </div>
                     <button
-                        onClick={onRefresh}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                        onClick={fetchData}
+                        disabled={loading}
+                        className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg text-sm"
                     >
-                        {t('refresh') || 'Refresh'}
+                        {loading ? (t('loading') || 'Loading...') : (t('refresh') || 'Refresh')}
                     </button>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                    <Stat label={t('total_decisions') || 'Total Decisions'} value={learning.totalDecisions || 0} />
-                    <Stat label={t('total_trades') || 'Total Trades'} value={learning.totalTrades || 0} />
-                    <Stat label={t('improvements') || 'Improvements'} value={learning.improvements.length} />
-                    <Stat label={t('mistakes') || 'Mistakes'} value={learning.mistakes.length} />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Stat label={t('learning_rate') || 'Learning Rate'} value={`${data?.learningRate || 0}%`} />
+                    <Stat label={t('adaptation_speed') || 'Adaptation Speed'} value={data?.adaptationSpeed?.toFixed(1) || '0.0'} />
+                    <Stat label={t('total_improvements') || 'Improvements'} value={data?.metrics?.totalImprovements || 0} />
+                    <Stat label={t('total_mistakes') || 'Mistakes'} value={data?.metrics?.totalMistakes || 0} />
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">{t('active_learning') || 'Active Learning'}:</span>
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                        learning.activeLearning ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
-                    }`}>
-                        {learning.activeLearning ? t('enabled') || 'Enabled' : t('disabled') || 'Disabled'}
-                    </span>
-                    <span className="text-muted-foreground ml-4">{t('last_training') || 'Last Training'}:</span>
-                    <span className="text-foreground">
-                        {learning.lastTraining ? new Date(learning.lastTraining).toLocaleString() : 'N/A'}
-                    </span>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-4">
+                    <SmallStat label={t('learned') || 'Learned'} value={data?.metrics?.learnedMistakes || 0} valueClass="text-green-400" />
+                    <SmallStat label={t('pending') || 'Pending'} value={data?.metrics?.pendingMistakes || 0} valueClass="text-yellow-400" />
+                    <SmallStat label={t('auto_generated') || 'Auto-generated'} value={data?.metrics?.autoGenerated || 0} valueClass="text-blue-400" />
+                    <SmallStat label={t('manual') || 'Manual'} value={data?.metrics?.manualAnnotations || 0} valueClass="text-purple-400" />
                 </div>
+                {data?.lastUpdated && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                        {t('last_updated') || 'Last updated'}: {new Date(data.lastUpdated).toLocaleTimeString()}
+                    </p>
+                )}
             </Card>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-semibold text-foreground">{t('recent_improvements') || 'Recent Improvements'}</h3>
+            <Card>
+                <div className="flex justify-between items-center mb-3">
+                    <h3 className="font-semibold text-foreground">{t('recent_improvements') || 'Recent Improvements'}</h3>
+                    <div className="flex gap-2">
                         <select
                             value={improvementFilter}
                             onChange={(e) => setImprovementFilter(e.target.value)}
                             className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
                         >
                             <option value="all">{t('all_areas') || 'All Areas'}</option>
-                            {improvementAreas.map(area => (
+                            {improvementAreas.map((area: any) => (
                                 <option key={area} value={area}>{area}</option>
                             ))}
                         </select>
-                    </div>
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder={t('search_improvements') || 'Search improvements...'}
-                        className="w-full px-2 py-1 mb-2 bg-background border border-border rounded text-xs text-foreground"
-                    />
-                    {filteredImprovements.length > 0 ? (
-                        <div className="space-y-2 max-h-64 overflow-y-auto text-sm text-foreground">
-                            {filteredImprovements.slice(0, 10).map(imp => (
-                                <div key={imp.id} className="p-3 border border-border rounded-lg">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <p className="font-semibold">{imp.area}</p>
-                                            <p className="text-xs text-muted-foreground">{imp.method}</p>
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                {new Date(imp.timestamp).toLocaleString()}
-                                            </p>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className="text-green-400 font-semibold">+{imp.improvement.toFixed(1)}%</span>
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                {imp.before.toFixed(1)}% → {imp.after.toFixed(1)}%
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-center text-muted-foreground py-6">
-                            {t('no_improvements_found') || 'No improvements found.'}
-                        </p>
-                    )}
-                </Card>
-
-                <Card>
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-semibold text-foreground">{t('recent_mistakes') || 'Recent Mistakes'}</h3>
-                        <select
-                            value={mistakeFilter}
-                            onChange={(e) => setMistakeFilter(e.target.value as any)}
+                        <input
+                            type="text"
+                            placeholder={t('search') || 'Search...'}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                             className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
-                        >
-                            <option value="all">{t('all') || 'All'}</option>
-                            <option value="learned">{t('learned') || 'Learned'}</option>
-                            <option value="pending">{t('pending') || 'Pending'}</option>
-                        </select>
+                        />
                     </div>
-                    {filteredMistakes.length > 0 ? (
-                        <div className="space-y-2 max-h-64 overflow-y-auto text-sm text-foreground">
-                            {filteredMistakes.slice(0, 10).map(m => (
-                                <div key={m.id} className="p-3 border border-border rounded-lg">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="font-semibold">{t(m.type) || m.type}</p>
-                                            <p className="text-xs text-muted-foreground mt-1">{m.correction}</p>
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                {new Date(m.timestamp).toLocaleString()}
-                                            </p>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className={`px-2 py-1 rounded-full text-xs ${
-                                                m.learned ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-                                            }`}>
-                                                {m.learned ? t('learned') || 'Learned' : t('pending') || 'Pending'}
-                                            </span>
-                                            <p className="text-xs text-red-400 mt-1">
-                                                Error: {m.error.toFixed(1)}%
-                                            </p>
-                                        </div>
-                                    </div>
+                </div>
+                <div className="space-y-2 text-sm max-h-[300px] overflow-y-auto">
+                    {filteredImprovements.length === 0 ? (
+                        <p className="text-muted-foreground text-xs">{t('no_improvements') || 'No improvements found'}</p>
+                    ) : filteredImprovements.slice(0, 20).map((improvement: any) => (
+                        <div key={improvement.id} className="p-3 bg-secondary/40 rounded-md">
+                            <div className="flex justify-between items-center">
+                                <div className="flex-1">
+                                    <p className="font-semibold text-foreground">{improvement.area}</p>
+                                    <p className="text-muted-foreground text-xs">{improvement.method}</p>
                                 </div>
-                            ))}
+                                <div className="text-right">
+                                    <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400">
+                                        +{improvement.impact.toFixed(1)}
+                                    </span>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {improvement.source}
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {new Date(improvement.timestamp).toLocaleString()}
+                            </p>
                         </div>
-                    ) : (
-                        <p className="text-center text-muted-foreground py-6">
-                            {t('no_mistakes_found') || 'No mistakes found.'}
-                        </p>
-                    )}
-                </Card>
-            </div>
-
-            <Card>
-                <h3 className="font-semibold text-foreground mb-3">{t('accuracy_history') || 'Accuracy History'}</h3>
-                {learning.accuracyHistory?.length ? (
-                    <ul className="space-y-2 text-sm text-foreground">
-                        {learning.accuracyHistory.slice(-20).map((entry, idx) => (
-                            <li key={idx} className="flex justify-between bg-secondary/40 rounded p-2">
-                                <span>{entry.date}</span>
-                                <span>{entry.accuracy.toFixed(2)}%</span>
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="text-sm text-muted-foreground">{t('no_data') || 'No data available'}</p>
-                )}
+                    ))}
+                </div>
             </Card>
 
             <Card>
-                <h3 className="font-semibold text-foreground mb-3">{t('model_versions') || 'Model Versions'}</h3>
-                {learning.modelVersions?.length ? (
-                    <div className="space-y-2 text-sm text-foreground">
-                        {learning.modelVersions.map((model, idx) => (
-                            <div key={idx} className="p-2 rounded bg-secondary/40 flex justify-between items-center">
-                                <div>
-                                    <p className="font-semibold">{model.version}</p>
-                                    <p className="text-[11px] text-muted-foreground">
-                                        {model.trainedAt ? new Date(model.trainedAt).toLocaleString() : ''}
-                                    </p>
+                <div className="flex justify-between items-center mb-3">
+                    <h3 className="font-semibold text-foreground">{t('recent_mistakes') || 'Recent Mistakes'}</h3>
+                    <select
+                        value={mistakeFilter}
+                        onChange={(e) => setMistakeFilter(e.target.value as any)}
+                        className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
+                    >
+                        <option value="all">{t('all') || 'All'}</option>
+                        <option value="learned">{t('learned') || 'Learned'}</option>
+                        <option value="pending">{t('pending') || 'Pending'}</option>
+                    </select>
+                </div>
+                <div className="space-y-2 text-sm max-h-[300px] overflow-y-auto">
+                    {filteredMistakes.length === 0 ? (
+                        <p className="text-muted-foreground text-xs">{t('no_mistakes') || 'No mistakes found'}</p>
+                    ) : filteredMistakes.slice(0, 20).map((mistake: any) => (
+                        <div key={mistake.id} className="p-3 bg-secondary/40 rounded-md">
+                            <div className="flex justify-between items-center">
+                                <div className="flex-1">
+                                    <p className="font-semibold text-foreground">{mistake.type}</p>
+                                    {mistake.correction && (
+                                        <p className="text-muted-foreground text-xs mt-1">
+                                            {t('correction') || 'Correction'}: {mistake.correction}
+                                        </p>
+                                    )}
                                 </div>
-                                <span className="text-xs text-muted-foreground">
-                                    {model.active ? t('active') || 'Active' : t('inactive') || 'Inactive'}
-                                </span>
+                                <div className="text-right flex flex-col gap-2">
+                                    <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400">
+                                        {mistake.impact.toFixed(1)}
+                                    </span>
+                                    {!mistake.learned && (
+                                        <button
+                                            onClick={() => handleMarkLearned(mistake.id)}
+                                            className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded hover:bg-blue-500/30"
+                                        >
+                                            {t('mark_learned') || 'Mark Learned'}
+                                        </button>
+                                    )}
+                                    {mistake.learned && (
+                                        <span className="text-xs text-green-400">✓ {t('learned') || 'Learned'}</span>
+                                    )}
+                                </div>
                             </div>
-                        ))}
-                    </div>
-                ) : (
-                    <p className="text-sm text-muted-foreground">{t('no_data') || 'No data available'}</p>
-                )}
+                            <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                                <span>{mistake.source}</span>
+                                <span>{new Date(mistake.timestamp).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </Card>
         </div>
     );
 };
 
 const Stat: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
-    <div className="text-center p-3 border border-border rounded-lg">
+    <div className="text-center">
+        <p className="text-2xl font-bold text-foreground">{value}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-lg font-semibold text-foreground mt-1">{value}</p>
+    </div>
+);
+
+const SmallStat: React.FC<{ label: string; value: string | number; valueClass?: string }> = ({ label, value, valueClass }) => (
+    <div className="text-center">
+        <p className={`text-lg font-bold ${valueClass || 'text-foreground'}`}>{value}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
     </div>
 );
 
 export default LearningTab;
-

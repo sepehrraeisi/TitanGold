@@ -175,7 +175,7 @@ const AIManager: React.FC = () => {
                     {activeTab === 'overview' && <OverviewTab data={data} artemis={artemis} t={t} onRefresh={refreshArtemis} onNavigate={setActiveTab} Card={Card} />}
                     {activeTab === 'decision_engine' && <DecisionEngineTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
                     {activeTab === 'orchestration' && <OrchestrationTab t={t} Card={Card} />}
-                    {activeTab === 'learning' && <LearningTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
+                    {activeTab === 'learning' && <LearningTab t={t} Card={Card} />}
                     {activeTab === 'monitoring' && <MonitoringTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
                     {activeTab === 'scenarios' && <ScenariosTab t={t} onRefresh={refreshArtemis} Card={Card} />}
                     {activeTab === 'data_hub' && <DataHubTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
