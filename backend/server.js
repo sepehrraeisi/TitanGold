@@ -55,6 +55,9 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 5001;
 
+// Trust proxy (behind nginx/cloudflare)
+app.set('trust proxy', 1);
+
 // Resolve __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
