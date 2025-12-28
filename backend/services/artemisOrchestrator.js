@@ -165,9 +165,22 @@ const PROVIDERS = {
 };
 
 async function callGemini(prompt, systemInstruction) {
-  // از aiService موجود استفاده می‌کنیم
-  const response = await aiService.askArtemis(prompt, systemInstruction);
-  return response;
+  // از aiService موجود استفاده می‌کنیم (که خودش Production++ شده)
+  await orchSem.acquire();
+  try {
+    const result = await retry(async () => {
+      const response = await aiService.askArtemis(prompt, systemInstruction);
+      // aiService.askArtemis already has timeout/retry internally
+      return response;
+    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'Gemini (via aiService)' });
+    
+    return result;
+  } catch (e) {
+    console.error('Gemini call failed after retries:', e.message);
+    return null;
+  } finally {
+    orchSem.release();
+  }
 }
 
 async function callClaude(prompt, systemInstruction) {
