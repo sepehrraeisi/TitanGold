@@ -4027,5 +4027,9 @@
   "permission_spot": "Spot",
   "permission_trading": "Trading",
   "permission_deposits": "Deposits",
-  "permission_withdrawals": "Withdrawals"
+  "permission_withdrawals": "Withdrawals",
+  "artemis_autopilot": "Autopilot",
+  "autopilot_status": "Autopilot Status",
+  "autopilot_suggestions": "Autopilot Suggestions"
+
 }

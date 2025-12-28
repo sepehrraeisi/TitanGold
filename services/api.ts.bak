@@ -26175,8 +26175,7 @@ export const fetchAutopilotStatus = async (): Promise<{
     });
 
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Failed to fetch autopilot status: ${response.status}`);
+        throw new Error(`Failed to fetch autopilot status: ${response.status}`);
     }
 
     return await response.json();
