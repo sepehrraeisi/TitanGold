@@ -20,7 +20,7 @@ const router = express.Router();
 // ==================== Rate Limiting ====================
 const autopilotLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 10, // 10 requests per minute
+  max: 60, // 60 requests per minute (admin-only, reasonable for testing/management)
   message: { error: 'Too many autopilot requests' },
   standardHeaders: true,
   legacyHeaders: false,
