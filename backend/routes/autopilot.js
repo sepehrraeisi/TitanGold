@@ -24,6 +24,9 @@ const autopilotLimiter = rateLimit({
   message: { error: 'Too many autopilot requests' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Too many autopilot requests', code: 'RATE_LIMITED' });
+  },
 });
 
 // ==================== Admin Check Middleware ====================

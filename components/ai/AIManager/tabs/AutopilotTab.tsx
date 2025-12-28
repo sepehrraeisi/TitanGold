@@ -304,13 +304,13 @@ const AutopilotTab: React.FC<AutopilotTabProps> = ({ t, Card, onRefresh }) => {
           </div>
 
           {/* Config (Read-only) */}
-          <div className="mt-4 p-3 bg-gray-100 rounded text-sm">
-            <div className="font-semibold mb-2">Configuration:</div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>Max Change: {status.config.max_change_percent}%</div>
-              <div>Min Interval: {status.config.min_cycle_interval_minutes}min</div>
-              <div>Max Failures: {status.config.max_consecutive_failures}</div>
-              <div>Human Approval: {status.config.require_human_approval ? 'Required' : 'Optional'}</div>
+          <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded text-sm border border-gray-200 dark:border-gray-700">
+            <div className="font-semibold mb-2 text-gray-900 dark:text-gray-100">Configuration:</div>
+            <div className="grid grid-cols-2 gap-2 text-xs text-gray-700 dark:text-gray-300">
+              <div><span className="font-medium">Max Change:</span> {status.config.max_change_percent}%</div>
+              <div><span className="font-medium">Min Interval:</span> {status.config.min_cycle_interval_minutes}min</div>
+              <div><span className="font-medium">Max Failures:</span> {status.config.max_consecutive_failures}</div>
+              <div><span className="font-medium">Human Approval:</span> {status.config.require_human_approval ? '✅ Required' : '⚠️ Optional'}</div>
             </div>
           </div>
         </div>
