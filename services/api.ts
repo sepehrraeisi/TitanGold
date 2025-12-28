@@ -26146,7 +26146,24 @@ export const markMistakeAsLearned = async (mistakeId: string): Promise<void> => 
     }
 };
 
+
 // ==================== Autopilot API ====================
+
+/**
+ * Safe JSON parser that handles plain text responses
+ */
+const safeParseJSON = async (response: Response): Promise<any> => {
+    const text = await response.text();
+    if (!text) return { error: 'Empty response' };
+    
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        // Response is plain text (e.g., nginx rate limit)
+        return { error: text };
+    }
+};
+
 
 /**
  * Get autopilot status
@@ -26175,11 +26192,11 @@ export const fetchAutopilotStatus = async (): Promise<{
     });
 
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        const errorData = await safeParseJSON(response).catch(() => ({ error: 'Unknown error' }));
         throw new Error(errorData.error || `Failed to fetch autopilot status: ${response.status}`);
     }
 
-    return await response.json();
+    return await safeParseJSON(response);
 };
 
 /**
@@ -26199,7 +26216,7 @@ export const enableAutopilot = async (): Promise<void> => {
     });
 
     if (!response.ok) {
-        const error = await response.json();
+        const error = await safeParseJSON(response);
         throw new Error(error.error || 'Failed to enable autopilot');
     }
 };
@@ -26275,7 +26292,7 @@ export const fetchAutopilotSuggestions = async (filters?: {
         throw new Error(`Failed to fetch suggestions: ${response.status}`);
     }
 
-    return await response.json();
+    return await safeParseJSON(response);
 };
 
 /**
@@ -26295,7 +26312,7 @@ export const approveAutopilotSuggestion = async (suggestionId: string): Promise<
     });
 
     if (!response.ok) {
-        const error = await response.json();
+        const error = await safeParseJSON(response);
         throw new Error(error.error || 'Failed to approve suggestion');
     }
 };
@@ -26340,7 +26357,7 @@ export const rollbackAutopilotSuggestion = async (suggestionId: string): Promise
     });
 
     if (!response.ok) {
-        const error = await response.json();
+        const error = await safeParseJSON(response);
         throw new Error(error.error || 'Failed to rollback suggestion');
     }
 };
@@ -26364,7 +26381,7 @@ export const runAutopilotOnce = async (hoursWindow?: number): Promise<void> => {
     });
 
     if (!response.ok) {
-        const error = await response.json();
+        const error = await safeParseJSON(response);
         throw new Error(error.error || 'Failed to run autopilot cycle');
     }
 };
