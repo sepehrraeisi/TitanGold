@@ -5,6 +5,91 @@ import { query } from '../database/db.js';
 
 dotenv.config();
 
+// ============================================================================
+// Production++ Utilities (Timeout / Retry / Concurrency)
+// ============================================================================
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function isRetryableStatus(status) {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+function isRetryableError(err) {
+  const msg = (err?.message || '').toLowerCase();
+  return (
+    msg.includes('econnreset') ||
+    msg.includes('etimedout') ||
+    msg.includes('timeout') ||
+    msg.includes('network') ||
+    msg.includes('unavailable')
+  );
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      throw new Error(`Timeout after ${timeoutMs}ms`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function retry(fn, {
+  attempts = 3,
+  baseDelayMs = 1000,
+  maxDelayMs = 7000,
+  label = 'provider'
+} = {}) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn(i);
+    } catch (e) {
+      lastErr = e;
+      const retryable = isRetryableError(e) || (e.message && e.message.includes('retryable'));
+      if (!retryable || i === attempts) throw e;
+
+      const delay = Math.min(maxDelayMs, baseDelayMs * (i === 1 ? 1 : i === 2 ? 3 : 7));
+      console.warn(`⚠️ ${label}: attempt ${i} failed; retrying in ${delay}ms. reason="${e.message}"`);
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
+class Semaphore {
+  constructor(max) {
+    this.max = max;
+    this.current = 0;
+    this.queue = [];
+  }
+  async acquire() {
+    if (this.current < this.max) { this.current++; return; }
+    await new Promise((resolve) => this.queue.push(resolve));
+    this.current++;
+  }
+  release() {
+    this.current = Math.max(0, this.current - 1);
+    const next = this.queue.shift();
+    if (next) next();
+  }
+}
+
+const ORCH_TIMEOUT_MS = Number(process.env.ORCH_TIMEOUT_MS || 25000);
+const ORCH_MAX_CONCURRENCY = Number(process.env.ORCH_MAX_CONCURRENCY || 2);
+const orchSem = new Semaphore(Number.isFinite(ORCH_MAX_CONCURRENCY) && ORCH_MAX_CONCURRENCY > 0 ? ORCH_MAX_CONCURRENCY : 2);
+
 /**
  * Artemis Orchestrator
  * --------------------
@@ -89,148 +174,215 @@ async function callClaude(prompt, systemInstruction) {
   const apiKey = getNextKey('claude');
   if (!apiKey) return null;
 
-  const body = {
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
-  };
-  if (systemInstruction) {
-    body.system = systemInstruction;
-  }
+  await orchSem.acquire();
+  try {
+    const result = await retry(async () => {
+      const body = {
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      };
+      if (systemInstruction) {
+        body.system = systemInstruction;
+      }
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
+      const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(body),
+      }, ORCH_TIMEOUT_MS);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    console.error('Claude API error:', res.status, text);
+      if (isRetryableStatus(res.status)) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} retryable: ${txt.slice(0, 200)}`);
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('Claude API error:', res.status, text);
+        return null;
+      }
+
+      const data = await res.json();
+      return data?.content?.[0]?.text || null;
+    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'Claude' });
+
+    return result;
+  } catch (e) {
+    console.error('Claude call failed after retries:', e.message);
     return null;
+  } finally {
+    orchSem.release();
   }
-
-  const data = await res.json();
-  const first = data?.content?.[0]?.text;
-  return first || null;
 }
 
 async function callOpenAI(prompt, systemInstruction) {
   const apiKey = getNextKey('openai');
   if (!apiKey) return null;
 
-  const messages = [];
-  if (systemInstruction) {
-    messages.push({ role: 'system', content: systemInstruction });
-  }
-  messages.push({ role: 'user', content: prompt });
+  await orchSem.acquire();
+  try {
+    const result = await retry(async () => {
+      const messages = [];
+      if (systemInstruction) {
+        messages.push({ role: 'system', content: systemInstruction });
+      }
+      messages.push({ role: 'user', content: prompt });
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages,
-      temperature: 0.3,
-      max_tokens: 1024,
-    }),
-  });
+      const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages,
+          temperature: 0.3,
+          max_tokens: 1024,
+        }),
+      }, ORCH_TIMEOUT_MS);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    console.error('OpenAI API error:', res.status, text);
+      if (isRetryableStatus(res.status)) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} retryable: ${txt.slice(0, 200)}`);
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('OpenAI API error:', res.status, text);
+        return null;
+      }
+
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content || null;
+    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'OpenAI' });
+
+    return result;
+  } catch (e) {
+    console.error('OpenAI call failed after retries:', e.message);
     return null;
+  } finally {
+    orchSem.release();
   }
-
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content || null;
 }
 
 async function callDeepSeek(prompt, systemInstruction) {
   const apiKey = getNextKey('deepseek');
   if (!apiKey) return null;
 
-  const messages = [];
-  if (systemInstruction) {
-    messages.push({ role: 'system', content: systemInstruction });
-  }
-  messages.push({ role: 'user', content: prompt });
+  await orchSem.acquire();
+  try {
+    const result = await retry(async () => {
+      const messages = [];
+      if (systemInstruction) {
+        messages.push({ role: 'system', content: systemInstruction });
+      }
+      messages.push({ role: 'user', content: prompt });
 
-  const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'deepseek-chat',
-      messages,
-      temperature: 0.3,
-      max_tokens: 1024,
-    }),
-  });
+      const res = await fetchWithTimeout('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages,
+          temperature: 0.3,
+          max_tokens: 1024,
+        }),
+      }, ORCH_TIMEOUT_MS);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    console.error('DeepSeek API error:', res.status, text);
+      if (isRetryableStatus(res.status)) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} retryable: ${txt.slice(0, 200)}`);
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('DeepSeek API error:', res.status, text);
+        return null;
+      }
+
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content || null;
+    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'DeepSeek' });
+
+    return result;
+  } catch (e) {
+    console.error('DeepSeek call failed after retries:', e.message);
     return null;
+  } finally {
+    orchSem.release();
   }
-
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content || null;
 }
 
 async function callOpenRouter(prompt, systemInstruction) {
   const apiKey = getNextKey('openrouter');
   if (!apiKey) return null;
 
-  const messages = [];
-  if (systemInstruction) {
-    messages.push({ role: 'system', content: systemInstruction });
-  }
-  messages.push({ role: 'user', content: prompt });
+  await orchSem.acquire();
+  try {
+    const result = await retry(async () => {
+      const messages = [];
+      if (systemInstruction) {
+        messages.push({ role: 'system', content: systemInstruction });
+      }
+      messages.push({ role: 'user', content: prompt });
 
-  const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
-  
-  const headers = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${apiKey}`,
-  };
-  
-  // Optional headers from env
-  if (process.env.OPENROUTER_HTTP_REFERER) {
-    headers['HTTP-Referer'] = process.env.OPENROUTER_HTTP_REFERER;
-  }
-  if (process.env.OPENROUTER_X_TITLE) {
-    headers['X-Title'] = process.env.OPENROUTER_X_TITLE;
-  }
+      const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+      
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      };
+      
+      // Optional headers from env
+      if (process.env.OPENROUTER_HTTP_REFERER) {
+        headers['HTTP-Referer'] = process.env.OPENROUTER_HTTP_REFERER;
+      }
+      if (process.env.OPENROUTER_X_TITLE) {
+        headers['X-Title'] = process.env.OPENROUTER_X_TITLE;
+      }
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.3,
-      max_tokens: 1024,
-    }),
-  });
+      const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.3,
+          max_tokens: 1024,
+        }),
+      }, ORCH_TIMEOUT_MS);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    console.error('OpenRouter API error:', res.status, text);
+      if (isRetryableStatus(res.status)) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} retryable: ${txt.slice(0, 200)}`);
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('OpenRouter API error:', res.status, text);
+        return null;
+      }
+
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content || null;
+    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'OpenRouter' });
+
+    return result;
+  } catch (e) {
+    console.error('OpenRouter call failed after retries:', e.message);
     return null;
+  } finally {
+    orchSem.release();
   }
-
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content || null;
 }
 
 function parseDecisionJson(raw) {
