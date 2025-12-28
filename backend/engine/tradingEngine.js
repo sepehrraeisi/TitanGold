@@ -39,6 +39,30 @@ function aiBreakerOnSuccess() {
   aiRateLimitState.cooldownUntil = 0;
 }
 
+// ============================================================================
+// Fetch with Timeout (Hardening for AI calls)
+// ============================================================================
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.warn(`⏱️ Fetch timeout after ${timeoutMs}ms: ${url}`);
+      throw new Error(`Timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+}
+
 // Virtual Wallet for Demo Mode
 class VirtualWallet {
     constructor() {
@@ -663,12 +687,16 @@ class TradingEngine {
                 }
             };
 
-            // Call Artemis Decision Engine via API
-            const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/artemis/decision`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(decisionRequest)
-            });
+            // Call Artemis Decision Engine via API (with 30s timeout)
+            const response = await fetchWithTimeout(
+                `http://localhost:${process.env.PORT || 5001}/api/artemis/decision`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(decisionRequest)
+                },
+                30000
+            );
 
             if (response.ok) {
                 const decision = await response.json();
@@ -812,12 +840,16 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
         }
 
         try {
-            // Call Technical Analysis Agent via API
-            const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/ai-agents/agent-1/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol, timeframe: '1h' })
-            });
+            // Call Technical Analysis Agent via API (with 30s timeout)
+            const response = await fetchWithTimeout(
+                `http://localhost:${process.env.PORT || 5001}/api/ai-agents/agent-1/run`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol, timeframe: '1h' })
+                },
+                30000
+            );
 
             if (response.status === 429) {
                 aiBreakerOn429();
@@ -848,12 +880,16 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
         }
 
         try {
-            // Call Risk Management Agent via API
-            const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/ai-agents/agent-2/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol })
-            });
+            // Call Risk Management Agent via API (with 30s timeout)
+            const response = await fetchWithTimeout(
+                `http://localhost:${process.env.PORT || 5001}/api/ai-agents/agent-2/run`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol })
+                },
+                30000
+            );
 
             if (response.status === 429) {
                 aiBreakerOn429();
@@ -884,12 +920,16 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
         }
 
         try {
-            // Call Timing Agent via API
-            const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/ai-agents/agent-15/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol })
-            });
+            // Call Timing Agent via API (with 30s timeout)
+            const response = await fetchWithTimeout(
+                `http://localhost:${process.env.PORT || 5001}/api/ai-agents/agent-15/run`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol })
+                },
+                30000
+            );
 
             if (response.status === 429) {
                 aiBreakerOn429();
