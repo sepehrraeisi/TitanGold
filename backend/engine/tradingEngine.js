@@ -6,6 +6,39 @@ import { mexcService } from '../services/mexc.js';
 import { aiService } from '../services/ai.js';
 import { telegramService } from '../services/telegram.js';
 
+// ============================================================================
+// AI Rate-Limit Circuit Breaker (Quick Fix for 429 Storm)
+// ============================================================================
+const aiRateLimitState = {
+  cooldownUntil: 0,
+  last429At: 0,
+  consecutive429: 0,
+};
+
+function aiBreakerShouldSkip() {
+  return Date.now() < aiRateLimitState.cooldownUntil;
+}
+
+function aiBreakerOn429() {
+  aiRateLimitState.last429At = Date.now();
+  aiRateLimitState.consecutive429 += 1;
+
+  // Progressive cooldown: 2min, 5min, 10min (capped)
+  const mins = aiRateLimitState.consecutive429 === 1 ? 2 :
+                aiRateLimitState.consecutive429 === 2 ? 5 : 10;
+  aiRateLimitState.cooldownUntil = Date.now() + mins * 60 * 1000;
+  
+  console.warn(`⚠️ AI Rate Limit Breaker: Cooldown for ${mins} minutes (consecutive 429s: ${aiRateLimitState.consecutive429})`);
+}
+
+function aiBreakerOnSuccess() {
+  if (aiRateLimitState.consecutive429 > 0) {
+    console.log('✅ AI Rate Limit Breaker: Reset (successful call)');
+  }
+  aiRateLimitState.consecutive429 = 0;
+  aiRateLimitState.cooldownUntil = 0;
+}
+
 // Virtual Wallet for Demo Mode
 class VirtualWallet {
     constructor() {
@@ -772,6 +805,12 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
     }
 
     async callTechnicalAgent(symbol) {
+        // AI Rate-Limit Circuit Breaker
+        if (aiBreakerShouldSkip()) {
+            console.warn(`⏸️ AI call skipped (cooldown): agent-1 for ${symbol}`);
+            return null;
+        }
+
         try {
             // Call Technical Analysis Agent via API
             const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/ai-agents/agent-1/run`, {
@@ -780,8 +819,14 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 body: JSON.stringify({ symbol, timeframe: '1h' })
             });
 
+            if (response.status === 429) {
+                aiBreakerOn429();
+                return null;
+            }
+
             if (response.ok) {
                 const result = await response.json();
+                aiBreakerOnSuccess();
                 return {
                     signal: result.signal || 'NEUTRAL',
                     confidence: result.confidence || 50,
@@ -796,6 +841,12 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
     }
 
     async callRiskAgent(symbol) {
+        // AI Rate-Limit Circuit Breaker
+        if (aiBreakerShouldSkip()) {
+            console.warn(`⏸️ AI call skipped (cooldown): agent-2 for ${symbol}`);
+            return null;
+        }
+
         try {
             // Call Risk Management Agent via API
             const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/ai-agents/agent-2/run`, {
@@ -804,8 +855,14 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 body: JSON.stringify({ symbol })
             });
 
+            if (response.status === 429) {
+                aiBreakerOn429();
+                return null;
+            }
+
             if (response.ok) {
                 const result = await response.json();
+                aiBreakerOnSuccess();
                 return {
                     recommendation: result.recommendation || 'HOLD',
                     confidence: result.confidence || 50,
@@ -820,6 +877,12 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
     }
 
     async callTimingAgent(symbol) {
+        // AI Rate-Limit Circuit Breaker
+        if (aiBreakerShouldSkip()) {
+            console.warn(`⏸️ AI call skipped (cooldown): agent-15 for ${symbol}`);
+            return null;
+        }
+
         try {
             // Call Timing Agent via API
             const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/ai-agents/agent-15/run`, {
@@ -828,8 +891,14 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 body: JSON.stringify({ symbol })
             });
 
+            if (response.status === 429) {
+                aiBreakerOn429();
+                return null;
+            }
+
             if (response.ok) {
                 const result = await response.json();
+                aiBreakerOnSuccess();
                 return {
                     signal: result.signal || 'NEUTRAL',
                     confidence: result.confidence || 50,
