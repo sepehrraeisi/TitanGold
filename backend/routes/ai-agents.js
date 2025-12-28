@@ -6,21 +6,162 @@ import { aiService } from '../services/ai.js';
 
 const router = express.Router();
 
-router.post('/chat', authenticate, async (req, res) => {
+// ============================================================================
+// Production++ Helpers for AI Routes
+// ============================================================================
+
+// 1) Normalized Error Response
+function sendError(res, code, message, status = 400, details = null) {
+  return res.status(status).json({
+    error: {
+      code,
+      message,
+      details: details || undefined
+    }
+  });
+}
+
+// 2) In-Memory Rate Limiter (per user)
+const rateLimitStore = new Map(); // key -> { count, resetAt }
+
+function rateLimit({ limit, windowMs }) {
+  return (req, res, next) => {
+    const key = req.user?.id || req.ip;
+    const now = Date.now();
+    
+    if (!rateLimitStore.has(key)) {
+      rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    
+    const record = rateLimitStore.get(key);
+    
+    if (now > record.resetAt) {
+      // Reset window
+      record.count = 1;
+      record.resetAt = now + windowMs;
+      return next();
+    }
+    
+    if (record.count >= limit) {
+      return sendError(res, 'RATE_LIMITED', `Rate limit exceeded. Max ${limit} requests per ${windowMs / 1000}s`, 429, {
+        limit,
+        windowMs,
+        resetAt: new Date(record.resetAt).toISOString()
+      });
+    }
+    
+    record.count++;
+    next();
+  };
+}
+
+// 3) Simple TTL Cache (in-memory)
+const agentCache = new Map(); // key -> { value, expiresAt }
+
+function getCache(key) {
+  const cached = agentCache.get(key);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    agentCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCache(key, value, ttlMs) {
+  agentCache.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs
+  });
+}
+
+// 4) Timeout Wrapper
+async function withTimeout(promise, ms, errorMessage = 'Operation timed out') {
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(errorMessage)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]);
+}
+
+// 5) Input Validation
+const VALID_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'];
+const SYMBOL_REGEX = /^[A-Z0-9]{3,20}$/;
+
+function validateAgentId(id) {
+  // agent-<num> or UUID format
+  return /^agent-\d+$/.test(id) || /^[a-f0-9-]{36}$/.test(id);
+}
+
+function validateSymbol(symbol) {
+  if (!symbol) return false;
+  // Remove / if present (e.g., BTC/USDT -> BTCUSDT)
+  const clean = symbol.replace('/', '');
+  return SYMBOL_REGEX.test(clean);
+}
+
+function validateTimeframe(timeframe) {
+  return VALID_TIMEFRAMES.includes(timeframe);
+}
+
+function validateMessage(message) {
+  return typeof message === 'string' && message.length > 0 && message.length <= 4000;
+}
+
+// ============================================================================
+// Routes
+// ============================================================================
+
+router.post('/chat', authenticate, rateLimit({ limit: 10, windowMs: 60000 }), async (req, res) => {
   try {
     const { message, context } = req.body;
-    const response = await aiService.askArtemis(message, context);
+    
+    // Validation
+    if (!validateMessage(message)) {
+      return sendError(res, 'VALIDATION_ERROR', 'Message must be 1-4000 characters', 400);
+    }
+    
+    // Timeout wrapper (25s)
+    const response = await withTimeout(
+      aiService.askArtemis(message, context),
+      25000,
+      'AI chat timeout after 25s'
+    );
+    
     res.json({ text: response });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to get AI response' });
+    console.error('AI chat error:', error);
+    if (error.message?.includes('timeout')) {
+      return sendError(res, 'AI_TIMEOUT', 'AI service timed out', 504);
+    }
+    return sendError(res, 'AI_ERROR', 'Failed to get AI response', 500, { error: error.message });
   }
 });
 
 // Run an AI agent (used by Scheduler and Trading Engine)
-router.post('/:id/run', authenticate, async (req, res) => {
+router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), async (req, res) => {
   try {
     const { id } = req.params;
     const { function: funcName, symbol, timeframe = '1h' } = req.body || {};
+
+    // Validation
+    if (!validateAgentId(id)) {
+      return sendError(res, 'VALIDATION_ERROR', 'Invalid agent ID format', 400);
+    }
+    if (symbol && !validateSymbol(symbol)) {
+      return sendError(res, 'VALIDATION_ERROR', 'Invalid symbol format', 400);
+    }
+    if (timeframe && !validateTimeframe(timeframe)) {
+      return sendError(res, 'VALIDATION_ERROR', `Invalid timeframe. Allowed: ${VALID_TIMEFRAMES.join(', ')}`, 400);
+    }
+
+    // Cache key (agent + symbol + timeframe)
+    const cacheKey = `agent:${id}:${symbol || 'default'}:${timeframe}`;
+    const cached = getCache(cacheKey);
+    if (cached) {
+      console.log(`✅ Cache hit for ${cacheKey}`);
+      return res.json(cached);
+    }
 
     // Agent 1: Technical Analysis
     if (id === 'agent-1') {
