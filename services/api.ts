@@ -26145,3 +26145,225 @@ export const markMistakeAsLearned = async (mistakeId: string): Promise<void> => 
         throw new Error(`Failed to mark mistake as learned: ${response.status}`);
     }
 };
+
+// ==================== Autopilot API ====================
+
+/**
+ * Get autopilot status
+ */
+export const fetchAutopilotStatus = async (): Promise<{
+    enabled: boolean;
+    last_run: string | null;
+    cycle_count: number;
+    fail_count: number;
+    config: {
+        max_change_percent: number;
+        min_cycle_interval_minutes: number;
+        max_consecutive_failures: number;
+        require_human_approval: boolean;
+    };
+}> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const response = await fetch('/api/autopilot/status', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch autopilot status: ${response.status}`);
+    }
+
+    return await response.json();
+};
+
+/**
+ * Enable autopilot
+ */
+export const enableAutopilot = async (): Promise<void> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const response = await fetch('/api/autopilot/enable', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to enable autopilot');
+    }
+};
+
+/**
+ * Disable autopilot
+ */
+export const disableAutopilot = async (): Promise<void> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const response = await fetch('/api/autopilot/disable', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to disable autopilot');
+    }
+};
+
+/**
+ * Get autopilot suggestions
+ */
+export const fetchAutopilotSuggestions = async (filters?: {
+    status?: 'pending' | 'approved' | 'rejected' | 'applied' | 'rolled_back';
+    agent_id?: string;
+    limit?: number;
+}): Promise<{
+    suggestions: Array<{
+        id: string;
+        action_type: string;
+        status: string;
+        agent_id: string;
+        agent_name: string;
+        agent_type: string;
+        old_config: any;
+        new_config: any;
+        change_summary: string;
+        reason: string;
+        confidence: number;
+        triggering_events: any[];
+        metrics: any;
+        suggested_at: string;
+        approved_by: string | null;
+        approved_by_email: string | null;
+        approved_at: string | null;
+        applied_at: string | null;
+    }>;
+    count: number;
+}> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.agent_id) params.append('agent_id', filters.agent_id);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+
+    const response = await fetch(`/api/autopilot/suggestions?${params.toString()}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch suggestions: ${response.status}`);
+    }
+
+    return await response.json();
+};
+
+/**
+ * Approve autopilot suggestion
+ */
+export const approveAutopilotSuggestion = async (suggestionId: string): Promise<void> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`/api/autopilot/suggestions/${suggestionId}/approve`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to approve suggestion');
+    }
+};
+
+/**
+ * Reject autopilot suggestion
+ */
+export const rejectAutopilotSuggestion = async (suggestionId: string, reason?: string): Promise<void> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`/api/autopilot/suggestions/${suggestionId}/reject`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason }),
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to reject suggestion');
+    }
+};
+
+/**
+ * Rollback autopilot suggestion
+ */
+export const rollbackAutopilotSuggestion = async (suggestionId: string): Promise<void> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`/api/autopilot/suggestions/${suggestionId}/rollback`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to rollback suggestion');
+    }
+};
+
+/**
+ * Manually trigger autopilot cycle
+ */
+export const runAutopilotOnce = async (hoursWindow?: number): Promise<void> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const response = await fetch('/api/autopilot/run-once', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ hours_window: hoursWindow || 24 }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to run autopilot cycle');
+    }
+};

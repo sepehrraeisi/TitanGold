@@ -14,6 +14,7 @@ const DataHubTab = lazy(() => import('./tabs/DataHubTab.tsx'));
 const BacktestingTab = lazy(() => import('./tabs/BacktestingTab.tsx'));
 const SystemLogsTab = lazy(() => import('./tabs/SystemLogsTab.tsx'));
 const SettingsTab = lazy(() => import('./tabs/SettingsTab.tsx'));
+const AutopilotTab = lazy(() => import('./tabs/AutopilotTab.tsx'));
 
 type ArtemisTab =
     | 'overview'
@@ -25,7 +26,8 @@ type ArtemisTab =
     | 'data_hub'
     | 'backtesting'
     | 'logs'
-    | 'settings';
+    | 'settings'
+    | 'autopilot';
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
     <div className={`bg-card border border-border rounded-lg p-4 ${className || ''}`}>
@@ -97,6 +99,7 @@ const AIManager: React.FC = () => {
         { id: 'backtesting', label: t('artemis_backtesting') || 'Backtesting' },
         { id: 'logs', label: t('artemis_logs') || 'System Logs' },
         { id: 'settings', label: t('artemis_settings') || 'Settings' },
+        { id: 'autopilot', label: t('artemis_autopilot') || 'Autopilot' },
     ];
 
     const refreshArtemis = async () => {
@@ -182,6 +185,7 @@ const AIManager: React.FC = () => {
                     {activeTab === 'backtesting' && <BacktestingTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
                     {activeTab === 'logs' && <SystemLogsTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
                     {activeTab === 'settings' && <SettingsTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
+                    {activeTab === 'autopilot' && <AutopilotTab t={t} onRefresh={refreshArtemis} Card={Card} />}
                 </Suspense>
             </div>
         </div>
