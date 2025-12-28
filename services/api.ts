@@ -26019,3 +26019,49 @@ export const emergencyStopTradingEngine = async (reason?: string): Promise<{ suc
     }
 };
 
+
+/**
+ * Fetch real-time orchestration state (agent tasks, resource allocation)
+ */
+export const fetchOrchestrationState = async (): Promise<{
+    activeAgents: number;
+    agentTasks: Array<{
+        id: string;
+        agentId: string;
+        agentName: string;
+        type: string;
+        status: 'pending' | 'running' | 'completed' | 'failed';
+        priority: 'low' | 'medium' | 'high' | 'critical';
+        startedAt: string;
+        completedAt: string | null;
+        executionTimeMs: number;
+        result: any;
+    }>;
+    resourceAllocation: Record<string, {
+        agentName: string;
+        cpu: number;
+        memory: number;
+        apiQuota: number;
+        taskCount: number;
+        avgExecutionTimeMs: number;
+    }>;
+    lastUpdated: string;
+}> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
+    const response = await fetch('/api/artemis/orchestration', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch orchestration state: ${response.status}`);
+    }
+
+    return await response.json();
+};

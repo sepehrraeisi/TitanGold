@@ -1,39 +1,87 @@
-import React, { useMemo, useState } from 'react';
-import { ArtemisState, AgentTask, ResourceAllocation } from '../../../../types.ts';
+import React, { useMemo, useState, useEffect } from 'react';
+import * as api from '../../../../services/api.ts';
 
 type Props = {
-    artemis: ArtemisState;
     t: (key: string) => string;
-    onRefresh: () => void;
     Card: React.FC<{ children: React.ReactNode; className?: string }>;
 };
 
-const OrchestrationTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
+const OrchestrationTab: React.FC<Props> = ({ t, Card }) => {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [data, setData] = useState<{
+        activeAgents: number;
+        agentTasks: any[];
+        resourceAllocation: Record<string, any>;
+        lastUpdated: string;
+    } | null>(null);
+
     const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'running' | 'completed' | 'failed'>('all');
     const [priorityFilter, setPriorityFilter] = useState<'all' | 'low' | 'medium' | 'high' | 'critical'>('all');
 
-    const agentTasks: AgentTask[] = artemis.orchestration?.agentTasks || [];
-    const resourceAllocation: Record<string, ResourceAllocation> = artemis.orchestration?.resourceAllocation || {};
+    const loadData = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const orchestrationData = await api.fetchOrchestrationState();
+            setData(orchestrationData);
+        } catch (e) {
+            console.error('Failed to load orchestration data:', e);
+            setError(e instanceof Error ? e.message : 'Failed to load data');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadData();
+        // Auto-refresh every 10 seconds
+        const interval = setInterval(loadData, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const agentTasks = data?.agentTasks || [];
+    const resourceAllocation = data?.resourceAllocation || {};
 
     const taskStats = useMemo(() => {
         const tasks = agentTasks;
         return {
             total: tasks.length,
-            pending: tasks.filter(t => t.status === 'pending').length,
-            running: tasks.filter(t => t.status === 'running').length,
-            completed: tasks.filter(t => t.status === 'completed').length,
-            failed: tasks.filter(t => t.status === 'failed').length,
-            completionRate: tasks.length > 0 ? (tasks.filter(t => t.status === 'completed').length / tasks.length) * 100 : 0,
+            pending: tasks.filter((t: any) => t.status === 'pending').length,
+            running: tasks.filter((t: any) => t.status === 'running').length,
+            completed: tasks.filter((t: any) => t.status === 'completed').length,
+            failed: tasks.filter((t: any) => t.status === 'failed').length,
+            completionRate: tasks.length > 0 ? (tasks.filter((t: any) => t.status === 'completed').length / tasks.length) * 100 : 0,
         };
     }, [agentTasks]);
 
     const filteredTasks = useMemo(() => {
-        return agentTasks.filter(task => {
+        return agentTasks.filter((task: any) => {
             if (taskFilter !== 'all' && task.status !== taskFilter) return false;
             if (priorityFilter !== 'all' && task.priority !== priorityFilter) return false;
             return true;
         });
     }, [agentTasks, taskFilter, priorityFilter]);
+
+    if (loading && !data) {
+        return <Card><div className="text-center p-4">{t('loading') || 'Loading...'}</div></Card>;
+    }
+
+    if (error && !data) {
+        return (
+            <Card>
+                <div className="text-center p-4">
+                    <p className="text-red-400 mb-3">{error}</p>
+                    <button
+                        onClick={loadData}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                    >
+                        {t('retry') || 'Retry'}
+                    </button>
+                </div>
+            </Card>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -41,17 +89,18 @@ const OrchestrationTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 <div className="flex justify-between items-center mb-4">
                     <div>
                         <h3 className="font-semibold text-foreground">{t('orchestration_summary') || 'Orchestration Summary'}</h3>
-                        <p className="text-xs text-muted-foreground">{t('orchestration_desc') || 'Tasks, resources, and failover status for agents'}</p>
+                        <p className="text-xs text-muted-foreground">{t('orchestration_desc') || 'Real-time agent tasks and resource allocation'}</p>
                     </div>
                     <button
-                        onClick={onRefresh}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                        onClick={loadData}
+                        disabled={loading}
+                        className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg text-sm"
                     >
-                        {t('refresh') || 'Refresh'}
+                        {loading ? (t('loading') || 'Loading...') : (t('refresh') || 'Refresh')}
                     </button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Stat label={t('active_agents') || 'Active Agents'} value={artemis.orchestration?.activeAgents || 0} />
+                    <Stat label={t('active_agents') || 'Active Agents'} value={data?.activeAgents || 0} />
                     <Stat label={t('agent_tasks') || 'Agent Tasks'} value={agentTasks.length} />
                     <Stat label={t('resources_allocated') || 'Resources Allocated'} value={Object.keys(resourceAllocation).length} />
                     <Stat label={t('completion_rate') || 'Completion Rate'} value={`${taskStats.completionRate.toFixed(1)}%`} />
@@ -64,6 +113,11 @@ const OrchestrationTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                         <SmallStat label={t('failed') || 'Failed'} value={taskStats.failed} valueClass="text-red-400" />
                         <SmallStat label={t('completion_rate') || 'Completion Rate'} value={`${taskStats.completionRate.toFixed(1)}%`} />
                     </div>
+                )}
+                {data?.lastUpdated && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                        {t('last_updated') || 'Last updated'}: {new Date(data.lastUpdated).toLocaleTimeString()}
+                    </p>
                 )}
             </Card>
 
@@ -95,27 +149,40 @@ const OrchestrationTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                         </select>
                     </div>
                 </div>
-                <div className="space-y-3 text-sm">
+                <div className="space-y-3 text-sm max-h-[500px] overflow-y-auto">
                     {filteredTasks.length === 0 ? (
-                        <p className="text-muted-foreground text-xs">{t('no_data') || 'No data available'}</p>
-                    ) : filteredTasks.map(task => {
+                        <p className="text-muted-foreground text-xs">{t('no_tasks') || 'No tasks found'}</p>
+                    ) : filteredTasks.map((task: any) => {
                         const allocation = resourceAllocation[task.agentId];
-                        const score = allocation ? (allocation.cpu + allocation.memory + allocation.network) / 3 : 0;
                         return (
                             <div key={task.id} className="p-3 bg-secondary/40 rounded-md">
                                 <div className="flex justify-between items-center">
-                                    <div>
-                                        <p className="font-semibold text-foreground">{task.task}</p>
+                                    <div className="flex-1">
+                                        <p className="font-semibold text-foreground">{task.agentName || task.agentId}</p>
                                         <p className="text-muted-foreground text-xs">
-                                            {t(task.status) || task.status} • {task.agentId}
+                                            {task.type} • {t(task.status) || task.status}
                                         </p>
                                     </div>
-                                    <span className="text-xs text-muted-foreground">
-                                        {t('priority') || 'Priority'}: {task.priority}
+                                    <span className={`text-xs px-2 py-1 rounded ${
+                                        task.priority === 'critical' ? 'bg-red-500/20 text-red-400' :
+                                        task.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                                        task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                                        'bg-gray-500/20 text-gray-400'
+                                    }`}>
+                                        {task.priority}
                                     </span>
                                 </div>
-                                <div className="text-xs text-muted-foreground mt-1">
-                                    Score: {score.toFixed(0)}
+                                <div className="flex gap-4 text-xs text-muted-foreground mt-2">
+                                    {task.executionTimeMs && (
+                                        <span>{t('execution_time') || 'Time'}: {task.executionTimeMs}ms</span>
+                                    )}
+                                    {allocation && (
+                                        <>
+                                            <span>CPU: {allocation.cpu}%</span>
+                                            <span>Memory: {allocation.memory}%</span>
+                                            <span>API Quota: {allocation.apiQuota}%</span>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -124,85 +191,75 @@ const OrchestrationTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
             </Card>
 
             <Card>
-                <h3 className="font-semibold text-foreground mb-4">{t('resource_allocation') || 'Resource Allocation'}</h3>
-                {Object.keys(resourceAllocation).length > 0 ? (
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {Object.entries(resourceAllocation).map(([agentId, allocation]) => (
-                            <div key={agentId} className="p-3 border border-border rounded-lg text-sm">
-                                <div className="flex justify-between items-start mb-2">
-                                    <p className="font-semibold text-foreground">{agentId}</p>
-                                    <span className="text-xs text-muted-foreground">
-                                        {t('priority') || 'Priority'}: {allocation.priority}
-                                    </span>
+                <h3 className="font-semibold text-foreground mb-3">{t('resource_allocation') || 'Resource Allocation'}</h3>
+                <div className="space-y-3 text-sm">
+                    {Object.entries(resourceAllocation).length === 0 ? (
+                        <p className="text-muted-foreground text-xs">{t('no_data') || 'No data available'}</p>
+                    ) : Object.entries(resourceAllocation).map(([agentId, allocation]: [string, any]) => (
+                        <div key={agentId} className="p-3 bg-secondary/40 rounded-md">
+                            <div className="flex justify-between items-center mb-2">
+                                <p className="font-semibold text-foreground">{allocation.agentName || agentId}</p>
+                                <span className="text-xs text-muted-foreground">
+                                    {allocation.taskCount} {t('tasks') || 'tasks'}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3 text-xs">
+                                <div>
+                                    <p className="text-muted-foreground">CPU</p>
+                                    <div className="mt-1 h-2 bg-secondary rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-purple-500"
+                                            style={{ width: `${allocation.cpu}%` }}
+                                        />
+                                    </div>
+                                    <p className="text-foreground mt-1">{allocation.cpu}%</p>
                                 </div>
-                                <div className="space-y-2">
-                                    <ResourceBar label={t('cpu_usage') || 'CPU'} value={allocation.cpu} color="bg-blue-500" />
-                                    <ResourceBar label={t('memory_usage') || 'Memory'} value={allocation.memory} color="bg-purple-500" />
+                                <div>
+                                    <p className="text-muted-foreground">Memory</p>
+                                    <div className="mt-1 h-2 bg-secondary rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-blue-500"
+                                            style={{ width: `${allocation.memory}%` }}
+                                        />
+                                    </div>
+                                    <p className="text-foreground mt-1">{allocation.memory}%</p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground">API Quota</p>
+                                    <div className="mt-1 h-2 bg-secondary rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-green-500"
+                                            style={{ width: `${allocation.apiQuota}%` }}
+                                        />
+                                    </div>
+                                    <p className="text-foreground mt-1">{allocation.apiQuota}%</p>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                ) : (
-                    <p className="text-center text-muted-foreground py-6">
-                        {t('no_resource_allocation') || 'No resource allocation configured.'}
-                    </p>
-                )}
-            </Card>
-
-            {artemis.orchestration.failoverStatus && artemis.orchestration.failoverStatus.enabled && (
-                <Card>
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-semibold text-foreground">{t('failover_status') || 'Failover Status'}</h3>
-                        <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded-full text-xs">
-                            {t('enabled') || 'Enabled'}
-                        </span>
-                    </div>
-                    {artemis.orchestration.failoverStatus.lastFailover && (
-                        <div className="p-3 border border-border rounded-lg text-sm">
-                            <p className="font-semibold text-foreground">
-                                {t('last_failover') || 'Last Failover'}:{' '}
-                                {artemis.orchestration.failoverStatus.lastFailover.fromAgent} →{' '}
-                                {artemis.orchestration.failoverStatus.lastFailover.toAgent}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                {artemis.orchestration.failoverStatus.lastFailover.reason}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                {new Date(artemis.orchestration.failoverStatus.lastFailover.timestamp).toLocaleString()}
-                            </p>
+                            {allocation.avgExecutionTimeMs > 0 && (
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    {t('avg_execution') || 'Avg execution'}: {allocation.avgExecutionTimeMs}ms
+                                </p>
+                            )}
                         </div>
-                    )}
-                </Card>
-            )}
+                    ))}
+                </div>
+            </Card>
         </div>
     );
 };
 
 const Stat: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
-    <div className="text-center p-3 border border-border rounded-lg">
+    <div className="text-center">
+        <p className="text-2xl font-bold text-foreground">{value}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-lg font-semibold text-foreground mt-1">{value}</p>
     </div>
 );
 
 const SmallStat: React.FC<{ label: string; value: string | number; valueClass?: string }> = ({ label, value, valueClass }) => (
-    <div className="bg-secondary/40 rounded p-3 text-center">
-        <p className="text-muted-foreground text-xs">{label}</p>
-        <p className={`text-xl font-semibold text-foreground ${valueClass || ''}`}>{value}</p>
-    </div>
-);
-
-const ResourceBar: React.FC<{ label: string; value: number; color: string }> = ({ label, value, color }) => (
-    <div>
-        <div className="flex justify-between text-xs mb-1">
-            <span className="text-muted-foreground">{label}</span>
-            <span className="text-foreground">{value.toFixed(1)}%</span>
-        </div>
-        <div className="w-full bg-secondary rounded-full h-2">
-            <div className={`${color} h-2 rounded-full`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }}></div>
-        </div>
+    <div className="text-center">
+        <p className={`text-lg font-bold ${valueClass || 'text-foreground'}`}>{value}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
     </div>
 );
 
 export default OrchestrationTab;
-

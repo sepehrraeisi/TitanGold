@@ -518,4 +518,105 @@ router.put('/config', authenticate, authorize('admin'), async (req, res) => {
   }
 });
 
+// ============================================================================
+// ORCHESTRATION ENDPOINT — Real-time Agent Task Tracking
+// ============================================================================
+router.get('/orchestration', authenticate, async (req, res) => {
+  try {
+    // 1. Get active agents
+    const agentsResult = await query(
+      'SELECT * FROM ai_agents WHERE status = $1 AND is_enabled = true ORDER BY name',
+      ['active']
+    );
+    const activeAgents = agentsResult.rows.length;
+
+    // 2. Get recent agent tasks (decisions = tasks)
+    const tasksResult = await query(`
+      SELECT 
+        d.id,
+        d.agent_id,
+        d.decision_type,
+        d.confidence,
+        d.was_successful,
+        d.execution_time_ms,
+        d.created_at,
+        d.metadata,
+        a.name as agent_name
+      FROM ai_decisions d
+      LEFT JOIN ai_agents a ON d.agent_id = a.id
+      WHERE d.created_at > NOW() - INTERVAL '24 hours'
+      ORDER BY d.created_at DESC
+      LIMIT 100
+    `);
+
+    // 3. Map decisions to AgentTask format
+    const agentTasks = tasksResult.rows.map(row => {
+      // Determine status based on decision outcome
+      let status = 'completed';
+      if (row.was_successful === false) {
+        status = 'failed';
+      } else if (row.was_successful === null) {
+        status = 'running';
+      }
+
+      // Map confidence to priority
+      const confidence = parseFloat(row.confidence) || 50;
+      let priority = 'low';
+      if (confidence > 80) priority = 'critical';
+      else if (confidence > 60) priority = 'high';
+      else if (confidence > 40) priority = 'medium';
+
+      return {
+        id: row.id,
+        agentId: row.agent_id,
+        agentName: row.agent_name,
+        type: row.decision_type,
+        status,
+        priority,
+        startedAt: row.created_at,
+        completedAt: status === 'completed' || status === 'failed' ? row.created_at : null,
+        executionTimeMs: row.execution_time_ms,
+        result: row.metadata
+      };
+    });
+
+    // 4. Calculate resource allocation per agent
+    const resourceAllocation = {};
+    for (const agent of agentsResult.rows) {
+      const agentTasksForAgent = tasksResult.rows.filter(t => t.agent_id === agent.id);
+      const taskCount = agentTasksForAgent.length;
+      
+      // Calculate resource metrics
+      const avgExecutionTime = taskCount > 0
+        ? agentTasksForAgent.reduce((sum, t) => sum + (t.execution_time_ms || 0), 0) / taskCount
+        : 0;
+
+      resourceAllocation[agent.id] = {
+        agentName: agent.name,
+        cpu: Math.min(100, Math.round(taskCount * 5)), // 5% per task
+        memory: Math.min(100, Math.round(taskCount * 3)), // 3% per task
+        apiQuota: Math.max(0, 100 - taskCount), // Decrease quota with usage
+        taskCount,
+        avgExecutionTimeMs: Math.round(avgExecutionTime)
+      };
+    }
+
+    res.json({
+      activeAgents,
+      agentTasks,
+      resourceAllocation,
+      lastUpdated: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Failed to fetch orchestration state:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch orchestration state',
+      activeAgents: 0,
+      agentTasks: [],
+      resourceAllocation: {},
+      lastUpdated: new Date().toISOString()
+    });
+  }
+});
+
 export default router;

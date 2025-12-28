@@ -174,7 +174,7 @@ const AIManager: React.FC = () => {
                 <Suspense fallback={<div className="text-center p-10">{t('loading')}</div>}>
                     {activeTab === 'overview' && <OverviewTab data={data} artemis={artemis} t={t} onRefresh={refreshArtemis} onNavigate={setActiveTab} Card={Card} />}
                     {activeTab === 'decision_engine' && <DecisionEngineTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
-                    {activeTab === 'orchestration' && <OrchestrationTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
+                    {activeTab === 'orchestration' && <OrchestrationTab t={t} Card={Card} />}
                     {activeTab === 'learning' && <LearningTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
                     {activeTab === 'monitoring' && <MonitoringTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
                     {activeTab === 'scenarios' && <ScenariosTab t={t} onRefresh={refreshArtemis} Card={Card} />}
