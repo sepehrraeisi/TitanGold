@@ -28,6 +28,7 @@ import tradeRoutes from './routes/trades.js';
 import aiAgentRoutes from './routes/ai-agents.js';
 import trainingRoutes from './routes/training.js';
 import artemisRoutes from './routes/artemis.js';
+import autopilotRoutes from './routes/autopilot.js';
 import dataSourceRoutes from './routes/data-sources.js';
 import notificationRoutes from './routes/notifications.js';
 import favoriteRoutes from './routes/favorites.js';
@@ -184,6 +185,7 @@ app.use('/api/trades', tradeRoutes);
 app.use('/api/ai-agents', aiAgentRoutes);
 app.use('/api/training', trainingRoutes);
 app.use('/api/artemis', artemisRoutes);
+app.use('/api/autopilot', autopilotRoutes);
 app.use('/api/data-sources', dataSourceRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/favorites', favoriteRoutes);
@@ -301,6 +303,16 @@ const server = app.listen(PORT, '0.0.0.0', () => {
       console.log('✅ Favorites WebSocket ready at /ws/favorites');
     } catch (error) {
       console.error('❌ Failed to initialize Favorites WebSocket:', error);
+    }
+    
+    // Start Autopilot Worker (if enabled)
+    try {
+      const autopilotWorker = await import('./workers/autopilot-worker.js');
+      autopilotWorker.default.start(5); // Run every 5 minutes
+      console.log('✅ Autopilot Worker started (5min interval)');
+    } catch (error) {
+      console.error('❌ Failed to start Autopilot Worker:', error);
+      // Don't crash server if autopilot fails
     }
     
     // Start Favorites Alert Monitor
