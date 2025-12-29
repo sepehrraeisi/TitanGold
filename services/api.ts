@@ -6102,24 +6102,80 @@ export const fetchTechnicalAnalysisAgentData = async (agentId: string): Promise<
     lastAnalysis: TechnicalAnalysisResult | null;
 }> => {
     try {
-        const agent = await database.get<AIAgent>('aiAgents', agentId);
-        if (agent) {
-            return {
-                config: agent.technicalAnalysisConfig || null,
-                performance: agent.performanceMetrics || null,
-                lastAnalysis: agent.lastAnalysis || null,
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        console.log(`📊 Fetching agent details from API: ${agentId.substring(0,8)}...`);
+
+        const response = await fetch(`/api/ai-agents/${agentId}/details`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData?.error || errorData?.message || 'Failed to load agent details');
+        }
+
+        const data = await response.json();
+        console.log('✅ Agent details loaded:', data);
+
+        // Transform DB config to UI format
+        const dbConfig = data?.agent?.config;
+        let config: TechnicalAnalysisConfig | null = null;
+
+        if (dbConfig) {
+            // Map seed format to UI format
+            config = {
+                enabledIndicators: (dbConfig.parameters?.indicators || []).map((id: string) => ({
+                    id: id.toLowerCase(),
+                    enabled: true,
+                    weight: 1,
+                    parameters: {},
+                })),
+                timeframes: dbConfig.parameters?.timeframes || ['1h', '4h', '1d'],
+                confidenceThreshold: dbConfig.parameters?.sensitivity === 'high' ? 80 : 
+                                    dbConfig.parameters?.sensitivity === 'low' ? 60 : 70,
+                strategy: dbConfig.strategy || 'indicators',
             };
         }
-    } catch (e) {
-        console.warn('Failed to load technical analysis agent data:', e);
-    }
 
-    // Return default if agent not found
-    return {
-        config: null,
-        performance: null,
-        lastAnalysis: null,
-    };
+        // Map performance data
+        const performance: AgentPerformanceMetrics | null = data?.performance ? {
+            totalSignals: data.performance.totalDecisions || 0,
+            successfulSignals: data.performance.successfulDecisions || 0,
+            winRate: data.performance.accuracy || 0,
+            averageConfidence: data.performance.performanceScore || 0,
+            profitFactor: 0, // TODO: Calculate from trades
+            sharpeRatio: 0,
+            maxDrawdown: 0,
+            recentPerformance: {
+                last24h: { signals: 0, winRate: 0 },
+                last7d: { signals: 0, winRate: 0 },
+                last30d: { signals: 0, winRate: 0 },
+            },
+        } : null;
+
+        return {
+            config,
+            performance,
+            lastAnalysis: data?.lastAnalysis || null,
+        };
+
+    } catch (error) {
+        console.error('❌ fetchTechnicalAnalysisAgentData error:', error);
+        
+        // Return null instead of throwing to prevent UI hang
+        return {
+            config: null,
+            performance: null,
+            lastAnalysis: null,
+        };
+    }
 };
 
 export const updateTechnicalAnalysisConfig = async (

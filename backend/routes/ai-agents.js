@@ -473,6 +473,71 @@ router.post('/:id/command', authenticate, rateLimit({ limit: 20, windowMs: 60000
   }
 });
 
+
+// Agent Details (Config, Performance, Last Analysis)
+router.get('/:id/details', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log(`📊 Fetching details for agent: ${id.substring(0,8)}...`);
+
+    const result = await query(
+      `SELECT id, name, type, status, is_enabled, accuracy, performance_score,
+              total_decisions, successful_decisions, agent_key,
+              config, metadata, updated_at, created_at
+       FROM ai_agents
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      console.log(`❌ Agent not found: ${id}`);
+      return sendError(res, 'NOT_FOUND', 'Agent not found', 404);
+    }
+
+    const agent = result.rows[0];
+
+    // Safe JSON parse for config/metadata
+    const safeParse = (value) => {
+      if (!value) return null;
+      if (typeof value === 'object') return value; // Already parsed by pg
+      try { return JSON.parse(value); } catch { return null; }
+    };
+
+    const config = safeParse(agent.config);
+    const metadata = safeParse(agent.metadata);
+
+    console.log(`✅ Agent details loaded: ${agent.name} (${agent.agent_key})`);
+
+    res.json({
+      agent: {
+        id: agent.id,
+        name: agent.name,
+        type: agent.type,
+        agent_key: agent.agent_key,
+        status: agent.status,
+        is_enabled: agent.is_enabled,
+        config,
+        metadata,
+        created_at: agent.created_at,
+        updated_at: agent.updated_at,
+      },
+      performance: {
+        accuracy: agent.accuracy ?? 0,
+        performanceScore: agent.performance_score ?? 0,
+        totalDecisions: agent.total_decisions ?? 0,
+        successfulDecisions: agent.successful_decisions ?? 0,
+      },
+      lastAnalysis: null, // TODO: Store analysis history
+    });
+
+  } catch (err) {
+    console.error('❌ Agent details error:', err);
+    sendError(res, 'SERVER_ERROR', err.message || 'Failed to load agent details', 500);
+  }
+});
+
 router.get('/manager-overview', authenticate, async (req, res) => {
   try {
     const userId = req.user?.id;
