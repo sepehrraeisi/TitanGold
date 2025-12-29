@@ -2,6 +2,13 @@ import dotenv from 'dotenv';
 import { aiService } from './ai.js';
 import { messageQueue } from './messageQueue.js';
 import { query } from '../database/db.js';
+import { 
+  pickProviderInstance, 
+  recordProviderSuccess, 
+  recordProviderFailure,
+  getProviderInstances,
+  getQuorum 
+} from './providerPool.js';
 
 dotenv.config();
 
@@ -99,6 +106,45 @@ const orchSem = new Semaphore(Number.isFinite(ORCH_MAX_CONCURRENCY) && ORCH_MAX_
  * توجه: فعلاً فقط Gemini (internal) به صورت کامل پیاده شده؛
  * بقیه LLMها در صورت تنظیم کلید محیطی استفاده می‌شوند، در غیر این صورت نادیده گرفته می‌شوند.
  */
+
+
+// ============================================================================
+// Provider Pool Integration - DB-driven with Failover
+// ============================================================================
+
+/**
+ * Call provider with automatic failover to next available key
+ * @param {string} provider - Provider name (gemini, openai, etc.)
+ * @param {Function} callFn - Async function (instance) => result
+ * @param {Object} options - { maxRetries: 2 }
+ * @returns {Promise<{ok, provider, instanceId?, result?, error?}>}
+ */
+async function callProviderWithFailover(provider, callFn, { maxRetries = 2 } = {}) {
+  let lastErr = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const inst = await pickProviderInstance(provider);
+    if (!inst) {
+      const err = new Error(`No healthy instance available for provider=${provider}`);
+      err.status = 503;
+      lastErr = err;
+      break; // No point retrying if no instances
+    }
+
+    try {
+      const result = await callFn(inst);
+      await recordProviderSuccess(inst.id);
+      return { ok: true, provider, instanceId: inst.id, result };
+    } catch (err) {
+      console.log(`⚠️ Provider ${provider} attempt ${attempt + 1} failed:`, err.message);
+      lastErr = err;
+      await recordProviderFailure(inst.id, err);
+      // Circuit breaker applied, continue to next key
+    }
+  }
+
+  return { ok: false, provider, error: lastErr?.message || 'unknown error' };
+}
 
 /**
  * Key Pool Helper - Multi-API-key support with round-robin

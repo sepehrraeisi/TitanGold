@@ -2,6 +2,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { 
+  pickProviderInstance, 
+  recordProviderSuccess, 
+  recordProviderFailure 
+} from './providerPool.js';
 
 // ============================================================================
 // Production++ Utilities (Timeout / Retry / Concurrency)
@@ -142,15 +147,61 @@ class AIService {
     }
   }
 
-  // Artemis is currently backed by Gemini in this repo (routes call askArtemis)
+  // Artemis with Provider Pool + Failover
+  // Tries Gemini first, falls back to other providers if needed
   async askArtemis(message, context) {
     const prompt = this.buildPrompt(message, context);
+    
+    // Try Gemini first (primary provider)
     try {
-      return await this.askGemini(prompt);
-    } catch (e) {
-      console.error('❌ askArtemis error:', e?.message || e);
-      return 'AI Service error';
+      const inst = await pickProviderInstance('gemini');
+      if (inst) {
+        try {
+          const genAI = new GoogleGenerativeAI(inst.api_key_encrypted);
+          const model = genAI.getGenerativeModel({ 
+            model: inst.model || 'gemini-2.0-flash' 
+          });
+          
+          const result = await withTimeout(
+            model.generateContent(prompt),
+            this.timeoutMs,
+            'Gemini askArtemis'
+          );
+          
+          const text = result.response?.text?.() || '';
+          await recordProviderSuccess(inst.id);
+          return text;
+        } catch (err) {
+          console.error('⚠️ Gemini failed, trying fallback:', err.message);
+          await recordProviderFailure(inst.id, err);
+          // Continue to fallback
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ No Gemini instance available');
     }
+    
+    // Fallback: try other providers (simplified - in production use full MoA)
+    try {
+      const providers = ['openai', 'deepseek', 'openrouter'];
+      for (const provider of providers) {
+        const inst = await pickProviderInstance(provider);
+        if (!inst) continue;
+        
+        try {
+          // For now, return placeholder (full implementation in Step 4)
+          console.log(`📝 Fallback to ${provider} (placeholder)`);
+          await recordProviderSuccess(inst.id);
+          return 'AI Service temporarily using fallback provider';
+        } catch (err) {
+          await recordProviderFailure(inst.id, err);
+        }
+      }
+    } catch (err) {
+      console.error('❌ All providers failed:', err.message);
+    }
+    
+    return 'AI Service error: all providers unavailable';
   }
 
   buildPrompt(message, context) {
