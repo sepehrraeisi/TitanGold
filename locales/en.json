@@ -1821,7 +1821,7 @@
   "high": "High",
   "min_confidence": "Minimum Confidence (%)",
   "max_positions": "Maximum Positions",
-  "total_signals": "Total Signals",
+  "total_signals": "Total Analyses",
   "successful_signals": "Successful Signals",
   "win_rate": "Win Rate",
   "avg_confidence": "Average Confidence",

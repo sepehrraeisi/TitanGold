@@ -4309,7 +4309,7 @@
   "high": "بالا",
   "min_confidence": "حداقل اعتماد (%)",
   "max_positions": "حداکثر موقعیت‌ها",
-  "total_signals": "کل سیگنال‌ها",
+  "total_signals": "کل تحلیل‌ها",
   "successful_signals": "سیگنال‌های موفق",
   "win_rate": "نرخ برد",
   "avg_confidence": "میانگین اعتماد",
