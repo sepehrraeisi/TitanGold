@@ -194,6 +194,19 @@ export function normalizeAgentConfig(agent_key, rawConfig = {}) {
   return normalized;
 }
 
+/**
+ * Deep merge two configs (for PATCH operations)
+ * Existing config is base, incoming overrides
+ * Use this BEFORE normalizeAgentConfig to preserve nested objects
+ * @param {object} existing - Current config from DB
+ * @param {object} incoming - New partial config from user
+ * @returns {object} Merged config
+ */
+export function mergeAgentConfig(existing = {}, incoming = {}) {
+  // Deep merge where incoming overrides existing
+  return deepMerge(existing, incoming);
+}
+
 export function getAgentDefaults(agent_key) {
   return AGENT_DEFAULTS[agent_key] || {};
 }

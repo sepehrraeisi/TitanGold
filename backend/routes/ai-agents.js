@@ -1,7 +1,7 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
-import { normalizeAgentConfig } from '../services/agentConfigDefaults.js';
+import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigDefaults.js';
 
 import { aiService } from '../services/ai.js';
 
@@ -544,8 +544,9 @@ router.patch('/:id/config', authenticate, async (req, res) => {
       }
     }
 
-    // Merge new config with existing (new takes precedence)
-    const mergedConfig = { ...existingConfig, ...config };
+    // Deep merge new config with existing (preserves nested objects)
+    // CRITICAL: Use deep merge to prevent destroying nested objects like targetAllocation
+    const mergedConfig = mergeAgentConfig(existingConfig, config);
 
     // Normalize to ensure all required fields exist
     const normalizedConfig = normalizeAgentConfig(agent_key, mergedConfig);
