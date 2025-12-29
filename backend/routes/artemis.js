@@ -18,6 +18,33 @@ async function logDecision(level, message, metadata = {}) {
   }
 }
 
+
+// ============================================
+// GET /api/artemis/health
+// Check all AI providers status
+// ============================================
+router.get('/health', authenticate, async (req, res) => {
+  try {
+    const { getProvidersHealth, getActiveProviders } = await import('../services/providerDefaults.js');
+    
+    const health = getProvidersHealth();
+    const active = getActiveProviders();
+    
+    return res.json({
+      providers: health,
+      active: active.length,
+      total: Object.keys(health).length,
+      ready: active.length >= 2, // Minimum 2 providers for quorum
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Failed to get providers health:', error);
+    return res.status(500).json({
+      error: 'Failed to check providers health',
+      message: error.message
+    });
+  }
+});
 router.get('/state', authenticate, async (req, res) => {
   try {
     const userId = req.user?.id;
