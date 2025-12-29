@@ -812,11 +812,11 @@ const SettingsTab: React.FC<{
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    checked={config.advancedSettings[setting]}
+                                    checked={config.advancedSettings?.[setting] ?? false}
                                     onChange={(e) => onUpdate({
                                         ...config,
                                         advancedSettings: {
-                                            ...config.advancedSettings,
+                                            ...(config.advancedSettings ?? { useMachineLearning: true, useDeepLearning: false, ensembleMode: true, realTimeAnalysis: true }),
                                             [setting]: e.target.checked,
                                         },
                                     })}

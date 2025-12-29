@@ -6124,25 +6124,8 @@ export const fetchTechnicalAnalysisAgentData = async (agentId: string): Promise<
         const data = await response.json();
         console.log('✅ Agent details loaded:', data);
 
-        // Transform DB config to UI format
-        const dbConfig = data?.agent?.config;
-        let config: TechnicalAnalysisConfig | null = null;
-
-        if (dbConfig) {
-            // Map seed format to UI format
-            config = {
-                enabledIndicators: (dbConfig.parameters?.indicators || []).map((id: string) => ({
-                    id: id.toLowerCase(),
-                    enabled: true,
-                    weight: 1,
-                    parameters: {},
-                })),
-                timeframes: dbConfig.parameters?.timeframes || ['1h', '4h', '1d'],
-                confidenceThreshold: dbConfig.parameters?.sensitivity === 'high' ? 80 : 
-                                    dbConfig.parameters?.sensitivity === 'low' ? 60 : 70,
-                strategy: dbConfig.strategy || 'indicators',
-            };
-        }
+        // Backend now sends complete config with defaults - use it directly
+        const config = data?.agent?.config || null;
 
         // Map performance data
         const performance: AgentPerformanceMetrics | null = data?.performance ? {
@@ -6150,7 +6133,7 @@ export const fetchTechnicalAnalysisAgentData = async (agentId: string): Promise<
             successfulSignals: data.performance.successfulDecisions || 0,
             winRate: data.performance.accuracy || 0,
             averageConfidence: data.performance.performanceScore || 0,
-            profitFactor: 0, // TODO: Calculate from trades
+            profitFactor: 0,
             sharpeRatio: 0,
             maxDrawdown: 0,
             recentPerformance: {
