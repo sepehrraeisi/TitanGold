@@ -97,7 +97,7 @@ class AIService {
     const key = process.env.GEMINI_API_KEY;
 
     this.enabled = Boolean(key);
-    this.modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
+    this.modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
     // Concurrency limit (safe default)
     const maxConc = Number(process.env.AI_MAX_CONCURRENCY || 2);
