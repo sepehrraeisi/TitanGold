@@ -172,7 +172,7 @@ const LearningTab: React.FC<Props> = ({ t, Card }) => {
                                 </div>
                                 <div className="text-right">
                                     <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400">
-                                        +{improvement.impact.toFixed(1)}
+                                        +{(parseFloat(improvement.impact) || 0).toFixed(1)}
                                     </span>
                                     <p className="text-xs text-muted-foreground mt-1">
                                         {improvement.source}
@@ -216,7 +216,7 @@ const LearningTab: React.FC<Props> = ({ t, Card }) => {
                                 </div>
                                 <div className="text-right flex flex-col gap-2">
                                     <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400">
-                                        {mistake.impact.toFixed(1)}
+                                        {(parseFloat(mistake.impact) || 0).toFixed(1)}
                                     </span>
                                     {!mistake.learned && (
                                         <button
