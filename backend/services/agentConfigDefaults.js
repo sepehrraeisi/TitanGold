@@ -1,12 +1,9 @@
 /**
- * Centralized Agent Configuration Defaults
- * 
- * Each agent has a default config structure to prevent undefined errors in UI.
- * Use normalizeAgentConfig(agent_key, rawConfig) to merge DB config with defaults.
+ * Centralized Agent Configuration Defaults (ESM)
+ * Ensures UI never receives undefined fields by normalizing DB config + defaults.
  */
 
-const AGENT_DEFAULTS = {
-  // 1. Technical Analysis Agent
+export const AGENT_DEFAULTS = {
   technical: {
     indicators: ['RSI', 'MACD', 'EMA', 'SMA', 'BB'],
     timeframes: ['1h', '4h', '1d'],
@@ -15,11 +12,7 @@ const AGENT_DEFAULTS = {
     minConfidence: 70,
     maxPositions: 5,
     autoTrading: false,
-    notificationSettings: {
-      onSignal: true,
-      onAlert: true,
-      onError: true,
-    },
+    notificationSettings: { onSignal: true, onAlert: true, onError: true },
     advancedSettings: {
       useMachineLearning: true,
       useDeepLearning: false,
@@ -28,7 +21,6 @@ const AGENT_DEFAULTS = {
     },
   },
 
-  // 2. Risk Management Agent
   risk: {
     riskLevel: 'medium',
     maxDrawdown: 10,
@@ -36,11 +28,7 @@ const AGENT_DEFAULTS = {
     stopLossPercent: 2,
     takeProfitPercent: 5,
     autoRebalance: true,
-    notificationSettings: {
-      onSignal: true,
-      onAlert: true,
-      onError: true,
-    },
+    notificationSettings: { onSignal: true, onAlert: true, onError: true },
     advancedSettings: {
       dynamicPositionSizing: true,
       correlationAnalysis: true,
@@ -48,60 +36,34 @@ const AGENT_DEFAULTS = {
     },
   },
 
-  // 3. Sentiment Analysis Agent
   sentiment: {
     sources: ['twitter', 'news', 'reddit'],
     sentimentThreshold: 60,
     timeWindow: '24h',
     languages: ['en'],
     autoTrading: false,
-    notificationSettings: {
-      onSignal: true,
-      onAlert: true,
-      onError: true,
-    },
-    advancedSettings: {
-      useNLP: true,
-      emotionDetection: true,
-      influencerWeight: 1.5,
-    },
+    notificationSettings: { onSignal: true, onAlert: true, onError: true },
+    advancedSettings: { useNLP: true, emotionDetection: true, influencerWeight: 1.5 },
   },
 
-  // 4. Pattern Recognition Agent
   pattern: {
     patterns: ['head_shoulders', 'double_top', 'triangle', 'flag'],
     timeframes: ['4h', '1d'],
     minConfidence: 75,
     autoTrading: false,
-    notificationSettings: {
-      onSignal: true,
-      onAlert: true,
-      onError: true,
-    },
-    advancedSettings: {
-      useHistoricalData: true,
-      patternVariations: true,
-    },
+    notificationSettings: { onSignal: true, onAlert: true, onError: true },
+    advancedSettings: { useHistoricalData: true, patternVariations: true },
   },
 
-  // 5. Price Prediction Agent
   price_prediction: {
     models: ['LSTM', 'ARIMA', 'Prophet'],
     predictionHorizon: '24h',
     confidence_threshold: 70,
     autoTrading: false,
-    notificationSettings: {
-      onSignal: true,
-      onAlert: true,
-      onError: true,
-    },
-    advancedSettings: {
-      ensembleModels: true,
-      retrainFrequency: 'daily',
-    },
+    notificationSettings: { onSignal: true, onAlert: true, onError: true },
+    advancedSettings: { ensembleModels: true, retrainFrequency: 'daily' },
   },
 
-  // 6-15: Add other agents with similar structure
   arbitrage: {
     exchanges: ['binance', 'coinbase'],
     minProfitPercent: 0.5,
@@ -184,57 +146,58 @@ const AGENT_DEFAULTS = {
   },
 };
 
-/**
- * Normalize agent configuration by merging DB config with defaults
- * @param {string} agent_key - Agent identifier (e.g., 'technical', 'risk')
- * @param {object} rawConfig - Config from database (may be incomplete)
- * @returns {object} Complete config with all required fields
- */
-function normalizeAgentConfig(agent_key, rawConfig = {}) {
+/** Small, safe deep-merge (objects + arrays) */
+function isPlainObject(v) {
+  return v && typeof v === 'object' && !Array.isArray(v);
+}
+
+function deepMerge(defaults, overrides) {
+  if (Array.isArray(defaults)) {
+    // If DB has an array, use it; else fallback to defaults
+    return Array.isArray(overrides) ? overrides : defaults;
+  }
+  if (isPlainObject(defaults)) {
+    const out = { ...defaults };
+    if (isPlainObject(overrides)) {
+      for (const [k, v] of Object.entries(overrides)) {
+        if (k in defaults) {
+          out[k] = deepMerge(defaults[k], v);
+        } else {
+          out[k] = v; // allow extra fields from DB
+        }
+      }
+    }
+    return out;
+  }
+  // primitives
+  return overrides !== undefined ? overrides : defaults;
+}
+
+export function normalizeAgentConfig(agent_key, rawConfig = {}) {
   const defaults = AGENT_DEFAULTS[agent_key];
-  
   if (!defaults) {
-    console.warn(`⚠️  No defaults found for agent_key: ${agent_key}`);
-    return rawConfig || {};
+    console.warn(`⚠️ No defaults found for agent_key: ${agent_key}`);
+    // still guarantee these two exist for UI safety
+    return {
+      ...(rawConfig || {}),
+      notificationSettings: rawConfig?.notificationSettings ?? { onSignal: true, onAlert: true, onError: true },
+      advancedSettings: rawConfig?.advancedSettings ?? {},
+    };
   }
 
-  // Deep merge: defaults + rawConfig (rawConfig takes precedence)
-  const normalized = {
-    ...defaults,
-    ...rawConfig,
-    notificationSettings: {
-      ...defaults.notificationSettings,
-      ...(rawConfig.notificationSettings || {}),
-    },
-    advancedSettings: {
-      ...defaults.advancedSettings,
-      ...(rawConfig.advancedSettings || {}),
-    },
-  };
+  const normalized = deepMerge(defaults, rawConfig || {});
+
+  // Hard guarantee: UI core blocks never undefined
+  normalized.notificationSettings ??= { onSignal: true, onAlert: true, onError: true };
+  normalized.advancedSettings ??= {};
 
   return normalized;
 }
 
-/**
- * Get default config for an agent
- * @param {string} agent_key - Agent identifier
- * @returns {object} Default config
- */
-function getAgentDefaults(agent_key) {
+export function getAgentDefaults(agent_key) {
   return AGENT_DEFAULTS[agent_key] || {};
 }
 
-/**
- * Get list of all supported agent keys
- * @returns {string[]} Array of agent keys
- */
-function getSupportedAgents() {
+export function getSupportedAgents() {
   return Object.keys(AGENT_DEFAULTS);
 }
-
-export {
-  normalizeAgentConfig,
-  getAgentDefaults,
-  getSupportedAgents,
-  AGENT_DEFAULTS,
-};

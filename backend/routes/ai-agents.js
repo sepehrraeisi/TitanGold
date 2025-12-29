@@ -523,7 +523,36 @@ router.patch('/:id/config', authenticate, async (req, res) => {
 
     console.log(`🔧 Updating config for agent ${id.substring(0, 8)}...`);
 
-    // Update in database
+    // Get current agent to access agent_key
+    const currentAgent = await query('SELECT agent_key, config FROM ai_agents WHERE id = $1', [id]);
+    
+    if (currentAgent.rows.length === 0) {
+      console.error('❌ Agent not found:', id);
+      return sendError(res, 'NOT_FOUND', 'Agent not found', 404);
+    }
+
+    const agent_key = currentAgent.rows[0].agent_key;
+    const currentConfig = currentAgent.rows[0].config;
+    
+    // Parse current config
+    let existingConfig = {};
+    if (currentConfig) {
+      try {
+        existingConfig = typeof currentConfig === 'object' ? currentConfig : JSON.parse(currentConfig);
+      } catch (e) {
+        console.warn('⚠️  Failed to parse existing config, using empty object');
+      }
+    }
+
+    // Merge new config with existing (new takes precedence)
+    const mergedConfig = { ...existingConfig, ...config };
+
+    // Normalize to ensure all required fields exist
+    const normalizedConfig = normalizeAgentConfig(agent_key, mergedConfig);
+
+    console.log(`✅ Config normalized for ${agent_key}`);
+
+    // Update in database with normalized config
     const result = await query(
       `UPDATE ai_agents
        SET config = $1,
@@ -532,16 +561,11 @@ router.patch('/:id/config', authenticate, async (req, res) => {
        WHERE id = $3
        RETURNING id, name, agent_key`,
       [
-        JSON.stringify(config),
+        JSON.stringify(normalizedConfig),
         metadata ? JSON.stringify(metadata) : null,
         id
       ]
     );
-
-    if (result.rows.length === 0) {
-      console.error('❌ Agent not found:', id);
-      return sendError(res, 'NOT_FOUND', 'Agent not found', 404);
-    }
 
     const agent = result.rows[0];
     console.log(`✅ Config updated for ${agent.name} (${agent.agent_key})`);
