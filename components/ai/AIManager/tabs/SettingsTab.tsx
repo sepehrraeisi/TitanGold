@@ -13,8 +13,8 @@ type Props = {
 type SettingsTabId = 'decision' | 'learning' | 'security' | 'monitoring' | 'integration' | 'ui' | 'scheduler';
 
 const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
-    // Guard: Check if artemis and config are loaded
-    if (!artemis || !artemis.config) {
+    // Guard: Check if artemis exists
+    if (!artemis) {
         return (
             <Card>
                 <div className="text-center p-10">
@@ -72,7 +72,22 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         },
     });
 
-    const [config, setConfig] = useState<ArtemisConfig>(artemis.config || getDefaultConfig());
+    // Merge artemis.config with defaults (handle empty config)
+    const safeInitialConfig = useMemo(() => {
+        const defaults = getDefaultConfig();
+        const raw = artemis.config || {};
+        
+        return {
+            decisionEngine: { ...defaults.decisionEngine, ...(raw.decisionEngine || {}) },
+            learning: { ...defaults.learning, ...(raw.learning || {}) },
+            monitoring: { ...defaults.monitoring, ...(raw.monitoring || {}) },
+            security: { ...defaults.security, ...(raw.security || {}) },
+            integration: { ...defaults.integration, ...(raw.integration || {}) },
+            ui: { ...defaults.ui, ...(raw.ui || {}) },
+        };
+    }, [artemis.config, artemis.mode]);
+
+    const [config, setConfig] = useState<ArtemisConfig>(safeInitialConfig);
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<SettingsTabId>('decision');
     const [showResetConfirm, setShowResetConfirm] = useState(false);
