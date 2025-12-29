@@ -145,6 +145,7 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
     const { function: funcName, symbol, timeframe = '1h' } = req.body || {};
 
     // 🔥 NEW: Map UUID/agent_key to legacy agent IDs
+    const originalId = id; // Keep original UUID for DB updates
     let agentId = id;
     
     // If UUID is received, lookup agent_key from database
@@ -237,16 +238,16 @@ Return ONLY JSON with this schema:
                    successful_decisions = COALESCE(successful_decisions, 0) + $1,
                    updated_at = NOW()
                WHERE id = $2`,
-              [isSuccessful, id]
+              [isSuccessful, originalId]
             );
-            console.log(`📊 Performance updated: total+1, successful+${isSuccessful}`);
+            console.log(`📊 Performance updated for ${originalId.substring(0,8)}: total+1, successful+${isSuccessful}`);
           } catch (perfError) {
             console.error('⚠️  Failed to update performance:', perfError);
             // Don't fail the request if performance tracking fails
           }
 
           const result = {
-            agentId: id,
+            agentId: originalId,
             function: funcName || 'runTechnicalAnalysis',
             signal: parsed.signal || 'NEUTRAL',
             confidence: parsed.confidence ?? 55,
