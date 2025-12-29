@@ -13,10 +13,13 @@ type Props = {
 type SettingsTabId = 'decision' | 'learning' | 'security' | 'monitoring' | 'integration' | 'ui' | 'scheduler';
 
 const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
-    if (!artemis) {
+    // Guard: Check if artemis and config are loaded
+    if (!artemis || !artemis.config) {
         return (
             <Card>
-                <div className="text-center p-10">{t('loading') || 'Loading...'}</div>
+                <div className="text-center p-10">
+                    <div className="text-sm text-muted-foreground">{t('loading_settings') || 'Loading settings...'}</div>
+                </div>
             </Card>
         );
     }
