@@ -408,6 +408,71 @@ function safeParseJson(raw) {
 }
 
 // Get manager overview (for AI Manager component)
+
+// Agent Control Command (Pause, Start, Restart, etc.)
+router.post('/:id/command', authenticate, rateLimit({ limit: 20, windowMs: 60000 }), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { command } = req.body;
+
+    if (!command) {
+      return sendError(res, 'VALIDATION_ERROR', 'Command is required', 400);
+    }
+
+    const validCommands = ['start', 'pause', 'stop', 'restart', 'resume', 'enable', 'disable'];
+    if (!validCommands.includes(command)) {
+      return sendError(res, 'VALIDATION_ERROR', `Invalid command. Allowed: ${validCommands.join(', ')}`, 400);
+    }
+
+    // Map command to status
+    let newStatus = 'active';
+    let isEnabled = true;
+
+    switch (command) {
+      case 'start':
+      case 'resume':
+      case 'enable':
+        newStatus = 'active';
+        isEnabled = true;
+        break;
+      case 'pause':
+      case 'stop':
+        newStatus = 'inactive';
+        isEnabled = true; // still enabled, just paused
+        break;
+      case 'disable':
+        newStatus = 'inactive';
+        isEnabled = false;
+        break;
+      case 'restart':
+        newStatus = 'active';
+        isEnabled = true;
+        break;
+    }
+
+    // Update agent in database
+    await query(`
+      UPDATE ai_agents 
+      SET status = $1, is_enabled = $2, updated_at = NOW()
+      WHERE id = $3
+    `, [newStatus, isEnabled, id]);
+
+    console.log(`✅ Agent ${id.substring(0,8)}... ${command} → status: ${newStatus}, enabled: ${isEnabled}`);
+
+    res.json({
+      success: true,
+      command,
+      status: newStatus,
+      isEnabled,
+      message: `Agent ${command} successful`
+    });
+
+  } catch (error) {
+    console.error('Agent command error:', error);
+    sendError(res, 'COMMAND_ERROR', error.message || 'Failed to execute command', 500);
+  }
+});
+
 router.get('/manager-overview', authenticate, async (req, res) => {
   try {
     const userId = req.user?.id;

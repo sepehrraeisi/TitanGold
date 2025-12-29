@@ -25068,3 +25068,37 @@ export const runAutopilotOnce = async (hoursWindow?: number): Promise<void> => {
         throw new Error(error.error || 'Failed to run autopilot cycle');
     }
 };
+
+// Agent Control Command (Pause, Start, Restart, etc.)
+export const sendAgentControlCommand = async (agentId: string, command: string): Promise<void> => {
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
+        }
+
+        console.log(`🎮 Sending agent command: ${command} to ${agentId.substring(0,8)}...`);
+
+        const response = await fetch(`/api/ai-agents/${agentId}/command`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ command }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData?.error || errorData?.message || `Command failed (${response.status})`;
+            console.error('❌ Agent command failed:', errorMessage);
+            throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        console.log('✅ Agent command executed:', data);
+    } catch (error) {
+        console.error('❌ sendAgentControlCommand error:', error);
+        throw error;
+    }
+};
