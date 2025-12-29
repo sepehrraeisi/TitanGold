@@ -21,20 +21,45 @@ async function logDecision(level, message, metadata = {}) {
 
 // ============================================
 // GET /api/artemis/health
-// Check all AI providers status
+// Check all AI providers status (DB-driven)
 // ============================================
 router.get('/health', authenticate, async (req, res) => {
   try {
-    const { getProvidersHealth, getActiveProviders } = await import('../services/providerDefaults.js');
+    const { getProviderHealth, getProviderInstances, getQuorum } = await import('../services/providerPool.js');
+    const { PROVIDER_DEFAULTS } = await import('../services/providerDefaults.js');
     
-    const health = getProvidersHealth();
-    const active = getActiveProviders();
+    // Get DB health summary
+    const healthSummary = await getProviderHealth();
+    const allInstances = await getProviderInstances();
+    
+    // Group instances by provider
+    const providerStatus = {};
+    for (const [key, defaults] of Object.entries(PROVIDER_DEFAULTS)) {
+      const summary = healthSummary.find(h => h.provider === key);
+      const instances = allInstances.filter(i => i.provider === key);
+      
+      providerStatus[key] = {
+        name: defaults.name,
+        totalKeys: parseInt(summary?.total_keys || 0),
+        healthyKeys: parseInt(summary?.healthy_keys || 0),
+        enabledKeys: parseInt(summary?.enabled_keys || 0),
+        successCount: parseInt(summary?.total_successes || 0),
+        failCount: parseInt(summary?.total_failures || 0),
+        ok: instances.length > 0,
+        reason: instances.length === 0 ? 'No healthy keys available' : null,
+        weight: defaults.weight,
+        defaultModel: defaults.defaultModel
+      };
+    }
+    
+    const quorum = getQuorum(allInstances.length);
     
     return res.json({
-      providers: health,
-      active: active.length,
-      total: Object.keys(health).length,
-      ready: active.length >= 2, // Minimum 2 providers for quorum
+      providers: providerStatus,
+      activeInstances: allInstances.length,
+      totalProviders: Object.keys(PROVIDER_DEFAULTS).length,
+      quorum,
+      ready: allInstances.length >= quorum,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
