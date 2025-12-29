@@ -198,6 +198,24 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
     const cached = getCache(cacheKey);
     if (cached) {
       console.log(`✅ Cache hit for ${cacheKey}`);
+      
+      // 🔥 CRITICAL: Track performance even on cache hit
+      // User clicked "Run Analysis" → Count it as a decision
+      try {
+        const isSuccessful = (cached.signal && cached.signal !== 'NEUTRAL') ? 1 : 0;
+        await query(
+          `UPDATE ai_agents
+           SET total_decisions = COALESCE(total_decisions, 0) + 1,
+               successful_decisions = COALESCE(successful_decisions, 0) + $1,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [isSuccessful, originalId]
+        );
+        console.log(`📊 Performance tracked on cache hit: ${originalId.substring(0,8)}`);
+      } catch (perfError) {
+        console.error('⚠️  Failed to track cached performance:', perfError);
+      }
+      
       return res.json(cached);
     }
 
