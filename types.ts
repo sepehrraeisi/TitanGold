@@ -854,6 +854,7 @@ export interface UserManagementData {
 
 export interface AIAgent {
   id: string;
+  agent_key?: string; // ✅ NEW: agent_key for frontend lookup
   name: string;
   role: string;
   status: 'active' | 'inactive' | 'training';

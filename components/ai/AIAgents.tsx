@@ -82,105 +82,105 @@ const AIAgents: React.FC = () => {
                 ))}
             </div>
             
-            {selectedAgent && selectedAgent.id === '1' && (
+            {selectedAgent && selectedAgent.agent_key === 'technical' && (
                 <TechnicalAnalysisAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '2' && (
+            {selectedAgent && selectedAgent.agent_key === 'risk' && (
                 <RiskManagementAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '3' && (
+            {selectedAgent && selectedAgent.agent_key === 'sentiment' && (
                 <SentimentAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '4' && (
+            {selectedAgent && selectedAgent.agent_key === 'pattern' && (
                 <PatternAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '5' && (
+            {selectedAgent && selectedAgent.agent_key === 'price_prediction' && (
                 <PricePredictionAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '6' && (
+            {selectedAgent && selectedAgent.agent_key === 'arbitrage' && (
                 <ArbitrageAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '7' && (
+            {selectedAgent && selectedAgent.agent_key === 'portfolio' && (
                 <PortfolioAllocationAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '8' && (
+            {selectedAgent && selectedAgent.agent_key === 'liquidity' && (
                 <LiquidityAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '9' && (
+            {selectedAgent && selectedAgent.agent_key === 'trend' && (
                 <TrendAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '10' && (
+            {selectedAgent && selectedAgent.agent_key === 'optimization' && (
                 <OptimizationAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '11' && (
+            {selectedAgent && selectedAgent.agent_key === 'order' && (
                 <OrderManagementAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '12' && (
+            {selectedAgent && selectedAgent.agent_key === 'fundamental' && (
                 <FundamentalAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '13' && (
+            {selectedAgent && selectedAgent.agent_key === 'market_intelligence' && (
                 <MarketIntelligenceAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '14' && (
+            {selectedAgent && selectedAgent.agent_key === 'volume' && (
                 <VolumeAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
                     onUpdate={handleAgentUpdate}
                 />
             )}
-            {selectedAgent && selectedAgent.id === '15' && (
+            {selectedAgent && selectedAgent.agent_key === 'timing' && (
                 <TimingAgentControl
                     agent={selectedAgent}
                     onClose={() => setSelectedAgent(null)}
