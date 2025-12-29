@@ -144,8 +144,45 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
     const { id } = req.params;
     const { function: funcName, symbol, timeframe = '1h' } = req.body || {};
 
+    // 🔥 NEW: Map UUID/agent_key to legacy agent IDs
+    let agentId = id;
+    
+    // If UUID is received, lookup agent_key from database
+    if (id.includes('-') && id.length > 20) {
+      try {
+        const agentResult = await query('SELECT agent_key FROM ai_agents WHERE id = $1', [id]);
+        if (agentResult.rows.length > 0 && agentResult.rows[0].agent_key) {
+          const agent_key = agentResult.rows[0].agent_key;
+          
+          // Map agent_key to legacy agent ID
+          const agentKeyToLegacyId = {
+            'technical': 'agent-1',
+            'risk': 'agent-2',
+            'sentiment': 'agent-3',
+            'pattern': 'agent-4',
+            'price_prediction': 'agent-5',
+            'arbitrage': 'agent-6',
+            'portfolio': 'agent-7',
+            'liquidity': 'agent-8',
+            'trend': 'agent-9',
+            'optimization': 'agent-10',
+            'order': 'agent-11',
+            'fundamental': 'agent-12',
+            'market_intelligence': 'agent-13',
+            'volume': 'agent-14',
+            'timing': 'agent-15'
+          };
+          
+          agentId = agentKeyToLegacyId[agent_key] || id;
+          console.log(`✅ Mapped UUID ${id.substring(0,8)}... → agent_key: ${agent_key} → legacy: ${agentId}`);
+        }
+      } catch (err) {
+        console.error('❌ Failed to lookup agent_key:', err.message);
+      }
+    }
+
     // Validation
-    if (!validateAgentId(id)) {
+    if (!validateAgentId(agentId) && !agentId.startsWith('agent-')) {
       return sendError(res, 'VALIDATION_ERROR', 'Invalid agent ID format', 400);
     }
     if (symbol && !validateSymbol(symbol)) {
@@ -156,7 +193,7 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
     }
 
     // Cache key (agent + symbol + timeframe)
-    const cacheKey = `agent:${id}:${symbol || 'default'}:${timeframe}`;
+    const cacheKey = `agent:${agentId}:${symbol || 'default'}:${timeframe}`;
     const cached = getCache(cacheKey);
     if (cached) {
       console.log(`✅ Cache hit for ${cacheKey}`);
@@ -164,7 +201,7 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
     }
 
     // Agent 1: Technical Analysis
-    if (id === 'agent-1') {
+    if (agentId === 'agent-1') {
       try {
         const prompt = `
 You are the Technical Analysis Agent in the TitanGold trading system.
@@ -230,7 +267,7 @@ Return ONLY JSON with this schema:
     }
 
     // Agent 2: Risk Management
-    if (id === 'agent-2') {
+    if (agentId === 'agent-2') {
       try {
         const prompt = `
 You are the Risk Management Agent in the TitanGold trading system.
@@ -283,7 +320,7 @@ Return ONLY JSON:
     }
 
     // Agent 15: Timing
-    if (id === 'agent-15') {
+    if (agentId === 'agent-15') {
       try {
         const prompt = `
 You are the Timing Agent in the TitanGold trading system.
