@@ -40,8 +40,16 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
 
 export const useLanguage = (): LanguageContextType => {
   const context = useContext(LanguageContext);
+  
+  // Fail-safe: never crash the UI
   if (!context) {
-    throw new Error('useLanguage must be used within a LanguageProvider');
+    console.warn('⚠️ useLanguage called outside LanguageProvider - using fallback');
+    return {
+      language: 'en',
+      setLanguage: () => {},
+      t: (key: string) => key, // Return key as-is (identity function)
+    };
   }
+  
   return context;
 };

@@ -281,6 +281,22 @@ class AutopilotEngine {
 
     for (const suggestion of suggestions) {
       try {
+        // ✅ Dedupe check: Skip if pending suggestion exists for same agent+action in last 30 minutes
+        const existingCheck = await query(
+          `SELECT id FROM autopilot_actions 
+           WHERE agent_id = $1 
+             AND action_type = $2 
+             AND status = 'pending' 
+             AND suggested_at > NOW() - interval '30 minutes'
+           LIMIT 1`,
+          [suggestion.agent_id, suggestion.action_type]
+        );
+
+        if (existingCheck.rows.length > 0) {
+          console.log(`[Autopilot] ⏭️  Skipping duplicate suggestion for agent ${suggestion.agent_id} (${suggestion.action_type})`);
+          continue; // Skip this suggestion
+        }
+
         const result = await query(
           `INSERT INTO autopilot_actions 
             (action_type, status, agent_id, new_config, change_summary, reason, confidence, triggering_events, metrics)
@@ -300,7 +316,7 @@ class AutopilotEngine {
         );
 
         saved.push(result.rows[0]);
-        console.log(`[Autopilot] Saved suggestion for agent ${suggestion.agent_id}`);
+        console.log(`[Autopilot] ✅ Saved suggestion for agent ${suggestion.agent_id}`);
 
       } catch (error) {
         console.error(`[Autopilot] Failed to save suggestion for agent ${suggestion.agent_id}:`, error);
