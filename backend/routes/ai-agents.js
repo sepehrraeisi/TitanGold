@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import { normalizeAgentConfig } from '../services/agentConfigDefaults.js';
 
 import { aiService } from '../services/ai.js';
 
@@ -605,30 +606,8 @@ router.get('/:id/details', authenticate, async (req, res) => {
     const rawConfig = safeParse(agent.config);
     const metadata = safeParse(agent.metadata);
 
-    // Default complete config structure to prevent undefined errors in UI
-    const defaultConfig = {
-      indicators: rawConfig?.indicators || ['RSI', 'MACD', 'EMA', 'SMA', 'BB'],
-      timeframes: rawConfig?.timeframes || ['1h', '4h', '1d'],
-      confidence_threshold: rawConfig?.confidence_threshold || 70,
-      riskLevel: rawConfig?.riskLevel || 'medium',
-      minConfidence: rawConfig?.minConfidence || 70,
-      maxPositions: rawConfig?.maxPositions || 5,
-      autoTrading: rawConfig?.autoTrading ?? false,
-      notificationSettings: rawConfig?.notificationSettings ?? {
-        onSignal: true,
-        onAlert: true,
-        onError: true,
-      },
-      advancedSettings: rawConfig?.advancedSettings ?? {
-        useMachineLearning: true,
-        useDeepLearning: false,
-        ensembleMode: true,
-        realTimeAnalysis: true,
-      },
-    };
-
-    // Merge with any additional fields from DB
-    const config = { ...defaultConfig, ...rawConfig };
+    // Use centralized config normalization
+    const config = normalizeAgentConfig(agent.agent_key, rawConfig);
 
     console.log(`✅ Agent details loaded: ${agent.name} (${agent.agent_key})`);
     console.log(`   Accuracy: ${agent.accuracy} (type: ${typeof agent.accuracy})`);
