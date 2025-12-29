@@ -482,9 +482,12 @@ router.get('/:id/details', authenticate, async (req, res) => {
     console.log(`📊 Fetching details for agent: ${id.substring(0,8)}...`);
 
     const result = await query(
-      `SELECT id, name, type, status, is_enabled, accuracy, performance_score,
-              total_decisions, successful_decisions, agent_key,
-              config, metadata, updated_at, created_at
+      `SELECT id, name, type, status, is_enabled, agent_key,
+              config, metadata, updated_at, created_at,
+              COALESCE(accuracy::float8, 0) AS accuracy,
+              COALESCE(performance_score::float8, 0) AS performance_score,
+              COALESCE(total_decisions, 0) AS total_decisions,
+              COALESCE(successful_decisions, 0) AS successful_decisions
        FROM ai_agents
        WHERE id = $1
        LIMIT 1`,
@@ -505,10 +508,18 @@ router.get('/:id/details', authenticate, async (req, res) => {
       try { return JSON.parse(value); } catch { return null; }
     };
 
+    // Safe number conversion
+    const toNum = (value) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    };
+
     const config = safeParse(agent.config);
     const metadata = safeParse(agent.metadata);
 
     console.log(`✅ Agent details loaded: ${agent.name} (${agent.agent_key})`);
+    console.log(`   Accuracy: ${agent.accuracy} (type: ${typeof agent.accuracy})`);
+    console.log(`   Performance: ${agent.performance_score} (type: ${typeof agent.performance_score})`);
 
     res.json({
       agent: {
@@ -524,12 +535,12 @@ router.get('/:id/details', authenticate, async (req, res) => {
         updated_at: agent.updated_at,
       },
       performance: {
-        accuracy: agent.accuracy ?? 0,
-        performanceScore: agent.performance_score ?? 0,
-        totalDecisions: agent.total_decisions ?? 0,
-        successfulDecisions: agent.successful_decisions ?? 0,
+        accuracy: toNum(agent.accuracy),
+        performanceScore: toNum(agent.performance_score),
+        totalDecisions: parseInt(agent.total_decisions, 10) || 0,
+        successfulDecisions: parseInt(agent.successful_decisions, 10) || 0,
       },
-      lastAnalysis: null, // TODO: Store analysis history
+      lastAnalysis: null,
     });
 
   } catch (err) {
