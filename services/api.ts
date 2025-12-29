@@ -6182,21 +6182,35 @@ export const updateTechnicalAnalysisConfig = async (
     agentId: string,
     config: TechnicalAnalysisConfig
 ): Promise<void> => {
+    console.log('🔧 Updating technical analysis config via backend API...');
+    
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
+    }
+
     try {
-        const agent = await database.get<AIAgent>('aiAgents', agentId);
-        if (agent) {
-            const updated = {
-                ...agent,
-                technicalAnalysisConfig: config,
-                lastUpdate: new Date().toISOString(),
-            };
-            await database.save('aiAgents', updated);
-        } else {
-            throw new Error('Agent not found');
+        const response = await fetch(`/api/ai-agents/${agentId}/config`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ config }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('❌ Config update failed:', errorData);
+            throw new Error(errorData?.message || errorData?.error || 'Update failed');
         }
-    } catch (e) {
-        console.error('Failed to update technical analysis config:', e);
-        throw e;
+
+        const data = await response.json();
+        console.log('✅ Config updated successfully:', data);
+        
+    } catch (error) {
+        console.error('❌ updateTechnicalAnalysisConfig error:', error);
+        throw error;
     }
 };
 

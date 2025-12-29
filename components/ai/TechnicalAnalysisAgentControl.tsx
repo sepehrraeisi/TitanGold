@@ -783,11 +783,11 @@ const SettingsTab: React.FC<{
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    checked={config.notificationSettings[setting]}
+                                    checked={config.notificationSettings?.[setting] ?? false}
                                     onChange={(e) => onUpdate({
                                         ...config,
                                         notificationSettings: {
-                                            ...config.notificationSettings,
+                                            ...(config.notificationSettings ?? { onSignal: true, onAlert: true, onError: true }),
                                             [setting]: e.target.checked,
                                         },
                                     })}

@@ -228,6 +228,23 @@ Return ONLY JSON with this schema:
         );
         const parsed = safeParseJson(raw);
         if (parsed) {
+          // Update performance metrics in database
+          const isSuccessful = (parsed.signal && parsed.signal !== 'NEUTRAL') ? 1 : 0;
+          try {
+            await query(
+              `UPDATE ai_agents
+               SET total_decisions = COALESCE(total_decisions, 0) + 1,
+                   successful_decisions = COALESCE(successful_decisions, 0) + $1,
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [isSuccessful, id]
+            );
+            console.log(`📊 Performance updated: total+1, successful+${isSuccessful}`);
+          } catch (perfError) {
+            console.error('⚠️  Failed to update performance:', perfError);
+            // Don't fail the request if performance tracking fails
+          }
+
           const result = {
             agentId: id,
             function: funcName || 'runTechnicalAnalysis',
@@ -472,6 +489,58 @@ router.post('/:id/command', authenticate, rateLimit({ limit: 20, windowMs: 60000
     sendError(res, 'COMMAND_ERROR', error.message || 'Failed to execute command', 500);
   }
 });
+// PATCH /api/ai-agents/:id/config - Update agent configuration
+router.patch('/:id/config', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { config, metadata } = req.body;
+
+    // Validate
+    if (!config || typeof config !== 'object') {
+      console.error('❌ Invalid config:', config);
+      return sendError(res, 'VALIDATION_ERROR', 'config is required and must be an object', 400);
+    }
+
+    console.log(`🔧 Updating config for agent ${id.substring(0, 8)}...`);
+
+    // Update in database
+    const result = await query(
+      `UPDATE ai_agents
+       SET config = $1,
+           metadata = COALESCE($2, metadata),
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, name, agent_key`,
+      [
+        JSON.stringify(config),
+        metadata ? JSON.stringify(metadata) : null,
+        id
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      console.error('❌ Agent not found:', id);
+      return sendError(res, 'NOT_FOUND', 'Agent not found', 404);
+    }
+
+    const agent = result.rows[0];
+    console.log(`✅ Config updated for ${agent.name} (${agent.agent_key})`);
+
+    return res.json({
+      success: true,
+      agent: {
+        id: agent.id,
+        name: agent.name,
+        agent_key: agent.agent_key
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Update config error:', error);
+    return sendError(res, 'SERVER_ERROR', error.message || 'Update failed', 500);
+  }
+});
+
 
 
 // Agent Details (Config, Performance, Last Analysis)
