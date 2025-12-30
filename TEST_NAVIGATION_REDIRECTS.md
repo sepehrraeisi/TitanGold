@@ -1,11 +1,27 @@
 # Navigation Redirect Tests
 
+## ⚠️ IMPORTANT: This is a Quick Reference
+
+For **COMPLETE manual testing**, see: **`MANUAL_TESTING_REPORT.md`**
+
+That document includes:
+- Detailed step-by-step test instructions
+- Browser back button behavior analysis
+- Decision framework for URL/history integration
+- Admin access control tests
+- Page refresh tests
+- Console error checks
+- Performance metrics
+- Sign-off section
+
+---
+
 ## Test Environment
 - URL: https://titan.zala.ir
 - User: Admin
 - Date: 2025-12-30
 
-## Test Scenarios
+## Quick Test Scenarios
 
 ### ✅ Test 1: AI Center → Config → Open in Settings
 **Path**: Dashboard → AI Center (tab) → Config (tab) → Click "Open in Settings" button
