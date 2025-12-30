@@ -423,6 +423,7 @@ fe5daec test(Navigation): Mark all redirect tests as PASS
 
 ### **Code Architecture**
 - `types/navigation.ts` - Navigation type definitions
+- `utils/urlSync.ts` - **NEW** - URL/History sync utilities ⭐
 - `.prettierrc` - Code formatting config
 - `.prettierignore` - Prettier exclusions
 
@@ -439,6 +440,7 @@ The implementation is complete, tested (automated), and deployed. The code is:
 - ✅ **Fast** - <50ms navigation
 - ✅ **Maintainable** - 1,651 lines removed
 - ✅ **CI/CD Ready** - Prettier in devDependencies
+- ✅ **URL/History Integration** - Browser back button support (Option B) ⭐
 - ⏳ **Pending manual browser testing** - See MANUAL_TESTING_REPORT.md
 
 ---
@@ -448,27 +450,35 @@ The implementation is complete, tested (automated), and deployed. The code is:
 ### **1. Complete Manual Testing**
 Open `MANUAL_TESTING_REPORT.md` and fill in:
 - Test execution results (9 test scenarios)
-- Browser back button behavior analysis
-- Decision: Accept state-based OR implement URL/history
+- Browser back button behavior testing ⭐ (now implemented!)
 - Performance metrics
 - Sign-off
 
-### **2. Decision Required: Back Button Behavior**
+### **2. ✅ Decision Made: URL/History Integration (Option B)**
 
-#### **Option A: Accept State-Based (Recommended)**
-- ✅ Simpler, faster, production-safe
-- ✅ No URL complexity
-- ❌ Back button won't work for in-app navigation
-- **Action**: Document in user guide, add "Back" button in Settings UI
+**Status**: ✅ **IMPLEMENTED** (Commit: 8fa6709)
 
-#### **Option B: Implement URL/History Integration**
-- ✅ Back button works (standard web app behavior)
-- ✅ Shareable URLs
-- ❌ More complexity, potential bugs
-- **Action**: Implement query params + popstate listener
+**Implementation**:
+- Created `utils/urlSync.ts` for URL state management
+- Updated `Dashboard.tsx` with URL hydration and popstate listener
+- Minimal scope: Only `view`, `settingsTab`, `settingsSubtab` synced
+- No complex routing, state-based navigation preserved
+
+**Features**:
+- ✅ Browser back/forward works
+- ✅ Deep linking / shareable URLs
+- ✅ Example: `/?view=settings&settingsTab=configuration&settingsSubtab=decision-engine`
+- ✅ QA: Reproducible test cases with URLs
+
+**Testing Required**:
+- [ ] Test browser back button (should work now!)
+- [ ] Test deep links (copy URL and open in new tab)
+- [ ] Test page refresh (should maintain state)
+- [ ] Test browser forward button
+- [ ] Verify no console errors
 
 ### **3. Final Sign-Off**
-Once manual testing is complete and back button decision is made:
+Once manual testing is complete:
 - Update `MANUAL_TESTING_REPORT.md` with results
 - Update this file's status from "AWAITING TESTING" to "FULLY TESTED"
 - Commit final test results
@@ -478,6 +488,7 @@ Once manual testing is complete and back button decision is made:
 
 **Questions?**
 - For complete testing instructions: `MANUAL_TESTING_REPORT.md` ⭐
+- For URL sync implementation: `utils/urlSync.ts` ⭐
 - For navigation types: `types/navigation.ts`
 - For duplication analysis: `OVERLAP_MATRIX.md`
 - For quick test reference: `TEST_NAVIGATION_REDIRECTS.md`

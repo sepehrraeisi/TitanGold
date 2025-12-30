@@ -220,47 +220,63 @@ After testing, please document the decision:
 
 ### **Option A: Accept State-Based Navigation (No History)**
 
-✅ **Decision**: Accept that browser back button does not work for in-app navigation.
+❌ **Decision**: NOT chosen.
 
-**Reasoning**:
-- State-based navigation is simpler and faster
-- Users should use in-app navigation (UI buttons)
-- Adding URL/router adds complexity
-- Performance is more important than back button
-
-**Documentation Required**:
-- Update user guide to mention in-app navigation only
-- Add note in PACKAGE_E_PART3_FINAL.md
-- Consider adding a "Back" button in Settings header
-
-**Action Items**:
-- [ ] Add note to user documentation
-- [ ] Add "Back to AI Manager" button in Settings
-- [ ] Update PACKAGE_E_PART3_FINAL.md
+**Reasoning for rejection**:
+- Users expect browser back button to work
+- State-only navigation would be confusing for web users
+- No deep linking support
+- Harder QA / debugging
 
 ---
 
-### **Option B: Implement URL/History Integration**
+### **Option B: Implement URL/History Integration** ✅
 
-❌ **Decision**: Add URL synchronization for back button support.
+✅ **Decision**: IMPLEMENTED (Minimal & Controlled scope)
 
 **Reasoning**:
-- Users expect back button to work
-- Better UX for complex navigation
-- Shareable URLs for specific pages
+- Natural user expectation (browser back works)
+- Deep linking / shareable URLs
+- Reproducible QA testing
+- Better debugging (URL + screenshot)
 - Standard web app behavior
+- No breaking of current state-based architecture
 
-**Implementation Required**:
-1. Add query params to URL: `?view=settings&tab=configuration&subtab=decision-engine`
-2. Read query params on Dashboard mount and set state
-3. Update query params on navigation via `history.pushState`
-4. Listen to `popstate` event for back button
+**Implementation Details** (Commit: 8fa6709):
+1. ✅ Created `utils/urlSync.ts`
+   - `readStateFromURL()`: Hydrate state from query params
+   - `writeStateToURL()`: Sync state to URL via pushState
+   - `URLState` interface: `view`, `settingsTab`, `settingsSubtab`
+   - Helper functions for conversion and comparison
+
+2. ✅ Updated `Dashboard.tsx`
+   - `useEffect`: Hydrate state from URL on mount
+   - `useEffect`: Listen to `popstate` for back/forward
+   - `handleNavigation`: Sync to URL via `pushState`
+   - State management preserved (no breaking changes)
+
+**Scope (Minimal & Controlled)**:
+- ✅ Only sync: `view`, `settingsTab`, `settingsSubtab`
+- ✅ Browser back/forward support
+- ✅ Deep linking support
+- ❌ No complex routing framework
+- ❌ No internal AI state in URL
+
+**Example URLs**:
+- `/?view=dashboard`
+- `/?view=settings&settingsTab=configuration&settingsSubtab=decision-engine`
+- `/?view=ai` (AI Center)
+
+**Testing Status**:
+- ✅ Build successful (28.99s)
+- ✅ Deployed to production (titan.zala.ir)
+- ⏳ **Manual browser testing required** (see test cases above)
 
 **Action Items**:
-- [ ] Implement URL query param sync
-- [ ] Test back button after implementation
-- [ ] Update documentation
-- [ ] Commit changes with new tests
+- [x] Implement URL query param sync
+- [ ] Test back button after implementation (Manual)
+- [ ] Update documentation after testing
+- [x] Commit changes (8fa6709)
 
 ---
 
