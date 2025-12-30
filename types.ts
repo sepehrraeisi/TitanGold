@@ -4185,6 +4185,15 @@ export interface DataHubError {
   resolved: boolean;
 }
 
+export interface SystemError {
+  id: string;
+  context?: string;
+  message: string;
+  stack?: string;
+  meta?: Record<string, any>;
+  timestamp: string;
+}
+
 export interface DataCacheEntry {
   data: any;
   timestamp: number;

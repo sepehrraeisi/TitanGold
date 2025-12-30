@@ -5,7 +5,7 @@
  * from the database (as opposed to IndexedDB/localStorage).
  */
 
-import type { ArtemisLog, ArtemisLogFilter } from '../types';
+import type { ArtemisLog, ArtemisLogFilter, SystemError } from '../types';
 
 /**
  * Fetch Artemis logs from backend server (not IndexedDB)
@@ -133,7 +133,7 @@ export const fetchArtemisLogsFromServer = async (
  * @param limit - Maximum number of errors to fetch (default: 50, max: 200)
  * @returns Array of error log objects
  */
-export const fetchSystemErrors = async (limit: number = 50): Promise<any[]> => {
+export const fetchSystemErrors = async (limit: number = 50): Promise<SystemError[]> => {
   try {
     const params = new URLSearchParams();
     params.set('limit', String(Math.min(limit, 200)));

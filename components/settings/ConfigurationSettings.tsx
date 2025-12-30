@@ -4,8 +4,9 @@ import Integrations from './configuration/Integrations.tsx';
 import DecisionEngine from './configuration/DecisionEngine.tsx';
 import Security from './configuration/Security.tsx';
 import Monitoring from './configuration/Monitoring.tsx';
+import SystemErrorsTab from './SystemErrorsTab.tsx';
 
-type ConfigTab = 'integrations' | 'decision-engine' | 'security' | 'monitoring';
+type ConfigTab = 'integrations' | 'decision-engine' | 'security' | 'monitoring' | 'system-errors';
 
 type ConfigurationSettingsProps = {
   initialSubtab?: string;
@@ -45,6 +46,11 @@ const ConfigurationSettings: React.FC<ConfigurationSettingsProps> = ({ initialSu
       label: language === 'fa' ? 'نظارت' : 'Monitoring',
       icon: '📊',
     },
+    {
+      id: 'system-errors',
+      label: language === 'fa' ? 'خطاهای سیستم' : 'System Errors',
+      icon: '🚨',
+    },
   ];
 
   const renderContent = () => {
@@ -57,6 +63,8 @@ const ConfigurationSettings: React.FC<ConfigurationSettingsProps> = ({ initialSu
         return <Security />;
       case 'monitoring':
         return <Monitoring />;
+      case 'system-errors':
+        return <SystemErrorsTab Card={({ children }) => <div className="card">{children}</div>} />;
       default:
         return null;
     }
