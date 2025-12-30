@@ -5,7 +5,7 @@ type Props = {
     t: (key: string) => string;
     onRefresh?: () => void;
     Card: React.FC<{ children: React.ReactNode; className?: string }>;
-    onNavigate?: (view: string) => void;
+    onNavigate?: (payload: { view: string; settingsTab?: string; settingsSubtab?: string }) => void;
 };
 
 /**
@@ -20,25 +20,12 @@ type Props = {
 const MonitoringTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
     const handleOpenSettings = () => {
         if (onNavigate) {
-            // Navigate to Settings view in Dashboard
-            onNavigate('settings');
-            
-            // Wait for Settings to load, then activate Configuration → Monitoring
-            setTimeout(() => {
-                // Trigger Configuration tab
-                const configTab = document.querySelector('[data-tab-id="configuration"]');
-                if (configTab instanceof HTMLElement) {
-                    configTab.click();
-                    
-                    // Then trigger Monitoring sub-tab
-                    setTimeout(() => {
-                        const monTab = document.querySelector('[data-subtab-id="monitoring"]');
-                        if (monTab instanceof HTMLElement) {
-                            monTab.click();
-                        }
-                    }, 100);
-                }
-            }, 200);
+            // State-based navigation - no DOM selectors needed!
+            onNavigate({
+                view: 'settings',
+                settingsTab: 'configuration',
+                settingsSubtab: 'monitoring'
+            });
         }
     };
 

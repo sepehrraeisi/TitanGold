@@ -7,9 +7,20 @@ import Monitoring from './configuration/Monitoring.tsx';
 
 type ConfigTab = 'integrations' | 'decision-engine' | 'security' | 'monitoring';
 
-const ConfigurationSettings: React.FC = () => {
+type ConfigurationSettingsProps = {
+  initialSubtab?: string;
+};
+
+const ConfigurationSettings: React.FC<ConfigurationSettingsProps> = ({ initialSubtab }) => {
   const { language, t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<ConfigTab>('integrations');
+  const [activeTab, setActiveTab] = useState<ConfigTab>((initialSubtab as ConfigTab) || 'integrations');
+
+  // Auto-navigate to initial subtab when provided
+  React.useEffect(() => {
+    if (initialSubtab && initialSubtab !== activeTab) {
+      setActiveTab(initialSubtab as ConfigTab);
+    }
+  }, [initialSubtab, activeTab]);
 
   const tabs: { id: ConfigTab; label: string; icon: string }[] = [
     {

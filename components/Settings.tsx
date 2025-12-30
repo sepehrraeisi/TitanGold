@@ -22,11 +22,28 @@ type SettingsTab =
     | 'users'
     | 'configuration';
 
-const Settings: React.FC = () => {
+type SettingsProps = {
+    initialTab?: string;
+    initialSubtab?: string;
+    onNavigationComplete?: () => void;
+};
+
+const Settings: React.FC<SettingsProps> = ({ initialTab, initialSubtab, onNavigationComplete }) => {
     const { t } = useLanguage();
     const { user } = useAppContext();
     const userRole = user?.role || 'Trader';
-    const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
+    const [activeTab, setActiveTab] = useState<SettingsTab>((initialTab as SettingsTab) || 'profile');
+
+    // Auto-navigate to initial tab when provided
+    React.useEffect(() => {
+        if (initialTab && initialTab !== activeTab) {
+            setActiveTab(initialTab as SettingsTab);
+            // Notify parent that navigation is complete
+            if (onNavigationComplete) {
+                setTimeout(onNavigationComplete, 100);
+            }
+        }
+    }, [initialTab, activeTab, onNavigationComplete]);
 
     const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
         {
@@ -158,7 +175,7 @@ const Settings: React.FC = () => {
             case 'profile': return <ProfileSettings />;
             case 'configuration':
                 // Guard: only allow Admin to see configuration tab
-                return userRole === 'Admin' ? <ConfigurationSettings /> : null;
+                return userRole === 'Admin' ? <ConfigurationSettings initialSubtab={initialSubtab} /> : null;
             case 'connections': return <ConnectionsSettings />;
             case 'wallet': return <WalletSettings />;
             case 'notifications': return <NotificationsSettings />;

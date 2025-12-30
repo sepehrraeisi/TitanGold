@@ -2,7 +2,7 @@ import React from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 
 type Props = {
-    onNavigate?: (view: string) => void;
+    onNavigate?: (payload: { view: string; settingsTab?: string; settingsSubtab?: string }) => void;
 };
 
 /**
@@ -19,25 +19,12 @@ const APIConfig: React.FC<Props> = ({ onNavigate }) => {
 
     const handleOpenSettings = () => {
         if (onNavigate) {
-            // Navigate to Settings view in Dashboard
-            onNavigate('settings');
-            
-            // Wait for Settings to load, then activate Configuration → Integrations
-            setTimeout(() => {
-                // Trigger Configuration tab
-                const configTab = document.querySelector('[data-tab-id="configuration"]');
-                if (configTab instanceof HTMLElement) {
-                    configTab.click();
-                    
-                    // Then trigger Integrations sub-tab
-                    setTimeout(() => {
-                        const intTab = document.querySelector('[data-subtab-id="integrations"]');
-                        if (intTab instanceof HTMLElement) {
-                            intTab.click();
-                        }
-                    }, 100);
-                }
-            }, 200);
+            // State-based navigation - no DOM selectors needed!
+            onNavigate({
+                view: 'settings',
+                settingsTab: 'configuration',
+                settingsSubtab: 'integrations'
+            });
         }
     };
 

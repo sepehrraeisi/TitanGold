@@ -32,10 +32,28 @@ type ViewKey =
   | 'profile'
   | 'wallet';
 
+type NavigationPayload = {
+  view: ViewKey;
+  settingsTab?: string;
+  settingsSubtab?: string;
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const { language } = useLanguage();
   const [activeView, setActiveView] = useState<ViewKey>('dashboard');
+  const [navigationPayload, setNavigationPayload] = useState<NavigationPayload | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  // Smart navigation handler that accepts both string and payload
+  const handleNavigation = (target: ViewKey | NavigationPayload) => {
+    if (typeof target === 'string') {
+      setActiveView(target);
+      setNavigationPayload(null);
+    } else {
+      setActiveView(target.view);
+      setNavigationPayload(target);
+    }
+  };
 
   const navItems = useMemo(
     () => [
@@ -68,11 +86,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       case 'news':
         return <News />;
       case 'ai':
-        return <AICenter onNavigate={setActiveView} />;
+        return <AICenter onNavigate={handleNavigation} />;
       case 'gold':
         return <GoldPage />;
       case 'settings':
-        return <Settings />;
+        return <Settings 
+          initialTab={navigationPayload?.settingsTab} 
+          initialSubtab={navigationPayload?.settingsSubtab}
+          onNavigationComplete={() => setNavigationPayload(null)}
+        />;
       case 'profile':
         return <ProfilePage />;
       case 'dashboard':
@@ -123,7 +145,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                   <button
                     key={item.key}
                     onClick={() => {
-                      setActiveView(item.key);
+                      handleNavigation(item.key);
                       setMobileNavOpen(false);
                     }}
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 ${

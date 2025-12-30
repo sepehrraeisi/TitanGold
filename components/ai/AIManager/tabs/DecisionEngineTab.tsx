@@ -5,7 +5,7 @@ type Props = {
     t: (key: string) => string;
     onRefresh?: () => void;
     Card: React.FC<{ children: React.ReactNode; className?: string }>;
-    onNavigate?: (view: string) => void;
+    onNavigate?: (payload: { view: string; settingsTab?: string; settingsSubtab?: string }) => void;
 };
 
 /**
@@ -20,25 +20,12 @@ type Props = {
 const DecisionEngineTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
     const handleOpenSettings = () => {
         if (onNavigate) {
-            // Navigate to Settings view in Dashboard
-            onNavigate('settings');
-            
-            // Wait for Settings to load, then activate Configuration → Decision Engine
-            setTimeout(() => {
-                // Trigger Configuration tab
-                const configTab = document.querySelector('[data-tab-id="configuration"]');
-                if (configTab instanceof HTMLElement) {
-                    configTab.click();
-                    
-                    // Then trigger Decision Engine sub-tab
-                    setTimeout(() => {
-                        const deTab = document.querySelector('[data-subtab-id="decision-engine"]');
-                        if (deTab instanceof HTMLElement) {
-                            deTab.click();
-                        }
-                    }, 100);
-                }
-            }, 200);
+            // State-based navigation - no DOM selectors needed!
+            onNavigate({
+                view: 'settings',
+                settingsTab: 'configuration',
+                settingsSubtab: 'decision-engine'
+            });
         }
     };
 
