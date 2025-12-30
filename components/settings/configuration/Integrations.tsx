@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../../context/LanguageContext.tsx';
+import { getAuthToken, authenticatedFetch } from '../../../services/api-auth.ts';
 
 interface Integration {
   id: string;
@@ -31,36 +32,52 @@ interface TestResult {
   responseTime?: string;
 }
 
+interface IntegrationFormData {
+  provider: string;
+  name: string;
+  api_key: string;
+  base_url?: string;
+  model?: string;
+  weight?: number;
+  rate_limit_per_min?: number;
+  daily_budget?: number;
+  monthly_budget?: number;
+}
+
 const Integrations: React.FC = () => {
   const { language, t } = useLanguage();
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editingIntegration, setEditingIntegration] = useState<Integration | null>(null);
+  const [formData, setFormData] = useState<IntegrationFormData>({
+    provider: 'openai',
+    name: '',
+    api_key: '',
+    base_url: '',
+    model: '',
+    weight: 1.0,
+    rate_limit_per_min: 60,
+    daily_budget: 10,
+    monthly_budget: 100,
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
 
-  const API_BASE = 'https://titan.zala.ir/api';
-
-  const getAuthToken = (): string | null => {
-    return localStorage.getItem('authToken');
-  };
+  const PROVIDERS = ['gemini', 'openai', 'anthropic', 'deepseek', 'openrouter'];
 
   const fetchIntegrations = async () => {
     try {
       setLoading(true);
       const token = getAuthToken();
       if (!token) {
-        setError('No authentication token found');
+        setError('No authentication token found. Please login again.');
         return;
       }
 
-      const response = await fetch(`${API_BASE}/config/integrations`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await authenticatedFetch('/config/integrations');
 
       if (!response.ok) {
         throw new Error(`Failed to fetch integrations: ${response.statusText}`);
@@ -87,18 +104,8 @@ const Integrations: React.FC = () => {
   const handleTest = async (id: string) => {
     setTestingId(id);
     try {
-      const token = getAuthToken();
-      if (!token) {
-        alert('No authentication token');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE}/config/integrations/${id}/test`, {
+      const response = await authenticatedFetch(`/config/integrations/${id}/test`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
       });
 
       const result: TestResult = await response.json();
@@ -109,7 +116,6 @@ const Integrations: React.FC = () => {
         alert(`❌ ${result.provider} - ${result.name}\n${result.message}\n${result.responseTime || ''}`);
       }
 
-      // Refresh integrations after test
       await fetchIntegrations();
     } catch (err: any) {
       alert(`Error testing integration: ${err.message}`);
@@ -124,18 +130,8 @@ const Integrations: React.FC = () => {
     }
 
     try {
-      const token = getAuthToken();
-      if (!token) {
-        alert('No authentication token');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE}/config/integrations/${id}/disable`, {
+      const response = await authenticatedFetch(`/config/integrations/${id}/disable`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
       });
 
       if (!response.ok) {
@@ -155,18 +151,8 @@ const Integrations: React.FC = () => {
     }
 
     try {
-      const token = getAuthToken();
-      if (!token) {
-        alert('No authentication token');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE}/config/integrations/${id}/reset-runtime`, {
+      const response = await authenticatedFetch(`/config/integrations/${id}/reset-runtime`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
       });
 
       if (!response.ok) {
@@ -177,6 +163,156 @@ const Integrations: React.FC = () => {
       await fetchIntegrations();
     } catch (err: any) {
       alert(`Error resetting runtime: ${err.message}`);
+    }
+  };
+
+  const openAddModal = () => {
+    setEditingIntegration(null);
+    setFormData({
+      provider: 'openai',
+      name: '',
+      api_key: '',
+      base_url: '',
+      model: '',
+      weight: 1.0,
+      rate_limit_per_min: 60,
+      daily_budget: 10,
+      monthly_budget: 100,
+    });
+    setFormErrors({});
+    setShowModal(true);
+  };
+
+  const openEditModal = (integration: Integration) => {
+    setEditingIntegration(integration);
+    setFormData({
+      provider: integration.provider,
+      name: integration.name,
+      api_key: '', // Don't populate API key for security
+      base_url: integration.base_url || '',
+      model: integration.model || '',
+      weight: integration.weight || 1.0,
+      rate_limit_per_min: integration.rate_limit_per_min || 60,
+      daily_budget: integration.daily_budget || 10,
+      monthly_budget: integration.monthly_budget || 100,
+    });
+    setFormErrors({});
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingIntegration(null);
+    setFormData({
+      provider: 'openai',
+      name: '',
+      api_key: '',
+      base_url: '',
+      model: '',
+      weight: 1.0,
+      rate_limit_per_min: 60,
+      daily_budget: 10,
+      monthly_budget: 100,
+    });
+    setFormErrors({});
+  };
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!formData.name.trim()) {
+      errors.name = 'Name is required';
+    }
+
+    if (!editingIntegration && !formData.api_key.trim()) {
+      errors.api_key = 'API Key is required for new integrations';
+    }
+
+    if (!PROVIDERS.includes(formData.provider)) {
+      errors.provider = 'Invalid provider selected';
+    }
+
+    if (formData.weight !== undefined && (formData.weight < 0 || formData.weight > 10)) {
+      errors.weight = 'Weight must be between 0 and 10';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      if (editingIntegration) {
+        // PATCH for update
+        const updatePayload: any = {
+          name: formData.name,
+          base_url: formData.base_url || undefined,
+          model: formData.model || undefined,
+          weight: formData.weight,
+          rate_limit_per_min: formData.rate_limit_per_min,
+          daily_budget: formData.daily_budget,
+          monthly_budget: formData.monthly_budget,
+        };
+
+        // Only include API key if it was changed
+        if (formData.api_key.trim()) {
+          updatePayload.api_key = formData.api_key;
+        }
+
+        const response = await authenticatedFetch(`/config/integrations/${editingIntegration.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(updatePayload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to update integration');
+        }
+
+        alert('✅ Integration updated successfully');
+      } else {
+        // POST for create
+        const createPayload = {
+          provider: formData.provider,
+          name: formData.name,
+          api_key: formData.api_key,
+          base_url: formData.base_url || undefined,
+          model: formData.model || undefined,
+          weight: formData.weight,
+          rate_limit_per_min: formData.rate_limit_per_min,
+          daily_budget: formData.daily_budget,
+          monthly_budget: formData.monthly_budget,
+        };
+
+        const response = await authenticatedFetch('/config/integrations', {
+          method: 'POST',
+          body: JSON.stringify(createPayload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to create integration');
+        }
+
+        const result = await response.json();
+        alert(`✅ Integration created successfully (ID: ${result.integration_id})`);
+      }
+
+      closeModal();
+      await fetchIntegrations();
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+      console.error('Form submission error:', err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -222,7 +358,7 @@ const Integrations: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={openAddModal}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
         >
           {language === 'fa' ? '+ افزودن یکپارچه‌سازی' : '+ Add Integration'}
@@ -297,7 +433,7 @@ const Integrations: React.FC = () => {
                       {testingId === integration.id ? '⏳' : '🧪 Test'}
                     </button>
                     <button
-                      onClick={() => setEditingIntegration(integration)}
+                      onClick={() => openEditModal(integration)}
                       className="px-3 py-1 bg-gray-700/40 hover:bg-gray-700/60 text-gray-300 rounded text-xs font-medium transition-colors"
                     >
                       ✏️ Edit
@@ -352,25 +488,199 @@ const Integrations: React.FC = () => {
         </div>
       )}
 
-      {/* TODO: Add/Edit Modal */}
-      {(showAddModal || editingIntegration) && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg border border-gray-700 p-6 max-w-2xl w-full mx-4">
-            <h3 className="text-xl font-bold text-white mb-4">
-              {editingIntegration ? 'Edit Integration' : 'Add New Integration'}
-            </h3>
-            <p className="text-gray-400 mb-4">
-              This feature is coming soon. Use the backend API directly for now.
-            </p>
-            <button
-              onClick={() => {
-                setShowAddModal(false);
-                setEditingIntegration(null);
-              }}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded"
-            >
-              Close
-            </button>
+      {/* Create/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-lg border border-gray-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-6 py-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-white">
+                  {editingIntegration ? 'Edit Integration' : 'Add New Integration'}
+                </h3>
+                <button
+                  onClick={closeModal}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Provider */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Provider *
+                </label>
+                <select
+                  value={formData.provider}
+                  onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
+                  disabled={!!editingIntegration}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:border-blue-500"
+                >
+                  {PROVIDERS.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                {editingIntegration && (
+                  <p className="text-xs text-gray-500 mt-1">Provider cannot be changed after creation</p>
+                )}
+                {formErrors.provider && (
+                  <p className="text-xs text-red-400 mt-1">{formErrors.provider}</p>
+                )}
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g., OpenAI Primary"
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                />
+                {formErrors.name && (
+                  <p className="text-xs text-red-400 mt-1">{formErrors.name}</p>
+                )}
+              </div>
+
+              {/* API Key */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  API Key {!editingIntegration && '*'}
+                </label>
+                <input
+                  type="password"
+                  value={formData.api_key}
+                  onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                  placeholder={editingIntegration ? 'Leave blank to keep existing key' : 'sk-...'}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                />
+                {editingIntegration && (
+                  <p className="text-xs text-gray-500 mt-1">Leave blank to keep existing key</p>
+                )}
+                {formErrors.api_key && (
+                  <p className="text-xs text-red-400 mt-1">{formErrors.api_key}</p>
+                )}
+              </div>
+
+              {/* Model */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Model
+                </label>
+                <input
+                  type="text"
+                  value={formData.model}
+                  onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                  placeholder="e.g., gpt-4o-mini (leave blank for default)"
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Base URL */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Base URL
+                </label>
+                <input
+                  type="url"
+                  value={formData.base_url}
+                  onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
+                  placeholder="e.g., https://api.openai.com/v1 (leave blank for default)"
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Weight */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Weight (0-10)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="10"
+                  value={formData.weight}
+                  onChange={(e) => setFormData({ ...formData, weight: parseFloat(e.target.value) })}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                />
+                {formErrors.weight && (
+                  <p className="text-xs text-red-400 mt-1">{formErrors.weight}</p>
+                )}
+              </div>
+
+              {/* Rate Limit */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Rate Limit (requests/min)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={formData.rate_limit_per_min}
+                  onChange={(e) => setFormData({ ...formData, rate_limit_per_min: parseInt(e.target.value) })}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Daily Budget */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Daily Budget ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.daily_budget}
+                  onChange={(e) => setFormData({ ...formData, daily_budget: parseFloat(e.target.value) })}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Monthly Budget */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Monthly Budget ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.monthly_budget}
+                  onChange={(e) => setFormData({ ...formData, monthly_budget: parseFloat(e.target.value) })}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-4 border-t border-gray-700">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? (
+                    <>⏳ {editingIntegration ? 'Updating...' : 'Creating...'}</>
+                  ) : (
+                    <>{editingIntegration ? 'Update Integration' : 'Create Integration'}</>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
