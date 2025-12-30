@@ -146,113 +146,151 @@ async function callProviderWithFailover(provider, callFn, { maxRetries = 2 } = {
   return { ok: false, provider, error: lastErr?.message || 'unknown error' };
 }
 
+// ============================================================================
+// DEPRECATED: Old env-based KeyPool (removed in favor of DB-driven Provider Pool)
+// All provider keys now come from api_integrations table via providerPool.js
+// ============================================================================
+
+// ============================================================================
+// Provider Call Helpers - DB-driven with Instance
+// ============================================================================
+
 /**
- * Key Pool Helper - Multi-API-key support with round-robin
- * Supports both single key (PROVIDER_API_KEY) and multiple keys (PROVIDER_API_KEYS=key1,key2,key3)
+ * Call OpenAI-compatible provider (OpenAI, DeepSeek, OpenRouter)
+ * @param {Object} inst - Provider instance from DB { api_key_encrypted, base_url, model }
  */
-const keyPools = {};
-const keyPoolIndices = {};
-
-function getNextKey(providerName) {
-  // Check if pool already initialized
-  if (!keyPools[providerName]) {
-    const multiKeyEnv = process.env[`${providerName.toUpperCase()}_API_KEYS`];
-    let singleKeyEnv = process.env[`${providerName.toUpperCase()}_API_KEY`];
-    
-    // Fallback to legacy env var names for backward compatibility
-    if (!singleKeyEnv) {
-      if (providerName === 'claude') {
-        singleKeyEnv = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
-      } else if (providerName === 'openai') {
-        singleKeyEnv = process.env.CHATGPT_API_KEY;
-      } else if (providerName === 'deepseek') {
-        singleKeyEnv = process.env.API_KEY;
-      }
-    }
-    
-    if (multiKeyEnv) {
-      // Multiple keys: comma-separated
-      keyPools[providerName] = multiKeyEnv.split(',').map(k => k.trim()).filter(k => k);
-      keyPoolIndices[providerName] = 0;
-    } else if (singleKeyEnv) {
-      // Single key
-      keyPools[providerName] = [singleKeyEnv.trim()];
-      keyPoolIndices[providerName] = 0;
-    } else {
-      // No key available
-      keyPools[providerName] = [];
-      keyPoolIndices[providerName] = 0;
-    }
-  }
+async function callOpenAICompatible(inst, prompt, systemInstruction) {
+  if (!inst?.api_key_encrypted) return null;
   
-  if (keyPools[providerName].length === 0) {
-    return null;
-  }
+  const baseUrl = inst.base_url || 'https://api.openai.com/v1';
+  const model = inst.model || 'gpt-4o-mini';
   
-  // Round-robin selection
-  const currentIndex = keyPoolIndices[providerName];
-  const key = keyPools[providerName][currentIndex];
-  keyPoolIndices[providerName] = (currentIndex + 1) % keyPools[providerName].length;
-  
-  // Log key index only (never log key value)
-  if (keyPools[providerName].length > 1) {
-    console.log(`[KeyPool] ${providerName}: using key index ${currentIndex}/${keyPools[providerName].length - 1}`);
-  }
-  
-  return key;
-}
-
-const PROVIDERS = {
-  gemini: 'gemini',
-  claude: 'claude',
-  openai: 'openai',
-  deepseek: 'deepseek',
-  openrouter: 'openrouter',
-};
-
-async function callGemini(prompt, systemInstruction) {
-  // از aiService موجود استفاده می‌کنیم (که خودش Production++ شده)
   await orchSem.acquire();
   try {
     const result = await retry(async () => {
-      const response = await aiService.askArtemis(prompt, systemInstruction);
-      // aiService.askArtemis already has timeout/retry internally
-      return response;
-    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'Gemini (via aiService)' });
-    
+      const messages = [];
+      if (systemInstruction) {
+        messages.push({ role: 'system', content: systemInstruction });
+      }
+      messages.push({ role: 'user', content: prompt });
+
+      const res = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${inst.api_key_encrypted}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 500,
+        }),
+      }, ORCH_TIMEOUT_MS);
+
+      if (isRetryableStatus(res.status)) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} retryable: ${txt.slice(0, 200)}`);
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error(`Provider ${inst.provider} API error:`, res.status, text);
+        return null;
+      }
+
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content || null;
+    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: inst.provider });
+
     return result;
   } catch (e) {
-    console.error('Gemini call failed after retries:', e.message);
+    console.error(`${inst.provider} call failed:`, e.message);
     return null;
   } finally {
     orchSem.release();
   }
 }
 
-async function callClaude(prompt, systemInstruction) {
-  const apiKey = getNextKey('claude');
-  if (!apiKey) return null;
-
+/**
+ * Call Gemini provider with DB instance
+ */
+async function callGeminiWithInstance(inst, prompt, systemInstruction) {
+  if (!inst?.api_key_encrypted) return null;
+  
+  const model = inst.model || 'gemini-2.0-flash';
+  
   await orchSem.acquire();
   try {
     const result = await retry(async () => {
-      const body = {
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
-      };
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${inst.api_key_encrypted}`;
+      
+      const parts = [];
       if (systemInstruction) {
-        body.system = systemInstruction;
+        parts.push({ text: systemInstruction });
+      }
+      parts.push({ text: prompt });
+
+      const res = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 500,
+          },
+        }),
+      }, ORCH_TIMEOUT_MS);
+
+      if (isRetryableStatus(res.status)) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} retryable: ${txt.slice(0, 200)}`);
       }
 
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('Gemini API error:', res.status, text);
+        return null;
+      }
+
+      const data = await res.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'Gemini' });
+
+    return result;
+  } catch (e) {
+    console.error('Gemini call failed:', e.message);
+    return null;
+  } finally {
+    orchSem.release();
+  }
+}
+
+/**
+ * Call Anthropic Claude with DB instance
+ */
+async function callClaudeWithInstance(inst, prompt, systemInstruction) {
+  if (!inst?.api_key_encrypted) return null;
+  
+  const model = inst.model || 'claude-3-5-sonnet-latest';
+  
+  await orchSem.acquire();
+  try {
+    const result = await retry(async () => {
       const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
+          'x-api-key': inst.api_key_encrypted,
           'anthropic-version': '2023-06-01',
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          model,
+          max_tokens: 500,
+          system: systemInstruction || '',
+          messages: [{ role: 'user', content: prompt }],
+        }),
       }, ORCH_TIMEOUT_MS);
 
       if (isRetryableStatus(res.status)) {
@@ -272,177 +310,21 @@ async function callClaude(prompt, systemInstruction) {
 
     return result;
   } catch (e) {
-    console.error('Claude call failed after retries:', e.message);
+    console.error('Claude call failed:', e.message);
     return null;
   } finally {
     orchSem.release();
   }
 }
 
-async function callOpenAI(prompt, systemInstruction) {
-  const apiKey = getNextKey('openai');
-  if (!apiKey) return null;
+const PROVIDERS = {
+  gemini: 'gemini',
+  claude: 'claude',
+  openai: 'openai',
+  deepseek: 'deepseek',
+  openrouter: 'openrouter',
+};
 
-  await orchSem.acquire();
-  try {
-    const result = await retry(async () => {
-      const messages = [];
-      if (systemInstruction) {
-        messages.push({ role: 'system', content: systemInstruction });
-      }
-      messages.push({ role: 'user', content: prompt });
-
-      const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages,
-          temperature: 0.3,
-          max_tokens: 1024,
-        }),
-      }, ORCH_TIMEOUT_MS);
-
-      if (isRetryableStatus(res.status)) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status} retryable: ${txt.slice(0, 200)}`);
-      }
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        console.error('OpenAI API error:', res.status, text);
-        return null;
-      }
-
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content || null;
-    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'OpenAI' });
-
-    return result;
-  } catch (e) {
-    console.error('OpenAI call failed after retries:', e.message);
-    return null;
-  } finally {
-    orchSem.release();
-  }
-}
-
-async function callDeepSeek(prompt, systemInstruction) {
-  const apiKey = getNextKey('deepseek');
-  if (!apiKey) return null;
-
-  await orchSem.acquire();
-  try {
-    const result = await retry(async () => {
-      const messages = [];
-      if (systemInstruction) {
-        messages.push({ role: 'system', content: systemInstruction });
-      }
-      messages.push({ role: 'user', content: prompt });
-
-      const res = await fetchWithTimeout('https://api.deepseek.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages,
-          temperature: 0.3,
-          max_tokens: 1024,
-        }),
-      }, ORCH_TIMEOUT_MS);
-
-      if (isRetryableStatus(res.status)) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status} retryable: ${txt.slice(0, 200)}`);
-      }
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        console.error('DeepSeek API error:', res.status, text);
-        return null;
-      }
-
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content || null;
-    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'DeepSeek' });
-
-    return result;
-  } catch (e) {
-    console.error('DeepSeek call failed after retries:', e.message);
-    return null;
-  } finally {
-    orchSem.release();
-  }
-}
-
-async function callOpenRouter(prompt, systemInstruction) {
-  const apiKey = getNextKey('openrouter');
-  if (!apiKey) return null;
-
-  await orchSem.acquire();
-  try {
-    const result = await retry(async () => {
-      const messages = [];
-      if (systemInstruction) {
-        messages.push({ role: 'system', content: systemInstruction });
-      }
-      messages.push({ role: 'user', content: prompt });
-
-      const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
-      
-      const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      };
-      
-      // Optional headers from env
-      if (process.env.OPENROUTER_HTTP_REFERER) {
-        headers['HTTP-Referer'] = process.env.OPENROUTER_HTTP_REFERER;
-      }
-      if (process.env.OPENROUTER_X_TITLE) {
-        headers['X-Title'] = process.env.OPENROUTER_X_TITLE;
-      }
-
-      const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature: 0.3,
-          max_tokens: 1024,
-        }),
-      }, ORCH_TIMEOUT_MS);
-
-      if (isRetryableStatus(res.status)) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status} retryable: ${txt.slice(0, 200)}`);
-      }
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        console.error('OpenRouter API error:', res.status, text);
-        return null;
-      }
-
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content || null;
-    }, { attempts: 3, baseDelayMs: 1000, maxDelayMs: 7000, label: 'OpenRouter' });
-
-    return result;
-  } catch (e) {
-    console.error('OpenRouter call failed after retries:', e.message);
-    return null;
-  } finally {
-    orchSem.release();
-  }
-}
 
 function parseDecisionJson(raw) {
   if (!raw) return null;
@@ -511,13 +393,17 @@ function aggregateDecisions(decisions, strategy = 'mixture_of_experts') {
  *   - opportunity, signals, context  (همان چیزی که /api/artemis/decision دریافت می‌کند)
  *   - decisionConfig از ArtemisConfig.decisionEngine
  */
+
+/**
+ * getMixtureDecision - DB-driven MoA with Quorum + Degraded Mode
+ * Coordinates multiple providers with failover and circuit breaker
+ */
 export async function getMixtureDecision(input, decisionConfig = {}) {
   const {
     opportunity,
     signals,
     context,
   } = input;
-
   const {
     strategy = 'mixture_of_experts',
     activeModel = 'hybrid',
@@ -529,8 +415,7 @@ export async function getMixtureDecision(input, decisionConfig = {}) {
     'You must decide whether to EXECUTE (BUY/SELL) or HOLD, considering risk, context and agent signals. ' +
     'Respond in strict JSON only.';
 
-  const basePrompt = `
-Trade Opportunity:
+  const basePrompt = `Trade Opportunity:
 symbol: ${opportunity.symbol}
 type: ${opportunity.type}
 side: ${opportunity.side}
@@ -552,68 +437,107 @@ You MUST return ONLY JSON with this schema:
   "action": "BUY" | "SELL" | "HOLD",
   "confidence": number,
   "reason": string
-}
-`;
+}`;
 
   // انتخاب Providerها بر اساس activeModel
   const providersToUse = [];
   if (activeModel === 'internal' || activeModel === 'gemini' || activeModel === 'hybrid') {
-    providersToUse.push(PROVIDERS.gemini);
+    providersToUse.push('gemini');
   }
   if (activeModel === 'claude' || activeModel === 'hybrid') {
-    providersToUse.push(PROVIDERS.claude);
+    providersToUse.push('anthropic');
   }
   if (activeModel === 'openai' || activeModel === 'hybrid') {
-    providersToUse.push(PROVIDERS.openai);
+    providersToUse.push('openai');
   }
   if (activeModel === 'deepseek' || activeModel === 'hybrid') {
-    providersToUse.push(PROVIDERS.deepseek);
+    providersToUse.push('deepseek');
   }
   if (activeModel === 'openrouter' || activeModel === 'hybrid') {
-    providersToUse.push(PROVIDERS.openrouter);
+    providersToUse.push('openrouter');
   }
-
   if (!providersToUse.length) {
-    // پیش‌فرض: فقط internal
-    providersToUse.push(PROVIDERS.gemini);
+    providersToUse.push('gemini'); // Default
   }
 
-  const calls = providersToUse.map(async provider => {
-    try {
+  // Fetch DB instances
+  const allInstances = await getProviderInstances();
+  const quorum = getQuorum(allInstances.length);
+
+  // Filter: فقط providerهایی که حداقل یک instance سالم دارند
+  const availableProviders = providersToUse.filter(p =>
+    allInstances.some(inst => inst.provider === p && inst.enabled)
+  );
+
+  if (availableProviders.length === 0) {
+    console.error('[getMixtureDecision] No healthy providers available');
+    return null;
+  }
+
+  console.log(`[getMixtureDecision] Calling ${availableProviders.length} providers with quorum=${quorum}`);
+
+  // Parallel calls با callProviderWithFailover
+  const calls = availableProviders.map(async provider => {
+    return callProviderWithFailover(provider, async (inst) => {
       let raw = null;
-      if (provider === PROVIDERS.gemini) {
-        raw = await callGemini(basePrompt, systemInstruction);
-      } else if (provider === PROVIDERS.claude) {
-        raw = await callClaude(basePrompt, systemInstruction);
-      } else if (provider === PROVIDERS.openai) {
-        raw = await callOpenAI(basePrompt, systemInstruction);
-      } else if (provider === PROVIDERS.deepseek) {
-        raw = await callDeepSeek(basePrompt, systemInstruction);
-      } else if (provider === PROVIDERS.openrouter) {
-        raw = await callOpenRouter(basePrompt, systemInstruction);
+      
+      if (provider === 'gemini') {
+        raw = await callGeminiWithInstance(inst, basePrompt, systemInstruction);
+      } else if (provider === 'anthropic') {
+        raw = await callClaudeWithInstance(inst, basePrompt, systemInstruction);
+      } else if (provider === 'openai') {
+        raw = await callOpenAICompatible(inst, basePrompt, systemInstruction);
+      } else if (provider === 'deepseek') {
+        raw = await callOpenAICompatible(inst, basePrompt, systemInstruction);
+      } else if (provider === 'openrouter') {
+        raw = await callOpenAICompatible(inst, basePrompt, systemInstruction);
       }
 
       const parsed = parseDecisionJson(raw);
-      if (!parsed) return null;
+      if (!parsed) throw new Error('Parse failed');
+
       return {
         provider,
         action: parsed.action || 'HOLD',
         confidence: parsed.confidence ?? opportunity.confidence ?? 0,
         reason: parsed.reason || '',
       };
-    } catch (e) {
-      console.error(`Artemis orchestrator provider ${provider} error:`, e);
-      return null;
-    }
+    }, { maxRetries: 2 });
   });
 
-  const results = (await Promise.all(calls)).filter(Boolean);
+  const results = (await Promise.all(calls)).filter(r => r.ok).map(r => r.result);
 
-  if (!results.length) {
+  // Quorum check
+  const ready = results.length >= quorum;
+  const degraded = !ready && results.length > 0;
+
+  if (results.length === 0) {
+    console.error('[getMixtureDecision] All providers failed');
     return null;
   }
 
-  return aggregateDecisions(results, strategy);
+  if (degraded) {
+    console.warn(`[getMixtureDecision] DEGRADED MODE: ${results.length}/${quorum} providers responded (need ${quorum})`);
+  }
+
+  // Aggregate decisions
+  const aggregated = aggregateDecisions(results, strategy);
+  
+  return {
+    ...aggregated,
+    quorum: {
+      required: quorum,
+      received: results.length,
+      total: availableProviders.length,
+      ready,
+      degraded,
+    },
+    providers: results.map(r => ({
+      provider: r.provider,
+      action: r.action,
+      confidence: r.confidence,
+    })),
+  };
 }
 
 /**
