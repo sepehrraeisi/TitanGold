@@ -39,7 +39,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [navigationPayload, setNavigationPayload] = useState<NavigationPayload | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
-  // Hydrate state from URL on mount
+  // Hydrate state from URL on mount + seed history.state
   useEffect(() => {
     const urlState = readStateFromURL();
     if (urlState) {
@@ -51,13 +51,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           settingsSubtab: urlState.settingsSubtab,
         });
       }
+      // Seed/normalize history.state for current entry (replaceState)
+      // This ensures event.state is present for back/forward
+      writeStateToURL(urlState, true);
+    } else {
+      // No URL state, use default (dashboard)
+      const defaultState = viewKeyToURLState('dashboard');
+      writeStateToURL(defaultState, true);
     }
   }, []);
 
   // Listen to browser back/forward
+  // IMPORTANT: Read from URL, not event.state (can be null)
   useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      const urlState = event.state as URLState | null;
+    const handlePopState = () => {
+      // Always read from URL (event.state can be null)
+      const urlState = readStateFromURL();
       if (urlState) {
         setActiveView(urlState.view);
         if (urlState.settingsTab || urlState.settingsSubtab) {
@@ -77,18 +86,30 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   }, []);
 
   // Smart navigation handler that accepts both string and payload
-  // AND syncs with URL
+  // AND syncs with URL (prevents duplicate history entries)
   const handleNavigation: OnNavigateHandler = target => {
     let newState: URLState;
 
     if (typeof target === 'string') {
+      newState = viewKeyToURLState(target);
+    } else {
+      newState = payloadToURLState(target);
+    }
+
+    // Prevent duplicate history entries
+    const currentState = readStateFromURL();
+    if (isURLStateEqual(currentState, newState)) {
+      // Same state, no need to push to history
+      return;
+    }
+
+    // Update React state
+    if (typeof target === 'string') {
       setActiveView(target);
       setNavigationPayload(null);
-      newState = viewKeyToURLState(target);
     } else {
       setActiveView(target.view);
       setNavigationPayload(target);
-      newState = payloadToURLState(target);
     }
 
     // Sync to URL (pushState for new navigation)

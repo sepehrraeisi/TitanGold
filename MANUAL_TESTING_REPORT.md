@@ -235,7 +235,7 @@ After testing, please document the decision:
 ✅ **Decision**: IMPLEMENTED (Minimal & Controlled scope)
 
 **Reasoning**:
-- Natural user expectation (browser back works)
+- Natural user expectation (browser back should work)
 - Deep linking / shareable URLs
 - Reproducible QA testing
 - Better debugging (URL + screenshot)
