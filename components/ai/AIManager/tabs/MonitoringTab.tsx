@@ -1,11 +1,12 @@
 import React from 'react';
+import { OnNavigateHandler } from '../../../../types/navigation.ts';
 
 type Props = {
     artemis?: any;
     t: (key: string) => string;
     onRefresh?: () => void;
     Card: React.FC<{ children: React.ReactNode; className?: string }>;
-    onNavigate?: (payload: { view: string; settingsTab?: string; settingsSubtab?: string }) => void;
+    onNavigate?: OnNavigateHandler;
 };
 
 /**

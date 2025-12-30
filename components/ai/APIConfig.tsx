@@ -1,8 +1,9 @@
 import React from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { OnNavigateHandler } from '../../types/navigation.ts';
 
 type Props = {
-    onNavigate?: (payload: { view: string; settingsTab?: string; settingsSubtab?: string }) => void;
+    onNavigate?: OnNavigateHandler;
 };
 
 /**

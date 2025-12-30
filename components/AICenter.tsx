@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
+import { OnNavigateHandler } from '../types/navigation.ts';
 import AIManager from './ai/AIManager/index.tsx';
 import AIAgents from './ai/AIAgents.tsx';
 import TrainingCenter from './ai/TrainingCenter.tsx';
@@ -10,7 +11,7 @@ import * as api from '../services/api.ts';
 type AITab = 'manager' | 'agents' | 'training' | 'analytics' | 'config';
 
 type Props = {
-    onNavigate?: (view: string) => void;
+    onNavigate?: OnNavigateHandler;
 };
 
 const AICenter: React.FC<Props> = ({ onNavigate }) => {

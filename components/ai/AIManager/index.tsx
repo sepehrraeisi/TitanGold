@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useState } from 'react';
 import { useLanguage } from '../../../context/LanguageContext.tsx';
+import { OnNavigateHandler } from '../../../types/navigation.ts';
 import { useArtemisState } from '../hooks/useArtemisState.ts';
 import * as api from '../../../services/api.ts';
 import { AIManagerOverview, ArtemisState } from '../../../types.ts';
@@ -36,7 +37,7 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
 );
 
 type Props = {
-    onNavigate?: (view: string) => void;
+    onNavigate?: OnNavigateHandler;
 };
 
 const AIManager: React.FC<Props> = ({ onNavigate }) => {

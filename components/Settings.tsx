@@ -38,9 +38,9 @@ const Settings: React.FC<SettingsProps> = ({ initialTab, initialSubtab, onNaviga
     React.useEffect(() => {
         if (initialTab && initialTab !== activeTab) {
             setActiveTab(initialTab as SettingsTab);
-            // Notify parent that navigation is complete
+            // Notify parent that navigation is complete (no setTimeout needed!)
             if (onNavigationComplete) {
-                setTimeout(onNavigationComplete, 100);
+                onNavigationComplete();
             }
         }
     }, [initialTab, activeTab, onNavigationComplete]);

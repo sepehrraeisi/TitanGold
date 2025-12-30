@@ -1,11 +1,13 @@
 import React from 'react';
+import { OnNavigateHandler } from '../../../../types/navigation.ts';
+import { useAppContext } from '../../../../context/AppContext.tsx';
 
 type Props = {
     artemis?: any;
     t: (key: string) => string;
     onRefresh?: () => void;
     Card: React.FC<{ children: React.ReactNode; className?: string }>;
-    onNavigate?: (payload: { view: string; settingsTab?: string; settingsSubtab?: string }) => void;
+    onNavigate?: OnNavigateHandler;
 };
 
 /**
@@ -18,7 +20,15 @@ type Props = {
  * Related: OVERLAP_MATRIX.md - Decision Engine Config (DUPLICATE → LINK_TO_SETTINGS)
  */
 const DecisionEngineTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
+    const { user } = useAppContext();
+    const isAdmin = user?.role === 'Admin';
+
     const handleOpenSettings = () => {
+        if (!isAdmin) {
+            alert(t('admin_only_feature') || 'This feature is only available for Admin users.');
+            return;
+        }
+        
         if (onNavigate) {
             // State-based navigation - no DOM selectors needed!
             onNavigate({
@@ -52,16 +62,28 @@ const DecisionEngineTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
                     </div>
 
                     {/* Action Button */}
-                    <button
-                        onClick={handleOpenSettings}
-                        className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg text-sm shadow-lg transition-all duration-200 hover:shadow-xl flex items-center gap-2"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        {t('open_in_settings') || 'Open in Settings'}
-                    </button>
+                    {isAdmin ? (
+                        <button
+                            onClick={handleOpenSettings}
+                            className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg text-sm shadow-lg transition-all duration-200 hover:shadow-xl flex items-center gap-2"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {t('open_in_settings') || 'Open in Settings'}
+                        </button>
+                    ) : (
+                        <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                            <p className="text-sm text-yellow-600 dark:text-yellow-400 flex items-center gap-2">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <span className="font-semibold">{t('admin_only') || 'Admin Only'}:</span>
+                                {t('admin_only_feature_desc') || 'This configuration is only available to Admin users. Please contact your administrator for access.'}
+                            </p>
+                        </div>
+                    )}
 
                     {/* Info Box */}
                     <div className="mt-6 p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg text-left max-w-md">

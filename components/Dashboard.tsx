@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
+import { ViewKey, NavigationPayload, NavigationTarget, OnNavigateHandler } from '../types/navigation.ts';
 import TradingDashboardHome from './trading/TradingDashboardHome.tsx';
 import Favorites from './Favorites.tsx';
 import Trades from './Trades.tsx';
@@ -19,25 +20,6 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
-type ViewKey =
-  | 'dashboard'
-  | 'favorites'
-  | 'trades'
-  | 'portfolio'
-  | 'analysis'
-  | 'news'
-  | 'ai'
-  | 'gold'
-  | 'settings'
-  | 'profile'
-  | 'wallet';
-
-type NavigationPayload = {
-  view: ViewKey;
-  settingsTab?: string;
-  settingsSubtab?: string;
-};
-
 const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const { language } = useLanguage();
   const [activeView, setActiveView] = useState<ViewKey>('dashboard');
@@ -45,7 +27,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Smart navigation handler that accepts both string and payload
-  const handleNavigation = (target: ViewKey | NavigationPayload) => {
+  const handleNavigation: OnNavigateHandler = (target) => {
     if (typeof target === 'string') {
       setActiveView(target);
       setNavigationPayload(null);
