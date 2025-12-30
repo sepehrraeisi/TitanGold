@@ -172,7 +172,7 @@ class AIService {
           await recordProviderSuccess(inst.id);
           return text;
         } catch (err) {
-          console.error('⚠️ Gemini failed, trying fallback:', err.message);
+          console.error('⚠️ Gemini failed:', err.message);
           await recordProviderFailure(inst.id, err);
           // Continue to fallback
         }
@@ -181,27 +181,9 @@ class AIService {
       console.warn('⚠️ No Gemini instance available');
     }
     
-    // Fallback: try other providers (simplified - in production use full MoA)
-    try {
-      const providers = ['openai', 'deepseek', 'openrouter'];
-      for (const provider of providers) {
-        const inst = await pickProviderInstance(provider);
-        if (!inst) continue;
-        
-        try {
-          // For now, return placeholder (full implementation in Step 4)
-          console.log(`📝 Fallback to ${provider} (placeholder)`);
-          await recordProviderSuccess(inst.id);
-          return 'AI Service temporarily using fallback provider';
-        } catch (err) {
-          await recordProviderFailure(inst.id, err);
-        }
-      }
-    } catch (err) {
-      console.error('❌ All providers failed:', err.message);
-    }
-    
-    return 'AI Service error: all providers unavailable';
+    // No fallback placeholder - return error
+    // For complex decisions, use getMixtureDecision() from artemisOrchestrator
+    throw new Error('AI Service: Gemini unavailable and no fallback configured. Use getMixtureDecision() for multi-provider support.');
   }
 
   buildPrompt(message, context) {

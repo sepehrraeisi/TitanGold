@@ -157,12 +157,20 @@ async function callProviderWithFailover(provider, callFn, { maxRetries = 2 } = {
 
 /**
  * Call OpenAI-compatible provider (OpenAI, DeepSeek, OpenRouter)
- * @param {Object} inst - Provider instance from DB { api_key_encrypted, base_url, model }
+ * @param {Object} inst - Provider instance from DB { api_key_encrypted, base_url, model, provider }
  */
 async function callOpenAICompatible(inst, prompt, systemInstruction) {
   if (!inst?.api_key_encrypted) return null;
   
-  const baseUrl = inst.base_url || 'https://api.openai.com/v1';
+  // Default base_url per provider
+  let defaultBaseUrl = 'https://api.openai.com/v1';
+  if (inst.provider === 'deepseek') {
+    defaultBaseUrl = 'https://api.deepseek.com/v1';
+  } else if (inst.provider === 'openrouter') {
+    defaultBaseUrl = 'https://openrouter.ai/api/v1';
+  }
+  
+  const baseUrl = inst.base_url || defaultBaseUrl;
   const model = inst.model || 'gpt-4o-mini';
   
   await orchSem.acquire();
@@ -465,8 +473,9 @@ You MUST return ONLY JSON with this schema:
   const quorum = getQuorum(allInstances.length);
 
   // Filter: فقط providerهایی که حداقل یک instance سالم دارند
+  // Note: getProviderInstances() already filters WHERE enabled=true
   const availableProviders = providersToUse.filter(p =>
-    allInstances.some(inst => inst.provider === p && inst.enabled)
+    allInstances.some(inst => inst.provider === p)
   );
 
   if (availableProviders.length === 0) {

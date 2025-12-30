@@ -1,0 +1,411 @@
+/**
+ * Configuration Management Routes
+ * Manage API integrations, provider settings, and Artemis configuration
+ */
+
+import express from 'express';
+import { query } from '../database/db.js';
+import { authenticate } from '../middleware/auth.js';
+import {
+  pickProviderInstance,
+  recordProviderSuccess,
+  recordProviderFailure,
+  getProviderHealth,
+} from '../services/providerPool.js';
+
+const router = express.Router();
+
+// All routes require authentication
+router.use(authenticate);
+
+// ============================================================================
+// API Integrations Management
+// ============================================================================
+
+/**
+ * GET /api/config/integrations
+ * List all API integrations with runtime status
+ */
+router.get('/integrations', async (req, res) => {
+  try {
+    const sql = `
+      SELECT
+        i.id,
+        i.provider,
+        i.name,
+        i.base_url,
+        i.model,
+        i.weight,
+        i.enabled,
+        i.rate_limit_per_min,
+        i.daily_budget,
+        i.monthly_budget,
+        i.metadata,
+        i.updated_at,
+        r.status,
+        r.cooldown_until,
+        r.last_error,
+        r.fail_count,
+        r.success_count,
+        r.total_requests,
+        r.total_cost,
+        r.last_used_at,
+        -- Mask API key (show only last 4 chars)
+        CASE
+          WHEN i.api_key_encrypted IS NOT NULL
+          THEN '***' || RIGHT(i.api_key_encrypted, 4)
+          ELSE NULL
+        END AS api_key_masked
+      FROM api_integrations i
+      LEFT JOIN api_integration_runtime r ON r.integration_id = i.id
+      WHERE i.created_by = $1
+      ORDER BY i.provider, i.name
+    `;
+
+    const result = await query(sql, [req.user.id]);
+
+    res.json({
+      success: true,
+      integrations: result.rows,
+    });
+  } catch (error) {
+    console.error('GET /api/config/integrations error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch integrations',
+    });
+  }
+});
+
+/**
+ * POST /api/config/integrations
+ * Create new API integration
+ */
+router.post('/integrations', async (req, res) => {
+  try {
+    const {
+      provider,
+      name,
+      api_key,
+      base_url,
+      model,
+      weight,
+      rate_limit_per_min,
+      daily_budget,
+      monthly_budget,
+      metadata,
+    } = req.body;
+
+    // Validation
+    if (!provider || !name || !api_key) {
+      return res.status(400).json({
+        success: false,
+        error: 'provider, name, and api_key are required',
+      });
+    }
+
+    const validProviders = ['gemini', 'openai', 'anthropic', 'deepseek', 'openrouter'];
+    if (!validProviders.includes(provider)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid provider. Must be one of: ${validProviders.join(', ')}`,
+      });
+    }
+
+    // Insert integration
+    const sqlInsert = `
+      INSERT INTO api_integrations (
+        provider, name, api_key_encrypted, base_url, model, weight,
+        rate_limit_per_min, daily_budget, monthly_budget, metadata, created_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING id
+    `;
+
+    const result = await query(sqlInsert, [
+      provider,
+      name,
+      api_key, // TODO: Encrypt with MASTER_KEY
+      base_url,
+      model,
+      weight || 1.0,
+      rate_limit_per_min,
+      daily_budget,
+      monthly_budget,
+      metadata ? JSON.stringify(metadata) : null,
+      req.user.id,
+    ]);
+
+    const integrationId = result.rows[0].id;
+
+    // Initialize runtime
+    const sqlRuntime = `
+      INSERT INTO api_integration_runtime (integration_id, status)
+      VALUES ($1, 'healthy')
+    `;
+    await query(sqlRuntime, [integrationId]);
+
+    res.json({
+      success: true,
+      integration_id: integrationId,
+      message: 'Integration created successfully',
+    });
+  } catch (error) {
+    console.error('POST /api/config/integrations error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create integration',
+    });
+  }
+});
+
+/**
+ * PATCH /api/config/integrations/:id
+ * Update existing integration
+ */
+router.patch('/integrations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      api_key,
+      base_url,
+      model,
+      weight,
+      enabled,
+      rate_limit_per_min,
+      daily_budget,
+      monthly_budget,
+      metadata,
+    } = req.body;
+
+    // Build update query
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(name);
+    }
+    if (api_key !== undefined) {
+      updates.push(`api_key_encrypted = $${paramIndex++}`);
+      values.push(api_key); // TODO: Encrypt
+    }
+    if (base_url !== undefined) {
+      updates.push(`base_url = $${paramIndex++}`);
+      values.push(base_url);
+    }
+    if (model !== undefined) {
+      updates.push(`model = $${paramIndex++}`);
+      values.push(model);
+    }
+    if (weight !== undefined) {
+      updates.push(`weight = $${paramIndex++}`);
+      values.push(weight);
+    }
+    if (enabled !== undefined) {
+      updates.push(`enabled = $${paramIndex++}`);
+      values.push(enabled);
+    }
+    if (rate_limit_per_min !== undefined) {
+      updates.push(`rate_limit_per_min = $${paramIndex++}`);
+      values.push(rate_limit_per_min);
+    }
+    if (daily_budget !== undefined) {
+      updates.push(`daily_budget = $${paramIndex++}`);
+      values.push(daily_budget);
+    }
+    if (monthly_budget !== undefined) {
+      updates.push(`monthly_budget = $${paramIndex++}`);
+      values.push(monthly_budget);
+    }
+    if (metadata !== undefined) {
+      updates.push(`metadata = $${paramIndex++}`);
+      values.push(JSON.stringify(metadata));
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No fields to update',
+      });
+    }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+    values.push(req.user.id);
+
+    const sql = `
+      UPDATE api_integrations
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex++} AND created_by = $${paramIndex++}
+      RETURNING id
+    `;
+
+    const result = await query(sql, values);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Integration not found or access denied',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Integration updated successfully',
+    });
+  } catch (error) {
+    console.error('PATCH /api/config/integrations/:id error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update integration',
+    });
+  }
+});
+
+/**
+ * POST /api/config/integrations/:id/test
+ * Test integration with actual API call
+ */
+router.post('/integrations/:id/test', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch integration
+    const sqlIntegration = `
+      SELECT provider, name, api_key_encrypted, base_url, model
+      FROM api_integrations
+      WHERE id = $1 AND created_by = $2
+    `;
+    const result = await query(sqlIntegration, [id, req.user.id]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Integration not found',
+      });
+    }
+
+    const integration = result.rows[0];
+
+    // Simple test call
+    try {
+      const health = await getProviderHealth(integration.provider);
+      
+      res.json({
+        success: true,
+        provider: integration.provider,
+        name: integration.name,
+        healthy: health.healthy,
+        message: health.healthy ? 'Provider is healthy' : health.reason,
+      });
+    } catch (testError) {
+      res.json({
+        success: false,
+        provider: integration.provider,
+        name: integration.name,
+        healthy: false,
+        error: testError.message,
+      });
+    }
+  } catch (error) {
+    console.error('POST /api/config/integrations/:id/test error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to test integration',
+    });
+  }
+});
+
+/**
+ * POST /api/config/integrations/:id/disable
+ * Temporarily disable integration (set status=disabled)
+ */
+router.post('/integrations/:id/disable', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verify ownership
+    const verify = await query(
+      'SELECT 1 FROM api_integrations WHERE id = $1 AND created_by = $2',
+      [id, req.user.id]
+    );
+
+    if (verify.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Integration not found',
+      });
+    }
+
+    // Update runtime status
+    const sql = `
+      UPDATE api_integration_runtime
+      SET status = 'disabled', updated_at = NOW()
+      WHERE integration_id = $1
+    `;
+    await query(sql, [id]);
+
+    res.json({
+      success: true,
+      message: 'Integration disabled',
+    });
+  } catch (error) {
+    console.error('POST /api/config/integrations/:id/disable error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to disable integration',
+    });
+  }
+});
+
+/**
+ * POST /api/config/integrations/:id/reset-runtime
+ * Reset runtime state (clear cooldown, reset fail count)
+ */
+router.post('/integrations/:id/reset-runtime', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verify ownership
+    const verify = await query(
+      'SELECT 1 FROM api_integrations WHERE id = $1 AND created_by = $2',
+      [id, req.user.id]
+    );
+
+    if (verify.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Integration not found',
+      });
+    }
+
+    // Reset runtime
+    const sql = `
+      UPDATE api_integration_runtime
+      SET
+        status = 'healthy',
+        cooldown_until = NULL,
+        last_error = NULL,
+        fail_count = 0,
+        updated_at = NOW()
+      WHERE integration_id = $1
+    `;
+    await query(sql, [id]);
+
+    res.json({
+      success: true,
+      message: 'Runtime state reset',
+    });
+  } catch (error) {
+    console.error('POST /api/config/integrations/:id/reset-runtime error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reset runtime',
+    });
+  }
+});
+
+export default router;
