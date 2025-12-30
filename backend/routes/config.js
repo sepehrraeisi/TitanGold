@@ -6,12 +6,6 @@
 import express from 'express';
 import { query } from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
-import {
-  pickProviderInstance,
-  recordProviderSuccess,
-  recordProviderFailure,
-  getProviderHealth,
-} from '../services/providerPool.js';
 
 const router = express.Router();
 
@@ -275,7 +269,7 @@ router.post('/integrations/:id/test', async (req, res) => {
 
     // Fetch integration
     const sqlIntegration = `
-      SELECT provider, name, api_key_encrypted, base_url, model
+      SELECT id, provider, name, api_key_encrypted, base_url, model
       FROM api_integrations
       WHERE id = $1 AND created_by = $2
     `;
@@ -290,16 +284,17 @@ router.post('/integrations/:id/test', async (req, res) => {
 
     const integration = result.rows[0];
 
-    // Simple test call
+    // Real API test call
     try {
-      const health = await getProviderHealth(integration.provider);
+      const testResult = await testProviderConnection(integration);
       
       res.json({
-        success: true,
+        success: testResult.success,
         provider: integration.provider,
         name: integration.name,
-        healthy: health.healthy,
-        message: health.healthy ? 'Provider is healthy' : health.reason,
+        healthy: testResult.success,
+        message: testResult.message,
+        responseTime: testResult.responseTime,
       });
     } catch (testError) {
       res.json({
@@ -318,6 +313,99 @@ router.post('/integrations/:id/test', async (req, res) => {
     });
   }
 });
+
+/**
+ * Test provider connection with real API call
+ */
+async function testProviderConnection(integration) {
+  const startTime = Date.now();
+  
+  try {
+    let response;
+    
+    if (integration.provider === 'gemini') {
+      // Test Gemini
+      const model = integration.model || 'gemini-2.0-flash';
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${integration.api_key_encrypted}`;
+      
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'Return JSON: {"status":"ok"}' }] }],
+          generationConfig: { maxOutputTokens: 20 },
+        }),
+      });
+      
+    } else if (integration.provider === 'anthropic') {
+      // Test Claude
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': integration.api_key_encrypted,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: integration.model || 'claude-3-5-sonnet-latest',
+          max_tokens: 20,
+          messages: [{ role: 'user', content: 'Return JSON: {"status":"ok"}' }],
+        }),
+      });
+      
+    } else {
+      // Test OpenAI-compatible (OpenAI, DeepSeek, OpenRouter)
+      let baseUrl = integration.base_url;
+      if (!baseUrl) {
+        if (integration.provider === 'deepseek') {
+          baseUrl = 'https://api.deepseek.com/v1';
+        } else if (integration.provider === 'openrouter') {
+          baseUrl = 'https://openrouter.ai/api/v1';
+        } else {
+          baseUrl = 'https://api.openai.com/v1';
+        }
+      }
+      
+      response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${integration.api_key_encrypted}`,
+        },
+        body: JSON.stringify({
+          model: integration.model || 'gpt-4o-mini',
+          messages: [{ role: 'user', content: 'Return JSON: {"status":"ok"}' }],
+          max_tokens: 20,
+        }),
+      });
+    }
+    
+    const responseTime = Date.now() - startTime;
+    
+    if (response.ok) {
+      return {
+        success: true,
+        message: 'API connection successful',
+        responseTime: `${responseTime}ms`,
+      };
+    } else {
+      const errorText = await response.text().catch(() => '');
+      return {
+        success: false,
+        message: `API returned ${response.status}: ${errorText.slice(0, 200)}`,
+        responseTime: `${responseTime}ms`,
+      };
+    }
+    
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+    return {
+      success: false,
+      message: `Connection failed: ${error.message}`,
+      responseTime: `${responseTime}ms`,
+    };
+  }
+}
 
 /**
  * POST /api/config/integrations/:id/disable
