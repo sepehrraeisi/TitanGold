@@ -1,6 +1,7 @@
 import React from 'react';
 import { OnNavigateHandler } from '../../../../types/navigation.ts';
 import { useAppContext } from '../../../../context/AppContext.tsx';
+import { isAdminRole } from '../../../../utils/auth.ts';
 
 type Props = {
   artemis?: any;
@@ -21,7 +22,7 @@ type Props = {
  */
 const MonitoringTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
   const { user } = useAppContext();
-  const isAdmin = user?.role === 'Admin';
+  const isAdmin = isAdminRole(user?.role);
 
   const handleOpenSettings = () => {
     // No alert needed - UI already shows Admin-only warning

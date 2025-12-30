@@ -3,6 +3,7 @@ import * as api from '../../../../services/api.ts';
 import { ArtemisConfig, ArtemisState } from '../../../../types.ts';
 import { OnNavigateHandler } from '../../../../types/navigation.ts';
 import { useAppContext } from '../../../../context/AppContext.tsx';
+import { isAdminRole } from '../../../../utils/auth.ts';
 import SchedulerSettings from '../../SchedulerSettings.tsx';
 
 type Props = {
@@ -120,7 +121,7 @@ const RedirectCard: React.FC<RedirectCardProps> = ({
 
 const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate }) => {
     const { user } = useAppContext();
-    const isAdmin = user?.role === 'Admin';
+    const isAdmin = isAdminRole(user?.role);
 
     // Guard: Check if artemis exists
     if (!artemis) {

@@ -247,7 +247,13 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
             <SystemLogsTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />
           )}
           {activeTab === 'settings' && (
-            <SettingsTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />
+            <SettingsTab
+              artemis={artemis}
+              t={t}
+              onRefresh={refreshArtemis}
+              Card={Card}
+              onNavigate={onNavigate}
+            />
           )}
           {activeTab === 'autopilot' && (
             <AutopilotTab t={t} onRefresh={refreshArtemis} Card={Card} />

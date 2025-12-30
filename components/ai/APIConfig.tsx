@@ -2,6 +2,7 @@ import React from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { OnNavigateHandler } from '../../types/navigation.ts';
 import { useAppContext } from '../../context/AppContext.tsx';
+import { isAdminRole } from '../../utils/auth.ts';
 
 type Props = {
   onNavigate?: OnNavigateHandler;
@@ -19,7 +20,7 @@ type Props = {
 const APIConfig: React.FC<Props> = ({ onNavigate }) => {
   const { t } = useLanguage();
   const { user } = useAppContext();
-  const isAdmin = user?.role === 'Admin';
+  const isAdmin = isAdminRole(user?.role);
 
   const handleOpenSettings = () => {
     // No alert needed - UI already shows Admin-only warning
