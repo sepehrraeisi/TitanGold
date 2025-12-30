@@ -1,6 +1,6 @@
-import React from "react";
-import { OnNavigateHandler } from "../../../../types/navigation.ts";
-import { useAppContext } from "../../../../context/AppContext.tsx";
+import React from 'react';
+import { OnNavigateHandler } from '../../../../types/navigation.ts';
+import { useAppContext } from '../../../../context/AppContext.tsx';
 
 type Props = {
   artemis?: any;
@@ -21,7 +21,7 @@ type Props = {
  */
 const MonitoringTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
   const { user } = useAppContext();
-  const isAdmin = user?.role === "Admin";
+  const isAdmin = user?.role === 'Admin';
 
   const handleOpenSettings = () => {
     // No alert needed - UI already shows Admin-only warning
@@ -32,9 +32,9 @@ const MonitoringTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
     if (onNavigate) {
       // State-based navigation - no DOM selectors needed!
       onNavigate({
-        view: "settings",
-        settingsTab: "configuration",
-        settingsSubtab: "monitoring",
+        view: 'settings',
+        settingsTab: 'configuration',
+        settingsSubtab: 'monitoring',
       });
     }
   };
@@ -63,11 +63,11 @@ const MonitoringTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
           {/* Title */}
           <div className="space-y-2">
             <h3 className="text-xl font-semibold text-foreground">
-              {t("monitoring_moved") || "System Monitoring Moved"}
+              {t('monitoring_moved') || 'System Monitoring Moved'}
             </h3>
             <p className="text-muted-foreground max-w-md">
-              {t("monitoring_moved_desc") ||
-                "System monitoring is now available in Settings > Configuration > Monitoring to provide unified health tracking and reduce duplication."}
+              {t('monitoring_moved_desc') ||
+                'System monitoring is now available in Settings > Configuration > Monitoring to provide unified health tracking and reduce duplication.'}
             </p>
           </div>
 
@@ -77,12 +77,7 @@ const MonitoringTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
               onClick={handleOpenSettings}
               className="mt-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg text-sm shadow-lg transition-all duration-200 hover:shadow-xl flex items-center gap-2"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -90,7 +85,7 @@ const MonitoringTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
                   d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                 />
               </svg>
-              {t("open_in_settings") || "Open in Settings"}
+              {t('open_in_settings') || 'Open in Settings'}
             </button>
           ) : (
             <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg max-w-md">
@@ -109,11 +104,9 @@ const MonitoringTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
                   />
                 </svg>
                 <span>
-                  <span className="font-semibold">
-                    {t("admin_only") || "Admin Only"}:
-                  </span>{" "}
-                  {t("admin_only_feature_desc") ||
-                    "This configuration is only available to Admin users. Please contact your administrator for access."}
+                  <span className="font-semibold">{t('admin_only') || 'Admin Only'}:</span>{' '}
+                  {t('admin_only_feature_desc') ||
+                    'This configuration is only available to Admin users. Please contact your administrator for access.'}
                 </span>
               </p>
             </div>
@@ -122,29 +115,23 @@ const MonitoringTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
           {/* Features List */}
           <div className="mt-6 p-4 bg-purple-500/5 border border-purple-500/20 rounded-lg text-left max-w-md">
             <p className="text-sm font-semibold text-foreground mb-2">
-              📊 {t("available_metrics") || "Available Metrics"}:
+              📊 {t('available_metrics') || 'Available Metrics'}:
             </p>
             <ul className="text-sm text-muted-foreground space-y-1 ml-4">
-              <li>• {t("health_status") || "Health Status (API + DB)"}</li>
-              <li>
-                •{" "}
-                {t("request_metrics") ||
-                  "Request Metrics (Count, Errors, Latency)"}
-              </li>
-              <li>• {t("top_routes") || "Top Routes Analysis"}</li>
-              <li>• {t("recent_errors") || "Recent Errors Log"}</li>
-              <li>• {t("real_time_data") || "Real-time Data Updates"}</li>
+              <li>• {t('health_status') || 'Health Status (API + DB)'}</li>
+              <li>• {t('request_metrics') || 'Request Metrics (Count, Errors, Latency)'}</li>
+              <li>• {t('top_routes') || 'Top Routes Analysis'}</li>
+              <li>• {t('recent_errors') || 'Recent Errors Log'}</li>
+              <li>• {t('real_time_data') || 'Real-time Data Updates'}</li>
             </ul>
           </div>
 
           {/* Info Box */}
           <div className="mt-4 p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg text-left max-w-md">
             <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">
-                ℹ️ {t("note") || "Note"}:
-              </span>{" "}
-              {t("monitoring_note") ||
-                "This consolidation provides a single source of truth for system health monitoring, making it easier to track and respond to issues."}
+              <span className="font-semibold text-foreground">ℹ️ {t('note') || 'Note'}:</span>{' '}
+              {t('monitoring_note') ||
+                'This consolidation provides a single source of truth for system health monitoring, making it easier to track and respond to issues.'}
             </p>
           </div>
         </div>

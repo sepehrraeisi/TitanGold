@@ -1,6 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
-import { ViewKey, NavigationPayload, NavigationTarget, OnNavigateHandler } from '../types/navigation.ts';
+import {
+  ViewKey,
+  NavigationPayload,
+  NavigationTarget,
+  OnNavigateHandler,
+} from '../types/navigation.ts';
 import TradingDashboardHome from './trading/TradingDashboardHome.tsx';
 import Favorites from './Favorites.tsx';
 import Trades from './Trades.tsx';
@@ -27,7 +32,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Smart navigation handler that accepts both string and payload
-  const handleNavigation: OnNavigateHandler = (target) => {
+  const handleNavigation: OnNavigateHandler = target => {
     if (typeof target === 'string') {
       setActiveView(target);
       setNavigationPayload(null);
@@ -72,11 +77,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       case 'gold':
         return <GoldPage />;
       case 'settings':
-        return <Settings 
-          initialTab={navigationPayload?.settingsTab} 
-          initialSubtab={navigationPayload?.settingsSubtab}
-          onNavigationComplete={() => setNavigationPayload(null)}
-        />;
+        return (
+          <Settings
+            initialTab={navigationPayload?.settingsTab}
+            initialSubtab={navigationPayload?.settingsSubtab}
+            onNavigationComplete={() => setNavigationPayload(null)}
+          />
+        );
       case 'profile':
         return <ProfilePage />;
       case 'dashboard':
@@ -88,27 +95,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const dir = language === 'fa' ? 'rtl' : 'ltr';
 
   return (
-    <div 
-      className={`min-h-screen bg-background text-foreground ${dir}`} 
+    <div
+      className={`min-h-screen bg-background text-foreground ${dir}`}
       dir={dir}
       style={language === 'fa' ? { fontFamily: 'IRANSans, Vazir, Tahoma, sans-serif' } : {}}
     >
       <div className="relative flex h-screen w-full overflow-hidden">
         <div className="flex h-full w-full flex-col">
-          <Header 
-            activeView={activeView} 
-            setActiveView={setActiveView} 
-            onLogout={onLogout}
-          />
-            <main className="flex-1 overflow-y-auto bg-background px-4 py-6 sm:px-6 lg:px-8">
-              <div className="mx-auto max-w-7xl">
-                {renderView()}
-              </div>
+          <Header activeView={activeView} setActiveView={setActiveView} onLogout={onLogout} />
+          <main className="flex-1 overflow-y-auto bg-background px-4 py-6 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl">{renderView()}</div>
           </main>
         </div>
 
         {isMobileNavOpen && (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur" onClick={() => setMobileNavOpen(false)}>
+          <div
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur"
+            onClick={() => setMobileNavOpen(false)}
+          >
             <div
               className="absolute top-0 h-full w-64 bg-background p-6 text-sm text-muted-foreground"
               style={language === 'fa' ? { right: 0 } : { left: 0 }}
@@ -117,7 +121,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               <div className="mb-6 flex items-center justify-between">
                 <span className="text-lg font-semibold">TITAN</span>
                 <button onClick={() => setMobileNavOpen(false)} aria-label="Close menu">
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <svg
+                    className="h-5 w-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
@@ -131,7 +141,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                       setMobileNavOpen(false);
                     }}
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 ${
-                      activeView === item.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-secondary'
+                      activeView === item.key
+                        ? 'bg-primary/20 text-primary'
+                        : 'text-muted-foreground hover:bg-secondary'
                     }`}
                   >
                     <span className="flex items-center gap-3">

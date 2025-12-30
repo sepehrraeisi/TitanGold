@@ -1,6 +1,6 @@
 /**
  * Navigation Types
- * 
+ *
  * Centralized navigation types for consistent state-based navigation
  * across Dashboard, AICenter, AIManager, and redirect components.
  */

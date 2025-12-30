@@ -13,7 +13,9 @@ type ConfigurationSettingsProps = {
 
 const ConfigurationSettings: React.FC<ConfigurationSettingsProps> = ({ initialSubtab }) => {
   const { language, t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<ConfigTab>((initialSubtab as ConfigTab) || 'integrations');
+  const [activeTab, setActiveTab] = useState<ConfigTab>(
+    (initialSubtab as ConfigTab) || 'integrations'
+  );
 
   // Auto-navigate to initial subtab when provided
   React.useEffect(() => {
