@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import Integrations from './configuration/Integrations.tsx';
+import DecisionEngine from './configuration/DecisionEngine.tsx';
 
 type ConfigTab = 'integrations' | 'decision-engine' | 'security' | 'monitoring';
 
@@ -36,20 +37,7 @@ const ConfigurationSettings: React.FC = () => {
       case 'integrations':
         return <Integrations />;
       case 'decision-engine':
-        return (
-          <div className="bg-gray-900/50 rounded-lg border border-gray-800 p-8 text-center">
-            <div className="text-6xl mb-4">🧠</div>
-            <h3 className="text-xl font-bold text-white mb-2">
-              {language === 'fa' ? 'موتور تصمیم‌گیری' : 'Decision Engine Settings'}
-            </h3>
-            <p className="text-gray-400">
-              {language === 'fa' 
-                ? 'تنظیمات مدل فعال، استراتژی رأی‌گیری، و کوئروم'
-                : 'Active model, voting strategy, and quorum settings'}
-            </p>
-            <p className="text-sm text-gray-500 mt-4">Coming soon...</p>
-          </div>
-        );
+        return <DecisionEngine />;
       case 'security':
         return (
           <div className="bg-gray-900/50 rounded-lg border border-gray-800 p-8 text-center">
