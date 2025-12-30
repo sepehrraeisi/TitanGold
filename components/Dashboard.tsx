@@ -50,6 +50,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           settingsTab: urlState.settingsTab,
           settingsSubtab: urlState.settingsSubtab,
         });
+      } else {
+        // Explicitly clear payload when URL has no settingsTab/settingsSubtab
+        // Prevents stale state from previous navigation
+        setNavigationPayload(null);
       }
       // Seed/normalize history.state for current entry (replaceState)
       // This ensures event.state is present for back/forward
