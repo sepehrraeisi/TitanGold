@@ -7,9 +7,11 @@
  * - Health tracking per integration
  * - Quota/rate-limit detection
  * - Multi-key support per provider
+ * - AES-256-GCM encryption for API keys
  */
 
 import { query } from '../database/db.js';
+import { decryptSecret, isEncrypted } from '../utils/crypto.js';
 
 const STATUS = {
   HEALTHY: 'healthy',
@@ -98,7 +100,22 @@ export async function getProviderInstances({ provider = null } = {}) {
       COALESCE(i.weight, 1.0) DESC
   `;
   const res = await query(sql, params);
-  return res.rows || [];
+  
+  // Decrypt API keys
+  const instances = (res.rows || []).map(inst => {
+    try {
+      // Decrypt if encrypted, otherwise keep as-is (for migration)
+      if (inst.api_key_encrypted && isEncrypted(inst.api_key_encrypted)) {
+        inst.api_key_encrypted = decryptSecret(inst.api_key_encrypted);
+      }
+    } catch (error) {
+      console.error(`Failed to decrypt key for ${inst.provider}/${inst.name}:`, error.message);
+      // Keep encrypted value (will fail API call, but won't crash)
+    }
+    return inst;
+  });
+  
+  return instances;
 }
 
 /**

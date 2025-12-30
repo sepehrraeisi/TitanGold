@@ -6,6 +6,7 @@
 import express from 'express';
 import { query } from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
+import { encryptSecret, decryptSecret, isEncrypted, maskSecret } from '../utils/crypto.js';
 
 const router = express.Router();
 
@@ -106,6 +107,9 @@ router.post('/integrations', async (req, res) => {
       });
     }
 
+    // Encrypt API key
+    const encryptedKey = encryptSecret(api_key);
+
     // Insert integration
     const sqlInsert = `
       INSERT INTO api_integrations (
@@ -119,7 +123,7 @@ router.post('/integrations', async (req, res) => {
     const result = await query(sqlInsert, [
       provider,
       name,
-      api_key, // TODO: Encrypt with MASTER_KEY
+      encryptedKey, // ✅ Encrypted with AES-256-GCM
       base_url,
       model,
       weight || 1.0,
@@ -184,7 +188,7 @@ router.patch('/integrations/:id', async (req, res) => {
     }
     if (api_key !== undefined) {
       updates.push(`api_key_encrypted = $${paramIndex++}`);
-      values.push(api_key); // TODO: Encrypt
+      values.push(encryptSecret(api_key)); // ✅ Encrypt before storing
     }
     if (base_url !== undefined) {
       updates.push(`base_url = $${paramIndex++}`);
@@ -284,9 +288,27 @@ router.post('/integrations/:id/test', async (req, res) => {
 
     const integration = result.rows[0];
 
-    // Real API test call
+    // Decrypt API key for testing
+    let decryptedKey;
     try {
-      const testResult = await testProviderConnection(integration);
+      decryptedKey = isEncrypted(integration.api_key_encrypted)
+        ? decryptSecret(integration.api_key_encrypted)
+        : integration.api_key_encrypted; // Fallback for plaintext (migration)
+    } catch (decryptError) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to decrypt API key',
+      });
+    }
+
+    // Real API test call (use decrypted key)
+    try {
+      const testIntegration = {
+        ...integration,
+        api_key_encrypted: decryptedKey, // Use plaintext for API call
+      };
+      
+      const testResult = await testProviderConnection(testIntegration);
       
       res.json({
         success: testResult.success,
