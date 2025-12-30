@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import {
   ViewKey,
@@ -6,6 +6,14 @@ import {
   NavigationTarget,
   OnNavigateHandler,
 } from '../types/navigation.ts';
+import {
+  readStateFromURL,
+  writeStateToURL,
+  payloadToURLState,
+  viewKeyToURLState,
+  isURLStateEqual,
+  URLState,
+} from '../utils/urlSync.ts';
 import TradingDashboardHome from './trading/TradingDashboardHome.tsx';
 import Favorites from './Favorites.tsx';
 import Trades from './Trades.tsx';
@@ -31,15 +39,60 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [navigationPayload, setNavigationPayload] = useState<NavigationPayload | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
+  // Hydrate state from URL on mount
+  useEffect(() => {
+    const urlState = readStateFromURL();
+    if (urlState) {
+      setActiveView(urlState.view);
+      if (urlState.settingsTab || urlState.settingsSubtab) {
+        setNavigationPayload({
+          view: urlState.view,
+          settingsTab: urlState.settingsTab,
+          settingsSubtab: urlState.settingsSubtab,
+        });
+      }
+    }
+  }, []);
+
+  // Listen to browser back/forward
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const urlState = event.state as URLState | null;
+      if (urlState) {
+        setActiveView(urlState.view);
+        if (urlState.settingsTab || urlState.settingsSubtab) {
+          setNavigationPayload({
+            view: urlState.view,
+            settingsTab: urlState.settingsTab,
+            settingsSubtab: urlState.settingsSubtab,
+          });
+        } else {
+          setNavigationPayload(null);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // Smart navigation handler that accepts both string and payload
+  // AND syncs with URL
   const handleNavigation: OnNavigateHandler = target => {
+    let newState: URLState;
+
     if (typeof target === 'string') {
       setActiveView(target);
       setNavigationPayload(null);
+      newState = viewKeyToURLState(target);
     } else {
       setActiveView(target.view);
       setNavigationPayload(target);
+      newState = payloadToURLState(target);
     }
+
+    // Sync to URL (pushState for new navigation)
+    writeStateToURL(newState, false);
   };
 
   const navItems = useMemo(
