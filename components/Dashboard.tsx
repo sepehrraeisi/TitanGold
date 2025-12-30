@@ -68,7 +68,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       case 'news':
         return <News />;
       case 'ai':
-        return <AICenter />;
+        return <AICenter onNavigate={setActiveView} />;
       case 'gold':
         return <GoldPage />;
       case 'settings':

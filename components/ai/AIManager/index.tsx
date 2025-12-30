@@ -35,7 +35,11 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
     </div>
 );
 
-const AIManager: React.FC = () => {
+type Props = {
+    onNavigate?: (view: string) => void;
+};
+
+const AIManager: React.FC<Props> = ({ onNavigate }) => {
     const { t } = useLanguage();
     const [isLoading, setIsLoading] = useState(true);
     const [data, setData] = useState<AIManagerOverview | null>(null);
@@ -176,10 +180,10 @@ const AIManager: React.FC = () => {
             <div className="mt-6">
                 <Suspense fallback={<div className="text-center p-10">{t('loading')}</div>}>
                     {activeTab === 'overview' && <OverviewTab data={data} artemis={artemis} t={t} onRefresh={refreshArtemis} onNavigate={setActiveTab} Card={Card} />}
-                    {activeTab === 'decision_engine' && <DecisionEngineTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
+                    {activeTab === 'decision_engine' && <DecisionEngineTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} onNavigate={onNavigate} />}
                     {activeTab === 'orchestration' && <OrchestrationTab t={t} Card={Card} />}
                     {activeTab === 'learning' && <LearningTab t={t} Card={Card} />}
-                    {activeTab === 'monitoring' && <MonitoringTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
+                    {activeTab === 'monitoring' && <MonitoringTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} onNavigate={onNavigate} />}
                     {activeTab === 'scenarios' && <ScenariosTab t={t} onRefresh={refreshArtemis} Card={Card} />}
                     {activeTab === 'data_hub' && <DataHubTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}
                     {activeTab === 'backtesting' && <BacktestingTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />}

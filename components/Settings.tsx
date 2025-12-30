@@ -181,6 +181,7 @@ const Settings: React.FC = () => {
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
+                                data-tab-id={tab.id}
                                 className={`w-full flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                                     activeTab === tab.id
                                         ? 'bg-blue-600/20 text-blue-300'

@@ -9,7 +9,11 @@ import * as api from '../services/api.ts';
 
 type AITab = 'manager' | 'agents' | 'training' | 'analytics' | 'config';
 
-const AICenter: React.FC = () => {
+type Props = {
+    onNavigate?: (view: string) => void;
+};
+
+const AICenter: React.FC<Props> = ({ onNavigate }) => {
     const { t } = useLanguage();
     const [activeTab, setActiveTab] = useState<AITab>('manager');
     const [isLoading, setIsLoading] = useState(true);
@@ -40,11 +44,11 @@ const AICenter: React.FC = () => {
     const renderContent = () => {
         // We let each component handle its own loading state for a better UX
         switch (activeTab) {
-            case 'manager': return <AIManager />;
+            case 'manager': return <AIManager onNavigate={onNavigate} />;
             case 'agents': return <AIAgents />;
             case 'training': return <TrainingCenter />;
             case 'analytics': return <AnalyticsDashboard />;
-            case 'config': return <APIConfig />;
+            case 'config': return <APIConfig onNavigate={onNavigate} />;
             default: return null;
         }
     };
