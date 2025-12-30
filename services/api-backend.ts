@@ -186,3 +186,63 @@ export const fetchSystemErrors = async (limit: number = 50): Promise<SystemError
     throw error;
   }
 };
+
+/**
+ * Fetch Sentiment Agent data from backend
+ * 
+ * Backend endpoint: GET /api/ai-agents/:id/details
+ * 
+ * @param agentId - Agent UUID
+ * @returns Agent config, performance metrics, and last analysis
+ */
+export const fetchSentimentAgentData = async (agentId: string): Promise<{
+  config: any | null;
+  performance: any | null;
+  lastAnalysis: any | null;
+}> => {
+  try {
+    const url = `/api/ai-agents/${agentId}/details`;
+
+    const res = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData?.error || errorData?.message || 'Failed to load sentiment agent details');
+    }
+
+    const data = await res.json();
+    console.log('✅ Sentiment agent details loaded:', data);
+
+    // Map backend response to expected format
+    const config = data?.agent?.config || null;
+    
+    const performance = data?.agent ? {
+      totalSignals: data.agent.total_decisions || 0,
+      successfulSignals: data.agent.successful_decisions || 0,
+      winRate: data.agent.accuracy || 0,
+      averageConfidence: data.agent.performance_score || 0,
+      profitFactor: 0,
+      sharpeRatio: 0,
+      maxDrawdown: 0,
+      recentPerformance: {
+        last24h: { signals: 0, winRate: 0 },
+        last7d: { signals: 0, winRate: 0 },
+        last30d: { signals: 0, winRate: 0 },
+      },
+    } : null;
+
+    return {
+      config,
+      performance,
+      lastAnalysis: null, // Can be populated from recent decisions if needed
+    };
+  } catch (error) {
+    console.error('Failed to fetch sentiment agent data:', error);
+    throw error;
+  }
+};
+

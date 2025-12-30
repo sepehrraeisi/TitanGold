@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
+import { fetchSentimentAgentData } from '../../services/api-backend.ts';
 import type {
     AIAgent,
     SentimentAnalysisConfig,
@@ -51,7 +52,7 @@ const SentimentAgentControl: React.FC<SentimentAgentControlProps> = ({ agent, on
         const loadData = async () => {
             setIsLoading(true);
             try {
-                const data = await api.fetchSentimentAgentData(agent.id);
+                const data = await fetchSentimentAgentData(agent.id);
                 if (data.config) setConfig(data.config);
                 if (data.metrics) setMetrics(data.metrics);
                 if (data.lastAnalysis) setLastAnalysis(data.lastAnalysis);
