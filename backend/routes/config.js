@@ -518,4 +518,163 @@ router.post('/integrations/:id/reset-runtime', async (req, res) => {
   }
 });
 
+// ============================================================================
+// Artemis Decision Engine Configuration
+// ============================================================================
+
+/**
+ * GET /api/config/artemis
+ * Get Artemis Decision Engine configuration
+ */
+router.get('/artemis', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT value, description, updated_at, updated_by 
+       FROM system_config 
+       WHERE key = $1`,
+      ['artemis.decision_engine']
+    );
+
+    if (result.rows.length === 0) {
+      // Return default config if not found
+      return res.json({
+        success: true,
+        config: {
+          strategy: 'mixture_of_experts',
+          quorum: { type: 'percent', value: 40, min: 2 },
+          timeoutMs: 12000,
+          maxRetries: 2,
+          maxConcurrency: 6,
+          providersToUse: ['openrouter', 'openai', 'deepseek', 'gemini'],
+          degradedMode: 'best_effort',
+          aggregation: { method: 'weighted_vote', finalSummarizer: true }
+        },
+        description: 'Default configuration (not persisted yet)',
+        updated_at: null,
+        updated_by: null,
+      });
+    }
+
+    const row = result.rows[0];
+    res.json({
+      success: true,
+      config: row.value,
+      description: row.description,
+      updated_at: row.updated_at,
+      updated_by: row.updated_by,
+    });
+  } catch (error) {
+    console.error('GET /api/config/artemis error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch Artemis configuration',
+    });
+  }
+});
+
+/**
+ * PUT /api/config/artemis
+ * Update Artemis Decision Engine configuration (Admin only)
+ */
+router.put('/artemis', async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only admins can update Artemis configuration',
+      });
+    }
+
+    const config = req.body;
+
+    // Validation
+    const errors = [];
+
+    // Validate strategy
+    const validStrategies = ['mixture_of_experts', 'weighted_vote', 'majority'];
+    if (config.strategy && !validStrategies.includes(config.strategy)) {
+      errors.push(`Invalid strategy. Must be one of: ${validStrategies.join(', ')}`);
+    }
+
+    // Validate quorum
+    if (config.quorum) {
+      if (config.quorum.type && !['percent', 'absolute'].includes(config.quorum.type)) {
+        errors.push('Quorum type must be "percent" or "absolute"');
+      }
+      if (config.quorum.value !== undefined) {
+        if (config.quorum.type === 'percent' && (config.quorum.value < 0 || config.quorum.value > 100)) {
+          errors.push('Quorum percent must be between 0 and 100');
+        }
+        if (config.quorum.type === 'absolute' && config.quorum.value < 1) {
+          errors.push('Quorum absolute must be at least 1');
+        }
+      }
+      if (config.quorum.min !== undefined && config.quorum.min < 1) {
+        errors.push('Quorum minimum must be at least 1');
+      }
+    }
+
+    // Validate timeouts
+    if (config.timeoutMs !== undefined && (config.timeoutMs < 1000 || config.timeoutMs > 60000)) {
+      errors.push('Timeout must be between 1000ms and 60000ms');
+    }
+
+    // Validate retries
+    if (config.maxRetries !== undefined && (config.maxRetries < 0 || config.maxRetries > 10)) {
+      errors.push('Max retries must be between 0 and 10');
+    }
+
+    // Validate concurrency
+    if (config.maxConcurrency !== undefined && (config.maxConcurrency < 1 || config.maxConcurrency > 20)) {
+      errors.push('Max concurrency must be between 1 and 20');
+    }
+
+    // Validate providers
+    const validProviders = ['gemini', 'openai', 'anthropic', 'deepseek', 'openrouter'];
+    if (config.providersToUse && Array.isArray(config.providersToUse)) {
+      const invalidProviders = config.providersToUse.filter(p => !validProviders.includes(p));
+      if (invalidProviders.length > 0) {
+        errors.push(`Invalid providers: ${invalidProviders.join(', ')}. Valid: ${validProviders.join(', ')}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        errors,
+      });
+    }
+
+    // Update configuration
+    await query(
+      `INSERT INTO system_config (key, value, description, updated_by)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (key) DO UPDATE SET
+         value = EXCLUDED.value,
+         updated_at = NOW(),
+         updated_by = EXCLUDED.updated_by`,
+      [
+        'artemis.decision_engine',
+        JSON.stringify(config),
+        'Artemis Decision Engine configuration: strategy, quorum, timeouts, provider selection',
+        req.user.id,
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'Artemis configuration updated successfully',
+      config,
+    });
+  } catch (error) {
+    console.error('PUT /api/config/artemis error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update Artemis configuration',
+    });
+  }
+});
+
 export default router;
