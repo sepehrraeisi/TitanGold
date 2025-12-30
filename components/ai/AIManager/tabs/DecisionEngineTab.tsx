@@ -24,8 +24,8 @@ const DecisionEngineTab: React.FC<Props> = ({ t, Card, onNavigate }) => {
     const isAdmin = user?.role === 'Admin';
 
     const handleOpenSettings = () => {
+        // No alert needed - UI already shows Admin-only warning
         if (!isAdmin) {
-            alert(t('admin_only_feature') || 'This feature is only available for Admin users.');
             return;
         }
         
