@@ -677,4 +677,137 @@ router.put('/artemis', async (req, res) => {
   }
 });
 
+// ============================================================================
+// Security Settings Configuration
+// ============================================================================
+
+/**
+ * GET /api/config/security
+ * Get Security settings configuration
+ */
+router.get('/security', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT value, description, updated_at, updated_by 
+       FROM system_config 
+       WHERE key = $1`,
+      ['security.settings']
+    );
+
+    if (result.rows.length === 0) {
+      // Return default config if not found
+      return res.json({
+        success: true,
+        config: {
+          allowEmailLogin: true,
+          jwtExpiryHours: 24,
+          maxLoginAttempts: 10,
+          lockoutMinutes: 15,
+        },
+        description: 'Default security configuration (not persisted yet)',
+        updated_at: null,
+        updated_by: null,
+      });
+    }
+
+    const row = result.rows[0];
+    res.json({
+      success: true,
+      config: row.value,
+      description: row.description,
+      updated_at: row.updated_at,
+      updated_by: row.updated_by,
+    });
+  } catch (error) {
+    console.error('GET /api/config/security error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch security configuration',
+    });
+  }
+});
+
+/**
+ * PUT /api/config/security
+ * Update Security settings configuration (Admin only)
+ */
+router.put('/security', async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only admins can update security configuration',
+      });
+    }
+
+    const config = req.body;
+
+    // Validation
+    const errors = [];
+
+    // Validate jwtExpiryHours
+    if (config.jwtExpiryHours !== undefined) {
+      if (typeof config.jwtExpiryHours !== 'number' || config.jwtExpiryHours < 1 || config.jwtExpiryHours > 168) {
+        errors.push('JWT expiry hours must be between 1 and 168 (7 days)');
+      }
+    }
+
+    // Validate maxLoginAttempts
+    if (config.maxLoginAttempts !== undefined) {
+      if (typeof config.maxLoginAttempts !== 'number' || config.maxLoginAttempts < 1 || config.maxLoginAttempts > 50) {
+        errors.push('Max login attempts must be between 1 and 50');
+      }
+    }
+
+    // Validate lockoutMinutes
+    if (config.lockoutMinutes !== undefined) {
+      if (typeof config.lockoutMinutes !== 'number' || config.lockoutMinutes < 1 || config.lockoutMinutes > 120) {
+        errors.push('Lockout minutes must be between 1 and 120');
+      }
+    }
+
+    // Validate allowEmailLogin
+    if (config.allowEmailLogin !== undefined && typeof config.allowEmailLogin !== 'boolean') {
+      errors.push('allowEmailLogin must be a boolean');
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        errors,
+      });
+    }
+
+    // Update configuration
+    await query(
+      `INSERT INTO system_config (key, value, description, updated_by)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (key) DO UPDATE SET
+         value = EXCLUDED.value,
+         updated_at = NOW(),
+         updated_by = EXCLUDED.updated_by`,
+      [
+        'security.settings',
+        JSON.stringify(config),
+        'Security settings: authentication, session management, and access controls',
+        req.user.id,
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'Security configuration updated successfully',
+      config,
+    });
+  } catch (error) {
+    console.error('PUT /api/config/security error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update security configuration',
+    });
+  }
+});
+
 export default router;
