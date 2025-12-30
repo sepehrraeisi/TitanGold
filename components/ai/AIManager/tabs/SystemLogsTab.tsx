@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import * as api from '../../../../services/api.ts';
+import { fetchArtemisLogsFromServer } from '../../../../services/api-backend.ts';
 import { ArtemisLog, ArtemisState } from '../../../../types.ts';
 
 type Props = {
@@ -40,10 +40,14 @@ const SystemLogsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 filter.level = levelFilter;
             }
             filter.limit = logsPerPage * currentPage;
-            const data = await api.fetchArtemisLogs(filter);
+            
+            // Use backend API instead of IndexedDB
+            const data = await fetchArtemisLogsFromServer(filter);
             setLogs(data);
         } catch (e) {
-            console.error('Failed to load logs:', e);
+            console.error('Failed to load logs from server:', e);
+            // Show error to user
+            setLogs([]);
         } finally {
             setIsLoading(false);
         }
