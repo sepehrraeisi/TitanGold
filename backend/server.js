@@ -48,6 +48,7 @@ import userPreferencesRoutes from './routes/userPreferences.js';
 import favoritesRoutes from './routes/favorites.js';
 import favoriteAlertsRoutes from './routes/favoriteAlerts.js';
 import healthRoutes from './routes/health.js';
+import monitoringRoutes from './routes/monitoring.js';
 import backtestRoutes from './routes/backtest.js';
 import scenariosRoutes from './routes/scenarios.js';
 
@@ -182,6 +183,7 @@ app.get('/health', async (req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/monitoring', monitoringRoutes);
 app.use('/api/ready', healthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/portfolios', portfolioRoutes);

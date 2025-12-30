@@ -3,6 +3,7 @@ import { useLanguage } from '../../context/LanguageContext.tsx';
 import Integrations from './configuration/Integrations.tsx';
 import DecisionEngine from './configuration/DecisionEngine.tsx';
 import Security from './configuration/Security.tsx';
+import Monitoring from './configuration/Monitoring.tsx';
 
 type ConfigTab = 'integrations' | 'decision-engine' | 'security' | 'monitoring';
 
@@ -42,20 +43,7 @@ const ConfigurationSettings: React.FC = () => {
       case 'security':
         return <Security />;
       case 'monitoring':
-        return (
-          <div className="bg-gray-900/50 rounded-lg border border-gray-800 p-8 text-center">
-            <div className="text-6xl mb-4">📊</div>
-            <h3 className="text-xl font-bold text-white mb-2">
-              {language === 'fa' ? 'نظارت سیستم' : 'System Monitoring'}
-            </h3>
-            <p className="text-gray-400">
-              {language === 'fa' 
-                ? 'سلامت ارائه‌دهندگان، لاگ‌ها، و متریک‌های عملکرد'
-                : 'Provider health, logs, and performance metrics'}
-            </p>
-            <p className="text-sm text-gray-500 mt-4">Coming soon...</p>
-          </div>
-        );
+        return <Monitoring />;
       default:
         return null;
     }
