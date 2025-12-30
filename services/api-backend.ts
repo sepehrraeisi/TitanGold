@@ -8,6 +8,29 @@
 import type { ArtemisLog, ArtemisLogFilter, SystemError } from '../types';
 
 /**
+ * Get authentication headers for API requests
+ * 
+ * Retrieves the titan_token from localStorage or sessionStorage
+ * and constructs the Authorization header.
+ * 
+ * @returns Headers object with Authorization if token exists
+ */
+const getAuthHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+  
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return headers;
+};
+
+/**
  * Fetch Artemis logs from backend server (not IndexedDB)
  * 
  * This is the production-ready version that fetches real-time logs
@@ -51,10 +74,7 @@ export const fetchArtemisLogsFromServer = async (
     const res = await fetch(url, {
       method: 'GET',
       credentials: 'include',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!res.ok) {
@@ -143,10 +163,7 @@ export const fetchSystemErrors = async (limit: number = 50): Promise<SystemError
     const res = await fetch(url, {
       method: 'GET',
       credentials: 'include',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!res.ok) {

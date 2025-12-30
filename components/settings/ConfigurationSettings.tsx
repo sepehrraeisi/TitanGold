@@ -64,7 +64,7 @@ const ConfigurationSettings: React.FC<ConfigurationSettingsProps> = ({ initialSu
       case 'monitoring':
         return <Monitoring />;
       case 'system-errors':
-        return <SystemErrorsTab Card={({ children }) => <div className="card">{children}</div>} />;
+        return <SystemErrorsTab />;
       default:
         return null;
     }
