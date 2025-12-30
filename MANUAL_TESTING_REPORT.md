@@ -154,15 +154,88 @@ Option B: **Browser Back NOT WORKING is acceptable** (state-only)
 
 ---
 
-### **Test 4: Browser Back Button Behavior**
+### **Test 4: Browser Back Button Behavior** ⭐
 
-| Test Scenario | Steps | Expected Behavior | Actual Behavior | Status |
-|--------------|-------|------------------|-----------------|--------|
-| **4A: Back from Settings** | 1. Dashboard → AI Manager → Decision Engine<br>2. Click "Open in Settings"<br>3. Click Browser Back ⏪ | Return to AI Manager Decision Engine tab | | ⏳ |
-| **4B: Back after Refresh** | 1. Follow 4A steps 1-2<br>2. Refresh page 🔄<br>3. Click Browser Back ⏪ | Stay on Settings (no history) OR go back to last URL | | ⏳ |
-| **4C: Multiple Back Clicks** | 1. Dashboard → AI → Manager → Decision<br>2. Open Settings<br>3. Click Back 3x ⏪⏪⏪ | Expected: __________ | | ⏳ |
+**Purpose**: Verify robust URL/History integration with back/forward buttons and deep linking.
 
+#### **Test 4A: Back/Forward Cycle (3 iterations)**
+
+| Step | Action | Expected Result | Actual Result | Status |
+|------|--------|----------------|---------------|--------|
+| 1 | Start at Dashboard (`/?view=dashboard`) | Dashboard visible | | ⏳ |
+| 2 | Navigate to AI Center | URL: `/?view=ai`, AI Center visible | | ⏳ |
+| 3 | Navigate to Settings → Configuration → Decision Engine | URL: `/?view=settings&settingsTab=configuration&settingsSubtab=decision-engine` | | ⏳ |
+| 4 | Click Browser Back ⏪ | Return to AI Center (`/?view=ai`) | | ⏳ |
+| 5 | Click Browser Forward ⏩ | Return to Settings/Config/Decision (`/?view=settings&settingsTab=configuration&settingsSubtab=decision-engine`) | | ⏳ |
+| 6 | Repeat Back → Forward 2 more times | Each cycle: AI ⟷ Settings/Config/Decision | | ⏳ |
+| 7 | Verify no console errors | DevTools console clean | | ⏳ |
+
+**Test Result**: ⏳ Pending  
 **Notes**: _______________________________________________________________
+
+---
+
+#### **Test 4B: Deep Link Verification**
+
+Open each URL in a **new browser tab** and verify correct landing page:
+
+| URL | Expected Landing Page | Actual Result | Status |
+|-----|---------------------|---------------|--------|
+| `/?view=ai` | AI Center (default Manager tab) | | ⏳ |
+| `/?view=settings&settingsTab=configuration&settingsSubtab=decision-engine` | Settings → Configuration → Decision Engine (subtab active) | | ⏳ |
+| `/?view=settings&settingsTab=configuration&settingsSubtab=monitoring` | Settings → Configuration → Monitoring (subtab active) | | ⏳ |
+| `/?view=settings&settingsTab=configuration&settingsSubtab=integrations` | Settings → Configuration → Integrations (subtab active) | | ⏳ |
+| `/?view=dashboard` | Dashboard home page | | ⏳ |
+
+**Test Result**: ⏳ Pending  
+**Notes**: _______________________________________________________________
+
+---
+
+#### **Test 4C: Page Refresh State Persistence**
+
+Refresh (F5) on each state and verify view/tab/subtab preserved:
+
+| Initial State | Action | Expected After Refresh | Actual Result | Status |
+|--------------|--------|----------------------|---------------|--------|
+| `/?view=ai` | Press F5 | Still on AI Center | | ⏳ |
+| `/?view=settings&settingsTab=configuration&settingsSubtab=decision-engine` | Press F5 | Still on Settings → Configuration → Decision Engine | | ⏳ |
+| `/?view=settings&settingsTab=configuration&settingsSubtab=monitoring` | Press F5 | Still on Settings → Configuration → Monitoring | | ⏳ |
+| Dashboard (no query params) | Press F5 | Still on Dashboard | | ⏳ |
+
+**Test Result**: ⏳ Pending  
+**Notes**: _______________________________________________________________
+
+---
+
+#### **Test 4D: Stale State Prevention**
+
+Verify navigationPayload clears when moving to simple views:
+
+| Step | Action | Expected State | Actual Result | Status |
+|------|--------|---------------|---------------|--------|
+| 1 | Navigate to `/?view=settings&settingsTab=configuration&settingsSubtab=decision-engine` | Settings/Config/Decision active | | ⏳ |
+| 2 | Navigate to `/?view=ai` | AI Center active, NO settings payload visible | | ⏳ |
+| 3 | Navigate to `/?view=dashboard` | Dashboard active, NO AI/settings payload | | ⏳ |
+| 4 | Use Browser Back to return to Settings deep link | Settings/Config/Decision active again | | ⏳ |
+
+**Test Result**: ⏳ Pending  
+**Notes**: _______________________________________________________________
+
+---
+
+### **Test 4 Summary**
+
+| Sub-Test | Purpose | Status |
+|----------|---------|--------|
+| 4A | Back/Forward cycles | ⏳ Pending |
+| 4B | Deep linking | ⏳ Pending |
+| 4C | Page refresh | ⏳ Pending |
+| 4D | Stale state prevention | ⏳ Pending |
+
+**Overall Test 4 Result**: ⏳ Pending  
+**Critical Issues**: _______________________________________________________________  
+**Minor Issues**: _______________________________________________________________
 
 ---
 
