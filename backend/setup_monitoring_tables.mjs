@@ -68,33 +68,6 @@ async function setupMonitoringTables() {
     `);
     console.log('Tables:', tables.rows.map(r => r.table_name).join(', '));
 
-    // 6. Seed a few test logs
-    console.log('\n6️⃣ Seeding test logs...');
-    
-    // Test request logs
-    for (let i = 0; i < 10; i++) {
-      await query(`
-        INSERT INTO request_logs (method, path, status, duration_ms)
-        VALUES ($1, $2, $3, $4)
-      `, [
-        ['GET', 'POST', 'PUT'][i % 3],
-        ['/api/config/artemis', '/api/config/security', '/api/auth/login'][i % 3],
-        [200, 200, 200, 400, 500][i % 5],
-        Math.floor(Math.random() * 500) + 50
-      ]);
-    }
-    
-    // Test error logs
-    await query(`
-      INSERT INTO error_logs (context, message, stack, meta)
-      VALUES 
-        ('auth', 'Invalid credentials', 'Error: Invalid credentials\n  at login...', '{"ip":"127.0.0.1"}'),
-        ('database', 'Connection timeout', 'Error: ETIMEDOUT\n  at Pool.connect...', '{"host":"localhost"}'),
-        ('api', 'Rate limit exceeded', 'Error: 429 Too Many Requests', '{"endpoint":"/api/artemis/decision"}')
-    `);
-    
-    console.log('✅ Test logs seeded');
-
     console.log('\n✅ Monitoring tables setup complete!');
     process.exit(0);
 

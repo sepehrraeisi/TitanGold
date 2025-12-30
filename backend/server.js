@@ -14,6 +14,7 @@ import pool from './database/db.js';
 // import { tradingEngine } from './engine/tradingEngine.js';
 import { messageQueue } from './services/messageQueue.js';
 import { requestContextMiddleware, performanceMiddleware, logger } from './services/logger.js';
+import { requestLogger, logError } from './middleware/requestLogger.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
 import { initWebsocket, broadcastNotification } from './services/websocket.js';
@@ -71,6 +72,9 @@ const __dirname = path.dirname(__filename);
 // Request context & performance metrics
 app.use(requestContextMiddleware);
 app.use(performanceMiddleware);
+
+// Request logging (to DB)
+app.use(requestLogger);
 
 // Security middleware
 app.use(helmet());
@@ -232,6 +236,21 @@ app.use((err, req, res, next) => {
     status: err.status || 500,
     message: err.message,
   });
+
+  // Log error to database (only 5xx errors to avoid noise)
+  if (!err.status || err.status >= 500) {
+    logError(
+      req.path || 'unknown',
+      err,
+      {
+        requestId: req.requestId,
+        method: req.method,
+        userId: req.user?.id || null
+      }
+    ).catch(logErr => {
+      console.error('Failed to log error to DB:', logErr);
+    });
+  }
 
   const status = err.status || 500;
   const message = err.message || 'Internal Server Error';
