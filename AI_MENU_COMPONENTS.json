@@ -1,0 +1,614 @@
+{
+  "aiComponents": [
+    {
+      "file": "AICenter.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/AICenter.tsx",
+      "size": 4713,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../context/LanguageContext.tsx",
+        "./ai/AIManager/index.tsx",
+        "./ai/AIAgents.tsx",
+        "./ai/TrainingCenter.tsx",
+        "./ai/AnalyticsDashboard.tsx",
+        "./ai/APIConfig.tsx",
+        "../services/api.ts"
+      ]
+    },
+    {
+      "file": "AIPredictions.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/AIPredictions.tsx",
+      "size": 3957,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "../context/LanguageContext.tsx",
+        "../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIAgents.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIAgents.tsx",
+      "size": 11187,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts",
+        "../../types.ts",
+        "./TechnicalAnalysisAgentControl.tsx",
+        "./RiskManagementAgentControl.tsx",
+        "./SentimentAgentControl.tsx",
+        "./PatternAgentControl.tsx",
+        "./PricePredictionAgentControl.tsx",
+        "./ArbitrageAgentControl.tsx",
+        "./PortfolioAllocationAgentControl.tsx",
+        "./LiquidityAgentControl.tsx",
+        "./TrendAgentControl.tsx",
+        "./OptimizationAgentControl.tsx",
+        "./OrderManagementAgentControl.tsx",
+        "./FundamentalAgentControl.tsx",
+        "./MarketIntelligenceAgentControl.tsx",
+        "./VolumeAgentControl.tsx",
+        "./TimingAgentControl.tsx"
+      ]
+    },
+    {
+      "file": "ai/AIManager/index.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/index.tsx",
+      "size": 10104,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../context/LanguageContext.tsx",
+        "../hooks/useArtemisState.ts",
+        "../../../services/api.ts",
+        "../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/AutopilotTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/AutopilotTab.tsx",
+      "size": 17101,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/BacktestingTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/BacktestingTab.tsx",
+      "size": 21408,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api.ts",
+        "../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHub/AdvancedFeatures.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHub/AdvancedFeatures.tsx",
+      "size": 103441,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../../services/api.ts",
+        "./modals/WebCrawlerModal.tsx",
+        "./modals/TelegramPublisherModal.tsx",
+        "./modals/AccessControlModal.tsx",
+        "./modals/AutomationTopicModal.tsx",
+        "./modals/QueuePreviewModal.tsx"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHub/modals/AccessControlModal.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHub/modals/AccessControlModal.tsx",
+      "size": 6823,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHub/modals/AutomationTopicModal.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHub/modals/AutomationTopicModal.tsx",
+      "size": 14448,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHub/modals/CreateCategoryModal.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHub/modals/CreateCategoryModal.tsx",
+      "size": 4956,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHub/modals/CreateSourceModal.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHub/modals/CreateSourceModal.tsx",
+      "size": 31709,
+      "hasAPI": true,
+      "hasState": true,
+      "imports": [
+        "../../../../../../services/api.ts",
+        "../../../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHub/modals/QueuePreviewModal.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHub/modals/QueuePreviewModal.tsx",
+      "size": 4626,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "../../../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHub/modals/TelegramPublisherModal.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHub/modals/TelegramPublisherModal.tsx",
+      "size": 12751,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHub/modals/ViewSourceDataModal.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHub/modals/ViewSourceDataModal.tsx",
+      "size": 19171,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "../../../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHub/modals/WebCrawlerModal.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHub/modals/WebCrawlerModal.tsx",
+      "size": 12102,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DataHubTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DataHubTab.tsx",
+      "size": 107616,
+      "hasAPI": true,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api.ts",
+        "./DataHub/modals/CreateSourceModal.tsx",
+        "./DataHub/modals/CreateCategoryModal.tsx",
+        "./DataHub/modals/ViewSourceDataModal.tsx",
+        "./DataHub/AdvancedFeatures.tsx"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/DecisionEngineTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/DecisionEngineTab.tsx",
+      "size": 16729,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api.ts",
+        "../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/LearningTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/LearningTab.tsx",
+      "size": 13392,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/MonitoringTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/MonitoringTab.tsx",
+      "size": 27782,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../types.ts",
+        "../../../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/OrchestrationTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/OrchestrationTab.tsx",
+      "size": 14452,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/OverviewTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/OverviewTab.tsx",
+      "size": 19291,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api.ts",
+        "../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/ScenariosTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/ScenariosTab.tsx",
+      "size": 42192,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api.ts",
+        "../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/SettingsTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/SettingsTab.tsx",
+      "size": 42043,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api.ts",
+        "../../../../types.ts",
+        "../../SchedulerSettings.tsx"
+      ]
+    },
+    {
+      "file": "ai/AIManager/tabs/SystemLogsTab.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager/tabs/SystemLogsTab.tsx",
+      "size": 22952,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../../services/api.ts",
+        "../../../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/AIManager.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/AIManager.tsx",
+      "size": 512348,
+      "hasAPI": true,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts",
+        "../../types.ts",
+        "./ArtemisComponents.tsx",
+        "./hooks/useArtemisState.ts"
+      ]
+    },
+    {
+      "file": "ai/ArbitrageAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/ArbitrageAgentControl.tsx",
+      "size": 54621,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/ArtemisComponents.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/ArtemisComponents.tsx",
+      "size": 79522,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts",
+        "../../types.ts",
+        "./SchedulerSettings.tsx"
+      ]
+    },
+    {
+      "file": "ai/FundamentalAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/FundamentalAgentControl.tsx",
+      "size": 55678,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/LiquidityAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/LiquidityAgentControl.tsx",
+      "size": 50851,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/MarketIntelligenceAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/MarketIntelligenceAgentControl.tsx",
+      "size": 62870,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/OptimizationAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/OptimizationAgentControl.tsx",
+      "size": 55626,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/OrderManagementAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/OrderManagementAgentControl.tsx",
+      "size": 48158,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/PatternAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/PatternAgentControl.tsx",
+      "size": 21019,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/PortfolioAllocationAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/PortfolioAllocationAgentControl.tsx",
+      "size": 55154,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/PricePredictionAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/PricePredictionAgentControl.tsx",
+      "size": 40327,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts",
+        "../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/RiskManagementAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/RiskManagementAgentControl.tsx",
+      "size": 49357,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/SentimentAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/SentimentAgentControl.tsx",
+      "size": 47621,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/TechnicalAnalysisAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/TechnicalAnalysisAgentControl.tsx",
+      "size": 45162,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts",
+        "../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/TimingAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/TimingAgentControl.tsx",
+      "size": 45367,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/TrainingCenter.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/TrainingCenter.tsx",
+      "size": 72697,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts",
+        "../../types.ts"
+      ]
+    },
+    {
+      "file": "ai/TrendAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/TrendAgentControl.tsx",
+      "size": 40422,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "ai/VolumeAgentControl.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/ai/VolumeAgentControl.tsx",
+      "size": 46373,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts"
+      ]
+    },
+    {
+      "file": "analysis/SmartPredictionCard.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/analysis/SmartPredictionCard.tsx",
+      "size": 2725,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../types.ts"
+      ]
+    },
+    {
+      "file": "gold/AIPredictionWidget.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/gold/AIPredictionWidget.tsx",
+      "size": 6678,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../types.ts",
+        "../ui/button.tsx"
+      ]
+    },
+    {
+      "file": "modals/AIAnalysisModal.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/modals/AIAnalysisModal.tsx",
+      "size": 2582,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "./Modal.tsx",
+        "../../context/LanguageContext.tsx",
+        "../../types.ts"
+      ]
+    },
+    {
+      "file": "portfolio/AIPortfolioAnalysisWidget.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/portfolio/AIPortfolioAnalysisWidget.tsx",
+      "size": 4484,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../types.ts",
+        "../ui/button.tsx"
+      ]
+    },
+    {
+      "file": "settings/configuration/DecisionEngine.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/settings/configuration/DecisionEngine.tsx",
+      "size": 15672,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../../context/LanguageContext.tsx",
+        "../../../services/api-auth.ts"
+      ]
+    },
+    {
+      "file": "trades/AIAssistantWidget.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/trades/AIAssistantWidget.tsx",
+      "size": 5758,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../types.ts"
+      ]
+    },
+    {
+      "file": "trades/ProfessionalAutopilot.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/trades/ProfessionalAutopilot.tsx",
+      "size": 46826,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "./StatCard.tsx",
+        "./TradingEngineDashboard.tsx",
+        "../../types.ts",
+        "../ui/toast.tsx",
+        "../ui/confirm-modal.tsx"
+      ]
+    },
+    {
+      "file": "widgets/ArtemisInsightsWidget.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/widgets/ArtemisInsightsWidget.tsx",
+      "size": 1795,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../types.ts"
+      ]
+    },
+    {
+      "file": "widgets/AutopilotWidget.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/widgets/AutopilotWidget.tsx",
+      "size": 9159,
+      "hasAPI": false,
+      "hasState": true,
+      "imports": [
+        "../../context/LanguageContext.tsx",
+        "../../services/api.ts",
+        "../../types.ts"
+      ]
+    },
+    {
+      "file": "widgets/TitanAIWidget.tsx",
+      "path": "/home/ubuntu/webapp/TitanGold/components/widgets/TitanAIWidget.tsx",
+      "size": 1882,
+      "hasAPI": false,
+      "hasState": false,
+      "imports": [
+        "../../context/LanguageContext.tsx"
+      ]
+    }
+  ],
+  "menuItems": [],
+  "routes": []
+}

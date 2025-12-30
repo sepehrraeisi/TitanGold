@@ -1,0 +1,2196 @@
+{
+  "routes": [
+    {
+      "file": "userPreferences.js",
+      "routeName": "userPreferences",
+      "count": 14,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/userPreferences/"
+        },
+        {
+          "method": "GET",
+          "path": "/category/:category",
+          "fullPath": "/api/userPreferences/category/:category"
+        },
+        {
+          "method": "GET",
+          "path": "/history",
+          "fullPath": "/api/userPreferences/history"
+        },
+        {
+          "method": "GET",
+          "path": "/categories",
+          "fullPath": "/api/userPreferences/categories"
+        },
+        {
+          "method": "POST",
+          "path": "/",
+          "fullPath": "/api/userPreferences/"
+        },
+        {
+          "method": "PUT",
+          "path": "/",
+          "fullPath": "/api/userPreferences/"
+        },
+        {
+          "method": "PUT",
+          "path": "/category/:category",
+          "fullPath": "/api/userPreferences/category/:category"
+        },
+        {
+          "method": "PUT",
+          "path": "/bulk",
+          "fullPath": "/api/userPreferences/bulk"
+        },
+        {
+          "method": "DELETE",
+          "path": "/",
+          "fullPath": "/api/userPreferences/"
+        },
+        {
+          "method": "DELETE",
+          "path": "/category/:category",
+          "fullPath": "/api/userPreferences/category/:category"
+        },
+        {
+          "method": "POST",
+          "path": "/sync",
+          "fullPath": "/api/userPreferences/sync"
+        },
+        {
+          "method": "GET",
+          "path": "/telegram",
+          "fullPath": "/api/userPreferences/telegram"
+        },
+        {
+          "method": "PUT",
+          "path": "/telegram",
+          "fullPath": "/api/userPreferences/telegram"
+        },
+        {
+          "method": "POST",
+          "path": "/telegram/test",
+          "fullPath": "/api/userPreferences/telegram/test"
+        }
+      ]
+    },
+    {
+      "file": "artemis.js",
+      "routeName": "artemis",
+      "count": 13,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "fullPath": "/api/artemis/health"
+        },
+        {
+          "method": "GET",
+          "path": "/state",
+          "fullPath": "/api/artemis/state"
+        },
+        {
+          "method": "PATCH",
+          "path": "/state",
+          "fullPath": "/api/artemis/state"
+        },
+        {
+          "method": "GET",
+          "path": "/scenarios",
+          "fullPath": "/api/artemis/scenarios"
+        },
+        {
+          "method": "POST",
+          "path": "/decision",
+          "fullPath": "/api/artemis/decision"
+        },
+        {
+          "method": "PATCH",
+          "path": "/config/decision-engine",
+          "fullPath": "/api/artemis/config/decision-engine"
+        },
+        {
+          "method": "GET",
+          "path": "/logs",
+          "fullPath": "/api/artemis/logs"
+        },
+        {
+          "method": "DELETE",
+          "path": "/logs",
+          "fullPath": "/api/artemis/logs"
+        },
+        {
+          "method": "PUT",
+          "path": "/config",
+          "fullPath": "/api/artemis/config"
+        },
+        {
+          "method": "GET",
+          "path": "/learning",
+          "fullPath": "/api/artemis/learning"
+        },
+        {
+          "method": "PATCH",
+          "path": "/learning/mistake/:id/mark-learned",
+          "fullPath": "/api/artemis/learning/mistake/:id/mark-learned"
+        },
+        {
+          "method": "POST",
+          "path": "/learning/event",
+          "fullPath": "/api/artemis/learning/event"
+        },
+        {
+          "method": "GET",
+          "path": "/orchestration",
+          "fullPath": "/api/artemis/orchestration"
+        }
+      ]
+    },
+    {
+      "file": "config.js",
+      "routeName": "config",
+      "count": 10,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/integrations",
+          "fullPath": "/api/config/integrations"
+        },
+        {
+          "method": "POST",
+          "path": "/integrations",
+          "fullPath": "/api/config/integrations"
+        },
+        {
+          "method": "PATCH",
+          "path": "/integrations/:id",
+          "fullPath": "/api/config/integrations/:id"
+        },
+        {
+          "method": "POST",
+          "path": "/integrations/:id/test",
+          "fullPath": "/api/config/integrations/:id/test"
+        },
+        {
+          "method": "POST",
+          "path": "/integrations/:id/disable",
+          "fullPath": "/api/config/integrations/:id/disable"
+        },
+        {
+          "method": "POST",
+          "path": "/integrations/:id/reset-runtime",
+          "fullPath": "/api/config/integrations/:id/reset-runtime"
+        },
+        {
+          "method": "GET",
+          "path": "/artemis",
+          "fullPath": "/api/config/artemis"
+        },
+        {
+          "method": "PUT",
+          "path": "/artemis",
+          "fullPath": "/api/config/artemis"
+        },
+        {
+          "method": "GET",
+          "path": "/security",
+          "fullPath": "/api/config/security"
+        },
+        {
+          "method": "PUT",
+          "path": "/security",
+          "fullPath": "/api/config/security"
+        }
+      ]
+    },
+    {
+      "file": "manual-trades.js",
+      "routeName": "manual-trades",
+      "count": 10,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/page-data",
+          "fullPath": "/api/manual-trades/page-data"
+        },
+        {
+          "method": "POST",
+          "path": "/execute",
+          "fullPath": "/api/manual-trades/execute"
+        },
+        {
+          "method": "POST",
+          "path": "/strategies/:strategyId/toggle",
+          "fullPath": "/api/manual-trades/strategies/:strategyId/toggle"
+        },
+        {
+          "method": "GET",
+          "path": "/recent",
+          "fullPath": "/api/manual-trades/recent"
+        },
+        {
+          "method": "GET",
+          "path": "/price/:pair",
+          "fullPath": "/api/manual-trades/price/:pair"
+        },
+        {
+          "method": "GET",
+          "path": "/balance",
+          "fullPath": "/api/manual-trades/balance"
+        },
+        {
+          "method": "GET",
+          "path": "/orderbook/:pair",
+          "fullPath": "/api/manual-trades/orderbook/:pair"
+        },
+        {
+          "method": "POST",
+          "path": "/order/advanced",
+          "fullPath": "/api/manual-trades/order/advanced"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/open",
+          "fullPath": "/api/manual-trades/orders/open"
+        },
+        {
+          "method": "DELETE",
+          "path": "/orders/:orderId",
+          "fullPath": "/api/manual-trades/orders/:orderId"
+        }
+      ]
+    },
+    {
+      "file": "strategies.js",
+      "routeName": "strategies",
+      "count": 10,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/strategies/"
+        },
+        {
+          "method": "POST",
+          "path": "/:strategyId/toggle",
+          "fullPath": "/api/strategies/:strategyId/toggle"
+        },
+        {
+          "method": "POST",
+          "path": "/",
+          "fullPath": "/api/strategies/"
+        },
+        {
+          "method": "POST",
+          "path": "/ai-generate",
+          "fullPath": "/api/strategies/ai-generate"
+        },
+        {
+          "method": "POST",
+          "path": "/:strategyId/copy",
+          "fullPath": "/api/strategies/:strategyId/copy"
+        },
+        {
+          "method": "PUT",
+          "path": "/:strategyId",
+          "fullPath": "/api/strategies/:strategyId"
+        },
+        {
+          "method": "POST",
+          "path": "/group-backtest",
+          "fullPath": "/api/strategies/group-backtest"
+        },
+        {
+          "method": "POST",
+          "path": "/optimize-all",
+          "fullPath": "/api/strategies/optimize-all"
+        },
+        {
+          "method": "GET",
+          "path": "/export/all",
+          "fullPath": "/api/strategies/export/all"
+        },
+        {
+          "method": "POST",
+          "path": "/allocate-portfolio",
+          "fullPath": "/api/strategies/allocate-portfolio"
+        }
+      ]
+    },
+    {
+      "file": "ai-agents.js",
+      "routeName": "ai-agents",
+      "count": 9,
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/chat",
+          "fullPath": "/api/ai-agents/chat"
+        },
+        {
+          "method": "POST",
+          "path": "/:id/run",
+          "fullPath": "/api/ai-agents/:id/run"
+        },
+        {
+          "method": "POST",
+          "path": "/:id/command",
+          "fullPath": "/api/ai-agents/:id/command"
+        },
+        {
+          "method": "PATCH",
+          "path": "/:id/config",
+          "fullPath": "/api/ai-agents/:id/config"
+        },
+        {
+          "method": "GET",
+          "path": "/:id/details",
+          "fullPath": "/api/ai-agents/:id/details"
+        },
+        {
+          "method": "GET",
+          "path": "/manager-overview",
+          "fullPath": "/api/ai-agents/manager-overview"
+        },
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/ai-agents/"
+        },
+        {
+          "method": "GET",
+          "path": "/:id",
+          "fullPath": "/api/ai-agents/:id"
+        },
+        {
+          "method": "PATCH",
+          "path": "/:id",
+          "fullPath": "/api/ai-agents/:id"
+        }
+      ]
+    },
+    {
+      "file": "favorites.js",
+      "routeName": "favorites",
+      "count": 9,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/favorites/"
+        },
+        {
+          "method": "GET",
+          "path": "/check/:assetId",
+          "fullPath": "/api/favorites/check/:assetId"
+        },
+        {
+          "method": "POST",
+          "path": "/",
+          "fullPath": "/api/favorites/"
+        },
+        {
+          "method": "DELETE",
+          "path": "/:id",
+          "fullPath": "/api/favorites/:id"
+        },
+        {
+          "method": "DELETE",
+          "path": "/by-asset/:assetId",
+          "fullPath": "/api/favorites/by-asset/:assetId"
+        },
+        {
+          "method": "PUT",
+          "path": "/:id/view",
+          "fullPath": "/api/favorites/:id/view"
+        },
+        {
+          "method": "GET",
+          "path": "/stats",
+          "fullPath": "/api/favorites/stats"
+        },
+        {
+          "method": "POST",
+          "path": "/sync",
+          "fullPath": "/api/favorites/sync"
+        },
+        {
+          "method": "GET",
+          "path": "/analytics",
+          "fullPath": "/api/favorites/analytics"
+        }
+      ]
+    },
+    {
+      "file": "users.js",
+      "routeName": "users",
+      "count": 9,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/stats/overview",
+          "fullPath": "/api/users/stats/overview"
+        },
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/users/"
+        },
+        {
+          "method": "GET",
+          "path": "/:id/activity",
+          "fullPath": "/api/users/:id/activity"
+        },
+        {
+          "method": "POST",
+          "path": "/:id/change-password",
+          "fullPath": "/api/users/:id/change-password"
+        },
+        {
+          "method": "PATCH",
+          "path": "/:id/role",
+          "fullPath": "/api/users/:id/role"
+        },
+        {
+          "method": "PATCH",
+          "path": "/:id/status",
+          "fullPath": "/api/users/:id/status"
+        },
+        {
+          "method": "GET",
+          "path": "/:id",
+          "fullPath": "/api/users/:id"
+        },
+        {
+          "method": "PATCH",
+          "path": "/:id",
+          "fullPath": "/api/users/:id"
+        },
+        {
+          "method": "DELETE",
+          "path": "/:id",
+          "fullPath": "/api/users/:id"
+        }
+      ]
+    },
+    {
+      "file": "autopilot.js",
+      "routeName": "autopilot",
+      "count": 8,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/status",
+          "fullPath": "/api/autopilot/status"
+        },
+        {
+          "method": "POST",
+          "path": "/enable",
+          "fullPath": "/api/autopilot/enable"
+        },
+        {
+          "method": "POST",
+          "path": "/disable",
+          "fullPath": "/api/autopilot/disable"
+        },
+        {
+          "method": "GET",
+          "path": "/suggestions",
+          "fullPath": "/api/autopilot/suggestions"
+        },
+        {
+          "method": "POST",
+          "path": "/suggestions/:id/approve",
+          "fullPath": "/api/autopilot/suggestions/:id/approve"
+        },
+        {
+          "method": "POST",
+          "path": "/suggestions/:id/reject",
+          "fullPath": "/api/autopilot/suggestions/:id/reject"
+        },
+        {
+          "method": "POST",
+          "path": "/suggestions/:id/rollback",
+          "fullPath": "/api/autopilot/suggestions/:id/rollback"
+        },
+        {
+          "method": "POST",
+          "path": "/run-once",
+          "fullPath": "/api/autopilot/run-once"
+        }
+      ]
+    },
+    {
+      "file": "favoriteAlerts.js",
+      "routeName": "favoriteAlerts",
+      "count": 8,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/:favoriteId/alerts",
+          "fullPath": "/api/favoriteAlerts/:favoriteId/alerts"
+        },
+        {
+          "method": "GET",
+          "path": "/alerts/active",
+          "fullPath": "/api/favoriteAlerts/alerts/active"
+        },
+        {
+          "method": "POST",
+          "path": "/:favoriteId/alerts",
+          "fullPath": "/api/favoriteAlerts/:favoriteId/alerts"
+        },
+        {
+          "method": "PUT",
+          "path": "/alerts/:alertId",
+          "fullPath": "/api/favoriteAlerts/alerts/:alertId"
+        },
+        {
+          "method": "DELETE",
+          "path": "/alerts/:alertId",
+          "fullPath": "/api/favoriteAlerts/alerts/:alertId"
+        },
+        {
+          "method": "POST",
+          "path": "/alerts/:alertId/trigger",
+          "fullPath": "/api/favoriteAlerts/alerts/:alertId/trigger"
+        },
+        {
+          "method": "GET",
+          "path": "/monitor/stats",
+          "fullPath": "/api/favoriteAlerts/monitor/stats"
+        },
+        {
+          "method": "POST",
+          "path": "/alerts/:alertId/test",
+          "fullPath": "/api/favoriteAlerts/alerts/:alertId/test"
+        }
+      ]
+    },
+    {
+      "file": "notifications.js",
+      "routeName": "notifications",
+      "count": 8,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/notifications/"
+        },
+        {
+          "method": "POST",
+          "path": "/broadcast",
+          "fullPath": "/api/notifications/broadcast"
+        },
+        {
+          "method": "GET",
+          "path": "/settings",
+          "fullPath": "/api/notifications/settings"
+        },
+        {
+          "method": "PUT",
+          "path": "/settings",
+          "fullPath": "/api/notifications/settings"
+        },
+        {
+          "method": "GET",
+          "path": "/history",
+          "fullPath": "/api/notifications/history"
+        },
+        {
+          "method": "PUT",
+          "path": "/history/:id/read",
+          "fullPath": "/api/notifications/history/:id/read"
+        },
+        {
+          "method": "DELETE",
+          "path": "/history/:id",
+          "fullPath": "/api/notifications/history/:id"
+        },
+        {
+          "method": "POST",
+          "path": "/test",
+          "fullPath": "/api/notifications/test"
+        }
+      ]
+    },
+    {
+      "file": "trading-engine.js",
+      "routeName": "trading-engine",
+      "count": 8,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/status",
+          "fullPath": "/api/trading-engine/status"
+        },
+        {
+          "method": "POST",
+          "path": "/start",
+          "fullPath": "/api/trading-engine/start"
+        },
+        {
+          "method": "POST",
+          "path": "/stop",
+          "fullPath": "/api/trading-engine/stop"
+        },
+        {
+          "method": "GET",
+          "path": "/trades/active",
+          "fullPath": "/api/trading-engine/trades/active"
+        },
+        {
+          "method": "GET",
+          "path": "/opportunities",
+          "fullPath": "/api/trading-engine/opportunities"
+        },
+        {
+          "method": "PUT",
+          "path": "/config",
+          "fullPath": "/api/trading-engine/config"
+        },
+        {
+          "method": "GET",
+          "path": "/config",
+          "fullPath": "/api/trading-engine/config"
+        },
+        {
+          "method": "POST",
+          "path": "/emergency-stop",
+          "fullPath": "/api/trading-engine/emergency-stop"
+        }
+      ]
+    },
+    {
+      "file": "scenarios.js",
+      "routeName": "scenarios",
+      "count": 7,
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/generate",
+          "fullPath": "/api/scenarios/generate"
+        },
+        {
+          "method": "POST",
+          "path": "/",
+          "fullPath": "/api/scenarios/"
+        },
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/scenarios/"
+        },
+        {
+          "method": "GET",
+          "path": "/:id",
+          "fullPath": "/api/scenarios/:id"
+        },
+        {
+          "method": "PATCH",
+          "path": "/:id",
+          "fullPath": "/api/scenarios/:id"
+        },
+        {
+          "method": "DELETE",
+          "path": "/:id",
+          "fullPath": "/api/scenarios/:id"
+        },
+        {
+          "method": "POST",
+          "path": "/:id/backtest",
+          "fullPath": "/api/scenarios/:id/backtest"
+        }
+      ]
+    },
+    {
+      "file": "security.js",
+      "routeName": "security",
+      "count": 7,
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/2fa/setup",
+          "fullPath": "/api/security/2fa/setup"
+        },
+        {
+          "method": "POST",
+          "path": "/2fa/verify",
+          "fullPath": "/api/security/2fa/verify"
+        },
+        {
+          "method": "POST",
+          "path": "/2fa/disable",
+          "fullPath": "/api/security/2fa/disable"
+        },
+        {
+          "method": "POST",
+          "path": "/2fa/verify-token",
+          "fullPath": "/api/security/2fa/verify-token"
+        },
+        {
+          "method": "POST",
+          "path": "/2fa/backup-codes/generate",
+          "fullPath": "/api/security/2fa/backup-codes/generate"
+        },
+        {
+          "method": "POST",
+          "path": "/2fa/backup-codes/verify",
+          "fullPath": "/api/security/2fa/backup-codes/verify"
+        },
+        {
+          "method": "GET",
+          "path": "/2fa/backup-codes/remaining",
+          "fullPath": "/api/security/2fa/backup-codes/remaining"
+        }
+      ]
+    },
+    {
+      "file": "data-sources.js",
+      "routeName": "data-sources",
+      "count": 6,
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/publish-telegram",
+          "fullPath": "/api/data-sources/publish-telegram"
+        },
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/data-sources/"
+        },
+        {
+          "method": "POST",
+          "path": "/",
+          "fullPath": "/api/data-sources/"
+        },
+        {
+          "method": "GET",
+          "path": "/state",
+          "fullPath": "/api/data-sources/state"
+        },
+        {
+          "method": "GET",
+          "path": "/health",
+          "fullPath": "/api/data-sources/health"
+        },
+        {
+          "method": "GET",
+          "path": "/stats",
+          "fullPath": "/api/data-sources/stats"
+        }
+      ]
+    },
+    {
+      "file": "exchanges.js",
+      "routeName": "exchanges",
+      "count": 6,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/exchanges/"
+        },
+        {
+          "method": "GET",
+          "path": "/:exchange",
+          "fullPath": "/api/exchanges/:exchange"
+        },
+        {
+          "method": "POST",
+          "path": "/:exchange",
+          "fullPath": "/api/exchanges/:exchange"
+        },
+        {
+          "method": "POST",
+          "path": "/:exchange/test",
+          "fullPath": "/api/exchanges/:exchange/test"
+        },
+        {
+          "method": "DELETE",
+          "path": "/:exchange",
+          "fullPath": "/api/exchanges/:exchange"
+        },
+        {
+          "method": "GET",
+          "path": "/health/status",
+          "fullPath": "/api/exchanges/health/status"
+        }
+      ]
+    },
+    {
+      "file": "auth.js",
+      "routeName": "auth",
+      "count": 5,
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/register",
+          "fullPath": "/api/auth/register"
+        },
+        {
+          "method": "POST",
+          "path": "/login",
+          "fullPath": "/api/auth/login"
+        },
+        {
+          "method": "POST",
+          "path": "/logout",
+          "fullPath": "/api/auth/logout"
+        },
+        {
+          "method": "POST",
+          "path": "/refresh",
+          "fullPath": "/api/auth/refresh"
+        },
+        {
+          "method": "GET",
+          "path": "/me",
+          "fullPath": "/api/auth/me"
+        }
+      ]
+    },
+    {
+      "file": "backtest.js",
+      "routeName": "backtest",
+      "count": 5,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/results",
+          "fullPath": "/api/backtest/results"
+        },
+        {
+          "method": "GET",
+          "path": "/results/:id",
+          "fullPath": "/api/backtest/results/:id"
+        },
+        {
+          "method": "POST",
+          "path": "/run",
+          "fullPath": "/api/backtest/run"
+        },
+        {
+          "method": "DELETE",
+          "path": "/results/:id",
+          "fullPath": "/api/backtest/results/:id"
+        },
+        {
+          "method": "GET",
+          "path": "/stats",
+          "fullPath": "/api/backtest/stats"
+        }
+      ]
+    },
+    {
+      "file": "profile.js",
+      "routeName": "profile",
+      "count": 5,
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/avatar",
+          "fullPath": "/api/profile/avatar"
+        },
+        {
+          "method": "GET",
+          "path": "/details",
+          "fullPath": "/api/profile/details"
+        },
+        {
+          "method": "PUT",
+          "path": "/details",
+          "fullPath": "/api/profile/details"
+        },
+        {
+          "method": "PUT",
+          "path": "/communications",
+          "fullPath": "/api/profile/communications"
+        },
+        {
+          "method": "POST",
+          "path": "/change-password",
+          "fullPath": "/api/profile/change-password"
+        }
+      ]
+    },
+    {
+      "file": "scheduler.js",
+      "routeName": "scheduler",
+      "count": 5,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/status",
+          "fullPath": "/api/scheduler/status"
+        },
+        {
+          "method": "POST",
+          "path": "/start",
+          "fullPath": "/api/scheduler/start"
+        },
+        {
+          "method": "POST",
+          "path": "/stop",
+          "fullPath": "/api/scheduler/stop"
+        },
+        {
+          "method": "PUT",
+          "path": "/config/:section",
+          "fullPath": "/api/scheduler/config/:section"
+        },
+        {
+          "method": "GET",
+          "path": "/config",
+          "fullPath": "/api/scheduler/config"
+        }
+      ]
+    },
+    {
+      "file": "settings.js",
+      "routeName": "settings",
+      "count": 5,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/settings/"
+        },
+        {
+          "method": "GET",
+          "path": "/:key",
+          "fullPath": "/api/settings/:key"
+        },
+        {
+          "method": "PUT",
+          "path": "/:key",
+          "fullPath": "/api/settings/:key"
+        },
+        {
+          "method": "POST",
+          "path": "/bulk",
+          "fullPath": "/api/settings/bulk"
+        },
+        {
+          "method": "DELETE",
+          "path": "/:key",
+          "fullPath": "/api/settings/:key"
+        }
+      ]
+    },
+    {
+      "file": "monitoring.js",
+      "routeName": "monitoring",
+      "count": 4,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "fullPath": "/api/monitoring/health"
+        },
+        {
+          "method": "GET",
+          "path": "/summary",
+          "fullPath": "/api/monitoring/summary"
+        },
+        {
+          "method": "GET",
+          "path": "/errors",
+          "fullPath": "/api/monitoring/errors"
+        },
+        {
+          "method": "GET",
+          "path": "/requests",
+          "fullPath": "/api/monitoring/requests"
+        }
+      ]
+    },
+    {
+      "file": "wallet.js",
+      "routeName": "wallet",
+      "count": 4,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/data",
+          "fullPath": "/api/wallet/data"
+        },
+        {
+          "method": "POST",
+          "path": "/refresh-connector/:id",
+          "fullPath": "/api/wallet/refresh-connector/:id"
+        },
+        {
+          "method": "PUT",
+          "path": "/security-controls/:id",
+          "fullPath": "/api/wallet/security-controls/:id"
+        },
+        {
+          "method": "PUT",
+          "path": "/preferences",
+          "fullPath": "/api/wallet/preferences"
+        }
+      ]
+    },
+    {
+      "file": "connections.js",
+      "routeName": "connections",
+      "count": 3,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/mexc",
+          "fullPath": "/api/connections/mexc"
+        },
+        {
+          "method": "POST",
+          "path": "/mexc",
+          "fullPath": "/api/connections/mexc"
+        },
+        {
+          "method": "POST",
+          "path": "/mexc/test",
+          "fullPath": "/api/connections/mexc/test"
+        }
+      ]
+    },
+    {
+      "file": "exports.js",
+      "routeName": "exports",
+      "count": 3,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/decisions",
+          "fullPath": "/api/exports/decisions"
+        },
+        {
+          "method": "GET",
+          "path": "/trades",
+          "fullPath": "/api/exports/trades"
+        },
+        {
+          "method": "GET",
+          "path": "/manual-trades",
+          "fullPath": "/api/exports/manual-trades"
+        }
+      ]
+    },
+    {
+      "file": "health.js",
+      "routeName": "health",
+      "count": 3,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/health/"
+        },
+        {
+          "method": "GET",
+          "path": "/ready",
+          "fullPath": "/api/health/ready"
+        },
+        {
+          "method": "GET",
+          "path": "/status",
+          "fullPath": "/api/health/status"
+        }
+      ]
+    },
+    {
+      "file": "email.js",
+      "routeName": "email",
+      "count": 2,
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/test",
+          "fullPath": "/api/email/test"
+        },
+        {
+          "method": "POST",
+          "path": "/send",
+          "fullPath": "/api/email/send"
+        }
+      ]
+    },
+    {
+      "file": "portfolios.js",
+      "routeName": "portfolios",
+      "count": 2,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/portfolios/"
+        },
+        {
+          "method": "POST",
+          "path": "/",
+          "fullPath": "/api/portfolios/"
+        }
+      ]
+    },
+    {
+      "file": "trades.js",
+      "routeName": "trades",
+      "count": 2,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/",
+          "fullPath": "/api/trades/"
+        },
+        {
+          "method": "POST",
+          "path": "/",
+          "fullPath": "/api/trades/"
+        }
+      ]
+    },
+    {
+      "file": "training.js",
+      "routeName": "training",
+      "count": 2,
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/sessions",
+          "fullPath": "/api/training/sessions"
+        },
+        {
+          "method": "POST",
+          "path": "/sessions",
+          "fullPath": "/api/training/sessions"
+        }
+      ]
+    }
+  ],
+  "byCategory": {
+    "ai-agents": [
+      {
+        "method": "POST",
+        "path": "/chat",
+        "fullPath": "/api/ai-agents/chat"
+      },
+      {
+        "method": "POST",
+        "path": "/:id/run",
+        "fullPath": "/api/ai-agents/:id/run"
+      },
+      {
+        "method": "POST",
+        "path": "/:id/command",
+        "fullPath": "/api/ai-agents/:id/command"
+      },
+      {
+        "method": "PATCH",
+        "path": "/:id/config",
+        "fullPath": "/api/ai-agents/:id/config"
+      },
+      {
+        "method": "GET",
+        "path": "/:id/details",
+        "fullPath": "/api/ai-agents/:id/details"
+      },
+      {
+        "method": "GET",
+        "path": "/manager-overview",
+        "fullPath": "/api/ai-agents/manager-overview"
+      },
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/ai-agents/"
+      },
+      {
+        "method": "GET",
+        "path": "/:id",
+        "fullPath": "/api/ai-agents/:id"
+      },
+      {
+        "method": "PATCH",
+        "path": "/:id",
+        "fullPath": "/api/ai-agents/:id"
+      }
+    ],
+    "artemis": [
+      {
+        "method": "GET",
+        "path": "/health",
+        "fullPath": "/api/artemis/health"
+      },
+      {
+        "method": "GET",
+        "path": "/state",
+        "fullPath": "/api/artemis/state"
+      },
+      {
+        "method": "PATCH",
+        "path": "/state",
+        "fullPath": "/api/artemis/state"
+      },
+      {
+        "method": "GET",
+        "path": "/scenarios",
+        "fullPath": "/api/artemis/scenarios"
+      },
+      {
+        "method": "POST",
+        "path": "/decision",
+        "fullPath": "/api/artemis/decision"
+      },
+      {
+        "method": "PATCH",
+        "path": "/config/decision-engine",
+        "fullPath": "/api/artemis/config/decision-engine"
+      },
+      {
+        "method": "GET",
+        "path": "/logs",
+        "fullPath": "/api/artemis/logs"
+      },
+      {
+        "method": "DELETE",
+        "path": "/logs",
+        "fullPath": "/api/artemis/logs"
+      },
+      {
+        "method": "PUT",
+        "path": "/config",
+        "fullPath": "/api/artemis/config"
+      },
+      {
+        "method": "GET",
+        "path": "/learning",
+        "fullPath": "/api/artemis/learning"
+      },
+      {
+        "method": "PATCH",
+        "path": "/learning/mistake/:id/mark-learned",
+        "fullPath": "/api/artemis/learning/mistake/:id/mark-learned"
+      },
+      {
+        "method": "POST",
+        "path": "/learning/event",
+        "fullPath": "/api/artemis/learning/event"
+      },
+      {
+        "method": "GET",
+        "path": "/orchestration",
+        "fullPath": "/api/artemis/orchestration"
+      }
+    ],
+    "auth": [
+      {
+        "method": "POST",
+        "path": "/register",
+        "fullPath": "/api/auth/register"
+      },
+      {
+        "method": "POST",
+        "path": "/login",
+        "fullPath": "/api/auth/login"
+      },
+      {
+        "method": "POST",
+        "path": "/logout",
+        "fullPath": "/api/auth/logout"
+      },
+      {
+        "method": "POST",
+        "path": "/refresh",
+        "fullPath": "/api/auth/refresh"
+      },
+      {
+        "method": "GET",
+        "path": "/me",
+        "fullPath": "/api/auth/me"
+      }
+    ],
+    "autopilot": [
+      {
+        "method": "GET",
+        "path": "/status",
+        "fullPath": "/api/autopilot/status"
+      },
+      {
+        "method": "POST",
+        "path": "/enable",
+        "fullPath": "/api/autopilot/enable"
+      },
+      {
+        "method": "POST",
+        "path": "/disable",
+        "fullPath": "/api/autopilot/disable"
+      },
+      {
+        "method": "GET",
+        "path": "/suggestions",
+        "fullPath": "/api/autopilot/suggestions"
+      },
+      {
+        "method": "POST",
+        "path": "/suggestions/:id/approve",
+        "fullPath": "/api/autopilot/suggestions/:id/approve"
+      },
+      {
+        "method": "POST",
+        "path": "/suggestions/:id/reject",
+        "fullPath": "/api/autopilot/suggestions/:id/reject"
+      },
+      {
+        "method": "POST",
+        "path": "/suggestions/:id/rollback",
+        "fullPath": "/api/autopilot/suggestions/:id/rollback"
+      },
+      {
+        "method": "POST",
+        "path": "/run-once",
+        "fullPath": "/api/autopilot/run-once"
+      }
+    ],
+    "backtest": [
+      {
+        "method": "GET",
+        "path": "/results",
+        "fullPath": "/api/backtest/results"
+      },
+      {
+        "method": "GET",
+        "path": "/results/:id",
+        "fullPath": "/api/backtest/results/:id"
+      },
+      {
+        "method": "POST",
+        "path": "/run",
+        "fullPath": "/api/backtest/run"
+      },
+      {
+        "method": "DELETE",
+        "path": "/results/:id",
+        "fullPath": "/api/backtest/results/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/stats",
+        "fullPath": "/api/backtest/stats"
+      }
+    ],
+    "config": [
+      {
+        "method": "GET",
+        "path": "/integrations",
+        "fullPath": "/api/config/integrations"
+      },
+      {
+        "method": "POST",
+        "path": "/integrations",
+        "fullPath": "/api/config/integrations"
+      },
+      {
+        "method": "PATCH",
+        "path": "/integrations/:id",
+        "fullPath": "/api/config/integrations/:id"
+      },
+      {
+        "method": "POST",
+        "path": "/integrations/:id/test",
+        "fullPath": "/api/config/integrations/:id/test"
+      },
+      {
+        "method": "POST",
+        "path": "/integrations/:id/disable",
+        "fullPath": "/api/config/integrations/:id/disable"
+      },
+      {
+        "method": "POST",
+        "path": "/integrations/:id/reset-runtime",
+        "fullPath": "/api/config/integrations/:id/reset-runtime"
+      },
+      {
+        "method": "GET",
+        "path": "/artemis",
+        "fullPath": "/api/config/artemis"
+      },
+      {
+        "method": "PUT",
+        "path": "/artemis",
+        "fullPath": "/api/config/artemis"
+      },
+      {
+        "method": "GET",
+        "path": "/security",
+        "fullPath": "/api/config/security"
+      },
+      {
+        "method": "PUT",
+        "path": "/security",
+        "fullPath": "/api/config/security"
+      }
+    ],
+    "connections": [
+      {
+        "method": "GET",
+        "path": "/mexc",
+        "fullPath": "/api/connections/mexc"
+      },
+      {
+        "method": "POST",
+        "path": "/mexc",
+        "fullPath": "/api/connections/mexc"
+      },
+      {
+        "method": "POST",
+        "path": "/mexc/test",
+        "fullPath": "/api/connections/mexc/test"
+      }
+    ],
+    "data-sources": [
+      {
+        "method": "POST",
+        "path": "/publish-telegram",
+        "fullPath": "/api/data-sources/publish-telegram"
+      },
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/data-sources/"
+      },
+      {
+        "method": "POST",
+        "path": "/",
+        "fullPath": "/api/data-sources/"
+      },
+      {
+        "method": "GET",
+        "path": "/state",
+        "fullPath": "/api/data-sources/state"
+      },
+      {
+        "method": "GET",
+        "path": "/health",
+        "fullPath": "/api/data-sources/health"
+      },
+      {
+        "method": "GET",
+        "path": "/stats",
+        "fullPath": "/api/data-sources/stats"
+      }
+    ],
+    "email": [
+      {
+        "method": "POST",
+        "path": "/test",
+        "fullPath": "/api/email/test"
+      },
+      {
+        "method": "POST",
+        "path": "/send",
+        "fullPath": "/api/email/send"
+      }
+    ],
+    "exchanges": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/exchanges/"
+      },
+      {
+        "method": "GET",
+        "path": "/:exchange",
+        "fullPath": "/api/exchanges/:exchange"
+      },
+      {
+        "method": "POST",
+        "path": "/:exchange",
+        "fullPath": "/api/exchanges/:exchange"
+      },
+      {
+        "method": "POST",
+        "path": "/:exchange/test",
+        "fullPath": "/api/exchanges/:exchange/test"
+      },
+      {
+        "method": "DELETE",
+        "path": "/:exchange",
+        "fullPath": "/api/exchanges/:exchange"
+      },
+      {
+        "method": "GET",
+        "path": "/health/status",
+        "fullPath": "/api/exchanges/health/status"
+      }
+    ],
+    "exports": [
+      {
+        "method": "GET",
+        "path": "/decisions",
+        "fullPath": "/api/exports/decisions"
+      },
+      {
+        "method": "GET",
+        "path": "/trades",
+        "fullPath": "/api/exports/trades"
+      },
+      {
+        "method": "GET",
+        "path": "/manual-trades",
+        "fullPath": "/api/exports/manual-trades"
+      }
+    ],
+    "favoriteAlerts": [
+      {
+        "method": "GET",
+        "path": "/:favoriteId/alerts",
+        "fullPath": "/api/favoriteAlerts/:favoriteId/alerts"
+      },
+      {
+        "method": "GET",
+        "path": "/alerts/active",
+        "fullPath": "/api/favoriteAlerts/alerts/active"
+      },
+      {
+        "method": "POST",
+        "path": "/:favoriteId/alerts",
+        "fullPath": "/api/favoriteAlerts/:favoriteId/alerts"
+      },
+      {
+        "method": "PUT",
+        "path": "/alerts/:alertId",
+        "fullPath": "/api/favoriteAlerts/alerts/:alertId"
+      },
+      {
+        "method": "DELETE",
+        "path": "/alerts/:alertId",
+        "fullPath": "/api/favoriteAlerts/alerts/:alertId"
+      },
+      {
+        "method": "POST",
+        "path": "/alerts/:alertId/trigger",
+        "fullPath": "/api/favoriteAlerts/alerts/:alertId/trigger"
+      },
+      {
+        "method": "GET",
+        "path": "/monitor/stats",
+        "fullPath": "/api/favoriteAlerts/monitor/stats"
+      },
+      {
+        "method": "POST",
+        "path": "/alerts/:alertId/test",
+        "fullPath": "/api/favoriteAlerts/alerts/:alertId/test"
+      }
+    ],
+    "favorites": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/favorites/"
+      },
+      {
+        "method": "GET",
+        "path": "/check/:assetId",
+        "fullPath": "/api/favorites/check/:assetId"
+      },
+      {
+        "method": "POST",
+        "path": "/",
+        "fullPath": "/api/favorites/"
+      },
+      {
+        "method": "DELETE",
+        "path": "/:id",
+        "fullPath": "/api/favorites/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/by-asset/:assetId",
+        "fullPath": "/api/favorites/by-asset/:assetId"
+      },
+      {
+        "method": "PUT",
+        "path": "/:id/view",
+        "fullPath": "/api/favorites/:id/view"
+      },
+      {
+        "method": "GET",
+        "path": "/stats",
+        "fullPath": "/api/favorites/stats"
+      },
+      {
+        "method": "POST",
+        "path": "/sync",
+        "fullPath": "/api/favorites/sync"
+      },
+      {
+        "method": "GET",
+        "path": "/analytics",
+        "fullPath": "/api/favorites/analytics"
+      }
+    ],
+    "health": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/health/"
+      },
+      {
+        "method": "GET",
+        "path": "/ready",
+        "fullPath": "/api/health/ready"
+      },
+      {
+        "method": "GET",
+        "path": "/status",
+        "fullPath": "/api/health/status"
+      }
+    ],
+    "manual-trades": [
+      {
+        "method": "GET",
+        "path": "/page-data",
+        "fullPath": "/api/manual-trades/page-data"
+      },
+      {
+        "method": "POST",
+        "path": "/execute",
+        "fullPath": "/api/manual-trades/execute"
+      },
+      {
+        "method": "POST",
+        "path": "/strategies/:strategyId/toggle",
+        "fullPath": "/api/manual-trades/strategies/:strategyId/toggle"
+      },
+      {
+        "method": "GET",
+        "path": "/recent",
+        "fullPath": "/api/manual-trades/recent"
+      },
+      {
+        "method": "GET",
+        "path": "/price/:pair",
+        "fullPath": "/api/manual-trades/price/:pair"
+      },
+      {
+        "method": "GET",
+        "path": "/balance",
+        "fullPath": "/api/manual-trades/balance"
+      },
+      {
+        "method": "GET",
+        "path": "/orderbook/:pair",
+        "fullPath": "/api/manual-trades/orderbook/:pair"
+      },
+      {
+        "method": "POST",
+        "path": "/order/advanced",
+        "fullPath": "/api/manual-trades/order/advanced"
+      },
+      {
+        "method": "GET",
+        "path": "/orders/open",
+        "fullPath": "/api/manual-trades/orders/open"
+      },
+      {
+        "method": "DELETE",
+        "path": "/orders/:orderId",
+        "fullPath": "/api/manual-trades/orders/:orderId"
+      }
+    ],
+    "monitoring": [
+      {
+        "method": "GET",
+        "path": "/health",
+        "fullPath": "/api/monitoring/health"
+      },
+      {
+        "method": "GET",
+        "path": "/summary",
+        "fullPath": "/api/monitoring/summary"
+      },
+      {
+        "method": "GET",
+        "path": "/errors",
+        "fullPath": "/api/monitoring/errors"
+      },
+      {
+        "method": "GET",
+        "path": "/requests",
+        "fullPath": "/api/monitoring/requests"
+      }
+    ],
+    "notifications": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/notifications/"
+      },
+      {
+        "method": "POST",
+        "path": "/broadcast",
+        "fullPath": "/api/notifications/broadcast"
+      },
+      {
+        "method": "GET",
+        "path": "/settings",
+        "fullPath": "/api/notifications/settings"
+      },
+      {
+        "method": "PUT",
+        "path": "/settings",
+        "fullPath": "/api/notifications/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/history",
+        "fullPath": "/api/notifications/history"
+      },
+      {
+        "method": "PUT",
+        "path": "/history/:id/read",
+        "fullPath": "/api/notifications/history/:id/read"
+      },
+      {
+        "method": "DELETE",
+        "path": "/history/:id",
+        "fullPath": "/api/notifications/history/:id"
+      },
+      {
+        "method": "POST",
+        "path": "/test",
+        "fullPath": "/api/notifications/test"
+      }
+    ],
+    "portfolios": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/portfolios/"
+      },
+      {
+        "method": "POST",
+        "path": "/",
+        "fullPath": "/api/portfolios/"
+      }
+    ],
+    "profile": [
+      {
+        "method": "POST",
+        "path": "/avatar",
+        "fullPath": "/api/profile/avatar"
+      },
+      {
+        "method": "GET",
+        "path": "/details",
+        "fullPath": "/api/profile/details"
+      },
+      {
+        "method": "PUT",
+        "path": "/details",
+        "fullPath": "/api/profile/details"
+      },
+      {
+        "method": "PUT",
+        "path": "/communications",
+        "fullPath": "/api/profile/communications"
+      },
+      {
+        "method": "POST",
+        "path": "/change-password",
+        "fullPath": "/api/profile/change-password"
+      }
+    ],
+    "scenarios": [
+      {
+        "method": "POST",
+        "path": "/generate",
+        "fullPath": "/api/scenarios/generate"
+      },
+      {
+        "method": "POST",
+        "path": "/",
+        "fullPath": "/api/scenarios/"
+      },
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/scenarios/"
+      },
+      {
+        "method": "GET",
+        "path": "/:id",
+        "fullPath": "/api/scenarios/:id"
+      },
+      {
+        "method": "PATCH",
+        "path": "/:id",
+        "fullPath": "/api/scenarios/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/:id",
+        "fullPath": "/api/scenarios/:id"
+      },
+      {
+        "method": "POST",
+        "path": "/:id/backtest",
+        "fullPath": "/api/scenarios/:id/backtest"
+      }
+    ],
+    "scheduler": [
+      {
+        "method": "GET",
+        "path": "/status",
+        "fullPath": "/api/scheduler/status"
+      },
+      {
+        "method": "POST",
+        "path": "/start",
+        "fullPath": "/api/scheduler/start"
+      },
+      {
+        "method": "POST",
+        "path": "/stop",
+        "fullPath": "/api/scheduler/stop"
+      },
+      {
+        "method": "PUT",
+        "path": "/config/:section",
+        "fullPath": "/api/scheduler/config/:section"
+      },
+      {
+        "method": "GET",
+        "path": "/config",
+        "fullPath": "/api/scheduler/config"
+      }
+    ],
+    "security": [
+      {
+        "method": "POST",
+        "path": "/2fa/setup",
+        "fullPath": "/api/security/2fa/setup"
+      },
+      {
+        "method": "POST",
+        "path": "/2fa/verify",
+        "fullPath": "/api/security/2fa/verify"
+      },
+      {
+        "method": "POST",
+        "path": "/2fa/disable",
+        "fullPath": "/api/security/2fa/disable"
+      },
+      {
+        "method": "POST",
+        "path": "/2fa/verify-token",
+        "fullPath": "/api/security/2fa/verify-token"
+      },
+      {
+        "method": "POST",
+        "path": "/2fa/backup-codes/generate",
+        "fullPath": "/api/security/2fa/backup-codes/generate"
+      },
+      {
+        "method": "POST",
+        "path": "/2fa/backup-codes/verify",
+        "fullPath": "/api/security/2fa/backup-codes/verify"
+      },
+      {
+        "method": "GET",
+        "path": "/2fa/backup-codes/remaining",
+        "fullPath": "/api/security/2fa/backup-codes/remaining"
+      }
+    ],
+    "settings": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/settings/"
+      },
+      {
+        "method": "GET",
+        "path": "/:key",
+        "fullPath": "/api/settings/:key"
+      },
+      {
+        "method": "PUT",
+        "path": "/:key",
+        "fullPath": "/api/settings/:key"
+      },
+      {
+        "method": "POST",
+        "path": "/bulk",
+        "fullPath": "/api/settings/bulk"
+      },
+      {
+        "method": "DELETE",
+        "path": "/:key",
+        "fullPath": "/api/settings/:key"
+      }
+    ],
+    "strategies": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/strategies/"
+      },
+      {
+        "method": "POST",
+        "path": "/:strategyId/toggle",
+        "fullPath": "/api/strategies/:strategyId/toggle"
+      },
+      {
+        "method": "POST",
+        "path": "/",
+        "fullPath": "/api/strategies/"
+      },
+      {
+        "method": "POST",
+        "path": "/ai-generate",
+        "fullPath": "/api/strategies/ai-generate"
+      },
+      {
+        "method": "POST",
+        "path": "/:strategyId/copy",
+        "fullPath": "/api/strategies/:strategyId/copy"
+      },
+      {
+        "method": "PUT",
+        "path": "/:strategyId",
+        "fullPath": "/api/strategies/:strategyId"
+      },
+      {
+        "method": "POST",
+        "path": "/group-backtest",
+        "fullPath": "/api/strategies/group-backtest"
+      },
+      {
+        "method": "POST",
+        "path": "/optimize-all",
+        "fullPath": "/api/strategies/optimize-all"
+      },
+      {
+        "method": "GET",
+        "path": "/export/all",
+        "fullPath": "/api/strategies/export/all"
+      },
+      {
+        "method": "POST",
+        "path": "/allocate-portfolio",
+        "fullPath": "/api/strategies/allocate-portfolio"
+      }
+    ],
+    "trades": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/trades/"
+      },
+      {
+        "method": "POST",
+        "path": "/",
+        "fullPath": "/api/trades/"
+      }
+    ],
+    "trading-engine": [
+      {
+        "method": "GET",
+        "path": "/status",
+        "fullPath": "/api/trading-engine/status"
+      },
+      {
+        "method": "POST",
+        "path": "/start",
+        "fullPath": "/api/trading-engine/start"
+      },
+      {
+        "method": "POST",
+        "path": "/stop",
+        "fullPath": "/api/trading-engine/stop"
+      },
+      {
+        "method": "GET",
+        "path": "/trades/active",
+        "fullPath": "/api/trading-engine/trades/active"
+      },
+      {
+        "method": "GET",
+        "path": "/opportunities",
+        "fullPath": "/api/trading-engine/opportunities"
+      },
+      {
+        "method": "PUT",
+        "path": "/config",
+        "fullPath": "/api/trading-engine/config"
+      },
+      {
+        "method": "GET",
+        "path": "/config",
+        "fullPath": "/api/trading-engine/config"
+      },
+      {
+        "method": "POST",
+        "path": "/emergency-stop",
+        "fullPath": "/api/trading-engine/emergency-stop"
+      }
+    ],
+    "training": [
+      {
+        "method": "GET",
+        "path": "/sessions",
+        "fullPath": "/api/training/sessions"
+      },
+      {
+        "method": "POST",
+        "path": "/sessions",
+        "fullPath": "/api/training/sessions"
+      }
+    ],
+    "userPreferences": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/userPreferences/"
+      },
+      {
+        "method": "GET",
+        "path": "/category/:category",
+        "fullPath": "/api/userPreferences/category/:category"
+      },
+      {
+        "method": "GET",
+        "path": "/history",
+        "fullPath": "/api/userPreferences/history"
+      },
+      {
+        "method": "GET",
+        "path": "/categories",
+        "fullPath": "/api/userPreferences/categories"
+      },
+      {
+        "method": "POST",
+        "path": "/",
+        "fullPath": "/api/userPreferences/"
+      },
+      {
+        "method": "PUT",
+        "path": "/",
+        "fullPath": "/api/userPreferences/"
+      },
+      {
+        "method": "PUT",
+        "path": "/category/:category",
+        "fullPath": "/api/userPreferences/category/:category"
+      },
+      {
+        "method": "PUT",
+        "path": "/bulk",
+        "fullPath": "/api/userPreferences/bulk"
+      },
+      {
+        "method": "DELETE",
+        "path": "/",
+        "fullPath": "/api/userPreferences/"
+      },
+      {
+        "method": "DELETE",
+        "path": "/category/:category",
+        "fullPath": "/api/userPreferences/category/:category"
+      },
+      {
+        "method": "POST",
+        "path": "/sync",
+        "fullPath": "/api/userPreferences/sync"
+      },
+      {
+        "method": "GET",
+        "path": "/telegram",
+        "fullPath": "/api/userPreferences/telegram"
+      },
+      {
+        "method": "PUT",
+        "path": "/telegram",
+        "fullPath": "/api/userPreferences/telegram"
+      },
+      {
+        "method": "POST",
+        "path": "/telegram/test",
+        "fullPath": "/api/userPreferences/telegram/test"
+      }
+    ],
+    "users": [
+      {
+        "method": "GET",
+        "path": "/stats/overview",
+        "fullPath": "/api/users/stats/overview"
+      },
+      {
+        "method": "GET",
+        "path": "/",
+        "fullPath": "/api/users/"
+      },
+      {
+        "method": "GET",
+        "path": "/:id/activity",
+        "fullPath": "/api/users/:id/activity"
+      },
+      {
+        "method": "POST",
+        "path": "/:id/change-password",
+        "fullPath": "/api/users/:id/change-password"
+      },
+      {
+        "method": "PATCH",
+        "path": "/:id/role",
+        "fullPath": "/api/users/:id/role"
+      },
+      {
+        "method": "PATCH",
+        "path": "/:id/status",
+        "fullPath": "/api/users/:id/status"
+      },
+      {
+        "method": "GET",
+        "path": "/:id",
+        "fullPath": "/api/users/:id"
+      },
+      {
+        "method": "PATCH",
+        "path": "/:id",
+        "fullPath": "/api/users/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/:id",
+        "fullPath": "/api/users/:id"
+      }
+    ],
+    "wallet": [
+      {
+        "method": "GET",
+        "path": "/data",
+        "fullPath": "/api/wallet/data"
+      },
+      {
+        "method": "POST",
+        "path": "/refresh-connector/:id",
+        "fullPath": "/api/wallet/refresh-connector/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/security-controls/:id",
+        "fullPath": "/api/wallet/security-controls/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/preferences",
+        "fullPath": "/api/wallet/preferences"
+      }
+    ]
+  }
+}
