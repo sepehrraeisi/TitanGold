@@ -285,6 +285,9 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
         inputData = { symbol, timeframe };
       }
       
+      // ✅ Check if cached result is fallback
+      const wasSuccessful = !(cached?._meta?.isFallback ?? false);
+      
       return logAndReturn(
         res,
         originalId,
@@ -294,7 +297,7 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
         cached,
         0, // execution time = 0 for cache hit
         true, // isCached = true
-        true  // wasSuccessful = true (cached results are by definition successful)
+        wasSuccessful // ✅ correct even if cached fallback
       );
     }
 
@@ -353,7 +356,8 @@ Return ONLY JSON with this schema:
             confidence: parsed.confidence ?? 55,
             indicators: parsed.indicators || {},
             symbol,
-            timeframe
+            timeframe,
+            _meta: { isFallback: false } // ✅ Track success for cache
           };
           
           // Cache for 30s
@@ -392,7 +396,8 @@ Return ONLY JSON with this schema:
           trend: 'sideways'
         },
         symbol,
-        timeframe
+        timeframe,
+        _meta: { isFallback: true } // ✅ Track fallback for cache
       };
       setCache(cacheKey, fallback1, 30000);
       
@@ -439,7 +444,8 @@ Return ONLY JSON:
             recommendation: parsed.recommendation || 'HOLD',
             confidence: parsed.confidence ?? 60,
             riskLevel: parsed.riskLevel || 'medium',
-            symbol
+            symbol,
+            _meta: { isFallback: false } // ✅ Track success for cache
           };
           
           // Cache for 30s
@@ -472,7 +478,8 @@ Return ONLY JSON:
         recommendation: 'HOLD',
         confidence: 60,
         riskLevel: 'medium',
-        symbol
+        symbol,
+        _meta: { isFallback: true } // ✅ Track fallback for cache
       };
       setCache(cacheKey, fallback2, 30000);
       
@@ -519,7 +526,8 @@ Return ONLY JSON:
             signal: parsed.signal || 'WAIT',
             confidence: parsed.confidence ?? 55,
             timing: parsed.timing || 'neutral',
-            symbol
+            symbol,
+            _meta: { isFallback: false } // ✅ Track success for cache
           };
           
           // Cache for 30s
@@ -552,7 +560,8 @@ Return ONLY JSON:
         signal: 'WAIT',
         confidence: 55,
         timing: 'neutral',
-        symbol
+        symbol,
+        _meta: { isFallback: true } // ✅ Track fallback for cache
       };
       setCache(cacheKey, fallback15, 30000);
       
