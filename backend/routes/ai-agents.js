@@ -109,13 +109,17 @@ function validateMessage(message) {
   return typeof message === 'string' && message.length > 0 && message.length <= 4000;
 }
 
-// 6) Universal Decision Logger
-async function logAgentDecision(agentId, userId, decisionType, inputData, outputData, confidence, wasSuccessful, executionTimeMs = null) {
+// 6) Universal Decision Logger + Response Wrapper
+async function logAndReturn(res, agentId, userId, decisionType, inputData, outputData, executionTimeMs, isCached = false) {
   try {
+    // Determine success based on output validity
+    const wasSuccessful = !!(outputData && (outputData.signal || outputData.recommendation || outputData.confidence > 0));
+    const confidence = outputData?.confidence || null;
+    
     await query(`
       INSERT INTO ai_decisions 
       (agent_id, user_id, decision_type, input_data, output_data, confidence, was_successful, execution_time_ms, created_at, metadata)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), '{}'::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9::jsonb)
       RETURNING id
     `, [
       agentId,
@@ -123,15 +127,18 @@ async function logAgentDecision(agentId, userId, decisionType, inputData, output
       decisionType,
       JSON.stringify(inputData),
       JSON.stringify(outputData),
-      confidence || null,
+      confidence,
       wasSuccessful,
-      executionTimeMs
+      executionTimeMs,
+      JSON.stringify({ cached: isCached })
     ]);
-    console.log(`📝 Decision logged: agent=${agentId.substring(0,8)}, type=${decisionType}, success=${wasSuccessful}`);
+    console.log(`📝 Decision logged: agent=${agentId.substring(0,8)}, type=${decisionType}, success=${wasSuccessful}, cached=${isCached}, time=${executionTimeMs}ms`);
   } catch (err) {
     console.error('❌ Failed to log decision:', err.message);
     // Don't throw - logging failures shouldn't break the agent response
   }
+  
+  return res.json(outputData);
 }
 
 // ============================================================================
@@ -242,8 +249,40 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
         console.error('⚠️  Failed to track cached performance:', perfError);
       }
       
-      return res.json(cached);
+      // 🔥 NEW: Log decision even for cache hits
+      const agentKeyMapping = {
+        'agent-1': 'technical_analysis',
+        'agent-2': 'risk_assessment',
+        'agent-3': 'sentiment_analysis',
+        'agent-4': 'pattern_recognition',
+        'agent-5': 'price_prediction',
+        'agent-6': 'arbitrage',
+        'agent-7': 'portfolio_allocation',
+        'agent-8': 'liquidity_analysis',
+        'agent-9': 'trend_analysis',
+        'agent-10': 'optimization',
+        'agent-11': 'order_management',
+        'agent-12': 'fundamental_analysis',
+        'agent-13': 'market_intelligence',
+        'agent-14': 'volume_analysis',
+        'agent-15': 'timing_analysis'
+      };
+      
+      const decisionType = agentKeyMapping[agentId] || 'agent_run';
+      return logAndReturn(
+        res,
+        originalId,
+        req.user?.id,
+        decisionType,
+        { symbol, timeframe },
+        cached,
+        0, // execution time = 0 for cache hit
+        true // isCached = true
+      );
     }
+
+    // ⏱️ Start timing for execution
+    const startTime = Date.now();
 
     // Agent 1: Technical Analysis
     if (agentId === 'agent-1') {
@@ -300,20 +339,21 @@ Return ONLY JSON with this schema:
             timeframe
           };
           
-          // 🔥 Log decision to ai_decisions
-          await logAgentDecision(
+          // Cache for 30s
+          setCache(cacheKey, result, 30000);
+          
+          // 🔥 Log decision and return
+          const executionTime = Date.now() - startTime;
+          return logAndReturn(
+            res,
             originalId,
             req.user?.id,
             'technical_analysis',
             { symbol, timeframe },
             result,
-            result.confidence,
-            isSuccessful === 1
+            executionTime,
+            false
           );
-          
-          // Cache for 30s
-          setCache(cacheKey, result, 30000);
-          return res.json(result);
         }
       } catch (e) {
         console.error('Agent-1 AI error:', e);
@@ -337,7 +377,19 @@ Return ONLY JSON with this schema:
         timeframe
       };
       setCache(cacheKey, fallback1, 30000);
-      return res.json(fallback1);
+      
+      // 🔥 Log fallback decision
+      const executionTime = Date.now() - startTime;
+      return logAndReturn(
+        res,
+        originalId,
+        req.user?.id,
+        'technical_analysis',
+        { symbol, timeframe },
+        fallback1,
+        executionTime,
+        false
+      );
     }
 
     // Agent 2: Risk Management
@@ -371,20 +423,21 @@ Return ONLY JSON:
             symbol
           };
           
-          // 🔥 Log decision to ai_decisions
-          await logAgentDecision(
+          // Cache for 30s
+          setCache(cacheKey, result, 30000);
+          
+          // 🔥 Log decision and return
+          const executionTime = Date.now() - startTime;
+          return logAndReturn(
+            res,
             originalId,
             req.user?.id,
             'risk_assessment',
             { symbol, action: req.body.action, amount: req.body.amount },
             result,
-            result.confidence,
-            result.recommendation !== 'REDUCE' // Success = not blocking trade
+            executionTime,
+            false
           );
-          
-          // Cache for 30s
-          setCache(cacheKey, result, 30000);
-          return res.json(result);
         }
       } catch (e) {
         console.error('Agent-2 AI error:', e);
@@ -402,7 +455,19 @@ Return ONLY JSON:
         symbol
       };
       setCache(cacheKey, fallback2, 30000);
-      return res.json(fallback2);
+      
+      // 🔥 Log fallback decision
+      const executionTime = Date.now() - startTime;
+      return logAndReturn(
+        res,
+        originalId,
+        req.user?.id,
+        'risk_assessment',
+        { symbol, action: req.body.action, amount: req.body.amount },
+        fallback2,
+        executionTime,
+        false
+      );
     }
 
     // Agent 15: Timing
@@ -436,20 +501,21 @@ Return ONLY JSON:
             symbol
           };
           
-          // 🔥 Log decision to ai_decisions
-          await logAgentDecision(
+          // Cache for 30s
+          setCache(cacheKey, result, 30000);
+          
+          // 🔥 Log decision and return
+          const executionTime = Date.now() - startTime;
+          return logAndReturn(
+            res,
             originalId,
             req.user?.id,
             'timing_analysis',
             { symbol },
             result,
-            result.confidence,
-            result.signal !== 'WAIT' // Success = actionable signal
+            executionTime,
+            false
           );
-          
-          // Cache for 30s
-          setCache(cacheKey, result, 30000);
-          return res.json(result);
         }
       } catch (e) {
         console.error('Agent-15 AI error:', e);
@@ -467,7 +533,19 @@ Return ONLY JSON:
         symbol
       };
       setCache(cacheKey, fallback15, 30000);
-      return res.json(fallback15);
+      
+      // 🔥 Log fallback decision
+      const executionTime = Date.now() - startTime;
+      return logAndReturn(
+        res,
+        originalId,
+        req.user?.id,
+        'timing_analysis',
+        { symbol },
+        fallback15,
+        executionTime,
+        false
+      );
     }
 
     // Generic fallback for other agents – safe NO-OP style response
