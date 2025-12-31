@@ -12642,134 +12642,62 @@ export const updateRiskManagementConfig = async (
 
 export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment> => {
     try {
-        const agent = await database.get<AIAgent>('aiAgents', agentId);
-        if (!agent || !agent.riskManagementConfig) {
-            throw new Error('Agent or config not found');
+        // Get auth token
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
         }
 
-        const config = agent.riskManagementConfig;
+        // Call backend /api/ai-agents/:id/run endpoint
+        const response = await fetch(`/api/ai-agents/${agentId}/run`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                symbol: 'PORTFOLIO',  // Portfolio-level risk assessment
+                action: 'ASSESS',
+                amount: 0,
+            }),
+        });
 
-        // Simulate risk assessment (in real app, this would analyze actual portfolio)
-        // Calculate portfolio risk based on various factors
-        const portfolioRisk = Math.min(100, Math.max(0,
-            30 + // Base risk
-            (Math.random() * 20) + // Market volatility
-            (config.maxDrawdown > 15 ? 10 : 0) + // Drawdown risk
-            (config.leverageLimit > 3 ? 15 : 0) // Leverage risk
-        ));
-
-        // Generate position risks (simulated)
-        const positionRisks: RiskAssessment['positionRisks'] = [
-            { symbol: 'BTCUSDT', riskScore: 45, riskLevel: 'medium', reasons: ['High volatility', 'Large position size'] },
-            { symbol: 'ETHUSDT', riskScore: 32, riskLevel: 'low', reasons: ['Normal volatility'] },
-        ];
-
-        // Add critical risk if portfolio risk is very high
-        if (portfolioRisk > 80) {
-            positionRisks.push({
-                symbol: 'HIGH_RISK',
-                riskScore: 95,
-                riskLevel: 'critical',
-                reasons: ['Portfolio risk exceeds safe threshold'],
-            });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.message || `HTTP ${response.status}: Failed to run risk assessment`);
         }
 
-        // Generate recommendations based on risk
-        const recommendations: RiskAssessment['recommendations'] = [];
-        if (portfolioRisk > 70) {
-            recommendations.push({
-                action: 'reduce',
-                reason: 'Portfolio risk is high. Consider reducing positions.',
-                priority: 'high',
-            });
-        }
-        const criticalPosition = positionRisks.find(p => p.riskLevel === 'critical');
-        if (criticalPosition) {
-            recommendations.push({
-                action: 'close',
-                symbol: criticalPosition.symbol,
-                reason: 'Critical risk detected in position',
-                priority: 'critical',
-            });
-        }
-
-        const riskScoreValue = Math.round(portfolioRisk * 10) / 10;
+        const backendResult = await response.json();
+        console.log('Backend risk assessment result:', backendResult);
+        
+        // Convert backend response to RiskAssessment format
+        const riskLevel = backendResult.riskLevel || 'medium';
+        const riskScore = backendResult.confidence || 50;
+        
         const assessment: RiskAssessment = {
             timestamp: new Date().toISOString(),
-            portfolioRisk: riskScoreValue,
-            overallRisk: riskScoreValue,
-            riskScore: riskScoreValue,
-            positionRisks,
-            recommendations,
+            portfolioRisk: riskScore,
+            overallRisk: riskScore,
+            riskScore: riskScore,
+            positionRisks: backendResult.positionRisks || [],
+            recommendations: backendResult.recommendation ? [{
+                action: backendResult.recommendation.toLowerCase() as any,
+                reason: `Risk level: ${riskLevel}. Confidence: ${riskScore}%`,
+                priority: riskLevel === 'high' || riskLevel === 'critical' ? 'high' : 'medium',
+            }] : [],
             marketConditions: {
-                volatility: 35 + Math.random() * 20,
-                trend: Math.random() > 0.5 ? 'bullish' : 'bearish',
-                liquidity: 'high',
+                volatility: 35,
+                trend: 'neutral',
+                liquidity: 'medium',
             },
             riskMetrics: {
-                currentDrawdown: 5.2 + Math.random() * 3,
-                dailyPnL: -2.5 + Math.random() * 5,
-                exposure: 65 + Math.random() * 20,
-                leverage: 1.5 + Math.random() * 1,
-                correlation: 0.4 + Math.random() * 0.3,
+                currentDrawdown: 0,
+                dailyPnL: 0,
+                exposure: 0,
+                leverage: 1,
+                correlation: 0.5,
             },
         };
-
-        // Update metrics
-        const currentMetrics = agent.riskMetrics || {
-            totalAssessments: 0,
-            risksBlocked: 0,
-            risksMitigated: 0,
-            averageRiskScore: 0,
-            maxRiskScore: 0,
-            portfolioProtectionRate: 0,
-            recentPerformance: {
-                last24h: { assessments: 0, risksBlocked: 0, avgRiskScore: 0 },
-                last7d: { assessments: 0, risksBlocked: 0, avgRiskScore: 0 },
-                last30d: { assessments: 0, risksBlocked: 0, avgRiskScore: 0 },
-            },
-            learningMetrics: {
-                mistakesLearned: 0,
-                predictionsImproved: 0,
-                accuracyGain: 0,
-                lastLearningUpdate: new Date().toISOString(),
-            },
-        };
-
-        const updatedMetrics: RiskManagementMetrics = {
-            ...currentMetrics,
-            totalAssessments: currentMetrics.totalAssessments + 1,
-            risksBlocked: currentMetrics.risksBlocked + (recommendations.filter(r => r.action === 'close' || r.action === 'reduce').length),
-            risksMitigated: currentMetrics.risksMitigated + (recommendations.filter(r => r.action === 'reduce').length),
-            averageRiskScore: (currentMetrics.averageRiskScore * currentMetrics.totalAssessments + portfolioRisk) / (currentMetrics.totalAssessments + 1),
-            maxRiskScore: Math.max(currentMetrics.maxRiskScore, portfolioRisk),
-            portfolioProtectionRate: currentMetrics.totalAssessments > 0
-                ? (currentMetrics.risksBlocked / currentMetrics.totalAssessments) * 100
-                : 0,
-            recentPerformance: {
-                last24h: {
-                    assessments: currentMetrics.recentPerformance.last24h.assessments + 1,
-                    risksBlocked: currentMetrics.recentPerformance.last24h.risksBlocked + (recommendations.filter(r => r.action === 'close' || r.action === 'reduce').length),
-                    avgRiskScore: portfolioRisk,
-                },
-                last7d: currentMetrics.recentPerformance.last7d,
-                last30d: currentMetrics.recentPerformance.last30d,
-            },
-        };
-
-        // Save assessment and metrics to agent
-        const updated = {
-            ...agent,
-            lastRiskAssessment: assessment,
-            riskMetrics: updatedMetrics,
-            lastUpdate: new Date().toISOString(),
-        };
-        await database.save('aiAgents', updated);
-
-        // Share with Artemis and sync with other agents
-        await shareDataWithArtemis(agentId, 'risk', assessment, 'analysis');
-        await forwardToDashboard(agentId, assessment, 'risk_assessment');
-        await syncWithOtherAgents(agentId, 'risk', assessment, 'analysis');
 
         return assessment;
     } catch (e) {
