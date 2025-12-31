@@ -110,10 +110,9 @@ function validateMessage(message) {
 }
 
 // 6) Universal Decision Logger + Response Wrapper
-async function logAndReturn(res, agentId, userId, decisionType, inputData, outputData, executionTimeMs, isCached = false) {
+async function logAndReturn(res, agentId, userId, decisionType, inputData, outputData, executionTimeMs, isCached = false, wasSuccessful = true) {
   try {
-    // Determine success based on output validity
-    const wasSuccessful = !!(outputData && (outputData.signal || outputData.recommendation || outputData.confidence > 0));
+    // wasSuccessful is now explicit parameter (not guessed from output)
     const confidence = outputData?.confidence || null;
     
     await query(`
@@ -269,15 +268,33 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
       };
       
       const decisionType = agentKeyMapping[agentId] || 'agent_run';
+      
+      // 🔥 FIXED: Per-agent input data (not generic symbol+timeframe)
+      let inputData;
+      if (agentId === 'agent-1') {
+        // Technical: symbol + timeframe
+        inputData = { symbol, timeframe };
+      } else if (agentId === 'agent-2') {
+        // Risk: symbol + action + amount
+        inputData = { symbol, action: req.body.action, amount: req.body.amount };
+      } else if (agentId === 'agent-15') {
+        // Timing: symbol only
+        inputData = { symbol };
+      } else {
+        // Others: generic
+        inputData = { symbol, timeframe };
+      }
+      
       return logAndReturn(
         res,
         originalId,
         req.user?.id,
         decisionType,
-        { symbol, timeframe },
+        inputData,
         cached,
         0, // execution time = 0 for cache hit
-        true // isCached = true
+        true, // isCached = true
+        true  // wasSuccessful = true (cached results are by definition successful)
       );
     }
 
@@ -352,7 +369,8 @@ Return ONLY JSON with this schema:
             { symbol, timeframe },
             result,
             executionTime,
-            false
+            false, // isCached
+            true   // wasSuccessful (parsed successfully)
           );
         }
       } catch (e) {
@@ -388,7 +406,8 @@ Return ONLY JSON with this schema:
         { symbol, timeframe },
         fallback1,
         executionTime,
-        false
+        false, // isCached
+        false  // wasSuccessful (fallback = failure)
       );
     }
 
@@ -436,7 +455,8 @@ Return ONLY JSON:
             { symbol, action: req.body.action, amount: req.body.amount },
             result,
             executionTime,
-            false
+            false, // isCached
+            true   // wasSuccessful (parsed successfully)
           );
         }
       } catch (e) {
@@ -466,7 +486,8 @@ Return ONLY JSON:
         { symbol, action: req.body.action, amount: req.body.amount },
         fallback2,
         executionTime,
-        false
+        false, // isCached
+        false  // wasSuccessful (fallback = failure)
       );
     }
 
@@ -514,7 +535,8 @@ Return ONLY JSON:
             { symbol },
             result,
             executionTime,
-            false
+            false, // isCached
+            true   // wasSuccessful (parsed successfully)
           );
         }
       } catch (e) {
@@ -544,7 +566,8 @@ Return ONLY JSON:
         { symbol },
         fallback15,
         executionTime,
-        false
+        false, // isCached
+        false  // wasSuccessful (fallback = failure)
       );
     }
 
