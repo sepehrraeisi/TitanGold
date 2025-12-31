@@ -6,6 +6,9 @@
 
 import { query } from '../database/db.js';
 
+// GUARD: Block test agents from being seeded
+const BLOCKED_AGENT_KEYS = ['test_technical', 'test', 'demo'];
+
 const realAgents = [
   {
     agent_key: 'technical',
@@ -339,6 +342,12 @@ async function seedRealAgents() {
     
     for (const agent of realAgents) {
       try {
+        // GUARD: Block test/demo agents
+        if (BLOCKED_AGENT_KEYS.includes(agent.agent_key)) {
+          console.log(`⏭️  Skipping blocked agent: ${agent.agent_key}`);
+          continue;
+        }
+        
         // Check if agent exists by agent_key
         const existing = await query(
           'SELECT id FROM ai_agents WHERE agent_key = $1',
