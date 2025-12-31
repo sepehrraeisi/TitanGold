@@ -197,7 +197,7 @@ export const fetchSystemErrors = async (limit: number = 50): Promise<SystemError
  */
 export const fetchSentimentAgentData = async (agentId: string): Promise<{
   config: any | null;
-  performance: any | null;
+  metrics: any | null;
   lastAnalysis: any | null;
 }> => {
   try {
@@ -220,7 +220,7 @@ export const fetchSentimentAgentData = async (agentId: string): Promise<{
     // Map backend response to expected format
     const config = data?.agent?.config || null;
     
-    const performance = data?.agent ? {
+    const metrics = data?.agent ? {
       totalSignals: data.agent.total_decisions || 0,
       successfulSignals: data.agent.successful_decisions || 0,
       winRate: data.agent.accuracy || 0,
@@ -237,7 +237,7 @@ export const fetchSentimentAgentData = async (agentId: string): Promise<{
 
     return {
       config,
-      performance,
+      metrics,
       lastAnalysis: null, // Can be populated from recent decisions if needed
     };
   } catch (error) {
