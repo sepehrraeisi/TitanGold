@@ -1,9 +1,14 @@
 import { query } from '../database/db.js';
 import { mexcService } from './mexc.js';
+import RiskGateService from './risk-gate.js';
+import * as db from '../database/db.js';
 
 // Import mexcService if not already imported
 
 class ManualTradingService {
+  constructor() {
+    this.riskGate = new RiskGateService(db);
+  }
   /**
    * Get complete page data for manual trading
    */
@@ -622,6 +627,19 @@ class ManualTradingService {
         throw new Error('Insufficient balance');
       }
 
+      // 🛡️ Risk Gate: Check if trade should be blocked
+      const riskCheck = await this.riskGate.checkRiskGate({
+        symbol: pair,
+        side,
+        amount,
+        price,
+        userId
+      });
+
+      if (!riskCheck.allowed) {
+        throw new Error(riskCheck.message || 'Trade blocked by risk management');
+      }
+
       // Execute trade (demo mode for now - can be extended to real trading)
       const mode = process.env.TRADING_MODE || 'demo';
       let executedPrice = price;
@@ -824,6 +842,19 @@ class ManualTradingService {
         // For stop orders, we need to create a conditional order
         // MEXC supports stop-limit orders
         mexcOrderType = 'stop-limit';
+      }
+
+      // 🛡️ Risk Gate: Check if trade should be blocked
+      const riskCheck = await this.riskGate.checkRiskGate({
+        symbol: pair,
+        side,
+        amount,
+        price: price || stopPrice || limitPrice,
+        userId
+      });
+
+      if (!riskCheck.allowed) {
+        throw new Error(riskCheck.message || 'Trade blocked by risk management');
       }
 
       // Execute order via MEXC
