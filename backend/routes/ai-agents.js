@@ -109,6 +109,31 @@ function validateMessage(message) {
   return typeof message === 'string' && message.length > 0 && message.length <= 4000;
 }
 
+// 6) Universal Decision Logger
+async function logAgentDecision(agentId, userId, decisionType, inputData, outputData, confidence, wasSuccessful, executionTimeMs = null) {
+  try {
+    await query(`
+      INSERT INTO ai_decisions 
+      (agent_id, user_id, decision_type, input_data, output_data, confidence, was_successful, execution_time_ms, created_at, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), '{}'::jsonb)
+      RETURNING id
+    `, [
+      agentId,
+      userId || null,
+      decisionType,
+      JSON.stringify(inputData),
+      JSON.stringify(outputData),
+      confidence || null,
+      wasSuccessful,
+      executionTimeMs
+    ]);
+    console.log(`📝 Decision logged: agent=${agentId.substring(0,8)}, type=${decisionType}, success=${wasSuccessful}`);
+  } catch (err) {
+    console.error('❌ Failed to log decision:', err.message);
+    // Don't throw - logging failures shouldn't break the agent response
+  }
+}
+
 // ============================================================================
 // Routes
 // ============================================================================
@@ -274,6 +299,18 @@ Return ONLY JSON with this schema:
             symbol,
             timeframe
           };
+          
+          // 🔥 Log decision to ai_decisions
+          await logAgentDecision(
+            originalId,
+            req.user?.id,
+            'technical_analysis',
+            { symbol, timeframe },
+            result,
+            result.confidence,
+            isSuccessful === 1
+          );
+          
           // Cache for 30s
           setCache(cacheKey, result, 30000);
           return res.json(result);
@@ -333,6 +370,18 @@ Return ONLY JSON:
             riskLevel: parsed.riskLevel || 'medium',
             symbol
           };
+          
+          // 🔥 Log decision to ai_decisions
+          await logAgentDecision(
+            originalId,
+            req.user?.id,
+            'risk_assessment',
+            { symbol, action: req.body.action, amount: req.body.amount },
+            result,
+            result.confidence,
+            result.recommendation !== 'REDUCE' // Success = not blocking trade
+          );
+          
           // Cache for 30s
           setCache(cacheKey, result, 30000);
           return res.json(result);
@@ -386,6 +435,18 @@ Return ONLY JSON:
             timing: parsed.timing || 'neutral',
             symbol
           };
+          
+          // 🔥 Log decision to ai_decisions
+          await logAgentDecision(
+            originalId,
+            req.user?.id,
+            'timing_analysis',
+            { symbol },
+            result,
+            result.confidence,
+            result.signal !== 'WAIT' // Success = actionable signal
+          );
+          
           // Cache for 30s
           setCache(cacheKey, result, 30000);
           return res.json(result);
