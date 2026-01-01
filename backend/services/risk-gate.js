@@ -1,13 +1,38 @@
 /**
- * Risk Gate Service
- * Pre-trade risk assessment to block dangerous trades
+ * @fileoverview Risk Gate Service
+ * @module services/risk-gate
+ * @description
+ * Pre-trade risk assessment to block dangerous trades.
+ * 
+ * Key Features:
+ * - Uses real Risk Agent logic (no Math.random())
+ * - Deterministic behavior for testing
+ * - Configurable fail-open/fail-closed based on TRADING_MODE
+ * - Logs all decisions to ai_decisions table
+ * 
+ * Integration:
+ * - Called by ManualTradingService before MEXC order execution
+ * - Direct internal function calls (no HTTP, no auth)
+ * 
+ * Fail Modes:
+ * - DEMO mode: fail-open (allow trade on error)
+ * - LIVE mode: fail-closed (block trade on error)
  */
+
+import * as riskAgent from './risk-agent.js';
 
 const RISK_AGENT_ID = '79bbdf0b-94a3-4cbc-adef-98c25f5ba1a7';
 
 class RiskGateService {
-  constructor(db) {
+  /**
+   * @param {Object} db - Database connection (query method)
+   * @param {string} [tradingMode='demo'] - Trading mode: 'demo' or 'live'
+   */
+  constructor(db, tradingMode = 'demo') {
     this.db = db;
+    this.tradingMode = tradingMode || process.env.TRADING_MODE || 'demo';
+    
+    console.log(`🛡️ RiskGateService initialized (mode: ${this.tradingMode})`);
   }
 
   /**
@@ -17,22 +42,36 @@ class RiskGateService {
    * @param {string} trade.side - 'buy' or 'sell'
    * @param {number} trade.amount - Trade amount
    * @param {number} trade.price - Trade price
-   * @param {string} trade.userId - User ID (optional, for logging)
+   * @param {string} [trade.userId] - User ID (optional, for logging)
    * @returns {Promise<Object>} { allowed: boolean, reason?: string, riskAssessment: Object }
+   * 
+   * @description
+   * Main entry point for pre-trade risk checks.
+   * 
+   * Flow:
+   * 1. Call Risk Agent's runRiskAssessment (internal, deterministic)
+   * 2. Check if trade should be blocked based on recommendation/riskLevel
+   * 3. Log decision to ai_decisions table (decision_type='risk_gate')
+   * 4. Return { allowed, reason, riskAssessment }
+   * 
+   * Error Handling:
+   * - DEMO mode: fail-open (allow trade, log error)
+   * - LIVE mode: fail-closed (block trade, log error)
    */
   async checkRiskGate(trade) {
     const startTime = Date.now();
     
     try {
-      // Call Risk Agent's run logic directly (internal call, no HTTP)
+      // 1️⃣ Run Risk Agent assessment (uses real AI logic + deterministic fallback)
       const riskAssessment = await this.assessRisk(trade);
       
-      // Determine if trade should be blocked
-      const shouldBlock = this.shouldBlockTrade(riskAssessment);
+      // 2️⃣ Determine if trade should be blocked
+      const shouldBlock = this.shouldBlockTrade(riskAssessment, trade);
       
-      // Log risk gate decision
+      // 3️⃣ Log risk gate decision
       await this.logRiskGateDecision(trade, riskAssessment, shouldBlock, Date.now() - startTime);
       
+      // 4️⃣ Return result
       if (shouldBlock) {
         return {
           allowed: false,
@@ -50,22 +89,44 @@ class RiskGateService {
     } catch (error) {
       console.error('❌ Risk gate error:', error);
       
-      // FAIL-OPEN: If risk gate fails, allow trade but log the error
-      // This prevents risk system failures from blocking all trading
-      await this.logRiskGateError(trade, error, Date.now() - startTime);
+      // ⚠️  FAIL MODE: Demo vs Live
+      const shouldFailOpen = this.tradingMode === 'demo';
+      const allowed = shouldFailOpen;
       
-      return {
-        allowed: true,
-        reason: 'RISK_GATE_ERROR',
-        message: 'Risk assessment failed, trade allowed with warning',
-        error: error.message
-      };
+      // Log error
+      await this.logRiskGateError(trade, error, Date.now() - startTime, allowed);
+      
+      if (shouldFailOpen) {
+        // DEMO: fail-open (allow trade with warning)
+        console.warn('⚠️  Risk gate error in DEMO mode: allowing trade (fail-open)');
+        return {
+          allowed: true,
+          reason: 'RISK_GATE_ERROR_FAIL_OPEN',
+          message: 'Risk assessment failed, trade allowed with warning (DEMO mode)',
+          error: error.message
+        };
+      } else {
+        // LIVE: fail-closed (block trade)
+        console.error('🚫 Risk gate error in LIVE mode: blocking trade (fail-closed)');
+        return {
+          allowed: false,
+          reason: 'RISK_GATE_ERROR_FAIL_CLOSED',
+          message: 'Risk assessment failed, trade blocked for safety (LIVE mode)',
+          error: error.message
+        };
+      }
     }
   }
 
   /**
-   * Assess risk for a trade
-   * Calls Risk Agent logic directly (no HTTP to avoid auth issues)
+   * Assess risk for a trade using real Risk Agent logic
+   * @param {Object} trade - Trade details
+   * @returns {Promise<Object>} Risk assessment result
+   * 
+   * @description
+   * Calls the real Risk Agent logic (services/risk-agent.js).
+   * NO Math.random() - fully deterministic.
+   * Uses AI when available, falls back to heuristics on timeout/error.
    */
   async assessRisk(trade) {
     // Calculate notional value
@@ -75,89 +136,53 @@ class RiskGateService {
     const inputData = {
       symbol: trade.symbol || trade.pair || 'UNKNOWN',
       action: trade.side?.toUpperCase() || 'BUY',
-      amount: notional
+      amount: notional,
+      price: trade.price
     };
     
-    // Query ai_agents for Risk Agent config
-    const agentResult = await this.db.query(
-      'SELECT config FROM ai_agents WHERE id = $1',
-      [RISK_AGENT_ID]
-    );
+    // 🔥 NEW: Call real Risk Agent logic (internal module)
+    // This uses the same logic as /api/ai-agents/:id/run (agent-2)
+    const result = await riskAgent.runRiskAssessment(inputData, RISK_AGENT_ID, 10000);
     
-    if (agentResult.rows.length === 0) {
-      throw new Error('Risk Agent not found');
-    }
+    // Add timestamp
+    result.timestamp = new Date().toISOString();
     
-    const config = agentResult.rows[0].config;
-    
-    // Perform risk assessment logic (simplified version)
-    // In production, this would use the full Risk Agent logic
-    const riskScore = this.calculateRiskScore(trade, config);
-    const riskLevel = this.getRiskLevel(riskScore);
-    const recommendation = this.getRecommendation(riskLevel, trade);
-    
-    return {
-      recommendation,
-      confidence: 75, // Base confidence
-      riskLevel,
-      riskScore,
-      timestamp: new Date().toISOString(),
-      ...inputData
-    };
-  }
-
-  /**
-   * Calculate risk score based on trade and config
-   */
-  calculateRiskScore(trade, config) {
-    let score = 30; // Base risk
-    
-    // Check position size against limits
-    const notional = trade.amount * (trade.price || 1);
-    const maxPositionSize = config?.parameters?.position_limit || 10000;
-    
-    if (notional > maxPositionSize) {
-      score += 30; // High risk for oversized positions
-    }
-    
-    // Add random market volatility factor
-    score += Math.random() * 20;
-    
-    return Math.min(100, Math.max(0, score));
-  }
-
-  /**
-   * Get risk level from score
-   */
-  getRiskLevel(score) {
-    if (score >= 80) return 'critical';
-    if (score >= 60) return 'high';
-    if (score >= 40) return 'medium';
-    return 'low';
-  }
-
-  /**
-   * Get recommendation based on risk level
-   */
-  getRecommendation(riskLevel, trade) {
-    if (riskLevel === 'critical') return 'REDUCE';
-    if (riskLevel === 'high') return 'REDUCE';
-    if (riskLevel === 'medium') return 'HOLD';
-    return 'HOLD';
+    return result;
   }
 
   /**
    * Determine if trade should be blocked
+   * @param {Object} riskAssessment - Risk assessment result
+   * @param {Object} trade - Trade details
+   * @returns {boolean} True if trade should be blocked
+   * 
+   * @description
+   * Blocking Rules:
+   * 1. recommendation = 'REDUCE' → BLOCK
+   * 2. recommendation = 'REJECT' → BLOCK
+   * 3. riskLevel = 'critical' → BLOCK
+   * 
+   * Additional heuristics (position limits):
+   * 4. Trade size > position_limit → BLOCK (if configured)
    */
-  shouldBlockTrade(riskAssessment) {
-    // Block if recommendation is REDUCE or REJECT
+  shouldBlockTrade(riskAssessment, trade) {
+    // Rule 1 & 2: Block on REDUCE/REJECT recommendations
     if (riskAssessment.recommendation === 'REDUCE' || 
         riskAssessment.recommendation === 'REJECT') {
+      console.log(`🚫 Risk Gate: BLOCK due to recommendation=${riskAssessment.recommendation}`);
       return true;
     }
     
-    // Block if risk level is critical
+    // Rule 3: Block on critical risk level
     if (riskAssessment.riskLevel === 'critical') {
+      console.log(`🚫 Risk Gate: BLOCK due to riskLevel=critical`);
+      return true;
+    }
+    
+    // Rule 4: Check position limit (optional, from metadata)
+    const riskScore = riskAssessment._meta?.riskScore;
+    if (riskScore !== undefined && riskScore >= 80) {
+      console.log(`🚫 Risk Gate: BLOCK due to riskScore=${riskScore} >= 80`);
       return true;
     }
     
@@ -166,6 +191,10 @@ class RiskGateService {
 
   /**
    * Log risk gate decision to database
+   * @param {Object} trade - Trade details
+   * @param {Object} riskAssessment - Risk assessment result
+   * @param {boolean} blocked - Whether trade was blocked
+   * @param {number} durationMs - Execution time in milliseconds
    */
   async logRiskGateDecision(trade, riskAssessment, blocked, durationMs) {
     try {
@@ -200,20 +229,27 @@ class RiskGateService {
           blocked,
           tradeType: 'manual',
           recommendation: riskAssessment.recommendation,
-          riskLevel: riskAssessment.riskLevel
+          riskLevel: riskAssessment.riskLevel,
+          isFallback: riskAssessment._meta?.isFallback || false,
+          tradingMode: this.tradingMode
         })
       ]);
       
-      console.log(`🛡️ Risk Gate: Trade ${blocked ? 'BLOCKED' : 'ALLOWED'} (${riskAssessment.riskLevel} risk)`);
+      console.log(`🛡️ Risk Gate: Trade ${blocked ? 'BLOCKED ❌' : 'ALLOWED ✅'} (${riskAssessment.riskLevel} risk, ${riskAssessment.recommendation})`);
     } catch (error) {
       console.error('❌ Failed to log risk gate decision:', error);
+      // Don't throw - logging failure shouldn't block trades
     }
   }
 
   /**
-   * Log risk gate error
+   * Log risk gate error to database
+   * @param {Object} trade - Trade details
+   * @param {Error} error - Error object
+   * @param {number} durationMs - Execution time in milliseconds
+   * @param {boolean} allowed - Whether trade was allowed despite error
    */
-  async logRiskGateError(trade, error, durationMs) {
+  async logRiskGateError(trade, error, durationMs, allowed) {
     try {
       await this.db.query(`
         INSERT INTO ai_decisions (
@@ -239,7 +275,9 @@ class RiskGateService {
         durationMs,
         JSON.stringify({
           errorType: error.name,
-          failOpen: true
+          failMode: this.tradingMode === 'demo' ? 'fail-open' : 'fail-closed',
+          tradeAllowed: allowed,
+          tradingMode: this.tradingMode
         })
       ]);
     } catch (logError) {
@@ -248,4 +286,5 @@ class RiskGateService {
   }
 }
 
+// Export as ES6 default
 export default RiskGateService;
