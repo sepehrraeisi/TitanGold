@@ -4,6 +4,7 @@ import { query } from '../database/db.js';
 import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigDefaults.js';
 
 import { aiService } from '../services/ai.js';
+import * as riskAgent from '../services/risk-agent.js';
 
 const router = express.Router();
 
@@ -417,85 +418,84 @@ Return ONLY JSON with this schema:
     }
 
     // Agent 2: Risk Management
+    // 🔥 SINGLE SOURCE OF TRUTH: Use shared risk-agent.js module
     if (agentId === 'agent-2') {
       try {
-        const prompt = `
-You are the Risk Management Agent in the TitanGold trading system.
-Assess the risk profile of ${symbol || 'the asset'}.
-
-Return ONLY JSON:
-{
-  "recommendation": "REDUCE" | "HOLD" | "INCREASE",
-  "confidence",
-  "riskLevel": "low" | "medium" | "high"
-}
-`;
-        // Timeout wrapper (30s)
-        const raw = await withTimeout(
-          aiService.askArtemis(prompt),
-          30000,
-          'Agent-2 timeout after 30s'
+        // Prepare input for Risk Agent
+        const inputData = {
+          symbol: symbol || 'PORTFOLIO',
+          action: req.body.action || 'ASSESS',
+          amount: req.body.amount || 0,
+          price: req.body.price
+        };
+        
+        // Call shared Risk Agent logic (10s timeout)
+        const riskResult = await riskAgent.runRiskAssessment(inputData, originalId, 10000);
+        
+        // Wrap result for API response
+        const result = {
+          agentId: originalId,
+          function: funcName || 'runRiskAssessment',
+          recommendation: riskResult.recommendation,
+          confidence: riskResult.confidence,
+          riskLevel: riskResult.riskLevel,
+          symbol: riskResult.symbol,
+          _meta: riskResult._meta // ✅ Includes isFallback, executionTime, source
+        };
+        
+        // Cache for 30s
+        setCache(cacheKey, result, 30000);
+        
+        // 🔥 Log decision and return
+        const executionTime = riskResult._meta.executionTime;
+        const wasSuccessful = !riskResult._meta.isFallback;
+        
+        return logAndReturn(
+          res,
+          originalId,
+          req.user?.id,
+          'risk_assessment',
+          { symbol: inputData.symbol, action: inputData.action, amount: inputData.amount },
+          result,
+          executionTime,
+          false, // isCached
+          wasSuccessful
         );
-        const parsed = safeParseJson(raw);
-        if (parsed) {
-          const result = {
-            agentId: id,
-            function: funcName || 'runRiskAssessment',
-            recommendation: parsed.recommendation || 'HOLD',
-            confidence: parsed.confidence ?? 60,
-            riskLevel: parsed.riskLevel || 'medium',
-            symbol,
-            _meta: { isFallback: false } // ✅ Track success for cache
-          };
-          
-          // Cache for 30s
-          setCache(cacheKey, result, 30000);
-          
-          // 🔥 Log decision and return
-          const executionTime = Date.now() - startTime;
-          return logAndReturn(
-            res,
-            originalId,
-            req.user?.id,
-            'risk_assessment',
-            { symbol, action: req.body.action, amount: req.body.amount },
-            result,
-            executionTime,
-            false, // isCached
-            true   // wasSuccessful (parsed successfully)
-          );
-        }
+        
       } catch (e) {
-        console.error('Agent-2 AI error:', e);
-        if (e.message?.includes('timeout')) {
-          return sendError(res, 'AI_TIMEOUT', 'Risk Management agent timed out', 504);
-        }
+        console.error('Agent-2 error:', e);
+        
+        // Return error response
+        const executionTime = Date.now() - startTime;
+        const fallbackResult = {
+          agentId: originalId,
+          function: funcName || 'runRiskAssessment',
+          recommendation: 'HOLD',
+          confidence: 50,
+          riskLevel: 'medium',
+          symbol: symbol || 'PORTFOLIO',
+          _meta: { 
+            isFallback: true,
+            executionTime,
+            source: 'error',
+            error: e.message
+          }
+        };
+        
+        setCache(cacheKey, fallbackResult, 30000);
+        
+        return logAndReturn(
+          res,
+          originalId,
+          req.user?.id,
+          'risk_assessment',
+          { symbol, action: req.body.action, amount: req.body.amount },
+          fallbackResult,
+          executionTime,
+          false, // isCached
+          false  // wasSuccessful
+        );
       }
-
-      const fallback2 = {
-        agentId: id,
-        function: funcName || 'runRiskAssessment',
-        recommendation: 'HOLD',
-        confidence: 60,
-        riskLevel: 'medium',
-        symbol,
-        _meta: { isFallback: true } // ✅ Track fallback for cache
-      };
-      setCache(cacheKey, fallback2, 30000);
-      
-      // 🔥 Log fallback decision
-      const executionTime = Date.now() - startTime;
-      return logAndReturn(
-        res,
-        originalId,
-        req.user?.id,
-        'risk_assessment',
-        { symbol, action: req.body.action, amount: req.body.amount },
-        fallback2,
-        executionTime,
-        false, // isCached
-        false  // wasSuccessful (fallback = failure)
-      );
     }
 
     // Agent 15: Timing

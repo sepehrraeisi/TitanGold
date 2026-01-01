@@ -157,19 +157,39 @@ class RiskGateService {
    * @returns {boolean} True if trade should be blocked
    * 
    * @description
-   * Blocking Rules:
-   * 1. recommendation = 'REDUCE' → BLOCK
-   * 2. recommendation = 'REJECT' → BLOCK
-   * 3. riskLevel = 'critical' → BLOCK
+   * Deterministic Blocking Rules (checked in order):
    * 
-   * Additional heuristics (position limits):
-   * 4. Trade size > position_limit → BLOCK (if configured)
+   * Rule 1: recommendation = 'REDUCE' → BLOCK
+   *   - Risk Agent recommends reducing exposure
+   *   
+   * Rule 2: recommendation = 'REJECT' → BLOCK
+   *   - Risk Agent explicitly rejects the trade
+   *   
+   * Rule 3: riskLevel = 'critical' → BLOCK
+   *   - Risk level is at critical threshold
+   *   
+   * Rule 4: riskScore >= 80 → BLOCK (if available in _meta)
+   *   - Numeric risk score exceeds critical threshold
+   * 
+   * Policy:
+   * - DEMO mode: fail-open (allow on error)
+   * - LIVE mode: fail-closed (block on error)
+   * 
+   * All blocking decisions are logged with:
+   * - blocked: true/false
+   * - blockingRules: array of triggered rules
+   * - mode: demo/live
+   * - isFallback: true if AI failed
    */
   shouldBlockTrade(riskAssessment, trade) {
     // Rule 1 & 2: Block on REDUCE/REJECT recommendations
-    if (riskAssessment.recommendation === 'REDUCE' || 
-        riskAssessment.recommendation === 'REJECT') {
-      console.log(`🚫 Risk Gate: BLOCK due to recommendation=${riskAssessment.recommendation}`);
+    if (riskAssessment.recommendation === 'REDUCE') {
+      console.log(`🚫 Risk Gate: BLOCK due to recommendation=REDUCE`);
+      return true;
+    }
+    
+    if (riskAssessment.recommendation === 'REJECT') {
+      console.log(`🚫 Risk Gate: BLOCK due to recommendation=REJECT`);
       return true;
     }
     
@@ -179,13 +199,15 @@ class RiskGateService {
       return true;
     }
     
-    // Rule 4: Check position limit (optional, from metadata)
+    // Rule 4: Check numeric risk score (if available)
     const riskScore = riskAssessment._meta?.riskScore;
     if (riskScore !== undefined && riskScore >= 80) {
       console.log(`🚫 Risk Gate: BLOCK due to riskScore=${riskScore} >= 80`);
       return true;
     }
     
+    // All rules passed → ALLOW
+    console.log(`✅ Risk Gate: ALLOW (recommendation=${riskAssessment.recommendation}, riskLevel=${riskAssessment.riskLevel})`);
     return false;
   }
 
@@ -195,9 +217,35 @@ class RiskGateService {
    * @param {Object} riskAssessment - Risk assessment result
    * @param {boolean} blocked - Whether trade was blocked
    * @param {number} durationMs - Execution time in milliseconds
+   * 
+   * @description
+   * Logs complete risk gate decision with metadata:
+   * - blocked: true/false
+   * - mode: demo/live
+   * - recommendation: REDUCE/HOLD/INCREASE
+   * - riskLevel: low/medium/high/critical
+   * - isFallback: true if AI failed
+   * - cached: false (risk gate never uses cache)
+   * - riskScore: numeric risk score (if available)
+   * - blockingRules: array of rules that triggered blocking
    */
   async logRiskGateDecision(trade, riskAssessment, blocked, durationMs) {
     try {
+      // Determine which rules triggered blocking (for audit)
+      const blockingRules = [];
+      if (blocked) {
+        if (riskAssessment.recommendation === 'REDUCE' || riskAssessment.recommendation === 'REJECT') {
+          blockingRules.push(`recommendation=${riskAssessment.recommendation}`);
+        }
+        if (riskAssessment.riskLevel === 'critical') {
+          blockingRules.push('riskLevel=critical');
+        }
+        const riskScore = riskAssessment._meta?.riskScore;
+        if (riskScore !== undefined && riskScore >= 80) {
+          blockingRules.push(`riskScore=${riskScore}>=80`);
+        }
+      }
+      
       await this.db.query(`
         INSERT INTO ai_decisions (
           agent_id,
@@ -227,15 +275,21 @@ class RiskGateService {
         durationMs,
         JSON.stringify({
           blocked,
-          tradeType: 'manual',
+          mode: this.tradingMode, // demo or live
           recommendation: riskAssessment.recommendation,
           riskLevel: riskAssessment.riskLevel,
           isFallback: riskAssessment._meta?.isFallback || false,
-          tradingMode: this.tradingMode
+          cached: false, // risk gate never uses cache
+          riskScore: riskAssessment._meta?.riskScore,
+          blockingRules: blockingRules.length > 0 ? blockingRules : undefined,
+          tradeType: 'manual'
         })
       ]);
       
-      console.log(`🛡️ Risk Gate: Trade ${blocked ? 'BLOCKED ❌' : 'ALLOWED ✅'} (${riskAssessment.riskLevel} risk, ${riskAssessment.recommendation})`);
+      console.log(`🛡️ Risk Gate [${this.tradingMode.toUpperCase()}]: Trade ${blocked ? 'BLOCKED ❌' : 'ALLOWED ✅'} (${riskAssessment.riskLevel} risk, ${riskAssessment.recommendation}, ${riskAssessment._meta?.isFallback ? 'fallback' : 'AI'})`);
+      if (blocked && blockingRules.length > 0) {
+        console.log(`   Blocking Rules: ${blockingRules.join('; ')}`);
+      }
     } catch (error) {
       console.error('❌ Failed to log risk gate decision:', error);
       // Don't throw - logging failure shouldn't block trades
