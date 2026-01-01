@@ -34,7 +34,8 @@ const OrderBookWidget: React.FC<OrderBookWidgetProps> = ({ pair, onPriceSelect }
 
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.bids && data.asks) {
+                    console.log('📊 Order book data received:', { bidsCount: data.bids?.length, asksCount: data.asks?.length, demo: data.demo });
+                    if (data.bids && data.asks && data.bids.length > 0 && data.asks.length > 0) {
                         // Process bids (buy orders) - highest price first
                         const processedBids = data.bids
                             .slice(0, 15)
