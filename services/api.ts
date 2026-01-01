@@ -25070,3 +25070,56 @@ export const sendAgentControlCommand = async (agentId: string, command: string):
     
     console.log('✅ Command executed successfully');
 };
+
+/**
+ * Fetch current trading mode (demo or live)
+ */
+export const fetchTradingMode = async (): Promise<{ mode: 'demo' | 'live' }> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) throw new Error('Authentication required');
+    
+    const response = await fetch('/api/settings/trading-mode', {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    
+    if (!response.ok) {
+        throw new Error('Failed to fetch trading mode');
+    }
+    
+    return await response.json();
+};
+
+/**
+ * Fetch wallet balance (demo or live)
+ */
+export const fetchWalletBalance = async (): Promise<{ mode: 'demo' | 'live', balances: { USDT: number, BTC: number, ETH: number }, updatedAt: string }> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) throw new Error('Authentication required');
+    
+    const response = await fetch('/api/wallet', {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    
+    if (!response.ok) {
+        throw new Error('Failed to fetch wallet balance');
+    }
+    
+    return await response.json();
+};
+
+/**
+ * Reset demo wallet to default values
+ */
+export const resetDemoWallet = async (): Promise<void> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) throw new Error('Authentication required');
+    
+    const response = await fetch('/api/wallet/demo/reset', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    
+    if (!response.ok) {
+        throw new Error('Failed to reset demo wallet');
+    }
+};
