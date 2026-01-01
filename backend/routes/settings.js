@@ -4,6 +4,127 @@ import { authenticate, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// ============================================================================
+// Trading Mode Endpoints (Per-User, DB-Backed)
+// ============================================================================
+
+/**
+ * GET /api/settings/trading-mode
+ * Get current user's trading mode (demo | live)
+ */
+router.get('/trading-mode', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get trading mode from user_preferences
+    const result = await db.query(
+      `SELECT preferences->'trading'->>'mode' as mode
+       FROM user_preferences
+       WHERE user_id = $1 AND is_deleted = FALSE`,
+      [userId]
+    );
+    
+    // Default to 'demo' if not set
+    const mode = result.rows[0]?.mode || 'demo';
+    
+    res.json({ 
+      mode,
+      userId,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching trading mode:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch trading mode',
+      message: error.message 
+    });
+  }
+});
+
+/**
+ * POST /api/settings/trading-mode
+ * Set current user's trading mode (demo | live)
+ * CRITICAL: DB-backed to survive PM2 cluster restarts
+ */
+router.post('/trading-mode', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { mode } = req.body;
+    
+    // Validate mode
+    if (mode !== 'demo' && mode !== 'live') {
+      return res.status(400).json({ 
+        error: 'Invalid mode',
+        message: 'Mode must be "demo" or "live"'
+      });
+    }
+    
+    // Update user_preferences with new mode
+    await db.query(
+      `INSERT INTO user_preferences (user_id, preferences, sync_source)
+       VALUES ($1, jsonb_build_object('trading', jsonb_build_object('mode', $2)), 'web')
+       ON CONFLICT (user_id)
+       DO UPDATE SET 
+         preferences = jsonb_set(
+           COALESCE(user_preferences.preferences, '{}'::jsonb),
+           '{trading,mode}',
+           to_jsonb($2::text)
+         ),
+         sync_source = 'web',
+         updated_at = NOW()`,
+      [userId, mode]
+    );
+    
+    // If switching to demo, initialize demo wallet with defaults
+    if (mode === 'demo') {
+      const defaultBalances = { USDT: 10000, BTC: 0, ETH: 0 };
+      
+      // Check if demo wallet already exists
+      const walletResult = await db.query(
+        `SELECT preferences->'wallet'->'demo'->>'balances' as balances
+         FROM user_preferences
+         WHERE user_id = $1 AND is_deleted = FALSE`,
+        [userId]
+      );
+      
+      // Only initialize if not already set
+      if (!walletResult.rows[0]?.balances) {
+        await db.query(
+          `UPDATE user_preferences
+           SET preferences = jsonb_set(
+             jsonb_set(
+               COALESCE(preferences, '{}'::jsonb),
+               '{wallet}',
+               COALESCE(preferences->'wallet', '{}'::jsonb)
+             ),
+             '{wallet,demo,balances}',
+             $2::jsonb
+           ),
+           updated_at = NOW()
+           WHERE user_id = $1`,
+          [userId, JSON.stringify(defaultBalances)]
+        );
+        
+        console.log(`✅ Demo wallet initialized for user ${userId}: ${JSON.stringify(defaultBalances)}`);
+      }
+    }
+    
+    console.log(`✅ Trading mode updated for user ${userId}: ${mode}`);
+    
+    res.json({ 
+      mode,
+      message: `Trading mode switched to ${mode}`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error updating trading mode:', error);
+    res.status(500).json({ 
+      error: 'Failed to update trading mode',
+      message: error.message 
+    });
+  }
+});
+
 /**
  * GET /api/settings
  * Get all system settings (public + authenticated)

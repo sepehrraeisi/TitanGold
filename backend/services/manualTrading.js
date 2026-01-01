@@ -786,6 +786,56 @@ class ManualTradingService {
    */
   async getBalance(userId) {
     try {
+      // Get trading mode from user_preferences
+      const modeResult = await query(
+        `SELECT preferences->'trading'->>'mode' as mode
+         FROM user_preferences
+         WHERE user_id = $1 AND is_deleted = FALSE`,
+        [userId]
+      );
+      
+      const mode = modeResult.rows[0]?.mode || 'demo';
+      console.log(`💰 getBalance for user ${userId}: mode=${mode}`);
+      
+      // If demo mode, get from user_preferences
+      if (mode === 'demo') {
+        const demoResult = await query(
+          `SELECT preferences->'wallet'->'demo'->>'balances' as balances
+           FROM user_preferences
+           WHERE user_id = $1 AND is_deleted = FALSE`,
+          [userId]
+        );
+        
+        const balances = demoResult.rows[0]?.balances;
+        if (balances) {
+          const parsed = JSON.parse(balances);
+          console.log(`✅ Demo balance fetched:`, parsed);
+          return parsed;
+        }
+        
+        // Initialize demo wallet with defaults
+        const defaults = { USDT: 10000, BTC: 0, ETH: 0 };
+        await query(
+          `UPDATE user_preferences
+           SET preferences = jsonb_set(
+             jsonb_set(
+               COALESCE(preferences, '{}'::jsonb),
+               '{wallet}',
+               COALESCE(preferences->'wallet', '{}'::jsonb)
+             ),
+             '{wallet,demo,balances}',
+             $2::jsonb
+           ),
+           updated_at = NOW()
+           WHERE user_id = $1`,
+          [userId, JSON.stringify(defaults)]
+        );
+        
+        console.log(`✅ Demo wallet initialized for user ${userId}`);
+        return defaults;
+      }
+      
+      // Live mode: try to get from user_balances table (legacy)
       const result = await query(
         `SELECT * FROM user_balances WHERE user_id = $1`,
         [userId]

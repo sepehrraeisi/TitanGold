@@ -1,8 +1,216 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import { mexcService } from '../services/mexc.js';
 
 const router = express.Router();
+
+// ============================================================================
+// Helper Functions for Trading Mode & Demo Wallet
+// ============================================================================
+
+/**
+ * Get user's current trading mode (demo | live)
+ */
+async function getUserTradingMode(userId) {
+  const result = await query(
+    `SELECT preferences->'trading'->>'mode' as mode
+     FROM user_preferences
+     WHERE user_id = $1 AND is_deleted = FALSE`,
+    [userId]
+  );
+  
+  return result.rows[0]?.mode || 'demo'; // Default to demo
+}
+
+/**
+ * Get demo wallet balances from user_preferences
+ */
+async function getDemoWalletBalances(userId) {
+  const result = await query(
+    `SELECT preferences->'wallet'->'demo'->>'balances' as balances
+     FROM user_preferences
+     WHERE user_id = $1 AND is_deleted = FALSE`,
+    [userId]
+  );
+  
+  const balances = result.rows[0]?.balances;
+  if (balances) {
+    return JSON.parse(balances);
+  }
+  
+  // Initialize with defaults if not found
+  const defaults = { USDT: 10000, BTC: 0, ETH: 0 };
+  await setDemoWalletBalances(userId, defaults);
+  return defaults;
+}
+
+/**
+ * Set demo wallet balances in user_preferences
+ */
+async function setDemoWalletBalances(userId, balances) {
+  await query(
+    `INSERT INTO user_preferences (user_id, preferences, sync_source)
+     VALUES ($1, jsonb_build_object('wallet', jsonb_build_object('demo', jsonb_build_object('balances', $2::jsonb))), 'web')
+     ON CONFLICT (user_id)
+     DO UPDATE SET 
+       preferences = jsonb_set(
+         jsonb_set(
+           COALESCE(user_preferences.preferences, '{}'::jsonb),
+           '{wallet}',
+           COALESCE(user_preferences.preferences->'wallet', '{}'::jsonb)
+         ),
+         '{wallet,demo,balances}',
+         $2::jsonb
+       ),
+       sync_source = 'web',
+       updated_at = NOW()`,
+    [userId, JSON.stringify(balances)]
+  );
+}
+
+/**
+ * Get real wallet balances from MEXC
+ */
+async function getRealWalletBalances(userId) {
+  try {
+    const mexcBalance = await mexcService.getBalance(userId);
+    return mexcBalance;
+  } catch (error) {
+    console.error('Error fetching MEXC balance:', error);
+    // Return empty balances if MEXC not configured
+    return { USDT: 0, BTC: 0, ETH: 0 };
+  }
+}
+
+// ============================================================================
+// Wallet API Endpoints
+// ============================================================================
+
+/**
+ * GET /api/wallet
+ * Get wallet balance (demo or live based on user's trading mode)
+ */
+router.get('/', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get trading mode
+    const mode = await getUserTradingMode(userId);
+    
+    // Get balances based on mode
+    let balances;
+    if (mode === 'demo') {
+      balances = await getDemoWalletBalances(userId);
+    } else {
+      balances = await getRealWalletBalances(userId);
+    }
+    
+    res.json({
+      mode,
+      balances,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching wallet:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch wallet',
+      message: error.message 
+    });
+  }
+});
+
+/**
+ * POST /api/wallet/reset
+ * Reset demo wallet to default balances (demo mode only)
+ */
+router.post('/reset', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get trading mode
+    const mode = await getUserTradingMode(userId);
+    
+    // Only allow reset in demo mode
+    if (mode !== 'demo') {
+      return res.status(400).json({ 
+        error: 'Invalid mode',
+        message: 'Can only reset demo wallet. Switch to demo mode first.'
+      });
+    }
+    
+    // Reset to defaults
+    const defaults = { USDT: 10000, BTC: 0, ETH: 0 };
+    await setDemoWalletBalances(userId, defaults);
+    
+    console.log(`✅ Demo wallet reset for user ${userId}`);
+    
+    res.json({
+      message: 'Demo wallet reset to defaults',
+      balances: defaults,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error resetting demo wallet:', error);
+    res.status(500).json({ 
+      error: 'Failed to reset demo wallet',
+      message: error.message 
+    });
+  }
+});
+
+/**
+ * POST /api/wallet/add-funds
+ * Add funds to demo wallet (demo mode only)
+ */
+router.post('/add-funds', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { asset, amount } = req.body;
+    
+    // Validate input
+    if (!asset || !amount || amount <= 0) {
+      return res.status(400).json({ 
+        error: 'Invalid input',
+        message: 'Asset and positive amount are required'
+      });
+    }
+    
+    // Get trading mode
+    const mode = await getUserTradingMode(userId);
+    
+    // Only allow in demo mode
+    if (mode !== 'demo') {
+      return res.status(400).json({ 
+        error: 'Invalid mode',
+        message: 'Can only add funds in demo mode'
+      });
+    }
+    
+    // Get current balances
+    const balances = await getDemoWalletBalances(userId);
+    
+    // Add funds
+    balances[asset] = (balances[asset] || 0) + amount;
+    
+    // Save updated balances
+    await setDemoWalletBalances(userId, balances);
+    
+    console.log(`✅ Added ${amount} ${asset} to demo wallet for user ${userId}`);
+    
+    res.json({
+      message: `Added ${amount} ${asset} to demo wallet`,
+      balances,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error adding demo funds:', error);
+    res.status(500).json({ 
+      error: 'Failed to add funds',
+      message: error.message 
+    });
+  }
+});
 
 // Get full wallet data for current user
 router.get('/data', authenticate, async (req, res) => {
