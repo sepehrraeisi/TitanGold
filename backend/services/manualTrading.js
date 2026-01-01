@@ -607,7 +607,11 @@ class ManualTradingService {
     const { side, amountPercent, stopLossPercent, takeProfitPercent, pair = 'BTC/USDT' } = order;
 
     try {
-      // Get current price and balance from MEXC
+      // 🔥 Get user's trading mode (per-user, DB-backed)
+      const mode = await this.getUserTradingMode(userId);
+      console.log(`🔄 executeQuickTrade for user ${userId}: mode=${mode}, side=${side}, pair=${pair}`);
+      
+      // Get current price and balance
       const ticker = await mexcService.fetchTicker(userId, pair);
       if (!ticker) {
         throw new Error('Pair not found or MEXC connection failed');
@@ -640,13 +644,13 @@ class ManualTradingService {
         throw new Error(riskCheck.message || 'Trade blocked by risk management');
       }
 
-      // Execute trade (demo mode for now - can be extended to real trading)
-      const mode = process.env.TRADING_MODE || 'demo';
+      // 🔥 Execute trade based on user's mode
       let executedPrice = price;
       let orderId = null;
 
       if (mode === 'live') {
-        // Real execution via MEXC
+        // ⚠️ LIVE MODE: Real execution via MEXC
+        console.log(`🔴 LIVE MODE: Executing real trade on MEXC`);
         const mexcOrder = await mexcService.createOrder(
           userId,
           pair,
@@ -657,8 +661,10 @@ class ManualTradingService {
         orderId = mexcOrder.id;
         executedPrice = mexcOrder.price || price;
       } else {
-        // Demo mode - simulate execution
+        // ✅ DEMO MODE: Simulate execution (NO MEXC call)
+        console.log(`🟢 DEMO MODE: Simulating trade (no MEXC call)`);
         executedPrice = price * (1 + (Math.random() * 0.001 - 0.0005)); // Small price variation
+        orderId = `DEMO-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       }
 
       // Calculate PnL (for demo, simulate)
@@ -689,62 +695,45 @@ class ManualTradingService {
         ]
       );
 
-      // Update balance (for demo mode)
+      // 🔥 Update balance (DEMO MODE ONLY - update demo wallet in user_preferences)
       if (mode === 'demo') {
-        // Get current balance
+        // Get current demo balance
         const currentBalance = await this.getBalance(userId);
         
+        // Calculate new balances
+        const newBalances = { ...currentBalance };
+        
         if (side === 'buy') {
-          const newQuoteBalance = Math.max(0, (currentBalance[quoteAsset || 'USDT'] || 0) - notional);
-          const newBaseBalance = (currentBalance[baseAsset] || 0) + amount;
-          
-          // Update quote asset balance
-          const quoteCol = (quoteAsset || 'USDT').toUpperCase();
-          if (quoteCol === 'USDT' || quoteCol === 'BTC' || quoteCol === 'ETH') {
-            await query(
-              `UPDATE user_balances 
-               SET ${quoteCol} = $1 
-               WHERE user_id = $2`,
-              [newQuoteBalance, userId]
-            );
-          }
-          
-          // Update base asset balance
-          const baseCol = baseAsset.toUpperCase();
-          if (baseCol === 'USDT' || baseCol === 'BTC' || baseCol === 'ETH') {
-            await query(
-              `UPDATE user_balances 
-               SET ${baseCol} = COALESCE(${baseCol}, 0) + $1 
-               WHERE user_id = $2`,
-              [amount, userId]
-            );
-          }
+          // Deduct quote asset (e.g., USDT)
+          newBalances[quoteAsset || 'USDT'] = Math.max(0, (currentBalance[quoteAsset || 'USDT'] || 0) - notional);
+          // Add base asset (e.g., BTC)
+          newBalances[baseAsset] = (currentBalance[baseAsset] || 0) + amount;
         } else {
-          const newBaseBalance = Math.max(0, (currentBalance[baseAsset] || 0) - amount);
-          const newQuoteBalance = (currentBalance[quoteAsset || 'USDT'] || 0) + notional;
-          
-          // Update base asset balance
-          const baseCol = baseAsset.toUpperCase();
-          if (baseCol === 'USDT' || baseCol === 'BTC' || baseCol === 'ETH') {
-            await query(
-              `UPDATE user_balances 
-               SET ${baseCol} = $1 
-               WHERE user_id = $2`,
-              [newBaseBalance, userId]
-            );
-          }
-          
-          // Update quote asset balance
-          const quoteCol = (quoteAsset || 'USDT').toUpperCase();
-          if (quoteCol === 'USDT' || quoteCol === 'BTC' || quoteCol === 'ETH') {
-            await query(
-              `UPDATE user_balances 
-               SET ${quoteCol} = COALESCE(${quoteCol}, 0) + $1 
-               WHERE user_id = $2`,
-              [notional, userId]
-            );
-          }
+          // side === 'sell'
+          // Add quote asset
+          newBalances[quoteAsset || 'USDT'] = (currentBalance[quoteAsset || 'USDT'] || 0) + notional;
+          // Deduct base asset
+          newBalances[baseAsset] = Math.max(0, (currentBalance[baseAsset] || 0) - amount);
         }
+        
+        // Update demo wallet in user_preferences
+        await query(
+          `UPDATE user_preferences
+           SET preferences = jsonb_set(
+             jsonb_set(
+               COALESCE(preferences, '{}'::jsonb),
+               '{wallet}',
+               COALESCE(preferences->'wallet', '{}'::jsonb)
+             ),
+             '{wallet,demo,balances}',
+             $2::jsonb
+           ),
+           updated_at = NOW()
+           WHERE user_id = $1`,
+          [userId, JSON.stringify(newBalances)]
+        );
+        
+        console.log(`✅ Demo wallet updated for user ${userId}:`, newBalances);
       }
 
       // Return updated page data
@@ -782,11 +771,10 @@ class ManualTradingService {
   }
 
   /**
-   * Get user balance
+   * Get user's trading mode (demo or live)
    */
-  async getBalance(userId) {
+  async getUserTradingMode(userId) {
     try {
-      // Get trading mode from user_preferences
       const modeResult = await query(
         `SELECT preferences->'trading'->>'mode' as mode
          FROM user_preferences
@@ -795,6 +783,21 @@ class ManualTradingService {
       );
       
       const mode = modeResult.rows[0]?.mode || 'demo';
+      console.log(`🎯 getUserTradingMode for user ${userId}: mode=${mode}`);
+      return mode;
+    } catch (error) {
+      console.warn('⚠️ Error getting trading mode, defaulting to demo:', error.message);
+      return 'demo';
+    }
+  }
+
+  /**
+   * Get user balance
+   */
+  async getBalance(userId) {
+    try {
+      // Get trading mode from user_preferences
+      const mode = await this.getUserTradingMode(userId);
       console.log(`💰 getBalance for user ${userId}: mode=${mode}`);
       
       // If demo mode, get from user_preferences
@@ -882,6 +885,9 @@ class ManualTradingService {
     try {
       const { type, side, pair, amount, price, stopPrice, limitPrice } = order;
 
+      // 🎯 Get user's trading mode
+      const mode = await this.getUserTradingMode(userId);
+
       // Determine order type for MEXC
       let mexcOrderType = 'limit';
       if (type === 'market') {
@@ -907,24 +913,38 @@ class ManualTradingService {
         throw new Error(riskCheck.message || 'Trade blocked by risk management');
       }
 
-      // Execute order via MEXC
       let mexcOrder;
-      if (mexcOrderType === 'market') {
-        mexcOrder = await mexcService.createOrder(userId, pair, 'market', side, amount);
-      } else if (mexcOrderType === 'limit') {
-        mexcOrder = await mexcService.createOrder(userId, pair, 'limit', side, amount, price);
-      } else if (mexcOrderType === 'stop-limit') {
-        // For stop-limit, use stopPrice as trigger and limitPrice as limit
-        mexcOrder = await mexcService.createOrder(
-          userId,
-          pair,
-          'stop-limit',
-          side,
-          amount,
-          limitPrice || price,
-          undefined,
-          { stopPrice }
-        );
+      
+      if (mode === 'live') {
+        // 🚨 LIVE MODE: Execute order via MEXC
+        if (mexcOrderType === 'market') {
+          mexcOrder = await mexcService.createOrder(userId, pair, 'market', side, amount);
+        } else if (mexcOrderType === 'limit') {
+          mexcOrder = await mexcService.createOrder(userId, pair, 'limit', side, amount, price);
+        } else if (mexcOrderType === 'stop-limit') {
+          // For stop-limit, use stopPrice as trigger and limitPrice as limit
+          mexcOrder = await mexcService.createOrder(
+            userId,
+            pair,
+            'stop-limit',
+            side,
+            amount,
+            limitPrice || price,
+            undefined,
+            { stopPrice }
+          );
+        }
+      } else {
+        // 🎮 DEMO MODE: Simulate order execution
+        const executedPrice = price || stopPrice || limitPrice || 0;
+        mexcOrder = {
+          id: `DEMO-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          status: 'closed',
+          price: executedPrice,
+          timestamp: Date.now(),
+          mode: 'demo'
+        };
+        console.log('🎮 [DEMO MODE] Simulated advanced order:', mexcOrder);
       }
 
       // Save order to database
@@ -962,14 +982,22 @@ class ManualTradingService {
    */
   async getOpenOrders(userId, pair = null) {
     try {
-      // Try to fetch from MEXC first (real-time data)
-      try {
-        const mexcOrders = await mexcService.fetchOpenOrders(userId, pair || undefined);
-        if (mexcOrders && mexcOrders.length > 0) {
-          return mexcOrders;
+      // 🎯 Get user's trading mode
+      const mode = await this.getUserTradingMode(userId);
+
+      if (mode === 'live') {
+        // 🚨 LIVE MODE: Try to fetch from MEXC first (real-time data)
+        try {
+          const mexcOrders = await mexcService.fetchOpenOrders(userId, pair || undefined);
+          if (mexcOrders && mexcOrders.length > 0) {
+            return mexcOrders;
+          }
+        } catch (mexcError) {
+          console.warn('⚠️ Could not fetch open orders from MEXC, falling back to database:', mexcError.message);
         }
-      } catch (mexcError) {
-        console.warn('⚠️ Could not fetch open orders from MEXC, falling back to database:', mexcError.message);
+      } else {
+        // 🎮 DEMO MODE: Only use database
+        console.log('🎮 [DEMO MODE] Fetching open orders from database only');
       }
 
       // Fallback to database
