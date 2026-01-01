@@ -148,6 +148,8 @@ class TradingEngine {
         this.activeTrades = new Map(); // tradeId -> Trade
         this.maxConcurrentTrades = 20;
         this.virtualWallet = new VirtualWallet(); // Virtual wallet for demo mode
+        this._portfolioCache = null; // Cache for portfolio value
+        this._portfolioCacheTime = 0; // Cache timestamp
         this.config = {
             enabled: true,
             mode: 'demo', // Will be synced with Artemis mode
@@ -1273,14 +1275,26 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
 
     async getPortfolioValue() {
         try {
+            // Cache for 60 seconds to reduce DB load
+            const now = Date.now();
+            if (this._portfolioCache && (now - this._portfolioCacheTime) < 60000) {
+                return this._portfolioCache;
+            }
+            
             // Get total portfolio value from database
             const result = await query(
                 'SELECT SUM(balance_usd) as total FROM portfolios WHERE user_id IS NULL'
             );
-            return parseFloat(result.rows[0]?.total || 10000); // Default $10k
+            const value = parseFloat(result.rows[0]?.total || 10000); // Default $10k
+            
+            // Update cache
+            this._portfolioCache = value;
+            this._portfolioCacheTime = now;
+            
+            return value;
         } catch (error) {
             console.error('Error getting portfolio value:', error);
-            return 10000; // Default
+            return this._portfolioCache || 10000; // Return cached or default
         }
     }
 
