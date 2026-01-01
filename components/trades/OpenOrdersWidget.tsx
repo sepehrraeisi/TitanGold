@@ -176,7 +176,9 @@ const OpenOrdersWidget: React.FC<OpenOrdersWidgetProps> = ({ pair, onCancel }) =
                             <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div>
                                     <span className="text-gray-400">{t('amount') || 'Amount'}: </span>
-                                    <span className="text-gray-300">{order.amount.toFixed(4)}</span>
+                                    <span className="text-gray-300">
+                                        {typeof order.amount === 'number' ? order.amount.toFixed(4) : '0.0000'}
+                                    </span>
                                 </div>
                                 {order.price && (
                                     <div>

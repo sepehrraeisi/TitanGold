@@ -99,13 +99,15 @@ const TradeHistoryWidget: React.FC<TradeHistoryWidgetProps> = ({ pair, limit = 5
             ['Date', 'Pair', 'Side', 'Price', 'Amount', 'Total', 'PnL', 'PnL %', 'Status'].join(','),
             ...filteredTrades.map(t => {
                 const dateStr = t.executedAt ? new Date(t.executedAt).toISOString() : '--';
+                const price = typeof t.price === 'number' ? t.price : 0;
+                const amount = typeof t.amount === 'number' ? t.amount : 0;
                 return [
                     dateStr,
                     t.pair,
                     t.side,
-                    t.price.toFixed(2),
-                    t.amount.toFixed(8),
-                    (t.price * t.amount).toFixed(2),
+                    price.toFixed(2),
+                    amount.toFixed(8),
+                    (price * amount).toFixed(2),
                     t.pnl?.toFixed(2) || '0',
                     t.pnlPercent?.toFixed(2) || '0',
                     t.status,
@@ -253,7 +255,9 @@ const TradeHistoryWidget: React.FC<TradeHistoryWidgetProps> = ({ pair, limit = 5
                                         </span>
                                     </td>
                                     <td className="py-2 text-right text-gray-300">{formatCurrency(trade.price)}</td>
-                                    <td className="py-2 text-right text-gray-300">{trade.amount.toFixed(4)}</td>
+                                    <td className="py-2 text-right text-gray-300">
+                                        {typeof trade.amount === 'number' ? trade.amount.toFixed(4) : '0.0000'}
+                                    </td>
                                     <td className="py-2 text-right">
                                         {trade.pnl !== undefined ? (
                                             <span
