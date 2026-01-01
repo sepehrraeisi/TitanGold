@@ -200,7 +200,7 @@ class RiskGateService {
     }
     
     // Rule 4: Check numeric risk score (if available)
-    const riskScore = riskAssessment._meta?.riskScore;
+    const riskScore = riskAssessment.riskScore || riskAssessment._meta?.riskScore;
     if (riskScore !== undefined && riskScore >= 80) {
       console.log(`🚫 Risk Gate: BLOCK due to riskScore=${riskScore} >= 80`);
       return true;
@@ -240,7 +240,7 @@ class RiskGateService {
         if (riskAssessment.riskLevel === 'critical') {
           blockingRules.push('riskLevel=critical');
         }
-        const riskScore = riskAssessment._meta?.riskScore;
+        const riskScore = riskAssessment.riskScore || riskAssessment._meta?.riskScore;
         if (riskScore !== undefined && riskScore >= 80) {
           blockingRules.push(`riskScore=${riskScore}>=80`);
         }
@@ -280,7 +280,7 @@ class RiskGateService {
           riskLevel: riskAssessment.riskLevel,
           isFallback: riskAssessment._meta?.isFallback || false,
           cached: false, // risk gate never uses cache
-          riskScore: riskAssessment._meta?.riskScore,
+          riskScore: riskAssessment.riskScore || riskAssessment._meta?.riskScore,
           blockingRules: blockingRules.length > 0 ? blockingRules : undefined,
           tradeType: 'manual'
         })

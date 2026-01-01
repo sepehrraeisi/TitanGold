@@ -210,17 +210,29 @@ Return ONLY JSON:
       // ✅ AI SUCCESS
       const executionTime = Date.now() - startTime;
       
+      // Calculate numeric risk score from riskLevel for consistency
+      let riskScore;
+      switch (parsed.riskLevel) {
+        case 'critical': riskScore = 90; break;
+        case 'high': riskScore = 75; break;
+        case 'medium': riskScore = 50; break;
+        case 'low': riskScore = 25; break;
+        default: riskScore = 50;
+      }
+      
       return {
         agentId,
         function: 'runRiskAssessment',
         recommendation: parsed.recommendation,
         confidence: parsed.confidence ?? 60,
         riskLevel: parsed.riskLevel || 'medium',
+        riskScore, // ✅ Add riskScore to root for easy access
         symbol,
         _meta: {
           isFallback: false,
           executionTime,
-          source: 'ai'
+          source: 'ai',
+          riskScore // ✅ Keep in _meta for consistency
         }
       };
     }
@@ -248,12 +260,13 @@ Return ONLY JSON:
     recommendation,
     confidence: Math.round(100 - riskScore / 2), // Higher risk → lower confidence
     riskLevel,
+    riskScore, // ✅ Add riskScore to root for easy access
     symbol,
     _meta: {
       isFallback: true,
       executionTime,
       source: 'heuristic',
-      riskScore,
+      riskScore, // ✅ Keep in _meta for consistency
       factors
     }
   };
