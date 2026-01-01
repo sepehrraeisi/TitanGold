@@ -84,7 +84,11 @@ const TradeHistoryWidget: React.FC<TradeHistoryWidgetProps> = ({ pair, limit = 5
             } else if (dateRange === 'month') {
                 cutoff.setMonth(now.getMonth() - 1);
             }
-            filtered = filtered.filter(t => new Date(t.executedAt) >= cutoff);
+            filtered = filtered.filter(t => {
+                if (!t.executedAt) return false;
+                const tradeDate = new Date(t.executedAt);
+                return !isNaN(tradeDate.getTime()) && tradeDate >= cutoff;
+            });
         }
 
         return filtered;
@@ -93,17 +97,20 @@ const TradeHistoryWidget: React.FC<TradeHistoryWidgetProps> = ({ pair, limit = 5
     const exportTrades = () => {
         const csv = [
             ['Date', 'Pair', 'Side', 'Price', 'Amount', 'Total', 'PnL', 'PnL %', 'Status'].join(','),
-            ...filteredTrades.map(t => [
-                new Date(t.executedAt).toISOString(),
-                t.pair,
-                t.side,
-                t.price.toFixed(2),
-                t.amount.toFixed(8),
-                (t.price * t.amount).toFixed(2),
-                t.pnl?.toFixed(2) || '0',
-                t.pnlPercent?.toFixed(2) || '0',
-                t.status,
-            ].join(',')),
+            ...filteredTrades.map(t => {
+                const dateStr = t.executedAt ? new Date(t.executedAt).toISOString() : '--';
+                return [
+                    dateStr,
+                    t.pair,
+                    t.side,
+                    t.price.toFixed(2),
+                    t.amount.toFixed(8),
+                    (t.price * t.amount).toFixed(2),
+                    t.pnl?.toFixed(2) || '0',
+                    t.pnlPercent?.toFixed(2) || '0',
+                    t.status,
+                ].join(',');
+            }),
         ].join('\n');
 
         const blob = new Blob([csv], { type: 'text/csv' });
@@ -115,14 +122,26 @@ const TradeHistoryWidget: React.FC<TradeHistoryWidgetProps> = ({ pair, limit = 5
         URL.revokeObjectURL(url);
     };
 
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return new Intl.DateTimeFormat(language === 'fa' ? 'fa-IR' : 'en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        }).format(date);
+    const formatDate = (dateString: string | undefined | null) => {
+        if (!dateString) {
+            return '--';
+        }
+        
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                return '--';
+            }
+            return new Intl.DateTimeFormat(language === 'fa' ? 'fa-IR' : 'en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            }).format(date);
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return '--';
+        }
     };
 
     const formatCurrency = (value: number) => {
