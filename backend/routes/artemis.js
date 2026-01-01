@@ -74,7 +74,22 @@ router.get('/state', authenticate, async (req, res) => {
   try {
     const userId = req.user?.id;
     
-    // Get Artemis state from database
+    // 🎯 Get user's trading mode from user_preferences (per-user)
+    let userMode = 'demo';
+    try {
+      const modeResult = await query(
+        `SELECT preferences->'trading'->>'mode' as mode
+         FROM user_preferences
+         WHERE user_id = $1 AND is_deleted = FALSE`,
+        [userId]
+      );
+      userMode = modeResult.rows[0]?.mode || 'demo';
+      console.log(`🎯 /api/artemis/state: user ${userId} mode=${userMode}`);
+    } catch (modeError) {
+      console.warn('⚠️ Failed to get user trading mode, defaulting to demo:', modeError);
+    }
+    
+    // Get Artemis state from database (global state)
     let artemisState;
     try {
       const result = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');
@@ -125,7 +140,7 @@ router.get('/state', authenticate, async (req, res) => {
     // Build full state object
     const fullState = {
       status: artemisState.status || 'active',
-      mode: artemisState.mode || 'demo',
+      mode: userMode, // 🎯 Use per-user mode from user_preferences, not global artemis_state
       strategy: artemisState.strategy || 'mixture_of_experts',
       activeLearning: artemisState.active_learning !== false,
       overallAccuracy: artemisState.overall_accuracy || 0,
@@ -201,14 +216,46 @@ router.get('/state', authenticate, async (req, res) => {
 
 router.patch('/state', authenticate, async (req, res) => {
   try {
+    const userId = req.user?.id;
     const { status, mode, strategy, config } = req.body;
+    
+    // 🎯 If mode is being updated, save it to user_preferences (per-user)
+    if (mode !== undefined) {
+      try {
+        await query(
+          `UPDATE user_preferences
+           SET preferences = jsonb_set(
+             COALESCE(preferences, '{}'::jsonb),
+             '{trading,mode}',
+             $2::jsonb
+           ),
+           updated_at = NOW()
+           WHERE user_id = $1`,
+          [userId, JSON.stringify(mode)]
+        );
+        console.log(`🎯 Updated user ${userId} trading mode to: ${mode}`);
+      } catch (modeError) {
+        console.error('❌ Failed to update user trading mode:', modeError);
+        throw modeError;
+      }
+    }
+    
+    // Also update global artemis_state (for backward compatibility)
     const result = await query(
       'UPDATE artemis_state SET status = COALESCE($1, status), mode = COALESCE($2, mode), strategy = COALESCE($3, strategy), config = COALESCE($4, config), updated_at = NOW() RETURNING *',
       [status, mode, strategy, config ? JSON.stringify(config) : null]
     );
-    res.json(result.rows[0]);
+    
+    // Return updated state (but with user's mode)
+    const updatedState = result.rows[0];
+    if (mode !== undefined) {
+      updatedState.mode = mode;
+    }
+    
+    res.json(updatedState);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update Artemis state' });
+    console.error('Failed to update Artemis state:', error);
+    res.status(500).json({ error: 'Failed to update Artemis state', details: error.message });
   }
 });
 
