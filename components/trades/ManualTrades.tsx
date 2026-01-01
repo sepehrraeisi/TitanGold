@@ -111,15 +111,27 @@ const ManualTrades: React.FC = () => {
     }, [data, formatStatValue, t]);
 
     const lastUpdatedLabel = useMemo(() => {
-        if (!data) {
+        if (!data || !data.lastUpdated) {
             return '';
         }
-        const date = new Date(data.lastUpdated);
-        const formatter = new Intl.DateTimeFormat(language === 'fa' ? 'fa-IR' : 'en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-        return t('last_updated', { time: formatter.format(date) });
+        
+        try {
+            const date = new Date(data.lastUpdated);
+            // Check if date is valid
+            if (isNaN(date.getTime())) {
+                console.warn('Invalid lastUpdated date:', data.lastUpdated);
+                return '';
+            }
+            
+            const formatter = new Intl.DateTimeFormat(language === 'fa' ? 'fa-IR' : 'en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+            return t('last_updated', { time: formatter.format(date) });
+        } catch (error) {
+            console.error('Error formatting lastUpdated:', error);
+            return '';
+        }
     }, [data, language, t]);
 
     const handleQuickTrade = useCallback(async (order: ManualQuickTradeOrder) => {

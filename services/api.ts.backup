@@ -20043,39 +20043,32 @@ Make the strategy name descriptive and professional.`;
 // Update Artemis mode (Demo/Real)
 export const updateArtemisMode = async (mode: 'demo' | 'real'): Promise<ArtemisState> => {
     try {
-        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        if (!token) {
-            throw new Error('Authentication required');
+        const artemis = await fetchArtemisState();
+        const oldMode = artemis.mode;
+        artemis.mode = mode;
+
+        // Update status based on mode switch
+        if (mode === 'real' && artemis.status === 'active') {
+            // Add confirmation step for real mode
+            console.log('Switching to REAL mode - all trades will use actual funds');
         }
-
-        // Update mode via backend API (PATCH /api/artemis/state)
-        const response = await fetch('/api/artemis/state', {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ mode }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to update mode');
-        }
-
-        const updatedState = await response.json();
 
         // Log mode change
         await logArtemisAction({
             type: 'config_change',
             level: 'info',
             source: 'user',
-            action: `Mode changed to ${mode}`,
-            details: { newMode: mode },
+            action: `Mode changed from ${oldMode} to ${mode}`,
+            details: { oldMode, newMode: mode },
             result: 'success',
         });
 
-        console.log(`✅ Mode updated to: ${mode}`);
-        return updatedState
+        await database.save('settings', {
+            key: 'artemis_state',
+            value: artemis,
+        });
+
+        return artemis;
     } catch (e) {
         console.error('Failed to update Artemis mode:', e);
         throw e;

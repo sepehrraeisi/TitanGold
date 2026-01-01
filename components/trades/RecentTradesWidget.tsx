@@ -13,7 +13,11 @@ const RecentTradesWidget: React.FC<RecentTradesWidgetProps> = ({ trades }) => {
         [language]
     );
 
-    const formatTimeAgo = (timestamp: string) => {
+    const formatTimeAgo = (timestamp: string | undefined | null) => {
+        if (!timestamp) {
+            return '--';
+        }
+        
         const date = new Date(timestamp);
         if (Number.isNaN(date.getTime())) {
             return '--';
