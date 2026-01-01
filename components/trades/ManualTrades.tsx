@@ -25,13 +25,20 @@ const ManualTrades: React.FC = () => {
     const [selectedPair, setSelectedPair] = useState<string>('BTC/USDT');
     const [activeView, setActiveView] = useState<'quick' | 'advanced'>('quick');
 
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (silent = false) => {
         try {
-            setIsLoading(true);
+            // Only show loading spinner on initial load, not on refreshes
+            if (!silent) {
+                setIsLoading(true);
+            }
             setFeedback(null); // Clear previous errors
-            console.log('🔄 Loading manual trading data from backend...');
+            if (!silent) {
+                console.log('🔄 Loading manual trading data from backend...');
+            }
             const response = await fetchManualTradingPageData();
-            console.log('✅ Manual trading data received:', response);
+            if (!silent) {
+                console.log('✅ Manual trading data received:', response);
+            }
             setData(response);
         } catch (error: any) {
             console.error('❌ Failed to load manual trading data:', error);
@@ -42,18 +49,20 @@ const ManualTrades: React.FC = () => {
             });
             setData(null); // Clear data on error
         } finally {
-            setIsLoading(false);
+            if (!silent) {
+                setIsLoading(false);
+            }
         }
     }, [t]);
 
     useEffect(() => {
-        void loadData();
-        // Refresh data every 10 seconds for real-time updates
+        void loadData(false); // Initial load with loading spinner
+        // Refresh data every 30 seconds for real-time updates (silent mode)
         const interval = setInterval(() => {
             if (!isActionPending) {
-                void loadData();
+                void loadData(true); // Silent refresh - no loading spinner, no flicker
             }
-        }, 10000);
+        }, 30000); // 30 seconds instead of 10
         return () => clearInterval(interval);
     }, [loadData, isActionPending]);
 
