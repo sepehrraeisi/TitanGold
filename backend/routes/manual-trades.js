@@ -181,12 +181,16 @@ router.get('/orderbook/:pair', authenticate, async (req, res) => {
     const { pair } = req.params;
     const limit = parseInt(req.query.limit) || 20;
     
+    console.log(`📊 Order book requested: ${pair} (userId: ${userId}, limit: ${limit})`);
+    
     // Check user's trading mode
     const modeResult = await query(
-      'SELECT trading->\'mode\' as mode FROM user_preferences WHERE user_id = $1 AND is_deleted = FALSE',
+      "SELECT trading->'mode' as mode FROM user_preferences WHERE user_id = $1 AND is_deleted = FALSE",
       [userId]
     );
     const mode = modeResult.rows[0]?.mode || 'demo';
+    
+    console.log(`🎮 User mode: ${mode} (rows: ${modeResult.rows.length})`);
     
     // In demo mode, return simulated order book
     if (mode === 'demo') {
@@ -200,6 +204,8 @@ router.get('/orderbook/:pair', authenticate, async (req, res) => {
         Math.random() * 10
       ]);
       
+      console.log(`✅ Returning simulated order book (${bids.length} bids, ${asks.length} asks)`);
+      
       return res.json({
         bids,
         asks,
@@ -209,10 +215,11 @@ router.get('/orderbook/:pair', authenticate, async (req, res) => {
     }
     
     // Live mode: fetch from MEXC
+    console.log(`📡 Fetching from MEXC (live mode)...`);
     const orderBook = await mexcService.fetchOrderBook(userId, pair, limit);
     res.json(orderBook);
   } catch (error) {
-    console.error('Failed to fetch order book:', error);
+    console.error('❌ Failed to fetch order book:', error);
     // Return empty order book on error instead of 500
     res.json({
       bids: [],
