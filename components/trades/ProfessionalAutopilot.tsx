@@ -214,12 +214,17 @@ const ProfessionalAutopilot: React.FC = () => {
 
         // Artemis Status
         if (artemis) {
+            // Calculate success rate safely
+            const successRate = artemis.totalDecisions && artemis.successfulDecisions
+                ? (artemis.successfulDecisions / artemis.totalDecisions) * 100
+                : (artemis.successRate || 0);
+            
             status.push({
                 id: 'artemis',
                 name: t('artemis_ai') || '🧠 Artemis AI',
                 status: artemis.status === 'active' ? (t('active') || 'Active') : (t('inactive') || 'Inactive'),
                 tone: artemis.status === 'active' ? 'success' : 'warning',
-                details: `${artemis.totalDecisions} ${t('decisions') || 'decisions'}, ${artemis.successRate.toFixed(1)}% ${t('success_rate') || 'success rate'}`,
+                details: `${artemis.totalDecisions || 0} ${t('decisions') || 'decisions'}, ${successRate.toFixed(1)}% ${t('success_rate') || 'success rate'}`,
             });
         }
 
