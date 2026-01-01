@@ -258,10 +258,42 @@ class ManualTradingService {
   }
 
   /**
-   * Get chart data (OHLCV) - Real data from MEXC
+   * Get chart data (OHLCV) - Real data from MEXC or simulated for demo
    */
   async getChartData(userId, pair = 'BTC/USDT', timeframe = '1h', limit = 100) {
     try {
+      // Check user's trading mode
+      const mode = await this.getUserTradingMode(userId);
+      
+      // In demo mode, return simulated chart data
+      if (mode === 'demo') {
+        console.log(`📈 Generating demo chart data for ${pair}...`);
+        const now = Date.now();
+        const basePrice = pair.includes('BTC') ? 42000 : pair.includes('ETH') ? 2500 : 100;
+        
+        const candles = Array.from({ length: limit }, (_, i) => {
+          const timestamp = now - (limit - i) * 3600000; // 1 hour intervals
+          const random = () => (Math.random() - 0.5) * 0.02; // ±2% variation
+          const open = basePrice * (1 + random());
+          const close = open * (1 + random());
+          const high = Math.max(open, close) * (1 + Math.abs(random()));
+          const low = Math.min(open, close) * (1 - Math.abs(random()));
+          const volume = Math.random() * 1000;
+          
+          return {
+            timestamp: new Date(timestamp).toISOString(),
+            open,
+            high,
+            low,
+            close,
+            volume,
+          };
+        });
+        
+        return candles;
+      }
+      
+      // Live mode: fetch from MEXC
       console.log(`📈 Fetching chart data for ${pair} from MEXC...`);
       const ohlcv = await mexcService.fetchOHLCV(userId, pair, timeframe, limit);
       

@@ -181,6 +181,34 @@ router.get('/orderbook/:pair', authenticate, async (req, res) => {
     const { pair } = req.params;
     const limit = parseInt(req.query.limit) || 20;
     
+    // Check user's trading mode
+    const modeResult = await query(
+      'SELECT trading->\'mode\' as mode FROM user_preferences WHERE user_id = $1 AND is_deleted = FALSE',
+      [userId]
+    );
+    const mode = modeResult.rows[0]?.mode || 'demo';
+    
+    // In demo mode, return simulated order book
+    if (mode === 'demo') {
+      const basePrice = pair.includes('BTC') ? 42000 : pair.includes('ETH') ? 2500 : 100;
+      const bids = Array.from({ length: limit }, (_, i) => [
+        basePrice * (1 - (i + 1) * 0.0001),
+        Math.random() * 10
+      ]);
+      const asks = Array.from({ length: limit }, (_, i) => [
+        basePrice * (1 + (i + 1) * 0.0001),
+        Math.random() * 10
+      ]);
+      
+      return res.json({
+        bids,
+        asks,
+        timestamp: Date.now(),
+        demo: true
+      });
+    }
+    
+    // Live mode: fetch from MEXC
     const orderBook = await mexcService.fetchOrderBook(userId, pair, limit);
     res.json(orderBook);
   } catch (error) {
