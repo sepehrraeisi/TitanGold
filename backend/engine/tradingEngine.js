@@ -163,22 +163,22 @@ class TradingEngine {
             scanners: {
                 arbitrage: {
                     enabled: true,
-                    interval: 60000, // 60 seconds (was 2s - reduced 30x)
+                    interval: 15000, // 15 seconds - FAST with batch processing
                     minProfitPercent: 0.5, // 0.5% minimum profit
                 },
                 priceMovement: {
                     enabled: true,
-                    interval: 120000, // 120 seconds (was 5s - reduced 24x)
+                    interval: 30000, // 30 seconds - moderate speed
                     minChangePercent: 2, // 2% minimum change
                 },
                 volumeSpike: {
                     enabled: true,
-                    interval: 180000, // 180 seconds (was 10s - reduced 18x)
+                    interval: 60000, // 60 seconds - catch volume spikes
                     minVolumeMultiplier: 2, // 2x average volume
                 },
                 pattern: {
                     enabled: true,
-                    interval: 300000, // 300 seconds (was 30s - reduced 10x)
+                    interval: 120000, // 120 seconds - pattern analysis
                 },
             },
             exchanges: {
@@ -297,17 +297,39 @@ class TradingEngine {
                 // Get all trading pairs from MEXC
                 const symbols = await this.getAllTradingSymbols();
                 
-                // Scan only top 20 coins to reduce API load (was 100)
-                const topSymbols = symbols.slice(0, 20);
+                // 🎯 Smart Strategy: Top 30 coins with batch processing
+                // Process in 3 batches of 10 (parallel within batch, serial between batches)
+                const topSymbols = symbols.slice(0, 30);
+                const batchSize = 10;
+                const batchDelay = 2000; // 2s pause between batches
 
-                for (const symbol of topSymbols) {
-                    try {
-                        const opportunity = await this.scanArbitrageOpportunity(symbol);
+                for (let i = 0; i < topSymbols.length; i += batchSize) {
+                    const batch = topSymbols.slice(i, i + batchSize);
+                    
+                    // Process batch in parallel (10 requests at once = faster)
+                    const promises = batch.map(symbol => 
+                        this.scanArbitrageOpportunity(symbol)
+                            .catch(error => {
+                                // Silent catch - just log and continue
+                                if (!error.message?.includes('throttle')) {
+                                    console.error(`Error scanning ${symbol}:`, error.message);
+                                }
+                                return null;
+                            })
+                    );
+                    
+                    const results = await Promise.all(promises);
+                    
+                    // Add valid opportunities
+                    for (const opportunity of results) {
                         if (opportunity) {
                             await this.addOpportunity(opportunity, 'CRITICAL');
                         }
-                    } catch (error) {
-                        console.error(`Error scanning arbitrage for ${symbol}:`, error);
+                    }
+                    
+                    // Small delay between batches to respect rate limits
+                    if (i + batchSize < topSymbols.length) {
+                        await new Promise(resolve => setTimeout(resolve, batchDelay));
                     }
                 }
             } catch (error) {
@@ -375,11 +397,23 @@ class TradingEngine {
 
             try {
                 const symbols = await this.getAllTradingSymbols();
-                const topSymbols = symbols.slice(0, 30); // Scan top 30 (was 200)
+                // 🎯 Smart: Top 40 symbols with batch processing
+                const topSymbols = symbols.slice(0, 40);
+                const batchSize = 10;
 
-                for (const symbol of topSymbols) {
-                    try {
-                        const ticker = await mexcService.fetchSystemTicker(symbol);
+                for (let i = 0; i < topSymbols.length; i += batchSize) {
+                    const batch = topSymbols.slice(i, i + batchSize);
+                    
+                    // Parallel batch processing
+                    const tickerPromises = batch.map(symbol =>
+                        mexcService.fetchSystemTicker(symbol)
+                            .then(ticker => ({ symbol, ticker }))
+                            .catch(() => ({ symbol, ticker: null }))
+                    );
+                    
+                    const tickerResults = await Promise.all(tickerPromises);
+                    
+                    for (const { symbol, ticker } of tickerResults) {
                         if (!ticker) continue;
 
                         const currentPrice = parseFloat(ticker.lastPrice);
@@ -407,8 +441,11 @@ class TradingEngine {
                         }
 
                         priceHistory.set(symbol, { price: currentPrice, timestamp: Date.now() });
-                    } catch (error) {
-                        console.error(`Price movement scan error for ${symbol}:`, error);
+                    }
+                    
+                    // Small delay between batches
+                    if (i + batchSize < topSymbols.length) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
                     }
                 }
             } catch (error) {
