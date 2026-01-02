@@ -86,28 +86,29 @@ const TradingEngineDashboard: React.FC<TradingEngineDashboardProps> = ({ autopil
 
     useEffect(() => {
         fetchData();
-        // Only refresh if not loading and backend is available
+        // 🎯 Silent background refresh every 10 seconds (not 5s to reduce load)
         const interval = setInterval(() => {
-            if (!isLoading && propStatus) {
+            if (!isLoading) {
+                // Silent fetch - don't show loading spinner
                 fetchData();
             }
-        }, 5000); // Refresh every 5 seconds
+        }, 10000); // Refresh every 10 seconds
         return () => clearInterval(interval);
-    }, []); // Empty dependency array - only run once on mount
+    }, [isLoading]); // Re-run if isLoading changes
 
     const fetchData = async () => {
         try {
-            // Use prop status if available, otherwise fetch
-            if (propStatus) {
+            // Always fetch fresh status from backend
+            const statusData = await api.fetchTradingEngineStatus().catch(err => {
+                console.error('Failed to fetch trading engine status:', err);
+                return propStatus || null; // Fallback to prop if fetch fails
+            });
+            
+            if (statusData) {
+                setStatus(statusData);
+            } else if (propStatus) {
+                // Only use propStatus as absolute fallback
                 setStatus(propStatus);
-            } else {
-                const statusData = await api.fetchTradingEngineStatus().catch(err => {
-                    console.error('Failed to fetch trading engine status:', err);
-                    return null;
-                });
-                if (statusData) {
-                    setStatus(statusData);
-                }
             }
 
             const [tradesData, opportunitiesData] = await Promise.all([

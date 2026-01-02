@@ -163,22 +163,22 @@ class TradingEngine {
             scanners: {
                 arbitrage: {
                     enabled: true,
-                    interval: 2000, // 2 seconds
+                    interval: 15000, // 15 seconds - FAST with batch processing
                     minProfitPercent: 0.5, // 0.5% minimum profit
                 },
                 priceMovement: {
                     enabled: true,
-                    interval: 5000, // 5 seconds
+                    interval: 30000, // 30 seconds - moderate speed
                     minChangePercent: 2, // 2% minimum change
                 },
                 volumeSpike: {
                     enabled: true,
-                    interval: 10000, // 10 seconds
+                    interval: 60000, // 60 seconds - catch volume spikes
                     minVolumeMultiplier: 2, // 2x average volume
                 },
                 pattern: {
                     enabled: true,
-                    interval: 30000, // 30 seconds
+                    interval: 120000, // 120 seconds - pattern analysis
                 },
             },
             exchanges: {
@@ -297,17 +297,39 @@ class TradingEngine {
                 // Get all trading pairs from MEXC
                 const symbols = await this.getAllTradingSymbols();
                 
-                // For now, scan top 100 coins (in production, scan all 400+)
-                const topSymbols = symbols.slice(0, 100);
+                // 🎯 Smart Strategy: Top 30 coins with batch processing
+                // Process in 3 batches of 10 (parallel within batch, serial between batches)
+                const topSymbols = symbols.slice(0, 30);
+                const batchSize = 10;
+                const batchDelay = 2000; // 2s pause between batches
 
-                for (const symbol of topSymbols) {
-                    try {
-                        const opportunity = await this.scanArbitrageOpportunity(symbol);
+                for (let i = 0; i < topSymbols.length; i += batchSize) {
+                    const batch = topSymbols.slice(i, i + batchSize);
+                    
+                    // Process batch in parallel (10 requests at once = faster)
+                    const promises = batch.map(symbol => 
+                        this.scanArbitrageOpportunity(symbol)
+                            .catch(error => {
+                                // Silent catch - just log and continue
+                                if (!error.message?.includes('throttle')) {
+                                    console.error(`Error scanning ${symbol}:`, error.message);
+                                }
+                                return null;
+                            })
+                    );
+                    
+                    const results = await Promise.all(promises);
+                    
+                    // Add valid opportunities
+                    for (const opportunity of results) {
                         if (opportunity) {
                             await this.addOpportunity(opportunity, 'CRITICAL');
                         }
-                    } catch (error) {
-                        console.error(`Error scanning arbitrage for ${symbol}:`, error);
+                    }
+                    
+                    // Small delay between batches to respect rate limits
+                    if (i + batchSize < topSymbols.length) {
+                        await new Promise(resolve => setTimeout(resolve, batchDelay));
                     }
                 }
             } catch (error) {
@@ -375,11 +397,23 @@ class TradingEngine {
 
             try {
                 const symbols = await this.getAllTradingSymbols();
-                const topSymbols = symbols.slice(0, 200); // Scan top 200
+                // 🎯 Smart: Top 40 symbols with batch processing
+                const topSymbols = symbols.slice(0, 40);
+                const batchSize = 10;
 
-                for (const symbol of topSymbols) {
-                    try {
-                        const ticker = await mexcService.fetchSystemTicker(symbol);
+                for (let i = 0; i < topSymbols.length; i += batchSize) {
+                    const batch = topSymbols.slice(i, i + batchSize);
+                    
+                    // Parallel batch processing
+                    const tickerPromises = batch.map(symbol =>
+                        mexcService.fetchSystemTicker(symbol)
+                            .then(ticker => ({ symbol, ticker }))
+                            .catch(() => ({ symbol, ticker: null }))
+                    );
+                    
+                    const tickerResults = await Promise.all(tickerPromises);
+                    
+                    for (const { symbol, ticker } of tickerResults) {
                         if (!ticker) continue;
 
                         const currentPrice = parseFloat(ticker.lastPrice);
@@ -407,8 +441,11 @@ class TradingEngine {
                         }
 
                         priceHistory.set(symbol, { price: currentPrice, timestamp: Date.now() });
-                    } catch (error) {
-                        console.error(`Price movement scan error for ${symbol}:`, error);
+                    }
+                    
+                    // Small delay between batches
+                    if (i + batchSize < topSymbols.length) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
                     }
                 }
             } catch (error) {
@@ -440,7 +477,7 @@ class TradingEngine {
 
             try {
                 const symbols = await this.getAllTradingSymbols();
-                const topSymbols = symbols.slice(0, 200);
+                const topSymbols = symbols.slice(0, 20); // Scan top 20 (was 200)
 
                 for (const symbol of topSymbols) {
                     try {
@@ -503,7 +540,7 @@ class TradingEngine {
                 // Use Pattern Recognition Agent to find patterns
                 // This integrates with existing Agent system
                 const symbols = await this.getAllTradingSymbols();
-                const topSymbols = symbols.slice(0, 50); // Scan top 50 for patterns
+                const topSymbols = symbols.slice(0, 15); // Scan top 15 for patterns (was 50)
 
                 for (const symbol of topSymbols) {
                     try {
@@ -1258,14 +1295,51 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
 
     async callPatternAgent(symbol) {
         try {
-            // Call Pattern Recognition Agent (existing system)
-            // This would integrate with your existing Agent API
-            // For now, return mock data
+            // Get real ticker price from MEXC
+            const ticker = await mexcService.fetchSystemTicker(symbol);
+            if (!ticker || !ticker.lastPrice) {
+                return null;
+            }
+            
+            const currentPrice = parseFloat(ticker.lastPrice);
+            const priceChange = parseFloat(ticker.priceChangePercent || 0);
+            
+            // Simple pattern detection based on price action
+            let signal = 'NEUTRAL';
+            let patternName = 'Consolidation';
+            let confidence = 50;
+            
+            // Bullish patterns
+            if (priceChange > 3) {
+                signal = 'BULLISH';
+                patternName = 'Strong Uptrend';
+                confidence = Math.min(90, 60 + Math.abs(priceChange) * 2);
+            } else if (priceChange > 1.5) {
+                signal = 'BULLISH';
+                patternName = 'Moderate Uptrend';
+                confidence = Math.min(85, 55 + Math.abs(priceChange) * 2);
+            }
+            // Bearish patterns
+            else if (priceChange < -3) {
+                signal = 'BEARISH';
+                patternName = 'Strong Downtrend';
+                confidence = Math.min(90, 60 + Math.abs(priceChange) * 2);
+            } else if (priceChange < -1.5) {
+                signal = 'BEARISH';
+                patternName = 'Moderate Downtrend';
+                confidence = Math.min(85, 55 + Math.abs(priceChange) * 2);
+            }
+            // Neutral (skip low confidence)
+            else {
+                return null; // Don't create opportunity for low movement
+            }
+            
             return {
-                signal: 'BULLISH',
-                patternName: 'Double Bottom',
-                confidence: 75,
-                price: 50000,
+                signal,
+                patternName,
+                confidence,
+                price: currentPrice,
+                priceChange,
             };
         } catch (error) {
             console.error(`Error calling pattern agent for ${symbol}:`, error);
