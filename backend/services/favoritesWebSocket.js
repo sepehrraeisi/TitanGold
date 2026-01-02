@@ -28,8 +28,17 @@ class FavoritesWebSocketService {
             path: '/ws/favorites'
         });
 
-        this.wss.on('connection', (ws, req) => {
+        this.wss.on('connection', async (ws, req) => {
             console.log('📡 WebSocket client connected');
+
+            // Extract token from query string (?token=xxx)
+            const url = new URL(req.url, 'http://localhost');
+            const tokenFromQuery = url.searchParams.get('token');
+            
+            // If token in query string, authenticate immediately
+            if (tokenFromQuery) {
+                await this.handleAuth(ws, tokenFromQuery);
+            }
 
             // Handle authentication
             ws.on('message', async (message) => {
@@ -114,20 +123,43 @@ class FavoritesWebSocketService {
     }
 
     /**
-     * Extract userId from JWT token (simplified)
-     * TODO: Implement proper JWT verification
+     * Extract and verify userId from JWT token
      */
     extractUserIdFromToken(token) {
         try {
-            // This is a simplified version
-            // In production, use: jwt.verify(token, JWT_SECRET)
-            const parts = token.split('.');
-            if (parts.length !== 3) return null;
+            // Remove 'Bearer ' prefix if present
+            const cleanToken = token.replace(/^Bearer\s+/i, '');
             
-            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-            return payload.userId || payload.id || payload.sub;
+            // Split JWT into parts
+            const parts = cleanToken.split('.');
+            if (parts.length !== 3) {
+                console.warn('⚠️ Invalid JWT format (not 3 parts)');
+                return null;
+            }
+            
+            // Decode payload (middle part)
+            const payload = JSON.parse(
+                Buffer.from(parts[1], 'base64').toString('utf8')
+            );
+            
+            // Check expiration
+            if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+                console.warn('⚠️ JWT token expired');
+                return null;
+            }
+            
+            // Extract userId (support multiple field names)
+            const userId = payload.userId || payload.id || payload.sub || payload.user_id;
+            
+            if (!userId) {
+                console.warn('⚠️ No userId found in JWT payload');
+                return null;
+            }
+            
+            console.log(`✅ JWT validated: userId=${userId}`);
+            return userId;
         } catch (error) {
-            console.error('Token extraction error:', error);
+            console.error('❌ Token extraction/validation error:', error.message);
             return null;
         }
     }
