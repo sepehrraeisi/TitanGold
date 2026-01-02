@@ -42,20 +42,21 @@ const TradingChartWidget: React.FC<TradingChartWidgetProps> = ({ chart, onTimefr
                 priceLabels: [],
                 minPrice: 0,
                 maxPrice: 0,
-                chartWidth: 800,
-                chartHeight: 400,
-                paddingX: 60,
-                paddingY: 40,
-                drawableWidth: 680,
-                drawableHeight: 320,
+                chartWidth: 1200,
+                chartHeight: 600,
+                paddingX: 80,
+                paddingY: 50,
+                drawableWidth: 1040,
+                drawableHeight: 450,
             };
         }
 
-        const width = 800;
-        const height = 400;
-        const paddingX = 60;
-        const paddingY = 40;
-        const volumeHeight = 60;
+        // 🎯 Larger chart for better visibility (international standard)
+        const width = 1200;
+        const height = 600;
+        const paddingX = 80;
+        const paddingY = 50;
+        const volumeHeight = 80;
         const drawableWidth = width - paddingX * 2;
         const drawableHeight = height - paddingY - volumeHeight;
         

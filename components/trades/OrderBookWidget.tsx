@@ -35,7 +35,15 @@ const OrderBookWidget: React.FC<OrderBookWidgetProps> = ({ pair, onPriceSelect }
 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('📊 Order book data received:', { bidsCount: data.bids?.length, asksCount: data.asks?.length, demo: data.demo });
+                    console.log('📊 Order book data received:', { bidsCount: data.bids?.length, asksCount: data.asks?.length, demo: data.demo, pair });
+                    
+                    // If backend returns empty arrays or no data, generate mock
+                    if (!data.bids || !data.asks || data.bids.length === 0 || data.asks.length === 0) {
+                        console.warn('⚠️ Empty order book from backend, generating mock data');
+                        generateMockOrderBook();
+                        return;
+                    }
+                    
                     if (data.bids && data.asks && data.bids.length > 0 && data.asks.length > 0) {
                         // Process bids (buy orders) - highest price first
                         const processedBids = data.bids

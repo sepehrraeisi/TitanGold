@@ -26,7 +26,9 @@ const QuickTradeWidget: React.FC<QuickTradeWidgetProps> = ({ data, onSubmit, dis
         maximumFractionDigits: 2,
     }), [language]);
 
-    const handleSubmit = (side: 'buy' | 'sell') => {
+    const handleSubmit = (side: 'buy' | 'sell') => (e?: React.MouseEvent) => {
+        e?.preventDefault();
+        e?.stopPropagation();
         const stopLossValue = Number.isFinite(Number(stopLoss)) ? Number(stopLoss) : data.stopLossPercent;
         const takeProfitValue = Number.isFinite(Number(takeProfit)) ? Number(takeProfit) : data.takeProfitPercent;
         void onSubmit({
@@ -59,14 +61,16 @@ const QuickTradeWidget: React.FC<QuickTradeWidgetProps> = ({ data, onSubmit, dis
 
                 <div className="grid grid-cols-2 gap-2">
                     <button
-                        onClick={() => handleSubmit('buy')}
+                        onClick={handleSubmit('buy')}
+                        type="button"
                         disabled={disabled}
                         className={`w-full py-2 font-semibold rounded-md transition-colors ${disabled ? 'bg-green-600/10 text-green-200/60 cursor-not-allowed' : 'bg-green-600/20 text-green-300 hover:bg-green-600/40'}`}
                     >
                         {t('quick_buy')}
                     </button>
                     <button
-                        onClick={() => handleSubmit('sell')}
+                        onClick={handleSubmit('sell')}
+                        type="button"
                         disabled={disabled}
                         className={`w-full py-2 font-semibold rounded-md transition-colors ${disabled ? 'bg-red-600/10 text-red-200/60 cursor-not-allowed' : 'bg-red-600/20 text-red-300 hover:bg-red-600/40'}`}
                     >
