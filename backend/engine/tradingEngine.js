@@ -163,22 +163,22 @@ class TradingEngine {
             scanners: {
                 arbitrage: {
                     enabled: true,
-                    interval: 2000, // 2 seconds
+                    interval: 60000, // 60 seconds (was 2s - reduced 30x)
                     minProfitPercent: 0.5, // 0.5% minimum profit
                 },
                 priceMovement: {
                     enabled: true,
-                    interval: 5000, // 5 seconds
+                    interval: 120000, // 120 seconds (was 5s - reduced 24x)
                     minChangePercent: 2, // 2% minimum change
                 },
                 volumeSpike: {
                     enabled: true,
-                    interval: 10000, // 10 seconds
+                    interval: 180000, // 180 seconds (was 10s - reduced 18x)
                     minVolumeMultiplier: 2, // 2x average volume
                 },
                 pattern: {
                     enabled: true,
-                    interval: 30000, // 30 seconds
+                    interval: 300000, // 300 seconds (was 30s - reduced 10x)
                 },
             },
             exchanges: {
@@ -297,8 +297,8 @@ class TradingEngine {
                 // Get all trading pairs from MEXC
                 const symbols = await this.getAllTradingSymbols();
                 
-                // For now, scan top 100 coins (in production, scan all 400+)
-                const topSymbols = symbols.slice(0, 100);
+                // Scan only top 20 coins to reduce API load (was 100)
+                const topSymbols = symbols.slice(0, 20);
 
                 for (const symbol of topSymbols) {
                     try {
@@ -375,7 +375,7 @@ class TradingEngine {
 
             try {
                 const symbols = await this.getAllTradingSymbols();
-                const topSymbols = symbols.slice(0, 200); // Scan top 200
+                const topSymbols = symbols.slice(0, 30); // Scan top 30 (was 200)
 
                 for (const symbol of topSymbols) {
                     try {
@@ -440,7 +440,7 @@ class TradingEngine {
 
             try {
                 const symbols = await this.getAllTradingSymbols();
-                const topSymbols = symbols.slice(0, 200);
+                const topSymbols = symbols.slice(0, 20); // Scan top 20 (was 200)
 
                 for (const symbol of topSymbols) {
                     try {
@@ -503,7 +503,7 @@ class TradingEngine {
                 // Use Pattern Recognition Agent to find patterns
                 // This integrates with existing Agent system
                 const symbols = await this.getAllTradingSymbols();
-                const topSymbols = symbols.slice(0, 50); // Scan top 50 for patterns
+                const topSymbols = symbols.slice(0, 15); // Scan top 15 for patterns (was 50)
 
                 for (const symbol of topSymbols) {
                     try {
