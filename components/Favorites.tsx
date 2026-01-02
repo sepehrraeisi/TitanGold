@@ -375,8 +375,16 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     // 🚀 NEW: WebSocket for Real-time Price Updates
     // Token: align with rest of app (titan_token), fallback to sessionStorage, optional for cookie-based auth
     const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token') || undefined;
+    
+    // 🔒 Dynamic WebSocket URL: Use WSS for HTTPS, WS for HTTP
+    const getWebSocketUrl = () => {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host; // includes port if present
+        return `${protocol}//${host}/ws/favorites`;
+    };
+    
     const { isConnected, isConnecting, error: wsError } = useWebSocket({
-        url: 'ws://188.40.209.82:5002/ws/favorites',
+        url: getWebSocketUrl(),
         token: authToken,
         autoConnect: true,
         onMessage: (message: WebSocketMessage) => {

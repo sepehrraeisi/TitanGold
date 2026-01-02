@@ -1,4 +1,5 @@
 import { _data } from './_data.ts';
+import { generateDemoChartData } from './chartDataGenerator.ts';
 import type {
     User,
     FavoriteItem,
@@ -1781,7 +1782,7 @@ function getDefaultManualTradingData(): ManualTradingPageData {
             { id: 'success_rate', labelKey: 'success_rate', value: 0, format: 'percent', decimals: 1 },
             { id: 'total_trades', labelKey: 'total_trades', value: 0, format: 'plain', decimals: 0 },
         ],
-        chart: [],
+        chart: generateDemoChartData(100, 42000, 'BTC/USDT'),
         quickTrade: {
             pair: 'BTC/USDT',
             baseAsset: 'BTC',
