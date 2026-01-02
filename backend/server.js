@@ -8,10 +8,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from './database/db.js';
-// ❌ Engines removed from backend - run in separate titan-engine-worker
-// import { autopilot } from './engine/autopilot.js';
-// import { scheduler } from './engine/scheduler.js';
-// import { tradingEngine } from './engine/tradingEngine.js';
+// Import engines (needed for API routes)
+import { tradingEngine } from './engine/tradingEngine.js';
 import { messageQueue } from './services/messageQueue.js';
 import { requestContextMiddleware, performanceMiddleware, logger } from './services/logger.js';
 import { requestLogger, logError } from './middleware/requestLogger.js';
