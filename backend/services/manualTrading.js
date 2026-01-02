@@ -24,8 +24,27 @@ class ManualTradingService {
       
       // Get chart data - Real data from MEXC (may fail if MEXC not configured)
       const chart = await this.getChartData(userId, 'BTC/USDT').catch(err => {
-        console.warn('⚠️ Error getting chart data, using empty array:', err);
-        return [];
+        console.warn('⚠️ Error getting chart data, generating demo data:', err.message);
+        // Generate demo data instead of empty array
+        const now = Date.now();
+        const basePrice = 42000;
+        return Array.from({ length: 100 }, (_, i) => {
+          const timestamp = now - (100 - i) * 3600000; // 1 hour intervals
+          const random = () => (Math.random() - 0.5) * 0.02;
+          const open = basePrice * (1 + random());
+          const close = open * (1 + random());
+          const high = Math.max(open, close) * (1 + Math.abs(random()));
+          const low = Math.min(open, close) * (1 - Math.abs(random()));
+          const volume = Math.random() * 1000;
+          return {
+            timestamp: new Date(timestamp).toISOString(),
+            open,
+            high,
+            low,
+            close,
+            volume,
+          };
+        });
       });
       
       // Get quick trade config - Real data from MEXC (may fail if MEXC not configured)

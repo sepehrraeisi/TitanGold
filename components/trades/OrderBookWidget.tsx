@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, memo } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 
 interface OrderBookEntry {
@@ -12,7 +12,7 @@ interface OrderBookWidgetProps {
     onPriceSelect?: (price: number) => void;
 }
 
-const OrderBookWidget: React.FC<OrderBookWidgetProps> = ({ pair, onPriceSelect }) => {
+const OrderBookWidget: React.FC<OrderBookWidgetProps> = memo(({ pair, onPriceSelect }) => {
     const { t, language } = useLanguage();
     const [bids, setBids] = useState<OrderBookEntry[]>([]);
     const [asks, setAsks] = useState<OrderBookEntry[]>([]);
@@ -335,6 +335,8 @@ const OrderBookWidget: React.FC<OrderBookWidgetProps> = ({ pair, onPriceSelect }
             </div>
         </div>
     );
-};
+});
+
+OrderBookWidget.displayName = 'OrderBookWidget';
 
 export default OrderBookWidget;

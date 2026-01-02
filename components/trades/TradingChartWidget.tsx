@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, memo } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import type { ManualTradingChartPoint } from '../../types.ts';
 
@@ -7,7 +7,7 @@ interface TradingChartWidgetProps {
     onTimeframeChange?: (timeframe: string) => void;
 }
 
-const TradingChartWidget: React.FC<TradingChartWidgetProps> = ({ chart, onTimeframeChange }) => {
+const TradingChartWidget: React.FC<TradingChartWidgetProps> = memo(({ chart, onTimeframeChange }) => {
     const { t, language } = useLanguage();
     const [selectedTimeframe, setSelectedTimeframe] = useState<string>('1H');
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -371,6 +371,9 @@ const TradingChartWidget: React.FC<TradingChartWidgetProps> = ({ chart, onTimefr
             </div>
         </div>
     );
-};
+});
+
+// Add displayName for debugging
+TradingChartWidget.displayName = 'TradingChartWidget';
 
 export default TradingChartWidget;
