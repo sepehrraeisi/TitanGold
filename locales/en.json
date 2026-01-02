@@ -3535,5 +3535,7 @@
   "admin_only": "Admin Only",
   "no_results": "No results found.",
   "hide": "Hide",
-  "context": "Context"
+  "context": "Context",
+  "demo_wallet": "Demo",
+  "click_to_toggle_balance": "Click to toggle balance visibility"
 }

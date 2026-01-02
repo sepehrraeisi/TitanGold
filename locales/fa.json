@@ -3356,5 +3356,8 @@
   "admin_only": "فقط ادمین",
   "no_results": "نتیجه‌ای یافت نشد.",
   "hide": "پنهان کردن",
-  "context": "زمینه"
+  "context": "زمینه",
+  "wallet": "کیف پول",
+  "demo_wallet": "دمو",
+  "click_to_toggle_balance": "کلیک کنید تا نمایش موجودی تغییر کند"
 }
