@@ -1295,14 +1295,51 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
 
     async callPatternAgent(symbol) {
         try {
-            // Call Pattern Recognition Agent (existing system)
-            // This would integrate with your existing Agent API
-            // For now, return mock data
+            // Get real ticker price from MEXC
+            const ticker = await mexcService.fetchSystemTicker(symbol);
+            if (!ticker || !ticker.lastPrice) {
+                return null;
+            }
+            
+            const currentPrice = parseFloat(ticker.lastPrice);
+            const priceChange = parseFloat(ticker.priceChangePercent || 0);
+            
+            // Simple pattern detection based on price action
+            let signal = 'NEUTRAL';
+            let patternName = 'Consolidation';
+            let confidence = 50;
+            
+            // Bullish patterns
+            if (priceChange > 3) {
+                signal = 'BULLISH';
+                patternName = 'Strong Uptrend';
+                confidence = Math.min(90, 60 + Math.abs(priceChange) * 2);
+            } else if (priceChange > 1.5) {
+                signal = 'BULLISH';
+                patternName = 'Moderate Uptrend';
+                confidence = Math.min(85, 55 + Math.abs(priceChange) * 2);
+            }
+            // Bearish patterns
+            else if (priceChange < -3) {
+                signal = 'BEARISH';
+                patternName = 'Strong Downtrend';
+                confidence = Math.min(90, 60 + Math.abs(priceChange) * 2);
+            } else if (priceChange < -1.5) {
+                signal = 'BEARISH';
+                patternName = 'Moderate Downtrend';
+                confidence = Math.min(85, 55 + Math.abs(priceChange) * 2);
+            }
+            // Neutral (skip low confidence)
+            else {
+                return null; // Don't create opportunity for low movement
+            }
+            
             return {
-                signal: 'BULLISH',
-                patternName: 'Double Bottom',
-                confidence: 75,
-                price: 50000,
+                signal,
+                patternName,
+                confidence,
+                price: currentPrice,
+                priceChange,
             };
         } catch (error) {
             console.error(`Error calling pattern agent for ${symbol}:`, error);
