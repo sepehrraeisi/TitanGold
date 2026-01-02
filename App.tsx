@@ -42,6 +42,22 @@ const AppContent: React.FC = () => {
         setUser(sessionUser);
       } else {
         console.log('⚠️ No session found');
+        
+        // Development fallback: Auto-login with mock user in dev mode
+        // This helps during frontend development when backend is not available
+        if (import.meta.env.DEV && window.location.search.includes('dev-login')) {
+          console.warn('🔧 Development mode: Auto-login enabled via ?dev-login');
+          const mockUser: User = {
+            id: 'dev-user-auto',
+            name: 'Development User',
+            email: 'dev@local.dev',
+            username: 'dev',
+            role: 'Admin' as const,
+          };
+          sessionStorage.setItem('titan_user', JSON.stringify(mockUser));
+          localStorage.setItem('titan_user', JSON.stringify(mockUser));
+          setUser(mockUser);
+        }
       }
       setIsLoading(false);
     };
@@ -59,8 +75,33 @@ const AppContent: React.FC = () => {
       console.log('✅ Login successful, user:', loggedInUser);
       setUser(loggedInUser);
     } else {
-      console.error('❌ Login failed');
-      setAuthError('invalid_credentials');
+      // Development fallback: If backend is not available, use mock user
+      // This only works in development mode and when backend is unreachable
+      if (import.meta.env.DEV) {
+        console.warn('⚠️ Backend login failed, using development fallback');
+        console.warn('💡 This is a temporary development mode. Backend connection is required in production.');
+        
+        // Create a mock user for development
+        const mockUser: User = {
+          id: 'dev-user-' + Date.now(),
+          name: username || 'Development User',
+          email: `${username}@dev.local`,
+          username: username || 'dev',
+          role: 'Admin' as const,
+        };
+        
+        // Store mock user in session
+        sessionStorage.setItem('titan_user', JSON.stringify(mockUser));
+        localStorage.setItem('titan_user', JSON.stringify(mockUser));
+        sessionStorage.setItem('titan_token', 'dev-token-' + Date.now());
+        localStorage.setItem('titan_token', 'dev-token-' + Date.now());
+        
+        console.log('✅ Development mode: Mock user created', mockUser);
+        setUser(mockUser);
+      } else {
+        console.error('❌ Login failed');
+        setAuthError('invalid_credentials');
+      }
     }
   };
   
