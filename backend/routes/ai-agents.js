@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigDefaults.js';
+import { normalizeArbitrageConfig } from '../services/normalizeArbitrageConfig.js';
 
 import { aiService } from '../services/ai.js';
 import * as riskAgent from '../services/risk-agent.js';
@@ -1093,14 +1094,21 @@ router.get('/:id/details', authenticate, async (req, res) => {
     const rawConfig = safeParse(agent.config);
     const metadata = safeParse(agent.metadata);
 
-    // Use centralized config normalization
-    const config = normalizeAgentConfig(agent.agent_key, rawConfig);
+    // Special handling for arbitrage agent
+    let config;
+    if (agent.agent_key === 'arbitrage') {
+      config = normalizeArbitrageConfig(rawConfig);
+    } else {
+      // Use centralized config normalization for other agents
+      config = normalizeAgentConfig(agent.agent_key, rawConfig);
+    }
 
     console.log(`✅ Agent details loaded: ${agent.name} (${agent.agent_key})`);
     console.log(`   Accuracy: ${agent.accuracy} (type: ${typeof agent.accuracy})`);
     console.log(`   Performance: ${agent.performance_score} (type: ${typeof agent.performance_score})`);
 
-    res.json({
+    // Build response based on agent type
+    const response = {
       agent: {
         id: agent.id,
         name: agent.name,
@@ -1124,7 +1132,34 @@ router.get('/:id/details', authenticate, async (req, res) => {
         indicators: [],
         result: { indicators: [] }
       },
-    });
+    };
+
+    // For arbitrage, add metrics and lastScan
+    if (agent.agent_key === 'arbitrage') {
+      // Get recent scan from metadata
+      const lastScan = metadata?.last_result || null;
+      
+      // Calculate metrics from last scan
+      const metrics = {
+        netProfitCapturedUSDT: lastScan?.summary?.totalProfitUSDT || 0,
+        successRate: 0, // TODO: Calculate from ai_decisions
+        avgExecutionMs: 200, // Average from opportunities
+        riskAlerts: lastScan?.riskAlerts?.length || 0,
+        opportunityFrequency24h: lastScan?.summary?.totalOpportunities || 0,
+        totalScans: parseInt(agent.total_decisions, 10) || 0,
+        opportunitiesFound: lastScan?.summary?.totalOpportunities || 0,
+        averageProfitBps: 0,
+        bestProfitBps: 0,
+        simulatedVolumeUSDT: 0,
+        executionHistory: [],
+        opportunityHistory: []
+      };
+      
+      response.metrics = metrics;
+      response.lastScan = lastScan;
+    }
+
+    res.json(response);
 
   } catch (err) {
     console.error('❌ Agent details error:', err);
