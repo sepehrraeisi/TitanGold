@@ -147,6 +147,97 @@ async function logAndReturn(res, agentId, userId, decisionType, inputData, outpu
 }
 
 // ============================================================================
+// Transform Registry Result to UI Format
+// ============================================================================
+/**
+ * Transforms agent registry result to UI-compatible format
+ * Handles: indicators object → array, signal normalization, confidence, etc.
+ */
+function transformAgentResultForUI(agent_key, rawResult) {
+  try {
+    const { symbol, timeframe, confidence, signal, indicators, timestamp, _meta } = rawResult;
+    
+    // Default structure
+    const uiResult = {
+      timestamp: timestamp || new Date().toISOString(),
+      symbol: symbol || 'UNKNOWN',
+      timeframe: timeframe || '1h',
+      signal: (signal || 'NEUTRAL').toLowerCase(), // UI expects lowercase: buy, sell, hold/neutral
+      confidence: typeof confidence === 'number' ? confidence : 0.5,
+      indicators: [],
+      reasoning: `${agent_key} analysis complete (source: ${_meta?.source || 'unknown'})`,
+      _meta: _meta || { source: 'mock', version: '1.0.0' }
+    };
+
+    // Transform indicators: object → array
+    if (indicators && typeof indicators === 'object' && !Array.isArray(indicators)) {
+      // Technical agent format: { rsi: 54, macd: {...}, trend: 'bullish', ... }
+      const indicatorArray = [];
+      
+      Object.entries(indicators).forEach(([key, value]) => {
+        if (typeof value === 'number') {
+          // Simple numeric indicator (e.g., rsi: 54)
+          indicatorArray.push({
+            indicatorId: key.toUpperCase(),
+            value: value,
+            signal: value > 50 ? 'buy' : value < 50 ? 'sell' : 'neutral',
+            weight: 50
+          });
+        } else if (typeof value === 'object' && value !== null) {
+          // Complex indicator (e.g., macd: { value: -0.38, signal: 'bearish', histogram: ... })
+          const indicatorValue = value.value || 0;
+          let indicatorSignal = 'neutral';
+          
+          // Normalize signal: can be numeric (MACD signal line) or string ('bearish')
+          if (typeof value.signal === 'string') {
+            indicatorSignal = value.signal.toLowerCase() === 'bearish' ? 'sell' : 
+                              value.signal.toLowerCase() === 'bullish' ? 'buy' : 'neutral';
+          } else if (typeof value.signal === 'number') {
+            // For MACD: if histogram is negative → sell, positive → buy
+            if (value.histogram !== undefined) {
+              indicatorSignal = value.histogram < 0 ? 'sell' : value.histogram > 0 ? 'buy' : 'neutral';
+            } else {
+              indicatorSignal = indicatorValue > value.signal ? 'buy' : indicatorValue < value.signal ? 'sell' : 'neutral';
+            }
+          }
+          
+          indicatorArray.push({
+            indicatorId: key.toUpperCase(),
+            value: indicatorValue,
+            signal: indicatorSignal,
+            weight: value.weight || 50
+          });
+        } else if (typeof value === 'string') {
+          // String indicator (e.g., trend: 'bullish')
+          indicatorArray.push({
+            indicatorId: key.toUpperCase(),
+            value: value === 'bullish' ? 70 : value === 'bearish' ? 30 : 50,
+            signal: value === 'bullish' ? 'buy' : value === 'bearish' ? 'sell' : 'neutral',
+            weight: 60
+          });
+        }
+      });
+      
+      uiResult.indicators = indicatorArray;
+    } else if (Array.isArray(indicators)) {
+      // Already in array format
+      uiResult.indicators = indicators;
+    }
+
+    // Add priceTarget if available (optional)
+    if (rawResult.priceTarget) {
+      uiResult.priceTarget = rawResult.priceTarget;
+    }
+
+    return uiResult;
+  } catch (error) {
+    console.error('❌ Transform error:', error.message);
+    // Fallback: return raw result
+    return rawResult;
+  }
+}
+
+// ============================================================================
 // Routes
 // ============================================================================
 
@@ -237,6 +328,9 @@ router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 
 
     console.log(`✅ [V2] Agent execution complete: ${agent.agent_key}`);
 
+    // Transform result to UI-compatible format
+    const uiResult = transformAgentResultForUI(agent.agent_key, result);
+
     // Persist decision (minimal, consistent)
     await query(
       `INSERT INTO ai_decisions (agent_id, decision_type, confidence, input_data, output_data, created_at)
@@ -275,7 +369,7 @@ router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 
       ok: true,
       agent_id: agent.id,
       agent_key: agent.agent_key,
-      result
+      result: uiResult
     });
   } catch (error) {
     console.error('❌ [V2] Registry run error:', error);
