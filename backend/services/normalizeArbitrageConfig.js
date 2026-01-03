@@ -182,6 +182,13 @@ export function normalizeArbitrageConfig(rawConfig) {
     // Settlement
     settlement: rawConfig.settlement || {
       maxTransfersPerDay: 5
+    },
+    
+    // Auto actions
+    autoActions: rawConfig.autoActions || {
+      notifyOnOpportunity: true,
+      simulateRoutes: false,
+      pauseOnHighLatency: true
     }
   };
 }
@@ -253,6 +260,11 @@ export function getDefaultConfig() {
     },
     settlement: {
       maxTransfersPerDay: 5
+    },
+    autoActions: {
+      notifyOnOpportunity: true,
+      simulateRoutes: false,
+      pauseOnHighLatency: true
     }
   };
 }
