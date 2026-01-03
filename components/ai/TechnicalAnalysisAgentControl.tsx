@@ -309,7 +309,7 @@ const OverviewTab: React.FC<{
                 />
                 <StatCard
                     label={t('active_indicators') || 'Active Indicators'}
-                    value={config?.enabledIndicators.filter(i => i.enabled).length || 0}
+                    value={(config?.enabledIndicators || []).filter(i => i.enabled).length || 0}
                     icon="⚙️"
                 />
             </div>
@@ -445,7 +445,7 @@ const IndicatorsTab: React.FC<{
     const toggleIndicator = (indicatorId: string) => {
         const updated = {
             ...config,
-            enabledIndicators: config.enabledIndicators.map(ind =>
+            enabledIndicators: (config.enabledIndicators || []).map(ind =>
                 ind.id === indicatorId ? { ...ind, enabled: !ind.enabled } : ind
             ),
         };
@@ -455,7 +455,7 @@ const IndicatorsTab: React.FC<{
     const updateIndicatorWeight = (indicatorId: string, weight: number) => {
         const updated = {
             ...config,
-            enabledIndicators: config.enabledIndicators.map(ind =>
+            enabledIndicators: (config.enabledIndicators || []).map(ind =>
                 ind.id === indicatorId ? { ...ind, weight: Math.max(0, Math.min(100, weight)) } : ind
             ),
         };
@@ -479,7 +479,7 @@ const IndicatorsTab: React.FC<{
             <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">{t('technical_indicators') || 'Technical Indicators'}</h3>
                 <div className="space-y-3">
-                    {config.enabledIndicators.map(indicator => (
+                    {(config.enabledIndicators || []).map(indicator => (
                         <div key={indicator.id} className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg">
                             <div className="flex-1">
                                 <div className="flex items-center gap-3">

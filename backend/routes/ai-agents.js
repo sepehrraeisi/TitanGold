@@ -1101,7 +1101,11 @@ router.get('/:id/details', authenticate, async (req, res) => {
         totalDecisions: parseInt(agent.total_decisions, 10) || 0,
         successfulDecisions: parseInt(agent.successful_decisions, 10) || 0,
       },
-      lastAnalysis: null,
+      // Provide safe default for lastAnalysis to prevent UI crashes
+      lastAnalysis: metadata?.last_result || {
+        indicators: [],
+        result: { indicators: [] }
+      },
     });
 
   } catch (err) {
