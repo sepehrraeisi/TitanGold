@@ -16,7 +16,8 @@ type Props = {
 
 const AICenter: React.FC<Props> = ({ onNavigate }) => {
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<AITab>('manager');
+  // Changed from 'manager' to 'agents' - new UI with registry support
+  const [activeTab, setActiveTab] = useState<AITab>('agents');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
