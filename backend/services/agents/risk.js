@@ -1,0 +1,40 @@
+// Risk Management Agent - MVP Stub
+// Purpose: Risk Management Agent implementation
+// Date: 2026-01-03
+
+export async function run({ userId, symbol, timeframe, config }) {
+  console.log(`🤖 Risk Management Agent: ${symbol}`);
+  
+  return {
+    agent_key: 'risk',
+    symbol,
+    result: 'MVP analysis complete',
+    confidence: 0.55,
+    timestamp: new Date().toISOString(),
+    _meta: { source: 'mock', version: '1.0.0' }
+  };
+}
+
+export async function getDetails({ userId }) {
+  return {
+    agent_key: 'risk',
+    name: 'Risk Management Agent',
+    description: 'Risk Management Agent implementation',
+    status: 'active',
+    lastRun: null,
+    metrics: {
+      totalRuns: 0,
+      avgExecutionTime: 0,
+      successRate: 0
+    }
+  };
+}
+
+export function defaultConfig() {
+  return {
+    enabled: true,
+    threshold: 0.6
+  };
+}
+
+export default { run, getDetails, defaultConfig };

@@ -1,0 +1,40 @@
+// Optimization Agent - MVP Stub
+// Purpose: Optimization Agent implementation
+// Date: 2026-01-03
+
+export async function run({ userId, symbol, timeframe, config }) {
+  console.log(`🤖 Optimization Agent: ${symbol}`);
+  
+  return {
+    agent_key: 'optimization',
+    symbol,
+    result: 'MVP analysis complete',
+    confidence: 0.55,
+    timestamp: new Date().toISOString(),
+    _meta: { source: 'mock', version: '1.0.0' }
+  };
+}
+
+export async function getDetails({ userId }) {
+  return {
+    agent_key: 'optimization',
+    name: 'Optimization Agent',
+    description: 'Optimization Agent implementation',
+    status: 'active',
+    lastRun: null,
+    metrics: {
+      totalRuns: 0,
+      avgExecutionTime: 0,
+      successRate: 0
+    }
+  };
+}
+
+export function defaultConfig() {
+  return {
+    enabled: true,
+    threshold: 0.6
+  };
+}
+
+export default { run, getDetails, defaultConfig };
