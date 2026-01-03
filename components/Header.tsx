@@ -15,20 +15,20 @@ interface HeaderProps {
 const NavLink: React.FC<{ text: string; view: string; activeView: string; onClick: (view: string) => void; isMobile?: boolean; }> = ({ text, view, activeView, onClick, isMobile }) => {
     const isActive = activeView === view;
     return (
-        <button
-            onClick={() => onClick(view)}
+    <button
+        onClick={() => onClick(view)}
             className={`relative w-full text-left px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                 isActive
                     ? 'bg-gradient-to-r from-blue-600/20 to-purple-600/20 text-blue-400 shadow-lg shadow-blue-500/10 border border-blue-500/30'
                     : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
-            } ${isMobile ? 'text-base' : ''}`}
-        >
+        } ${isMobile ? 'text-base' : ''}`}
+    >
             {isActive && (
                 <span className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-purple-500 rounded-r-full"></span>
             )}
             <span className="relative z-10">{text}</span>
-        </button>
-    );
+    </button>
+);
 };
 
 const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: () => void; dailyPnL?: number;}> = ({ setActiveView, onLogout, dailyPnL = 0 }) => {
@@ -128,22 +128,22 @@ const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: (
             >
                 {currentAvatar && !avatarError ? (
                     <div className="relative">
-                        <img 
+                    <img 
                             className="h-10 w-10 rounded-full object-cover border-2 border-gray-700 shadow-lg" 
-                            src={currentAvatar} 
-                            alt={user?.name || 'User'}
-                            onError={() => {
-                                console.warn('Avatar image failed to load:', currentAvatar);
-                                setAvatarError(true);
-                                setCurrentAvatar(null);
-                            }}
-                        />
+                        src={currentAvatar} 
+                        alt={user?.name || 'User'}
+                        onError={() => {
+                            console.warn('Avatar image failed to load:', currentAvatar);
+                            setAvatarError(true);
+                            setCurrentAvatar(null);
+                        }}
+                    />
                         <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-gray-900"></div>
                     </div>
                 ) : (
                     <div className="relative">
                         <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold border-2 border-gray-700 shadow-lg ring-2 ring-blue-500/20">
-                            {getInitials(user?.name)}
+                        {getInitials(user?.name)}
                         </div>
                         <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-gray-900 animate-pulse"></div>
                     </div>
@@ -203,11 +203,23 @@ const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: (
     );
 }
 
-const LanguageSwitcher: React.FC = () => {
+const LanguageSwitcher: React.FC<{ isMobile?: boolean }> = ({ isMobile = false }) => {
     const { language, setLanguage } = useLanguage();
     const toggleLanguage = () => {
         setLanguage(language === 'en' ? 'fa' : 'en');
     }
+    
+    if (isMobile) {
+        return (
+            <button 
+                onClick={toggleLanguage} 
+                className="px-3 py-1.5 bg-gradient-to-r from-blue-600/20 to-purple-600/20 hover:from-blue-600/30 hover:to-purple-600/30 border border-blue-500/30 rounded-lg text-sm font-semibold text-blue-400 transition-all duration-200 hover:scale-105 active:scale-95"
+            >
+                {language === 'en' ? 'فارسی' : 'English'}
+            </button>
+        );
+    }
+    
     return (
         <button 
             onClick={toggleLanguage} 
@@ -327,12 +339,155 @@ const DemoModeToggle: React.FC = () => {
     );
 }
 
-const MobileMenu: React.FC<{ navLinks: any[], activeView: string, setActiveView: (view: string) => void, isOpen: boolean, setIsOpen: (isOpen: boolean) => void }> = ({ navLinks, activeView, setActiveView, isOpen, setIsOpen }) => {
+// Mode Toggle with Status Label for Mobile Sidebar
+const ModeToggleWithStatus: React.FC = () => {
     const { t } = useLanguage();
+    const [artemis, setArtemis] = useState<ArtemisState | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isToggling, setIsToggling] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+    useEffect(() => {
+        const loadArtemis = async () => {
+            try {
+                const state = await api.fetchArtemisState();
+                setArtemis(state);
+            } catch (error) {
+                console.error('Failed to load Artemis state:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadArtemis();
+        
+        // Refresh every 10 seconds
+        const interval = setInterval(loadArtemis, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleToggle = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isToggling || !artemis) return;
+        setShowConfirm(true);
+    };
+
+    const handleConfirm = async () => {
+        if (!artemis) return;
+        
+        setShowConfirm(false);
+        setIsToggling(true);
+
+        const newMode = artemis.mode === 'demo' ? 'real' : 'demo';
+        
+        try {
+            const updated = await api.updateArtemisMode(newMode);
+            setArtemis(updated);
+            setToast({
+                message: t('mode_switched') || `Mode switched to ${newMode.toUpperCase()}`,
+                type: 'success'
+            });
+        } catch (error) {
+            console.error('Failed to switch mode:', error);
+            setToast({
+                message: t('mode_switch_failed') || 'Failed to switch mode',
+                type: 'error'
+            });
+        } finally {
+            setIsToggling(false);
+        }
+    };
+
+    const confirmMessage = artemis?.mode === 'demo'
+        ? t('switch_to_real_mode_confirm') || 'Switch to REAL mode? This will use real funds and execute real trades. Are you sure?'
+        : t('switch_to_demo_mode_confirm') || 'Switch to DEMO mode? This will use virtual funds for testing.';
+
+    if (isLoading || !artemis) {
+        return (
+            <div className="flex items-center justify-between gap-2">
+                <div className="w-9 h-5 bg-gray-700 rounded-full animate-pulse" />
+                <span className="text-xs text-gray-400">...</span>
+            </div>
+        );
+    }
+
+    const isDemo = artemis.mode === 'demo';
+
+    return (
+        <>
+        <div 
+            className="flex items-center justify-between gap-3 cursor-pointer group" 
+            onClick={handleToggle}
+            title={t('click_to_switch_mode') || `Click to switch to ${isDemo ? 'REAL' : 'DEMO'} mode`}
+        >
+            <div className="flex items-center gap-2">
+                <div className={`relative w-11 h-6 flex items-center rounded-full p-1 duration-300 transition-all ${isDemo ? 'bg-gradient-to-r from-yellow-500/30 to-yellow-600/20 border border-yellow-500/40' : 'bg-gradient-to-r from-red-500/30 to-red-600/20 border border-red-500/40'}`}>
+                    <div className={`absolute w-4 h-4 rounded-full shadow-lg transform duration-300 transition-all ${isDemo ? 'translate-x-0 bg-gradient-to-br from-yellow-400 to-yellow-600' : 'translate-x-5 bg-gradient-to-br from-red-400 to-red-600'}`}/>
+                </div>
+            </div>
+            <span className={`text-xs font-bold ${isDemo ? 'text-yellow-400' : 'text-red-400'}`}>
+                {isDemo ? 'DEMO' : 'LIVE'}
+            </span>
+        </div>
+            <ConfirmModal
+                isOpen={showConfirm}
+                message={confirmMessage}
+                onConfirm={handleConfirm}
+                onCancel={() => setShowConfirm(false)}
+                type={artemis?.mode === 'demo' ? 'danger' : 'warning'}
+            />
+            {toast && (
+                <Toast
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast(null)}
+                />
+            )}
+        </>
+    );
+};
+
+const MobileMenu: React.FC<{ navLinks: any[], activeView: string, setActiveView: (view: string) => void, isOpen: boolean, setIsOpen: (isOpen: boolean) => void, statusData?: { aiAgents: { active: number; total: number; percentage: number }; connection: { status: string; text: string }; activeTrades: number; dailyPnL: number } }> = ({ navLinks, activeView, setActiveView, isOpen, setIsOpen, statusData }) => {
+    const { t } = useLanguage();
+    const [walletBalance, setWalletBalance] = useState<{ total: number; mode: 'demo' | 'live' } | null>(null);
+    
+    useEffect(() => {
+        const loadBalance = async () => {
+            try {
+                const artemisState = await api.fetchArtemisState().catch(() => null);
+                const mode = artemisState?.mode || 'demo';
+                const walletBalanceData = await api.fetchWalletBalance().catch(() => null);
+                if (walletBalanceData) {
+                    const actualMode = walletBalanceData.mode || mode;
+                    const { USDT = 0, BTC = 0, ETH = 0 } = walletBalanceData.balances || {};
+                    const [ethPrice, btcPrice] = await Promise.all([
+                        api.fetchMexcTicker24hr('ETHUSDT').catch(() => [{ lastPrice: '2500' }]),
+                        api.fetchMexcTicker24hr('BTCUSDT').catch(() => [{ lastPrice: '45000' }]),
+                    ]);
+                    const eth = parseFloat(ethPrice[0]?.lastPrice || '2500');
+                    const btc = parseFloat(btcPrice[0]?.lastPrice || '45000');
+                    const total = USDT + (BTC * btc) + (ETH * eth);
+                    setWalletBalance({ total, mode: actualMode });
+                }
+            } catch (error) {
+                console.error('Failed to load wallet balance:', error);
+            }
+        };
+        if (isOpen) {
+            loadBalance();
+        }
+    }, [isOpen]);
+
+    const formatBalance = (value: number): string => {
+        if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+        if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
+        return `$${value.toFixed(2)}`;
+    };
+
     return (
     <div className={`fixed inset-0 bg-black/70 backdrop-blur-md z-50 transition-opacity lg:hidden ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsOpen(false)}>
-        <div className={`fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-gray-900 to-gray-950 shadow-2xl transition-transform transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} border-r border-gray-800/50`} onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-gray-800/50 bg-gradient-to-r from-blue-600/10 to-purple-600/10">
+        <div className={`fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-gray-900 to-gray-950 shadow-2xl transition-transform transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} border-r border-gray-800/50 flex flex-col`} onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-800/50 bg-gradient-to-r from-blue-600/10 to-purple-600/10 flex-shrink-0">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                         <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-lg">
@@ -352,25 +507,88 @@ const MobileMenu: React.FC<{ navLinks: any[], activeView: string, setActiveView:
                     </button>
                 </div>
             </div>
-            <nav className="p-4 space-y-1 overflow-y-auto">
+            
+            <nav className="p-4 space-y-1 overflow-y-auto flex-1">
                 {navLinks.map(link => (
                     <NavLink key={link.view} {...link} activeView={activeView} onClick={(view) => { setActiveView(view); setIsOpen(false); }} isMobile />
                 ))}
             </nav>
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800/50 bg-gradient-to-r from-gray-900/90 to-gray-800/90">
-                <div className="mb-3">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="p-1.5 bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-lg border border-blue-500/30">
-                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                        </div>
-                        <span className="text-sm font-semibold text-gray-300">{t('mode') || 'Trading Mode'}</span>
+            
+            {/* Mode & Language - Top Section */}
+            <div className="border-t border-gray-800/50 bg-gray-900/30 flex-shrink-0 p-3">
+                <div className="flex items-center justify-between gap-2">
+                    {/* Trading Mode */}
+                    <div className="flex-1 p-2 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/40 transition-colors">
+                        <ModeToggleWithStatus />
                     </div>
-                    <p className="text-xs text-gray-500">{t('switch_trading_mode') || 'Switch between demo and live trading'}</p>
+                    
+                    {/* Language Switcher - Icon Only (Same as Header) */}
+                    <div className="p-2 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/40 transition-colors">
+                        <LanguageSwitcher isMobile={false} />
+                    </div>
                 </div>
-                <DemoModeToggle />
             </div>
+            
+            {/* Status Section - Icon Only */}
+            {statusData && (
+                <div className="border-t border-gray-800/50 bg-gray-900/30 flex-shrink-0 p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                        {/* Artemis Status */}
+                        <div className="flex items-center justify-center gap-2 p-2 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-purple-500/40 transition-colors">
+                            <div className="relative">
+                                <svg className="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M10 3.5a1.5 1.5 0 011.5 1.5v1.5a1.5 1.5 0 01-3 0V5A1.5 1.5 0 0110 3.5zM5.5 10a1.5 1.5 0 011.5-1.5h1.5a1.5 1.5 0 010 3H7A1.5 1.5 0 015.5 10zM10 14.5a1.5 1.5 0 01-1.5-1.5v-1.5a1.5 1.5 0 013 0V13A1.5 1.5 0 0110 14.5zM14.5 10a1.5 1.5 0 01-1.5 1.5h-1.5a1.5 1.5 0 010-3H13A1.5 1.5 0 0114.5 10z" />
+                                </svg>
+                                {statusData.aiAgents.active > 0 && (
+                                    <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                                )}
+                            </div>
+                            <span className="text-sm font-bold text-purple-400">
+                                {statusData.aiAgents.active}/{statusData.aiAgents.total}
+                            </span>
+                        </div>
+                        
+                        {/* Connection */}
+                        <div className="flex items-center justify-center gap-2 p-2 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-green-500/40 transition-colors">
+                            <div className="relative">
+                                <svg className={`h-5 w-5 ${statusData.connection.status === 'connected' ? 'text-green-400' : 'text-red-400'}`} viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M12.586 2.586a2 2 0 012.828 0L18 5.172a2 2 0 010 2.828l-2.586 2.586a2 2 0 01-2.828 0L10 8.000l-2.586 2.586a2 2 0 01-2.828-2.828L7.172 5.172a2 2 0 012.828 0L12.586 2.586zM10 10l-2.586 2.586a2 2 0 01-2.828 0L2 10l2.586-2.586a2 2 0 012.828 0L10 10z" clipRule="evenodd" />
+                                </svg>
+                                <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 ${statusData.connection.status === 'connected' ? 'bg-green-400' : 'bg-red-400'} rounded-full ${statusData.connection.status === 'connected' ? 'animate-pulse' : ''}`}></div>
+                            </div>
+                            <span className={`text-sm font-bold ${statusData.connection.status === 'connected' ? 'text-green-400' : 'text-red-400'}`}>
+                                {statusData.connection.status === 'connected' ? '✓' : '✗'}
+                            </span>
+                        </div>
+                        
+                        {/* Active Trades */}
+                        <div className="flex items-center justify-center gap-2 p-2 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/40 transition-colors">
+                            <div className="relative">
+                                <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
+                                    <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
+                                </svg>
+                                {statusData.activeTrades > 0 && (
+                                    <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                                )}
+                            </div>
+                            <span className="text-sm font-bold text-blue-400">
+                                {statusData.activeTrades}
+                            </span>
+                        </div>
+                        
+                        {/* Wallet */}
+                        <div className="flex items-center justify-center gap-2 p-2 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/40 transition-colors">
+                            <svg className="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="text-sm font-bold text-blue-400 truncate max-w-[70px]">
+                                {walletBalance ? formatBalance(walletBalance.total) : '--'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     </div>
 );
@@ -590,62 +808,62 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
 
     return (
         <>
-            <header className="bg-gradient-to-r from-gray-900/95 via-gray-900/95 to-gray-900/95 backdrop-blur-xl border-b border-gray-800/50 shadow-xl shadow-black/20 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
-                <div className="flex items-center space-x-6">
+            <header className="bg-gradient-to-r from-gray-900/95 via-gray-900/95 to-gray-900/95 backdrop-blur-xl border-b border-gray-800/50 shadow-xl shadow-black/20 px-2 sm:px-3 md:px-4 py-2 sm:py-3 flex items-center justify-between sticky top-0 z-50 min-h-[60px]">
+                <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 lg:space-x-6 min-w-0 flex-1">
                     <button 
-                        className="lg:hidden text-gray-400 hover:text-gray-200 p-2 rounded-lg hover:bg-gray-800/50 transition-all duration-200" 
+                        className="lg:hidden text-gray-400 hover:text-gray-200 p-1.5 sm:p-2 rounded-lg hover:bg-gray-800/50 transition-all duration-200 flex-shrink-0" 
                         onClick={() => setIsMobileMenuOpen(true)}
                     >
-                         <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                         <svg className="h-5 w-5 sm:h-6 sm:w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
-                    <div className="flex items-center space-x-3 cursor-pointer group">
+                    <div className="flex items-center space-x-2 sm:space-x-3 cursor-pointer group flex-shrink-0">
                         <div className="hidden md:block relative">
                             <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg blur opacity-50 group-hover:opacity-75 transition-opacity"></div>
-                            <div className="relative bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-lg">
-                                <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                                </svg>
+                            <div className="relative bg-gradient-to-br from-blue-600 to-purple-600 p-1.5 sm:p-2 rounded-lg">
+                                <svg className="h-5 w-5 sm:h-6 sm:w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                        </svg>
                             </div>
                         </div>
-                        <span className="text-lg md:text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">TITAN</span>
+                        <span className="text-base sm:text-lg md:text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent whitespace-nowrap">TITAN</span>
                     </div>
-                    <nav className="hidden lg:flex items-center space-x-1">
+                    <nav className="hidden lg:flex items-center space-x-0.5 xl:space-x-1 min-w-0 overflow-x-auto">
                         {navLinks.map(link => (
                             <NavLink key={link.view} {...link} activeView={activeView} onClick={setActiveView} />
                         ))}
                     </nav>
                 </div>
 
-                <div className="flex items-center space-x-3">
-                    <div className="hidden md:flex items-center space-x-3 border-r border-gray-700/50 pr-3">
+                <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 flex-shrink-0">
+                    <div className="hidden md:flex items-center space-x-1 sm:space-x-2 border-r border-gray-700/50 pr-1 sm:pr-2 md:pr-3">
                         {statusIcons.map(item => (
                             <div 
                                 key={item.title} 
-                                className="flex items-center space-x-2 px-3 py-1.5 rounded-lg hover:bg-gray-800/50 transition-all duration-200 group" 
+                                className="hidden xl:flex items-center space-x-1.5 sm:space-x-2 px-2 sm:px-2.5 md:px-3 py-1 sm:py-1.5 rounded-lg hover:bg-gray-800/50 transition-all duration-200 group" 
                                 title={item.title}
                             >
-                                <div className="group-hover:scale-110 transition-transform duration-200">
-                                    {item.icon}
+                                <div className="group-hover:scale-110 transition-transform duration-200 flex-shrink-0">
+                            {item.icon}
                                 </div>
-                                <span className="text-sm text-gray-300 font-medium">{item.text}</span>
+                                <span className="text-xs sm:text-sm text-gray-300 font-medium whitespace-nowrap hidden 2xl:block">{item.text}</span>
                             </div>
                         ))}
-                        <LanguageSwitcher />
+                        <LanguageSwitcher isMobile={false} />
                     </div>
                     {/* Wallet Balance */}
-                    <div className="hidden md:block border-r border-gray-700/50 pr-3">
+                    <div className="hidden md:block border-r border-gray-700/50 pr-1 sm:pr-2 md:pr-3">
                         <WalletBalance />
                     </div>
                     {/* Demo/Real Mode Toggle - Hidden on mobile, shown in sidebar */}
-                    <div className="hidden lg:block border-r border-gray-700/50 pr-3">
-                        <DemoModeToggle />
+                    <div className="hidden lg:block border-r border-gray-700/50 pr-1 sm:pr-2 md:pr-3">
+                        <ModeToggleWithStatus />
                     </div>
                     <UserDropdown setActiveView={setActiveView} onLogout={onLogout} dailyPnL={statusData.dailyPnL} />
                 </div>
             </header>
-            <MobileMenu navLinks={navLinks} activeView={activeView} setActiveView={setActiveView} isOpen={isMobileMenuOpen} setIsOpen={setIsMobileMenuOpen} />
+            <MobileMenu navLinks={navLinks} activeView={activeView} setActiveView={setActiveView} isOpen={isMobileMenuOpen} setIsOpen={setIsMobileMenuOpen} statusData={statusData} />
         </>
     );
 };
