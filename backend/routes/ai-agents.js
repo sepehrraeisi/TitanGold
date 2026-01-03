@@ -13,13 +13,20 @@ const router = express.Router();
 // Production++ Helpers for AI Routes
 // ============================================================================
 
-// 1) Normalized Error Response
+// 1) Normalized Error Response (with UI crash prevention)
 function sendError(res, code, message, status = 400, details = null) {
   return res.status(status).json({
+    ok: false,
     error: {
       code,
       message,
       details: details || undefined
+    },
+    // ✅ CRITICAL: Prevent UI crash on .filter()
+    // Even if auth fails or agent errors, UI won't crash
+    indicators: [],
+    result: {
+      indicators: []
     }
   });
 }
