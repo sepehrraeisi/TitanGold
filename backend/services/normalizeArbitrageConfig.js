@@ -132,6 +132,17 @@ export function normalizeArbitrageConfig(rawConfig) {
       shareWithPortfolio: false,
       forwardToArtemis: true,
       triggerMode: 'auto'
+    },
+    
+    // Notifications
+    notifications: rawConfig.notifications || {
+      immediate: true,
+      dashboardOnly: false,
+      channels: {
+        email: true,
+        telegram: false,
+        discord: false
+      }
     }
   };
 }
@@ -176,6 +187,15 @@ export function getDefaultConfig() {
       shareWithPortfolio: false,
       forwardToArtemis: true,
       triggerMode: 'auto'
+    },
+    notifications: {
+      immediate: true,
+      dashboardOnly: false,
+      channels: {
+        email: true,
+        telegram: false,
+        discord: false
+      }
     }
   };
 }
