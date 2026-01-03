@@ -5,6 +5,7 @@ import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigD
 
 import { aiService } from '../services/ai.js';
 import * as riskAgent from '../services/risk-agent.js';
+import agentRegistry from '../services/agents/registry.js';
 
 const router = express.Router();
 

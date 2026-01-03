@@ -123,6 +123,7 @@ CREATE TABLE trade_history (
 
 CREATE TABLE ai_agents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agent_key VARCHAR(50), -- Unique identifier for agent type (technical, risk, sentiment, etc.)
     name VARCHAR(255) NOT NULL,
     type VARCHAR(100) NOT NULL, -- technical_analysis, risk_management, sentiment, pattern, etc.
     status VARCHAR(50) NOT NULL DEFAULT 'idle', -- idle, active, training, error
@@ -136,7 +137,8 @@ CREATE TABLE ai_agents (
     is_enabled BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    metadata JSONB DEFAULT '{}'::jsonb
+    metadata JSONB DEFAULT '{}'::jsonb,
+    CONSTRAINT ai_agents_agent_key_unique UNIQUE (agent_key)
 );
 
 CREATE TABLE ai_training_sessions (
