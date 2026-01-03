@@ -967,9 +967,70 @@ router.get('/manager-overview', authenticate, async (req, res) => {
 router.get('/', authenticate, async (req, res) => {
   try {
     const result = await query(
-      'SELECT * FROM ai_agents ORDER BY name'
+      `SELECT 
+        id, 
+        agent_key, 
+        name, 
+        type,
+        status,
+        config,
+        metadata,
+        COALESCE(accuracy::float8, 0) AS accuracy,
+        COALESCE(performance_score::float8, 0) AS performance_score,
+        COALESCE(total_decisions, 0) AS total_decisions,
+        COALESCE(successful_decisions, 0) AS successful_decisions,
+        is_enabled,
+        created_at,
+        updated_at,
+        last_active_at
+      FROM ai_agents 
+      ORDER BY agent_key`
     );
-    res.json(result.rows);
+    
+    // Map DB fields to UI contract
+    const agents = result.rows.map(agent => {
+      // Safe JSON parse
+      const safeParse = (value) => {
+        if (!value) return {};
+        if (typeof value === 'object') return value;
+        try { return JSON.parse(value); } catch { return {}; }
+      };
+      
+      const config = safeParse(agent.config);
+      const metadata = safeParse(agent.metadata);
+      
+      // Status mapping: idle/error -> inactive, active/training -> as-is
+      let mappedStatus = agent.status;
+      if (agent.status === 'idle' || agent.status === 'error') {
+        mappedStatus = 'inactive';
+      }
+      
+      // Extract capabilities from metadata
+      const capabilities = metadata.capabilities || [];
+      const role = metadata.role || 'AI Agent';
+      
+      return {
+        id: agent.id,
+        agent_key: agent.agent_key,
+        name: agent.name,
+        role,
+        status: mappedStatus,
+        accuracy: parseFloat(agent.accuracy) || 0,
+        trainingProgress: 100, // Default: all agents are trained
+        decisions: parseInt(agent.total_decisions, 10) || 0,
+        learningTime: metadata.learning_time || '0h',
+        knowledgeSize: metadata.knowledge_size || 'N/A',
+        capabilities,
+        lastUpdate: agent.updated_at || agent.created_at,
+        // Additional fields for compatibility
+        type: agent.type,
+        is_enabled: agent.is_enabled,
+        config,
+        metadata
+      };
+    });
+    
+    res.json(agents);
   } catch (error) {
     console.error('Failed to fetch AI agents:', error);
     // If database is unavailable, return empty array instead of error
