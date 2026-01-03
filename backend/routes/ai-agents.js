@@ -229,6 +229,9 @@ function transformAgentResultForUI(agent_key, rawResult) {
       uiResult.priceTarget = rawResult.priceTarget;
     }
 
+    // ✅ SAFETY: Ensure indicators is ALWAYS an array (never undefined/null)
+    uiResult.indicators = Array.isArray(uiResult.indicators) ? uiResult.indicators : [];
+
     return uiResult;
   } catch (error) {
     console.error('❌ Transform error:', error.message);
@@ -268,15 +271,14 @@ router.post('/chat', authenticate, rateLimit({ limit: 10, windowMs: 60000 }), as
 });
 
 // ============================================================================
-// Registry-based Run Endpoint (V2) - SAFE MIGRATION PATH
-// POST /api/ai-agents/:id/run-v2
+// Registry-based Run Handler (Shared between /run and /run-v2)
 // ============================================================================
-router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), async (req, res) => {
+async function runAgentViaRegistry(req, res) {
   try {
     const { id } = req.params;
     const { symbol, timeframe, config, input } = req.body || {};
 
-    console.log(`🚀 [V2] Running agent: ${id.substring(0, 8)}... | symbol: ${symbol} | timeframe: ${timeframe}`);
+    console.log(`🚀 [Registry] Running agent: ${id.substring(0, 8)}... | symbol: ${symbol} | timeframe: ${timeframe}`);
 
     // Basic validations
     if (!isValidUUID(id)) {
@@ -315,7 +317,7 @@ router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 
       ...(config || {})
     };
 
-    console.log(`✅ [V2] Agent loaded: ${agent.agent_key} (${agent.name})`);
+    console.log(`✅ [Registry] Agent loaded: ${agent.agent_key} (${agent.name})`);
 
     // Execute via registry
     const result = await agentRegistry.runAgent(agent.agent_key, {
@@ -326,7 +328,7 @@ router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 
       input // optional freeform payload for agents
     });
 
-    console.log(`✅ [V2] Agent execution complete: ${agent.agent_key}`);
+    console.log(`✅ [Registry] Agent execution complete: ${agent.agent_key}`);
 
     // Transform result to UI-compatible format
     const uiResult = transformAgentResultForUI(agent.agent_key, result);
@@ -344,7 +346,7 @@ router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 
       ]
     );
 
-    console.log(`📝 [V2] Decision logged for ${agent.agent_key}`);
+    console.log(`📝 [Registry] Decision logged for ${agent.agent_key}`);
 
     // Update agent metadata snapshot + last_active_at
     const newMetadata = {
@@ -363,16 +365,31 @@ router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 
       [agent.id, JSON.stringify(newMetadata)]
     );
 
-    console.log(`📊 [V2] Agent metadata updated for ${agent.agent_key}`);
+    console.log(`📊 [Registry] Agent metadata updated for ${agent.agent_key}`);
 
+    // ✅ Safety: Ensure indicators is always an array
+    const safeIndicators = Array.isArray(uiResult?.indicators) ? uiResult.indicators : [];
+
+    // ✅ Return DUAL format for maximum UI compatibility:
+    // - Top-level fields (for UIs that read directly: data.indicators)
+    // - Also inside 'result' (for UIs that read: data.result.indicators)
     return res.json({
       ok: true,
       agent_id: agent.id,
       agent_key: agent.agent_key,
-      result: uiResult
+      
+      // ✅ TOP-LEVEL fields (UI reads: response.indicators.filter(...))
+      ...uiResult,
+      indicators: safeIndicators,
+      
+      // ✅ Backward/Alt compatibility (UI reads: response.result.indicators.filter(...))
+      result: {
+        ...uiResult,
+        indicators: safeIndicators
+      }
     });
   } catch (error) {
-    console.error('❌ [V2] Registry run error:', error);
+    console.error('❌ [Registry] Run error:', error);
 
     // Best-effort: store last_error on agent if id is valid
     try {
@@ -391,16 +408,34 @@ router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 
           );
         }
       }
-    } catch (_) {
+    } catch (updateErr) {
       // Ignore metadata update errors
     }
 
-    return sendError(res, 'AI_ERROR', error.message || 'Failed to run agent (v2)', 500);
+    return sendError(res, 'AI_ERROR', error.message || 'Failed to run agent', 500);
   }
-});
+}
 
-// Run an AI agent (used by Scheduler and Trading Engine)
-router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), async (req, res) => {
+// ============================================================================
+// Registry-based Run Endpoint (V2) - SAFE MIGRATION PATH
+// POST /api/ai-agents/:id/run-v2
+// ============================================================================
+router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), runAgentViaRegistry);
+
+// ============================================================================
+// LEGACY /run endpoint - NOW USES REGISTRY (same as /run-v2)
+// POST /api/ai-agents/:id/run
+// ============================================================================
+router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), runAgentViaRegistry);
+
+// ============================================================================
+// OLD LEGACY ROUTE (KEPT FOR REFERENCE - DEPRECATED)
+// This was the old /run handler with hardcoded agent-1, agent-2, etc.
+// Now replaced by registry-based handler above
+// ============================================================================
+/*
+/*
+router.post('/:id/run-OLD', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), async (req, res) => {
   try {
     const { id } = req.params;
     const { function: funcName, symbol, timeframe = '1h' } = req.body || {};
@@ -842,6 +877,9 @@ function safeParseJson(raw) {
   }
   return null;
 }
+
+
+*/
 
 // Get manager overview (for AI Manager component)
 
