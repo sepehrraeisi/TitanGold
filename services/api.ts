@@ -6350,7 +6350,7 @@ export const runTechnicalAnalysis = async (agentId: string, symbol?: string, tim
 
         console.log(`🚀 Running Technical Analysis via backend API: ${agentId.substring(0,8)}...`);
 
-        const response = await fetch(`/api/ai-agents/${agentId}/run`, {
+        const response = await fetch(`/api/ai-agents/${agentId}/run-v2`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -12699,7 +12699,7 @@ export const runRiskAssessment = async (agentId: string): Promise<RiskAssessment
         }
 
         // Call backend /api/ai-agents/:id/run endpoint
-        const response = await fetch(`/api/ai-agents/${agentId}/run`, {
+        const response = await fetch(`/api/ai-agents/${agentId}/run-v2`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
