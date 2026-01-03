@@ -3359,5 +3359,6 @@
   "context": "زمینه",
   "wallet": "کیف پول",
   "demo_wallet": "دمو",
-  "click_to_toggle_balance": "کلیک کنید تا نمایش موجودی تغییر کند"
+  "click_to_toggle_balance": "کلیک کنید تا نمایش موجودی تغییر کند",
+  "switch_trading_mode": "تغییر بین حالت دمو و واقعی معاملات"
 }

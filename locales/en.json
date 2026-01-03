@@ -3537,5 +3537,6 @@
   "hide": "Hide",
   "context": "Context",
   "demo_wallet": "Demo",
-  "click_to_toggle_balance": "Click to toggle balance visibility"
+  "click_to_toggle_balance": "Click to toggle balance visibility",
+  "switch_trading_mode": "Switch between demo and live trading"
 }

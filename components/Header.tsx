@@ -357,8 +357,18 @@ const MobileMenu: React.FC<{ navLinks: any[], activeView: string, setActiveView:
                     <NavLink key={link.view} {...link} activeView={activeView} onClick={(view) => { setActiveView(view); setIsOpen(false); }} isMobile />
                 ))}
             </nav>
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800/50 bg-gray-900/50">
-                <div className="text-sm text-gray-400 mb-2 font-medium">{t('mode') || 'Mode'}:</div>
+            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800/50 bg-gradient-to-r from-gray-900/90 to-gray-800/90">
+                <div className="mb-3">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1.5 bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-lg border border-blue-500/30">
+                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-300">{t('mode') || 'Trading Mode'}</span>
+                    </div>
+                    <p className="text-xs text-gray-500">{t('switch_trading_mode') || 'Switch between demo and live trading'}</p>
+                </div>
                 <DemoModeToggle />
             </div>
         </div>
@@ -381,43 +391,28 @@ const WalletBalance: React.FC = () => {
                 const artemisState = await api.fetchArtemisState().catch(() => null);
                 const mode = artemisState?.mode || 'demo';
 
-                if (mode === 'live') {
-                    // In live mode, get total from all wallets
+                // First try to get wallet balance from API (it returns the correct mode)
+                const walletBalance = await api.fetchWalletBalance().catch(() => null);
+                if (walletBalance) {
+                    const actualMode = walletBalance.mode || mode; // Use mode from API response
+                    const { USDT = 0, BTC = 0, ETH = 0 } = walletBalance.balances || {};
+                    // Get prices for conversion
+                    const [ethPrice, btcPrice] = await Promise.all([
+                        api.fetchMexcTicker24hr('ETHUSDT').catch(() => [{ lastPrice: '2500' }]),
+                        api.fetchMexcTicker24hr('BTCUSDT').catch(() => [{ lastPrice: '45000' }]),
+                    ]);
+                    const eth = parseFloat(ethPrice[0]?.lastPrice || '2500');
+                    const btc = parseFloat(btcPrice[0]?.lastPrice || '45000');
+                    const total = USDT + (BTC * btc) + (ETH * eth);
+                    setBalance({ total, mode: actualMode });
+                } else if (mode === 'live') {
+                    // Fallback: In live mode, get total from all wallets
                     try {
                         const walletData = await api.fetchWalletData();
                         const totalUSD = walletData.stats.totalAssets || 0;
                         setBalance({ total: totalUSD, mode: 'live' });
                     } catch (error) {
-                        console.warn('Failed to fetch live wallet data, trying API:', error);
-                        // Fallback to API
-                        const walletBalance = await api.fetchWalletBalance().catch(() => null);
-                        if (walletBalance) {
-                            const { USDT = 0, BTC = 0, ETH = 0 } = walletBalance.balances || {};
-                            // Get prices for conversion
-                            const [ethPrice, btcPrice] = await Promise.all([
-                                api.fetchMexcTicker24hr('ETHUSDT').catch(() => [{ lastPrice: '2500' }]),
-                                api.fetchMexcTicker24hr('BTCUSDT').catch(() => [{ lastPrice: '45000' }]),
-                            ]);
-                            const eth = parseFloat(ethPrice[0]?.lastPrice || '2500');
-                            const btc = parseFloat(btcPrice[0]?.lastPrice || '45000');
-                            const total = USDT + (BTC * btc) + (ETH * eth);
-                            setBalance({ total, mode: 'live' });
-                        }
-                    }
-                } else {
-                    // In demo mode, get demo balance
-                    const walletBalance = await api.fetchWalletBalance().catch(() => null);
-                    if (walletBalance) {
-                        const { USDT = 0, BTC = 0, ETH = 0 } = walletBalance.balances || {};
-                        // Get prices for conversion
-                        const [ethPrice, btcPrice] = await Promise.all([
-                            api.fetchMexcTicker24hr('ETHUSDT').catch(() => [{ lastPrice: '2500' }]),
-                            api.fetchMexcTicker24hr('BTCUSDT').catch(() => [{ lastPrice: '45000' }]),
-                        ]);
-                        const eth = parseFloat(ethPrice[0]?.lastPrice || '2500');
-                        const btc = parseFloat(btcPrice[0]?.lastPrice || '45000');
-                        const total = USDT + (BTC * btc) + (ETH * eth);
-                        setBalance({ total, mode: 'demo' });
+                        console.warn('Failed to fetch live wallet data:', error);
                     }
                 }
             } catch (error) {
@@ -606,7 +601,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
                         </svg>
                     </button>
                     <div className="flex items-center space-x-3 cursor-pointer group">
-                        <div className="relative">
+                        <div className="hidden md:block relative">
                             <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg blur opacity-50 group-hover:opacity-75 transition-opacity"></div>
                             <div className="relative bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-lg">
                                 <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -614,7 +609,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
                                 </svg>
                             </div>
                         </div>
-                        <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">TITAN</span>
+                        <span className="text-lg md:text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">TITAN</span>
                     </div>
                     <nav className="hidden lg:flex items-center space-x-1">
                         {navLinks.map(link => (
@@ -640,11 +635,11 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
                         <LanguageSwitcher />
                     </div>
                     {/* Wallet Balance */}
-                    <div className="border-r border-gray-700/50 pr-3">
+                    <div className="hidden md:block border-r border-gray-700/50 pr-3">
                         <WalletBalance />
                     </div>
-                    {/* Demo/Real Mode Toggle - Always visible */}
-                    <div className="border-r border-gray-700/50 pr-3">
+                    {/* Demo/Real Mode Toggle - Hidden on mobile, shown in sidebar */}
+                    <div className="hidden lg:block border-r border-gray-700/50 pr-3">
                         <DemoModeToggle />
                     </div>
                     <UserDropdown setActiveView={setActiveView} onLogout={onLogout} dailyPnL={statusData.dailyPnL} />

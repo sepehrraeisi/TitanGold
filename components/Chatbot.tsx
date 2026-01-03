@@ -203,7 +203,7 @@ const Chatbot: React.FC = () => {
       {/* Floating Chat Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 transition-all duration-300 transform hover:scale-110 active:scale-95 z-50 flex items-center justify-center group ${
+        className={`fixed bottom-4 right-4 md:bottom-6 md:right-6 w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 transition-all duration-300 transform hover:scale-110 active:scale-95 z-50 flex items-center justify-center group ${
           isOpen ? 'rotate-180' : ''
         }`}
         aria-label="Toggle Chatbot"
@@ -226,7 +226,7 @@ const Chatbot: React.FC = () => {
       
       {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 w-96 h-[600px] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 border border-gray-700/50 rounded-2xl shadow-2xl flex flex-col z-40 backdrop-blur-xl animate-slideUp">
+        <div className="fixed bottom-20 right-2 md:right-6 w-[calc(100vw-1rem)] md:w-96 h-[calc(100vh-6rem)] md:h-[600px] max-h-[600px] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 border border-gray-700/50 rounded-2xl shadow-2xl flex flex-col z-40 backdrop-blur-xl animate-slideUp">
           {/* Header */}
           <div className="p-4 border-b border-gray-700/50 bg-gradient-to-r from-blue-600/10 to-purple-600/10 rounded-t-2xl">
             <div className="flex items-center justify-between">
