@@ -7901,121 +7901,46 @@ export const updateArbitrageConfig = async (
 
 export const runArbitrageAnalysis = async (agentId: string): Promise<ArbitrageScanResult> => {
     try {
-        const agent = await database.get<AIAgent>('aiAgents', agentId);
-        if (!agent || !agent.arbitrageConfig) throw new Error('Agent or config not found');
-        const config = agent.arbitrageConfig;
-        const exchanges = config.exchanges.filter(e => e.enabled);
-        if (exchanges.length === 0) {
-            throw new Error('No exchanges enabled');
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) {
+            throw new Error('Authentication required');
         }
-        const spotTickers = await fetchMexcTicker24hr();
-        const tickerMap = new Map<string, any>();
-        (spotTickers || []).forEach((ticker: any) => {
-            if (ticker.symbol) {
-                tickerMap.set(ticker.symbol.toUpperCase(), ticker);
-            }
-        });
-        let opportunities: ArbitrageOpportunity[] = [];
-        if (exchanges.some(e => e.id === 'mexc' && e.markets.includes('spot'))) {
-            opportunities = opportunities.concat(detectTriangularOpportunities(config, tickerMap, 'mexc'));
-            const spotPerpOps = await detectSpotVsPerpOpportunities(config, tickerMap, 'mexc');
-            opportunities = opportunities.concat(spotPerpOps);
-        }
-        const netProfitPotentialUSDT = opportunities.reduce((sum, opp) => sum + (opp.netProfitUSDT ?? 0), 0);
-        const avgRiskScore = opportunities.length
-            ? opportunities.reduce((sum, opp) => sum + (opp.riskScore ?? 0), 0) / opportunities.length
-            : 0;
-        const avgExecutionMsScan = opportunities.length
-            ? opportunities.reduce((sum, opp) => sum + (opp.executionTimeMs ?? 0), 0) / opportunities.length
-            : 0;
-        const scan: ArbitrageScanResult = {
-            timestamp: new Date().toISOString(),
-            opportunities,
-            exchangesChecked: exchanges.map(e => e.id),
-            symbolsChecked: config.symbols,
-            avgRiskScore: Math.round(avgRiskScore * 100) / 100,
-            netProfitPotentialUSDT: Math.round(netProfitPotentialUSDT * 100) / 100,
-            avgExecutionMs: Math.round(avgExecutionMsScan),
-        };
 
-        const currentMetrics = agent.arbitrageMetrics || createDefaultArbitrageMetrics();
+        console.log('🔍 Running arbitrage analysis for agent:', agentId);
 
-        const totalProfitBps = opportunities.reduce((sum, opp) => sum + opp.expectedProfitBps, 0);
-        const avgProfitBps = opportunities.length > 0 ? totalProfitBps / opportunities.length : 0;
-        const bestProfitBps = opportunities.reduce((max, opp) => Math.max(max, opp.expectedProfitBps), currentMetrics.bestProfitBps);
-        const simulatedVolume = opportunities.reduce((sum, opp) => sum + opp.notionalUSDT, 0);
-        const executionHistoryBundle = buildArbitrageExecutionRecords(opportunities, config, currentMetrics.executionHistory);
-        const executionHistory = executionHistoryBundle.merged;
-        const newExecutionRecords = executionHistoryBundle.newRecords;
-        const opportunityHistory = buildOpportunityHistoryEntries(opportunities, currentMetrics.opportunityHistory);
-        const executedProfit = newExecutionRecords
-            .filter(record => record.status === 'executed')
-            .reduce((sum, record) => sum + record.profitUSDT, 0);
-        const riskAlerts = opportunities.filter(opp => opp.riskScore >= 75).length;
-        const successCount = newExecutionRecords.filter(record => record.status === 'executed').length;
-        const successRateScan = newExecutionRecords.length
-            ? (successCount / newExecutionRecords.length) * 100
-            : currentMetrics.successRate;
-        const updatedSuccessRate = currentMetrics.totalScans
-            ? (currentMetrics.successRate * currentMetrics.totalScans + successRateScan) / (currentMetrics.totalScans + 1)
-            : successRateScan;
-        const updatedAvgExecutionMs = opportunities.length
-            ? (currentMetrics.avgExecutionMs * currentMetrics.totalScans + avgExecutionMsScan) / (currentMetrics.totalScans + 1)
-            : currentMetrics.avgExecutionMs;
-        const updatedMetrics: ArbitrageMetrics = {
-            ...currentMetrics,
-            totalScans: currentMetrics.totalScans + 1,
-            opportunitiesFound: currentMetrics.opportunitiesFound + opportunities.length,
-            averageProfitBps:
-                currentMetrics.totalScans > 0
-                    ? (currentMetrics.averageProfitBps * currentMetrics.totalScans + avgProfitBps) /
-                    (currentMetrics.totalScans + 1)
-                    : avgProfitBps,
-            bestProfitBps,
-            simulatedVolumeUSDT: currentMetrics.simulatedVolumeUSDT + simulatedVolume,
-            netProfitCapturedUSDT: Math.round((currentMetrics.netProfitCapturedUSDT + executedProfit) * 100) / 100,
-            avgExecutionMs: Math.round(updatedAvgExecutionMs),
-            successRate: Math.round(updatedSuccessRate * 100) / 100,
-            riskAlerts: currentMetrics.riskAlerts + riskAlerts,
-            opportunityFrequency24h: Math.round(
-                (currentMetrics.opportunityFrequency24h + opportunities.length) * 100,
-            ) / 100,
-            executionHistory,
-            opportunityHistory,
-            recentPerformance: {
-                last24h: {
-                    scans: currentMetrics.recentPerformance.last24h.scans + 1,
-                    opportunities: currentMetrics.recentPerformance.last24h.opportunities + opportunities.length,
-                    avgProfitBps: avgProfitBps,
-                    netProfitUSDT: currentMetrics.recentPerformance.last24h.netProfitUSDT + executedProfit,
-                },
-                last7d: {
-                    ...currentMetrics.recentPerformance.last7d,
-                    netProfitUSDT: currentMetrics.recentPerformance.last7d.netProfitUSDT + executedProfit,
-                },
-                last30d: {
-                    ...currentMetrics.recentPerformance.last30d,
-                    netProfitUSDT: currentMetrics.recentPerformance.last30d.netProfitUSDT + executedProfit,
-                },
+        // Call backend endpoint (to be created)
+        const response = await fetch(`/api/ai-agents/${agentId}/run`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
             },
-        };
-
-        await database.save('aiAgents', {
-            ...agent,
-            lastArbitrageScan: scan,
-            arbitrageMetrics: updatedMetrics,
-            lastUpdate: new Date().toISOString(),
+            body: JSON.stringify({
+                symbol: 'BTCUSDT', // Default for now
+                timeframe: '1h',
+            }),
         });
 
-        // Share with Artemis and sync with other agents
-        await shareDataWithArtemis(agentId, 'arbitrage', scan, 'analysis');
-        await forwardToDashboard(agentId, scan, 'arbitrage_scan');
-        await syncWithOtherAgents(agentId, 'arbitrage', scan, 'analysis');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to run arbitrage analysis');
+        }
 
-        return scan;
-    } catch (e) {
-        console.error('Failed to run arbitrage analysis:', e);
-        throw e;
+        const data = await response.json();
+        
+        // Transform backend response to ArbitrageScanResult format
+        return {
+            timestamp: data.timestamp || new Date().toISOString(),
+            opportunities: data.opportunities || [],
+            exchangesChecked: data.exchangesChecked || ['mexc'],
+            symbolsChecked: data.symbolsChecked || ['BTCUSDT'],
+            avgRiskScore: data.avgRiskScore || 0,
+            netProfitPotentialUSDT: data.netProfitPotentialUSDT || 0,
+            avgExecutionMs: data.avgExecutionMs || 0,
+        };
+    } catch (error) {
+        console.error('❌ Failed to run arbitrage analysis:', error);
+        throw error;
     }
 };
 
@@ -13741,12 +13666,16 @@ export const fetchMexcTrades = async (symbol?: string, limit: number = 50): Prom
 
 // Helper to get MEXC API URL (use proxy in development)
 const getMexcApiUrl = (endpoint: string): string => {
-    // In development, use Vite proxy to avoid CORS issues
-    if (import.meta.env.DEV) {
-        return `/api/mexc${endpoint}`;
-    }
-    // In production, use direct API (if CORS is configured)
-    return `${MEXC_API_BASE}${endpoint}`;
+    // Always use backend proxy to avoid CORS issues
+    // Backend proxies requests to MEXC API at /api/market/mexc/*
+    // Map /api/v3/ticker/24hr -> /api/market/mexc/ticker24hr
+    const proxyEndpoint = endpoint
+        .replace('/api/v3/ticker/24hr', '/ticker24hr')
+        .replace('/api/v3/depth', '/depth')
+        .replace('/api/v3/exchangeInfo', '/exchangeInfo')
+        .replace('/api/v3/ticker/price', '/price');
+    
+    return `/api/market/mexc${proxyEndpoint}`;
 };
 
 // Get MEXC 24hr Ticker Statistics
