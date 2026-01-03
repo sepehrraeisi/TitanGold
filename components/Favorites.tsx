@@ -372,7 +372,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     const [showAnalytics, setShowAnalytics] = useState(false);
     const [fearGreedIndex, setFearGreedIndex] = useState<{ index: number; label: string } | null>(null);
 
-    // 🚀 NEW: WebSocket for Real-time Price Updates
+    // 🚀 WebSocket for Real-time Price Updates (TEMPORARILY DISABLED - using polling instead)
     // Token: align with rest of app (titan_token), fallback to sessionStorage, optional for cookie-based auth
     const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token') || undefined;
     
@@ -383,10 +383,11 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
         return `${protocol}//${host}/ws/favorites`;
     };
     
+    // TEMPORARILY DISABLED WebSocket - using polling instead until Cloudflare WebSocket is configured
     const { isConnected, isConnecting, error: wsError } = useWebSocket({
         url: getWebSocketUrl(),
         token: authToken,
-        autoConnect: true,
+        autoConnect: false, // DISABLED - was true
         onMessage: (message: WebSocketMessage) => {
             if (message.type === 'price_update' && message.data) {
                 console.log('💹 Real-time price update:', message.data);
