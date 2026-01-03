@@ -1322,6 +1322,21 @@ router.get('/', authenticate, async (req, res) => {
       ORDER BY agent_key`
     );
     
+    // Get real-time decision stats for all agents
+    const decisionsResult = await query(
+      `SELECT 
+        agent_id,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE was_successful = true) as successful,
+        EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))/3600 as learning_hours
+      FROM ai_decisions
+      GROUP BY agent_id`
+    );
+    
+    const decisionsMap = new Map(
+      decisionsResult.rows.map(d => [d.agent_id, d])
+    );
+    
     // Map DB fields to UI contract
     const agents = result.rows.map(agent => {
       // Safe JSON parse
@@ -1344,17 +1359,28 @@ router.get('/', authenticate, async (req, res) => {
       const capabilities = metadata.capabilities || [];
       const role = metadata.role || 'AI Agent';
       
+      // Get real decision stats
+      const decisionStats = decisionsMap.get(agent.id) || { total: 0, successful: 0, learning_hours: 0 };
+      const realAccuracy = decisionStats.total > 0 
+        ? (decisionStats.successful / decisionStats.total) * 100 
+        : 0;
+      const learningHours = parseFloat(decisionStats.learning_hours) || 0;
+      
+      // Calculate knowledge size from decision data
+      const avgDecisionSize = 2; // KB per decision (estimate)
+      const knowledgeMB = ((decisionStats.total * avgDecisionSize) / 1024).toFixed(1);
+      
       return {
         id: agent.id,
         agent_key: agent.agent_key,
         name: agent.name,
         role,
         status: mappedStatus,
-        accuracy: parseFloat(agent.accuracy) || 0,
-        trainingProgress: 100, // Default: all agents are trained
-        decisions: parseInt(agent.total_decisions, 10) || 0,
-        learningTime: metadata.learning_time || '0h',
-        knowledgeSize: metadata.knowledge_size || 'N/A',
+        accuracy: parseFloat(realAccuracy.toFixed(1)),
+        trainingProgress: decisionStats.total > 0 ? 100 : 0,
+        decisions: parseInt(decisionStats.total, 10),
+        learningTime: learningHours.toFixed(1) + 'h',
+        knowledgeSize: knowledgeMB + 'MB',
         capabilities,
         lastUpdate: agent.updated_at || agent.created_at,
         // Additional fields for compatibility
