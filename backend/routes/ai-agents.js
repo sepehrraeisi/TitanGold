@@ -96,6 +96,10 @@ function validateAgentId(id) {
   return /^agent-\d+$/.test(id) || /^[a-f0-9-]{36}$/.test(id);
 }
 
+function isValidUUID(id) {
+  return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id);
+}
+
 function validateSymbol(symbol) {
   if (!symbol) return false;
   // Remove / if present (e.g., BTC/USDT -> BTCUSDT)
@@ -169,6 +173,135 @@ router.post('/chat', authenticate, rateLimit({ limit: 10, windowMs: 60000 }), as
       return sendError(res, 'AI_TIMEOUT', 'AI service timed out', 504);
     }
     return sendError(res, 'AI_ERROR', 'Failed to get AI response', 500, { error: error.message });
+  }
+});
+
+// ============================================================================
+// Registry-based Run Endpoint (V2) - SAFE MIGRATION PATH
+// POST /api/ai-agents/:id/run-v2
+// ============================================================================
+router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { symbol, timeframe, config, input } = req.body || {};
+
+    console.log(`🚀 [V2] Running agent: ${id.substring(0, 8)}... | symbol: ${symbol} | timeframe: ${timeframe}`);
+
+    // Basic validations
+    if (!isValidUUID(id)) {
+      return sendError(res, 'VALIDATION_ERROR', 'Invalid agent ID format', 400);
+    }
+    if (symbol && !validateSymbol(symbol)) {
+      return sendError(res, 'VALIDATION_ERROR', 'Invalid symbol format', 400);
+    }
+
+    // Load agent row (must include agent_key)
+    const agentResult = await query(
+      `SELECT id, agent_key, name, type, status, config, metadata, is_enabled
+       FROM ai_agents
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    if (agentResult.rows.length === 0) {
+      return sendError(res, 'NOT_FOUND', 'AI agent not found', 404);
+    }
+
+    const agent = agentResult.rows[0];
+
+    if (!agent.is_enabled) {
+      return sendError(res, 'DISABLED', 'AI agent is disabled', 403);
+    }
+
+    if (!agent.agent_key) {
+      return sendError(res, 'CONTRACT_ERROR', 'Agent missing agent_key (seed/migration issue)', 500);
+    }
+
+    // Merge DB config with request override
+    const mergedConfig = {
+      ...(agent.config || {}),
+      ...(config || {})
+    };
+
+    console.log(`✅ [V2] Agent loaded: ${agent.agent_key} (${agent.name})`);
+
+    // Execute via registry
+    const result = await agentRegistry.runAgent(agent.agent_key, {
+      userId: req.user?.id,
+      symbol,
+      timeframe,
+      config: mergedConfig,
+      input // optional freeform payload for agents
+    });
+
+    console.log(`✅ [V2] Agent execution complete: ${agent.agent_key}`);
+
+    // Persist decision (minimal, consistent)
+    await query(
+      `INSERT INTO ai_decisions (agent_id, decision_type, confidence, input_data, output_data, created_at)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, NOW())`,
+      [
+        agent.id,
+        result?.decision_type || 'analysis',
+        typeof result?.confidence === 'number' ? result.confidence : 0.5,
+        JSON.stringify({ symbol, timeframe, config: mergedConfig, input }),
+        JSON.stringify(result || {})
+      ]
+    );
+
+    console.log(`📝 [V2] Decision logged for ${agent.agent_key}`);
+
+    // Update agent metadata snapshot + last_active_at
+    const newMetadata = {
+      ...(agent.metadata || {}),
+      last_result: result || null,
+      last_error: null,
+      last_run_at: new Date().toISOString()
+    };
+
+    await query(
+      `UPDATE ai_agents
+       SET last_active_at = NOW(),
+           updated_at = NOW(),
+           metadata = $2::jsonb
+       WHERE id = $1`,
+      [agent.id, JSON.stringify(newMetadata)]
+    );
+
+    console.log(`📊 [V2] Agent metadata updated for ${agent.agent_key}`);
+
+    return res.json({
+      ok: true,
+      agent_id: agent.id,
+      agent_key: agent.agent_key,
+      result
+    });
+  } catch (error) {
+    console.error('❌ [V2] Registry run error:', error);
+
+    // Best-effort: store last_error on agent if id is valid
+    try {
+      const { id } = req.params;
+      if (isValidUUID(id)) {
+        const r = await query(`SELECT metadata FROM ai_agents WHERE id=$1 LIMIT 1`, [id]);
+        if (r.rows.length) {
+          const md = r.rows[0].metadata || {};
+          md.last_error = {
+            message: error.message || 'Unknown error',
+            at: new Date().toISOString()
+          };
+          await query(
+            `UPDATE ai_agents SET metadata=$2::jsonb, updated_at=NOW() WHERE id=$1`,
+            [id, JSON.stringify(md)]
+          );
+        }
+      }
+    } catch (_) {
+      // Ignore metadata update errors
+    }
+
+    return sendError(res, 'AI_ERROR', error.message || 'Failed to run agent (v2)', 500);
   }
 });
 
