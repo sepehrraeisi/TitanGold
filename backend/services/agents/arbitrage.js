@@ -218,10 +218,15 @@ async function detectOpportunities(params) {
       
       // Build opportunity
       const opportunity = {
+        id: `${symbol}-${Date.now()}`, // Unique ID for UI
         symbol,
         exchange: 'mexc',
         type: 'spot',
+        strategy: 'spot', // Strategy type for UI
         timestamp: new Date().toISOString(),
+        
+        // Path for UI (spot arbitrage is simple: Buy → Sell)
+        path: [`Buy ${symbol}`, `Sell ${symbol}`],
         
         // Prices
         lastPrice,
@@ -234,7 +239,9 @@ async function detectOpportunities(params) {
         spreadPct: spread,
         netSpreadPct: profitCalc.netSpreadPct,
         estimatedProfitUSDT: profitCalc.profitUSDT,
+        netProfitUSDT: profitCalc.profitUSDT, // Alias for UI
         profitBps: profitCalc.profitBps,
+        expectedProfitBps: profitCalc.profitBps, // Alias for UI
         
         // Volume & Liquidity
         volume24hUSDT: volume24h,
@@ -245,6 +252,9 @@ async function detectOpportunities(params) {
         // Risk
         riskScore,
         riskLevel: getRiskLevel(riskScore),
+        
+        // Execution time estimate (simplified)
+        executionTimeMs: spread > 1.0 ? 500 : 200, // Higher spread = slower execution
         
         // Meta
         fees: {
