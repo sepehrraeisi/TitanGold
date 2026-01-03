@@ -60,22 +60,35 @@ function normalizeStrategies(strategies) {
       {
         type: 'spot',
         enabled: true,
-        minProfitBps: 20
+        minProfitBps: 20,
+        maxSlippageBps: 10,
+        maxExposureUSDT: 10000
       },
       {
         type: 'triangle',
         enabled: false,
-        minProfitBps: 30
+        minProfitBps: 30,
+        maxSlippageBps: 15,
+        maxExposureUSDT: 5000
       },
       {
         type: 'cross_exchange',
         enabled: false,
-        minProfitBps: 50
+        minProfitBps: 50,
+        maxSlippageBps: 20,
+        maxExposureUSDT: 8000
       }
     ];
   }
   
-  return strategies;
+  // Ensure each strategy has all required fields
+  return strategies.map(s => ({
+    type: s.type || 'spot',
+    enabled: s.enabled !== undefined ? s.enabled : true,
+    minProfitBps: s.minProfitBps || 20,
+    maxSlippageBps: s.maxSlippageBps || 10,
+    maxExposureUSDT: s.maxExposureUSDT || 10000
+  }));
 }
 
 /**
@@ -143,6 +156,32 @@ export function normalizeArbitrageConfig(rawConfig) {
         telegram: false,
         discord: false
       }
+    },
+    
+    // Thresholds
+    opportunityThresholdBps: rawConfig.opportunityThresholdBps || 20,
+    detectionSensitivity: rawConfig.detectionSensitivity || 'balanced',
+    
+    // Execution settings
+    execution: rawConfig.execution || {
+      autoExecute: false,
+      preferSpeed: true,
+      capitalPerTradeUSDT: 1000,
+      maxConcurrent: 3,
+      maxDailyExecutions: 10
+    },
+    
+    // Risk controls
+    riskControls: rawConfig.riskControls || {
+      maxLatencyMs: 500,
+      maxTransferMinutes: 30,
+      minDepthUSD: 10000,
+      riskLimitUSDT: 5000
+    },
+    
+    // Settlement
+    settlement: rawConfig.settlement || {
+      maxTransfersPerDay: 5
     }
   };
 }
@@ -178,9 +217,9 @@ export function getDefaultConfig() {
     maxSimultaneousTrades: 3,
     executionTimeoutSec: 30,
     strategies: [
-      { type: 'spot', enabled: true, minProfitBps: 20 },
-      { type: 'triangle', enabled: false, minProfitBps: 30 },
-      { type: 'cross_exchange', enabled: false, minProfitBps: 50 }
+      { type: 'spot', enabled: true, minProfitBps: 20, maxSlippageBps: 10, maxExposureUSDT: 10000 },
+      { type: 'triangle', enabled: false, minProfitBps: 30, maxSlippageBps: 15, maxExposureUSDT: 5000 },
+      { type: 'cross_exchange', enabled: false, minProfitBps: 50, maxSlippageBps: 20, maxExposureUSDT: 8000 }
     ],
     integrationSettings: {
       shareWithRisk: true,
@@ -196,6 +235,24 @@ export function getDefaultConfig() {
         telegram: false,
         discord: false
       }
+    },
+    opportunityThresholdBps: 20,
+    detectionSensitivity: 'balanced',
+    execution: {
+      autoExecute: false,
+      preferSpeed: true,
+      capitalPerTradeUSDT: 1000,
+      maxConcurrent: 3,
+      maxDailyExecutions: 10
+    },
+    riskControls: {
+      maxLatencyMs: 500,
+      maxTransferMinutes: 30,
+      minDepthUSD: 10000,
+      riskLimitUSDT: 5000
+    },
+    settlement: {
+      maxTransfersPerDay: 5
     }
   };
 }
