@@ -1303,13 +1303,14 @@ router.get('/', authenticate, async (req, res) => {
       };
     });
     
-    res.json(agents);
+    // Wrap in { agents: [...] } for UI compatibility
+    res.json({ agents });
   } catch (error) {
     console.error('Failed to fetch AI agents:', error);
     // If database is unavailable, return empty array instead of error
     if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
       console.warn('⚠️ Database unavailable, returning empty AI agents array');
-      return res.json([]);
+      return res.json({ agents: [] });
     }
     res.status(500).json({ error: 'Failed to fetch AI agents', message: error.message });
   }
