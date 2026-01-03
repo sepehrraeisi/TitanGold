@@ -164,7 +164,25 @@ function transformAgentResultForUI(agent_key, rawResult) {
   try {
     const { symbol, timeframe, confidence, signal, indicators, timestamp, _meta } = rawResult;
     
-    // Default structure
+    // Special handling for arbitrage agent
+    if (agent_key === 'arbitrage') {
+      return {
+        timestamp: rawResult.timestamp || new Date().toISOString(),
+        confidence: typeof rawResult.confidence === 'number' ? rawResult.confidence : 0.5,
+        indicators: [], // Arbitrage doesn't use indicators
+        
+        // Arbitrage-specific fields
+        summary: rawResult.summary || {},
+        opportunities: rawResult.opportunities || [],
+        riskAlerts: rawResult.riskAlerts || [],
+        config: rawResult.config || {},
+        
+        // Meta
+        _meta: rawResult._meta || { source: 'real', version: '1.0.0' }
+      };
+    }
+    
+    // Default structure for other agents
     const uiResult = {
       timestamp: timestamp || new Date().toISOString(),
       symbol: symbol || 'UNKNOWN',
