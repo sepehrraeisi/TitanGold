@@ -1012,7 +1012,12 @@ router.patch('/:id/config', authenticate, async (req, res) => {
     const mergedConfig = mergeAgentConfig(existingConfig, config);
 
     // Normalize to ensure all required fields exist
-    const normalizedConfig = normalizeAgentConfig(agent_key, mergedConfig);
+    let normalizedConfig;
+    if (agent_key === 'arbitrage') {
+      normalizedConfig = normalizeArbitrageConfig(mergedConfig);
+    } else {
+      normalizedConfig = normalizeAgentConfig(agent_key, mergedConfig);
+    }
 
     console.log(`✅ Config normalized for ${agent_key}`);
 
