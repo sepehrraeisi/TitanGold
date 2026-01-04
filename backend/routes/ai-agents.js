@@ -183,6 +183,31 @@ function transformAgentResultForUI(agent_key, rawResult) {
       };
     }
     
+    // Special handling for fundamental agent
+    if (agent_key === 'fundamental') {
+      return {
+        timestamp: rawResult.timestamp || new Date().toISOString(),
+        symbol: rawResult.symbol || 'UNKNOWN',
+        timeframe: rawResult.timeframe || '1d',
+        decision: rawResult.decision || 'hold',
+        confidence: typeof rawResult.confidence === 'number' ? rawResult.confidence : 0.5,
+        
+        // Fundamental-specific fields (preserve all)
+        score: rawResult.score || { total: 0, macro: 0, funding: 0, onchain: 0, news: 0 },
+        overview: rawResult.overview || {},
+        company_project_data: rawResult.company_project_data || {},
+        financial_ratios: rawResult.financial_ratios || {},
+        events_news: rawResult.events_news || {},
+        onchain_tokenomics: rawResult.onchain_tokenomics || {},
+        fair_value: rawResult.fair_value || {},
+        signals: Array.isArray(rawResult.signals) ? rawResult.signals : [],
+        raw: rawResult.raw || {},
+        
+        // Meta
+        _meta: rawResult._meta || { source: 'real', version: '2.0.0' }
+      };
+    }
+    
     // Default structure for other agents
     const uiResult = {
       timestamp: timestamp || new Date().toISOString(),
