@@ -1492,6 +1492,27 @@ router.get('/', authenticate, async (req, res) => {
         };
       }
       
+      if (agent.agent_key === 'liquidity') {
+        // Get liquidity-specific metrics from agent_metrics_liquidity table
+        // For now, use basic metrics (will be populated after first run)
+        return {
+          ...baseMetrics,
+          // Hide ML metrics
+          accuracy: null,
+          trainingProgress: null,
+          learningTime: null,
+          knowledgeSize: null,
+          // Liquidity-specific metrics
+          totalScans: parseInt(decisionStats.total, 10),
+          activeHours: parseFloat(learningHours.toFixed(1)),
+          avgLiquidityScore: metadata?.avg_liquidity_score || 0,
+          avgSpread: metadata?.avg_spread || 0,
+          avgSlippage50k: metadata?.avg_slippage_50k || 0,
+          riskLevel: metadata?.current_risk_level || 'low',
+          alertsTriggered: metadata?.alerts_count || 0
+        };
+      }
+      
       // For ML agents: Show all metrics
       return {
         ...baseMetrics,

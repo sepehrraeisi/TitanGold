@@ -51,6 +51,7 @@ import healthRoutes from './routes/health.js';
 import monitoringRoutes from './routes/monitoring.js';
 import backtestRoutes from './routes/backtest.js';
 import scenariosRoutes from './routes/scenarios.js';
+import liquidityAgentRoutes from './routes/liquidity-agent.js';
 
 dotenv.config();
 
@@ -192,6 +193,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/portfolios', portfolioRoutes);
 app.use('/api/trades', tradeRoutes);
 app.use('/api/ai-agents', aiAgentRoutes);
+app.use('/api/agents/liquidity', liquidityAgentRoutes);
 app.use('/api/market', marketProxyRoutes);
 app.use('/api/training', trainingRoutes);
 app.use('/api/artemis', artemisRoutes);
