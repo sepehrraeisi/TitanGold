@@ -150,7 +150,14 @@ export async function run({ userId, symbol, timeframe, config }) {
     
     confidence = Math.min(Math.max(confidence, 0), 1);
     
-    // 8. Build comprehensive response
+    // 8. Generate alerts
+    const alerts = [];
+    if (fearGreed.value < 20) alerts.push(`Extreme fear detected: ${fearGreed.value}`);
+    if (fearGreed.value > 80) alerts.push(`Extreme greed detected: ${fearGreed.value}`);
+    if (volume24h < 1000000) alerts.push(`Low volume warning: $${(volume24h/1000000).toFixed(2)}M`);
+    if (Math.abs(priceChangePercent) > 10) alerts.push(`High volatility: ${priceChangePercent.toFixed(2)}%`);
+    
+    // 9. Build comprehensive response
     const executionTime = Date.now() - startTime;
     
     const result = {
@@ -160,6 +167,15 @@ export async function run({ userId, symbol, timeframe, config }) {
       timestamp: new Date().toISOString(),
       decision,
       confidence: parseFloat(confidence.toFixed(2)),
+      
+      // UI-expected fields
+      averageScore: parseFloat(totalScore.toFixed(2)),
+      marketSummary: {
+        fearGreed: fearGreed.value,
+        macroLabel: fearGreed.classification || 'Neutral',
+        fundingImbalance: parseFloat((funding.rate * 10000).toFixed(1)) // Convert to bps
+      },
+      alerts,
       
       // Score breakdown
       score: {
@@ -242,28 +258,48 @@ export async function run({ userId, symbol, timeframe, config }) {
       // Signals (for compatibility with UI)
       signals: [
         {
+          symbol,
           category: 'macro',
           signal: macroScore > 60 ? 'bullish' : macroScore < 40 ? 'bearish' : 'neutral',
           score: macroScore,
-          weight: 30
+          weight: 30,
+          macroScore,
+          newsScore,
+          intrinsicValue: lastPrice * (1 + (macroScore - 50) / 200),
+          valuationStatus: macroScore > 60 ? 'undervalued' : macroScore < 40 ? 'overvalued' : 'fair',
+          rating: decision
         },
         {
+          symbol,
           category: 'funding',
           signal: fundingScore > 60 ? 'bullish' : fundingScore < 40 ? 'bearish' : 'neutral',
           score: fundingScore,
-          weight: 20
+          weight: 20,
+          intrinsicValue: lastPrice * (1 + (fundingScore - 50) / 200),
+          valuationStatus: fundingScore > 60 ? 'undervalued' : fundingScore < 40 ? 'overvalued' : 'fair',
+          rating: fundingScore > 60 ? 'buy' : fundingScore < 40 ? 'sell' : 'hold'
         },
         {
+          symbol,
           category: 'onchain',
           signal: onchainScore > 60 ? 'bullish' : onchainScore < 40 ? 'bearish' : 'neutral',
           score: onchainScore,
-          weight: 30
+          weight: 30,
+          intrinsicValue: lastPrice * (1 + (onchainScore - 50) / 200),
+          valuationStatus: onchainScore > 60 ? 'undervalued' : onchainScore < 40 ? 'overvalued' : 'fair',
+          rating: onchainScore > 60 ? 'buy' : onchainScore < 40 ? 'sell' : 'hold'
         },
         {
+          symbol,
           category: 'news',
           signal: newsScore > 60 ? 'bullish' : newsScore < 40 ? 'bearish' : 'neutral',
           score: newsScore,
-          weight: 20
+          weight: 20,
+          macroScore,
+          newsScore,
+          intrinsicValue: lastPrice * (1 + (newsScore - 50) / 200),
+          valuationStatus: newsScore > 60 ? 'undervalued' : newsScore < 40 ? 'overvalued' : 'fair',
+          rating: newsScore > 60 ? 'buy' : newsScore < 40 ? 'sell' : 'hold'
         }
       ],
       

@@ -193,6 +193,15 @@ function transformAgentResultForUI(agent_key, rawResult) {
         decision: rawResult.decision || 'hold',
         confidence: typeof rawResult.confidence === 'number' ? rawResult.confidence : 0.5,
         
+        // UI-expected fields
+        averageScore: typeof rawResult.averageScore === 'number' ? rawResult.averageScore : (rawResult.score?.total || 0),
+        marketSummary: rawResult.marketSummary || {
+          fearGreed: 50,
+          macroLabel: 'Neutral',
+          fundingImbalance: 0
+        },
+        alerts: Array.isArray(rawResult.alerts) ? rawResult.alerts : [],
+        
         // Fundamental-specific fields (preserve all)
         score: rawResult.score || { total: 0, macro: 0, funding: 0, onchain: 0, news: 0 },
         overview: rawResult.overview || {},
