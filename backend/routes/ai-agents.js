@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigDefaults.js';
 import { normalizeArbitrageConfig } from '../services/normalizeArbitrageConfig.js';
+import { normalizeFundamentalConfig } from '../services/normalizeFundamentalConfig.js';
 
 import { aiService } from '../services/ai.js';
 import * as riskAgent from '../services/risk-agent.js';
@@ -1040,6 +1041,8 @@ router.patch('/:id/config', authenticate, async (req, res) => {
     let normalizedConfig;
     if (agent_key === 'arbitrage') {
       normalizedConfig = normalizeArbitrageConfig(mergedConfig);
+    } else if (agent_key === 'fundamental') {
+      normalizedConfig = normalizeFundamentalConfig(mergedConfig);
     } else {
       normalizedConfig = normalizeAgentConfig(agent_key, mergedConfig);
     }
@@ -1128,6 +1131,8 @@ router.get('/:id/details', authenticate, async (req, res) => {
     let config;
     if (agent.agent_key === 'arbitrage') {
       config = normalizeArbitrageConfig(rawConfig);
+    } else if (agent.agent_key === 'fundamental') {
+      config = normalizeFundamentalConfig(rawConfig);
     } else {
       // Use centralized config normalization for other agents
       config = normalizeAgentConfig(agent.agent_key, rawConfig);
@@ -1187,6 +1192,29 @@ router.get('/:id/details', authenticate, async (req, res) => {
       
       response.metrics = metrics;
       response.lastScan = lastScan;
+    }
+    
+    // For fundamental, add metrics and lastAnalysis
+    if (agent.agent_key === 'fundamental') {
+      const lastResult = metadata?.last_result || null;
+      
+      // Build metrics from last result
+      const metrics = {
+        totalAnalyses: parseInt(agent.total_decisions, 10) || 0,
+        avgExecutionTime: lastResult?.raw?.executionTime || 0,
+        lastScore: lastResult?.score?.total || 0,
+        avgScore: lastResult?.score?.total || 0, // TODO: Calculate average from history
+        bullishCount: lastResult?.decision === 'buy' ? 1 : 0,
+        bearishCount: lastResult?.decision === 'sell' ? 1 : 0,
+        neutralCount: lastResult?.decision === 'hold' ? 1 : 0
+      };
+      
+      response.metrics = metrics;
+      
+      // lastAnalysis with full fundamental data
+      if (lastResult) {
+        response.lastAnalysis = lastResult;
+      }
     }
 
     res.json(response);
