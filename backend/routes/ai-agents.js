@@ -1458,19 +1458,37 @@ router.get('/', authenticate, async (req, res) => {
         metadata
       };
       
-      // For fundamental agent: Don't show ML-specific metrics
+      // For rule-based agents (fundamental, arbitrage): Don't show ML-specific metrics
       if (agent.agent_key === 'fundamental') {
         return {
           ...baseMetrics,
-          // Fundamental-specific metrics (hide ML metrics)
-          accuracy: null, // Not applicable (no ground truth)
-          trainingProgress: null, // Not applicable (rule-based)
-          learningTime: null, // Rename needed: use "activeWindow" instead
-          knowledgeSize: null, // Not applicable (no vector DB)
-          // Real metrics
+          // Hide ML metrics
+          accuracy: null,
+          trainingProgress: null,
+          learningTime: null,
+          knowledgeSize: null,
+          // Fundamental-specific metrics
           totalAnalyses: parseInt(decisionStats.total, 10),
           activeHours: parseFloat(learningHours.toFixed(1)),
           dataStoredMB: parseFloat(knowledgeMB)
+        };
+      }
+      
+      if (agent.agent_key === 'arbitrage') {
+        return {
+          ...baseMetrics,
+          // Hide ML metrics
+          accuracy: null,
+          trainingProgress: null,
+          learningTime: null,
+          knowledgeSize: null,
+          // Arbitrage-specific metrics
+          totalScans: parseInt(decisionStats.total, 10),
+          activeHours: parseFloat(learningHours.toFixed(1)),
+          dataStoredMB: parseFloat(knowledgeMB),
+          // Arbitrage-specific from last scan
+          opportunitiesFound: metadata?.last_result?.summary?.totalOpportunities || 0,
+          totalProfitUSDT: metadata?.last_result?.summary?.totalProfitUSDT || 0
         };
       }
       

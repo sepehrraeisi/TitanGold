@@ -876,6 +876,11 @@ export interface AIAgent {
   activeHours?: number;
   dataStoredMB?: number;
   
+  // Arbitrage-specific metrics
+  totalScans?: number;
+  opportunitiesFound?: number;
+  totalProfitUSDT?: number;
+  
   // Technical Analysis Agent specific fields
   technicalAnalysisConfig?: TechnicalAnalysisConfig;
   performanceMetrics?: AgentPerformanceMetrics;
