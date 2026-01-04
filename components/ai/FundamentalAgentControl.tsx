@@ -195,12 +195,25 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
                             }`}>
                                 {t(agent.status)}
                             </span>
+                            
+                            {/* Show accuracy only if available (for ML agents) */}
+                            {agent.accuracy != null && (
+                                <span className="text-sm text-gray-400">
+                                    {t('accuracy')}: <span className="text-white font-semibold">{agent.accuracy.toFixed(1)}%</span>
+                                </span>
+                            )}
+                            
+                            {/* Show decisions (real metric for all agents) */}
                             <span className="text-sm text-gray-400">
-                                {t('accuracy')}: <span className="text-white font-semibold">{agent.accuracy.toFixed(1)}%</span>
+                                {agent.totalAnalyses != null ? t('analyses') : t('decisions')}: <span className="text-white font-semibold">{(agent.totalAnalyses || agent.decisions || 0).toLocaleString()}</span>
                             </span>
-                            <span className="text-sm text-gray-400">
-                                {t('decisions')}: <span className="text-white font-semibold">{agent.decisions.toLocaleString()}</span>
-                            </span>
+                            
+                            {/* Show active hours for fundamental agents */}
+                            {agent.activeHours != null && agent.activeHours > 0 && (
+                                <span className="text-sm text-gray-400">
+                                    {t('active_time')}: <span className="text-white font-semibold">{agent.activeHours}h</span>
+                                </span>
+                            )}
                         </div>
                         <div className="flex gap-2">
                             {agent.status === 'active' ? (

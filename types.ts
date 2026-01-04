@@ -858,14 +858,24 @@ export interface AIAgent {
   name: string;
   role: string;
   status: 'active' | 'inactive' | 'training';
-  accuracy: number;
-  trainingProgress: number;
+  
+  // ML-specific metrics (null for rule-based agents like fundamental)
+  accuracy?: number | null;
+  trainingProgress?: number | null;
+  learningTime?: number | null;
+  knowledgeSize?: number | null;
+  
+  // Universal metrics
   decisions: number;
-  learningTime: number;
-  knowledgeSize: number;
   level: 'Expert' | 'Advanced' | 'Intermediate';
   capabilities: string[];
   lastUpdate: string;
+  
+  // Fundamental-specific metrics
+  totalAnalyses?: number;
+  activeHours?: number;
+  dataStoredMB?: number;
+  
   // Technical Analysis Agent specific fields
   technicalAnalysisConfig?: TechnicalAnalysisConfig;
   performanceMetrics?: AgentPerformanceMetrics;

@@ -1441,17 +1441,14 @@ router.get('/', authenticate, async (req, res) => {
       const avgDecisionSize = 2; // KB per decision (estimate)
       const knowledgeMB = ((decisionStats.total * avgDecisionSize) / 1024).toFixed(1);
       
-      return {
+      // Agent-specific metrics (based on agent type)
+      const baseMetrics = {
         id: agent.id,
         agent_key: agent.agent_key,
         name: agent.name,
         role,
         status: mappedStatus,
-        accuracy: parseFloat(realAccuracy.toFixed(1)),
-        trainingProgress: decisionStats.total > 0 ? 100 : 0,
         decisions: parseInt(decisionStats.total, 10),
-        learningTime: learningHours.toFixed(1) + 'h',
-        knowledgeSize: knowledgeMB + 'MB',
         capabilities,
         lastUpdate: agent.updated_at || agent.created_at,
         // Additional fields for compatibility
@@ -1459,6 +1456,31 @@ router.get('/', authenticate, async (req, res) => {
         is_enabled: agent.is_enabled,
         config,
         metadata
+      };
+      
+      // For fundamental agent: Don't show ML-specific metrics
+      if (agent.agent_key === 'fundamental') {
+        return {
+          ...baseMetrics,
+          // Fundamental-specific metrics (hide ML metrics)
+          accuracy: null, // Not applicable (no ground truth)
+          trainingProgress: null, // Not applicable (rule-based)
+          learningTime: null, // Rename needed: use "activeWindow" instead
+          knowledgeSize: null, // Not applicable (no vector DB)
+          // Real metrics
+          totalAnalyses: parseInt(decisionStats.total, 10),
+          activeHours: parseFloat(learningHours.toFixed(1)),
+          dataStoredMB: parseFloat(knowledgeMB)
+        };
+      }
+      
+      // For ML agents: Show all metrics
+      return {
+        ...baseMetrics,
+        accuracy: parseFloat(realAccuracy.toFixed(1)),
+        trainingProgress: decisionStats.total > 0 ? 100 : 0,
+        learningTime: learningHours.toFixed(1) + 'h',
+        knowledgeSize: knowledgeMB + 'MB'
       };
     });
     
