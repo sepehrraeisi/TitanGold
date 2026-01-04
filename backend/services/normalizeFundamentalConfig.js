@@ -69,6 +69,9 @@ export function normalizeFundamentalConfig(rawConfig) {
       : defaultConfig.symbols,
     
     dataSources: {
+      // Preserve all data source fields from rawConfig
+      ...(rawConfig.dataSources || {}),
+      // Ensure defaults for core fields
       macro: typeof rawConfig.dataSources?.macro === 'boolean' 
         ? rawConfig.dataSources.macro 
         : defaultConfig.dataSources.macro,
@@ -84,6 +87,9 @@ export function normalizeFundamentalConfig(rawConfig) {
     },
     
     thresholds: {
+      // Preserve all threshold fields from rawConfig
+      ...(rawConfig.thresholds || {}),
+      // Ensure defaults for core fields
       buyScore: typeof rawConfig.thresholds?.buyScore === 'number' 
         ? rawConfig.thresholds.buyScore 
         : defaultConfig.thresholds.buyScore,
@@ -96,6 +102,9 @@ export function normalizeFundamentalConfig(rawConfig) {
     },
     
     weights: {
+      // Preserve all weight fields from rawConfig
+      ...(rawConfig.weights || {}),
+      // Ensure defaults for core fields
       macro: typeof rawConfig.weights?.macro === 'number' 
         ? rawConfig.weights.macro 
         : defaultConfig.weights.macro,
@@ -165,6 +174,9 @@ export function normalizeFundamentalConfig(rawConfig) {
     
     // Alert channels
     alertChannels: {
+      // Preserve all alert channel fields from rawConfig
+      ...(rawConfig.alertChannels || {}),
+      // Ensure defaults for core fields
       dashboard: typeof rawConfig.alertChannels?.dashboard === 'boolean'
         ? rawConfig.alertChannels.dashboard
         : defaultConfig.alertChannels.dashboard,

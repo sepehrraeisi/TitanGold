@@ -804,6 +804,17 @@ const FundamentalSettings: React.FC<{
         
         setIsSaving(true);
         try {
+            // 🐛 DEBUG: Log config before save
+            console.log('🔍 Saving config:', {
+                dataSources: localConfig.dataSources,
+                weights: localConfig.weights,
+                thresholds: localConfig.thresholds,
+                alertChannels: localConfig.alertChannels,
+                integrationSettings: localConfig.integrationSettings,
+                lookbackDays: localConfig.lookbackDays,
+                symbols: localConfig.symbols,
+            });
+            
             await onUpdate(localConfig);
             setIsDirty(false);
         } catch (error) {
