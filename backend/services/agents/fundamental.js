@@ -199,35 +199,59 @@ export async function run({ userId, symbol, timeframe, config }) {
         circulatingSupply: null
       },
       
-      // Company/Project data (crypto-specific)
-      company_project_data: {
+      // Company/Project data (crypto-specific) - MUST be array for UI
+      company_project_data: [{
         name: symbol.replace('USDT', ''),
         symbol,
+        type: 'crypto',
         description: `${symbol.replace('USDT', '')} is a cryptocurrency trading pair on MEXC exchange`,
-        marketCap: volume24h > 1000000000 ? 'Large Cap (>$1B)' : volume24h > 100000000 ? 'Mid Cap ($100M-$1B)' : 'Small Cap (<$100M)',
-        circulatingSupply: 'N/A',
-        totalSupply: 'N/A',
+        marketCap: volume24h * 100, // Estimate market cap from volume (rough estimate)
+        circulatingSupply: null,
+        totalSupply: null,
         website: null,
         whitepaper: null,
         github: null,
         twitter: null,
-        team: 'Community-driven',
+        team: { active: true, size: 'N/A', description: 'Community-driven' },
         partnerships: [],
         launchDate: 'N/A',
-        exchange: 'MEXC'
-      },
+        exchange: 'MEXC',
+        sector: 'Cryptocurrency',
+        category: volume24h > 1000000000 ? 'Large Cap' : volume24h > 100000000 ? 'Mid Cap' : 'Small Cap'
+      }],
       
-      // Financial ratios (crypto-specific)
-      financial_ratios: {
-        volumeToMarketCap: 'N/A',
-        volatility24h: high24h > 0 ? parseFloat(((high24h - low24h) / low24h * 100).toFixed(2)) : 0,
-        liquidityRatio: volume24h > 10000000 ? 'High' : volume24h > 1000000 ? 'Medium' : 'Low',
-        priceToHistoricalAverage: 'N/A',
-        rsi: macroScore, // Use macro score as proxy
-        sharpeRatio: 'N/A',
-        alpha: 'N/A',
-        beta: 'N/A'
-      },
+      // Financial ratios (crypto-specific) - MUST be array for UI
+      financial_ratios: [
+        {
+          name: 'Volatility (24h)',
+          value: high24h > 0 ? `${((high24h - low24h) / low24h * 100).toFixed(2)}%` : '0%',
+          status: ((high24h - low24h) / low24h * 100) < 2 ? 'good' : 
+                  ((high24h - low24h) / low24h * 100) < 5 ? 'fair' : 'poor',
+          benchmark: '< 5% (good)',
+          description: 'Price volatility over the last 24 hours'
+        },
+        {
+          name: 'Liquidity',
+          value: volume24h > 10000000 ? 'High' : volume24h > 1000000 ? 'Medium' : 'Low',
+          status: volume24h > 10000000 ? 'good' : volume24h > 1000000 ? 'fair' : 'poor',
+          benchmark: '> $10M (high)',
+          description: 'Market liquidity based on 24h volume'
+        },
+        {
+          name: 'RSI (Proxy)',
+          value: macroScore.toFixed(0),
+          status: macroScore > 70 ? 'poor' : macroScore < 30 ? 'poor' : 'good',
+          benchmark: '30-70 (neutral)',
+          description: 'Relative Strength Index (using macro score)'
+        },
+        {
+          name: 'Volume/Market Cap',
+          value: 'N/A',
+          status: 'fair',
+          benchmark: '> 0.1 (high)',
+          description: 'Trading volume relative to market cap'
+        }
+      ],
       
       // Events & News
       events_news: {
@@ -237,20 +261,26 @@ export async function run({ userId, symbol, timeframe, config }) {
         sentimentScore: newsScore,
         impactAnalysis: [
           {
+            id: `event-${Date.now()}-1`,
+            title: `${symbol} 24h Volume`,
             event: `${symbol} 24h Volume: $${(volume24h / 1000000).toFixed(2)}M`,
             date: new Date().toISOString(),
             impact: volume24h > 100000000 ? 'High' : volume24h > 10000000 ? 'Medium' : 'Low',
             impactScore: onchainScore,
             estimatedPriceImpact: priceChangePercent,
-            sentiment: priceChangePercent > 0 ? 'Positive' : priceChangePercent < 0 ? 'Negative' : 'Neutral'
+            sentiment: priceChangePercent > 0 ? 'Positive' : priceChangePercent < 0 ? 'Negative' : 'Neutral',
+            source: 'MEXC'
           },
           {
+            id: `event-${Date.now()}-2`,
+            title: 'Market Sentiment',
             event: `Market Sentiment: ${fearGreed.classification}`,
             date: new Date().toISOString(),
             impact: fearGreed.value > 75 || fearGreed.value < 25 ? 'High' : 'Medium',
             impactScore: macroScore,
             estimatedPriceImpact: (macroScore - 50) / 10, // -5% to +5% range
-            sentiment: macroScore > 50 ? 'Positive' : 'Negative'
+            sentiment: macroScore > 50 ? 'Positive' : 'Negative',
+            source: 'Alternative.me'
           }
         ]
       },
@@ -334,7 +364,24 @@ export async function run({ userId, symbol, timeframe, config }) {
           newsScore,
           intrinsicValue: lastPrice * (1 + (macroScore - 50) / 200),
           valuationStatus: macroScore > 60 ? 'undervalued' : macroScore < 40 ? 'overvalued' : 'fair',
-          rating: decision
+          rating: decision,
+          financialRatios: [
+            {
+              name: 'Volatility (24h)',
+              value: high24h > 0 ? `${((high24h - low24h) / low24h * 100).toFixed(2)}%` : '0%',
+              status: ((high24h - low24h) / low24h * 100) < 2 ? 'good' : 
+                      ((high24h - low24h) / low24h * 100) < 5 ? 'fair' : 'poor',
+              benchmark: '< 5% (good)',
+              description: 'Price volatility over the last 24 hours'
+            },
+            {
+              name: 'Liquidity',
+              value: volume24h > 10000000 ? 'High' : volume24h > 1000000 ? 'Medium' : 'Low',
+              status: volume24h > 10000000 ? 'good' : volume24h > 1000000 ? 'fair' : 'poor',
+              benchmark: '> $10M (high)',
+              description: 'Market liquidity based on 24h volume'
+            }
+          ]
         },
         {
           symbol,
