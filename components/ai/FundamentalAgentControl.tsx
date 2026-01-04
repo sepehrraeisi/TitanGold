@@ -20,13 +20,38 @@ interface FundamentalAgentControlProps {
     onUpdate: (agent: AIAgent) => void;
 }
 
+// 🔧 Frontend Normalization Layer - Maps backend structure to UI expectations
+function normalizeFundamentalAnalysis(raw: any): FundamentalAnalysisResult | null {
+    if (!raw) return null;
+    
+    return {
+        ...raw,
+        // Map backend fields to UI expectations
+        companyData: raw.company_project_data || [],
+        financialRatios: raw.financial_ratios || [],
+        events: {
+            impactAnalysis: raw.events_news?.impactAnalysis || []
+        },
+        onChainData: raw.onchain_tokenomics || null,
+        fairValueHistory: raw.fair_value?.history || [],
+        // Preserve existing fields
+        overview: raw.overview || {},
+        signals: raw.signals || [],
+        averageScore: raw.averageScore || raw.score?.total || 0,
+        marketSummary: raw.marketSummary || { fearGreed: 50, macroLabel: 'Neutral', fundingImbalance: 0 },
+        alerts: raw.alerts || []
+    } as FundamentalAnalysisResult;
+}
+
 const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
     type FundamentalTab = 'overview' | 'company_data' | 'financial_ratios' | 'events' | 'onchain' | 'fair_value' | 'settings' | 'integration';
     const [activeTab, setActiveTab] = useState<FundamentalTab>('overview');
     const [config, setConfig] = useState<FundamentalAnalysisConfig | null>(agent.fundamentalAnalysisConfig || null);
     const [metrics, setMetrics] = useState<FundamentalAnalysisMetrics | null>(agent.fundamentalMetrics || null);
-    const [analysis, setAnalysis] = useState<FundamentalAnalysisResult | null>(agent.lastFundamentalAnalysis || null);
+    const [analysis, setAnalysis] = useState<FundamentalAnalysisResult | null>(
+        normalizeFundamentalAnalysis(agent.lastFundamentalAnalysis)
+    );
     const [isLoading, setIsLoading] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
 
@@ -37,7 +62,10 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
                 const data = await api.fetchFundamentalAgentData(agent.id);
                 if (data.config) setConfig(data.config);
                 if (data.metrics) setMetrics(data.metrics);
-                if (data.lastAnalysis) setAnalysis(data.lastAnalysis);
+                if (data.lastAnalysis) {
+                    // 🔧 Normalize backend structure to UI expectations
+                    setAnalysis(normalizeFundamentalAnalysis(data.lastAnalysis));
+                }
             } catch (error) {
                 console.error('Failed to load fundamental agent data:', error);
             } finally {
@@ -56,10 +84,13 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
             // 2. Fetch fresh data from /details (single source of truth)
             const freshData = await api.fetchFundamentalAgentData(agent.id);
             
-            // 3. Update state with complete structure
+            // 3. Update state with complete structure (normalized)
             if (freshData.config) setConfig(freshData.config);
             if (freshData.metrics) setMetrics(freshData.metrics);
-            if (freshData.lastAnalysis) setAnalysis(freshData.lastAnalysis);
+            if (freshData.lastAnalysis) {
+                // 🔧 Normalize backend structure to UI expectations
+                setAnalysis(normalizeFundamentalAnalysis(freshData.lastAnalysis));
+            }
             
             // 4. Update parent agent state
             const updatedAgents = await api.fetchAIAgents();
