@@ -50,12 +50,21 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
     const handleRunAnalysis = async () => {
         setIsRunning(true);
         try {
-            const result = await api.runFundamentalAnalysis(agent.id);
-            setAnalysis(result);
+            // 1. Trigger run (don't use result directly)
+            await api.runFundamentalAnalysis(agent.id);
+            
+            // 2. Fetch fresh data from /details (single source of truth)
+            const freshData = await api.fetchFundamentalAgentData(agent.id);
+            
+            // 3. Update state with complete structure
+            if (freshData.config) setConfig(freshData.config);
+            if (freshData.metrics) setMetrics(freshData.metrics);
+            if (freshData.lastAnalysis) setAnalysis(freshData.lastAnalysis);
+            
+            // 4. Update parent agent state
             const updatedAgents = await api.fetchAIAgents();
             const updatedAgent = updatedAgents.find(a => a.id === agent.id);
             if (updatedAgent) {
-                setMetrics(updatedAgent.fundamentalMetrics || null);
                 onUpdate(updatedAgent);
             }
         } catch (error) {
