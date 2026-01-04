@@ -10555,18 +10555,25 @@ export const fetchFundamentalAgentData = async (agentId: string): Promise<{
     lastAnalysis: FundamentalAnalysisResult | null;
 }> => {
     try {
-        const agent = await database.get<AIAgent>('aiAgents', agentId);
-        if (agent) {
-            return {
-                config: agent.fundamentalAnalysisConfig || null,
-                metrics: agent.fundamentalMetrics || null,
-                lastAnalysis: agent.lastFundamentalAnalysis || null,
-            };
-        }
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) throw new Error('No auth token');
+        
+        const response = await fetch(`/api/ai-agents/${agentId}/details`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch details');
+        
+        const data = await response.json();
+        return {
+            config: data.agent?.config || null,
+            metrics: data.metrics || null,
+            lastAnalysis: data.lastAnalysis || null
+        };
     } catch (e) {
         console.warn('Failed to fetch fundamental agent data:', e);
+        return { config: null, metrics: null, lastAnalysis: null };
     }
-    return { config: null, metrics: null, lastAnalysis: null };
 };
 
 export const updateFundamentalAnalysisConfig = async (
@@ -10574,13 +10581,19 @@ export const updateFundamentalAnalysisConfig = async (
     config: FundamentalAnalysisConfig,
 ): Promise<void> => {
     try {
-        const agent = await database.get<AIAgent>('aiAgents', agentId);
-        if (!agent) throw new Error('Agent not found');
-        await database.save('aiAgents', {
-            ...agent,
-            fundamentalAnalysisConfig: config,
-            lastUpdate: new Date().toISOString(),
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) throw new Error('No auth token');
+        
+        const response = await fetch(`/api/ai-agents/${agentId}/config`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ config })
         });
+        
+        if (!response.ok) throw new Error('Failed to update config');
     } catch (e) {
         console.error('Failed to update fundamental analysis config:', e);
         throw e;
@@ -10589,289 +10602,34 @@ export const updateFundamentalAnalysisConfig = async (
 
 export const runFundamentalAnalysis = async (agentId: string): Promise<FundamentalAnalysisResult> => {
     try {
-        const agent = await database.get<AIAgent>('aiAgents', agentId);
-        if (!agent || !agent.fundamentalAnalysisConfig) throw new Error('Agent or config not found');
-        const config = agent.fundamentalAnalysisConfig;
-        const fearGreed = config.dataSources.macro ? await fetchFearGreedIndex() : { value: 50, classification: 'Neutral' };
-        const newsArticles = config.dataSources.news
-            ? await fetchCryptoNewsArticles(['coindesk', 'reuters', 'cointelegraph'], 25)
-            : [];
-        const signals: FundamentalSignal[] = [];
-        const alerts: string[] = [];
-        const maxSymbols = config.symbols.slice(0, 5);
-
-        for (const symbol of maxSymbols) {
-            const ticker = await fetchMexcTicker24hr(symbol);
-            if (!ticker) continue;
-            const priceChange = parseFloat(ticker.priceChangePercent ?? ticker.changeRate ?? '0');
-            const volume = parseFloat(ticker.quoteVolume ?? ticker.volume ?? '0');
-            const onchainScore = config.dataSources.onchain
-                ? normalizeScore(Math.log10(volume + 1), 5, 10)
-                : 50;
-
-            let fundingScore = 50;
-            let fundingRateBps = 0;
-            if (config.dataSources.funding) {
-                const base = splitSymbolPair(symbol)?.base || symbol.replace('USDT', '');
-                const perpSymbol = `${base}_USDT`;
-                const perpTicker = await fetchMexcPerpetualTicker(perpSymbol);
-                const fundingRate = perpTicker ? parseFloat(perpTicker.fundingRate ?? perpTicker.lastFundingRate ?? '0') : 0;
-                fundingRateBps = Math.round((fundingRate || 0) * 10000);
-                fundingScore = normalizeScore(fundingRateBps, -30, 30);
-            }
-
-            const macroScore = config.dataSources.macro ? normalizeScore(fearGreed.value, 0, 100) : 50;
-            const { score: newsScore, headline } = config.dataSources.news ? summarizeNewsSentiment(newsArticles, symbol) : { score: 50 };
-
-            const weights = config.weights;
-            const totalWeight = Object.values(weights).reduce((sum, v) => sum + v, 0) || 1;
-            const weightedScore = (
-                (onchainScore * weights.onchain) +
-                (macroScore * weights.macro) +
-                (fundingScore * weights.funding) +
-                (newsScore * weights.news)
-            ) / totalWeight;
-
-            const verdict = weightedScore >= config.thresholds.bullish
-                ? 'bullish'
-                : weightedScore <= config.thresholds.bearish
-                    ? 'bearish'
-                    : 'neutral';
-
-            if (config.alerts.onFundingAnomaly && Math.abs(fundingRateBps) > 35) {
-                alerts.push(`${symbol} funding anomaly ${fundingRateBps} bps`);
-            }
-
-            // Calculate intrinsic value and fair price
-            const lastPrice = parseFloat(ticker.lastPrice ?? ticker.last ?? ticker.close ?? '0');
-            const intrinsicValue = lastPrice * (1 + (weightedScore - 50) / 100);
-            const fairPrice = intrinsicValue;
-            const fairValueRatio = lastPrice > 0 ? intrinsicValue / lastPrice : 1;
-            const valuationStatus = fairValueRatio > (config.thresholds?.overvalued ?? 1.1) ? 'overvalued' :
-                fairValueRatio < (config.thresholds?.undervalued ?? 0.9) ? 'undervalued' : 'fair';
-
-            // Calculate rating
-            let rating: 'buy' | 'hold' | 'sell' | undefined;
-            if (config.outputType === 'buy_sell' || config.outputType === 'rating') {
-                if (verdict === 'bullish' && valuationStatus === 'undervalued') rating = 'buy';
-                else if (verdict === 'bearish' && valuationStatus === 'overvalued') rating = 'sell';
-                else rating = 'hold';
-            }
-
-            // Calculate growth potential
-            const growthPotential = (weightedScore - 50) * 2; // -100 to +100
-
-            // Calculate health index
-            const healthIndex = (onchainScore + macroScore + newsScore) / 3;
-
-            // Generate financial ratios (mock data for now)
-            const financialRatios = config.dataSources.financial ? [
-                { name: 'P/E Ratio', value: 15.5, benchmark: 20, status: 'good' as const, description: 'Below industry average' },
-                { name: 'P/B Ratio', value: 2.1, benchmark: 3, status: 'good' as const },
-                { name: 'Debt/Equity', value: 0.3, benchmark: 0.5, status: 'good' as const },
-            ] : undefined;
-
-            signals.push({
-                symbol,
-                score: Math.round(weightedScore * 100) / 100,
-                verdict,
-                rating,
-                intrinsicValue: Math.round(intrinsicValue * 100) / 100,
-                fairPrice: Math.round(fairPrice * 100) / 100,
-                valuationStatus,
-                growthPotential: Math.round(growthPotential * 100) / 100,
-                healthIndex: Math.round(healthIndex * 100) / 100,
-                fundingRate: fundingRateBps,
-                macroScore: Math.round(macroScore * 100) / 100,
-                newsScore: Math.round(newsScore * 100) / 100,
-                onchainScore: Math.round(onchainScore * 100) / 100,
-                notes: headline,
-                financialRatios,
-                factors: [
-                    { name: 'On-chain/Flow', value: onchainScore, weight: weights.onchain, impact: onchainScore * weights.onchain },
-                    { name: 'Macro', value: macroScore, weight: weights.macro, impact: macroScore * weights.macro },
-                    { name: 'Funding', value: fundingScore, weight: weights.funding, impact: fundingScore * weights.funding },
-                    { name: 'News', value: newsScore, weight: weights.news, impact: newsScore * weights.news },
-                ],
-            });
-
-            // Add valuation alerts
-            if (config.alerts?.onOvervalued && valuationStatus === 'overvalued') {
-                alerts.push(`${symbol} appears overvalued (fair value ratio: ${fairValueRatio.toFixed(2)})`);
-            }
-            if (config.alerts?.onUndervalued && valuationStatus === 'undervalued') {
-                alerts.push(`${symbol} appears undervalued (fair value ratio: ${fairValueRatio.toFixed(2)})`);
-            }
-        }
-
-        const averageScore = signals.length
-            ? signals.reduce((sum, s) => sum + s.score, 0) / signals.length
-            : 50;
-
-        if (config.alerts.onScoreSpike && averageScore >= 80) {
-            alerts.push('Average fundamental score above 80');
-        }
-        if (config.alerts.onMacroShock && fearGreed.value <= 20) {
-            alerts.push('Macro shock detected via Fear & Greed index');
-        }
-
-        // Build Company/Project Data
-        const companyProjectDataPromises = signals.map(async signal => {
-            const ticker = maxSymbols.find(s => s === signal.symbol) ? await fetchMexcTicker24hr(signal.symbol) : null;
-            const marketCap = ticker ? parseFloat(ticker?.quoteVolume ?? '0') * parseFloat(ticker?.lastPrice ?? '0') : undefined;
-            return {
-                symbol: signal.symbol,
-                name: signal.symbol,
-                type: 'crypto' as const,
-                marketCap,
-                circulatingSupply: marketCap && ticker && parseFloat(ticker.lastPrice ?? '0') > 0 ? marketCap / parseFloat(ticker.lastPrice) : undefined,
-                team: {
-                    active: true,
-                },
-                roadmap: {
-                    milestones: [],
-                },
-            };
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (!token) throw new Error('Authentication required');
+        
+        console.log('🚀 Running fundamental analysis for agent:', agentId);
+        
+        const response = await fetch(`/api/ai-agents/${agentId}/run`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ symbol: 'BTCUSDT' }) // Default symbol
         });
-        const companyProjectData = await Promise.all(companyProjectDataPromises);
-
-        // Build Event Impact Analysis
-        const eventImpacts: EventImpactAnalysis[] = newsArticles.slice(0, 5).map((article, index) => ({
-            id: `event-${index}`,
-            symbol: maxSymbols[0] || 'BTCUSDT',
-            eventType: 'other' as const,
-            title: article.title || 'News Event',
-            description: article.description || '',
-            date: article.publishedAt || new Date().toISOString(),
-            impactScore: Math.random() * 100,
-            impactDirection: Math.random() > 0.5 ? 'positive' as const : 'negative' as const,
-            affectedMetrics: ['price', 'volume'],
-            estimatedPriceImpact: (Math.random() - 0.5) * 10,
-        }));
-
-        // Build On-chain Data
-        const onChainData = signals.map(signal => ({
-            symbol: signal.symbol,
-            whaleDistribution: {
-                top10: Math.random() * 30 + 20,
-                top100: Math.random() * 50 + 40,
-                concentration: Math.random() * 0.5 + 0.3,
-            },
-            addressActivity: {
-                activeAddresses: Math.floor(Math.random() * 100000 + 50000),
-                newAddresses: Math.floor(Math.random() * 10000 + 5000),
-                transactionCount: Math.floor(Math.random() * 1000000 + 500000),
-            },
-            tokenomics: {
-                totalSupply: Math.random() * 1000000000 + 100000000,
-                circulatingSupply: Math.random() * 500000000 + 50000000,
-                lockedSupply: Math.random() * 200000000 + 10000000,
-                inflationRate: Math.random() * 5,
-                stakingRate: Math.random() * 20 + 10,
-            },
-            networkHealth: {
-                transactionVolume: Math.random() * 1000000 + 100000,
-            },
-        }));
-
-        // Build Fair Value History
-        const fairValueHistoryPromises = signals.map(async signal => {
-            const ticker = await fetchMexcTicker24hr(signal.symbol);
-            const marketPrice = parseFloat(ticker?.lastPrice ?? '0');
-            return {
-                timestamp: new Date().toISOString(),
-                symbol: signal.symbol,
-                intrinsicValue: signal.intrinsicValue || 0,
-                marketPrice,
-                fairValueRatio: signal.fairPrice && signal.intrinsicValue ? signal.fairPrice / signal.intrinsicValue : 1,
-                valuationStatus: signal.valuationStatus || 'fair',
-            };
-        });
-        const fairValueHistory = await Promise.all(fairValueHistoryPromises);
-
-        const result: FundamentalAnalysisResult = {
-            timestamp: new Date().toISOString(),
-            averageScore: Math.round(averageScore * 100) / 100,
-            marketSummary: {
-                fearGreed: fearGreed.value,
-                macroLabel: fearGreed.classification,
-                fundingImbalance: signals.reduce((sum, s) => sum + (s.fundingRate || 0), 0) / (signals.length || 1),
-            },
-            signals,
-            alerts,
-            companyProjectData,
-            eventImpacts,
-            onChainData,
-            fairValueHistory,
-        };
-
-        const currentMetrics: FundamentalAnalysisMetrics = agent.fundamentalMetrics || {
-            totalAnalyses: 0,
-            averageScore: 0,
-            bullishCount: 0,
-            bearishCount: 0,
-            neutralCount: 0,
-            alertsTriggered: 0,
-            recentPerformance: {
-                last24h: { analyses: 0, avgScore: 0 },
-                last7d: { analyses: 0, avgScore: 0 },
-            },
-        };
-
-        const verdictCounts = signals.reduce(
-            (acc, s) => {
-                acc[s.verdict] += 1;
-                return acc;
-            },
-            { bullish: 0, bearish: 0, neutral: 0 },
-        );
-
-        const undervaluedCount = signals.filter(s => s.valuationStatus === 'undervalued').length;
-        const overvaluedCount = signals.filter(s => s.valuationStatus === 'overvalued').length;
-
-        const updatedMetrics: FundamentalAnalysisMetrics = {
-            totalAnalyses: currentMetrics.totalAnalyses + 1,
-            averageScore: currentMetrics.totalAnalyses
-                ? (currentMetrics.averageScore * currentMetrics.totalAnalyses + averageScore) / (currentMetrics.totalAnalyses + 1)
-                : averageScore,
-            bullishCount: currentMetrics.bullishCount + verdictCounts.bullish,
-            bearishCount: currentMetrics.bearishCount + verdictCounts.bearish,
-            neutralCount: currentMetrics.neutralCount + verdictCounts.neutral,
-            alertsTriggered: currentMetrics.alertsTriggered + alerts.length,
-            undervaluedDetections: (currentMetrics.undervaluedDetections || 0) + undervaluedCount,
-            overvaluedDetections: (currentMetrics.overvaluedDetections || 0) + overvaluedCount,
-            recentPerformance: {
-                last24h: {
-                    analyses: currentMetrics.recentPerformance.last24h.analyses + 1,
-                    avgScore: averageScore,
-                },
-                last7d: currentMetrics.recentPerformance.last7d,
-            },
-            fairValueHistory: [
-                ...fairValueHistory,
-                ...(currentMetrics.fairValueHistory || []),
-            ].slice(-100),
-        };
-
-        await database.save('aiAgents', {
-            ...agent,
-            fundamentalAnalysisConfig: config,
-            fundamentalMetrics: updatedMetrics,
-            lastFundamentalAnalysis: result,
-            lastUpdate: new Date().toISOString(),
-        });
-
-        // Share with Artemis and sync with other agents
-        await shareDataWithArtemis(agentId, 'fundamental', result, 'analysis');
-        await forwardToDashboard(agentId, result, 'fundamental_analysis');
-        await syncWithOtherAgents(agentId, 'fundamental', result, 'analysis');
-
-        return result;
-    } catch (e) {
-        console.error('Failed to run fundamental analysis:', e);
-        throw e;
+        
+        if (!response.ok) {
+            throw new Error(`Run failed: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        // Extract the actual analysis result from the response
+        return result.result || result;
+    } catch (error) {
+        console.error('❌ Failed to run fundamental analysis:', error);
+        throw error;
     }
 };
+
 
 export const learnFromFundamentalMistake = async (
     agentId: string,
