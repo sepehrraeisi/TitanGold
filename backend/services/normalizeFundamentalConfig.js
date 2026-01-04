@@ -31,7 +31,24 @@ export function getDefaultConfig() {
     },
     outputType: 'rating', // 'rating' | 'buy_sell' | 'score'
     autoRefresh: false,
-    refreshIntervalMinutes: 60
+    refreshIntervalMinutes: 60,
+    
+    // Integration settings
+    integrations: {
+      artemisCore: true,
+      syncWithPricePrediction: true,
+      syncWithPortfolio: true,
+      syncWithRisk: true,
+      forwardToDashboard: true
+    },
+    
+    // Alert channels
+    alertChannels: {
+      dashboard: true,
+      email: false,
+      telegram: false,
+      discord: false
+    }
   };
 }
 
@@ -115,7 +132,42 @@ export function normalizeFundamentalConfig(rawConfig) {
       
     refreshIntervalMinutes: typeof rawConfig.refreshIntervalMinutes === 'number' 
       ? rawConfig.refreshIntervalMinutes 
-      : defaultConfig.refreshIntervalMinutes
+      : defaultConfig.refreshIntervalMinutes,
+    
+    // Integration settings
+    integrations: {
+      artemisCore: typeof rawConfig.integrations?.artemisCore === 'boolean'
+        ? rawConfig.integrations.artemisCore
+        : defaultConfig.integrations.artemisCore,
+      syncWithPricePrediction: typeof rawConfig.integrations?.syncWithPricePrediction === 'boolean'
+        ? rawConfig.integrations.syncWithPricePrediction
+        : defaultConfig.integrations.syncWithPricePrediction,
+      syncWithPortfolio: typeof rawConfig.integrations?.syncWithPortfolio === 'boolean'
+        ? rawConfig.integrations.syncWithPortfolio
+        : defaultConfig.integrations.syncWithPortfolio,
+      syncWithRisk: typeof rawConfig.integrations?.syncWithRisk === 'boolean'
+        ? rawConfig.integrations.syncWithRisk
+        : defaultConfig.integrations.syncWithRisk,
+      forwardToDashboard: typeof rawConfig.integrations?.forwardToDashboard === 'boolean'
+        ? rawConfig.integrations.forwardToDashboard
+        : defaultConfig.integrations.forwardToDashboard
+    },
+    
+    // Alert channels
+    alertChannels: {
+      dashboard: typeof rawConfig.alertChannels?.dashboard === 'boolean'
+        ? rawConfig.alertChannels.dashboard
+        : defaultConfig.alertChannels.dashboard,
+      email: typeof rawConfig.alertChannels?.email === 'boolean'
+        ? rawConfig.alertChannels.email
+        : defaultConfig.alertChannels.email,
+      telegram: typeof rawConfig.alertChannels?.telegram === 'boolean'
+        ? rawConfig.alertChannels.telegram
+        : defaultConfig.alertChannels.telegram,
+      discord: typeof rawConfig.alertChannels?.discord === 'boolean'
+        ? rawConfig.alertChannels.discord
+        : defaultConfig.alertChannels.discord
+    }
   };
 }
 
