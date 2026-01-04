@@ -1059,15 +1059,19 @@ router.patch('/:id/config', authenticate, async (req, res) => {
     console.log(`✅ Config normalized for ${agent_key}`);
 
     // Update in database with normalized config
+    // 🔥 CRITICAL: Use JSONB merge operator to preserve existing fields
+    // Old way: SET config = $1  ← Replaced entire config
+    // New way: SET config = config || $1  ← Merges new fields into existing config
     const result = await query(
       `UPDATE ai_agents
-       SET config = $1,
+       SET config = COALESCE(config, '{}'::jsonb) || $1::jsonb,
            metadata = COALESCE($2, metadata),
            updated_at = NOW()
        WHERE id = $3
-       RETURNING id, name, agent_key`,
+       RETURNING id, name, agent_key, config`,
       [
-        JSON.stringify(normalizedConfig),
+        // PostgreSQL node driver auto-converts objects to JSONB
+        normalizedConfig,  // Don't stringify - let pg driver handle it
         metadata ? JSON.stringify(metadata) : null,
         id
       ]
@@ -1075,6 +1079,10 @@ router.patch('/:id/config', authenticate, async (req, res) => {
 
     const agent = result.rows[0];
     console.log(`✅ Config updated for ${agent.name} (${agent.agent_key})`);
+    
+    // Config is already parsed by PostgreSQL driver (JSONB -> Object)
+    const savedConfig = agent.config;
+    console.log(`✅ Saved config keys:`, Object.keys(savedConfig));
 
     return res.json({
       success: true,
@@ -1082,7 +1090,8 @@ router.patch('/:id/config', authenticate, async (req, res) => {
         id: agent.id,
         name: agent.name,
         agent_key: agent.agent_key
-      }
+      },
+      savedConfig  // Return saved config for verification
     });
 
   } catch (error) {
