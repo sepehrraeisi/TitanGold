@@ -109,12 +109,25 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
     const handleUpdateConfig = async (updatedConfig: FundamentalAnalysisConfig) => {
         setIsLoading(true);
         try {
+            // 1. Save to backend
             await api.updateFundamentalAnalysisConfig(agent.id, updatedConfig);
-            setConfig(updatedConfig);
-            alert(t('config_updated') || 'Configuration updated');
+            
+            // 2. 🆕 Refetch from /details (Golden Rule: Single Source of Truth)
+            const freshData = await api.fetchFundamentalAgentData(agent.id);
+            
+            // 3. Update local state with fresh data
+            if (freshData.config) setConfig(freshData.config);
+            if (freshData.metrics) setMetrics(freshData.metrics);
+            if (freshData.lastAnalysis) {
+                setAnalysis(normalizeFundamentalAnalysis(freshData.lastAnalysis));
+            }
+            
+            // 4. Show success
+            alert(t('config_updated') || 'Configuration updated successfully');
         } catch (error) {
             console.error('Failed to update fundamental config:', error);
             alert(t('update_failed') || 'Update failed');
+            throw error; // Re-throw so Settings component knows it failed
         } finally {
             setIsLoading(false);
         }
@@ -761,26 +774,77 @@ const FundamentalSettings: React.FC<{
     onUpdate: (config: FundamentalAnalysisConfig) => void;
     t: (key: string) => string;
 }> = ({ config, disabled, onUpdate, t }) => {
+    // 🆕 Track local state and dirty flag
+    const [localConfig, setLocalConfig] = React.useState<FundamentalAnalysisConfig>(config);
+    const [isDirty, setIsDirty] = React.useState(false);
+    const [isSaving, setIsSaving] = React.useState(false);
+
+    // 🆕 Sync with parent config when it changes from outside
+    React.useEffect(() => {
+        setLocalConfig(config);
+        setIsDirty(false);
+    }, [config]);
+
     const updateField = (field: keyof FundamentalAnalysisConfig, value: any) => {
-        onUpdate({ ...config, [field]: value });
+        setLocalConfig({ ...localConfig, [field]: value });
+        setIsDirty(true);
     };
 
     const updateWeights = (key: keyof FundamentalAnalysisConfig['weights'], value: number) => {
-        updateField('weights', { ...config.weights, [key]: value });
+        updateField('weights', { ...localConfig.weights, [key]: value });
     };
 
     const updateThreshold = (key: keyof FundamentalAnalysisConfig['thresholds'], value: number) => {
-        updateField('thresholds', { ...config.thresholds, [key]: value });
+        updateField('thresholds', { ...localConfig.thresholds, [key]: value });
+    };
+
+    // 🆕 Save handler
+    const handleSave = async () => {
+        if (!isDirty || isSaving) return;
+        
+        setIsSaving(true);
+        try {
+            await onUpdate(localConfig);
+            setIsDirty(false);
+        } catch (error) {
+            console.error('Save failed:', error);
+            // onUpdate will show alert
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
         <div className="space-y-5">
+            {/* 🆕 Save Button - Sticky at top */}
+            <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-4 flex items-center justify-between sticky top-0 z-10">
+                <div>
+                    <p className="text-white font-semibold">{t('settings') || 'Settings'}</p>
+                    {isDirty && (
+                        <p className="text-xs text-yellow-400 mt-1">
+                            {t('unsaved_changes') || 'You have unsaved changes'}
+                        </p>
+                    )}
+                </div>
+                <button
+                    onClick={handleSave}
+                    disabled={!isDirty || isSaving || disabled}
+                    className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+                        !isDirty || isSaving || disabled
+                            ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                            : 'bg-orange-500 text-white hover:bg-orange-600'
+                    }`}
+                >
+                    {isSaving ? t('saving') || 'Saving...' : t('save_changes') || 'Save Changes'}
+                </button>
+            </div>
+
             <div className="bg-gray-900/40 border border-gray-800 rounded-lg p-5 space-y-3">
                 <h3 className="text-lg font-semibold text-white">{t('tracked_symbols') || 'Tracked Symbols'}</h3>
                 <textarea
                     rows={2}
                     disabled={disabled}
-                    value={config.symbols.join(', ')}
+                    value={localConfig.symbols.join(', ')}
                     onChange={(e) => updateField('symbols', e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean))}
                     className="w-full p-3 bg-gray-800 border border-gray-700 rounded-md text-white text-sm"
                 />
@@ -788,7 +852,7 @@ const FundamentalSettings: React.FC<{
                 <input
                     type="number"
                     disabled={disabled}
-                    value={config.lookbackDays}
+                    value={localConfig.lookbackDays}
                     onChange={(e) => updateField('lookbackDays', parseInt(e.target.value, 10))}
                     className="w-full p-2 bg-gray-800 border border-gray-700 rounded-md text-white text-sm"
                 />
@@ -802,8 +866,8 @@ const FundamentalSettings: React.FC<{
                             <input
                                 type="checkbox"
                                 disabled={disabled}
-                                checked={config.dataSources[key] ?? false}
-                                onChange={(e) => updateField('dataSources', { ...config.dataSources, [key]: e.target.checked })}
+                                checked={localConfig.dataSources[key] ?? false}
+                                onChange={(e) => updateField('dataSources', { ...localConfig.dataSources, [key]: e.target.checked })}
                                 className="w-4 h-4 accent-orange-500"
                             />
                             {t(key) || key}
@@ -819,7 +883,7 @@ const FundamentalSettings: React.FC<{
                         <NumberInput
                             key={key}
                             label={t(key) || key}
-                            value={config.weights[key] ?? 0}
+                            value={localConfig.weights[key] ?? 0}
                             step={0.05}
                             disabled={disabled}
                             onChange={(value) => updateWeights(key, value)}
@@ -833,26 +897,26 @@ const FundamentalSettings: React.FC<{
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <NumberInput
                         label={t('bullish_threshold') || 'Bullish threshold'}
-                        value={config.thresholds.bullish}
+                        value={localConfig.thresholds.bullish}
                         disabled={disabled}
                         onChange={(value) => updateThreshold('bullish', value)}
                     />
                     <NumberInput
                         label={t('bearish_threshold') || 'Bearish threshold'}
-                        value={config.thresholds.bearish}
+                        value={localConfig.thresholds.bearish}
                         disabled={disabled}
                         onChange={(value) => updateThreshold('bearish', value)}
                     />
                     <NumberInput
                         label={t('overvalued_threshold') || 'Overvalued threshold'}
-                        value={config.thresholds.overvalued ?? 1.1}
+                        value={localConfig.thresholds.overvalued ?? 1.1}
                         step={0.01}
                         disabled={disabled}
                         onChange={(value) => updateThreshold('overvalued', value)}
                     />
                     <NumberInput
                         label={t('undervalued_threshold') || 'Undervalued threshold'}
-                        value={config.thresholds.undervalued ?? 0.9}
+                        value={localConfig.thresholds.undervalued ?? 0.9}
                         step={0.01}
                         disabled={disabled}
                         onChange={(value) => updateThreshold('undervalued', value)}
@@ -860,7 +924,7 @@ const FundamentalSettings: React.FC<{
                 </div>
             </div>
 
-            {config.assetTypes && (
+            {localConfig.assetTypes && (
                 <div className="bg-gray-900/40 border border-gray-800 rounded-lg p-5 space-y-3">
                     <h3 className="text-lg font-semibold text-white">{t('asset_types') || 'Asset Types'}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -869,9 +933,9 @@ const FundamentalSettings: React.FC<{
                                 <input
                                     type="checkbox"
                                     disabled={disabled}
-                                    checked={config.assetTypes?.includes(type) ?? false}
+                                    checked={localConfig.assetTypes?.includes(type) ?? false}
                                     onChange={(e) => {
-                                        const current = config.assetTypes || [];
+                                        const current = localConfig.assetTypes || [];
                                         const updated = e.target.checked
                                             ? [...current, type]
                                             : current.filter(t => t !== type);
@@ -886,12 +950,12 @@ const FundamentalSettings: React.FC<{
                 </div>
             )}
 
-            {config.analysisTimeframe && (
+            {localConfig.analysisTimeframe && (
                 <div className="bg-gray-900/40 border border-gray-800 rounded-lg p-5 space-y-3">
                     <h3 className="text-lg font-semibold text-white">{t('analysis_timeframe') || 'Analysis Timeframe'}</h3>
                     <select
                         disabled={disabled}
-                        value={config.analysisTimeframe}
+                        value={localConfig.analysisTimeframe}
                         onChange={(e) => updateField('analysisTimeframe', e.target.value as 'short' | 'medium' | 'long')}
                         className="w-full p-2 bg-gray-800 border border-gray-700 rounded-md text-white text-sm"
                     >
@@ -902,12 +966,12 @@ const FundamentalSettings: React.FC<{
                 </div>
             )}
 
-            {config.outputType && (
+            {localConfig.outputType && (
                 <div className="bg-gray-900/40 border border-gray-800 rounded-lg p-5 space-y-3">
                     <h3 className="text-lg font-semibold text-white">{t('output_type') || 'Output Type'}</h3>
                     <select
                         disabled={disabled}
-                        value={config.outputType}
+                        value={localConfig.outputType}
                         onChange={(e) => updateField('outputType', e.target.value as 'alerts_only' | 'buy_sell' | 'rating')}
                         className="w-full p-2 bg-gray-800 border border-gray-700 rounded-md text-white text-sm"
                     >
@@ -926,9 +990,9 @@ const FundamentalSettings: React.FC<{
                         <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={config.integrationSettings?.shareWithArtemis ?? true}
+                            checked={localConfig.integrationSettings?.shareWithArtemis ?? true}
                             onChange={(e) => updateField('integrationSettings', { 
-                                ...config.integrationSettings, 
+                                ...localConfig.integrationSettings, 
                                 shareWithArtemis: e.target.checked 
                             })}
                             className="w-4 h-4 accent-orange-500"
@@ -939,9 +1003,9 @@ const FundamentalSettings: React.FC<{
                         <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={config.integrationSettings?.syncWithPricePrediction ?? true}
+                            checked={localConfig.integrationSettings?.syncWithPricePrediction ?? true}
                             onChange={(e) => updateField('integrationSettings', { 
-                                ...config.integrationSettings, 
+                                ...localConfig.integrationSettings, 
                                 syncWithPricePrediction: e.target.checked 
                             })}
                             className="w-4 h-4 accent-orange-500"
@@ -952,9 +1016,9 @@ const FundamentalSettings: React.FC<{
                         <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={config.integrationSettings?.syncWithPortfolio ?? true}
+                            checked={localConfig.integrationSettings?.syncWithPortfolio ?? true}
                             onChange={(e) => updateField('integrationSettings', { 
-                                ...config.integrationSettings, 
+                                ...localConfig.integrationSettings, 
                                 syncWithPortfolio: e.target.checked 
                             })}
                             className="w-4 h-4 accent-orange-500"
@@ -965,9 +1029,9 @@ const FundamentalSettings: React.FC<{
                         <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={config.integrationSettings?.syncWithRisk ?? true}
+                            checked={localConfig.integrationSettings?.syncWithRisk ?? true}
                             onChange={(e) => updateField('integrationSettings', { 
-                                ...config.integrationSettings, 
+                                ...localConfig.integrationSettings, 
                                 syncWithRisk: e.target.checked 
                             })}
                             className="w-4 h-4 accent-orange-500"
@@ -978,9 +1042,9 @@ const FundamentalSettings: React.FC<{
                         <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={config.integrationSettings?.forwardToDashboard ?? true}
+                            checked={localConfig.integrationSettings?.forwardToDashboard ?? true}
                             onChange={(e) => updateField('integrationSettings', { 
-                                ...config.integrationSettings, 
+                                ...localConfig.integrationSettings, 
                                 forwardToDashboard: e.target.checked 
                             })}
                             className="w-4 h-4 accent-orange-500"
@@ -998,9 +1062,9 @@ const FundamentalSettings: React.FC<{
                         <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={config.alertChannels?.dashboard ?? true}
+                            checked={localConfig.alertChannels?.dashboard ?? true}
                             onChange={(e) => updateField('alertChannels', { 
-                                ...config.alertChannels, 
+                                ...localConfig.alertChannels, 
                                 dashboard: e.target.checked 
                             })}
                             className="w-4 h-4 accent-orange-500"
@@ -1011,9 +1075,9 @@ const FundamentalSettings: React.FC<{
                         <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={config.alertChannels?.email ?? false}
+                            checked={localConfig.alertChannels?.email ?? false}
                             onChange={(e) => updateField('alertChannels', { 
-                                ...config.alertChannels, 
+                                ...localConfig.alertChannels, 
                                 email: e.target.checked 
                             })}
                             className="w-4 h-4 accent-orange-500"
@@ -1024,9 +1088,9 @@ const FundamentalSettings: React.FC<{
                         <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={config.alertChannels?.messenger ?? false}
+                            checked={localConfig.alertChannels?.messenger ?? false}
                             onChange={(e) => updateField('alertChannels', { 
-                                ...config.alertChannels, 
+                                ...localConfig.alertChannels, 
                                 messenger: e.target.checked 
                             })}
                             className="w-4 h-4 accent-orange-500"
