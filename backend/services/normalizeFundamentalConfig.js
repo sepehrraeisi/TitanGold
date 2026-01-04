@@ -33,9 +33,9 @@ export function getDefaultConfig() {
     autoRefresh: false,
     refreshIntervalMinutes: 60,
     
-    // Integration settings
-    integrations: {
-      artemisCore: true,
+    // Integration settings (UI uses integrationSettings)
+    integrationSettings: {
+      shareWithArtemis: true,
       syncWithPricePrediction: true,
       syncWithPortfolio: true,
       syncWithRisk: true,
@@ -134,23 +134,33 @@ export function normalizeFundamentalConfig(rawConfig) {
       ? rawConfig.refreshIntervalMinutes 
       : defaultConfig.refreshIntervalMinutes,
     
-    // Integration settings
-    integrations: {
-      artemisCore: typeof rawConfig.integrations?.artemisCore === 'boolean'
-        ? rawConfig.integrations.artemisCore
-        : defaultConfig.integrations.artemisCore,
-      syncWithPricePrediction: typeof rawConfig.integrations?.syncWithPricePrediction === 'boolean'
-        ? rawConfig.integrations.syncWithPricePrediction
-        : defaultConfig.integrations.syncWithPricePrediction,
-      syncWithPortfolio: typeof rawConfig.integrations?.syncWithPortfolio === 'boolean'
-        ? rawConfig.integrations.syncWithPortfolio
-        : defaultConfig.integrations.syncWithPortfolio,
-      syncWithRisk: typeof rawConfig.integrations?.syncWithRisk === 'boolean'
-        ? rawConfig.integrations.syncWithRisk
-        : defaultConfig.integrations.syncWithRisk,
-      forwardToDashboard: typeof rawConfig.integrations?.forwardToDashboard === 'boolean'
-        ? rawConfig.integrations.forwardToDashboard
-        : defaultConfig.integrations.forwardToDashboard
+    // Integration settings (support both 'integrations' and 'integrationSettings')
+    integrationSettings: {
+      shareWithArtemis: typeof rawConfig.integrationSettings?.shareWithArtemis === 'boolean'
+        ? rawConfig.integrationSettings.shareWithArtemis
+        : (typeof rawConfig.integrations?.artemisCore === 'boolean'
+          ? rawConfig.integrations.artemisCore
+          : defaultConfig.integrations.artemisCore),
+      syncWithPricePrediction: typeof rawConfig.integrationSettings?.syncWithPricePrediction === 'boolean'
+        ? rawConfig.integrationSettings.syncWithPricePrediction
+        : (typeof rawConfig.integrations?.syncWithPricePrediction === 'boolean'
+          ? rawConfig.integrations.syncWithPricePrediction
+          : defaultConfig.integrations.syncWithPricePrediction),
+      syncWithPortfolio: typeof rawConfig.integrationSettings?.syncWithPortfolio === 'boolean'
+        ? rawConfig.integrationSettings.syncWithPortfolio
+        : (typeof rawConfig.integrations?.syncWithPortfolio === 'boolean'
+          ? rawConfig.integrations.syncWithPortfolio
+          : defaultConfig.integrations.syncWithPortfolio),
+      syncWithRisk: typeof rawConfig.integrationSettings?.syncWithRisk === 'boolean'
+        ? rawConfig.integrationSettings.syncWithRisk
+        : (typeof rawConfig.integrations?.syncWithRisk === 'boolean'
+          ? rawConfig.integrations.syncWithRisk
+          : defaultConfig.integrations.syncWithRisk),
+      forwardToDashboard: typeof rawConfig.integrationSettings?.forwardToDashboard === 'boolean'
+        ? rawConfig.integrationSettings.forwardToDashboard
+        : (typeof rawConfig.integrations?.forwardToDashboard === 'boolean'
+          ? rawConfig.integrations.forwardToDashboard
+          : defaultConfig.integrations.forwardToDashboard)
     },
     
     // Alert channels
