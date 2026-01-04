@@ -917,6 +917,124 @@ const FundamentalSettings: React.FC<{
                     </select>
                 </div>
             )}
+
+            {/* Integration Settings */}
+            <div className="bg-gray-900/40 border border-gray-800 rounded-lg p-5 space-y-4">
+                <h3 className="text-lg font-semibold text-white">{t('integration_settings') || 'Integration Settings'}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="flex items-center text-sm text-gray-300 gap-2">
+                        <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={config.integrationSettings?.shareWithArtemis ?? true}
+                            onChange={(e) => updateField('integrationSettings', { 
+                                ...config.integrationSettings, 
+                                shareWithArtemis: e.target.checked 
+                            })}
+                            className="w-4 h-4 accent-orange-500"
+                        />
+                        {t('share_with_artemis') || 'Artemis Core Access'}
+                    </label>
+                    <label className="flex items-center text-sm text-gray-300 gap-2">
+                        <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={config.integrationSettings?.syncWithPricePrediction ?? true}
+                            onChange={(e) => updateField('integrationSettings', { 
+                                ...config.integrationSettings, 
+                                syncWithPricePrediction: e.target.checked 
+                            })}
+                            className="w-4 h-4 accent-orange-500"
+                        />
+                        {t('sync_with_price_prediction') || 'Sync with Price Prediction'}
+                    </label>
+                    <label className="flex items-center text-sm text-gray-300 gap-2">
+                        <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={config.integrationSettings?.syncWithPortfolio ?? true}
+                            onChange={(e) => updateField('integrationSettings', { 
+                                ...config.integrationSettings, 
+                                syncWithPortfolio: e.target.checked 
+                            })}
+                            className="w-4 h-4 accent-orange-500"
+                        />
+                        {t('sync_with_portfolio') || 'Sync with Portfolio'}
+                    </label>
+                    <label className="flex items-center text-sm text-gray-300 gap-2">
+                        <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={config.integrationSettings?.syncWithRisk ?? true}
+                            onChange={(e) => updateField('integrationSettings', { 
+                                ...config.integrationSettings, 
+                                syncWithRisk: e.target.checked 
+                            })}
+                            className="w-4 h-4 accent-orange-500"
+                        />
+                        {t('sync_with_risk') || 'Sync with Risk Agent'}
+                    </label>
+                    <label className="flex items-center text-sm text-gray-300 gap-2">
+                        <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={config.integrationSettings?.forwardToDashboard ?? true}
+                            onChange={(e) => updateField('integrationSettings', { 
+                                ...config.integrationSettings, 
+                                forwardToDashboard: e.target.checked 
+                            })}
+                            className="w-4 h-4 accent-orange-500"
+                        />
+                        {t('forward_to_dashboard') || 'Forward to Dashboard'}
+                    </label>
+                </div>
+            </div>
+
+            {/* Alert Channels */}
+            <div className="bg-gray-900/40 border border-gray-800 rounded-lg p-5 space-y-4">
+                <h3 className="text-lg font-semibold text-white">{t('alert_channels') || 'Alert Channels'}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <label className="flex items-center text-sm text-gray-300 gap-2">
+                        <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={config.alertChannels?.dashboard ?? true}
+                            onChange={(e) => updateField('alertChannels', { 
+                                ...config.alertChannels, 
+                                dashboard: e.target.checked 
+                            })}
+                            className="w-4 h-4 accent-orange-500"
+                        />
+                        {t('dashboard') || 'Dashboard'}
+                    </label>
+                    <label className="flex items-center text-sm text-gray-300 gap-2">
+                        <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={config.alertChannels?.email ?? false}
+                            onChange={(e) => updateField('alertChannels', { 
+                                ...config.alertChannels, 
+                                email: e.target.checked 
+                            })}
+                            className="w-4 h-4 accent-orange-500"
+                        />
+                        {t('email') || 'Email'}
+                    </label>
+                    <label className="flex items-center text-sm text-gray-300 gap-2">
+                        <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={config.alertChannels?.messenger ?? false}
+                            onChange={(e) => updateField('alertChannels', { 
+                                ...config.alertChannels, 
+                                messenger: e.target.checked 
+                            })}
+                            className="w-4 h-4 accent-orange-500"
+                        />
+                        {t('messenger') || 'Messenger'}
+                    </label>
+                </div>
+            </div>
         </div>
     );
 };
