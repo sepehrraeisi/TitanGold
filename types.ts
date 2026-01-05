@@ -881,6 +881,13 @@ export interface AIAgent {
   opportunitiesFound?: number;
   totalProfitUSDT?: number;
   
+  // Liquidity-specific metrics
+  avgLiquidityScore?: number;
+  avgSpread?: number;
+  avgSlippage50k?: number;
+  riskLevel?: 'low' | 'medium' | 'high';
+  alertsTriggered?: number;
+  
   // Technical Analysis Agent specific fields
   technicalAnalysisConfig?: TechnicalAnalysisConfig;
   performanceMetrics?: AgentPerformanceMetrics;
@@ -5055,3 +5062,4 @@ export interface DeFiData {
     totalYield: number;
     lastSyncedAt: string;
 }
+// Note: Liquidity-specific metrics added inline above totalScans

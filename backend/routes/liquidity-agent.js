@@ -445,7 +445,30 @@ router.post('/settings', authenticate, async (req, res) => {
       )
     }
 
-    return res.json({ success: true })
+    // 🆕 Golden Rule: Refetch fresh data from DB (single source of truth)
+    const freshResult = await pool.query(
+      `SELECT enabled, mode, symbols, depth_levels, 
+              slippage_thresholds, alert_rules, integrations
+       FROM agent_settings_liquidity
+       WHERE user_id = $1`,
+      [userId]
+    )
+
+    const settings = freshResult.rows[0]
+
+    // Return the persisted data (what's actually in DB)
+    return res.json({
+      success: true,
+      settings: {
+        enabled: settings.enabled,
+        mode: settings.mode,
+        symbols: settings.symbols,
+        depthLevels: settings.depth_levels,
+        slippageThresholds: settings.slippage_thresholds,
+        alertRules: settings.alert_rules,
+        integrations: settings.integrations
+      }
+    })
   } catch (error) {
     console.error('Error updating liquidity settings:', error)
     return res.status(500).json({
