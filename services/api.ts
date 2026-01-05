@@ -8508,7 +8508,8 @@ export const fetchLiquidityAgentData = async (agentId: string): Promise<{
         const agent = await database.get<AIAgent>('aiAgents', agentId);
         if (agent) {
             return {
-                config: agent.liquidityAnalysisConfig || null,
+                // 🔧 Map agent.config to liquidityAnalysisConfig if needed
+                config: agent.liquidityAnalysisConfig || (agent as any).config || null,
                 metrics: agent.liquidityMetrics || null,
                 lastAnalysis: agent.lastLiquidityAnalysis || null,
             };
