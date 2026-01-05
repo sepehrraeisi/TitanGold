@@ -88,8 +88,18 @@ const LiquidityAgentControl: React.FC<LiquidityAgentControlProps> = ({ agent, on
     const handleUpdateConfig = async (updatedConfig: LiquidityAnalysisConfig) => {
         setIsLoading(true);
         try {
+            // 1. Save to backend
             await api.updateLiquidityAnalysisConfig(agent.id, updatedConfig);
-            setConfig(updatedConfig);
+            
+            // 2. 🆕 Refetch from backend (Golden Rule: Single Source of Truth)
+            const freshData = await api.fetchLiquidityAgentData(agent.id);
+            
+            // 3. Update local state with fresh data
+            if (freshData.config) setConfig(freshData.config);
+            if (freshData.metrics) setMetrics(freshData.metrics);
+            if (freshData.lastAnalysis) setAnalysis(freshData.lastAnalysis);
+            
+            // 4. Show success
             alert(t('config_updated') || 'Configuration updated');
         } catch (error) {
             console.error('Failed to update liquidity config:', error);
