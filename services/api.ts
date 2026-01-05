@@ -13471,9 +13471,9 @@ export const fetchMexcTrades = async (symbol?: string, limit: number = 50): Prom
 const getMexcApiUrl = (endpoint: string): string => {
     // Always use backend proxy to avoid CORS issues
     // Backend proxies requests to MEXC API at /api/market/mexc/*
-    // Map /api/v3/ticker/24hr -> /api/market/mexc/ticker24hr
+    // Map /api/v3/ticker/24hr -> /api/market/mexc/ticker/24hr (with slash)
     const proxyEndpoint = endpoint
-        .replace('/api/v3/ticker/24hr', '/ticker24hr')
+        .replace('/api/v3/ticker/24hr', '/ticker/24hr')
         .replace('/api/v3/depth', '/depth')
         .replace('/api/v3/exchangeInfo', '/exchangeInfo')
         .replace('/api/v3/ticker/price', '/price');
