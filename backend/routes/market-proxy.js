@@ -9,8 +9,9 @@ const MEXC_API_BASE = 'https://api.mexc.com';
 /**
  * Proxy endpoint for MEXC 24hr ticker
  * Solves CORS issues by proxying through backend
+ * Route: /api/market/mexc/ticker/24hr (with slash to match MEXC API)
  */
-router.get('/mexc/ticker24hr', async (req, res) => {
+router.get('/mexc/ticker/24hr', async (req, res) => {
   try {
     const { symbol } = req.query;
     
