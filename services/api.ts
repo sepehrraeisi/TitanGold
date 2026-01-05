@@ -4152,6 +4152,14 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
             // If backend returns valid data (array), use it (sanitized)
             if (Array.isArray(agentsArray) && agentsArray.length > 0) {
                 const agents = sanitizeAIAgents(agentsArray);
+                // 🔄 Sync to IndexedDB for offline access
+                try {
+                    for (const agent of agents) {
+                        await database.save('aiAgents', agent);
+                    }
+                } catch (e) {
+                    console.warn('Failed to sync agents to IndexedDB:', e);
+                }
                 console.log('✅ AI agents loaded from backend:', agents.length);
                 return agents;
             }
