@@ -24,6 +24,32 @@ interface FundamentalAgentControlProps {
 function normalizeFundamentalAnalysis(raw: any): FundamentalAnalysisResult | null {
     if (!raw) return null;
     
+    // Normalize onchain_tokenomics to array format expected by UI
+    const onChainDataArray = raw.onchain_tokenomics ? [{
+        symbol: raw.symbol || 'N/A',
+        whaleDistribution: raw.onchain_tokenomics.whaleDistribution || {
+            top10: 0,
+            top100: 0,
+            concentration: 0
+        },
+        addressActivity: {
+            activeAddresses: raw.onchain_tokenomics.activeAddresses || 0,
+            newAddresses: Math.floor((raw.onchain_tokenomics.activeAddresses || 0) * 0.1), // Estimate
+            transactionCount: raw.onchain_tokenomics.transactionCount || 0
+        },
+        tokenomics: raw.onchain_tokenomics.tokenomics || {
+            totalSupply: 0,
+            circulatingSupply: 0,
+            inflationRate: 0,
+            burnRate: 0
+        },
+        networkHealth: raw.onchain_tokenomics.networkHealth || {
+            transactionVolume: 0,
+            hashRate: 0,
+            activeNodes: 0
+        }
+    }] : [];
+    
     return {
         ...raw,
         // Map backend fields to UI expectations
@@ -32,7 +58,7 @@ function normalizeFundamentalAnalysis(raw: any): FundamentalAnalysisResult | nul
         events: {
             impactAnalysis: raw.events_news?.impactAnalysis || []
         },
-        onChainData: raw.onchain_tokenomics || null,
+        onChainData: onChainDataArray,
         fairValueHistory: raw.fair_value?.history || [],
         // Preserve existing fields
         overview: raw.overview || {},
@@ -151,8 +177,8 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
     };
 
     const signals = useMemo<FundamentalSignal[]>(() => analysis?.signals ?? [], [analysis]);
-    const companyData = useMemo(() => analysis?.companyProjectData ?? [], [analysis?.companyProjectData]);
-    const eventImpacts = useMemo(() => analysis?.eventImpacts ?? [], [analysis?.eventImpacts]);
+    const companyData = useMemo(() => analysis?.companyData ?? [], [analysis?.companyData]);
+    const eventImpacts = useMemo(() => analysis?.events?.impactAnalysis ?? [], [analysis?.events]);
     const onChainData = useMemo(() => analysis?.onChainData ?? [], [analysis?.onChainData]);
     const fairValueHistory = useMemo(() => analysis?.fairValueHistory ?? metrics?.fairValueHistory ?? [], [analysis?.fairValueHistory, metrics?.fairValueHistory]);
 
