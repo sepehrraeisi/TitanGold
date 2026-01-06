@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create PostgreSQL connection pool
+// Create PostgreSQL connection pool with SSL configuration
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT) || 5432,  // PostgreSQL is on port 5433
@@ -14,6 +14,12 @@ const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+  // SSL Configuration
+  ssl: process.env.DB_SSL === 'true' ? {
+    rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    // For localhost with self-signed cert, we need to allow unauthorized
+    // In production with proper certs, set DB_SSL_REJECT_UNAUTHORIZED=true
+  } : false,
 });
 
 // Test database connection
