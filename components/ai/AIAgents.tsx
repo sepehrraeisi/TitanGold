@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import { AIAgent } from '../../types.ts';
+import ErrorBoundary from '../ErrorBoundary.tsx';
 import TechnicalAnalysisAgentControl from './TechnicalAnalysisAgentControl.tsx';
 import RiskManagementAgentControl from './RiskManagementAgentControl.tsx';
 import SentimentAgentControl from './SentimentAgentControl.tsx';
@@ -83,109 +84,139 @@ const AIAgents: React.FC = () => {
             </div>
             
             {selectedAgent && selectedAgent.agent_key === 'technical' && (
-                <TechnicalAnalysisAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Technical Analysis Agent Error">
+                    <TechnicalAnalysisAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'risk' && (
-                <RiskManagementAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Risk Management Agent Error">
+                    <RiskManagementAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'sentiment' && (
-                <SentimentAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Sentiment Agent Error">
+                    <SentimentAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'pattern' && (
-                <PatternAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Pattern Agent Error">
+                    <PatternAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'price_prediction' && (
-                <PricePredictionAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Price Prediction Agent Error">
+                    <PricePredictionAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'arbitrage' && (
-                <ArbitrageAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Arbitrage Agent Error">
+                    <ArbitrageAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'portfolio' && (
-                <PortfolioAllocationAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Portfolio Allocation Agent Error">
+                    <PortfolioAllocationAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'liquidity' && (
-                <LiquidityAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Liquidity Agent Error">
+                    <LiquidityAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'trend' && (
-                <TrendAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Trend Agent Error">
+                    <TrendAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'optimization' && (
-                <OptimizationAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Optimization Agent Error">
+                    <OptimizationAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'order' && (
-                <OrderManagementAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Order Management Agent Error">
+                    <OrderManagementAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'fundamental' && (
-                <FundamentalAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Fundamental Agent Error">
+                    <FundamentalAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'market_intelligence' && (
-                <MarketIntelligenceAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Market Intelligence Agent Error">
+                    <MarketIntelligenceAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'volume' && (
-                <VolumeAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Volume Agent Error">
+                    <VolumeAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
             {selectedAgent && selectedAgent.agent_key === 'timing' && (
-                <TimingAgentControl
-                    agent={selectedAgent}
-                    onClose={() => setSelectedAgent(null)}
-                    onUpdate={handleAgentUpdate}
-                />
+                <ErrorBoundary fallbackTitle="Timing Agent Error">
+                    <TimingAgentControl
+                        agent={selectedAgent}
+                        onClose={() => setSelectedAgent(null)}
+                        onUpdate={handleAgentUpdate}
+                    />
+                </ErrorBoundary>
             )}
         </>
     );

@@ -1,165 +1,129 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { useLanguage } from '../context/LanguageContext.tsx';
 
 interface Props {
-    children: ReactNode;
-    fallback?: ReactNode;
+  children: ReactNode;
+  fallbackTitle?: string;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface State {
-    hasError: boolean;
-    error: Error | null;
-    errorInfo: ErrorInfo | null;
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
 }
 
 class ErrorBoundary extends Component<Props, State> {
-    constructor(props: Props) {
-        super(props);
-        this.state = {
-            hasError: false,
-            error: null,
-            errorInfo: null,
-        };
+  public state: State = {
+    hasError: false,
+    error: null,
+    errorInfo: null,
+  };
+
+  public static getDerivedStateFromError(error: Error): State {
+    // Update state so the next render will show the fallback UI
+    return { hasError: true, error, errorInfo: null };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Log error to console for development
+    console.error('🔴 ErrorBoundary caught an error:', error, errorInfo);
+    
+    // Update state with error details
+    this.setState({
+      error,
+      errorInfo,
+    });
+
+    // Call custom error handler if provided
+    if (this.props.onError) {
+      this.props.onError(error, errorInfo);
     }
 
-    static getDerivedStateFromError(error: Error): State {
-        return {
-            hasError: true,
-            error,
-            errorInfo: null,
-        };
-    }
+    // TODO: MONITORING-001 - Send to monitoring service (Sentry, etc.)
+    // Example:
+    // if (window.errorMonitoring) {
+    //   window.errorMonitoring.captureException(error, { extra: errorInfo });
+    // }
+  }
 
-    componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        console.error('ErrorBoundary caught an error:', error, errorInfo);
-        this.setState({
-            error,
-            errorInfo,
-        });
+  private handleRetry = () => {
+    // Reset error state to retry rendering
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+    });
+  };
 
-        // Log error to error tracking service (e.g., Sentry)
-        // if (window.Sentry) {
-        //     window.Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } });
-        // }
-    }
-
-    handleReset = () => {
-        this.setState({
-            hasError: false,
-            error: null,
-            errorInfo: null,
-        });
-    };
-
-    render() {
-        if (this.state.hasError) {
-            if (this.props.fallback) {
-                return this.props.fallback;
-            }
-
-            return (
-                <ErrorFallback
-                    error={this.state.error}
-                    errorInfo={this.state.errorInfo}
-                    onReset={this.handleReset}
+  public render() {
+    if (this.state.hasError) {
+      // Fallback UI when error occurs
+      return (
+        <div className="bg-red-900/20 border border-red-500 rounded-lg p-6 m-4">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <svg
+                className="h-6 w-6 text-red-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth="1.5"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
                 />
-            );
-        }
-
-        return this.props.children;
-    }
-}
-
-interface ErrorFallbackProps {
-    error: Error | null;
-    errorInfo: ErrorInfo | null;
-    onReset: () => void;
-}
-
-const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, errorInfo, onReset }) => {
-    const { t } = useLanguage();
-
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-[#0D111C] p-4">
-            <div className="max-w-2xl w-full bg-[#161B22] border border-red-500/30 rounded-xl p-8 shadow-xl">
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
-                        <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-white">
-                            {t('error_boundary_title') || 'Something went wrong'}
-                        </h1>
-                        <p className="text-gray-400 mt-1">
-                            {t('error_boundary_desc') || 'An unexpected error occurred. Please try again.'}
-                        </p>
-                    </div>
-                </div>
-
-                {error && (
-                    <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                        <p className="text-sm font-semibold text-red-400 mb-2">
-                            {t('error_message') || 'Error Message:'}
-                        </p>
-                        <p className="text-sm text-gray-300 font-mono break-all">
-                            {error.message || 'Unknown error'}
-                        </p>
-                        {error.stack && (
-                            <details className="mt-3">
-                                <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300">
-                                    {t('show_stack_trace') || 'Show Stack Trace'}
-                                </summary>
-                                <pre className="mt-2 text-xs text-gray-400 overflow-auto max-h-40 font-mono">
-                                    {error.stack}
-                                </pre>
-                            </details>
-                        )}
-                    </div>
-                )}
-
-                {errorInfo && errorInfo.componentStack && (
-                    <details className="mb-6">
-                        <summary className="text-sm text-gray-400 cursor-pointer hover:text-gray-300 mb-2">
-                            {t('show_component_stack') || 'Show Component Stack'}
-                        </summary>
-                        <pre className="text-xs text-gray-500 overflow-auto max-h-40 font-mono bg-gray-900/50 p-3 rounded">
-                            {errorInfo.componentStack}
-                        </pre>
-                    </details>
-                )}
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={onReset}
-                        className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
-                    >
-                        {t('try_again') || 'Try Again'}
-                    </button>
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors"
-                    >
-                        {t('reload_page') || 'Reload Page'}
-                    </button>
-                    <button
-                        onClick={() => window.location.href = '/'}
-                        className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors"
-                    >
-                        {t('go_home') || 'Go Home'}
-                    </button>
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-gray-700">
-                    <p className="text-xs text-gray-500 text-center">
-                        {t('error_boundary_help') || 'If this problem persists, please contact support with the error details above.'}
-                    </p>
-                </div>
+              </svg>
             </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-red-400">
+                {this.props.fallbackTitle || 'An error occurred'}
+              </h3>
+              <div className="mt-2 text-sm text-red-300">
+                <p className="font-mono text-xs bg-red-950/50 p-2 rounded mt-2">
+                  {this.state.error?.message || 'Unknown error'}
+                </p>
+              </div>
+              {process.env.NODE_ENV === 'development' && this.state.errorInfo && (
+                <details className="mt-3 text-xs text-red-200">
+                  <summary className="cursor-pointer hover:text-red-100">
+                    View stack trace (development only)
+                  </summary>
+                  <pre className="mt-2 bg-red-950/50 p-2 rounded overflow-auto max-h-40 text-xs">
+                    {this.state.errorInfo.componentStack}
+                  </pre>
+                </details>
+              )}
+              <div className="mt-4 flex space-x-3">
+                <button
+                  onClick={this.handleRetry}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  <svg
+                    className="mr-1.5 h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+                    />
+                  </svg>
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-    );
-};
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 export default ErrorBoundary;
-
