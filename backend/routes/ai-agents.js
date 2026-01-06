@@ -35,10 +35,24 @@ function sendError(res, code, message, status = 400, details = null) {
   });
 }
 
-// 2) Timeout Wrapper
-async function withTimeout(promise, ms, errorMessage = 'Operation timed out') {
+// 2) Timeout Wrapper with Logging
+/**
+ * Wrap a promise with a timeout
+ * @param {Promise} promise - The promise to wrap
+ * @param {number} ms - Timeout in milliseconds
+ * @param {string} errorMessage - Custom error message
+ * @param {string} agentKey - Agent key for logging (optional)
+ * @returns {Promise} Promise that rejects on timeout
+ */
+async function withTimeout(promise, ms, errorMessage = 'Operation timed out', agentKey = 'unknown') {
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error(errorMessage)), ms);
+    setTimeout(() => {
+      const timeoutError = new Error(errorMessage);
+      timeoutError.isTimeout = true;
+      timeoutError.agentKey = agentKey;
+      console.error(`⏱️  TIMEOUT: Agent ${agentKey} exceeded ${ms}ms limit`);
+      reject(timeoutError);
+    }, ms);
   });
   return Promise.race([promise, timeoutPromise]);
 }
@@ -327,14 +341,23 @@ async function runAgentViaRegistry(req, res) {
 
     console.log(`✅ [Registry] Agent loaded: ${agent.agent_key} (${agent.name})`);
 
-    // Execute via registry
-    const result = await agentRegistry.runAgent(agent.agent_key, {
-      userId: req.user?.id,
-      symbol,
-      timeframe,
-      config: mergedConfig,
-      input // optional freeform payload for agents
-    });
+    // Get timeout from env or use default (30 seconds)
+    const timeoutMs = parseInt(process.env.AGENT_TIMEOUT_MS || '30000', 10);
+    console.log(`⏱️  [Registry] Timeout set to ${timeoutMs}ms for ${agent.agent_key}`);
+
+    // Execute via registry with timeout
+    const result = await withTimeout(
+      agentRegistry.runAgent(agent.agent_key, {
+        userId: req.user?.id,
+        symbol,
+        timeframe,
+        config: mergedConfig,
+        input // optional freeform payload for agents
+      }),
+      timeoutMs,
+      `Agent ${agent.agent_key} execution timed out after ${timeoutMs}ms`,
+      agent.agent_key
+    );
 
     console.log(`✅ [Registry] Agent execution complete: ${agent.agent_key}`);
 
@@ -399,6 +422,15 @@ async function runAgentViaRegistry(req, res) {
   } catch (error) {
     console.error('❌ [Registry] Run error:', error);
 
+    // Check if this is a timeout error
+    const isTimeout = error.isTimeout === true;
+    const statusCode = isTimeout ? 504 : 500;
+    const errorCode = isTimeout ? 'AGENT_TIMEOUT' : 'AI_ERROR';
+    
+    if (isTimeout) {
+      console.error(`⏱️  [Registry] TIMEOUT ERROR: ${error.agentKey} - ${error.message}`);
+    }
+
     // Best-effort: store last_error on agent if id is valid
     try {
       const { id } = req.params;
@@ -408,6 +440,7 @@ async function runAgentViaRegistry(req, res) {
           const md = r.rows[0].metadata || {};
           md.last_error = {
             message: error.message || 'Unknown error',
+            isTimeout: isTimeout,
             at: new Date().toISOString()
           };
           await query(
@@ -420,7 +453,7 @@ async function runAgentViaRegistry(req, res) {
       // Ignore metadata update errors
     }
 
-    return sendError(res, 'AI_ERROR', error.message || 'Failed to run agent', 500);
+    return sendError(res, errorCode, error.message || 'Failed to run agent', statusCode);
   }
 }
 
