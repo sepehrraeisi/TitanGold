@@ -1,5 +1,6 @@
 import express from 'express';
 import { query } from '../database/db.js';
+import { getRedisInfo, isRedisAvailable } from '../utils/redis.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -105,6 +106,30 @@ router.get('/ready', async (req, res) => {
     };
   }
 
+  // Check Redis
+  try {
+    if (isRedisAvailable()) {
+      const redisInfo = await getRedisInfo();
+      checks.checks.redis = {
+        status: redisInfo.status === 'connected' ? 'ok' : 'error',
+        message: redisInfo.status === 'connected' 
+          ? `Redis ${redisInfo.version} - Hit rate: ${redisInfo.stats.hit_rate}%`
+          : redisInfo.message,
+        memory_used: redisInfo.memory?.used_memory_human || 'unknown'
+      };
+    } else {
+      checks.checks.redis = {
+        status: 'warning',
+        message: 'Redis not connected (fallback mode active)'
+      };
+    }
+  } catch (error) {
+    checks.checks.redis = {
+      status: 'warning',
+      message: 'Redis check failed',
+    };
+  }
+
   // Overall status
   checks.status = allReady ? 'ok' : 'degraded';
 
@@ -142,6 +167,17 @@ router.get('/status', async (req, res) => {
       status.database = result.rows[0];
     } catch (error) {
       status.database = { error: error.message };
+    }
+
+    // Redis stats
+    try {
+      if (isRedisAvailable()) {
+        status.redis = await getRedisInfo();
+      } else {
+        status.redis = { status: 'disconnected', message: 'Redis not available' };
+      }
+    } catch (error) {
+      status.redis = { status: 'error', error: error.message };
     }
 
     res.json(status);
