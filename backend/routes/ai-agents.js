@@ -5,6 +5,7 @@ import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigD
 import { normalizeArbitrageConfig } from '../services/normalizeArbitrageConfig.js';
 import { normalizeFundamentalConfig } from '../services/normalizeFundamentalConfig.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import { getCache, setCache, buildCacheKey, invalidateAgentCache } from '../services/cache.js';
 
 import { aiService } from '../services/ai.js';
 import * as riskAgent from '../services/risk-agent.js';
@@ -34,27 +35,7 @@ function sendError(res, code, message, status = 400, details = null) {
   });
 }
 
-// 2) Simple TTL Cache (in-memory)
-const agentCache = new Map(); // key -> { value, expiresAt }
-
-function getCache(key) {
-  const cached = agentCache.get(key);
-  if (!cached) return null;
-  if (Date.now() > cached.expiresAt) {
-    agentCache.delete(key);
-    return null;
-  }
-  return cached.value;
-}
-
-function setCache(key, value, ttlMs) {
-  agentCache.set(key, {
-    value,
-    expiresAt: Date.now() + ttlMs
-  });
-}
-
-// 4) Timeout Wrapper
+// 2) Timeout Wrapper
 async function withTimeout(promise, ms, errorMessage = 'Operation timed out') {
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => reject(new Error(errorMessage)), ms);
@@ -62,7 +43,7 @@ async function withTimeout(promise, ms, errorMessage = 'Operation timed out') {
   return Promise.race([promise, timeoutPromise]);
 }
 
-// 5) Input Validation
+// 3) Input Validation
 const VALID_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'];
 const SYMBOL_REGEX = /^[A-Z0-9]{3,20}$/;
 
@@ -518,7 +499,7 @@ router.post('/:id/run-OLD', authenticate, rateLimit({ limit: 15, windowMs: 60000
 
     // Cache key (agent + symbol + timeframe)
     const cacheKey = `agent:${agentId}:${symbol || 'default'}:${timeframe}`;
-    const cached = getCache(cacheKey);
+    const cached = await getCache(cacheKey);
     if (cached) {
       console.log(`✅ Cache hit for ${cacheKey}`);
       
@@ -652,7 +633,7 @@ Return ONLY JSON with this schema:
           };
           
           // Cache for 30s
-          setCache(cacheKey, result, 30000);
+          await setCache(cacheKey, result, 300);
           
           // 🔥 Log decision and return
           const executionTime = Date.now() - startTime;
@@ -690,7 +671,7 @@ Return ONLY JSON with this schema:
         timeframe,
         _meta: { isFallback: true } // ✅ Track fallback for cache
       };
-      setCache(cacheKey, fallback1, 30000);
+      await setCache(cacheKey, fallback1, 300);
       
       // 🔥 Log fallback decision
       const executionTime = Date.now() - startTime;
@@ -734,7 +715,7 @@ Return ONLY JSON with this schema:
         };
         
         // Cache for 30s
-        setCache(cacheKey, result, 30000);
+        await setCache(cacheKey, result, 300);
         
         // 🔥 Log decision and return
         const executionTime = riskResult._meta.executionTime;
@@ -772,7 +753,7 @@ Return ONLY JSON with this schema:
           }
         };
         
-        setCache(cacheKey, fallbackResult, 30000);
+        await setCache(cacheKey, fallbackResult, 300);
         
         return logAndReturn(
           res,
@@ -821,7 +802,7 @@ Return ONLY JSON:
           };
           
           // Cache for 30s
-          setCache(cacheKey, result, 30000);
+          await setCache(cacheKey, result, 300);
           
           // 🔥 Log decision and return
           const executionTime = Date.now() - startTime;
@@ -853,7 +834,7 @@ Return ONLY JSON:
         symbol,
         _meta: { isFallback: true } // ✅ Track fallback for cache
       };
-      setCache(cacheKey, fallback15, 30000);
+      await setCache(cacheKey, fallback15, 300);
       
       // 🔥 Log fallback decision
       const executionTime = Date.now() - startTime;
@@ -1045,6 +1026,12 @@ router.patch('/:id/config', authenticate, async (req, res) => {
 
     const agent = result.rows[0];
     console.log(`✅ Config updated for ${agent.name} (${agent.agent_key})`);
+    
+    // Invalidate cache for this agent
+    if (agent.agent_key) {
+      const deletedKeys = await invalidateAgentCache(agent.agent_key);
+      console.log(`🔄 Invalidated ${deletedKeys} cache entries for ${agent.agent_key}`);
+    }
     
     // Config is already parsed by PostgreSQL driver (JSONB -> Object)
     const savedConfig = agent.config;
