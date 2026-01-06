@@ -33,3 +33,5 @@ dist-ssr
 
 # User uploads (avatars, files, etc.)
 backend/uploads/
+# Test coverage reports
+coverage/
