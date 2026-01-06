@@ -273,8 +273,11 @@ app.use((err, req, res, next) => {
 // START SERVER
 // ============================================================================
 
-// GUARANTEE HTTP LISTEN - Always execute, even if background services fail
-const server = app.listen(PORT, '0.0.0.0', () => {
+// Only start server if not in test mode (for integration tests with supertest)
+let server;
+if (process.env.NODE_ENV !== 'test') {
+  // GUARANTEE HTTP LISTEN - Always execute, even if background services fail
+  server = app.listen(PORT, '0.0.0.0', () => {
   // Log actual bound address and port AFTER listen succeeds
   const address = server.address();
   const boundAddress = address ? `${address.address}:${address.port}` : `0.0.0.0:${PORT}`;
@@ -365,15 +368,18 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   });
 });
 
-// Handle listen errors
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use`);
-  } else {
-    console.error('❌ Server error:', error);
-  }
-  process.exit(1);
-});
+  // Handle listen errors
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use`);
+    } else {
+      console.error('❌ Server error:', error);
+    }
+    process.exit(1);
+  });
+} else {
+  console.log('🧪 Running in test mode - server not listening on port');
+}
 
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
@@ -394,19 +400,40 @@ process.on('SIGTERM', async () => {
   favoritesAlertMonitor.stop();
   await messageQueue.close().catch(() => {});
   
-  pool.end(() => {
-    console.log('🛑 Database pool closed');
-    process.exit(0);
-  });
+  // Close server if it's running
+  if (server) {
+    server.close(() => {
+      pool.end(() => {
+        console.log('🛑 Database pool closed');
+        process.exit(0);
+      });
+    });
+  } else {
+    pool.end(() => {
+      console.log('🛑 Database pool closed');
+      process.exit(0);
+    });
+  }
 });
 
 process.on('SIGINT', async () => {
   console.log('🛑 SIGINT signal received: closing HTTP server');
   await messageQueue.close().catch(() => {});
-  pool.end(() => {
-    console.log('🛑 Database pool closed');
-    process.exit(0);
-  });
+  
+  // Close server if it's running
+  if (server) {
+    server.close(() => {
+      pool.end(() => {
+        console.log('🛑 Database pool closed');
+        process.exit(0);
+      });
+    });
+  } else {
+    pool.end(() => {
+      console.log('🛑 Database pool closed');
+      process.exit(0);
+    });
+  }
 });
 
 export default app;
