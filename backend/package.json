@@ -8,7 +8,9 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node database/migrate.js",
-    "test:integration": "node tests/integration.smoke.js"
+    "test:integration": "node tests/integration.smoke.js",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch"
   },
   "keywords": [
     "trading",
@@ -39,12 +41,15 @@
     "nodemailer": "^7.0.12",
     "pg": "^8.11.3",
     "qrcode": "^1.5.3",
+    "redis": "^4.6.13",
     "speakeasy": "^2.0.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
     "ws": "^8.17.1"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "jest": "^29.7.0",
     "nodemon": "^3.0.2"
   },
   "overrides": {

@@ -4,6 +4,7 @@ import { query } from '../database/db.js';
 import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigDefaults.js';
 import { normalizeArbitrageConfig } from '../services/normalizeArbitrageConfig.js';
 import { normalizeFundamentalConfig } from '../services/normalizeFundamentalConfig.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 
 import { aiService } from '../services/ai.js';
 import * as riskAgent from '../services/risk-agent.js';
@@ -33,42 +34,7 @@ function sendError(res, code, message, status = 400, details = null) {
   });
 }
 
-// 2) In-Memory Rate Limiter (per user)
-const rateLimitStore = new Map(); // key -> { count, resetAt }
-
-function rateLimit({ limit, windowMs }) {
-  return (req, res, next) => {
-    const key = req.user?.id || req.ip;
-    const now = Date.now();
-    
-    if (!rateLimitStore.has(key)) {
-      rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
-      return next();
-    }
-    
-    const record = rateLimitStore.get(key);
-    
-    if (now > record.resetAt) {
-      // Reset window
-      record.count = 1;
-      record.resetAt = now + windowMs;
-      return next();
-    }
-    
-    if (record.count >= limit) {
-      return sendError(res, 'RATE_LIMITED', `Rate limit exceeded. Max ${limit} requests per ${windowMs / 1000}s`, 429, {
-        limit,
-        windowMs,
-        resetAt: new Date(record.resetAt).toISOString()
-      });
-    }
-    
-    record.count++;
-    next();
-  };
-}
-
-// 3) Simple TTL Cache (in-memory)
+// 2) Simple TTL Cache (in-memory)
 const agentCache = new Map(); // key -> { value, expiresAt }
 
 function getCache(key) {

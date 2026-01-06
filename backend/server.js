@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from './database/db.js';
+import { getRedisClient, isRedisAvailable } from './utils/redis.js';
 // Import engines (needed for API routes)
 import { tradingEngine } from './engine/tradingEngine.js';
 import { messageQueue } from './services/messageQueue.js';
@@ -290,6 +291,14 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   // Initialize background services (non-blocking, wrapped in try/catch)
   // These MUST NOT prevent the server from listening
   (async () => {
+    // Initialize Redis
+    try {
+      await getRedisClient();
+      console.log('✅ Redis client connected and ready');
+    } catch (error) {
+      console.warn('⚠️ Redis initialization failed, rate limiter will use fallback mode:', error.message);
+    }
+
     // Initialize Message Queue
     try {
       await messageQueue.connect();

@@ -51,6 +51,49 @@ router.get('/mexc/ticker/24hr', async (req, res) => {
 });
 
 /**
+ * Legacy route for backward compatibility (without slash)
+ * Route: /api/market/mexc/ticker24hr
+ */
+router.get('/mexc/ticker24hr', async (req, res) => {
+  try {
+    const { symbol } = req.query;
+    
+    const url = symbol
+      ? `${MEXC_API_BASE}/api/v3/ticker/24hr?symbol=${symbol}`
+      : `${MEXC_API_BASE}/api/v3/ticker/24hr`;
+    
+    console.log('📊 Fetching MEXC ticker (legacy route):', symbol || 'ALL');
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'TitanGold/1.0',
+      },
+      timeout: 10000,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`MEXC API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    res.json({
+      ok: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+    
+  } catch (error) {
+    console.error('❌ MEXC ticker error (legacy):', error.message);
+    res.status(500).json({
+      ok: false,
+      error: 'Failed to fetch MEXC ticker',
+      message: error.message,
+    });
+  }
+});
+
+/**
  * Proxy endpoint for MEXC orderbook depth
  */
 router.get('/mexc/depth', async (req, res) => {
