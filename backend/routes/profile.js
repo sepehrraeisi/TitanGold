@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import bcrypt from 'bcrypt';
 import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -85,7 +86,7 @@ router.post('/avatar', authenticate, upload.single('avatar'), async (req, res) =
       oldAvatarUrl = result.rows[0]?.avatar_url || null;
     } catch (err) {
       // If users table or column is missing, just skip cleanup
-      console.warn('⚠️ Failed to read existing avatar_url from users table:', err.message);
+      logger.warn('⚠️ Failed to read existing avatar_url from users table:', err.message);
     }
 
     // Update user record with new avatar URL
@@ -97,7 +98,7 @@ router.post('/avatar', authenticate, upload.single('avatar'), async (req, res) =
         [avatarUrl, userId]
       );
     } catch (err) {
-      console.warn('⚠️ Failed to update avatar_url in users table:', err.message);
+      logger.warn('⚠️ Failed to update avatar_url in users table:', err.message);
       // We still return success because file is uploaded and frontend also stores URL client-side
     }
 
@@ -108,7 +109,7 @@ router.post('/avatar', authenticate, upload.single('avatar'), async (req, res) =
         if (!err) {
           fs.unlink(oldPath, (unlinkErr) => {
             if (unlinkErr) {
-              console.warn('⚠️ Failed to delete old avatar file:', unlinkErr.message);
+              logger.warn('⚠️ Failed to delete old avatar file:', unlinkErr.message);
             }
           });
         }
@@ -121,7 +122,7 @@ router.post('/avatar', authenticate, upload.single('avatar'), async (req, res) =
       message: 'Avatar uploaded successfully',
     });
   } catch (error) {
-    console.error('❌ Error uploading avatar:', error);
+    logger.error('❌ Error uploading avatar:', error);
 
     // Multer errors
     if (error.code === 'LIMIT_FILE_SIZE') {
@@ -231,7 +232,7 @@ router.get('/details', authenticate, async (req, res) => {
 
     return res.json(profileData);
   } catch (error) {
-    console.error('❌ Error fetching profile details:', error);
+    logger.error('❌ Error fetching profile details:', error);
     return res.status(500).json({ error: 'Failed to fetch profile details', message: error.message });
   }
 });
@@ -305,7 +306,7 @@ router.put('/details', authenticate, async (req, res) => {
 
     return res.json(profileData);
   } catch (error) {
-    console.error('❌ Error updating profile details:', error);
+    logger.error('❌ Error updating profile details:', error);
     return res.status(500).json({ error: 'Failed to update profile details', message: error.message });
   }
 });
@@ -388,7 +389,7 @@ router.put('/communications', authenticate, async (req, res) => {
 
     return res.json(profileData);
   } catch (error) {
-    console.error('❌ Error updating communication preferences:', error);
+    logger.error('❌ Error updating communication preferences:', error);
     return res.status(500).json({ error: 'Failed to update preferences', message: error.message });
   }
 });
@@ -451,7 +452,7 @@ router.post('/change-password', authenticate, async (req, res) => {
       message: 'Password changed successfully',
     });
   } catch (error) {
-    console.error('❌ Error changing password:', error);
+    logger.error('❌ Error changing password:', error);
     return res.status(500).json({ 
       success: false, 
       error: 'Failed to change password', 

@@ -8,6 +8,7 @@
  */
 
 import { detectCycle, analyzeSeasonality, analyzeTimeEffects } from '../cycleDetector.js';
+import { logger } from '../../services/logger.js';
 
 /**
  * Run Market Timing Analysis
@@ -15,7 +16,7 @@ import { detectCycle, analyzeSeasonality, analyzeTimeEffects } from '../cycleDet
  * @returns {Promise<Object>} Timing analysis result
  */
 export async function run({ userId, symbol, timeframe = '1d', config = {} }) {
-  console.log(`⏰ Market Timing Agent: ${symbol} (${timeframe})`);
+  logger.info(`⏰ Market Timing Agent: ${symbol} (${timeframe})`);
   
   try {
     // Generate mock historical data for MVP
@@ -105,13 +106,13 @@ export async function run({ userId, symbol, timeframe = '1d', config = {} }) {
       }
     };
     
-    console.log(`✅ Market Timing complete: ${signal} (confidence: ${(confidence * 100).toFixed(1)}%)`);
-    console.log(`   Phase: ${cycleInfo.phase} | Score: ${timingScore.toFixed(1)} | ${recommendations.action}`);
+    logger.info(`✅ Market Timing complete: ${signal} (confidence: ${(confidence * 100).toFixed(1)}%)`);
+    logger.info(`   Phase: ${cycleInfo.phase} | Score: ${timingScore.toFixed(1)} | ${recommendations.action}`);
     
     return result;
     
   } catch (error) {
-    console.error(`❌ Market Timing error:`, error.message);
+    logger.error(`❌ Market Timing error:`, error.message);
     return {
       agent_key: 'timing',
       symbol,

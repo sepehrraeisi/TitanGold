@@ -23,6 +23,7 @@ import db from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
 import { preferencesLimiter } from '../middleware/rateLimits.js';
 import Joi from 'joi';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -175,7 +176,7 @@ router.get('/', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error fetching user preferences:', error);
+        logger.error('❌ Error fetching user preferences:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch preferences',
@@ -232,7 +233,7 @@ router.get('/category/:category', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error fetching category preferences:', error);
+        logger.error('❌ Error fetching category preferences:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch category preferences',
@@ -307,7 +308,7 @@ router.get('/history', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error fetching preference history:', error);
+        logger.error('❌ Error fetching preference history:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch history',
@@ -346,7 +347,7 @@ router.get('/categories', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error fetching categories:', error);
+        logger.error('❌ Error fetching categories:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch categories',
@@ -401,7 +402,7 @@ router.post('/', authenticate, validateBody(preferenceUpdateSchema), async (req,
                 last_sync_at, sync_source, created_at, updated_at
         `, [userId, JSON.stringify(preferences), syncSource, deviceFingerprint, ipAddress, userAgent]);
 
-        console.log(`✅ Preferences created for user ${userId}`);
+        logger.info(`✅ Preferences created for user ${userId}`);
 
         res.status(201).json({
             success: true,
@@ -410,7 +411,7 @@ router.post('/', authenticate, validateBody(preferenceUpdateSchema), async (req,
         });
 
     } catch (error) {
-        console.error('❌ Error creating preferences:', error);
+        logger.error('❌ Error creating preferences:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to create preferences',
@@ -480,7 +481,7 @@ router.put('/', authenticate, validateBody(preferenceUpdateSchema), async (req, 
                 hasConflict = true;
                 // Simple merge strategy: client values override server values
                 mergedPrefs = { ...current.rows[0].preferences, ...preferences };
-                console.log(`⚠️  Version conflict detected for user ${userId}. Server: ${serverVersion}, Client: ${clientVersion}`);
+                logger.info(`⚠️  Version conflict detected for user ${userId}. Server: ${serverVersion}, Client: ${clientVersion}`);
             }
 
             // Update preferences
@@ -499,7 +500,7 @@ router.put('/', authenticate, validateBody(preferenceUpdateSchema), async (req, 
 
             await client.query('COMMIT');
 
-            console.log(`✅ Preferences updated for user ${userId}, version ${serverVersion} → ${result.rows[0].version}`);
+            logger.info(`✅ Preferences updated for user ${userId}, version ${serverVersion} → ${result.rows[0].version}`);
 
             // Broadcast update via WebSocket (if available)
             if (req.app.locals.wss) {
@@ -525,7 +526,7 @@ router.put('/', authenticate, validateBody(preferenceUpdateSchema), async (req, 
         }
 
     } catch (error) {
-        console.error('❌ Error updating preferences:', error);
+        logger.error('❌ Error updating preferences:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to update preferences',
@@ -590,13 +591,13 @@ router.put('/category/:category', authenticate, async (req, res) => {
         }
 
         // UPSERT (Insert or Update)
-        console.log('🔍 DEBUG - About to UPSERT preferences:');
-        console.log('   userId:', userId);
-        console.log('   updatedPreferences:', updatedPreferences);
-        console.log('   syncSource:', syncSource);
-        console.log('   deviceFingerprint:', deviceFingerprint);
-        console.log('   ipAddress:', ipAddress);
-        console.log('   userAgent:', userAgent ? userAgent.substring(0, 50) : 'null');
+        logger.info('🔍 DEBUG - About to UPSERT preferences:');
+        logger.info('   userId:', userId);
+        logger.info('   updatedPreferences:', updatedPreferences);
+        logger.info('   syncSource:', syncSource);
+        logger.info('   deviceFingerprint:', deviceFingerprint);
+        logger.info('   ipAddress:', ipAddress);
+        logger.info('   userAgent:', userAgent ? userAgent.substring(0, 50) : 'null');
 
         const result = await db.query(`
             INSERT INTO user_preferences (
@@ -626,7 +627,7 @@ router.put('/category/:category', authenticate, async (req, res) => {
             userAgent
         ]);
 
-        console.log(`✅ Category '${category}' updated for user ${userId}, version: ${result.rows[0].version}`);
+        logger.info(`✅ Category '${category}' updated for user ${userId}, version: ${result.rows[0].version}`);
 
         res.json({
             success: true,
@@ -635,7 +636,7 @@ router.put('/category/:category', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error updating category preferences:', error);
+        logger.error('❌ Error updating category preferences:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to update category preferences',
@@ -688,7 +689,7 @@ router.put('/bulk', authenticate, validateBody(bulkUpdateSchema), async (req, re
             RETURNING id, user_id, preferences, version, updated_at
         `, [userId, JSON.stringify(mergedPrefs), syncSource, deviceFingerprint, ipAddress, userAgent]);
 
-        console.log(`✅ Bulk update completed for user ${userId}, ${updates.length} categories updated, version: ${result.rows[0].version}`);
+        logger.info(`✅ Bulk update completed for user ${userId}, ${updates.length} categories updated, version: ${result.rows[0].version}`);
 
         res.json({
             success: true,
@@ -697,7 +698,7 @@ router.put('/bulk', authenticate, validateBody(bulkUpdateSchema), async (req, re
         });
 
     } catch (error) {
-        console.error('❌ Error bulk updating preferences:', error);
+        logger.error('❌ Error bulk updating preferences:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to bulk update preferences',
@@ -737,7 +738,7 @@ router.delete('/', authenticate, async (req, res) => {
             });
         }
 
-        console.log(`✅ Preferences deleted for user ${userId}`);
+        logger.info(`✅ Preferences deleted for user ${userId}`);
 
         res.json({
             success: true,
@@ -745,7 +746,7 @@ router.delete('/', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error deleting preferences:', error);
+        logger.error('❌ Error deleting preferences:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to delete preferences',
@@ -782,7 +783,7 @@ router.delete('/category/:category', authenticate, async (req, res) => {
             });
         }
 
-        console.log(`✅ Category '${category}' deleted for user ${userId}`);
+        logger.info(`✅ Category '${category}' deleted for user ${userId}`);
 
         res.json({
             success: true,
@@ -791,7 +792,7 @@ router.delete('/category/:category', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error deleting category:', error);
+        logger.error('❌ Error deleting category:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to delete category',
@@ -881,7 +882,7 @@ router.post('/sync', authenticate, async (req, res) => {
             WHERE user_id = $1 AND is_deleted = FALSE
         `, [userId]);
 
-        console.log(`✅ Sync completed for user ${userId}: ${syncAction}${hasConflict ? ' (with conflict)' : ''}`);
+        logger.info(`✅ Sync completed for user ${userId}: ${syncAction}${hasConflict ? ' (with conflict)' : ''}`);
 
         res.json({
             success: true,
@@ -900,7 +901,7 @@ router.post('/sync', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error syncing preferences:', error);
+        logger.error('❌ Error syncing preferences:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to sync preferences',
@@ -934,7 +935,7 @@ router.get('/telegram', authenticate, async (req, res) => {
             telegram: telegramConfig
         });
     } catch (error) {
-        console.error('❌ Error fetching Telegram config:', error);
+        logger.error('❌ Error fetching Telegram config:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch Telegram configuration'
@@ -996,7 +997,7 @@ router.put('/telegram', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error updating Telegram config:', error);
+        logger.error('❌ Error updating Telegram config:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to update Telegram configuration'
@@ -1044,7 +1045,7 @@ router.post('/telegram/test', authenticate, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error testing Telegram:', error);
+        logger.error('❌ Error testing Telegram:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to send test message',

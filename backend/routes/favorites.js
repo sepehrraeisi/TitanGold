@@ -9,6 +9,7 @@
 import express from 'express';
 import pool from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ router.get('/', authenticate, async (req, res) => {
             count: result.rows.length
         });
     } catch (error) {
-        console.error('Error fetching favorites:', error);
+        logger.error('Error fetching favorites:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch favorites'
@@ -67,7 +68,7 @@ router.get('/check/:assetId', authenticate, async (req, res) => {
             favoriteId: result.rows[0]?.id || null
         });
     } catch (error) {
-        console.error('Error checking favorite:', error);
+        logger.error('Error checking favorite:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to check favorite status'
@@ -118,7 +119,7 @@ router.post('/', authenticate, async (req, res) => {
             message: 'Favorite added successfully'
         });
     } catch (error) {
-        console.error('Error adding favorite:', error);
+        logger.error('Error adding favorite:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to add favorite'
@@ -158,7 +159,7 @@ router.delete('/:id', authenticate, async (req, res) => {
             message: 'Favorite removed successfully'
         });
     } catch (error) {
-        console.error('Error removing favorite:', error);
+        logger.error('Error removing favorite:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to remove favorite'
@@ -191,7 +192,7 @@ router.delete('/by-asset/:assetId', authenticate, async (req, res) => {
             message: 'Favorite removed successfully'
         });
     } catch (error) {
-        console.error('Error removing favorite:', error);
+        logger.error('Error removing favorite:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to remove favorite'
@@ -229,7 +230,7 @@ router.put('/:id/view', authenticate, async (req, res) => {
             lastViewedAt: result.rows[0].last_viewed_at
         });
     } catch (error) {
-        console.error('Error updating view:', error);
+        logger.error('Error updating view:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to update view count'
@@ -272,7 +273,7 @@ router.get('/stats', authenticate, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error fetching stats:', error);
+        logger.error('Error fetching stats:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch statistics'
@@ -343,7 +344,7 @@ router.post('/sync', authenticate, async (req, res) => {
             message: `Synced ${syncedCount} favorites successfully`
         });
     } catch (error) {
-        console.error('Error syncing favorites:', error);
+        logger.error('Error syncing favorites:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to sync favorites'
@@ -432,7 +433,7 @@ router.get('/analytics', authenticate, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error fetching analytics:', error);
+        logger.error('Error fetching analytics:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch analytics'

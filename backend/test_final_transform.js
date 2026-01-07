@@ -1,8 +1,9 @@
 import agentRegistry from './services/agents/registry.js';
+import { logger } from './services/logger.js';
 
 async function testFinalTransform() {
   try {
-    console.log('🧪 Testing Final Transformation Logic\n');
+    logger.info('🧪 Testing Final Transformation Logic\n');
 
     // Run technical agent
     const rawResult = await agentRegistry.runAgent('technical', {
@@ -11,8 +12,8 @@ async function testFinalTransform() {
       timeframe: '4h'
     });
 
-    console.log('📊 Raw Result from Registry:');
-    console.log(JSON.stringify(rawResult, null, 2));
+    logger.info('📊 Raw Result from Registry:');
+    logger.info(JSON.stringify(rawResult, null, 2));
 
     // Apply transformation (same as endpoint)
     const { symbol, timeframe, confidence, signal, indicators, timestamp, _meta } = rawResult;
@@ -74,25 +75,25 @@ async function testFinalTransform() {
       uiResult.indicators = indicatorArray;
     }
 
-    console.log('\n✅ UI-Compatible Result:');
-    console.log(JSON.stringify(uiResult, null, 2));
+    logger.info('\n✅ UI-Compatible Result:');
+    logger.info(JSON.stringify(uiResult, null, 2));
 
-    console.log('\n📊 Validation Results:');
-    console.log(`   ✓ Indicators count: ${uiResult.indicators.length}`);
-    console.log(`   ✓ Indicators is Array: ${Array.isArray(uiResult.indicators)}`);
-    console.log(`   ✓ Signal format: "${uiResult.signal}" (lowercase)`);
-    console.log(`   ✓ Confidence: ${uiResult.confidence} (number)`);
-    console.log(`   ✓ Timestamp: ${uiResult.timestamp}`);
-    console.log(`   ✓ Reasoning: ${uiResult.reasoning}`);
+    logger.info('\n📊 Validation Results:');
+    logger.info(`   ✓ Indicators count: ${uiResult.indicators.length}`);
+    logger.info(`   ✓ Indicators is Array: ${Array.isArray(uiResult.indicators)}`);
+    logger.info(`   ✓ Signal format: "${uiResult.signal}" (lowercase)`);
+    logger.info(`   ✓ Confidence: ${uiResult.confidence} (number)`);
+    logger.info(`   ✓ Timestamp: ${uiResult.timestamp}`);
+    logger.info(`   ✓ Reasoning: ${uiResult.reasoning}`);
     
     // Validate each indicator
-    console.log('\n📋 Indicators Validation:');
+    logger.info('\n📋 Indicators Validation:');
     uiResult.indicators.forEach((ind, i) => {
       const signalOk = typeof ind.signal === 'string' && ['buy', 'sell', 'neutral'].includes(ind.signal);
-      console.log(`   ${i + 1}. ${ind.indicatorId}:`);
-      console.log(`      - value: ${ind.value.toFixed(2)}`);
-      console.log(`      - signal: "${ind.signal}" ${signalOk ? '✅' : '❌ INVALID'}`);
-      console.log(`      - weight: ${ind.weight}`);
+      logger.info(`   ${i + 1}. ${ind.indicatorId}:`);
+      logger.info(`      - value: ${ind.value.toFixed(2)}`);
+      logger.info(`      - signal: "${ind.signal}" ${signalOk ? '✅' : '❌ INVALID'}`);
+      logger.info(`      - weight: ${ind.weight}`);
     });
 
     // Final check
@@ -100,16 +101,16 @@ async function testFinalTransform() {
       typeof i.signal === 'string' && ['buy', 'sell', 'neutral'].includes(i.signal)
     );
 
-    console.log('\n🎯 Final Verdict:');
+    logger.info('\n🎯 Final Verdict:');
     if (allSignalsValid && Array.isArray(uiResult.indicators) && uiResult.indicators.length > 0) {
-      console.log('   ✅ ALL CHECKS PASSED - UI will work!');
+      logger.info('   ✅ ALL CHECKS PASSED - UI will work!');
     } else {
-      console.log('   ❌ FAILED - UI will break');
+      logger.info('   ❌ FAILED - UI will break');
       process.exit(1);
     }
 
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
+    logger.error('❌ Test failed:', error.message);
     process.exit(1);
   }
 }

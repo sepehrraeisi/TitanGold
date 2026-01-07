@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { logger } from './services/logger.js';
 
 dotenv.config();
 
@@ -17,8 +18,8 @@ const pool = new Pool({
 const BASE_URL = 'http://localhost:5002/api';
 
 async function checkFundamentalMetrics() {
-  console.log('🔍 Checking Fundamental Agent Metrics');
-  console.log('='.repeat(60));
+  logger.info('🔍 Checking Fundamental Agent Metrics');
+  logger.info('='.repeat(60));
   
   // Step 1: Login
   const loginRes = await fetch(`${BASE_URL}/auth/login`, {
@@ -31,12 +32,12 @@ async function checkFundamentalMetrics() {
   });
   
   if (!loginRes.ok) {
-    console.error('❌ Login failed');
+    logger.error('❌ Login failed');
     process.exit(1);
   }
   
   const { token } = await loginRes.json();
-  console.log('✅ Login successful\n');
+  logger.info('✅ Login successful\n');
   
   // Step 2: Get Fundamental Agent from API
   const agentsRes = await fetch(`${BASE_URL}/ai-agents`, {
@@ -48,21 +49,21 @@ async function checkFundamentalMetrics() {
   const fundamentalAgent = agents.find(a => a.agent_key === 'fundamental');
   
   if (!fundamentalAgent) {
-    console.error('❌ No fundamental agent found');
+    logger.error('❌ No fundamental agent found');
     process.exit(1);
   }
   
-  console.log('📊 Fundamental Agent from API:');
-  console.log(`  - ID: ${fundamentalAgent.id}`);
-  console.log(`  - Name: ${fundamentalAgent.name}`);
-  console.log(`  - Status: ${fundamentalAgent.status}`);
-  console.log(`  - Accuracy: ${fundamentalAgent.accuracy}`);
-  console.log(`  - Training Progress: ${fundamentalAgent.trainingProgress}`);
-  console.log(`  - Decisions: ${fundamentalAgent.decisions}`);
-  console.log(`  - Learning Time: ${fundamentalAgent.learningTime}`);
-  console.log(`  - Knowledge Size: ${fundamentalAgent.knowledgeSize}`);
-  console.log(`  - Capabilities: ${fundamentalAgent.capabilities.join(', ')}`);
-  console.log('\n');
+  logger.info('📊 Fundamental Agent from API:');
+  logger.info(`  - ID: ${fundamentalAgent.id}`);
+  logger.info(`  - Name: ${fundamentalAgent.name}`);
+  logger.info(`  - Status: ${fundamentalAgent.status}`);
+  logger.info(`  - Accuracy: ${fundamentalAgent.accuracy}`);
+  logger.info(`  - Training Progress: ${fundamentalAgent.trainingProgress}`);
+  logger.info(`  - Decisions: ${fundamentalAgent.decisions}`);
+  logger.info(`  - Learning Time: ${fundamentalAgent.learningTime}`);
+  logger.info(`  - Knowledge Size: ${fundamentalAgent.knowledgeSize}`);
+  logger.info(`  - Capabilities: ${fundamentalAgent.capabilities.join(', ')}`);
+  logger.info('\n');
   
   // Step 3: Check DB directly
   const dbQuery = await pool.query(
@@ -79,11 +80,11 @@ async function checkFundamentalMetrics() {
   
   const dbAgent = dbQuery.rows[0];
   
-  console.log('📊 Fundamental Agent from DB (ai_agents table):');
-  console.log(`  - accuracy: ${dbAgent.accuracy}`);
-  console.log(`  - total_decisions: ${dbAgent.total_decisions}`);
-  console.log(`  - successful_decisions: ${dbAgent.successful_decisions}`);
-  console.log('\n');
+  logger.info('📊 Fundamental Agent from DB (ai_agents table):');
+  logger.info(`  - accuracy: ${dbAgent.accuracy}`);
+  logger.info(`  - total_decisions: ${dbAgent.total_decisions}`);
+  logger.info(`  - successful_decisions: ${dbAgent.successful_decisions}`);
+  logger.info('\n');
   
   // Step 4: Check ai_decisions table
   const decisionsQuery = await pool.query(
@@ -100,44 +101,44 @@ async function checkFundamentalMetrics() {
   
   const decisionStats = decisionsQuery.rows[0];
   
-  console.log('📊 ai_decisions table stats:');
-  console.log(`  - Total decisions: ${decisionStats.total}`);
-  console.log(`  - Successful: ${decisionStats.successful}`);
-  console.log(`  - Learning hours: ${parseFloat(decisionStats.learning_hours || 0).toFixed(1)}`);
-  console.log(`  - First decision: ${decisionStats.first_decision || 'N/A'}`);
-  console.log(`  - Last decision: ${decisionStats.last_decision || 'N/A'}`);
-  console.log('\n');
+  logger.info('📊 ai_decisions table stats:');
+  logger.info(`  - Total decisions: ${decisionStats.total}`);
+  logger.info(`  - Successful: ${decisionStats.successful}`);
+  logger.info(`  - Learning hours: ${parseFloat(decisionStats.learning_hours || 0).toFixed(1)}`);
+  logger.info(`  - First decision: ${decisionStats.first_decision || 'N/A'}`);
+  logger.info(`  - Last decision: ${decisionStats.last_decision || 'N/A'}`);
+  logger.info('\n');
   
   // Step 5: Analysis
-  console.log('📊 Analysis:');
-  console.log('='.repeat(60));
+  logger.info('📊 Analysis:');
+  logger.info('='.repeat(60));
   
   const isReal = parseInt(decisionStats.total) > 0;
   
   if (isReal) {
-    console.log('✅ Metrics are REAL (based on actual decisions)');
-    console.log(`   - Accuracy: Calculated from ${decisionStats.successful}/${decisionStats.total} successful decisions`);
-    console.log(`   - Decisions: ${decisionStats.total} recorded in ai_decisions table`);
-    console.log(`   - Learning Time: ${parseFloat(decisionStats.learning_hours || 0).toFixed(1)}h between first and last decision`);
+    logger.info('✅ Metrics are REAL (based on actual decisions)');
+    logger.info(`   - Accuracy: Calculated from ${decisionStats.successful}/${decisionStats.total} successful decisions`);
+    logger.info(`   - Decisions: ${decisionStats.total} recorded in ai_decisions table`);
+    logger.info(`   - Learning Time: ${parseFloat(decisionStats.learning_hours || 0).toFixed(1)}h between first and last decision`);
     const knowledgeMB = ((parseInt(decisionStats.total) * 2) / 1024).toFixed(1);
-    console.log(`   - Knowledge: ${knowledgeMB}MB (estimated at 2KB per decision)`);
+    logger.info(`   - Knowledge: ${knowledgeMB}MB (estimated at 2KB per decision)`);
   } else {
-    console.log('⚠️  Metrics are PLACEHOLDER (no decisions recorded yet)');
-    console.log('   - Accuracy: 0% (no decisions)');
-    console.log('   - Decisions: 0');
-    console.log('   - Learning Time: 0h');
-    console.log('   - Knowledge: 0.0MB');
-    console.log('   - Training Progress: 0 (agent never run)');
+    logger.info('⚠️  Metrics are PLACEHOLDER (no decisions recorded yet)');
+    logger.info('   - Accuracy: 0% (no decisions)');
+    logger.info('   - Decisions: 0');
+    logger.info('   - Learning Time: 0h');
+    logger.info('   - Knowledge: 0.0MB');
+    logger.info('   - Training Progress: 0 (agent never run)');
   }
   
-  console.log('\n📋 Recommendation:');
+  logger.info('\n📋 Recommendation:');
   if (isReal) {
-    console.log('✅ Keep showing these metrics - they are based on real data');
+    logger.info('✅ Keep showing these metrics - they are based on real data');
   } else {
-    console.log('⚠️  Options:');
-    console.log('   1. Hide metrics until first run (cleaner UX)');
-    console.log('   2. Show "0" with tooltip: "No analyses performed yet"');
-    console.log('   3. Run analysis once to populate metrics');
+    logger.info('⚠️  Options:');
+    logger.info('   1. Hide metrics until first run (cleaner UX)');
+    logger.info('   2. Show "0" with tooltip: "No analyses performed yet"');
+    logger.info('   3. Run analysis once to populate metrics');
   }
   
   await pool.end();

@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { tradingEngine } from '../engine/tradingEngine.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.get('/status', authenticate, async (req, res) => {
     };
     res.json(safeStatus);
   } catch (error) {
-    console.error('Failed to get trading engine status:', error);
+    logger.error('Failed to get trading engine status:', error);
     // Return safe default status instead of error
     res.json({
       isRunning: false,
@@ -56,7 +57,7 @@ router.post('/start', authenticate, authorize('admin', 'trader'), async (req, re
     await tradingEngine.start();
     res.json({ success: true, message: 'Trading engine started' });
   } catch (error) {
-    console.error('Failed to start trading engine:', error);
+    logger.error('Failed to start trading engine:', error);
     res.status(500).json({ error: 'Failed to start trading engine' });
   }
 });
@@ -67,7 +68,7 @@ router.post('/stop', authenticate, authorize('admin', 'trader'), async (req, res
     await tradingEngine.stop();
     res.json({ success: true, message: 'Trading engine stopped' });
   } catch (error) {
-    console.error('Failed to stop trading engine:', error);
+    logger.error('Failed to stop trading engine:', error);
     res.status(500).json({ error: 'Failed to stop trading engine' });
   }
 });
@@ -78,7 +79,7 @@ router.get('/trades/active', authenticate, async (req, res) => {
     const trades = tradingEngine.getActiveTrades();
     res.json({ trades });
   } catch (error) {
-    console.error('Failed to get active trades:', error);
+    logger.error('Failed to get active trades:', error);
     res.status(500).json({ error: 'Failed to get active trades' });
   }
 });
@@ -89,7 +90,7 @@ router.get('/opportunities', authenticate, async (req, res) => {
     const opportunities = tradingEngine.getOpportunityQueue();
     res.json({ opportunities });
   } catch (error) {
-    console.error('Failed to get opportunities:', error);
+    logger.error('Failed to get opportunities:', error);
     res.status(500).json({ error: 'Failed to get opportunities' });
   }
 });
@@ -120,7 +121,7 @@ router.put('/config', authenticate, authorize('admin', 'trader'), async (req, re
     await tradingEngine.saveConfig();
     res.json({ success: true, message: 'Configuration updated' });
   } catch (error) {
-    console.error('Failed to update trading engine config:', error);
+    logger.error('Failed to update trading engine config:', error);
     res.status(500).json({ error: 'Failed to update configuration' });
   }
 });
@@ -130,7 +131,7 @@ router.get('/config', authenticate, async (req, res) => {
   try {
     res.json(tradingEngine.config);
   } catch (error) {
-    console.error('Failed to get trading engine config:', error);
+    logger.error('Failed to get trading engine config:', error);
     res.status(500).json({ error: 'Failed to get configuration' });
   }
 });
@@ -142,7 +143,7 @@ router.post('/emergency-stop', authenticate, authorize('admin', 'trader'), async
     await tradingEngine.emergencyStop(reason || 'manual');
     res.json({ success: true, message: 'Emergency stop executed' });
   } catch (error) {
-    console.error('Failed to execute emergency stop:', error);
+    logger.error('Failed to execute emergency stop:', error);
     res.status(500).json({ error: 'Failed to execute emergency stop' });
   }
 });

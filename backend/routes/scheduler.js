@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { scheduler } from '../engine/scheduler.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -10,7 +11,7 @@ router.get('/status', authenticate, async (req, res) => {
     const status = scheduler.getStatus();
     res.json(status);
   } catch (error) {
-    console.error('Failed to get scheduler status:', error);
+    logger.error('Failed to get scheduler status:', error);
     res.status(500).json({ error: 'Failed to get scheduler status' });
   }
 });
@@ -21,7 +22,7 @@ router.post('/start', authenticate, authorize('admin', 'trader'), async (req, re
     await scheduler.start();
     res.json({ success: true, message: 'Scheduler started' });
   } catch (error) {
-    console.error('Failed to start scheduler:', error);
+    logger.error('Failed to start scheduler:', error);
     const errorMessage = error.message || 'Failed to start scheduler';
     res.status(500).json({ 
       error: errorMessage,
@@ -36,7 +37,7 @@ router.post('/stop', authenticate, authorize('admin', 'trader'), async (req, res
     await scheduler.stop();
     res.json({ success: true, message: 'Scheduler stopped' });
   } catch (error) {
-    console.error('Failed to stop scheduler:', error);
+    logger.error('Failed to stop scheduler:', error);
     const errorMessage = error.message || 'Failed to stop scheduler';
     res.status(500).json({ 
       error: errorMessage,
@@ -58,7 +59,7 @@ router.put('/config/:section', authenticate, authorize('admin', 'trader'), async
     await scheduler.updateConfig(section, updates);
     res.json({ success: true, message: 'Configuration updated' });
   } catch (error) {
-    console.error('Failed to update scheduler config:', error);
+    logger.error('Failed to update scheduler config:', error);
     res.status(500).json({ error: 'Failed to update configuration' });
   }
 });
@@ -69,7 +70,7 @@ router.get('/config', authenticate, async (req, res) => {
     const status = scheduler.getStatus();
     res.json(status.config);
   } catch (error) {
-    console.error('Failed to get scheduler config:', error);
+    logger.error('Failed to get scheduler config:', error);
     res.status(500).json({ error: 'Failed to get configuration' });
   }
 });

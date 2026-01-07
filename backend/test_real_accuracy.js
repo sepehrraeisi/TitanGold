@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const API_URL = 'https://titan.zala.ir/api';
 
@@ -10,7 +11,7 @@ async function test() {
     body: JSON.stringify({ username: 'testuser', password: 'Test@123456' })
   });
   const { token } = await loginRes.json();
-  console.log('✅ Login successful');
+  logger.info('✅ Login successful');
 
   // 2) Get AI agents
   const agentsRes = await fetch(`${API_URL}/ai-agents`, {
@@ -19,13 +20,13 @@ async function test() {
   const { agents } = await agentsRes.json();
   
   const arb = agents.find(a => a.agent_key === 'arbitrage');
-  console.log('\n📊 Arbitrage Agent Real Stats:');
-  console.log(`- Accuracy: ${arb.accuracy}%`);
-  console.log(`- Training Progress: ${arb.trainingProgress}%`);
-  console.log(`- Decisions: ${arb.decisions}`);
-  console.log(`- Learning Time: ${arb.learningTime}`);
-  console.log(`- Knowledge: ${arb.knowledgeSize}`);
-  console.log(`- Status: ${arb.status}`);
+  logger.info('\n📊 Arbitrage Agent Real Stats:');
+  logger.info(`- Accuracy: ${arb.accuracy}%`);
+  logger.info(`- Training Progress: ${arb.trainingProgress}%`);
+  logger.info(`- Decisions: ${arb.decisions}`);
+  logger.info(`- Learning Time: ${arb.learningTime}`);
+  logger.info(`- Knowledge: ${arb.knowledgeSize}`);
+  logger.info(`- Status: ${arb.status}`);
 }
 
 test().catch(console.error);

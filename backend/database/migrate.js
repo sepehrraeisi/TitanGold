@@ -10,6 +10,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import dotenv from 'dotenv';
 import { query } from './db.js';
+import { logger } from '../services/logger.js';
 
 dotenv.config();
 
@@ -18,14 +19,14 @@ const args = process.argv.slice(3);
 
 // Ensure DATABASE_URL is set
 if (!process.env.DATABASE_URL) {
-  console.error('❌ DATABASE_URL not set in .env file');
-  console.error('Please add: DATABASE_URL=postgresql://user@host:port/database');
+  logger.error('❌ DATABASE_URL not set in .env file');
+  logger.error('Please add: DATABASE_URL=postgresql://user@host:port/database');
   process.exit(1);
 }
 
-console.log('🔄 Running migration:', command);
-console.log('Database:', process.env.DATABASE_URL.replace(/:[^:@]*@/, ':***@'));
-console.log('');
+logger.info('🔄 Running migration:', command);
+logger.info('Database:', process.env.DATABASE_URL.replace(/:[^:@]*@/, ':***@'));
+logger.info('');
 
 try {
   // Build the node-pg-migrate command
@@ -43,7 +44,7 @@ try {
     case 'create':
       const name = args[0];
       if (!name) {
-        console.error('❌ Migration name required: npm run migrate:create <name>');
+        logger.error('❌ Migration name required: npm run migrate:create <name>');
         process.exit(1);
       }
       cmd = `${npmBin} ${migrateBin} create ${name}`;
@@ -57,8 +58,8 @@ try {
       cmd = `${npmBin} ${migrateBin} redo`;
       break;
     default:
-      console.error(`❌ Unknown command: ${command}`);
-      console.error('Available commands: up, down, create, status, redo');
+      logger.error(`❌ Unknown command: ${command}`);
+      logger.error('Available commands: up, down, create, status, redo');
       process.exit(1);
   }
   
@@ -68,9 +69,9 @@ try {
     env: { ...process.env },
   });
   
-  console.log('\n✅ Migration command completed');
+  logger.info('\n✅ Migration command completed');
 } catch (error) {
-  console.error('\n❌ Migration failed:', error.message);
+  logger.error('\n❌ Migration failed:', error.message);
   process.exit(1);
 }
 
@@ -82,28 +83,28 @@ async function showMigrationStatus() {
       ORDER BY run_on DESC
     `);
     
-    console.log('📊 Migration Status');
-    console.log('═'.repeat(70));
-    console.log(`\nTotal migrations applied: ${rows.length}\n`);
+    logger.info('📊 Migration Status');
+    logger.info('═'.repeat(70));
+    logger.info(`\nTotal migrations applied: ${rows.length}\n`);
     
     if (rows.length > 0) {
-      console.log('Recent migrations:');
+      logger.info('Recent migrations:');
       rows.slice(0, 10).forEach((row, index) => {
         const date = new Date(row.run_on).toISOString();
-        console.log(`  ${index + 1}. ${row.name}`);
-        console.log(`     Applied: ${date}`);
+        logger.info(`  ${index + 1}. ${row.name}`);
+        logger.info(`     Applied: ${date}`);
       });
       
       if (rows.length > 10) {
-        console.log(`\n  ... and ${rows.length - 10} more`);
+        logger.info(`\n  ... and ${rows.length - 10} more`);
       }
     } else {
-      console.log('No migrations have been applied yet.');
+      logger.info('No migrations have been applied yet.');
     }
     
-    console.log('\n' + '═'.repeat(70));
+    logger.info('\n' + '═'.repeat(70));
   } catch (error) {
-    console.error('❌ Failed to get migration status:', error.message);
+    logger.error('❌ Failed to get migration status:', error.message);
     throw error;
   }
 }

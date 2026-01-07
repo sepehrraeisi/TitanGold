@@ -3,6 +3,7 @@
 // Date: 2026-01-03
 
 import fetch from 'node-fetch';
+import { logger } from '../../services/logger.js';
 
 /**
  * Fetch ticker data from MEXC via backend proxy
@@ -32,7 +33,7 @@ async function fetchMexcTicker(symbol) {
     
     return result.data;
   } catch (error) {
-    console.error(`❌ Failed to fetch MEXC ticker for ${symbol}:`, error.message);
+    logger.error(`❌ Failed to fetch MEXC ticker for ${symbol}:`, error.message);
     throw error;
   }
 }
@@ -66,7 +67,7 @@ async function fetchMexcDepth(symbol, limit = 20) {
     
     return result.data;
   } catch (error) {
-    console.error(`❌ Failed to fetch MEXC depth for ${symbol}:`, error.message);
+    logger.error(`❌ Failed to fetch MEXC depth for ${symbol}:`, error.message);
     throw error;
   }
 }
@@ -167,7 +168,7 @@ async function detectOpportunities(params) {
   
   const opportunities = [];
   
-  console.log(`🔍 Scanning ${symbols.length} symbols for arbitrage...`);
+  logger.info(`🔍 Scanning ${symbols.length} symbols for arbitrage...`);
   
   for (const symbol of symbols) {
     try {
@@ -183,7 +184,7 @@ async function detectOpportunities(params) {
       
       // Skip if volume too low
       if (volume24h < minVolumeUSDT) {
-        console.log(`⏭️  ${symbol}: Volume too low (${volume24h.toFixed(0)} USDT)`);
+        logger.info(`⏭️  ${symbol}: Volume too low (${volume24h.toFixed(0)} USDT)`);
         continue;
       }
       
@@ -192,7 +193,7 @@ async function detectOpportunities(params) {
       const bestAsk = depth.asks && depth.asks[0] ? parseFloat(depth.asks[0][0]) : null;
       
       if (!bestBid || !bestAsk) {
-        console.log(`⏭️  ${symbol}: Missing bid/ask data`);
+        logger.info(`⏭️  ${symbol}: Missing bid/ask data`);
         continue;
       }
       
@@ -201,7 +202,7 @@ async function detectOpportunities(params) {
       
       // Filter by spread thresholds
       if (spread < minSpreadPct || spread > maxSpreadPct) {
-        console.log(`⏭️  ${symbol}: Spread ${spread.toFixed(2)}% outside range [${minSpreadPct}, ${maxSpreadPct}]`);
+        logger.info(`⏭️  ${symbol}: Spread ${spread.toFixed(2)}% outside range [${minSpreadPct}, ${maxSpreadPct}]`);
         continue;
       }
       
@@ -265,10 +266,10 @@ async function detectOpportunities(params) {
       
       opportunities.push(opportunity);
       
-      console.log(`✅ ${symbol}: Spread ${spread.toFixed(2)}% | Profit ${profitCalc.profitUSDT.toFixed(2)} USDT | Risk ${riskScore}`);
+      logger.info(`✅ ${symbol}: Spread ${spread.toFixed(2)}% | Profit ${profitCalc.profitUSDT.toFixed(2)} USDT | Risk ${riskScore}`);
       
     } catch (error) {
-      console.error(`❌ Error scanning ${symbol}:`, error.message);
+      logger.error(`❌ Error scanning ${symbol}:`, error.message);
       // Continue with next symbol
     }
   }
@@ -328,7 +329,7 @@ function getRiskLevel(riskScore) {
 export async function run(params) {
   const { userId, symbol, timeframe, config, input } = params;
   
-  console.log(`🤖 Arbitrage Agent: Starting scan...`);
+  logger.info(`🤖 Arbitrage Agent: Starting scan...`);
   
   try {
     // Detect opportunities
@@ -350,7 +351,7 @@ export async function run(params) {
     // Risk alerts (opportunities with high risk)
     const riskAlerts = opportunities.filter(opp => opp.riskScore >= 75);
     
-    console.log(`✅ Arbitrage scan complete: ${totalOpportunities} opportunities found`);
+    logger.info(`✅ Arbitrage scan complete: ${totalOpportunities} opportunities found`);
     
     return {
       agent_key: 'arbitrage',
@@ -400,7 +401,7 @@ export async function run(params) {
     };
     
   } catch (error) {
-    console.error('❌ Arbitrage scan error:', error);
+    logger.error('❌ Arbitrage scan error:', error);
     
     // Return error result
     return {

@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { logger } from './services/logger.js';
 
 const file = 'routes/ai-agents.js';
 const content = fs.readFileSync(file, 'utf8');
@@ -11,7 +12,7 @@ const startIdx = content.indexOf(startMarker);
 const endIdx = content.indexOf(endMarker, startIdx);
 
 if (startIdx === -1 || endIdx === -1) {
-  console.error('Could not find markers');
+  logger.error('Could not find markers');
   process.exit(1);
 }
 
@@ -24,4 +25,4 @@ const after = content.substring(endIdx);
 const newContent = before + '/*\n' + oldHandler + '\n*/\n\n' + after;
 
 fs.writeFileSync(file, newContent, 'utf8');
-console.log('✅ Old handler commented out successfully');
+logger.info('✅ Old handler commented out successfully');

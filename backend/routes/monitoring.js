@@ -1,6 +1,7 @@
 import express from 'express';
 import { query } from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ router.get('/health', async (req, res) => {
       await query('SELECT 1');
       dbHealthy = true;
     } catch (dbErr) {
-      console.error('Health check - DB error:', dbErr);
+      logger.error('Health check - DB error:', dbErr);
     }
 
     const uptimeSec = Math.floor((Date.now() - SERVER_START_TIME) / 1000);
@@ -33,7 +34,7 @@ router.get('/health', async (req, res) => {
       version: process.env.GIT_SHA || 'unknown'
     });
   } catch (error) {
-    console.error('Health check error:', error);
+    logger.error('Health check error:', error);
     res.status(500).json({
       ok: false,
       db: false,
@@ -113,7 +114,7 @@ router.get('/summary', authenticate, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Summary error:', error);
+    logger.error('Summary error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch monitoring summary'
@@ -164,7 +165,7 @@ router.get('/errors', authenticate, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Errors fetch error:', error);
+    logger.error('Errors fetch error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch error logs'
@@ -217,7 +218,7 @@ router.get('/requests', authenticate, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Requests fetch error:', error);
+    logger.error('Requests fetch error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch request logs'

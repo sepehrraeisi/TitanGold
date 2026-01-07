@@ -9,6 +9,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import pool from '../database/db.js';
 import axios from 'axios';
+import { logger } from '../services/logger.js';
 
 class FavoritesWebSocketService {
     constructor() {
@@ -29,7 +30,7 @@ class FavoritesWebSocketService {
         });
 
         this.wss.on('connection', async (ws, req) => {
-            console.log('📡 WebSocket client connected');
+            logger.info('📡 WebSocket client connected');
 
             // Extract token from query string (?token=xxx)
             const url = new URL(req.url, 'http://localhost');
@@ -49,7 +50,7 @@ class FavoritesWebSocketService {
                         await this.handleAuth(ws, data.token);
                     }
                 } catch (error) {
-                    console.error('WebSocket message error:', error);
+                    logger.error('WebSocket message error:', error);
                     ws.send(JSON.stringify({
                         type: 'error',
                         message: 'Invalid message format'
@@ -58,12 +59,12 @@ class FavoritesWebSocketService {
             });
 
             ws.on('close', () => {
-                console.log('📡 WebSocket client disconnected');
+                logger.info('📡 WebSocket client disconnected');
                 this.removeClient(ws);
             });
 
             ws.on('error', (error) => {
-                console.error('WebSocket error:', error);
+                logger.error('WebSocket error:', error);
                 this.removeClient(ws);
             });
         });
@@ -71,7 +72,7 @@ class FavoritesWebSocketService {
         // Start price update loop
         this.startPriceUpdateLoop();
 
-        console.log('✅ WebSocket service initialized on /ws/favorites');
+        logger.info('✅ WebSocket service initialized on /ws/favorites');
     }
 
     /**
@@ -111,9 +112,9 @@ class FavoritesWebSocketService {
             // Send initial price data
             await this.sendInitialPrices(ws, userId);
 
-            console.log(`✅ Client authenticated: userId=${userId}, total connections=${this.clients.size}`);
+            logger.info(`✅ Client authenticated: userId=${userId}, total connections=${this.clients.size}`);
         } catch (error) {
-            console.error('Auth error:', error);
+            logger.error('Auth error:', error);
             ws.send(JSON.stringify({
                 type: 'auth_error',
                 message: 'Authentication failed'
@@ -133,7 +134,7 @@ class FavoritesWebSocketService {
             // Split JWT into parts
             const parts = cleanToken.split('.');
             if (parts.length !== 3) {
-                console.warn('⚠️ Invalid JWT format (not 3 parts)');
+                logger.warn('⚠️ Invalid JWT format (not 3 parts)');
                 return null;
             }
             
@@ -144,7 +145,7 @@ class FavoritesWebSocketService {
             
             // Check expiration
             if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-                console.warn('⚠️ JWT token expired');
+                logger.warn('⚠️ JWT token expired');
                 return null;
             }
             
@@ -152,14 +153,14 @@ class FavoritesWebSocketService {
             const userId = payload.userId || payload.id || payload.sub || payload.user_id;
             
             if (!userId) {
-                console.warn('⚠️ No userId found in JWT payload');
+                logger.warn('⚠️ No userId found in JWT payload');
                 return null;
             }
             
-            console.log(`✅ JWT validated: userId=${userId}`);
+            logger.info(`✅ JWT validated: userId=${userId}`);
             return userId;
         } catch (error) {
-            console.error('❌ Token extraction/validation error:', error.message);
+            logger.error('❌ Token extraction/validation error:', error.message);
             return null;
         }
     }
@@ -206,7 +207,7 @@ class FavoritesWebSocketService {
                 data: prices
             }));
         } catch (error) {
-            console.error('Error sending initial prices:', error);
+            logger.error('Error sending initial prices:', error);
         }
     }
 
@@ -218,7 +219,7 @@ class FavoritesWebSocketService {
             await this.broadcastPriceUpdates();
         }, this.UPDATE_FREQUENCY);
 
-        console.log(`✅ Price update loop started (every ${this.UPDATE_FREQUENCY}ms)`);
+        logger.info(`✅ Price update loop started (every ${this.UPDATE_FREQUENCY}ms)`);
     }
 
     /**
@@ -270,10 +271,10 @@ class FavoritesWebSocketService {
                     timestamp: new Date().toISOString()
                 });
 
-                console.log(`📊 Broadcasted ${updates.length} price updates to ${this.clients.size} users`);
+                logger.info(`📊 Broadcasted ${updates.length} price updates to ${this.clients.size} users`);
             }
         } catch (error) {
-            console.error('Error broadcasting price updates:', error);
+            logger.error('Error broadcasting price updates:', error);
         }
     }
 
@@ -303,13 +304,13 @@ class FavoritesWebSocketService {
                         });
                     }
                 } catch (err) {
-                    console.warn(`Failed to fetch price for ${symbol}:`, err.message);
+                    logger.warn(`Failed to fetch price for ${symbol}:`, err.message);
                 }
             }
 
             return prices;
         } catch (error) {
-            console.error('MEXC API error:', error);
+            logger.error('MEXC API error:', error);
             return [];
         }
     }
@@ -376,7 +377,7 @@ class FavoritesWebSocketService {
             this.wss.close();
         }
 
-        console.log('📡 WebSocket service shutdown');
+        logger.info('📡 WebSocket service shutdown');
     }
 }
 

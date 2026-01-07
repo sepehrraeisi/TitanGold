@@ -1,8 +1,9 @@
 import agentRegistry from './services/agents/registry.js';
+import { logger } from './services/logger.js';
 
 async function testDualFormat() {
   try {
-    console.log('🧪 Testing DUAL FORMAT Response\n');
+    logger.info('🧪 Testing DUAL FORMAT Response\n');
 
     // Run technical agent
     const rawResult = await agentRegistry.runAgent('technical', {
@@ -97,40 +98,40 @@ async function testDualFormat() {
       }
     };
 
-    console.log('📊 DUAL FORMAT Response:');
-    console.log(JSON.stringify(response, null, 2));
+    logger.info('📊 DUAL FORMAT Response:');
+    logger.info(JSON.stringify(response, null, 2));
 
-    console.log('\n✅ Validation:');
-    console.log(`   - response.indicators exists: ${!!response.indicators}`);
-    console.log(`   - response.indicators is Array: ${Array.isArray(response.indicators)}`);
-    console.log(`   - response.indicators.length: ${response.indicators.length}`);
-    console.log(`   - response.result.indicators exists: ${!!response.result?.indicators}`);
-    console.log(`   - response.result.indicators is Array: ${Array.isArray(response.result?.indicators)}`);
-    console.log(`   - response.result.indicators.length: ${response.result?.indicators?.length}`);
+    logger.info('\n✅ Validation:');
+    logger.info(`   - response.indicators exists: ${!!response.indicators}`);
+    logger.info(`   - response.indicators is Array: ${Array.isArray(response.indicators)}`);
+    logger.info(`   - response.indicators.length: ${response.indicators.length}`);
+    logger.info(`   - response.result.indicators exists: ${!!response.result?.indicators}`);
+    logger.info(`   - response.result.indicators is Array: ${Array.isArray(response.result?.indicators)}`);
+    logger.info(`   - response.result.indicators.length: ${response.result?.indicators?.length}`);
 
     // Test UI reads
-    console.log('\n🎯 UI Compatibility Tests:');
+    logger.info('\n🎯 UI Compatibility Tests:');
     
     // Test 1: UI reads response.indicators.filter(...)
     try {
       const filtered = response.indicators.filter(i => i.signal === 'buy');
-      console.log(`   ✅ response.indicators.filter() works (${filtered.length} items)`);
+      logger.info(`   ✅ response.indicators.filter() works (${filtered.length} items)`);
     } catch (e) {
-      console.log(`   ❌ response.indicators.filter() FAILED: ${e.message}`);
+      logger.info(`   ❌ response.indicators.filter() FAILED: ${e.message}`);
     }
 
     // Test 2: UI reads response.result.indicators.filter(...)
     try {
       const filtered = response.result.indicators.filter(i => i.signal === 'sell');
-      console.log(`   ✅ response.result.indicators.filter() works (${filtered.length} items)`);
+      logger.info(`   ✅ response.result.indicators.filter() works (${filtered.length} items)`);
     } catch (e) {
-      console.log(`   ❌ response.result.indicators.filter() FAILED: ${e.message}`);
+      logger.info(`   ❌ response.result.indicators.filter() FAILED: ${e.message}`);
     }
 
-    console.log('\n🎉 DUAL FORMAT TEST PASSED - UI will work with either path!');
+    logger.info('\n🎉 DUAL FORMAT TEST PASSED - UI will work with either path!');
 
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
+    logger.error('❌ Test failed:', error.message);
     process.exit(1);
   }
 }

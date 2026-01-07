@@ -12,6 +12,7 @@
 
 import { query } from '../database/db.js';
 import { decryptSecret, isEncrypted } from '../utils/crypto.js';
+import { logger } from '../services/logger.js';
 
 const STATUS = {
   HEALTHY: 'healthy',
@@ -109,7 +110,7 @@ export async function getProviderInstances({ provider = null } = {}) {
         inst.api_key_encrypted = decryptSecret(inst.api_key_encrypted);
       }
     } catch (error) {
-      console.error(`Failed to decrypt key for ${inst.provider}/${inst.name}:`, error.message);
+      logger.error(`Failed to decrypt key for ${inst.provider}/${inst.name}:`, error.message);
       // Keep encrypted value (will fail API call, but won't crash)
     }
     return inst;
@@ -167,7 +168,7 @@ export async function recordProviderFailure(integrationId, err) {
   const cooldownUntil = addMs(cooldownMs);
   const message = (err?.message || 'unknown error').slice(0, 500);
 
-  console.log(`⚠️ Provider failure: ${status}, cooldown ${cooldownMs}ms`);
+  logger.info(`⚠️ Provider failure: ${status}, cooldown ${cooldownMs}ms`);
 
   await query(
     `UPDATE api_integration_runtime

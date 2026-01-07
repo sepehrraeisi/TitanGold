@@ -2,8 +2,9 @@
 // Purpose: Sentiment Analysis Agent implementation
 // Date: 2026-01-03
 
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🤖 Sentiment Analysis Agent: ${symbol}`);
+  logger.info(`🤖 Sentiment Analysis Agent: ${symbol}`);
   
   return {
     agent_key: 'sentiment',

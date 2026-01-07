@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { logger } from '../services/logger.js';
 import { 
   pickProviderInstance, 
   recordProviderSuccess, 
@@ -64,7 +65,7 @@ async function retry(fn, {
 
       // exponential-ish backoff: 1s -> 3s -> 7s (cap)
       const delay = Math.min(maxDelayMs, baseDelayMs * (i === 1 ? 1 : i === 2 ? 3 : 7));
-      console.warn(`⚠️ ${label}: attempt ${i} failed; retrying in ${delay}ms. reason="${e.message}"`);
+      logger.warn(`⚠️ ${label}: attempt ${i} failed; retrying in ${delay}ms. reason="${e.message}"`);
       await sleep(delay);
     }
   }
@@ -112,7 +113,7 @@ class AIService {
     this.timeoutMs = Number(process.env.AI_TIMEOUT_MS || 25000);
 
     if (!this.enabled) {
-      console.warn('⚠️ Gemini API Key not provided (GEMINI_API_KEY). AI features may return fallback responses.');
+      logger.warn('⚠️ Gemini API Key not provided (GEMINI_API_KEY). AI features may return fallback responses.');
       this.genAI = null;
       return;
     }
@@ -172,13 +173,13 @@ class AIService {
           await recordProviderSuccess(inst.id);
           return text;
         } catch (err) {
-          console.error('⚠️ Gemini failed:', err.message);
+          logger.error('⚠️ Gemini failed:', err.message);
           await recordProviderFailure(inst.id, err);
           // Continue to fallback
         }
       }
     } catch (err) {
-      console.warn('⚠️ No Gemini instance available');
+      logger.warn('⚠️ No Gemini instance available');
     }
     
     // No fallback placeholder - return error

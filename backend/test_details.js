@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const BASE_URL = 'https://titan.zala.ir/api';
 
@@ -24,11 +25,11 @@ async function test() {
   });
   const details = await detailsRes.json();
   
-  console.log('📊 Details Response Keys:', Object.keys(details));
-  console.log('\n✅ Config Keys:', details.agent?.config ? Object.keys(details.agent.config) : 'NO CONFIG');
-  console.log('\n🔧 Exchanges:', details.agent?.config?.exchanges);
-  console.log('\n📈 Metrics:', details.metrics);
-  console.log('\n🔍 Last Scan Summary:', details.lastScan?.summary);
+  logger.info('📊 Details Response Keys:', Object.keys(details));
+  logger.info('\n✅ Config Keys:', details.agent?.config ? Object.keys(details.agent.config) : 'NO CONFIG');
+  logger.info('\n🔧 Exchanges:', details.agent?.config?.exchanges);
+  logger.info('\n📈 Metrics:', details.metrics);
+  logger.info('\n🔍 Last Scan Summary:', details.lastScan?.summary);
 }
 
 test();

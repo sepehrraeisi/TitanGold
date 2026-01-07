@@ -2,6 +2,7 @@
 // Test: Save and refetch config
 
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const API_BASE = 'https://titan.zala.ir/api';
 const USERNAME = 'testuser';
@@ -16,7 +17,7 @@ async function test() {
             body: JSON.stringify({ username: USERNAME, password: PASSWORD })
         });
         const { token } = await loginRes.json();
-        console.log('✅ Login successful\n');
+        logger.info('✅ Login successful\n');
 
         // 2. Get agent
         const agentsRes = await fetch(`${API_BASE}/ai-agents`, {
@@ -24,7 +25,7 @@ async function test() {
         });
         const { agents } = await agentsRes.json();
         const fund = agents.find(a => a.agent_key === 'fundamental');
-        console.log('✅ Found Fundamental Agent\n');
+        logger.info('✅ Found Fundamental Agent\n');
 
         // 3. Get current config
         const beforeRes = await fetch(`${API_BASE}/ai-agents/${fund.id}/details`, {
@@ -32,12 +33,12 @@ async function test() {
         });
         const beforeData = await beforeRes.json();
         
-        console.log('📊 Config BEFORE save:');
-        console.log('  - shareWithArtemis:', beforeData.agent.config.integrationSettings?.shareWithArtemis);
-        console.log('  - syncWithPricePrediction:', beforeData.agent.config.integrationSettings?.syncWithPricePrediction);
-        console.log('  - dashboard alert:', beforeData.agent.config.alertChannels?.dashboard);
-        console.log('  - email alert:', beforeData.agent.config.alertChannels?.email);
-        console.log('');
+        logger.info('📊 Config BEFORE save:');
+        logger.info('  - shareWithArtemis:', beforeData.agent.config.integrationSettings?.shareWithArtemis);
+        logger.info('  - syncWithPricePrediction:', beforeData.agent.config.integrationSettings?.syncWithPricePrediction);
+        logger.info('  - dashboard alert:', beforeData.agent.config.alertChannels?.dashboard);
+        logger.info('  - email alert:', beforeData.agent.config.alertChannels?.email);
+        logger.info('');
 
         // 4. Change config
         const newConfig = {
@@ -57,13 +58,13 @@ async function test() {
             }
         };
 
-        console.log('💾 Saving NEW config...');
-        console.log('  - shareWithArtemis: false (changed)');
-        console.log('  - syncWithPortfolio: false (changed)');
-        console.log('  - forwardToDashboard: false (changed)');
-        console.log('  - dashboard: false (changed)');
-        console.log('  - email: true (changed)');
-        console.log('');
+        logger.info('💾 Saving NEW config...');
+        logger.info('  - shareWithArtemis: false (changed)');
+        logger.info('  - syncWithPortfolio: false (changed)');
+        logger.info('  - forwardToDashboard: false (changed)');
+        logger.info('  - dashboard: false (changed)');
+        logger.info('  - email: true (changed)');
+        logger.info('');
 
         // 5. Save
         const saveRes = await fetch(`${API_BASE}/ai-agents/${fund.id}/config`, {
@@ -80,7 +81,7 @@ async function test() {
             throw new Error(`Save failed: ${err}`);
         }
 
-        console.log('✅ Save successful\n');
+        logger.info('✅ Save successful\n');
 
         // 6. Refetch
         const afterRes = await fetch(`${API_BASE}/ai-agents/${fund.id}/details`, {
@@ -88,13 +89,13 @@ async function test() {
         });
         const afterData = await afterRes.json();
 
-        console.log('📊 Config AFTER refetch:');
-        console.log('  - shareWithArtemis:', afterData.agent.config.integrationSettings?.shareWithArtemis);
-        console.log('  - syncWithPortfolio:', afterData.agent.config.integrationSettings?.syncWithPortfolio);
-        console.log('  - forwardToDashboard:', afterData.agent.config.integrationSettings?.forwardToDashboard);
-        console.log('  - dashboard alert:', afterData.agent.config.alertChannels?.dashboard);
-        console.log('  - email alert:', afterData.agent.config.alertChannels?.email);
-        console.log('');
+        logger.info('📊 Config AFTER refetch:');
+        logger.info('  - shareWithArtemis:', afterData.agent.config.integrationSettings?.shareWithArtemis);
+        logger.info('  - syncWithPortfolio:', afterData.agent.config.integrationSettings?.syncWithPortfolio);
+        logger.info('  - forwardToDashboard:', afterData.agent.config.integrationSettings?.forwardToDashboard);
+        logger.info('  - dashboard alert:', afterData.agent.config.alertChannels?.dashboard);
+        logger.info('  - email alert:', afterData.agent.config.alertChannels?.email);
+        logger.info('');
 
         // 7. Verify
         const passed = 
@@ -105,19 +106,19 @@ async function test() {
             afterData.agent.config.alertChannels?.email === true;
 
         if (passed) {
-            console.log('✅ ✅ ✅ TEST PASSED! Config persisted correctly!');
+            logger.info('✅ ✅ ✅ TEST PASSED! Config persisted correctly!');
         } else {
-            console.log('❌ ❌ ❌ TEST FAILED! Config reset to defaults!');
-            console.log('\nExpected:');
-            console.log('  shareWithArtemis: false');
-            console.log('  syncWithPortfolio: false');
-            console.log('  forwardToDashboard: false');
-            console.log('  dashboard: false');
-            console.log('  email: true');
+            logger.info('❌ ❌ ❌ TEST FAILED! Config reset to defaults!');
+            logger.info('\nExpected:');
+            logger.info('  shareWithArtemis: false');
+            logger.info('  syncWithPortfolio: false');
+            logger.info('  forwardToDashboard: false');
+            logger.info('  dashboard: false');
+            logger.info('  email: true');
         }
 
     } catch (error) {
-        console.error('❌ Test failed:', error.message);
+        logger.error('❌ Test failed:', error.message);
     }
 }
 

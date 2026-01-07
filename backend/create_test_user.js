@@ -1,6 +1,7 @@
 import pg from 'pg';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
+import { logger } from './services/logger.js';
 
 dotenv.config();
 
@@ -20,15 +21,15 @@ async function createTestUser() {
     const email = 'test@titan.local';
     const password = 'Test@123456';
     
-    console.log('\n🔐 Creating test user...');
-    console.log('Username:', username);
-    console.log('Email:', email);
-    console.log('Password:', password);
-    console.log('\n📊 DB Config:');
-    console.log('Host:', process.env.DB_HOST);
-    console.log('Port:', process.env.DB_PORT);
-    console.log('Database:', process.env.DB_NAME);
-    console.log('User:', process.env.DB_USER);
+    logger.info('\n🔐 Creating test user...');
+    logger.info('Username:', username);
+    logger.info('Email:', email);
+    logger.info('Password:', password);
+    logger.info('\n📊 DB Config:');
+    logger.info('Host:', process.env.DB_HOST);
+    logger.info('Port:', process.env.DB_PORT);
+    logger.info('Database:', process.env.DB_NAME);
+    logger.info('User:', process.env.DB_USER);
     
     // Check if user exists
     const existingUser = await pool.query(
@@ -37,15 +38,15 @@ async function createTestUser() {
     );
     
     if (existingUser.rows.length > 0) {
-      console.log('\n✅ User already exists!');
-      console.log('User ID:', existingUser.rows[0].id);
-      console.log('\n📝 Login Credentials:');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('🌐 URL: https://titan.zala.ir');
-      console.log('👤 Username:', username);
-      console.log('📧 Email:', email);
-      console.log('🔑 Password:', password);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      logger.info('\n✅ User already exists!');
+      logger.info('User ID:', existingUser.rows[0].id);
+      logger.info('\n📝 Login Credentials:');
+      logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      logger.info('🌐 URL: https://titan.zala.ir');
+      logger.info('👤 Username:', username);
+      logger.info('📧 Email:', email);
+      logger.info('🔑 Password:', password);
+      logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       process.exit(0);
     }
     
@@ -60,22 +61,22 @@ async function createTestUser() {
       [username, email, hashedPassword]
     );
     
-    console.log('\n✅ Test user created successfully!');
-    console.log('User ID:', result.rows[0].id);
+    logger.info('\n✅ Test user created successfully!');
+    logger.info('User ID:', result.rows[0].id);
     
-    console.log('\n📝 Login Credentials:');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🌐 URL: https://titan.zala.ir');
-    console.log('👤 Username:', username);
-    console.log('📧 Email:', email);
-    console.log('🔑 Password:', password);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    logger.info('\n📝 Login Credentials:');
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.info('🌐 URL: https://titan.zala.ir');
+    logger.info('👤 Username:', username);
+    logger.info('📧 Email:', email);
+    logger.info('🔑 Password:', password);
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    logger.error('❌ Error:', error.message);
     if (error.code === 'ECONNREFUSED') {
-      console.error('\n💡 Solution: Database is not running or connection refused');
-      console.error('Try: sudo systemctl start postgresql@15-main');
+      logger.error('\n💡 Solution: Database is not running or connection refused');
+      logger.error('Try: sudo systemctl start postgresql@15-main');
     }
     process.exit(1);
   } finally {

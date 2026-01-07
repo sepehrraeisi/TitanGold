@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const BASE_URL = 'https://titan.zala.ir/api';
 
@@ -28,8 +29,8 @@ async function test() {
   });
   const result = await runRes.json();
   
-  console.log('Response Keys:', Object.keys(result));
-  console.log('\nFirst Opportunity:', result.opportunities?.[0] ? JSON.stringify(result.opportunities[0], null, 2) : 'No opportunities');
+  logger.info('Response Keys:', Object.keys(result));
+  logger.info('\nFirst Opportunity:', result.opportunities?.[0] ? JSON.stringify(result.opportunities[0], null, 2) : 'No opportunities');
 }
 
 test();

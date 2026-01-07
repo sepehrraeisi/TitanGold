@@ -7,6 +7,7 @@ import express from 'express';
 import { query } from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
 import { encryptSecret, decryptSecret, isEncrypted, maskSecret } from '../utils/crypto.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -64,7 +65,7 @@ router.get('/integrations', async (req, res) => {
       integrations: result.rows,
     });
   } catch (error) {
-    console.error('GET /api/config/integrations error:', error);
+    logger.error('GET /api/config/integrations error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch integrations',
@@ -149,7 +150,7 @@ router.post('/integrations', async (req, res) => {
       message: 'Integration created successfully',
     });
   } catch (error) {
-    console.error('POST /api/config/integrations error:', error);
+    logger.error('POST /api/config/integrations error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to create integration',
@@ -255,7 +256,7 @@ router.patch('/integrations/:id', async (req, res) => {
       message: 'Integration updated successfully',
     });
   } catch (error) {
-    console.error('PATCH /api/config/integrations/:id error:', error);
+    logger.error('PATCH /api/config/integrations/:id error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to update integration',
@@ -328,7 +329,7 @@ router.post('/integrations/:id/test', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('POST /api/config/integrations/:id/test error:', error);
+    logger.error('POST /api/config/integrations/:id/test error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to test integration',
@@ -463,7 +464,7 @@ router.post('/integrations/:id/disable', async (req, res) => {
       message: 'Integration disabled',
     });
   } catch (error) {
-    console.error('POST /api/config/integrations/:id/disable error:', error);
+    logger.error('POST /api/config/integrations/:id/disable error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to disable integration',
@@ -510,7 +511,7 @@ router.post('/integrations/:id/reset-runtime', async (req, res) => {
       message: 'Runtime state reset',
     });
   } catch (error) {
-    console.error('POST /api/config/integrations/:id/reset-runtime error:', error);
+    logger.error('POST /api/config/integrations/:id/reset-runtime error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to reset runtime',
@@ -564,7 +565,7 @@ router.get('/artemis', async (req, res) => {
       updated_by: row.updated_by,
     });
   } catch (error) {
-    console.error('GET /api/config/artemis error:', error);
+    logger.error('GET /api/config/artemis error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch Artemis configuration',
@@ -669,7 +670,7 @@ router.put('/artemis', async (req, res) => {
       config,
     });
   } catch (error) {
-    console.error('PUT /api/config/artemis error:', error);
+    logger.error('PUT /api/config/artemis error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to update Artemis configuration',
@@ -719,7 +720,7 @@ router.get('/security', async (req, res) => {
       updated_by: row.updated_by,
     });
   } catch (error) {
-    console.error('GET /api/config/security error:', error);
+    logger.error('GET /api/config/security error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch security configuration',
@@ -802,7 +803,7 @@ router.put('/security', async (req, res) => {
       config,
     });
   } catch (error) {
-    console.error('PUT /api/config/security error:', error);
+    logger.error('PUT /api/config/security error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to update security configuration',

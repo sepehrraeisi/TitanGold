@@ -12,6 +12,7 @@
 
 import { query } from '../database/db.js';
 import autopilotService from '../services/autopilot.js';
+import { logger } from '../services/logger.js';
 
 // ==================== Worker State ====================
 let workerInterval = null;
@@ -25,14 +26,14 @@ let isRunning = false;
 async function runAutopilotCycle() {
   // Prevent overlapping cycles
   if (isRunning) {
-    console.log('[Autopilot Worker] Cycle already running, skipping...');
+    logger.info('[Autopilot Worker] Cycle already running, skipping...');
     return;
   }
 
   isRunning = true;
 
   try {
-    console.log('[Autopilot Worker] Starting cycle...');
+    logger.info('[Autopilot Worker] Starting cycle...');
 
     // 1) Check if autopilot is enabled
     const stateResult = await query(
@@ -47,7 +48,7 @@ async function runAutopilotCycle() {
     );
 
     if (stateResult.rows.length === 0) {
-      console.log('[Autopilot Worker] No artemis_state found, skipping cycle');
+      logger.info('[Autopilot Worker] No artemis_state found, skipping cycle');
       return;
     }
 
@@ -55,14 +56,14 @@ async function runAutopilotCycle() {
 
     // 2) Check if enabled
     if (!state.autopilot_enabled) {
-      console.log('[Autopilot Worker] Autopilot disabled, skipping cycle');
+      logger.info('[Autopilot Worker] Autopilot disabled, skipping cycle');
       return;
     }
 
     // 3) Check circuit breaker
     const failCount = state.autopilot_fail_count || 0;
     if (failCount >= 3) {
-      console.log(`[Autopilot Worker] Circuit breaker triggered (fail_count: ${failCount}), skipping cycle`);
+      logger.info(`[Autopilot Worker] Circuit breaker triggered (fail_count: ${failCount}), skipping cycle`);
       return;
     }
 
@@ -76,21 +77,21 @@ async function runAutopilotCycle() {
       const minutesSinceLastRun = (now - lastRun) / (1000 * 60);
 
       if (minutesSinceLastRun < minIntervalMinutes) {
-        console.log(`[Autopilot Worker] Too soon since last run (${minutesSinceLastRun.toFixed(1)}m < ${minIntervalMinutes}m), skipping`);
+        logger.info(`[Autopilot Worker] Too soon since last run (${minutesSinceLastRun.toFixed(1)}m < ${minIntervalMinutes}m), skipping`);
         return;
       }
     }
 
     // 5) Run analysis
-    console.log('[Autopilot Worker] Running learning analysis...');
+    logger.info('[Autopilot Worker] Running learning analysis...');
     const analysis = await autopilotService.analyzeLearningAndSuggest(24);
 
-    console.log(`[Autopilot Worker] Analysis complete: ${analysis.summary.suggestionsGenerated} suggestions`);
+    logger.info(`[Autopilot Worker] Analysis complete: ${analysis.summary.suggestionsGenerated} suggestions`);
 
     // 6) Save suggestions (only if any exist)
     if (analysis.suggestions.length > 0) {
       const saved = await autopilotService.saveSuggestions(analysis.suggestions);
-      console.log(`[Autopilot Worker] Saved ${saved.length} suggestions`);
+      logger.info(`[Autopilot Worker] Saved ${saved.length} suggestions`);
     }
 
     // 7) Update state (success)
@@ -102,10 +103,10 @@ async function runAutopilotCycle() {
        WHERE id = (SELECT id FROM artemis_state ORDER BY created_at DESC LIMIT 1)`
     );
 
-    console.log('[Autopilot Worker] Cycle completed successfully');
+    logger.info('[Autopilot Worker] Cycle completed successfully');
 
   } catch (error) {
-    console.error('[Autopilot Worker] Cycle failed:', error);
+    logger.error('[Autopilot Worker] Cycle failed:', error);
 
     // Increment fail count (triggers circuit breaker at ≥3)
     try {
@@ -116,10 +117,10 @@ async function runAutopilotCycle() {
          WHERE id = (SELECT id FROM artemis_state ORDER BY created_at DESC LIMIT 1)`
       );
 
-      console.log('[Autopilot Worker] Incremented fail_count due to error');
+      logger.info('[Autopilot Worker] Incremented fail_count due to error');
 
     } catch (updateError) {
-      console.error('[Autopilot Worker] Failed to update fail_count:', updateError);
+      logger.error('[Autopilot Worker] Failed to update fail_count:', updateError);
     }
 
   } finally {
@@ -135,27 +136,27 @@ async function runAutopilotCycle() {
  */
 export function startAutopilotWorker(intervalMinutes = 5) {
   if (workerInterval) {
-    console.log('[Autopilot Worker] Already running');
+    logger.info('[Autopilot Worker] Already running');
     return;
   }
 
   const intervalMs = intervalMinutes * 60 * 1000;
 
-  console.log(`[Autopilot Worker] Starting with ${intervalMinutes}min interval...`);
+  logger.info(`[Autopilot Worker] Starting with ${intervalMinutes}min interval...`);
 
   // Run immediately on start
   runAutopilotCycle().catch(err => {
-    console.error('[Autopilot Worker] Initial cycle error:', err);
+    logger.error('[Autopilot Worker] Initial cycle error:', err);
   });
 
   // Then run periodically
   workerInterval = setInterval(() => {
     runAutopilotCycle().catch(err => {
-      console.error('[Autopilot Worker] Periodic cycle error:', err);
+      logger.error('[Autopilot Worker] Periodic cycle error:', err);
     });
   }, intervalMs);
 
-  console.log('[Autopilot Worker] Started successfully');
+  logger.info('[Autopilot Worker] Started successfully');
 }
 
 /**
@@ -163,14 +164,14 @@ export function startAutopilotWorker(intervalMinutes = 5) {
  */
 export function stopAutopilotWorker() {
   if (!workerInterval) {
-    console.log('[Autopilot Worker] Not running');
+    logger.info('[Autopilot Worker] Not running');
     return;
   }
 
   clearInterval(workerInterval);
   workerInterval = null;
 
-  console.log('[Autopilot Worker] Stopped');
+  logger.info('[Autopilot Worker] Stopped');
 }
 
 /**

@@ -1,6 +1,7 @@
 import http from 'http';
+import { logger } from './services/logger.js';
 
-console.log('🧪 Testing Authorization Header Forwarding\n');
+logger.info('🧪 Testing Authorization Header Forwarding\n');
 
 // Simulate request WITH Authorization header
 const options = {
@@ -13,9 +14,9 @@ const options = {
   }
 };
 
-console.log('📤 Sending request to backend (direct, bypassing Nginx):');
-console.log('   URL: http://localhost:5002/api/health');
-console.log('   Header: Authorization: Bearer test-token-123\n');
+logger.info('📤 Sending request to backend (direct, bypassing Nginx):');
+logger.info('   URL: http://localhost:5002/api/health');
+logger.info('   Header: Authorization: Bearer test-token-123\n');
 
 const req = http.request(options, (res) => {
   let data = '';
@@ -25,28 +26,28 @@ const req = http.request(options, (res) => {
   });
   
   res.on('end', () => {
-    console.log('📥 Response received:');
-    console.log('   Status:', res.statusCode);
-    console.log('   Body:', data);
+    logger.info('📥 Response received:');
+    logger.info('   Status:', res.statusCode);
+    logger.info('   Body:', data);
     
     if (res.statusCode === 200) {
-      console.log('\n✅ Backend is accepting requests directly');
-      console.log('✅ No auth required for /health (expected)\n');
+      logger.info('\n✅ Backend is accepting requests directly');
+      logger.info('✅ No auth required for /health (expected)\n');
       
-      console.log('🎯 Next: Test from browser with real token');
-      console.log('   1. Open https://titan.zala.ir');
-      console.log('   2. Login');
-      console.log('   3. DevTools → Network → POST /api/ai-agents/.../run');
-      console.log('   4. Check Request Headers for: Authorization: Bearer ...');
-      console.log('   5. Check Response status (should be 200, not 401)\n');
+      logger.info('🎯 Next: Test from browser with real token');
+      logger.info('   1. Open https://titan.zala.ir');
+      logger.info('   2. Login');
+      logger.info('   3. DevTools → Network → POST /api/ai-agents/.../run');
+      logger.info('   4. Check Request Headers for: Authorization: Bearer ...');
+      logger.info('   5. Check Response status (should be 200, not 401)\n');
     } else {
-      console.log('\n❌ Unexpected status code');
+      logger.info('\n❌ Unexpected status code');
     }
   });
 });
 
 req.on('error', (err) => {
-  console.error('❌ Request failed:', err.message);
+  logger.error('❌ Request failed:', err.message);
 });
 
 req.end();

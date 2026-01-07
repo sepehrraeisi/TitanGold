@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { aiService } from './ai.js';
 import { messageQueue } from './messageQueue.js';
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 import { 
   pickProviderInstance, 
   recordProviderSuccess, 
@@ -68,7 +69,7 @@ async function retry(fn, {
       if (!retryable || i === attempts) throw e;
 
       const delay = Math.min(maxDelayMs, baseDelayMs * (i === 1 ? 1 : i === 2 ? 3 : 7));
-      console.warn(`⚠️ ${label}: attempt ${i} failed; retrying in ${delay}ms. reason="${e.message}"`);
+      logger.warn(`⚠️ ${label}: attempt ${i} failed; retrying in ${delay}ms. reason="${e.message}"`);
       await sleep(delay);
     }
   }
@@ -136,7 +137,7 @@ async function callProviderWithFailover(provider, callFn, { maxRetries = 2 } = {
       await recordProviderSuccess(inst.id);
       return { ok: true, provider, instanceId: inst.id, result };
     } catch (err) {
-      console.log(`⚠️ Provider ${provider} attempt ${attempt + 1} failed:`, err.message);
+      logger.info(`⚠️ Provider ${provider} attempt ${attempt + 1} failed:`, err.message);
       lastErr = err;
       await recordProviderFailure(inst.id, err);
       // Circuit breaker applied, continue to next key
@@ -203,7 +204,7 @@ async function callOpenAICompatible(inst, prompt, systemInstruction) {
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        console.error(`Provider ${inst.provider} API error:`, res.status, text);
+        logger.error(`Provider ${inst.provider} API error:`, res.status, text);
         return null;
       }
 
@@ -213,7 +214,7 @@ async function callOpenAICompatible(inst, prompt, systemInstruction) {
 
     return result;
   } catch (e) {
-    console.error(`${inst.provider} call failed:`, e.message);
+    logger.error(`${inst.provider} call failed:`, e.message);
     return null;
   } finally {
     orchSem.release();
@@ -258,7 +259,7 @@ async function callGeminiWithInstance(inst, prompt, systemInstruction) {
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        console.error('Gemini API error:', res.status, text);
+        logger.error('Gemini API error:', res.status, text);
         return null;
       }
 
@@ -268,7 +269,7 @@ async function callGeminiWithInstance(inst, prompt, systemInstruction) {
 
     return result;
   } catch (e) {
-    console.error('Gemini call failed:', e.message);
+    logger.error('Gemini call failed:', e.message);
     return null;
   } finally {
     orchSem.release();
@@ -308,7 +309,7 @@ async function callClaudeWithInstance(inst, prompt, systemInstruction) {
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        console.error('Claude API error:', res.status, text);
+        logger.error('Claude API error:', res.status, text);
         return null;
       }
 
@@ -318,7 +319,7 @@ async function callClaudeWithInstance(inst, prompt, systemInstruction) {
 
     return result;
   } catch (e) {
-    console.error('Claude call failed:', e.message);
+    logger.error('Claude call failed:', e.message);
     return null;
   } finally {
     orchSem.release();
@@ -347,7 +348,7 @@ function parseDecisionJson(raw) {
       return JSON.parse(raw.slice(start, end + 1));
     }
   } catch (e) {
-    console.error('Artemis orchestrator JSON parse error:', e, 'raw:', raw);
+    logger.error('Artemis orchestrator JSON parse error:', e, 'raw:', raw);
   }
   return null;
 }
@@ -479,11 +480,11 @@ You MUST return ONLY JSON with this schema:
   );
 
   if (availableProviders.length === 0) {
-    console.error('[getMixtureDecision] No healthy providers available');
+    logger.error('[getMixtureDecision] No healthy providers available');
     return null;
   }
 
-  console.log(`[getMixtureDecision] Calling ${availableProviders.length} providers with quorum=${quorum}`);
+  logger.info(`[getMixtureDecision] Calling ${availableProviders.length} providers with quorum=${quorum}`);
 
   // Parallel calls با callProviderWithFailover
   const calls = availableProviders.map(async provider => {
@@ -521,12 +522,12 @@ You MUST return ONLY JSON with this schema:
   const degraded = !ready && results.length > 0;
 
   if (results.length === 0) {
-    console.error('[getMixtureDecision] All providers failed');
+    logger.error('[getMixtureDecision] All providers failed');
     return null;
   }
 
   if (degraded) {
-    console.warn(`[getMixtureDecision] DEGRADED MODE: ${results.length}/${quorum} providers responded (need ${quorum})`);
+    logger.warn(`[getMixtureDecision] DEGRADED MODE: ${results.length}/${quorum} providers responded (need ${quorum})`);
   }
 
   // Aggregate decisions
@@ -594,7 +595,7 @@ export async function coordinateAgents(userId, context = {}) {
     );
     activeAgents = result.rows || [];
   } catch (error) {
-    console.warn('⚠️ Could not fetch agents from database, using default list:', error.message);
+    logger.warn('⚠️ Could not fetch agents from database, using default list:', error.message);
     // Fallback: use default agent IDs
     activeAgents = Array.from({ length: 15 }, (_, i) => ({
       id: `agent-${i + 1}`,
@@ -621,7 +622,7 @@ export async function coordinateAgents(userId, context = {}) {
     const agentGroup = executionPlan.sequential[layerIndex];
     const layerStartTime = Date.now();
     
-    console.log(`📊 Executing agent layer ${layerIndex + 1}/${executionPlan.sequential.length} with ${agentGroup.length} agents`);
+    logger.info(`📊 Executing agent layer ${layerIndex + 1}/${executionPlan.sequential.length} with ${agentGroup.length} agents`);
     
     // Execute all agents in this layer in parallel
     const groupResults = await Promise.allSettled(
@@ -635,7 +636,7 @@ export async function coordinateAgents(userId, context = {}) {
         agentResults[agent.id] = result.value;
         executionMetrics.agentsExecuted++;
       } else {
-        console.error(`❌ Agent ${agent.id} failed:`, result.reason);
+        logger.error(`❌ Agent ${agent.id} failed:`, result.reason);
         agentResults[agent.id] = {
           agentId: agent.id,
           error: result.reason?.message || 'Unknown error',
@@ -647,14 +648,14 @@ export async function coordinateAgents(userId, context = {}) {
     
     const layerExecutionTime = Date.now() - layerStartTime;
     executionMetrics.totalExecutionTime += layerExecutionTime;
-    console.log(`✅ Layer ${layerIndex + 1} completed in ${layerExecutionTime}ms`);
+    logger.info(`✅ Layer ${layerIndex + 1} completed in ${layerExecutionTime}ms`);
   }
 
   // Execute parallel agents (independent agents) - all at once
   if (executionPlan.parallel.length > 0) {
     const parallelStartTime = Date.now();
     const parallelAgents = executionPlan.parallel.flat();
-    console.log(`📊 Executing ${parallelAgents.length} independent agents in parallel`);
+    logger.info(`📊 Executing ${parallelAgents.length} independent agents in parallel`);
     
     const parallelResults = await Promise.allSettled(
       parallelAgents.map(agent => 
@@ -668,7 +669,7 @@ export async function coordinateAgents(userId, context = {}) {
         agentResults[agent.id] = result.value;
         executionMetrics.agentsExecuted++;
       } else {
-        console.error(`❌ Agent ${agent.id} failed:`, result.reason);
+        logger.error(`❌ Agent ${agent.id} failed:`, result.reason);
         agentResults[agent.id] = {
           agentId: agent.id,
           error: result.reason?.message || 'Unknown error',
@@ -680,7 +681,7 @@ export async function coordinateAgents(userId, context = {}) {
     
     const parallelExecutionTime = Date.now() - parallelStartTime;
     executionMetrics.totalExecutionTime += parallelExecutionTime;
-    console.log(`✅ Parallel agents completed in ${parallelExecutionTime}ms`);
+    logger.info(`✅ Parallel agents completed in ${parallelExecutionTime}ms`);
   }
 
   // Aggregate all results
@@ -766,7 +767,7 @@ async function executeAgent(agent, symbol, timeframe, useMessageQueue) {
       return await callAgentAPI(agent.id, symbol, timeframe);
     }
   } catch (error) {
-    console.error(`Error executing agent ${agent.id}:`, error);
+    logger.error(`Error executing agent ${agent.id}:`, error);
     return {
       agentId: agent.id,
       error: error.message,
@@ -873,7 +874,7 @@ export async function scheduleAutomaticTraining(userId = null) {
       );
       agentsNeedingTraining = result.rows || [];
     } catch (error) {
-      console.warn('⚠️ Could not fetch agents for training:', error.message);
+      logger.warn('⚠️ Could not fetch agents for training:', error.message);
       return { scheduled: false, reason: 'Could not fetch agents' };
     }
     
@@ -900,7 +901,7 @@ export async function scheduleAutomaticTraining(userId = null) {
         );
         trainingSessions.push(sessionResult.rows[0]);
       } catch (error) {
-        console.error(`Failed to schedule training for agent ${agent.id}:`, error);
+        logger.error(`Failed to schedule training for agent ${agent.id}:`, error);
       }
     }
     
@@ -914,7 +915,7 @@ export async function scheduleAutomaticTraining(userId = null) {
       agents: agentsNeedingTraining.map(a => a.name),
     };
   } catch (error) {
-    console.error('Error in scheduleAutomaticTraining:', error);
+    logger.error('Error in scheduleAutomaticTraining:', error);
     return { scheduled: false, reason: error.message };
   }
 }
@@ -969,7 +970,7 @@ export async function triggerTrainingSession(agentIds = null, mode = 'supervised
         );
         sessions.push(sessionResult.rows[0]);
       } catch (error) {
-        console.error(`Failed to create training session for ${agent.id}:`, error);
+        logger.error(`Failed to create training session for ${agent.id}:`, error);
       }
     }
     
@@ -979,7 +980,7 @@ export async function triggerTrainingSession(agentIds = null, mode = 'supervised
       sessions,
     };
   } catch (error) {
-    console.error('Error triggering training session:', error);
+    logger.error('Error triggering training session:', error);
     throw error;
   }
 }

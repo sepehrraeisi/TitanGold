@@ -1,5 +1,6 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { logger } from './services/logger.js';
 
 dotenv.config();
 
@@ -15,21 +16,21 @@ const pool = new Pool({
 
 async function checkAgents() {
   try {
-    console.log('\n📊 Checking ai_agents table...\n');
+    logger.info('\n📊 Checking ai_agents table...\n');
     
     const result = await pool.query(
       'SELECT id, agent_key, name, type, status, is_enabled FROM ai_agents ORDER BY agent_key'
     );
     
-    console.log(`Total agents: ${result.rows.length}`);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    logger.info(`Total agents: ${result.rows.length}`);
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     result.rows.forEach(agent => {
-      console.log(`${agent.agent_key.padEnd(20)} | ${agent.name.padEnd(30)} | ${agent.status.padEnd(10)} | enabled: ${agent.is_enabled}`);
+      logger.info(`${agent.agent_key.padEnd(20)} | ${agent.name.padEnd(30)} | ${agent.status.padEnd(10)} | enabled: ${agent.is_enabled}`);
     });
     
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    logger.error('❌ Error:', error.message);
   } finally {
     await pool.end();
   }

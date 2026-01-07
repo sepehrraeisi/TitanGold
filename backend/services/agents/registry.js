@@ -4,6 +4,7 @@
 
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { logger } from '../../services/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -58,10 +59,10 @@ export async function getAgentService(agent_key) {
     // Cache loaded agent
     agents.set(agent_key, agentModule);
     
-    console.log(`✅ Loaded agent: ${agent_key}`);
+    logger.info(`✅ Loaded agent: ${agent_key}`);
     return agentModule;
   } catch (error) {
-    console.error(`❌ Failed to load agent ${agent_key}:`, error.message);
+    logger.error(`❌ Failed to load agent ${agent_key}:`, error.message);
     throw new Error(`Failed to load agent ${agent_key}: ${error.message}`);
   }
 }
@@ -84,7 +85,7 @@ function validateAgentInterface(agent_key, agentModule) {
     }
   }
   
-  console.log(`✅ Validated agent interface: ${agent_key}`);
+  logger.info(`✅ Validated agent interface: ${agent_key}`);
 }
 
 /**
@@ -155,13 +156,13 @@ export function hasAgent(agent_key) {
 
 // Pre-warm critical agents (optional)
 export async function prewarmAgents(keys = ['technical', 'risk']) {
-  console.log(`🔥 Pre-warming agents: ${keys.join(', ')}`);
+  logger.info(`🔥 Pre-warming agents: ${keys.join(', ')}`);
   
   for (const key of keys) {
     try {
       await getAgentService(key);
     } catch (error) {
-      console.warn(`⚠️  Failed to pre-warm ${key}:`, error.message);
+      logger.warn(`⚠️  Failed to pre-warm ${key}:`, error.message);
     }
   }
 }

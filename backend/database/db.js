@@ -1,6 +1,7 @@
 import pkg from 'pg';
 const { Pool } = pkg;
 import dotenv from 'dotenv';
+import { logger } from '../services/logger.js';
 
 dotenv.config();
 
@@ -61,7 +62,7 @@ const CONNECTION_LEAK_THRESHOLD = parseInt(process.env.DB_POOL_LEAK_THRESHOLD) |
 
 // Test database connection
 pool.on('connect', (client) => {
-  console.log('✅ Connected to PostgreSQL database');
+  logger.info('✅ Connected to PostgreSQL database');
   updatePoolMetrics();
 });
 
@@ -78,7 +79,7 @@ pool.on('release', (client) => {
   if (acquireTime) {
     const holdTime = Date.now() - acquireTime;
     if (holdTime > CONNECTION_LEAK_THRESHOLD) {
-      console.warn(`⚠️  Connection leak detected: held for ${holdTime}ms (threshold: ${CONNECTION_LEAK_THRESHOLD}ms)`);
+      logger.warn(`⚠️  Connection leak detected: held for ${holdTime}ms (threshold: ${CONNECTION_LEAK_THRESHOLD}ms)`);
     }
     connectionAcquireTimes.delete(client);
   }
@@ -91,7 +92,7 @@ pool.on('remove', (client) => {
 });
 
 pool.on('error', (err) => {
-  console.error('❌ Unexpected error on idle client', err);
+  logger.error('❌ Unexpected error on idle client', err);
   updatePoolMetrics();
   process.exit(-1);
 });
@@ -102,10 +103,10 @@ export const query = async (text, params) => {
   try {
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
-    console.log('📊 Query executed:', { text, duration, rows: res.rowCount });
+    logger.info('📊 Query executed:', { text, duration, rows: res.rowCount });
     return res;
   } catch (error) {
-    console.error('❌ Query error:', error);
+    logger.error('❌ Query error:', error);
     throw error;
   }
 };
@@ -173,9 +174,9 @@ export const checkConnectionLeaks = () => {
 
 // Graceful shutdown (DATABASE-005)
 export const shutdownPool = async () => {
-  console.log('🔄 Shutting down database connection pool...');
+  logger.info('🔄 Shutting down database connection pool...');
   await pool.end();
-  console.log('✅ Database connection pool closed');
+  logger.info('✅ Database connection pool closed');
 };
 
 // Log pool metrics periodically (DATABASE-005)
@@ -183,11 +184,11 @@ if (process.env.DB_POOL_METRICS_INTERVAL) {
   const interval = parseInt(process.env.DB_POOL_METRICS_INTERVAL);
   setInterval(() => {
     const metrics = getPoolMetrics();
-    console.log('📊 Pool Metrics:', metrics);
+    logger.info('📊 Pool Metrics:', metrics);
     
     const leakStatus = checkConnectionLeaks();
     if (leakStatus.hasLeaks) {
-      console.warn('⚠️  Connection Leaks:', leakStatus);
+      logger.warn('⚠️  Connection Leaks:', leakStatus);
     }
   }, interval);
 }

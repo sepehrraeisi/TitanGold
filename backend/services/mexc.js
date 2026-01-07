@@ -2,6 +2,7 @@ import ccxt from 'ccxt';
 import dotenv from 'dotenv';
 import { query } from '../database/db.js';
 import { mexcLimiter } from './rateLimiter.js';
+import { logger } from '../services/logger.js';
 
 dotenv.config();
 
@@ -25,7 +26,7 @@ class MexcService {
          LIMIT 1`,
         [userId]
       ).catch(err => {
-        console.warn('⚠️ Error querying exchange_connections table:', err);
+        logger.warn('⚠️ Error querying exchange_connections table:', err);
         return { rows: [] };
       });
 
@@ -40,7 +41,7 @@ class MexcService {
           throw error;
         }
 
-        console.log('📝 Using MEXC API keys from environment variables');
+        logger.info('📝 Using MEXC API keys from environment variables');
         this.exchange = new ccxt.mexc({
           apiKey,
           secret,
@@ -50,7 +51,7 @@ class MexcService {
         });
       } else {
         const connection = result.rows[0];
-        console.log('📝 Using MEXC API keys from database');
+        logger.info('📝 Using MEXC API keys from database');
         this.exchange = new ccxt.mexc({
           apiKey: connection.api_key,
           secret: connection.api_secret,
@@ -63,7 +64,7 @@ class MexcService {
       this.markets = null; // Reset markets cache
       return this.exchange;
     } catch (error) {
-      console.error('❌ Error initializing MEXC exchange:', error);
+      logger.error('❌ Error initializing MEXC exchange:', error);
       
       // If it's a configuration error, re-throw it
       if (error.code === 'MEXC_NOT_CONFIGURED') {
@@ -75,7 +76,7 @@ class MexcService {
       const secret = process.env.MEXC_SECRET_KEY;
       
       if (apiKey && secret) {
-        console.log('📝 Fallback: Using MEXC API keys from environment variables');
+        logger.info('📝 Fallback: Using MEXC API keys from environment variables');
         this.exchange = new ccxt.mexc({
           apiKey,
           secret,
@@ -176,7 +177,7 @@ class MexcService {
       true, // use cache
       60000 // 1 minute cache for prices
     ).catch(error => {
-      console.error('MEXC fetchPrices error:', error);
+      logger.error('MEXC fetchPrices error:', error);
       throw error;
     });
   }
@@ -187,7 +188,7 @@ class MexcService {
       const balance = await this.exchange.fetchBalance();
       return balance;
     } catch (error) {
-      console.error('MEXC getBalance error:', error);
+      logger.error('MEXC getBalance error:', error);
       throw error;
     }
   }
@@ -198,7 +199,7 @@ class MexcService {
       const order = await this.exchange.createOrder(symbol, type, side, amount, price);
       return order;
     } catch (error) {
-      console.error('MEXC createOrder error:', error);
+      logger.error('MEXC createOrder error:', error);
       throw error;
     }
   }
@@ -209,7 +210,7 @@ class MexcService {
       const ohlcv = await this.exchange.fetchOHLCV(symbol, timeframe, undefined, limit);
       return ohlcv;
     } catch (error) {
-      console.error(`❌ MEXC fetchOHLCV error for ${symbol}:`, error);
+      logger.error(`❌ MEXC fetchOHLCV error for ${symbol}:`, error);
       // If it's a configuration error, re-throw it
       if (error.code === 'MEXC_NOT_CONFIGURED') {
         throw error;
@@ -225,7 +226,7 @@ class MexcService {
       const ticker = await this.exchange.fetchTicker(symbol);
       return ticker;
     } catch (error) {
-      console.error(`❌ MEXC fetchTicker error for ${symbol}:`, error);
+      logger.error(`❌ MEXC fetchTicker error for ${symbol}:`, error);
       // If it's a configuration error, re-throw it
       if (error.code === 'MEXC_NOT_CONFIGURED') {
         throw error;
@@ -247,7 +248,7 @@ class MexcService {
         }))
       };
     } catch (error) {
-      console.error('MEXC getExchangeInfo error:', error);
+      logger.error('MEXC getExchangeInfo error:', error);
       return { symbols: [] };
     }
   }
@@ -288,7 +289,7 @@ class MexcService {
       const ticker = await futuresExchange.fetchTicker(symbol);
       return ticker;
     } catch (error) {
-      console.error(`MEXC fetchPerpetualTicker error for ${symbol}:`, error);
+      logger.error(`MEXC fetchPerpetualTicker error for ${symbol}:`, error);
       return null;
     }
   }
@@ -313,7 +314,7 @@ class MexcService {
         timestamp: orderBook.timestamp || Date.now(),
       };
     } catch (error) {
-      console.error(`MEXC fetchOrderBook error for ${symbol}:`, error);
+      logger.error(`MEXC fetchOrderBook error for ${symbol}:`, error);
       if (error.code === 'MEXC_NOT_CONFIGURED') {
         throw error;
       }
@@ -335,7 +336,7 @@ class MexcService {
       const result = await this.exchange.cancelOrder(orderId, symbol);
       return result;
     } catch (error) {
-      console.error(`MEXC cancelOrder error for ${orderId}:`, error);
+      logger.error(`MEXC cancelOrder error for ${orderId}:`, error);
       if (error.code === 'MEXC_NOT_CONFIGURED') {
         throw error;
       }
@@ -364,7 +365,7 @@ class MexcService {
         exchangeOrderId: order.id,
       }));
     } catch (error) {
-      console.error(`MEXC fetchOpenOrders error:`, error);
+      logger.error(`MEXC fetchOpenOrders error:`, error);
       if (error.code === 'MEXC_NOT_CONFIGURED') {
         throw error;
       }

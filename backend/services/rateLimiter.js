@@ -8,6 +8,7 @@
  * - LRU eviction: max 100 entries
  */
 
+import { logger } from '../services/logger.js';
 class RateLimiter {
   constructor(config = {}) {
     this.maxRequests = config.maxRequests || 100; // Max requests per window
@@ -77,7 +78,7 @@ class RateLimiter {
     this.backoffDelays.set(key, attempts + 1);
     
     const backoffMs = this.calculateBackoff(attempts);
-    console.log(`⏱️  Rate limit hit for ${key}, backing off for ${backoffMs}ms (attempt ${attempts + 1})`);
+    logger.info(`⏱️  Rate limit hit for ${key}, backing off for ${backoffMs}ms (attempt ${attempts + 1})`);
     
     return backoffMs;
   }
@@ -98,7 +99,7 @@ class RateLimiter {
   async waitForBackoff(key) {
     const delay = this.getBackoffDelay(key);
     if (delay > 0) {
-      console.log(`⏳ Waiting ${delay}ms before retry (${key})`);
+      logger.info(`⏳ Waiting ${delay}ms before retry (${key})`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -129,7 +130,7 @@ class RateLimiter {
       if (cached && Date.now() - cached.timestamp < cacheTtl) {
         // Update LRU access order
         this.updateLRU(key);
-        // console.log(`✅ Cache hit for ${key} (age: ${Math.floor((Date.now() - cached.timestamp) / 1000)}s)`);
+        // logger.info(`✅ Cache hit for ${key} (age: ${Math.floor((Date.now() - cached.timestamp) / 1000)}s)`);
         return cached.data;
       }
     }
@@ -173,7 +174,7 @@ class RateLimiter {
       const lruKey = this.cacheAccessOrder.shift();
       if (lruKey && this.cache.has(lruKey)) {
         this.cache.delete(lruKey);
-        // console.log(`🗑️ LRU evicted: ${lruKey}`);
+        // logger.info(`🗑️ LRU evicted: ${lruKey}`);
       }
     }
     
@@ -245,7 +246,7 @@ class RateLimiter {
       }
     }
     if (cleanedCount > 0) {
-      console.log(`🧹 Cleaned ${cleanedCount} expired cache entries`);
+      logger.info(`🧹 Cleaned ${cleanedCount} expired cache entries`);
     }
   }
 

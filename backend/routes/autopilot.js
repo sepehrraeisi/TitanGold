@@ -14,6 +14,7 @@ import { authenticate } from '../middleware/auth.js';
 import { rateLimit } from 'express-rate-limit';
 import { query } from '../database/db.js';
 import autopilotService from '../services/autopilot.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -47,7 +48,7 @@ const requireAdmin = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error('[Autopilot] Admin check failed:', error);
+    logger.error('[Autopilot] Admin check failed:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -103,7 +104,7 @@ router.get('/status', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Autopilot] Error fetching status:', error);
+    logger.error('[Autopilot] Error fetching status:', error);
     res.status(500).json({ error: 'Failed to fetch autopilot status' });
   }
 });
@@ -139,7 +140,7 @@ router.post('/enable', async (req, res) => {
        WHERE id = (SELECT id FROM artemis_state ORDER BY created_at DESC LIMIT 1)`
     );
 
-    console.log(`[Autopilot] Enabled by user ${req.user.id}`);
+    logger.info(`[Autopilot] Enabled by user ${req.user.id}`);
 
     res.json({
       success: true,
@@ -149,7 +150,7 @@ router.post('/enable', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Autopilot] Error enabling:', error);
+    logger.error('[Autopilot] Error enabling:', error);
     res.status(500).json({ error: 'Failed to enable autopilot' });
   }
 });
@@ -167,7 +168,7 @@ router.post('/disable', async (req, res) => {
        WHERE id = (SELECT id FROM artemis_state ORDER BY created_at DESC LIMIT 1)`
     );
 
-    console.log(`[Autopilot] Disabled by user ${req.user.id}`);
+    logger.info(`[Autopilot] Disabled by user ${req.user.id}`);
 
     res.json({
       success: true,
@@ -177,7 +178,7 @@ router.post('/disable', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Autopilot] Error disabling:', error);
+    logger.error('[Autopilot] Error disabling:', error);
     res.status(500).json({ error: 'Failed to disable autopilot' });
   }
 });
@@ -225,7 +226,7 @@ router.get('/suggestions', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Autopilot] Error fetching suggestions:', error);
+    logger.error('[Autopilot] Error fetching suggestions:', error);
     res.status(500).json({ error: 'Failed to fetch suggestions' });
   }
 });
@@ -241,7 +242,7 @@ router.post('/suggestions/:id/approve', async (req, res) => {
     // Apply suggestion (includes human approval tracking)
     const result = await autopilotService.applySuggestion(id, req.user.id);
 
-    console.log(`[Autopilot] Suggestion ${id} approved by user ${req.user.id}`);
+    logger.info(`[Autopilot] Suggestion ${id} approved by user ${req.user.id}`);
 
     res.json({
       success: true,
@@ -250,7 +251,7 @@ router.post('/suggestions/:id/approve', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Autopilot] Error approving suggestion:', error);
+    logger.error('[Autopilot] Error approving suggestion:', error);
     
     if (error.message.includes('not found')) {
       return res.status(404).json({ error: 'Suggestion not found' });
@@ -275,7 +276,7 @@ router.post('/suggestions/:id/reject', async (req, res) => {
 
     await autopilotService.rejectSuggestion(id, req.user.id, reason);
 
-    console.log(`[Autopilot] Suggestion ${id} rejected by user ${req.user.id}`);
+    logger.info(`[Autopilot] Suggestion ${id} rejected by user ${req.user.id}`);
 
     res.json({
       success: true,
@@ -285,7 +286,7 @@ router.post('/suggestions/:id/reject', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Autopilot] Error rejecting suggestion:', error);
+    logger.error('[Autopilot] Error rejecting suggestion:', error);
     res.status(500).json({ error: 'Failed to reject suggestion' });
   }
 });
@@ -301,7 +302,7 @@ router.post('/suggestions/:id/rollback', async (req, res) => {
     // Rollback (always restores old_config)
     const result = await autopilotService.rollbackSuggestion(id);
 
-    console.log(`[Autopilot] Suggestion ${id} rolled back by user ${req.user.id}`);
+    logger.info(`[Autopilot] Suggestion ${id} rolled back by user ${req.user.id}`);
 
     res.json({
       success: true,
@@ -311,7 +312,7 @@ router.post('/suggestions/:id/rollback', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Autopilot] Error rolling back suggestion:', error);
+    logger.error('[Autopilot] Error rolling back suggestion:', error);
 
     if (error.message.includes('not found')) {
       return res.status(404).json({ error: 'Suggestion not found' });
@@ -333,7 +334,7 @@ router.post('/run-once', async (req, res) => {
   try {
     const { hours_window = 24 } = req.body;
 
-    console.log(`[Autopilot] Manual run triggered by user ${req.user.id}`);
+    logger.info(`[Autopilot] Manual run triggered by user ${req.user.id}`);
 
     // Check circuit breaker
     const statusResult = await query(
@@ -376,7 +377,7 @@ router.post('/run-once', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Autopilot] Error in manual run:', error);
+    logger.error('[Autopilot] Error in manual run:', error);
 
     // Increment fail count
     await query(
@@ -384,7 +385,7 @@ router.post('/run-once', async (req, res) => {
        SET autopilot_fail_count = autopilot_fail_count + 1,
            updated_at = NOW()
        WHERE id = (SELECT id FROM artemis_state ORDER BY created_at DESC LIMIT 1)`
-    ).catch(err => console.error('[Autopilot] Failed to update fail_count:', err));
+    ).catch(err => logger.error('[Autopilot] Failed to update fail_count:', err));
 
     res.status(500).json({ error: 'Autopilot cycle failed' });
   }

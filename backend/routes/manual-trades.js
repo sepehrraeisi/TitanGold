@@ -3,6 +3,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import { mexcService } from '../services/mexc.js';
 import { manualTradingService } from '../services/manualTrading.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -10,19 +11,19 @@ const router = express.Router();
 router.get('/page-data', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log(`📊 Fetching manual trading page data for user ${userId}`);
+    logger.info(`📊 Fetching manual trading page data for user ${userId}`);
     
     // Try to get data - will use defaults if MEXC is not configured or DB is unavailable
     const data = await manualTradingService.getPageData(userId);
     
-    console.log(`✅ Manual trading page data fetched successfully`);
+    logger.info(`✅ Manual trading page data fetched successfully`);
     res.json(data);
   } catch (error) {
-    console.error('❌ Failed to fetch manual trading page data:', error);
+    logger.error('❌ Failed to fetch manual trading page data:', error);
     
     // If database is unavailable, return default data structure
     if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED')) {
-      console.warn('⚠️ Database unavailable, returning default manual trading data');
+      logger.warn('⚠️ Database unavailable, returning default manual trading data');
       return res.json({
         stats: manualTradingService.getDefaultStats(),
         chart: [],
@@ -98,7 +99,7 @@ router.post('/execute', authenticate, authorize('admin', 'trader'), async (req, 
 
     res.json(result);
   } catch (error) {
-    console.error('Failed to execute quick trade:', error);
+    logger.error('Failed to execute quick trade:', error);
     res.status(500).json({ error: error.message || 'Failed to execute trade' });
   }
 });
@@ -112,7 +113,7 @@ router.post('/strategies/:strategyId/toggle', authenticate, authorize('admin', '
     const result = await manualTradingService.toggleStrategy(userId, strategyId);
     res.json(result);
   } catch (error) {
-    console.error('Failed to toggle strategy:', error);
+    logger.error('Failed to toggle strategy:', error);
     res.status(500).json({ error: 'Failed to toggle strategy' });
   }
 });
@@ -133,7 +134,7 @@ router.get('/recent', authenticate, async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
-    console.error('Failed to fetch recent trades:', error);
+    logger.error('Failed to fetch recent trades:', error);
     res.status(500).json({ error: 'Failed to fetch recent trades' });
   }
 });
@@ -157,7 +158,7 @@ router.get('/price/:pair', authenticate, async (req, res) => {
       timestamp: Date.now(),
     });
   } catch (error) {
-    console.error('Failed to fetch price from MEXC:', error);
+    logger.error('Failed to fetch price from MEXC:', error);
     res.status(500).json({ error: error.message || 'Failed to fetch price. Please ensure MEXC API keys are configured.' });
   }
 });
@@ -169,7 +170,7 @@ router.get('/balance', authenticate, async (req, res) => {
     const balance = await manualTradingService.getBalance(userId);
     res.json(balance);
   } catch (error) {
-    console.error('Failed to fetch balance:', error);
+    logger.error('Failed to fetch balance:', error);
     res.status(500).json({ error: 'Failed to fetch balance' });
   }
 });
@@ -181,7 +182,7 @@ router.get('/orderbook/:pair', authenticate, async (req, res) => {
     const { pair } = req.params;
     const limit = parseInt(req.query.limit) || 20;
     
-    console.log(`📊 Order book requested: ${pair} (userId: ${userId}, limit: ${limit})`);
+    logger.info(`📊 Order book requested: ${pair} (userId: ${userId}, limit: ${limit})`);
     
     // Check user's trading mode
     const modeResult = await query(
@@ -190,7 +191,7 @@ router.get('/orderbook/:pair', authenticate, async (req, res) => {
     );
     const mode = modeResult.rows[0]?.mode || 'demo';
     
-    console.log(`🎮 User mode: ${mode} (rows: ${modeResult.rows.length})`);
+    logger.info(`🎮 User mode: ${mode} (rows: ${modeResult.rows.length})`);
     
     // In demo mode, return simulated order book
     if (mode === 'demo') {
@@ -204,7 +205,7 @@ router.get('/orderbook/:pair', authenticate, async (req, res) => {
         Math.random() * 10
       ]);
       
-      console.log(`✅ Returning simulated order book (${bids.length} bids, ${asks.length} asks)`);
+      logger.info(`✅ Returning simulated order book (${bids.length} bids, ${asks.length} asks)`);
       
       return res.json({
         bids,
@@ -215,11 +216,11 @@ router.get('/orderbook/:pair', authenticate, async (req, res) => {
     }
     
     // Live mode: fetch from MEXC
-    console.log(`📡 Fetching from MEXC (live mode)...`);
+    logger.info(`📡 Fetching from MEXC (live mode)...`);
     const orderBook = await mexcService.fetchOrderBook(userId, pair, limit);
     res.json(orderBook);
   } catch (error) {
-    console.error('❌ Failed to fetch order book:', error);
+    logger.error('❌ Failed to fetch order book:', error);
     // Return empty order book on error instead of 500
     res.json({
       bids: [],
@@ -255,7 +256,7 @@ router.post('/order/advanced', authenticate, authorize('admin', 'trader'), async
 
     res.json(result);
   } catch (error) {
-    console.error('Failed to place advanced order:', error);
+    logger.error('Failed to place advanced order:', error);
     res.status(500).json({ error: error.message || 'Failed to place order' });
   }
 });
@@ -268,7 +269,7 @@ router.get('/orders/open', authenticate, async (req, res) => {
     const orders = await manualTradingService.getOpenOrders(userId, pair);
     res.json(orders);
   } catch (error) {
-    console.error('Failed to fetch open orders:', error);
+    logger.error('Failed to fetch open orders:', error);
     res.json([]); // Return empty array on error
   }
 });
@@ -281,7 +282,7 @@ router.delete('/orders/:orderId', authenticate, authorize('admin', 'trader'), as
     await manualTradingService.cancelOrder(userId, orderId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Failed to cancel order:', error);
+    logger.error('Failed to cancel order:', error);
     res.status(500).json({ error: error.message || 'Failed to cancel order' });
   }
 });

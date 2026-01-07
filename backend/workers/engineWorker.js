@@ -8,6 +8,7 @@ import { telegramService } from '../services/telegram.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { logger } from '../services/logger.js';
 
 dotenv.config();
 
@@ -50,20 +51,20 @@ class EngineWorker {
    */
   async start() {
     if (!ENGINE_ENABLED) {
-      console.log('⏸️ Engine is disabled (ENGINE_ENABLED=false). Exiting safely.');
+      logger.info('⏸️ Engine is disabled (ENGINE_ENABLED=false). Exiting safely.');
       return;
     }
 
     if (this.isRunning) {
-      console.log('⚠️ Engine is already running');
+      logger.info('⚠️ Engine is already running');
       return;
     }
 
     this.isRunning = true;
     this.currentBackoff = 0;
-    console.log('🚀 Engine Worker starting...');
-    console.log(`   Tick interval: ${ENGINE_TICK_INTERVAL_MS}ms`);
-    console.log(`   Max backoff: ${ENGINE_MAX_BACKOFF_MS}ms`);
+    logger.info('🚀 Engine Worker starting...');
+    logger.info(`   Tick interval: ${ENGINE_TICK_INTERVAL_MS}ms`);
+    logger.info(`   Max backoff: ${ENGINE_MAX_BACKOFF_MS}ms`);
 
     // Start the main loop
     this.runCycle();
@@ -75,7 +76,7 @@ class EngineWorker {
   async stop() {
     this.isRunning = false;
     this.updateHeartbeat();
-    console.log('🛑 Engine Worker stopped');
+    logger.info('🛑 Engine Worker stopped');
   }
 
   /**
@@ -86,7 +87,7 @@ class EngineWorker {
       try {
         const cycleStartTime = Date.now();
         
-        console.log(`\n🔄 Engine cycle #${this.cycleCount + 1} starting...`);
+        logger.info(`\n🔄 Engine cycle #${this.cycleCount + 1} starting...`);
         
         // Execute full cycle
         await this.executeFullCycle();
@@ -98,7 +99,7 @@ class EngineWorker {
         this.cycleCount++;
         
         const cycleDuration = Date.now() - cycleStartTime;
-        console.log(`✅ Cycle #${this.cycleCount} completed in ${cycleDuration}ms`);
+        logger.info(`✅ Cycle #${this.cycleCount} completed in ${cycleDuration}ms`);
         
         // Update heartbeat
         this.updateHeartbeat();
@@ -108,7 +109,7 @@ class EngineWorker {
         await this.sleep(waitTime);
         
       } catch (error) {
-        console.error('❌ Engine cycle error:', error);
+        logger.error('❌ Engine cycle error:', error);
         this.lastError = {
           message: error.message,
           timestamp: new Date().toISOString(),
@@ -121,7 +122,7 @@ class EngineWorker {
           ENGINE_MAX_BACKOFF_MS
         );
         
-        console.log(`⏳ Backing off for ${this.currentBackoff}ms before retry...`);
+        logger.info(`⏳ Backing off for ${this.currentBackoff}ms before retry...`);
         
         // Update heartbeat with error
         this.updateHeartbeat();
@@ -137,26 +138,26 @@ class EngineWorker {
    */
   async executeFullCycle() {
     // Step 1: Refresh DataHub
-    console.log('📊 Step 1: Refreshing DataHub...');
+    logger.info('📊 Step 1: Refreshing DataHub...');
     await this.refreshDataHub();
     
     // Step 2: Coordinate 15 AI Agents
-    console.log('🤖 Step 2: Coordinating AI agents...');
+    logger.info('🤖 Step 2: Coordinating AI agents...');
     const agentResults = await this.coordinateAgents();
     
     // Step 3: Get Artemis Decision
-    console.log('🧠 Step 3: Getting Artemis decision...');
+    logger.info('🧠 Step 3: Getting Artemis decision...');
     const decision = await this.getArtemisDecision(agentResults);
     
     // Step 4: Publish to Telegram (if decision exists)
     if (decision) {
-      console.log('📱 Step 4: Publishing to Telegram...');
+      logger.info('📱 Step 4: Publishing to Telegram...');
       await this.publishToTelegram(decision, agentResults);
     } else {
-      console.log('⏭️ Step 4: Skipping Telegram (no decision)');
+      logger.info('⏭️ Step 4: Skipping Telegram (no decision)');
     }
     
-    console.log('✅ Full cycle completed');
+    logger.info('✅ Full cycle completed');
   }
 
   /**
@@ -171,7 +172,7 @@ class EngineWorker {
       );
       
       const sources = result.rows || [];
-      console.log(`   Found ${sources.length} active data sources`);
+      logger.info(`   Found ${sources.length} active data sources`);
       
       // Refresh each source (with small delay to avoid overload)
       for (const source of sources) {
@@ -185,16 +186,16 @@ class EngineWorker {
             [source.id]
           );
         } catch (error) {
-          console.error(`   ⚠️ Failed to refresh source ${source.id}:`, error.message);
+          logger.error(`   ⚠️ Failed to refresh source ${source.id}:`, error.message);
         }
         
         // Small delay between sources
         await this.sleep(500);
       }
       
-      console.log(`   ✅ DataHub refresh completed (${sources.length} sources)`);
+      logger.info(`   ✅ DataHub refresh completed (${sources.length} sources)`);
     } catch (error) {
-      console.error('   ❌ DataHub refresh error:', error.message);
+      logger.error('   ❌ DataHub refresh error:', error.message);
       // Don't throw - allow cycle to continue
     }
   }
@@ -218,12 +219,12 @@ class EngineWorker {
       
       const results = await coordinateAgents(userId, context);
       
-      console.log(`   ✅ Agents coordinated: ${results.executionMetrics.agentsExecuted}/${results.executionMetrics.agentsTotal} succeeded`);
-      console.log(`   Overall signal: ${results.summary.overallSignal}, Avg confidence: ${results.summary.avgConfidence}%`);
+      logger.info(`   ✅ Agents coordinated: ${results.executionMetrics.agentsExecuted}/${results.executionMetrics.agentsTotal} succeeded`);
+      logger.info(`   Overall signal: ${results.summary.overallSignal}, Avg confidence: ${results.summary.avgConfidence}%`);
       
       return results;
     } catch (error) {
-      console.error('   ❌ Agent coordination error:', error.message);
+      logger.error('   ❌ Agent coordination error:', error.message);
       // Return empty results to allow cycle to continue
       return {
         agents: {},
@@ -276,15 +277,15 @@ class EngineWorker {
       );
       
       if (decision) {
-        console.log(`   ✅ Decision: ${decision.action}, Confidence: ${decision.confidence.toFixed(1)}%`);
-        console.log(`   Providers: ${decision.providers?.join(', ') || 'N/A'}`);
+        logger.info(`   ✅ Decision: ${decision.action}, Confidence: ${decision.confidence.toFixed(1)}%`);
+        logger.info(`   Providers: ${decision.providers?.join(', ') || 'N/A'}`);
       } else {
-        console.log('   ⚠️ No decision returned (all providers failed or below threshold)');
+        logger.info('   ⚠️ No decision returned (all providers failed or below threshold)');
       }
       
       return decision;
     } catch (error) {
-      console.error('   ❌ Artemis decision error:', error.message);
+      logger.error('   ❌ Artemis decision error:', error.message);
       return null; // Don't throw - allow cycle to continue
     }
   }
@@ -352,7 +353,7 @@ class EngineWorker {
         dailyLoss,
       };
     } catch (error) {
-      console.error('   ⚠️ Failed to get portfolio context:', error.message);
+      logger.error('   ⚠️ Failed to get portfolio context:', error.message);
       // Return safe defaults
       return {
         activeTrades: 0,
@@ -370,7 +371,7 @@ class EngineWorker {
   async publishToTelegram(decision, agentResults) {
     try {
       if (!telegramService.bot) {
-        console.log('   ⚠️ Telegram bot not configured, skipping publish');
+        logger.info('   ⚠️ Telegram bot not configured, skipping publish');
         return;
       }
       
@@ -380,9 +381,9 @@ class EngineWorker {
       // Send to Telegram
       await telegramService.sendMessage(message, 'Markdown');
       
-      console.log('   ✅ Published to Telegram');
+      logger.info('   ✅ Published to Telegram');
     } catch (error) {
-      console.error('   ❌ Telegram publish error:', error.message);
+      logger.error('   ❌ Telegram publish error:', error.message);
       // Don't throw - Telegram failure shouldn't stop the cycle
     }
   }
@@ -427,7 +428,7 @@ _${timestamp}_
     try {
       fs.writeFileSync(HEARTBEAT_FILE, JSON.stringify(this.heartbeat, null, 2));
     } catch (error) {
-      console.error('Failed to write heartbeat:', error);
+      logger.error('Failed to write heartbeat:', error);
     }
   }
 
@@ -441,7 +442,7 @@ _${timestamp}_
         return JSON.parse(data);
       }
     } catch (error) {
-      console.error('Failed to read heartbeat:', error);
+      logger.error('Failed to read heartbeat:', error);
     }
     return this.heartbeat;
   }
@@ -463,19 +464,19 @@ const isMainModule = process.argv[1] && process.argv[1].endsWith('engineWorker.j
 
 if (isMainModule) {
   engineWorker.start().catch(error => {
-    console.error('Failed to start engine worker:', error);
+    logger.error('Failed to start engine worker:', error);
     process.exit(1);
   });
   
   // Handle graceful shutdown
   process.on('SIGTERM', async () => {
-    console.log('🛑 SIGTERM received, stopping engine worker...');
+    logger.info('🛑 SIGTERM received, stopping engine worker...');
     await engineWorker.stop();
     process.exit(0);
   });
   
   process.on('SIGINT', async () => {
-    console.log('🛑 SIGINT received, stopping engine worker...');
+    logger.info('🛑 SIGINT received, stopping engine worker...');
     await engineWorker.stop();
     process.exit(0);
   });

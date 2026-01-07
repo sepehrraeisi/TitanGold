@@ -1,8 +1,9 @@
 // Test GET /api/ai-agents endpoint
 import pool from './database/db.js';
+import { logger } from './services/logger.js';
 
 async function testAgentsAPI() {
-    console.log('🧪 Testing GET /api/ai-agents mapping...\n');
+    logger.info('🧪 Testing GET /api/ai-agents mapping...\n');
     
     try {
         const result = await pool.query(`
@@ -27,7 +28,7 @@ async function testAgentsAPI() {
             LIMIT 3
         `);
         
-        console.log(`📊 Found ${result.rows.length} agents\n`);
+        logger.info(`📊 Found ${result.rows.length} agents\n`);
         
         result.rows.forEach((agent, idx) => {
             // Safe JSON parse
@@ -64,19 +65,19 @@ async function testAgentsAPI() {
                 lastUpdate: agent.updated_at || agent.created_at
             };
             
-            console.log(`${idx + 1}. ${agent.agent_key}`);
-            console.log(`   Name: ${uiAgent.name}`);
-            console.log(`   Role: ${uiAgent.role}`);
-            console.log(`   Status: ${agent.status} → ${uiAgent.status}`);
-            console.log(`   Capabilities: ${capabilities.length > 0 ? capabilities.slice(0, 3).join(', ') : 'None'}`);
-            console.log(`   Decisions: ${uiAgent.decisions}`);
-            console.log('');
+            logger.info(`${idx + 1}. ${agent.agent_key}`);
+            logger.info(`   Name: ${uiAgent.name}`);
+            logger.info(`   Role: ${uiAgent.role}`);
+            logger.info(`   Status: ${agent.status} → ${uiAgent.status}`);
+            logger.info(`   Capabilities: ${capabilities.length > 0 ? capabilities.slice(0, 3).join(', ') : 'None'}`);
+            logger.info(`   Decisions: ${uiAgent.decisions}`);
+            logger.info('');
         });
         
-        console.log('✅ API mapping test successful!');
+        logger.info('✅ API mapping test successful!');
         process.exit(0);
     } catch (error) {
-        console.error('❌ Test failed:', error.message);
+        logger.error('❌ Test failed:', error.message);
         process.exit(1);
     }
 }

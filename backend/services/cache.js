@@ -1,4 +1,5 @@
 import { getRedisClient, isRedisAvailable } from '../utils/redis.js';
+import { logger } from '../services/logger.js';
 
 // Cache statistics for monitoring
 let cacheStats = {
@@ -59,7 +60,7 @@ export function buildCacheKey(agentKey, symbol = 'default', timeframe = '1h') {
 export async function getCache(key) {
   try {
     if (!isRedisAvailable()) {
-      console.warn('⚠️ Redis not available, cache miss');
+      logger.warn('⚠️ Redis not available, cache miss');
       cacheStats.misses++;
       return null;
     }
@@ -69,16 +70,16 @@ export async function getCache(key) {
     
     if (value) {
       cacheStats.hits++;
-      console.log(`✅ Cache HIT: ${key}`);
+      logger.info(`✅ Cache HIT: ${key}`);
       return JSON.parse(value);
     } else {
       cacheStats.misses++;
-      console.log(`❌ Cache MISS: ${key}`);
+      logger.info(`❌ Cache MISS: ${key}`);
       return null;
     }
   } catch (error) {
     cacheStats.errors++;
-    console.error(`❌ Cache get error for key ${key}:`, error.message);
+    logger.error(`❌ Cache get error for key ${key}:`, error.message);
     return null; // Fail gracefully
   }
 }
@@ -94,7 +95,7 @@ export async function getCache(key) {
 export async function setCache(key, value, ttlSeconds = 300) {
   try {
     if (!isRedisAvailable()) {
-      console.warn('⚠️ Redis not available, skipping cache set');
+      logger.warn('⚠️ Redis not available, skipping cache set');
       return false;
     }
 
@@ -107,11 +108,11 @@ export async function setCache(key, value, ttlSeconds = 300) {
     });
     
     cacheStats.sets++;
-    console.log(`💾 Cache SET: ${key} (TTL: ${ttlSeconds}s)`);
+    logger.info(`💾 Cache SET: ${key} (TTL: ${ttlSeconds}s)`);
     return true;
   } catch (error) {
     cacheStats.errors++;
-    console.error(`❌ Cache set error for key ${key}:`, error.message);
+    logger.error(`❌ Cache set error for key ${key}:`, error.message);
     return false; // Fail gracefully
   }
 }
@@ -125,7 +126,7 @@ export async function setCache(key, value, ttlSeconds = 300) {
 export async function deleteCache(key) {
   try {
     if (!isRedisAvailable()) {
-      console.warn('⚠️ Redis not available, skipping cache delete');
+      logger.warn('⚠️ Redis not available, skipping cache delete');
       return 0;
     }
 
@@ -152,18 +153,18 @@ export async function deleteCache(key) {
       } while (cursor !== '0');
       
       cacheStats.deletes += deletedCount;
-      console.log(`🗑️  Cache DELETE pattern: ${key} (${deletedCount} keys)`);
+      logger.info(`🗑️  Cache DELETE pattern: ${key} (${deletedCount} keys)`);
       return deletedCount;
     } else {
       // Single key delete
       const deleted = await client.del(key);
       cacheStats.deletes += deleted;
-      console.log(`🗑️  Cache DELETE: ${key}`);
+      logger.info(`🗑️  Cache DELETE: ${key}`);
       return deleted;
     }
   } catch (error) {
     cacheStats.errors++;
-    console.error(`❌ Cache delete error for key ${key}:`, error.message);
+    logger.error(`❌ Cache delete error for key ${key}:`, error.message);
     return 0;
   }
 }
@@ -177,7 +178,7 @@ export async function deleteCache(key) {
 export async function invalidateAgentCache(agentKey) {
   const pattern = `agent:${agentKey}:*`;
   const deleted = await deleteCache(pattern);
-  console.log(`🔄 Invalidated cache for agent: ${agentKey} (${deleted} keys)`);
+  logger.info(`🔄 Invalidated cache for agent: ${agentKey} (${deleted} keys)`);
   return deleted;
 }
 
@@ -191,7 +192,7 @@ export async function invalidateAgentCache(agentKey) {
 export async function invalidateAgentSymbolCache(agentKey, symbol) {
   const pattern = `agent:${agentKey}:${symbol}:*`;
   const deleted = await deleteCache(pattern);
-  console.log(`🔄 Invalidated cache for ${agentKey}/${symbol} (${deleted} keys)`);
+  logger.info(`🔄 Invalidated cache for ${agentKey}/${symbol} (${deleted} keys)`);
   return deleted;
 }
 

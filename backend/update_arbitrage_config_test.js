@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { logger } from './services/logger.js';
 const { Client } = pg;
 
 const client = new Client({
@@ -11,7 +12,7 @@ const client = new Client({
 async function updateArbitrageConfigForTesting() {
   try {
     await client.connect();
-    console.log('✅ Connected to PostgreSQL');
+    logger.info('✅ Connected to PostgreSQL');
     
     // Lower thresholds for testing
     const config = {
@@ -47,18 +48,18 @@ async function updateArbitrageConfigForTesting() {
     );
     
     if (result.rows.length === 0) {
-      console.log('❌ Arbitrage agent not found in database');
+      logger.info('❌ Arbitrage agent not found in database');
       return;
     }
     
-    console.log('✅ Arbitrage config updated for testing');
-    console.log('Agent:', result.rows[0].name);
-    console.log('Config:', JSON.stringify(result.rows[0].config, null, 2));
-    console.log('\n⚠️  WARNING: minSpreadPct = 0.01% for testing only!');
-    console.log('   Real arbitrage: minSpreadPct should be >= 0.20%');
+    logger.info('✅ Arbitrage config updated for testing');
+    logger.info('Agent:', result.rows[0].name);
+    logger.info('Config:', JSON.stringify(result.rows[0].config, null, 2));
+    logger.info('\n⚠️  WARNING: minSpreadPct = 0.01% for testing only!');
+    logger.info('   Real arbitrage: minSpreadPct should be >= 0.20%');
     
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    logger.error('❌ Error:', error.message);
   } finally {
     await client.end();
   }

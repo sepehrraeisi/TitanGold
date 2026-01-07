@@ -3,6 +3,7 @@ import { query } from '../database/db.js';
 import { getRedisInfo, isRedisAvailable } from '../utils/redis.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { logger } from '../services/logger.js';
 
 const execAsync = promisify(exec);
 const router = express.Router();
@@ -13,7 +14,7 @@ try {
   const { stdout } = await execAsync('git rev-parse --short HEAD');
   gitCommit = stdout.trim();
 } catch (error) {
-  console.warn('Could not get git commit:', error.message);
+  logger.warn('Could not get git commit:', error.message);
 }
 
 /**

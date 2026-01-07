@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const API_URL = 'https://titan.zala.ir/api';
 
@@ -26,7 +27,7 @@ async function test() {
   });
   
   const result = await runRes.json();
-  console.log(JSON.stringify(result, null, 2));
+  logger.info(JSON.stringify(result, null, 2));
 }
 
 test().catch(console.error);

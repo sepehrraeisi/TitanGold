@@ -1,8 +1,9 @@
 // Test API Integration - GET /api/ai-agents
 import http from 'http';
+import { logger } from './services/logger.js';
 
 async function testAPI() {
-  console.log('🧪 Testing GET /api/ai-agents (without auth)...\n');
+  logger.info('🧪 Testing GET /api/ai-agents (without auth)...\n');
   
   return new Promise((resolve, reject) => {
     const options = {
@@ -23,40 +24,40 @@ async function testAPI() {
       });
       
       res.on('end', () => {
-        console.log(`📊 Status: ${res.statusCode}`);
+        logger.info(`📊 Status: ${res.statusCode}`);
         
         if (res.statusCode === 401) {
-          console.log('✅ Authentication required (expected)');
-          console.log('   Response:', data.substring(0, 100));
+          logger.info('✅ Authentication required (expected)');
+          logger.info('   Response:', data.substring(0, 100));
           resolve();
           return;
         }
         
         try {
           const agents = JSON.parse(data);
-          console.log(`✅ Agents received: ${agents.length}`);
+          logger.info(`✅ Agents received: ${agents.length}`);
           
           if (agents.length > 0) {
             const agent = agents[0];
-            console.log('\n📋 First Agent:');
-            console.log(`   ID: ${agent.id}`);
-            console.log(`   Agent Key: ${agent.agent_key || 'MISSING'}`);
-            console.log(`   Name: ${agent.name}`);
-            console.log(`   Role: ${agent.role || 'MISSING'}`);
-            console.log(`   Status: ${agent.status}`);
-            console.log(`   Capabilities: ${agent.capabilities?.length || 0}`);
+            logger.info('\n📋 First Agent:');
+            logger.info(`   ID: ${agent.id}`);
+            logger.info(`   Agent Key: ${agent.agent_key || 'MISSING'}`);
+            logger.info(`   Name: ${agent.name}`);
+            logger.info(`   Role: ${agent.role || 'MISSING'}`);
+            logger.info(`   Status: ${agent.status}`);
+            logger.info(`   Capabilities: ${agent.capabilities?.length || 0}`);
           }
           
           resolve();
         } catch (err) {
-          console.error('❌ Failed to parse response:', err.message);
+          logger.error('❌ Failed to parse response:', err.message);
           reject(err);
         }
       });
     });
     
     req.on('error', (err) => {
-      console.error('❌ Request failed:', err.message);
+      logger.error('❌ Request failed:', err.message);
       reject(err);
     });
     
@@ -66,10 +67,10 @@ async function testAPI() {
 
 testAPI()
   .then(() => {
-    console.log('\n✅ API test complete');
+    logger.info('\n✅ API test complete');
     process.exit(0);
   })
   .catch((err) => {
-    console.error('\n❌ API test failed:', err);
+    logger.error('\n❌ API test failed:', err);
     process.exit(1);
   });

@@ -13,6 +13,7 @@
  */
 
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 // ==================== Constants ====================
 const MAX_CHANGE_PERCENT = 10;
@@ -34,13 +35,13 @@ class AutopilotEngine {
    */
   async analyzeLearningAndSuggest(hoursWindow = 24) {
     try {
-      console.log(`[Autopilot] Analyzing learning events from last ${hoursWindow}h...`);
+      logger.info(`[Autopilot] Analyzing learning events from last ${hoursWindow}h...`);
 
       // 1) Get recent learning events
       const learningEvents = await this.getRecentLearning(hoursWindow);
 
       if (learningEvents.length === 0) {
-        console.log('[Autopilot] No recent learning events found');
+        logger.info('[Autopilot] No recent learning events found');
         return {
           suggestions: [],
           summary: {
@@ -52,7 +53,7 @@ class AutopilotEngine {
         };
       }
 
-      console.log(`[Autopilot] Found ${learningEvents.length} learning events`);
+      logger.info(`[Autopilot] Found ${learningEvents.length} learning events`);
 
       // 2) Group by agent
       const eventsByAgent = this.groupEventsByAgent(learningEvents);
@@ -66,7 +67,7 @@ class AutopilotEngine {
         }
       }
 
-      console.log(`[Autopilot] Generated ${suggestions.length} suggestions`);
+      logger.info(`[Autopilot] Generated ${suggestions.length} suggestions`);
 
       return {
         suggestions,
@@ -79,7 +80,7 @@ class AutopilotEngine {
       };
 
     } catch (error) {
-      console.error('[Autopilot] Error analyzing learning:', error);
+      logger.error('[Autopilot] Error analyzing learning:', error);
       throw error;
     }
   }
@@ -125,7 +126,7 @@ class AutopilotEngine {
       const mistakes = events.filter(e => e.event_type === 'mistake');
       const improvements = events.filter(e => e.event_type === 'improvement');
 
-      console.log(`[Autopilot] Agent ${agentId}: ${mistakes.length} mistakes, ${improvements.length} improvements`);
+      logger.info(`[Autopilot] Agent ${agentId}: ${mistakes.length} mistakes, ${improvements.length} improvements`);
 
       // Safety check: Too many mistakes → suggest pause
       if (mistakes.length >= MISTAKE_THRESHOLD) {
@@ -145,7 +146,7 @@ class AutopilotEngine {
       return null;
 
     } catch (error) {
-      console.error(`[Autopilot] Error generating suggestions for agent ${agentId}:`, error);
+      logger.error(`[Autopilot] Error generating suggestions for agent ${agentId}:`, error);
       return null;
     }
   }
@@ -293,7 +294,7 @@ class AutopilotEngine {
         );
 
         if (existingCheck.rows.length > 0) {
-          console.log(`[Autopilot] ⏭️  Skipping duplicate suggestion for agent ${suggestion.agent_id} (${suggestion.action_type})`);
+          logger.info(`[Autopilot] ⏭️  Skipping duplicate suggestion for agent ${suggestion.agent_id} (${suggestion.action_type})`);
           continue; // Skip this suggestion
         }
 
@@ -316,10 +317,10 @@ class AutopilotEngine {
         );
 
         saved.push(result.rows[0]);
-        console.log(`[Autopilot] ✅ Saved suggestion for agent ${suggestion.agent_id}`);
+        logger.info(`[Autopilot] ✅ Saved suggestion for agent ${suggestion.agent_id}`);
 
       } catch (error) {
-        console.error(`[Autopilot] Failed to save suggestion for agent ${suggestion.agent_id}:`, error);
+        logger.error(`[Autopilot] Failed to save suggestion for agent ${suggestion.agent_id}:`, error);
       }
     }
 
@@ -386,7 +387,7 @@ class AutopilotEngine {
         [approvedBy, JSON.stringify(currentConfig), suggestionId]
       );
 
-      console.log(`[Autopilot] Applied suggestion ${suggestionId} for agent ${suggestion.agent_id}`);
+      logger.info(`[Autopilot] Applied suggestion ${suggestionId} for agent ${suggestion.agent_id}`);
 
       return {
         success: true,
@@ -396,7 +397,7 @@ class AutopilotEngine {
       };
 
     } catch (error) {
-      console.error('[Autopilot] Error applying suggestion:', error);
+      logger.error('[Autopilot] Error applying suggestion:', error);
       throw error;
     }
   }
@@ -416,7 +417,7 @@ class AutopilotEngine {
       [rejectedBy, reason, suggestionId]
     );
 
-    console.log(`[Autopilot] Rejected suggestion ${suggestionId}`);
+    logger.info(`[Autopilot] Rejected suggestion ${suggestionId}`);
   }
 
   /**
@@ -456,7 +457,7 @@ class AutopilotEngine {
         [suggestionId]
       );
 
-      console.log(`[Autopilot] Rolled back suggestion ${suggestionId}`);
+      logger.info(`[Autopilot] Rolled back suggestion ${suggestionId}`);
 
       return {
         success: true,
@@ -465,7 +466,7 @@ class AutopilotEngine {
       };
 
     } catch (error) {
-      console.error('[Autopilot] Error rolling back suggestion:', error);
+      logger.error('[Autopilot] Error rolling back suggestion:', error);
       throw error;
     }
   }

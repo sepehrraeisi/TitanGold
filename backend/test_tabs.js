@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const API_URL = 'https://titan.zala.ir/api';
 
@@ -28,29 +29,29 @@ async function test() {
   const result = await runRes.json();
   const data = result.result || result;
   
-  console.log('✅ Company Data:');
-  console.log('  Name:', data.company_project_data?.name);
-  console.log('  Description:', data.company_project_data?.description?.substring(0, 50) + '...');
-  console.log('  Market Cap:', data.company_project_data?.marketCap);
+  logger.info('✅ Company Data:');
+  logger.info('  Name:', data.company_project_data?.name);
+  logger.info('  Description:', data.company_project_data?.description?.substring(0, 50) + '...');
+  logger.info('  Market Cap:', data.company_project_data?.marketCap);
   
-  console.log('\n✅ Financial Ratios:');
-  console.log('  Volatility 24h:', data.financial_ratios?.volatility24h + '%');
-  console.log('  Liquidity:', data.financial_ratios?.liquidityRatio);
+  logger.info('\n✅ Financial Ratios:');
+  logger.info('  Volatility 24h:', data.financial_ratios?.volatility24h + '%');
+  logger.info('  Liquidity:', data.financial_ratios?.liquidityRatio);
   
-  console.log('\n✅ Events & News:');
-  console.log('  Impact Analysis Count:', data.events_news?.impactAnalysis?.length || 0);
+  logger.info('\n✅ Events & News:');
+  logger.info('  Impact Analysis Count:', data.events_news?.impactAnalysis?.length || 0);
   if (data.events_news?.impactAnalysis?.length > 0) {
-    console.log('  First Event:', data.events_news.impactAnalysis[0].event);
+    logger.info('  First Event:', data.events_news.impactAnalysis[0].event);
   }
   
-  console.log('\n✅ On-chain:');
-  console.log('  Network Activity:', data.onchain_tokenomics?.networkActivity);
-  console.log('  Active Addresses:', data.onchain_tokenomics?.activeAddresses);
+  logger.info('\n✅ On-chain:');
+  logger.info('  Network Activity:', data.onchain_tokenomics?.networkActivity);
+  logger.info('  Active Addresses:', data.onchain_tokenomics?.activeAddresses);
   
-  console.log('\n✅ Fair Value:');
-  console.log('  Estimated:', data.fair_value?.estimated?.toFixed(2));
-  console.log('  Current Price:', data.fair_value?.currentPrice?.toFixed(2));
-  console.log('  History Count:', data.fair_value?.history?.length || 0);
+  logger.info('\n✅ Fair Value:');
+  logger.info('  Estimated:', data.fair_value?.estimated?.toFixed(2));
+  logger.info('  Current Price:', data.fair_value?.currentPrice?.toFixed(2));
+  logger.info('  History Count:', data.fair_value?.history?.length || 0);
 }
 
 test().catch(console.error);

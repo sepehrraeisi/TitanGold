@@ -10,6 +10,7 @@ import express from 'express';
 import pool from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
 import favoritesAlertMonitor from '../services/favoritesAlertMonitor.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -60,7 +61,7 @@ router.get('/:favoriteId/alerts', authenticate, async (req, res) => {
             count: result.rows.length
         });
     } catch (error) {
-        console.error('Error fetching alerts:', error);
+        logger.error('Error fetching alerts:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch alerts'
@@ -103,7 +104,7 @@ router.get('/alerts/active', authenticate, async (req, res) => {
             count: result.rows.length
         });
     } catch (error) {
-        console.error('Error fetching active alerts:', error);
+        logger.error('Error fetching active alerts:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch active alerts'
@@ -191,7 +192,7 @@ router.post('/:favoriteId/alerts', authenticate, async (req, res) => {
             message: 'Alert created successfully'
         });
     } catch (error) {
-        console.error('Error creating alert:', error);
+        logger.error('Error creating alert:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to create alert'
@@ -297,7 +298,7 @@ router.put('/alerts/:alertId', authenticate, async (req, res) => {
             message: 'Alert updated successfully'
         });
     } catch (error) {
-        console.error('Error updating alert:', error);
+        logger.error('Error updating alert:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to update alert'
@@ -330,7 +331,7 @@ router.delete('/alerts/:alertId', authenticate, async (req, res) => {
             message: 'Alert deleted successfully'
         });
     } catch (error) {
-        console.error('Error deleting alert:', error);
+        logger.error('Error deleting alert:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to delete alert'
@@ -377,7 +378,7 @@ router.post('/alerts/:alertId/trigger', authenticate, async (req, res) => {
             message: 'Alert triggered successfully'
         });
     } catch (error) {
-        console.error('Error triggering alert:', error);
+        logger.error('Error triggering alert:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to trigger alert'
@@ -403,7 +404,7 @@ router.get('/monitor/stats', authenticate, async (req, res) => {
             activeAlerts: parseInt(result.rows[0].count)
         });
     } catch (error) {
-        console.error('Error fetching monitor stats:', error);
+        logger.error('Error fetching monitor stats:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch monitor statistics'
@@ -437,7 +438,7 @@ router.post('/alerts/:alertId/test', authenticate, async (req, res) => {
         
         res.json(result);
     } catch (error) {
-        console.error('Error testing alert:', error);
+        logger.error('Error testing alert:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to test alert'

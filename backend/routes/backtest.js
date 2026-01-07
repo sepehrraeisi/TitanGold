@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ router.get('/results', authenticate, async (req, res) => {
       total: result.rows?.length || 0
     });
   } catch (error) {
-    console.error('Failed to fetch backtest results:', error);
+    logger.error('Failed to fetch backtest results:', error);
     res.status(500).json({ error: 'Failed to fetch backtest results' });
   }
 });
@@ -63,7 +64,7 @@ router.get('/results/:id', authenticate, async (req, res) => {
     
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Failed to fetch backtest result:', error);
+    logger.error('Failed to fetch backtest result:', error);
     res.status(500).json({ error: 'Failed to fetch backtest result' });
   }
 });
@@ -137,9 +138,9 @@ router.post('/run', authenticate, async (req, res) => {
           [JSON.stringify(results), backtest.id]
         );
         
-        console.log(`✅ Backtest ${backtest.id} completed successfully`);
+        logger.info(`✅ Backtest ${backtest.id} completed successfully`);
       } catch (error) {
-        console.error('Backtest execution error:', error);
+        logger.error('Backtest execution error:', error);
         await query(
           `UPDATE backtest_runs 
            SET status = 'failed', error_message = $1 
@@ -157,7 +158,7 @@ router.post('/run', authenticate, async (req, res) => {
       estimated_completion: '3-5 seconds'
     });
   } catch (error) {
-    console.error('Failed to start backtest:', error);
+    logger.error('Failed to start backtest:', error);
     res.status(500).json({ error: 'Failed to start backtest' });
   }
 });
@@ -180,7 +181,7 @@ router.delete('/results/:id', authenticate, authorize('admin', 'trader'), async 
       message: 'Backtest result deleted successfully'
     });
   } catch (error) {
-    console.error('Failed to delete backtest result:', error);
+    logger.error('Failed to delete backtest result:', error);
     res.status(500).json({ error: 'Failed to delete backtest result' });
   }
 });
@@ -201,7 +202,7 @@ router.get('/stats', authenticate, async (req, res) => {
     
     res.json(stats.rows[0] || {});
   } catch (error) {
-    console.error('Failed to fetch backtest stats:', error);
+    logger.error('Failed to fetch backtest stats:', error);
     res.status(500).json({ error: 'Failed to fetch statistics' });
   }
 });

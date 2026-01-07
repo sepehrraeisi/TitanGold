@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const BASE_URL = 'https://titan.zala.ir/api';
 
@@ -21,7 +22,7 @@ async function test() {
   });
   const details = await detailsRes.json();
   
-  console.log('📢 Notifications:', JSON.stringify(details.agent.config.notifications, null, 2));
+  logger.info('📢 Notifications:', JSON.stringify(details.agent.config.notifications, null, 2));
 }
 
 test();

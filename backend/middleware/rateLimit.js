@@ -1,4 +1,5 @@
 import { getRedisClient } from '../utils/redis.js';
+import { logger } from '../services/logger.js';
 
 /**
  * Redis-backed Rate Limiter Middleware
@@ -79,10 +80,10 @@ export function rateLimit({ limit, windowMs }) {
       
       next();
     } catch (error) {
-      console.error('❌ Rate limiter error:', error.message);
+      logger.error('❌ Rate limiter error:', error.message);
       
       // Fail open: allow request if Redis is down
-      console.warn('⚠️  Rate limiter failed, allowing request (fail-open)');
+      logger.warn('⚠️  Rate limiter failed, allowing request (fail-open)');
       next();
     }
   };

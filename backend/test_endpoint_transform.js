@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { logger } from './services/logger.js';
 const { Pool } = pg;
 
 const pool = new Pool({
@@ -21,8 +22,8 @@ async function testEndpoint() {
     }
     
     const agent = agentResult.rows[0];
-    console.log(`✅ Agent: ${agent.name} (${agent.agent_key})`);
-    console.log(`   UUID: ${agent.id}\n`);
+    logger.info(`✅ Agent: ${agent.name} (${agent.agent_key})`);
+    logger.info(`   UUID: ${agent.id}\n`);
 
     // Mock authenticated request (simulate via registry)
     const { default: agentRegistry } = await import('./services/agents/registry.js');
@@ -33,8 +34,8 @@ async function testEndpoint() {
       timeframe: '1h'
     });
 
-    console.log('📊 Raw Result from Registry:');
-    console.log(JSON.stringify(rawResult, null, 2));
+    logger.info('📊 Raw Result from Registry:');
+    logger.info(JSON.stringify(rawResult, null, 2));
 
     // Simulate transformer (same logic as in endpoint)
     const { symbol, timeframe, confidence, signal, indicators, timestamp, _meta } = rawResult;
@@ -96,29 +97,29 @@ async function testEndpoint() {
       uiResult.indicators = indicatorArray;
     }
 
-    console.log('\n✅ UI-Compatible Result (after transform):');
-    console.log(JSON.stringify(uiResult, null, 2));
+    logger.info('\n✅ UI-Compatible Result (after transform):');
+    logger.info(JSON.stringify(uiResult, null, 2));
 
-    console.log('\n📝 Validation:');
-    console.log(`   - Indicators count: ${uiResult.indicators.length}`);
-    console.log(`   - Indicators is Array: ${Array.isArray(uiResult.indicators)}`);
-    console.log(`   - Signal format: "${uiResult.signal}" (lowercase)`);
-    console.log(`   - Confidence: ${uiResult.confidence}`);
+    logger.info('\n📝 Validation:');
+    logger.info(`   - Indicators count: ${uiResult.indicators.length}`);
+    logger.info(`   - Indicators is Array: ${Array.isArray(uiResult.indicators)}`);
+    logger.info(`   - Signal format: "${uiResult.signal}" (lowercase)`);
+    logger.info(`   - Confidence: ${uiResult.confidence}`);
     
     // Check MACD specifically
     const macdIndicator = uiResult.indicators.find(i => i.indicatorId === 'MACD');
     if (macdIndicator) {
-      console.log(`\n   MACD Check:`);
-      console.log(`     - value: ${macdIndicator.value}`);
-      console.log(`     - signal: "${macdIndicator.signal}" (type: ${typeof macdIndicator.signal})`);
-      console.log(`     - signal is string: ${typeof macdIndicator.signal === 'string' ? '✅' : '❌'}`);
+      logger.info(`\n   MACD Check:`);
+      logger.info(`     - value: ${macdIndicator.value}`);
+      logger.info(`     - signal: "${macdIndicator.signal}" (type: ${typeof macdIndicator.signal})`);
+      logger.info(`     - signal is string: ${typeof macdIndicator.signal === 'string' ? '✅' : '❌'}`);
     }
 
     await pool.end();
-    console.log('\n✅ All tests passed!');
+    logger.info('\n✅ All tests passed!');
 
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
+    logger.error('❌ Test failed:', error.message);
     await pool.end();
     process.exit(1);
   }

@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const API_URL = 'https://titan.zala.ir/api';
 
@@ -27,30 +28,30 @@ async function test() {
   
   const result = await runRes.json();
   
-  console.log('📊 Full Response Structure:\n');
-  console.log('Decision:', result.result?.decision || result.decision);
-  console.log('Confidence:', result.result?.confidence || result.confidence);
-  console.log('\nScores:');
+  logger.info('📊 Full Response Structure:\n');
+  logger.info('Decision:', result.result?.decision || result.decision);
+  logger.info('Confidence:', result.result?.confidence || result.confidence);
+  logger.info('\nScores:');
   if (result.result?.score) {
-    console.log('- Total:', result.result.score.total);
-    console.log('- Macro:', result.result.score.macro);
-    console.log('- Funding:', result.result.score.funding);
-    console.log('- OnChain:', result.result.score.onchain);
-    console.log('- News:', result.result.score.news);
+    logger.info('- Total:', result.result.score.total);
+    logger.info('- Macro:', result.result.score.macro);
+    logger.info('- Funding:', result.result.score.funding);
+    logger.info('- OnChain:', result.result.score.onchain);
+    logger.info('- News:', result.result.score.news);
   }
   
-  console.log('\nOverview:');
+  logger.info('\nOverview:');
   if (result.result?.overview) {
     const ov = result.result.overview;
-    console.log(`- Price: $${ov.lastPrice}`);
-    console.log(`- 24h Change: ${ov.priceChangePercent}%`);
-    console.log(`- Volume: $${ov.volume24h.toLocaleString()}`);
+    logger.info(`- Price: $${ov.lastPrice}`);
+    logger.info(`- 24h Change: ${ov.priceChangePercent}%`);
+    logger.info(`- Volume: $${ov.volume24h.toLocaleString()}`);
   }
   
-  console.log('\nSignals:', result.result?.signals?.length || 0);
+  logger.info('\nSignals:', result.result?.signals?.length || 0);
   if (result.result?.signals) {
     result.result.signals.forEach(s => {
-      console.log(`  - ${s.category}: ${s.signal} (${s.score})`);
+      logger.info(`  - ${s.category}: ${s.signal} (${s.score})`);
     });
   }
 }

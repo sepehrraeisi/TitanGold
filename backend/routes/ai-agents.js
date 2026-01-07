@@ -10,6 +10,7 @@ import { getCache, setCache, buildCacheKey, invalidateAgentCache } from '../serv
 import { aiService } from '../services/ai.js';
 import * as riskAgent from '../services/risk-agent.js';
 import agentRegistry from '../services/agents/registry.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -50,7 +51,7 @@ async function withTimeout(promise, ms, errorMessage = 'Operation timed out', ag
       const timeoutError = new Error(errorMessage);
       timeoutError.isTimeout = true;
       timeoutError.agentKey = agentKey;
-      console.error(`⏱️  TIMEOUT: Agent ${agentKey} exceeded ${ms}ms limit`);
+      logger.error(`⏱️  TIMEOUT: Agent ${agentKey} exceeded ${ms}ms limit`);
       reject(timeoutError);
     }, ms);
   });
@@ -107,9 +108,9 @@ async function logAndReturn(res, agentId, userId, decisionType, inputData, outpu
       executionTimeMs,
       JSON.stringify({ cached: isCached })
     ]);
-    console.log(`📝 Decision logged: agent=${agentId.substring(0,8)}, type=${decisionType}, success=${wasSuccessful}, cached=${isCached}, time=${executionTimeMs}ms`);
+    logger.info(`📝 Decision logged: agent=${agentId.substring(0,8)}, type=${decisionType}, success=${wasSuccessful}, cached=${isCached}, time=${executionTimeMs}ms`);
   } catch (err) {
-    console.error('❌ Failed to log decision:', err.message);
+    logger.error('❌ Failed to log decision:', err.message);
     // Don't throw - logging failures shouldn't break the agent response
   }
   
@@ -256,7 +257,7 @@ function transformAgentResultForUI(agent_key, rawResult) {
 
     return uiResult;
   } catch (error) {
-    console.error('❌ Transform error:', error.message);
+    logger.error('❌ Transform error:', error.message);
     // Fallback: return raw result
     return rawResult;
   }
@@ -284,7 +285,7 @@ router.post('/chat', authenticate, rateLimit({ limit: 10, windowMs: 60000 }), as
     
     res.json({ text: response });
   } catch (error) {
-    console.error('AI chat error:', error);
+    logger.error('AI chat error:', error);
     if (error.message?.includes('timeout')) {
       return sendError(res, 'AI_TIMEOUT', 'AI service timed out', 504);
     }
@@ -300,7 +301,7 @@ async function runAgentViaRegistry(req, res) {
     const { id } = req.params;
     const { symbol, timeframe, config, input } = req.body || {};
 
-    console.log(`🚀 [Registry] Running agent: ${id.substring(0, 8)}... | symbol: ${symbol} | timeframe: ${timeframe}`);
+    logger.info(`🚀 [Registry] Running agent: ${id.substring(0, 8)}... | symbol: ${symbol} | timeframe: ${timeframe}`);
 
     // Basic validations
     if (!isValidUUID(id)) {
@@ -339,11 +340,11 @@ async function runAgentViaRegistry(req, res) {
       ...(config || {})
     };
 
-    console.log(`✅ [Registry] Agent loaded: ${agent.agent_key} (${agent.name})`);
+    logger.info(`✅ [Registry] Agent loaded: ${agent.agent_key} (${agent.name})`);
 
     // Get timeout from env or use default (30 seconds)
     const timeoutMs = parseInt(process.env.AGENT_TIMEOUT_MS || '30000', 10);
-    console.log(`⏱️  [Registry] Timeout set to ${timeoutMs}ms for ${agent.agent_key}`);
+    logger.info(`⏱️  [Registry] Timeout set to ${timeoutMs}ms for ${agent.agent_key}`);
 
     // Execute via registry with timeout
     const result = await withTimeout(
@@ -359,7 +360,7 @@ async function runAgentViaRegistry(req, res) {
       agent.agent_key
     );
 
-    console.log(`✅ [Registry] Agent execution complete: ${agent.agent_key}`);
+    logger.info(`✅ [Registry] Agent execution complete: ${agent.agent_key}`);
 
     // Transform result to UI-compatible format
     const uiResult = transformAgentResultForUI(agent.agent_key, result);
@@ -377,7 +378,7 @@ async function runAgentViaRegistry(req, res) {
       ]
     );
 
-    console.log(`📝 [Registry] Decision logged for ${agent.agent_key}`);
+    logger.info(`📝 [Registry] Decision logged for ${agent.agent_key}`);
 
     // Update agent metadata snapshot + last_active_at
     const newMetadata = {
@@ -396,7 +397,7 @@ async function runAgentViaRegistry(req, res) {
       [agent.id, JSON.stringify(newMetadata)]
     );
 
-    console.log(`📊 [Registry] Agent metadata updated for ${agent.agent_key}`);
+    logger.info(`📊 [Registry] Agent metadata updated for ${agent.agent_key}`);
 
     // ✅ Safety: Ensure indicators is always an array
     const safeIndicators = Array.isArray(uiResult?.indicators) ? uiResult.indicators : [];
@@ -420,7 +421,7 @@ async function runAgentViaRegistry(req, res) {
       }
     });
   } catch (error) {
-    console.error('❌ [Registry] Run error:', error);
+    logger.error('❌ [Registry] Run error:', error);
 
     // Check if this is a timeout error
     const isTimeout = error.isTimeout === true;
@@ -428,7 +429,7 @@ async function runAgentViaRegistry(req, res) {
     const errorCode = isTimeout ? 'AGENT_TIMEOUT' : 'AI_ERROR';
     
     if (isTimeout) {
-      console.error(`⏱️  [Registry] TIMEOUT ERROR: ${error.agentKey} - ${error.message}`);
+      logger.error(`⏱️  [Registry] TIMEOUT ERROR: ${error.agentKey} - ${error.message}`);
     }
 
     // Best-effort: store last_error on agent if id is valid
@@ -512,10 +513,10 @@ router.post('/:id/run-OLD', authenticate, rateLimit({ limit: 15, windowMs: 60000
           };
           
           agentId = agentKeyToLegacyId[agent_key] || id;
-          console.log(`✅ Mapped UUID ${id.substring(0,8)}... → agent_key: ${agent_key} → legacy: ${agentId}`);
+          logger.info(`✅ Mapped UUID ${id.substring(0,8)}... → agent_key: ${agent_key} → legacy: ${agentId}`);
         }
       } catch (err) {
-        console.error('❌ Failed to lookup agent_key:', err.message);
+        logger.error('❌ Failed to lookup agent_key:', err.message);
       }
     }
 
@@ -534,7 +535,7 @@ router.post('/:id/run-OLD', authenticate, rateLimit({ limit: 15, windowMs: 60000
     const cacheKey = `agent:${agentId}:${symbol || 'default'}:${timeframe}`;
     const cached = await getCache(cacheKey);
     if (cached) {
-      console.log(`✅ Cache hit for ${cacheKey}`);
+      logger.info(`✅ Cache hit for ${cacheKey}`);
       
       // 🔥 CRITICAL: Track performance even on cache hit
       // User clicked "Run Analysis" → Count it as a decision
@@ -548,9 +549,9 @@ router.post('/:id/run-OLD', authenticate, rateLimit({ limit: 15, windowMs: 60000
            WHERE id = $2`,
           [isSuccessful, originalId]
         );
-        console.log(`📊 Performance tracked on cache hit: ${originalId.substring(0,8)}`);
+        logger.info(`📊 Performance tracked on cache hit: ${originalId.substring(0,8)}`);
       } catch (perfError) {
-        console.error('⚠️  Failed to track cached performance:', perfError);
+        logger.error('⚠️  Failed to track cached performance:', perfError);
       }
       
       // 🔥 NEW: Log decision even for cache hits
@@ -648,9 +649,9 @@ Return ONLY JSON with this schema:
                WHERE id = $2`,
               [isSuccessful, originalId]
             );
-            console.log(`📊 Performance updated for ${originalId.substring(0,8)}: total+1, successful+${isSuccessful}`);
+            logger.info(`📊 Performance updated for ${originalId.substring(0,8)}: total+1, successful+${isSuccessful}`);
           } catch (perfError) {
-            console.error('⚠️  Failed to update performance:', perfError);
+            logger.error('⚠️  Failed to update performance:', perfError);
             // Don't fail the request if performance tracking fails
           }
 
@@ -683,7 +684,7 @@ Return ONLY JSON with this schema:
           );
         }
       } catch (e) {
-        console.error('Agent-1 AI error:', e);
+        logger.error('Agent-1 AI error:', e);
         if (e.message?.includes('timeout')) {
           return sendError(res, 'AI_TIMEOUT', 'Technical Analysis agent timed out', 504);
         }
@@ -767,7 +768,7 @@ Return ONLY JSON with this schema:
         );
         
       } catch (e) {
-        console.error('Agent-2 error:', e);
+        logger.error('Agent-2 error:', e);
         
         // Return error response
         const executionTime = Date.now() - startTime;
@@ -852,7 +853,7 @@ Return ONLY JSON:
           );
         }
       } catch (e) {
-        console.error('Agent-15 AI error:', e);
+        logger.error('Agent-15 AI error:', e);
         if (e.message?.includes('timeout')) {
           return sendError(res, 'AI_TIMEOUT', 'Timing agent timed out', 504);
         }
@@ -893,7 +894,7 @@ Return ONLY JSON:
       message: 'Agent run stub executed successfully'
     });
   } catch (error) {
-    console.error('Failed to run AI agent:', error);
+    logger.error('Failed to run AI agent:', error);
     if (error.message?.includes('timeout')) {
       return sendError(res, 'AI_TIMEOUT', 'AI agent timed out', 504);
     }
@@ -914,7 +915,7 @@ function safeParseJson(raw) {
       return JSON.parse(raw.slice(start, end + 1));
     }
   } catch (e) {
-    console.error('AI agent JSON parse error:', e, 'raw:', raw);
+    logger.error('AI agent JSON parse error:', e, 'raw:', raw);
   }
   return null;
 }
@@ -972,7 +973,7 @@ router.post('/:id/command', authenticate, rateLimit({ limit: 20, windowMs: 60000
       WHERE id = $3
     `, [newStatus, isEnabled, id]);
 
-    console.log(`✅ Agent ${id.substring(0,8)}... ${command} → status: ${newStatus}, enabled: ${isEnabled}`);
+    logger.info(`✅ Agent ${id.substring(0,8)}... ${command} → status: ${newStatus}, enabled: ${isEnabled}`);
 
     res.json({
       success: true,
@@ -983,7 +984,7 @@ router.post('/:id/command', authenticate, rateLimit({ limit: 20, windowMs: 60000
     });
 
   } catch (error) {
-    console.error('Agent command error:', error);
+    logger.error('Agent command error:', error);
     sendError(res, 'COMMAND_ERROR', error.message || 'Failed to execute command', 500);
   }
 });
@@ -995,17 +996,17 @@ router.patch('/:id/config', authenticate, async (req, res) => {
 
     // Validate
     if (!config || typeof config !== 'object') {
-      console.error('❌ Invalid config:', config);
+      logger.error('❌ Invalid config:', config);
       return sendError(res, 'VALIDATION_ERROR', 'config is required and must be an object', 400);
     }
 
-    console.log(`🔧 Updating config for agent ${id.substring(0, 8)}...`);
+    logger.info(`🔧 Updating config for agent ${id.substring(0, 8)}...`);
 
     // Get current agent to access agent_key
     const currentAgent = await query('SELECT agent_key, config FROM ai_agents WHERE id = $1', [id]);
     
     if (currentAgent.rows.length === 0) {
-      console.error('❌ Agent not found:', id);
+      logger.error('❌ Agent not found:', id);
       return sendError(res, 'NOT_FOUND', 'Agent not found', 404);
     }
 
@@ -1018,7 +1019,7 @@ router.patch('/:id/config', authenticate, async (req, res) => {
       try {
         existingConfig = typeof currentConfig === 'object' ? currentConfig : JSON.parse(currentConfig);
       } catch (e) {
-        console.warn('⚠️  Failed to parse existing config, using empty object');
+        logger.warn('⚠️  Failed to parse existing config, using empty object');
       }
     }
 
@@ -1036,7 +1037,7 @@ router.patch('/:id/config', authenticate, async (req, res) => {
       normalizedConfig = normalizeAgentConfig(agent_key, mergedConfig);
     }
 
-    console.log(`✅ Config normalized for ${agent_key}`);
+    logger.info(`✅ Config normalized for ${agent_key}`);
 
     // Update in database with normalized config
     // 🔥 CRITICAL: Use JSONB merge operator to preserve existing fields
@@ -1058,17 +1059,17 @@ router.patch('/:id/config', authenticate, async (req, res) => {
     );
 
     const agent = result.rows[0];
-    console.log(`✅ Config updated for ${agent.name} (${agent.agent_key})`);
+    logger.info(`✅ Config updated for ${agent.name} (${agent.agent_key})`);
     
     // Invalidate cache for this agent
     if (agent.agent_key) {
       const deletedKeys = await invalidateAgentCache(agent.agent_key);
-      console.log(`🔄 Invalidated ${deletedKeys} cache entries for ${agent.agent_key}`);
+      logger.info(`🔄 Invalidated ${deletedKeys} cache entries for ${agent.agent_key}`);
     }
     
     // Config is already parsed by PostgreSQL driver (JSONB -> Object)
     const savedConfig = agent.config;
-    console.log(`✅ Saved config keys:`, Object.keys(savedConfig));
+    logger.info(`✅ Saved config keys:`, Object.keys(savedConfig));
 
     return res.json({
       success: true,
@@ -1081,7 +1082,7 @@ router.patch('/:id/config', authenticate, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Update config error:', error);
+    logger.error('❌ Update config error:', error);
     return sendError(res, 'SERVER_ERROR', error.message || 'Update failed', 500);
   }
 });
@@ -1093,7 +1094,7 @@ router.get('/:id/details', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
 
-    console.log(`📊 Fetching details for agent: ${id.substring(0,8)}...`);
+    logger.info(`📊 Fetching details for agent: ${id.substring(0,8)}...`);
 
     const result = await query(
       `SELECT id, name, type, status, is_enabled, agent_key,
@@ -1109,7 +1110,7 @@ router.get('/:id/details', authenticate, async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      console.log(`❌ Agent not found: ${id}`);
+      logger.info(`❌ Agent not found: ${id}`);
       return sendError(res, 'NOT_FOUND', 'Agent not found', 404);
     }
 
@@ -1142,9 +1143,9 @@ router.get('/:id/details', authenticate, async (req, res) => {
       config = normalizeAgentConfig(agent.agent_key, rawConfig);
     }
 
-    console.log(`✅ Agent details loaded: ${agent.name} (${agent.agent_key})`);
-    console.log(`   Accuracy: ${agent.accuracy} (type: ${typeof agent.accuracy})`);
-    console.log(`   Performance: ${agent.performance_score} (type: ${typeof agent.performance_score})`);
+    logger.info(`✅ Agent details loaded: ${agent.name} (${agent.agent_key})`);
+    logger.info(`   Accuracy: ${agent.accuracy} (type: ${typeof agent.accuracy})`);
+    logger.info(`   Performance: ${agent.performance_score} (type: ${typeof agent.performance_score})`);
 
     // Build response based on agent type
     const response = {
@@ -1224,7 +1225,7 @@ router.get('/:id/details', authenticate, async (req, res) => {
     res.json(response);
 
   } catch (err) {
-    console.error('❌ Agent details error:', err);
+    logger.error('❌ Agent details error:', err);
     sendError(res, 'SERVER_ERROR', err.message || 'Failed to load agent details', 500);
   }
 });
@@ -1239,7 +1240,7 @@ router.get('/manager-overview', authenticate, async (req, res) => {
       const agentsResult = await query('SELECT * FROM ai_agents ORDER BY name');
       agents = agentsResult.rows || [];
     } catch (e) {
-      console.warn('⚠️ Failed to fetch agents:', e);
+      logger.warn('⚠️ Failed to fetch agents:', e);
     }
     
     // Get decision statistics
@@ -1270,7 +1271,7 @@ router.get('/manager-overview', authenticate, async (req, res) => {
         };
       }
     } catch (e) {
-      console.warn('⚠️ Failed to fetch decision stats:', e);
+      logger.warn('⚠️ Failed to fetch decision stats:', e);
     }
     
     // Get Artemis state
@@ -1279,7 +1280,7 @@ router.get('/manager-overview', authenticate, async (req, res) => {
       const artemisResult = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');
       artemisState = artemisResult.rows[0] || {};
     } catch (e) {
-      console.warn('⚠️ Failed to fetch Artemis state:', e);
+      logger.warn('⚠️ Failed to fetch Artemis state:', e);
     }
     
     // Calculate agent performance summary
@@ -1318,7 +1319,7 @@ router.get('/manager-overview', authenticate, async (req, res) => {
     
     res.json(overview);
   } catch (error) {
-    console.error('Failed to fetch manager overview:', error);
+    logger.error('Failed to fetch manager overview:', error);
     // Return default overview on error
     res.json({
       artemis: {
@@ -1512,10 +1513,10 @@ router.get('/', authenticate, async (req, res) => {
     // Wrap in { agents: [...] } for UI compatibility
     res.json({ agents });
   } catch (error) {
-    console.error('Failed to fetch AI agents:', error);
+    logger.error('Failed to fetch AI agents:', error);
     // If database is unavailable, return empty array instead of error
     if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-      console.warn('⚠️ Database unavailable, returning empty AI agents array');
+      logger.warn('⚠️ Database unavailable, returning empty AI agents array');
       return res.json({ agents: [] });
     }
     res.status(500).json({ error: 'Failed to fetch AI agents', message: error.message });

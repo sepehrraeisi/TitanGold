@@ -1,4 +1,5 @@
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 /**
  * Request logging middleware
@@ -35,7 +36,7 @@ export const requestLogger = (req, res, next) => {
       [req.method, cleanPath, res.statusCode, durationMs, userId]
     ).catch(err => {
       // Don't throw - just log the error
-      console.error('Request logger error:', err);
+      logger.error('Request logger error:', err);
     });
   });
 
@@ -59,6 +60,6 @@ export const logError = async (context, error, meta = {}) => {
       ]
     );
   } catch (err) {
-    console.error('Error logger failed:', err);
+    logger.error('Error logger failed:', err);
   }
 };

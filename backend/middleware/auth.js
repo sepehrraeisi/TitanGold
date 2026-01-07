@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 // Verify JWT token
 export const authenticate = async (req, res, next) => {
@@ -21,7 +22,7 @@ export const authenticate = async (req, res, next) => {
       ).catch(dbError => {
         // If database is unavailable, log warning and continue with JWT-only auth
         if (dbError.code === 'ECONNREFUSED' || dbError.message?.includes('ECONNREFUSED')) {
-          console.warn('⚠️ Database unavailable, using JWT-only authentication');
+          logger.warn('⚠️ Database unavailable, using JWT-only authentication');
           return { rows: [] }; // Continue with fallback
         }
         throw dbError; // Re-throw other DB errors
@@ -51,7 +52,7 @@ export const authenticate = async (req, res, next) => {
         } catch (dbError) {
           // If database becomes unavailable during user lookup, fallback to JWT-only
           if (dbError.code === 'ECONNREFUSED' || dbError.message?.includes('ECONNREFUSED')) {
-            console.warn('⚠️ Database unavailable during user lookup, using JWT-only authentication');
+            logger.warn('⚠️ Database unavailable during user lookup, using JWT-only authentication');
             // Fall through to JWT-only auth below
           } else {
             throw dbError;
@@ -61,7 +62,7 @@ export const authenticate = async (req, res, next) => {
     } catch (dbError) {
       // If database query fails completely, fallback to JWT-only auth
       if (dbError.code === 'ECONNREFUSED' || dbError.message?.includes('ECONNREFUSED')) {
-        console.warn('⚠️ Database unavailable, using JWT-only authentication');
+        logger.warn('⚠️ Database unavailable, using JWT-only authentication');
         // Fall through to JWT-only auth below
       } else {
         throw dbError;
@@ -80,7 +81,7 @@ export const authenticate = async (req, res, next) => {
     };
     req.token = token;
     
-    console.log('⚠️ Using JWT-only authentication (database unavailable)');
+    logger.info('⚠️ Using JWT-only authentication (database unavailable)');
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -89,7 +90,7 @@ export const authenticate = async (req, res, next) => {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Token expired' });
     }
-    console.error('Authentication error:', error);
+    logger.error('Authentication error:', error);
     res.status(500).json({ 
       error: 'Authentication failed',
       message: error.message,

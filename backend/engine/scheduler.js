@@ -2,6 +2,7 @@
 // Handles automatic execution of all AI components
 
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 class SchedulerService {
     constructor() {
@@ -40,13 +41,13 @@ class SchedulerService {
 
     async start() {
         if (this.isRunning) {
-            console.log('⚠️ Scheduler is already running');
+            logger.info('⚠️ Scheduler is already running');
             return;
         }
 
         try {
             this.isRunning = true;
-            console.log('🚀 24/7 Scheduler Service Started');
+            logger.info('🚀 24/7 Scheduler Service Started');
 
             // Load configuration from database
             await this.loadConfig();
@@ -58,10 +59,10 @@ class SchedulerService {
             this.startAnalyticsScheduler();
             this.startArtemisScheduler();
 
-            console.log('✅ All schedulers initialized');
+            logger.info('✅ All schedulers initialized');
         } catch (error) {
             this.isRunning = false;
-            console.error('❌ Failed to start scheduler:', error);
+            logger.error('❌ Failed to start scheduler:', error);
             throw error; // Re-throw to let the route handler catch it
         }
     }
@@ -76,7 +77,7 @@ class SchedulerService {
         this.intervals.clear();
         this.jobs.clear();
 
-        console.log('🛑 24/7 Scheduler Service Stopped');
+        logger.info('🛑 24/7 Scheduler Service Stopped');
     }
 
     async loadConfig() {
@@ -89,7 +90,7 @@ class SchedulerService {
                 this.config = { ...this.config, ...result.rows[0].config };
             }
         } catch (error) {
-            console.error('Failed to load scheduler config:', error);
+            logger.error('Failed to load scheduler config:', error);
             // Use default config
         }
     }
@@ -103,14 +104,14 @@ class SchedulerService {
                 [JSON.stringify(this.config)]
             );
         } catch (error) {
-            console.error('Failed to save scheduler config:', error);
+            logger.error('Failed to save scheduler config:', error);
         }
     }
 
     // Agent Scheduler - Auto-execute all 15 agents
     startAgentScheduler() {
         if (!this.config.agents.enabled) {
-            console.log('⏸️ Agent Scheduler is disabled');
+            logger.info('⏸️ Agent Scheduler is disabled');
             return;
         }
 
@@ -142,7 +143,7 @@ class SchedulerService {
             if (!this.isRunning || !this.config.agents.enabled) return;
 
             try {
-                console.log('🤖 Running scheduled agent executions...');
+                logger.info('🤖 Running scheduled agent executions...');
                 
                 for (let i = 0; i < agentIds.length; i++) {
                     const agentId = agentIds[i];
@@ -161,18 +162,18 @@ class SchedulerService {
                         // Small delay between agents to avoid overload
                         await new Promise(resolve => setTimeout(resolve, 2000));
                     } catch (error) {
-                        console.error(`❌ Failed to execute ${funcName} for ${agentId}:`, error);
+                        logger.error(`❌ Failed to execute ${funcName} for ${agentId}:`, error);
                     }
                 }
 
-                console.log('✅ Agent execution cycle completed');
+                logger.info('✅ Agent execution cycle completed');
             } catch (error) {
-                console.error('❌ Agent scheduler error:', error);
+                logger.error('❌ Agent scheduler error:', error);
             }
         }, this.config.agents.interval);
 
         this.intervals.set('agents', intervalId);
-        console.log(`✅ Agent Scheduler started (interval: ${this.config.agents.interval / 1000}s)`);
+        logger.info(`✅ Agent Scheduler started (interval: ${this.config.agents.interval / 1000}s)`);
     }
 
     async executeAgentFunction(agentId, funcName) {
@@ -190,14 +191,14 @@ class SchedulerService {
             }
         } catch (error) {
             // Fallback: Log the execution
-            console.log(`✅ Executed ${funcName} for ${agentId}`);
+            logger.info(`✅ Executed ${funcName} for ${agentId}`);
         }
     }
 
     // Data Hub Scheduler - Auto-refresh all data sources
     startDataHubScheduler() {
         if (!this.config.dataHub.enabled) {
-            console.log('⏸️ Data Hub Scheduler is disabled');
+            logger.info('⏸️ Data Hub Scheduler is disabled');
             return;
         }
 
@@ -205,7 +206,7 @@ class SchedulerService {
             if (!this.isRunning || !this.config.dataHub.enabled) return;
 
             try {
-                console.log('📊 Refreshing Data Hub sources...');
+                logger.info('📊 Refreshing Data Hub sources...');
                 
                 // Get all active data sources
                 const dataHubState = await this.fetchDataHubState();
@@ -228,19 +229,19 @@ class SchedulerService {
                             // Small delay between sources
                             await new Promise(resolve => setTimeout(resolve, 1000));
                         } catch (error) {
-                            console.error(`❌ Failed to refresh source ${source.id}:`, error);
+                            logger.error(`❌ Failed to refresh source ${source.id}:`, error);
                         }
                     }
                 }
 
-                console.log('✅ Data Hub refresh cycle completed');
+                logger.info('✅ Data Hub refresh cycle completed');
             } catch (error) {
-                console.error('❌ Data Hub scheduler error:', error);
+                logger.error('❌ Data Hub scheduler error:', error);
             }
         }, this.config.dataHub.interval);
 
         this.intervals.set('dataHub', intervalId);
-        console.log(`✅ Data Hub Scheduler started (interval: ${this.config.dataHub.interval / 1000}s)`);
+        logger.info(`✅ Data Hub Scheduler started (interval: ${this.config.dataHub.interval / 1000}s)`);
     }
 
     async fetchDataHubState() {
@@ -251,7 +252,7 @@ class SchedulerService {
             }
             return null;
         } catch (error) {
-            console.error('Failed to fetch Data Hub state:', error);
+            logger.error('Failed to fetch Data Hub state:', error);
             return null;
         }
     }
@@ -262,7 +263,7 @@ class SchedulerService {
                 method: 'POST'
             });
         } catch (error) {
-            console.error(`Failed to refresh source ${sourceId}:`, error);
+            logger.error(`Failed to refresh source ${sourceId}:`, error);
         }
     }
 
@@ -272,14 +273,14 @@ class SchedulerService {
                 method: 'POST'
             });
         } catch (error) {
-            console.error(`Failed to normalize source ${sourceId}:`, error);
+            logger.error(`Failed to normalize source ${sourceId}:`, error);
         }
     }
 
     // Training Scheduler - Auto-schedule training sessions
     startTrainingScheduler() {
         if (!this.config.training.enabled) {
-            console.log('⏸️ Training Scheduler is disabled');
+            logger.info('⏸️ Training Scheduler is disabled');
             return;
         }
 
@@ -288,7 +289,7 @@ class SchedulerService {
 
             try {
                 if (this.config.training.autoSchedule) {
-                    console.log('🎓 Checking for training opportunities...');
+                    logger.info('🎓 Checking for training opportunities...');
                     
                     // Check if any agents need training
                     const trainingData = await this.fetchTrainingData();
@@ -298,21 +299,21 @@ class SchedulerService {
                             if (recommendation.priority === 'high' || recommendation.priority === 'critical') {
                                 try {
                                     await this.scheduleTraining(recommendation.agentIds, recommendation.mode);
-                                    console.log(`✅ Auto-scheduled training for agents: ${recommendation.agentIds.join(', ')}`);
+                                    logger.info(`✅ Auto-scheduled training for agents: ${recommendation.agentIds.join(', ')}`);
                                 } catch (error) {
-                                    console.error('Failed to schedule training:', error);
+                                    logger.error('Failed to schedule training:', error);
                                 }
                             }
                         }
                     }
                 }
             } catch (error) {
-                console.error('❌ Training scheduler error:', error);
+                logger.error('❌ Training scheduler error:', error);
             }
         }, this.config.training.interval);
 
         this.intervals.set('training', intervalId);
-        console.log(`✅ Training Scheduler started (interval: ${this.config.training.interval / 1000}s)`);
+        logger.info(`✅ Training Scheduler started (interval: ${this.config.training.interval / 1000}s)`);
     }
 
     async fetchTrainingData() {
@@ -328,7 +329,7 @@ class SchedulerService {
                 }] : []
             };
         } catch (error) {
-            console.error('Failed to fetch training data:', error);
+            logger.error('Failed to fetch training data:', error);
             return { recommendations: [] };
         }
     }
@@ -338,16 +339,16 @@ class SchedulerService {
             // Import triggerTrainingSession from artemisOrchestrator
             const { triggerTrainingSession } = await import('../services/artemisOrchestrator.js');
             await triggerTrainingSession(agentIds, mode);
-            console.log(`✅ Training scheduled for agents: ${agentIds.join(', ')}`);
+            logger.info(`✅ Training scheduled for agents: ${agentIds.join(', ')}`);
         } catch (error) {
-            console.error('Failed to schedule training:', error);
+            logger.error('Failed to schedule training:', error);
         }
     }
 
     // Analytics Scheduler - Auto-refresh analytics
     startAnalyticsScheduler() {
         if (!this.config.analytics.enabled) {
-            console.log('⏸️ Analytics Scheduler is disabled');
+            logger.info('⏸️ Analytics Scheduler is disabled');
             return;
         }
 
@@ -356,23 +357,23 @@ class SchedulerService {
 
             try {
                 if (this.config.analytics.autoRefresh) {
-                    console.log('📈 Refreshing analytics data...');
+                    logger.info('📈 Refreshing analytics data...');
                     // Analytics data is automatically updated when agents run
                     // This is mainly for UI refresh triggers
                 }
             } catch (error) {
-                console.error('❌ Analytics scheduler error:', error);
+                logger.error('❌ Analytics scheduler error:', error);
             }
         }, this.config.analytics.interval);
 
         this.intervals.set('analytics', intervalId);
-        console.log(`✅ Analytics Scheduler started (interval: ${this.config.analytics.interval / 1000}s)`);
+        logger.info(`✅ Analytics Scheduler started (interval: ${this.config.analytics.interval / 1000}s)`);
     }
 
     // Artemis Scheduler - Auto-decision making
     startArtemisScheduler() {
         if (!this.config.artemis.enabled) {
-            console.log('⏸️ Artemis Scheduler is disabled');
+            logger.info('⏸️ Artemis Scheduler is disabled');
             return;
         }
 
@@ -381,17 +382,17 @@ class SchedulerService {
 
             try {
                 if (this.config.artemis.autoDecisions) {
-                    console.log('🧠 Artemis decision cycle...');
+                    logger.info('🧠 Artemis decision cycle...');
                     // Artemis makes decisions based on agent signals
                     // This is handled by the decision engine
                 }
             } catch (error) {
-                console.error('❌ Artemis scheduler error:', error);
+                logger.error('❌ Artemis scheduler error:', error);
             }
         }, this.config.artemis.interval);
 
         this.intervals.set('artemis', intervalId);
-        console.log(`✅ Artemis Scheduler started (interval: ${this.config.artemis.interval / 1000}s)`);
+        logger.info(`✅ Artemis Scheduler started (interval: ${this.config.artemis.interval / 1000}s)`);
     }
 
     // Update configuration

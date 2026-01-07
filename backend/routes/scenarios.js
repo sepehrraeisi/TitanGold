@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -41,7 +42,7 @@ router.post('/generate', authenticate, async (req, res) => {
       message: 'AI scenario generated successfully. Review and save to use.'
     });
   } catch (error) {
-    console.error('Failed to generate scenario:', error);
+    logger.error('Failed to generate scenario:', error);
     res.status(500).json({ error: 'Failed to generate AI scenario' });
   }
 });
@@ -65,7 +66,7 @@ router.post('/', authenticate, async (req, res) => {
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Failed to create scenario:', error);
+    logger.error('Failed to create scenario:', error);
     res.status(500).json({ error: 'Failed to create scenario' });
   }
 });
@@ -97,7 +98,7 @@ router.get('/', authenticate, async (req, res) => {
     
     res.json(result.rows);
   } catch (error) {
-    console.error('Failed to fetch scenarios:', error);
+    logger.error('Failed to fetch scenarios:', error);
     res.status(500).json({ error: 'Failed to fetch scenarios' });
   }
 });
@@ -117,7 +118,7 @@ router.get('/:id', authenticate, async (req, res) => {
     
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Failed to fetch scenario:', error);
+    logger.error('Failed to fetch scenario:', error);
     res.status(500).json({ error: 'Failed to fetch scenario' });
   }
 });
@@ -159,7 +160,7 @@ router.patch('/:id', authenticate, async (req, res) => {
     
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Failed to update scenario:', error);
+    logger.error('Failed to update scenario:', error);
     res.status(500).json({ error: 'Failed to update scenario' });
   }
 });
@@ -183,7 +184,7 @@ router.delete('/:id', authenticate, authorize('admin', 'trader'), async (req, re
       scenario: result.rows[0]
     });
   } catch (error) {
-    console.error('Failed to delete scenario:', error);
+    logger.error('Failed to delete scenario:', error);
     res.status(500).json({ error: 'Failed to delete scenario' });
   }
 });
@@ -244,7 +245,7 @@ router.post('/:id/backtest', authenticate, async (req, res) => {
           [JSON.stringify(results), backtestId]
         );
       } catch (error) {
-        console.error('Backtest execution error:', error);
+        logger.error('Backtest execution error:', error);
         await query(
           `UPDATE backtest_runs 
            SET status = 'failed', error_message = $1 
@@ -261,7 +262,7 @@ router.post('/:id/backtest', authenticate, async (req, res) => {
       message: 'Backtest started. Check status with GET /api/backtest/runs/:id'
     });
   } catch (error) {
-    console.error('Failed to start backtest:', error);
+    logger.error('Failed to start backtest:', error);
     res.status(500).json({ error: 'Failed to start backtest' });
   }
 });

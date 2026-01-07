@@ -2,8 +2,9 @@
 // Purpose: Order Management Agent implementation
 // Date: 2026-01-03
 
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🤖 Order Management Agent: ${symbol}`);
+  logger.info(`🤖 Order Management Agent: ${symbol}`);
   
   return {
     agent_key: 'order',

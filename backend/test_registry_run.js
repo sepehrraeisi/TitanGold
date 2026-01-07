@@ -1,12 +1,13 @@
 // Test Registry-Based Run
 import agentRegistry from './services/agents/registry.js';
+import { logger } from './services/logger.js';
 
 async function testRun() {
-  console.log('🧪 Testing Registry-Based Agent Run\n');
+  logger.info('🧪 Testing Registry-Based Agent Run\n');
   
   try {
     // Test 1: Run technical agent
-    console.log('=== Test 1: Technical Agent ===');
+    logger.info('=== Test 1: Technical Agent ===');
     const result = await agentRegistry.runAgent('technical', {
       userId: 'test-user',
       symbol: 'BTC/USDT',
@@ -14,11 +15,11 @@ async function testRun() {
       config: {}
     });
     
-    console.log('✅ Result:', JSON.stringify(result, null, 2));
-    console.log('');
+    logger.info('✅ Result:', JSON.stringify(result, null, 2));
+    logger.info('');
     
     // Test 2: Run risk agent
-    console.log('=== Test 2: Risk Agent ===');
+    logger.info('=== Test 2: Risk Agent ===');
     const riskResult = await agentRegistry.runAgent('risk', {
       userId: 'test-user',
       symbol: 'ETH/USDT',
@@ -26,23 +27,23 @@ async function testRun() {
       config: {}
     });
     
-    console.log('✅ Result:', JSON.stringify(riskResult, null, 2));
-    console.log('');
+    logger.info('✅ Result:', JSON.stringify(riskResult, null, 2));
+    logger.info('');
     
     // Test 3: Invalid agent
-    console.log('=== Test 3: Invalid Agent ===');
+    logger.info('=== Test 3: Invalid Agent ===');
     try {
       await agentRegistry.runAgent('invalid_agent', {});
-      console.log('❌ Should have thrown error');
+      logger.info('❌ Should have thrown error');
     } catch (err) {
-      console.log('✅ Expected error:', err.message);
+      logger.info('✅ Expected error:', err.message);
     }
     
-    console.log('\n✅ All registry run tests passed!');
+    logger.info('\n✅ All registry run tests passed!');
     process.exit(0);
   } catch (error) {
-    console.error('\n❌ Test failed:', error.message);
-    console.error(error.stack);
+    logger.error('\n❌ Test failed:', error.message);
+    logger.error(error.stack);
     process.exit(1);
   }
 }

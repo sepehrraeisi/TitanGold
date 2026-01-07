@@ -7,8 +7,9 @@
  * @param {Object} params - { userId, symbol, timeframe, config }
  * @returns {Promise<Object>} Analysis result
  */
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe = '1h', config = {} }) {
-  console.log(`🔍 Technical Analysis: ${symbol} (${timeframe})`);
+  logger.info(`🔍 Technical Analysis: ${symbol} (${timeframe})`);
   
   // MVP: Simple mock analysis
   // TODO: Integrate with real market data provider
@@ -53,7 +54,7 @@ export async function run({ userId, symbol, timeframe = '1h', config = {} }) {
     result.confidence = 0.65;
   }
   
-  console.log(`✅ Technical Analysis complete: ${result.signal} (${result.confidence})`);
+  logger.info(`✅ Technical Analysis complete: ${result.signal} (${result.confidence})`);
   return result;
 }
 
@@ -84,7 +85,7 @@ export async function getDetails({ userId }) {
  * @returns {Promise<Object>} Command result
  */
 export async function command({ command, payload }) {
-  console.log(`⚡ Technical Agent command: ${command}`);
+  logger.info(`⚡ Technical Agent command: ${command}`);
   
   switch (command) {
     case 'reset':

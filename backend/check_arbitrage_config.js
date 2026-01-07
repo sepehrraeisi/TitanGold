@@ -1,5 +1,6 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { logger } from './services/logger.js';
 
 dotenv.config();
 
@@ -21,20 +22,20 @@ async function checkArbitrageConfig() {
     );
     
     if (result.rows.length === 0) {
-      console.log('❌ Arbitrage agent not found in DB!');
+      logger.info('❌ Arbitrage agent not found in DB!');
       process.exit(1);
     }
     
     const agent = result.rows[0];
-    console.log('\n📊 Arbitrage Agent Config:\n');
-    console.log('agent_key:', agent.agent_key);
-    console.log('status:', agent.status);
-    console.log('is_enabled:', agent.is_enabled);
-    console.log('\nconfig:', JSON.stringify(agent.config, null, 2));
-    console.log('\nmetadata:', JSON.stringify(agent.metadata, null, 2));
+    logger.info('\n📊 Arbitrage Agent Config:\n');
+    logger.info('agent_key:', agent.agent_key);
+    logger.info('status:', agent.status);
+    logger.info('is_enabled:', agent.is_enabled);
+    logger.info('\nconfig:', JSON.stringify(agent.config, null, 2));
+    logger.info('\nmetadata:', JSON.stringify(agent.metadata, null, 2));
     
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    logger.error('❌ Error:', error.message);
   } finally {
     await pool.end();
   }

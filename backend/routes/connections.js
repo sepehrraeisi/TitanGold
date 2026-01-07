@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import exchangesRouter from './exchanges.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -37,10 +38,10 @@ router.get('/mexc', authenticate, async (req, res) => {
       lastSyncAt: connection.last_sync_at,
     });
   } catch (error) {
-    console.error('Failed to fetch MEXC connection:', error);
+    logger.error('Failed to fetch MEXC connection:', error);
     // If database is unavailable, return empty connection instead of error
     if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-      console.warn('⚠️ Database unavailable, returning empty connection settings');
+      logger.warn('⚠️ Database unavailable, returning empty connection settings');
       return res.json({
         apiKey: '',
         apiSecret: '',
@@ -85,7 +86,7 @@ router.post('/mexc', authenticate, authorize('admin', 'trader'), async (req, res
       message: testResult.success ? 'Connection saved and tested successfully' : 'Connection saved but test failed',
     });
   } catch (error) {
-    console.error('Failed to save MEXC connection:', error);
+    logger.error('Failed to save MEXC connection:', error);
     res.status(500).json({ error: 'Failed to save connection settings' });
   }
 });
@@ -120,7 +121,7 @@ router.post('/mexc/test', authenticate, async (req, res) => {
     const testResult = await testMexcConnection(testApiKey, testApiSecret);
     res.json(testResult);
   } catch (error) {
-    console.error('Failed to test MEXC connection:', error);
+    logger.error('Failed to test MEXC connection:', error);
     res.status(500).json({ error: 'Failed to test connection' });
   }
 });
@@ -141,7 +142,7 @@ async function testMexcConnection(apiKey, apiSecret) {
     await exchange.fetchBalance();
     return { success: true, message: 'Connection successful' };
   } catch (error) {
-    console.error('MEXC connection test failed:', error);
+    logger.error('MEXC connection test failed:', error);
     return { 
       success: false, 
       message: error.message || 'Connection test failed',

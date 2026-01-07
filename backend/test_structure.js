@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const API_URL = 'https://titan.zala.ir/api';
 
@@ -28,12 +29,12 @@ async function test() {
   
   const result = await runRes.json();
   
-  console.log('result.result structure:');
+  logger.info('result.result structure:');
   if (result.result) {
-    console.log('Keys:', Object.keys(result.result));
-    console.log('\naverageScore:', result.result.averageScore);
-    console.log('marketSummary:', result.result.marketSummary);
-    console.log('alerts:', result.result.alerts);
+    logger.info('Keys:', Object.keys(result.result));
+    logger.info('\naverageScore:', result.result.averageScore);
+    logger.info('marketSummary:', result.result.marketSummary);
+    logger.info('alerts:', result.result.alerts);
   }
 }
 

@@ -3,6 +3,7 @@
  * Ensures UI never receives undefined fields by normalizing DB config + defaults.
  */
 
+import { logger } from '../services/logger.js';
 export const AGENT_DEFAULTS = {
   technical: {
     indicators: ['RSI', 'MACD', 'EMA', 'SMA', 'BB'],
@@ -176,7 +177,7 @@ function deepMerge(defaults, overrides) {
 export function normalizeAgentConfig(agent_key, rawConfig = {}) {
   const defaults = AGENT_DEFAULTS[agent_key];
   if (!defaults) {
-    console.warn(`⚠️ No defaults found for agent_key: ${agent_key}`);
+    logger.warn(`⚠️ No defaults found for agent_key: ${agent_key}`);
     // still guarantee these two exist for UI safety
     return {
       ...(rawConfig || {}),

@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -33,7 +34,7 @@ router.post('/2fa/setup', authenticate, async (req, res) => {
     ).catch(async (err) => {
       // If column doesn't exist, try to add it first (for development)
       if (err.message?.includes('column "two_factor_temp_secret" does not exist')) {
-        console.warn('⚠️ two_factor_temp_secret column does not exist, attempting to create...');
+        logger.warn('⚠️ two_factor_temp_secret column does not exist, attempting to create...');
         // For now, just continue - the column should exist in production
       } else {
         throw err;
@@ -45,7 +46,7 @@ router.post('/2fa/setup', authenticate, async (req, res) => {
     try {
       qrCode = await QRCode.toDataURL(secret.otpauth_url);
     } catch (qrError) {
-      console.error('Failed to generate QR code:', qrError);
+      logger.error('Failed to generate QR code:', qrError);
       // Continue without QR code - user can enter secret manually
     }
     
@@ -55,7 +56,7 @@ router.post('/2fa/setup', authenticate, async (req, res) => {
       manualEntryKey: secret.base32,
     });
   } catch (error) {
-    console.error('Failed to setup 2FA:', error);
+    logger.error('Failed to setup 2FA:', error);
     res.status(500).json({ error: 'Failed to setup 2FA', message: error.message });
   }
 });
@@ -109,7 +110,7 @@ router.post('/2fa/verify', authenticate, async (req, res) => {
         [tempSecret, userId]
       ).catch(async (err) => {
         if (err.message?.includes('column "two_factor_secret" does not exist')) {
-          console.warn('⚠️ 2FA columns do not exist in users table');
+          logger.warn('⚠️ 2FA columns do not exist in users table');
           // For development, we'll continue - columns should exist in production
         } else {
           throw err;
@@ -124,7 +125,7 @@ router.post('/2fa/verify', authenticate, async (req, res) => {
       res.status(400).json({ error: 'Invalid token. Please check your authenticator app and try again.' });
     }
   } catch (error) {
-    console.error('Failed to verify 2FA:', error);
+    logger.error('Failed to verify 2FA:', error);
     res.status(500).json({ error: 'Failed to verify 2FA', message: error.message });
   }
 });
@@ -180,7 +181,7 @@ router.post('/2fa/disable', authenticate, async (req, res) => {
     ).catch(err => {
       if (err.message?.includes('column') && err.message?.includes('does not exist')) {
         // Columns don't exist - that's fine for development
-        console.warn('⚠️ 2FA columns do not exist');
+        logger.warn('⚠️ 2FA columns do not exist');
       } else {
         throw err;
       }
@@ -191,7 +192,7 @@ router.post('/2fa/disable', authenticate, async (req, res) => {
       message: '2FA disabled successfully' 
     });
   } catch (error) {
-    console.error('Failed to disable 2FA:', error);
+    logger.error('Failed to disable 2FA:', error);
     res.status(500).json({ error: 'Failed to disable 2FA', message: error.message });
   }
 });
@@ -242,7 +243,7 @@ router.post('/2fa/verify-token', authenticate, async (req, res) => {
       res.status(400).json({ error: 'Invalid token' });
     }
   } catch (error) {
-    console.error('Failed to verify 2FA token:', error);
+    logger.error('Failed to verify 2FA token:', error);
     res.status(500).json({ error: 'Failed to verify token', message: error.message });
   }
 });
@@ -286,7 +287,7 @@ router.post('/2fa/backup-codes/generate', authenticate, async (req, res) => {
       [JSON.stringify(hashedCodes), userId]
     );
 
-    console.log(`[SECURITY] User ${userId} generated new 2FA backup codes`);
+    logger.info(`[SECURITY] User ${userId} generated new 2FA backup codes`);
 
     res.json({
       backupCodes,
@@ -294,7 +295,7 @@ router.post('/2fa/backup-codes/generate', authenticate, async (req, res) => {
       warning: 'Each code can only be used once. Generate new codes if you use all of them.',
     });
   } catch (error) {
-    console.error('Error generating backup codes:', error);
+    logger.error('Error generating backup codes:', error);
     res.status(500).json({ error: 'Failed to generate backup codes', message: error.message });
   }
 });
@@ -342,7 +343,7 @@ router.post('/2fa/backup-codes/verify', async (req, res) => {
     }
 
     if (!codeFound) {
-      console.log(`[SECURITY] Failed backup code attempt for user ${userId}`);
+      logger.info(`[SECURITY] Failed backup code attempt for user ${userId}`);
       return res.status(400).json({ error: 'Invalid or already used backup code' });
     }
 
@@ -357,7 +358,7 @@ router.post('/2fa/backup-codes/verify', async (req, res) => {
 
     const remainingCodes = backupCodes.filter((c) => !c.used).length;
 
-    console.log(`[SECURITY] User ${userId} used a backup code. ${remainingCodes} codes remaining.`);
+    logger.info(`[SECURITY] User ${userId} used a backup code. ${remainingCodes} codes remaining.`);
 
     res.json({
       success: true,
@@ -368,7 +369,7 @@ router.post('/2fa/backup-codes/verify', async (req, res) => {
         : null,
     });
   } catch (error) {
-    console.error('Error verifying backup code:', error);
+    logger.error('Error verifying backup code:', error);
     res.status(500).json({ error: 'Failed to verify backup code', message: error.message });
   }
 });
@@ -394,7 +395,7 @@ router.get('/2fa/backup-codes/remaining', authenticate, async (req, res) => {
       used: backupCodes.length - remaining,
     });
   } catch (error) {
-    console.error('Error fetching backup codes info:', error);
+    logger.error('Error fetching backup codes info:', error);
     res.status(500).json({ error: 'Failed to fetch backup codes information', message: error.message });
   }
 });

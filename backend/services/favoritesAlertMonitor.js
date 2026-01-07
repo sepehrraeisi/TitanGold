@@ -9,6 +9,7 @@
 import pool from '../database/db.js';
 import { telegramService } from './telegram.js';
 import axios from 'axios';
+import { logger } from '../services/logger.js';
 
 class FavoritesAlertMonitor {
     constructor() {
@@ -22,7 +23,7 @@ class FavoritesAlertMonitor {
      */
     start() {
         if (this.monitorInterval) {
-            console.warn('⚠️ Alert monitor already running');
+            logger.warn('⚠️ Alert monitor already running');
             return;
         }
 
@@ -30,7 +31,7 @@ class FavoritesAlertMonitor {
             await this.checkAlerts();
         }, this.CHECK_FREQUENCY);
 
-        console.log(`✅ Favorites Alert Monitor started (checking every ${this.CHECK_FREQUENCY}ms)`);
+        logger.info(`✅ Favorites Alert Monitor started (checking every ${this.CHECK_FREQUENCY}ms)`);
         
         // Run initial check
         this.checkAlerts();
@@ -43,7 +44,7 @@ class FavoritesAlertMonitor {
         if (this.monitorInterval) {
             clearInterval(this.monitorInterval);
             this.monitorInterval = null;
-            console.log('🛑 Favorites Alert Monitor stopped');
+            logger.info('🛑 Favorites Alert Monitor stopped');
         }
     }
 
@@ -77,7 +78,7 @@ class FavoritesAlertMonitor {
                 return; // No active alerts
             }
 
-            console.log(`🔍 Checking ${result.rows.length} active alerts...`);
+            logger.info(`🔍 Checking ${result.rows.length} active alerts...`);
 
             // Group alerts by symbol to minimize API calls
             const alertsBySymbol = new Map();
@@ -94,7 +95,7 @@ class FavoritesAlertMonitor {
             }
 
         } catch (error) {
-            console.error('❌ Error checking alerts:', error);
+            logger.error('❌ Error checking alerts:', error);
         }
     }
 
@@ -107,7 +108,7 @@ class FavoritesAlertMonitor {
             const currentPrice = await this.fetchPrice(assetId);
             
             if (!currentPrice) {
-                console.warn(`⚠️ Could not fetch price for ${assetId}`);
+                logger.warn(`⚠️ Could not fetch price for ${assetId}`);
                 return;
             }
 
@@ -120,13 +121,13 @@ class FavoritesAlertMonitor {
                 );
 
                 if (triggered) {
-                    console.log(`🔔 Alert triggered! ${alert.symbol} ${alert.condition} $${alert.target_price} (current: $${currentPrice})`);
+                    logger.info(`🔔 Alert triggered! ${alert.symbol} ${alert.condition} $${alert.target_price} (current: $${currentPrice})`);
                     await this.triggerAlert(alert, currentPrice);
                 }
             }
 
         } catch (error) {
-            console.error(`❌ Error checking alerts for ${assetId}:`, error);
+            logger.error(`❌ Error checking alerts for ${assetId}:`, error);
         }
     }
 
@@ -166,11 +167,11 @@ class FavoritesAlertMonitor {
             // Send notifications
             await this.sendNotifications(alert, currentPrice);
 
-            console.log(`✅ Alert ${alert.alert_id} triggered and notifications sent`);
+            logger.info(`✅ Alert ${alert.alert_id} triggered and notifications sent`);
 
         } catch (error) {
             await client.query('ROLLBACK');
-            console.error('❌ Error triggering alert:', error);
+            logger.error('❌ Error triggering alert:', error);
         } finally {
             client.release();
         }
@@ -206,24 +207,24 @@ class FavoritesAlertMonitor {
                         { parse_mode: 'Markdown' }
                     );
                     
-                    console.log(`📱 Telegram notification sent to user ${alert.username} for ${alert.symbol}`);
+                    logger.info(`📱 Telegram notification sent to user ${alert.username} for ${alert.symbol}`);
                 } else {
-                    console.warn(`⚠️ Telegram not configured for user ${alert.username}`);
+                    logger.warn(`⚠️ Telegram not configured for user ${alert.username}`);
                 }
             } catch (error) {
-                console.error('❌ Telegram notification failed:', error);
+                logger.error('❌ Telegram notification failed:', error);
             }
         }
 
         // TODO: Browser notification (via WebSocket)
         if (alert.notify_browser) {
             // This would integrate with WebSocket service
-            console.log(`🔔 Browser notification needed for ${alert.symbol}`);
+            logger.info(`🔔 Browser notification needed for ${alert.symbol}`);
         }
 
         // TODO: Email notification
         if (alert.notify_email) {
-            console.log(`📧 Email notification needed for ${alert.symbol}`);
+            logger.info(`📧 Email notification needed for ${alert.symbol}`);
         }
     }
 
@@ -263,7 +264,7 @@ Your alert has been triggered and deactivated.
 
             return null;
         } catch (error) {
-            console.warn(`⚠️ Failed to fetch price for ${assetId}:`, error.message);
+            logger.warn(`⚠️ Failed to fetch price for ${assetId}:`, error.message);
             
             // Return cached price if available
             return this.lastCheckedPrices.get(assetId) || null;
@@ -335,7 +336,7 @@ Your alert has been triggered and deactivated.
             };
 
         } catch (error) {
-            console.error('Error checking specific alert:', error);
+            logger.error('Error checking specific alert:', error);
             return { success: false, error: error.message };
         }
     }

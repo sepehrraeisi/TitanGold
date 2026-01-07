@@ -3,12 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from './database/db.js';
+import { logger } from './services/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function runMigration() {
-    console.log('🚀 Starting migration 005: Add agent_key to ai_agents...');
+    logger.info('🚀 Starting migration 005: Add agent_key to ai_agents...');
     
     try {
         // Read migration file
@@ -16,13 +17,13 @@ async function runMigration() {
         const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
         
         // Execute migration
-        console.log('📝 Executing migration SQL...');
+        logger.info('📝 Executing migration SQL...');
         await pool.query(migrationSQL);
         
-        console.log('✅ Migration completed successfully!');
+        logger.info('✅ Migration completed successfully!');
         
         // Verify results
-        console.log('\n📊 Verification:');
+        logger.info('\n📊 Verification:');
         const agentsResult = await pool.query(`
             SELECT 
                 COUNT(*) as total,
@@ -31,9 +32,9 @@ async function runMigration() {
             FROM ai_agents
         `);
         
-        console.log('   Total agents:', agentsResult.rows[0].total);
-        console.log('   With agent_key:', agentsResult.rows[0].with_key);
-        console.log('   Without agent_key:', agentsResult.rows[0].without_key);
+        logger.info('   Total agents:', agentsResult.rows[0].total);
+        logger.info('   With agent_key:', agentsResult.rows[0].with_key);
+        logger.info('   Without agent_key:', agentsResult.rows[0].without_key);
         
         // Show current agent_keys
         const keysResult = await pool.query(`
@@ -44,16 +45,16 @@ async function runMigration() {
         `);
         
         if (keysResult.rows.length > 0) {
-            console.log('\n📋 Current agent_keys:');
+            logger.info('\n📋 Current agent_keys:');
             keysResult.rows.forEach(row => {
-                console.log(`   ${row.agent_key.padEnd(20)} | ${row.name.padEnd(30)} | ${row.status}`);
+                logger.info(`   ${row.agent_key.padEnd(20)} | ${row.name.padEnd(30)} | ${row.status}`);
             });
         }
         
         process.exit(0);
     } catch (error) {
-        console.error('❌ Migration failed:', error.message);
-        console.error(error);
+        logger.error('❌ Migration failed:', error.message);
+        logger.error(error);
         process.exit(1);
     }
 }

@@ -1,15 +1,16 @@
 // Test /run-v2 endpoint with real DB
 import pool from './database/db.js';
 import http from 'http';
+import { logger } from './services/logger.js';
 
 async function testRunV2() {
-  console.log('🧪 Testing POST /:id/run-v2 with DB\n');
+  logger.info('🧪 Testing POST /:id/run-v2 with DB\n');
   
   try {
     // Step 1: Get decisions count BEFORE
     const beforeResult = await pool.query('SELECT COUNT(*) FROM ai_decisions');
     const countBefore = parseInt(beforeResult.rows[0].count);
-    console.log(`📊 Decisions count BEFORE: ${countBefore}`);
+    logger.info(`📊 Decisions count BEFORE: ${countBefore}`);
     
     // Step 2: Get a real agent UUID (technical agent)
     const agentResult = await pool.query(`
@@ -24,36 +25,36 @@ async function testRunV2() {
     }
     
     const agent = agentResult.rows[0];
-    console.log(`✅ Agent found: ${agent.name} (${agent.agent_key})`);
-    console.log(`   UUID: ${agent.id}\n`);
+    logger.info(`✅ Agent found: ${agent.name} (${agent.agent_key})`);
+    logger.info(`   UUID: ${agent.id}\n`);
     
     // Step 3: Call /run-v2 without auth (expect 401)
-    console.log('📡 Testing /run-v2 without auth...');
+    logger.info('📡 Testing /run-v2 without auth...');
     const noAuthResult = await callRunV2(agent.id, null);
-    console.log(`   Status: ${noAuthResult.status} (expected: 401)`);
+    logger.info(`   Status: ${noAuthResult.status} (expected: 401)`);
     
     if (noAuthResult.status === 401) {
-      console.log('   ✅ Auth protection working\n');
+      logger.info('   ✅ Auth protection working\n');
     } else {
-      console.log('   ⚠️  Expected 401 but got', noAuthResult.status, '\n');
+      logger.info('   ⚠️  Expected 401 but got', noAuthResult.status, '\n');
     }
     
     // Step 4: Get decisions count AFTER (should be same, no auth)
     const afterNoAuthResult = await pool.query('SELECT COUNT(*) FROM ai_decisions');
     const countAfterNoAuth = parseInt(afterNoAuthResult.rows[0].count);
-    console.log(`📊 Decisions count AFTER no-auth test: ${countAfterNoAuth}`);
-    console.log(`   Change: ${countAfterNoAuth - countBefore} (expected: 0)\n`);
+    logger.info(`📊 Decisions count AFTER no-auth test: ${countAfterNoAuth}`);
+    logger.info(`   Change: ${countAfterNoAuth - countBefore} (expected: 0)\n`);
     
-    console.log('✅ Test complete!');
-    console.log('\n📋 Summary:');
-    console.log(`   - Endpoint exists: YES`);
-    console.log(`   - Auth protection: YES`);
-    console.log(`   - Ready for authenticated test: YES`);
-    console.log('\n⚠️  Next: Test with real auth token from frontend');
+    logger.info('✅ Test complete!');
+    logger.info('\n📋 Summary:');
+    logger.info(`   - Endpoint exists: YES`);
+    logger.info(`   - Auth protection: YES`);
+    logger.info(`   - Ready for authenticated test: YES`);
+    logger.info('\n⚠️  Next: Test with real auth token from frontend');
     
     process.exit(0);
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
+    logger.error('❌ Test failed:', error.message);
     process.exit(1);
   }
 }

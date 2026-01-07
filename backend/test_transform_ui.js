@@ -1,4 +1,5 @@
 import agentRegistry from './services/agents/registry.js';
+import { logger } from './services/logger.js';
 
 // Test transformer
 async function testTransform() {
@@ -11,8 +12,8 @@ async function testTransform() {
       config: {}
     });
 
-    console.log('📊 Raw Result from Registry:');
-    console.log(JSON.stringify(result, null, 2));
+    logger.info('📊 Raw Result from Registry:');
+    logger.info(JSON.stringify(result, null, 2));
 
     // Simulate transformer
     const { symbol, timeframe, confidence, signal, indicators, timestamp, _meta } = result;
@@ -60,14 +61,14 @@ async function testTransform() {
       uiResult.indicators = indicatorArray;
     }
 
-    console.log('\n✅ UI-Compatible Result (Transformed):');
-    console.log(JSON.stringify(uiResult, null, 2));
-    console.log('\n📝 Indicators array count:', uiResult.indicators.length);
-    console.log('📝 Signal format:', uiResult.signal);
-    console.log('📝 Confidence:', uiResult.confidence);
+    logger.info('\n✅ UI-Compatible Result (Transformed):');
+    logger.info(JSON.stringify(uiResult, null, 2));
+    logger.info('\n📝 Indicators array count:', uiResult.indicators.length);
+    logger.info('📝 Signal format:', uiResult.signal);
+    logger.info('📝 Confidence:', uiResult.confidence);
 
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
+    logger.error('❌ Test failed:', error.message);
     process.exit(1);
   }
 }

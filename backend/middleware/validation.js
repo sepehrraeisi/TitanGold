@@ -7,6 +7,7 @@
  */
 
 import { ZodError } from 'zod';
+import { logger } from '../services/logger.js';
 
 /**
  * Format Zod validation errors into a user-friendly structure
@@ -48,7 +49,7 @@ export const validateBody = (schema) => {
         return res.status(400).json(formatZodError(error));
       }
       // Unexpected error
-      console.error('Validation middleware error:', error);
+      logger.error('Validation middleware error:', error);
       return res.status(500).json({
         ok: false,
         error: {
@@ -75,7 +76,7 @@ export const validateQuery = (schema) => {
       if (error instanceof ZodError) {
         return res.status(400).json(formatZodError(error));
       }
-      console.error('Validation middleware error:', error);
+      logger.error('Validation middleware error:', error);
       return res.status(500).json({
         ok: false,
         error: {
@@ -102,7 +103,7 @@ export const validateParams = (schema) => {
       if (error instanceof ZodError) {
         return res.status(400).json(formatZodError(error));
       }
-      console.error('Validation middleware error:', error);
+      logger.error('Validation middleware error:', error);
       return res.status(500).json({
         ok: false,
         error: {
@@ -195,7 +196,7 @@ export const validate = (schemas) => {
 
       next();
     } catch (error) {
-      console.error('Validation middleware error:', error);
+      logger.error('Validation middleware error:', error);
       return res.status(500).json({
         ok: false,
         error: {

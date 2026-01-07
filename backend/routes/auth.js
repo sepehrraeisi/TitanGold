@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import { query, transaction } from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -102,7 +103,7 @@ router.post('/register', [
       refreshToken
     });
   } catch (error) {
-    console.error('Register error:', error);
+    logger.error('Register error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -174,7 +175,7 @@ router.post('/login', [
       refreshToken
     });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -192,7 +193,7 @@ router.post('/logout', authenticate, async (req, res) => {
 
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
-    console.error('Logout error:', error);
+    logger.error('Logout error:', error);
     res.status(500).json({ error: 'Logout failed' });
   }
 });
@@ -246,7 +247,7 @@ router.post('/refresh', async (req, res) => {
       refreshToken: newRefreshToken
     });
   } catch (error) {
-    console.error('Refresh token error:', error);
+    logger.error('Refresh token error:', error);
     res.status(401).json({ error: 'Token refresh failed' });
   }
 });
@@ -273,7 +274,7 @@ router.get('/me', authenticate, async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Get current user error:', error);
+    logger.error('Get current user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
   }
 });

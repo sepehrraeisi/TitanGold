@@ -1,43 +1,44 @@
 import { mexcService } from '../services/mexc.js';
 import { aiService } from '../services/ai.js';
 import { telegramService } from '../services/telegram.js';
+import { logger } from '../services/logger.js';
 
 async function verify() {
-    console.log('🔍 Starting System Verification...');
+    logger.info('🔍 Starting System Verification...');
 
     // 1. Test MEXC
     try {
-        console.log('📡 Testing MEXC Connection...');
+        logger.info('📡 Testing MEXC Connection...');
         const prices = await mexcService.fetchSystemPrices(['BTC/USDT']);
         const btc = prices['BTC/USDT'];
         if (btc) {
-            console.log('✅ MEXC Connected. BTC Price:', btc.last || btc.close || btc.price);
+            logger.info('✅ MEXC Connected. BTC Price:', btc.last || btc.close || btc.price);
         } else {
-            console.error('❌ MEXC Failed: No price data');
+            logger.error('❌ MEXC Failed: No price data');
         }
     } catch (error) {
-        console.error('❌ MEXC Error:', error.message);
+        logger.error('❌ MEXC Error:', error.message);
     }
 
     // 2. Test AI
     try {
-        console.log('🧠 Testing AI (Gemini)...');
+        logger.info('🧠 Testing AI (Gemini)...');
         const response = await aiService.askArtemis('Hello, are you online?');
-        console.log('✅ AI Response:', response);
+        logger.info('✅ AI Response:', response);
     } catch (error) {
-        console.error('❌ AI Error:', error.message);
+        logger.error('❌ AI Error:', error.message);
     }
 
     // 3. Test Telegram
     try {
-        console.log('📨 Testing Telegram...');
+        logger.info('📨 Testing Telegram...');
         // await telegramService.sendMessage('🚀 TitanGold System Online via Verification Script');
-        console.log('✅ Telegram Service Initialized (Message sending skipped to avoid spam)');
+        logger.info('✅ Telegram Service Initialized (Message sending skipped to avoid spam)');
     } catch (error) {
-        console.error('❌ Telegram Error:', error.message);
+        logger.error('❌ Telegram Error:', error.message);
     }
 
-    console.log('🏁 Verification Complete');
+    logger.info('🏁 Verification Complete');
     process.exit(0);
 }
 

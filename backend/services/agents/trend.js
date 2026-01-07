@@ -2,8 +2,9 @@
 // Purpose: Trend Detection Agent implementation
 // Date: 2026-01-03
 
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🤖 Trend Detection Agent: ${symbol}`);
+  logger.info(`🤖 Trend Detection Agent: ${symbol}`);
   
   return {
     agent_key: 'trend',

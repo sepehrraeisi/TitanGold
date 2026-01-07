@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 
 import { telegramService } from '../services/telegram.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -90,7 +91,7 @@ router.get('/state', authenticate, async (req, res) => {
       recentSources: sourcesDetailResult.rows || [],
     });
   } catch (error) {
-    console.error('Failed to fetch DataHub state:', error);
+    logger.error('Failed to fetch DataHub state:', error);
     res.status(500).json({ error: 'Failed to fetch DataHub state' });
   }
 });
@@ -124,7 +125,7 @@ router.get('/health', authenticate, async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('DataHub health check failed:', error);
+    logger.error('DataHub health check failed:', error);
     res.status(503).json({
       status: 'unhealthy',
       database: 'disconnected',
@@ -147,7 +148,7 @@ router.get('/stats', authenticate, async (req, res) => {
     
     res.json(stats.rows[0] || {});
   } catch (error) {
-    console.error('Failed to fetch DataHub stats:', error);
+    logger.error('Failed to fetch DataHub stats:', error);
     res.status(500).json({ error: 'Failed to fetch statistics' });
   }
 });

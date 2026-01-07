@@ -2,8 +2,9 @@
 // Purpose: Price Prediction Agent implementation
 // Date: 2026-01-03
 
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🤖 Price Prediction Agent: ${symbol}`);
+  logger.info(`🤖 Price Prediction Agent: ${symbol}`);
   
   return {
     agent_key: 'price_prediction',

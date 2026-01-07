@@ -2,8 +2,9 @@
 // Purpose: Optimization Agent implementation
 // Date: 2026-01-03
 
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🤖 Optimization Agent: ${symbol}`);
+  logger.info(`🤖 Optimization Agent: ${symbol}`);
   
   return {
     agent_key: 'optimization',

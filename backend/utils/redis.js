@@ -1,4 +1,5 @@
 import { createClient } from 'redis';
+import { logger } from '../services/logger.js';
 
 let redisClient = null;
 let isConnecting = false;
@@ -29,7 +30,7 @@ export async function getRedisClient() {
       socket: {
         reconnectStrategy: (retries) => {
           if (retries > 10) {
-            console.error('❌ Redis: Max reconnection attempts reached');
+            logger.error('❌ Redis: Max reconnection attempts reached');
             return new Error('Max reconnection attempts reached');
           }
           // Exponential backoff: 50ms, 100ms, 200ms, ...
@@ -46,19 +47,19 @@ export async function getRedisClient() {
     redisClient = createClient(clientOptions);
 
     redisClient.on('error', (err) => {
-      console.error('❌ Redis Client Error:', err.message);
+      logger.error('❌ Redis Client Error:', err.message);
     });
 
     redisClient.on('connect', () => {
-      console.log('🔗 Redis: Connected');
+      logger.info('🔗 Redis: Connected');
     });
 
     redisClient.on('reconnecting', () => {
-      console.log('🔄 Redis: Reconnecting...');
+      logger.info('🔄 Redis: Reconnecting...');
     });
 
     redisClient.on('ready', () => {
-      console.log('✅ Redis: Ready');
+      logger.info('✅ Redis: Ready');
     });
 
     await redisClient.connect();
@@ -67,7 +68,7 @@ export async function getRedisClient() {
     return redisClient;
   } catch (error) {
     isConnecting = false;
-    console.error('❌ Redis connection failed:', error.message);
+    logger.error('❌ Redis connection failed:', error.message);
     throw error;
   }
 }
@@ -78,7 +79,7 @@ export async function getRedisClient() {
 export async function closeRedis() {
   if (redisClient && redisClient.isOpen) {
     await redisClient.quit();
-    console.log('🔌 Redis: Connection closed');
+    logger.info('🔌 Redis: Connection closed');
   }
 }
 
@@ -158,7 +159,7 @@ export async function getRedisInfo() {
       }
     };
   } catch (error) {
-    console.error('❌ Failed to get Redis info:', error.message);
+    logger.error('❌ Failed to get Redis info:', error.message);
     return {
       status: 'error',
       message: error.message

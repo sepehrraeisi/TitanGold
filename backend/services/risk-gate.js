@@ -20,6 +20,7 @@
  */
 
 import * as riskAgent from './risk-agent.js';
+import { logger } from '../services/logger.js';
 
 const RISK_AGENT_ID = '79bbdf0b-94a3-4cbc-adef-98c25f5ba1a7';
 
@@ -32,7 +33,7 @@ class RiskGateService {
     this.db = db;
     this.tradingMode = tradingMode || process.env.TRADING_MODE || 'demo';
     
-    console.log(`🛡️ RiskGateService initialized (mode: ${this.tradingMode})`);
+    logger.info(`🛡️ RiskGateService initialized (mode: ${this.tradingMode})`);
   }
 
   /**
@@ -87,7 +88,7 @@ class RiskGateService {
       };
       
     } catch (error) {
-      console.error('❌ Risk gate error:', error);
+      logger.error('❌ Risk gate error:', error);
       
       // ⚠️  FAIL MODE: Demo vs Live
       const shouldFailOpen = this.tradingMode === 'demo';
@@ -98,7 +99,7 @@ class RiskGateService {
       
       if (shouldFailOpen) {
         // DEMO: fail-open (allow trade with warning)
-        console.warn('⚠️  Risk gate error in DEMO mode: allowing trade (fail-open)');
+        logger.warn('⚠️  Risk gate error in DEMO mode: allowing trade (fail-open)');
         return {
           allowed: true,
           reason: 'RISK_GATE_ERROR_FAIL_OPEN',
@@ -107,7 +108,7 @@ class RiskGateService {
         };
       } else {
         // LIVE: fail-closed (block trade)
-        console.error('🚫 Risk gate error in LIVE mode: blocking trade (fail-closed)');
+        logger.error('🚫 Risk gate error in LIVE mode: blocking trade (fail-closed)');
         return {
           allowed: false,
           reason: 'RISK_GATE_ERROR_FAIL_CLOSED',
@@ -184,30 +185,30 @@ class RiskGateService {
   shouldBlockTrade(riskAssessment, trade) {
     // Rule 1 & 2: Block on REDUCE/REJECT recommendations
     if (riskAssessment.recommendation === 'REDUCE') {
-      console.log(`🚫 Risk Gate: BLOCK due to recommendation=REDUCE`);
+      logger.info(`🚫 Risk Gate: BLOCK due to recommendation=REDUCE`);
       return true;
     }
     
     if (riskAssessment.recommendation === 'REJECT') {
-      console.log(`🚫 Risk Gate: BLOCK due to recommendation=REJECT`);
+      logger.info(`🚫 Risk Gate: BLOCK due to recommendation=REJECT`);
       return true;
     }
     
     // Rule 3: Block on critical risk level
     if (riskAssessment.riskLevel === 'critical') {
-      console.log(`🚫 Risk Gate: BLOCK due to riskLevel=critical`);
+      logger.info(`🚫 Risk Gate: BLOCK due to riskLevel=critical`);
       return true;
     }
     
     // Rule 4: Check numeric risk score (if available)
     const riskScore = riskAssessment.riskScore || riskAssessment._meta?.riskScore;
     if (riskScore !== undefined && riskScore >= 80) {
-      console.log(`🚫 Risk Gate: BLOCK due to riskScore=${riskScore} >= 80`);
+      logger.info(`🚫 Risk Gate: BLOCK due to riskScore=${riskScore} >= 80`);
       return true;
     }
     
     // All rules passed → ALLOW
-    console.log(`✅ Risk Gate: ALLOW (recommendation=${riskAssessment.recommendation}, riskLevel=${riskAssessment.riskLevel})`);
+    logger.info(`✅ Risk Gate: ALLOW (recommendation=${riskAssessment.recommendation}, riskLevel=${riskAssessment.riskLevel})`);
     return false;
   }
 
@@ -286,12 +287,12 @@ class RiskGateService {
         })
       ]);
       
-      console.log(`🛡️ Risk Gate [${this.tradingMode.toUpperCase()}]: Trade ${blocked ? 'BLOCKED ❌' : 'ALLOWED ✅'} (${riskAssessment.riskLevel} risk, ${riskAssessment.recommendation}, ${riskAssessment._meta?.isFallback ? 'fallback' : 'AI'})`);
+      logger.info(`🛡️ Risk Gate [${this.tradingMode.toUpperCase()}]: Trade ${blocked ? 'BLOCKED ❌' : 'ALLOWED ✅'} (${riskAssessment.riskLevel} risk, ${riskAssessment.recommendation}, ${riskAssessment._meta?.isFallback ? 'fallback' : 'AI'})`);
       if (blocked && blockingRules.length > 0) {
-        console.log(`   Blocking Rules: ${blockingRules.join('; ')}`);
+        logger.info(`   Blocking Rules: ${blockingRules.join('; ')}`);
       }
     } catch (error) {
-      console.error('❌ Failed to log risk gate decision:', error);
+      logger.error('❌ Failed to log risk gate decision:', error);
       // Don't throw - logging failure shouldn't block trades
     }
   }
@@ -335,7 +336,7 @@ class RiskGateService {
         })
       ]);
     } catch (logError) {
-      console.error('❌ Failed to log risk gate error:', logError);
+      logger.error('❌ Failed to log risk gate error:', logError);
     }
   }
 }

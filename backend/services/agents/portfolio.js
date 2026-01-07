@@ -2,8 +2,9 @@
 // Purpose: Portfolio Allocation Agent implementation
 // Date: 2026-01-03
 
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🤖 Portfolio Allocation Agent: ${symbol}`);
+  logger.info(`🤖 Portfolio Allocation Agent: ${symbol}`);
   
   return {
     agent_key: 'portfolio',

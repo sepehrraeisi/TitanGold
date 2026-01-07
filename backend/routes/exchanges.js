@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -49,10 +50,10 @@ router.get('/', authenticate, async (req, res) => {
 
     res.json({ connections });
   } catch (error) {
-    console.error('Failed to fetch exchange connections:', error);
+    logger.error('Failed to fetch exchange connections:', error);
     // If database is unavailable, return empty connections
     if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-      console.warn('⚠️ Database unavailable, returning empty connections');
+      logger.warn('⚠️ Database unavailable, returning empty connections');
       return res.json({
         connections: SUPPORTED_EXCHANGES.map(exchange => ({
           exchange,
@@ -109,10 +110,10 @@ router.get('/:exchange', authenticate, async (req, res) => {
       accountInfo: connection.account_info || {},
     });
   } catch (error) {
-    console.error(`Failed to fetch ${req.params.exchange} connection:`, error);
+    logger.error(`Failed to fetch ${req.params.exchange} connection:`, error);
     // If database is unavailable, return empty connection
     if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-      console.warn('⚠️ Database unavailable, returning empty connection settings');
+      logger.warn('⚠️ Database unavailable, returning empty connection settings');
       return res.json({
         apiKey: '',
         apiSecret: '',
@@ -168,7 +169,7 @@ router.post('/:exchange', authenticate, authorize('admin', 'trader'), async (req
       accountInfo: testResult.accountInfo || {},
     });
   } catch (error) {
-    console.error(`Failed to save ${req.params.exchange} connection:`, error);
+    logger.error(`Failed to save ${req.params.exchange} connection:`, error);
     res.status(500).json({ error: 'Failed to save connection settings' });
   }
 });
@@ -210,7 +211,7 @@ router.post('/:exchange/test', authenticate, async (req, res) => {
     const testResult = await testExchangeConnection(exchange, testApiKey, testApiSecret, testIsTestnet);
     res.json(testResult);
   } catch (error) {
-    console.error(`Failed to test ${req.params.exchange} connection:`, error);
+    logger.error(`Failed to test ${req.params.exchange} connection:`, error);
     res.status(500).json({ error: 'Failed to test connection' });
   }
 });
@@ -232,7 +233,7 @@ router.delete('/:exchange', authenticate, authorize('admin', 'trader'), async (r
 
     res.json({ success: true, message: `${exchange} connection removed` });
   } catch (error) {
-    console.error(`Failed to delete ${req.params.exchange} connection:`, error);
+    logger.error(`Failed to delete ${req.params.exchange} connection:`, error);
     res.status(500).json({ error: 'Failed to delete connection' });
   }
 });
@@ -269,7 +270,7 @@ router.get('/health/status', authenticate, async (req, res) => {
 
     res.json({ health: healthStatus });
   } catch (error) {
-    console.error('Failed to fetch health status:', error);
+    logger.error('Failed to fetch health status:', error);
     res.status(500).json({ error: 'Failed to fetch health status' });
   }
 });
@@ -328,7 +329,7 @@ async function testExchangeConnection(exchangeName, apiKey, apiSecret, isTestnet
       accountInfo,
     };
   } catch (error) {
-    console.error(`${exchangeName} connection test failed:`, error);
+    logger.error(`${exchangeName} connection test failed:`, error);
     return { 
       success: false, 
       message: error.message || 'Connection test failed',

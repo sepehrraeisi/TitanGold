@@ -1,4 +1,5 @@
 // Test MACD transformation
+import { logger } from './services/logger.js';
 const macdValue = {
   value: -0.79,
   signal: -0.94,
@@ -21,9 +22,9 @@ if (typeof macdValue.signal === 'string') {
   }
 }
 
-console.log('MACD Input:', JSON.stringify(macdValue));
-console.log('MACD Output:');
-console.log('  - value:', indicatorValue);
-console.log('  - signal:', indicatorSignal);
-console.log('  - histogram:', macdValue.histogram);
-console.log('  - Decision: histogram=', macdValue.histogram, '→', indicatorSignal);
+logger.info('MACD Input:', JSON.stringify(macdValue));
+logger.info('MACD Output:');
+logger.info('  - value:', indicatorValue);
+logger.info('  - signal:', indicatorSignal);
+logger.info('  - histogram:', macdValue.histogram);
+logger.info('  - Decision: histogram=', macdValue.histogram, '→', indicatorSignal);

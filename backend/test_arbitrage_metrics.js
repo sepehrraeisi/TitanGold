@@ -1,9 +1,10 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const BASE_URL = 'http://localhost:5002/api';
 
 async function testArbitrageMetrics() {
-  console.log('🧪 Testing Arbitrage Agent Metrics\n');
+  logger.info('🧪 Testing Arbitrage Agent Metrics\n');
   
   // Login
   const loginRes = await fetch(`${BASE_URL}/auth/login`, {
@@ -26,34 +27,34 @@ async function testArbitrageMetrics() {
   const arbitrageAgent = agents.find(a => a.agent_key === 'arbitrage');
   
   if (!arbitrageAgent) {
-    console.log('❌ Arbitrage agent not found');
+    logger.info('❌ Arbitrage agent not found');
     return;
   }
   
-  console.log('📊 Arbitrage Agent Response:');
-  console.log('='.repeat(60));
+  logger.info('📊 Arbitrage Agent Response:');
+  logger.info('='.repeat(60));
   
-  console.log('\n✅ HIDDEN Metrics (null for rule-based agents):');
-  console.log(`  - accuracy: ${arbitrageAgent.accuracy}`);
-  console.log(`  - trainingProgress: ${arbitrageAgent.trainingProgress}`);
-  console.log(`  - learningTime: ${arbitrageAgent.learningTime}`);
-  console.log(`  - knowledgeSize: ${arbitrageAgent.knowledgeSize}`);
+  logger.info('\n✅ HIDDEN Metrics (null for rule-based agents):');
+  logger.info(`  - accuracy: ${arbitrageAgent.accuracy}`);
+  logger.info(`  - trainingProgress: ${arbitrageAgent.trainingProgress}`);
+  logger.info(`  - learningTime: ${arbitrageAgent.learningTime}`);
+  logger.info(`  - knowledgeSize: ${arbitrageAgent.knowledgeSize}`);
   
-  console.log('\n✅ REAL Metrics (shown for all agents):');
-  console.log(`  - decisions: ${arbitrageAgent.decisions}`);
-  console.log(`  - status: ${arbitrageAgent.status}`);
-  console.log(`  - lastUpdate: ${arbitrageAgent.lastUpdate}`);
-  console.log(`  - capabilities: ${arbitrageAgent.capabilities?.length || 0} items`);
+  logger.info('\n✅ REAL Metrics (shown for all agents):');
+  logger.info(`  - decisions: ${arbitrageAgent.decisions}`);
+  logger.info(`  - status: ${arbitrageAgent.status}`);
+  logger.info(`  - lastUpdate: ${arbitrageAgent.lastUpdate}`);
+  logger.info(`  - capabilities: ${arbitrageAgent.capabilities?.length || 0} items`);
   
-  console.log('\n✅ ARBITRAGE-SPECIFIC Metrics:');
-  console.log(`  - totalScans: ${arbitrageAgent.totalScans}`);
-  console.log(`  - activeHours: ${arbitrageAgent.activeHours}`);
-  console.log(`  - dataStoredMB: ${arbitrageAgent.dataStoredMB}`);
-  console.log(`  - opportunitiesFound: ${arbitrageAgent.opportunitiesFound}`);
-  console.log(`  - totalProfitUSDT: ${arbitrageAgent.totalProfitUSDT}`);
+  logger.info('\n✅ ARBITRAGE-SPECIFIC Metrics:');
+  logger.info(`  - totalScans: ${arbitrageAgent.totalScans}`);
+  logger.info(`  - activeHours: ${arbitrageAgent.activeHours}`);
+  logger.info(`  - dataStoredMB: ${arbitrageAgent.dataStoredMB}`);
+  logger.info(`  - opportunitiesFound: ${arbitrageAgent.opportunitiesFound}`);
+  logger.info(`  - totalProfitUSDT: ${arbitrageAgent.totalProfitUSDT}`);
   
-  console.log('\n' + '='.repeat(60));
-  console.log('✅ Test Result:');
+  logger.info('\n' + '='.repeat(60));
+  logger.info('✅ Test Result:');
   
   const testsPass = 
     arbitrageAgent.accuracy === null &&
@@ -63,12 +64,12 @@ async function testArbitrageMetrics() {
     arbitrageAgent.totalScans != null;
   
   if (testsPass) {
-    console.log('✅ ALL TESTS PASSED!');
-    console.log('   - ML metrics hidden (null) ✅');
-    console.log('   - Real metrics shown ✅');
-    console.log('   - Arbitrage-specific metrics present ✅');
+    logger.info('✅ ALL TESTS PASSED!');
+    logger.info('   - ML metrics hidden (null) ✅');
+    logger.info('   - Real metrics shown ✅');
+    logger.info('   - Arbitrage-specific metrics present ✅');
   } else {
-    console.log('❌ TESTS FAILED');
+    logger.info('❌ TESTS FAILED');
   }
 }
 

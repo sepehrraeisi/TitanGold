@@ -5,7 +5,7 @@
  */
 
 // 🔍 BOOT LOG - Must be first!
-console.log("🚀 engineWorkerLeader booting", {
+logger.info("🚀 engineWorkerLeader booting", {
   pid: process.pid,
   node: process.version,
   cwd: process.cwd(),
@@ -21,6 +21,7 @@ console.log("🚀 engineWorkerLeader booting", {
 import dotenv from 'dotenv';
 import { query } from '../database/db.js';
 import { messageQueue } from '../services/messageQueue.js';
+import { logger } from '../services/logger.js';
 
 dotenv.config();
 
@@ -48,19 +49,19 @@ class EngineWorkerLeader {
    */
   async start() {
     if (this.isRunning) {
-      console.log('⚠️ Engine Worker already running');
+      logger.info('⚠️ Engine Worker already running');
       return;
     }
 
-    console.log('🚀 Engine Worker Leader starting...');
+    logger.info('🚀 Engine Worker Leader starting...');
     this.isRunning = true;
 
     // Connect message queue
     try {
       await messageQueue.connect();
-      console.log('✅ Message Queue connected');
+      logger.info('✅ Message Queue connected');
     } catch (error) {
-      console.warn('⚠️ Message Queue unavailable, using fallback:', error.message);
+      logger.warn('⚠️ Message Queue unavailable, using fallback:', error.message);
     }
 
     // Start idle mode checker
@@ -71,7 +72,7 @@ class EngineWorkerLeader {
    * بررسی دوره‌ای: آیا کاری هست یا نه؟
    */
   async startIdleChecker() {
-    console.log(`🔍 Starting idle checker (interval: ${IDLE_CHECK_INTERVAL_MS}ms)`);
+    logger.info(`🔍 Starting idle checker (interval: ${IDLE_CHECK_INTERVAL_MS}ms)`);
     
     const checkAndAct = async () => {
       if (!this.isRunning) return;
@@ -96,7 +97,7 @@ class EngineWorkerLeader {
           consecutiveIdleChecks++;
           
           if (!isIdle) {
-            console.log('💤 No active work detected, entering Idle Mode');
+            logger.info('💤 No active work detected, entering Idle Mode');
             isIdle = true;
           }
           
@@ -104,7 +105,7 @@ class EngineWorkerLeader {
           if (consecutiveIdleChecks > 3 && currentBackoffLevel < IDLE_BACKOFF_LEVELS.length - 1) {
             currentBackoffLevel++;
             const newInterval = IDLE_BACKOFF_LEVELS[currentBackoffLevel];
-            console.log(`⏸️ Idle backoff increased to ${newInterval / 1000}s (level ${currentBackoffLevel})`);
+            logger.info(`⏸️ Idle backoff increased to ${newInterval / 1000}s (level ${currentBackoffLevel})`);
             
             // Reschedule with new interval
             clearInterval(this.idleCheckInterval);
@@ -112,7 +113,7 @@ class EngineWorkerLeader {
           }
         }
       } catch (error) {
-        console.error('❌ Error in idle checker:', error.message);
+        logger.error('❌ Error in idle checker:', error.message);
       }
     };
 
@@ -158,15 +159,15 @@ class EngineWorkerLeader {
       const hasWork = hasConnections || hasActiveUsers || hasPendingJobs;
 
       if (isIdle && hasWork) {
-        console.log(`✅ Work detected: connections=${hasConnections}, users=${hasActiveUsers}, jobs=${hasPendingJobs}`);
+        logger.info(`✅ Work detected: connections=${hasConnections}, users=${hasActiveUsers}, jobs=${hasPendingJobs}`);
       } else if (!hasWork && consecutiveIdleChecks % 10 === 0) {
         // Log every 10th idle check to avoid spam
-        console.log(`💤 No work: sleeping... (backoff level: ${currentBackoffLevel})`);
+        logger.info(`💤 No work: sleeping... (backoff level: ${currentBackoffLevel})`);
       }
 
       return hasWork;
     } catch (error) {
-      console.error('❌ Error checking for work:', error.message);
+      logger.error('❌ Error checking for work:', error.message);
       return false; // On error, assume no work
     }
   }
@@ -176,11 +177,11 @@ class EngineWorkerLeader {
    */
   async startEngines() {
     if (this.enginesStarted) {
-      console.log('⚠️ Engines already started');
+      logger.info('⚠️ Engines already started');
       return;
     }
 
-    console.log('⚙️ Starting engines (dynamic import)...');
+    logger.info('⚙️ Starting engines (dynamic import)...');
     
     try {
       // Dynamic import to avoid side-effects on module load
@@ -202,30 +203,30 @@ class EngineWorkerLeader {
       // Start engines based on env
       if (process.env.AUTOPILOT_ENABLED === 'true') {
         autopilot.start();
-        console.log('✅ Autopilot started');
+        logger.info('✅ Autopilot started');
       } else {
-        console.log('⏸️ Autopilot disabled');
+        logger.info('⏸️ Autopilot disabled');
       }
 
       if (process.env.SCHEDULER_ENABLED === 'true') {
         scheduler.start();
-        console.log('✅ Scheduler started');
+        logger.info('✅ Scheduler started');
       } else {
-        console.log('⏸️ Scheduler disabled');
+        logger.info('⏸️ Scheduler disabled');
       }
 
       if (process.env.TRADING_ENGINE_ENABLED === 'true') {
         tradingEngine.start();
-        console.log('✅ Trading Engine started');
+        logger.info('✅ Trading Engine started');
       } else {
-        console.log('⏸️ Trading Engine disabled');
+        logger.info('⏸️ Trading Engine disabled');
       }
 
       this.enginesStarted = true;
-      console.log('✅ All engines initialized');
+      logger.info('✅ All engines initialized');
       
     } catch (error) {
-      console.error('❌ Failed to start engines:', error);
+      logger.error('❌ Failed to start engines:', error);
       throw error;
     }
   }
@@ -236,14 +237,14 @@ class EngineWorkerLeader {
   async stopEngines() {
     if (!this.enginesStarted) return;
 
-    console.log('🛑 Stopping engines...');
+    logger.info('🛑 Stopping engines...');
 
     try {
       if (autopilot && autopilot.stop) autopilot.stop();
       if (scheduler && scheduler.stop) scheduler.stop();
       if (tradingEngine && tradingEngine.stop) tradingEngine.stop();
     } catch (error) {
-      console.error('Error stopping engines:', error);
+      logger.error('Error stopping engines:', error);
     }
 
     this.enginesStarted = false;
@@ -253,7 +254,7 @@ class EngineWorkerLeader {
    * توقف Engine Worker
    */
   async stop() {
-    console.log('🛑 Stopping Engine Worker...');
+    logger.info('🛑 Stopping Engine Worker...');
     this.isRunning = false;
 
     if (this.idleCheckInterval) {
@@ -267,10 +268,10 @@ class EngineWorkerLeader {
     try {
       await messageQueue.close();
     } catch (error) {
-      console.error('Error closing message queue:', error);
+      logger.error('Error closing message queue:', error);
     }
 
-    console.log('✅ Engine Worker stopped');
+    logger.info('✅ Engine Worker stopped');
   }
 }
 
@@ -279,20 +280,20 @@ const worker = new EngineWorkerLeader();
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\n📡 SIGINT received, shutting down...');
+  logger.info('\n📡 SIGINT received, shutting down...');
   await worker.stop();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n📡 SIGTERM received, shutting down...');
+  logger.info('\n📡 SIGTERM received, shutting down...');
   await worker.stop();
   process.exit(0);
 });
 
 // Start worker
 worker.start().catch((error) => {
-  console.error('❌ Failed to start Engine Worker:', error);
+  logger.error('❌ Failed to start Engine Worker:', error);
   process.exit(1);
 });
 

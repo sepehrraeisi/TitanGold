@@ -1,6 +1,7 @@
 import express from 'express';
 import db from '../database/db.js';
 import { authenticate, authorize } from '../middleware/auth.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -33,7 +34,7 @@ router.get('/trading-mode', authenticate, async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching trading mode:', error);
+    logger.error('Error fetching trading mode:', error);
     res.status(500).json({ 
       error: 'Failed to fetch trading mode',
       message: error.message 
@@ -105,11 +106,11 @@ router.post('/trading-mode', authenticate, async (req, res) => {
           [userId, JSON.stringify(defaultBalances)]
         );
         
-        console.log(`✅ Demo wallet initialized for user ${userId}: ${JSON.stringify(defaultBalances)}`);
+        logger.info(`✅ Demo wallet initialized for user ${userId}: ${JSON.stringify(defaultBalances)}`);
       }
     }
     
-    console.log(`✅ Trading mode updated for user ${userId}: ${mode}`);
+    logger.info(`✅ Trading mode updated for user ${userId}: ${mode}`);
     
     res.json({ 
       mode,
@@ -117,7 +118,7 @@ router.post('/trading-mode', authenticate, async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error updating trading mode:', error);
+    logger.error('Error updating trading mode:', error);
     res.status(500).json({ 
       error: 'Failed to update trading mode',
       message: error.message 
@@ -147,7 +148,7 @@ router.get('/', async (req, res) => {
       lastUpdated: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching settings:', error);
+    logger.error('Error fetching settings:', error);
     res.status(500).json({ 
       error: 'Failed to fetch settings',
       message: error.message 
@@ -183,7 +184,7 @@ router.get('/:key', async (req, res) => {
       updatedAt: setting.updated_at
     });
   } catch (error) {
-    console.error('Error fetching setting:', error);
+    logger.error('Error fetching setting:', error);
     res.status(500).json({ 
       error: 'Failed to fetch setting',
       message: error.message 
@@ -223,7 +224,7 @@ router.put('/:key', authenticate, authorize('admin'), async (req, res) => {
 
     const setting = result.rows[0];
 
-    console.log(`✅ Setting updated: ${key} = ${JSON.stringify(setting.value)}`);
+    logger.info(`✅ Setting updated: ${key} = ${JSON.stringify(setting.value)}`);
 
     res.json({
       message: 'Setting updated successfully',
@@ -233,7 +234,7 @@ router.put('/:key', authenticate, authorize('admin'), async (req, res) => {
       updatedAt: setting.updated_at
     });
   } catch (error) {
-    console.error('Error updating setting:', error);
+    logger.error('Error updating setting:', error);
     res.status(500).json({ 
       error: 'Failed to update setting',
       message: error.message 
@@ -281,7 +282,7 @@ router.post('/bulk', authenticate, authorize('admin'), async (req, res) => {
 
       await client.query('COMMIT');
 
-      console.log(`✅ Bulk settings updated: ${results.length} settings`);
+      logger.info(`✅ Bulk settings updated: ${results.length} settings`);
 
       res.json({
         message: 'Settings updated successfully',
@@ -295,7 +296,7 @@ router.post('/bulk', authenticate, authorize('admin'), async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('Error bulk updating settings:', error);
+    logger.error('Error bulk updating settings:', error);
     res.status(500).json({ 
       error: 'Failed to update settings',
       message: error.message 
@@ -323,14 +324,14 @@ router.delete('/:key', authenticate, authorize('admin'), async (req, res) => {
       });
     }
 
-    console.log(`✅ Setting deleted: ${key}`);
+    logger.info(`✅ Setting deleted: ${key}`);
 
     res.json({
       message: 'Setting deleted successfully',
       key
     });
   } catch (error) {
-    console.error('Error deleting setting:', error);
+    logger.error('Error deleting setting:', error);
     res.status(500).json({ 
       error: 'Failed to delete setting',
       message: error.message 

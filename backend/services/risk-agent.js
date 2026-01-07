@@ -12,6 +12,7 @@
  */
 
 import * as aiService from './ai.js';
+import { logger } from '../services/logger.js';
 
 /**
  * @typedef {Object} RiskAssessmentInput
@@ -60,7 +61,7 @@ function safeParseJson(text) {
   try {
     return JSON.parse(text);
   } catch (e) {
-    console.error('❌ JSON parse error:', e.message);
+    logger.error('❌ JSON parse error:', e.message);
     return null;
   }
 }
@@ -170,9 +171,9 @@ function getRecommendation(riskScore) {
  *   action: 'BUY',
  *   amount: 15000
  * });
- * console.log(result.recommendation); // 'REDUCE', 'HOLD', or 'INCREASE'
- * console.log(result.riskLevel);      // 'low', 'medium', 'high', or 'critical'
- * console.log(result._meta.isFallback); // true if AI failed
+ * logger.info(result.recommendation); // 'REDUCE', 'HOLD', or 'INCREASE'
+ * logger.info(result.riskLevel);      // 'low', 'medium', 'high', or 'critical'
+ * logger.info(result._meta.isFallback); // true if AI failed
  * ```
  */
 async function runRiskAssessment(input, agentId = 'agent-2', timeoutMs = 10000) {
@@ -238,11 +239,11 @@ Return ONLY JSON:
     }
     
     // Invalid response → fall through to fallback
-    console.warn('⚠️  Risk Agent: AI returned invalid response, using fallback');
+    logger.warn('⚠️  Risk Agent: AI returned invalid response, using fallback');
     
   } catch (error) {
     // AI call failed or timed out
-    console.error('❌ Risk Agent AI error:', error.message);
+    logger.error('❌ Risk Agent AI error:', error.message);
   }
   
   // 3️⃣ FALLBACK: Deterministic Heuristic-Based Risk Assessment
@@ -251,8 +252,8 @@ Return ONLY JSON:
   const recommendation = getRecommendation(riskScore);
   const executionTime = Date.now() - startTime;
   
-  console.log(`🛡️  Risk Agent FALLBACK: score=${riskScore}, level=${riskLevel}, recommendation=${recommendation}`);
-  console.log(`   Factors: ${factors.join('; ')}`);
+  logger.info(`🛡️  Risk Agent FALLBACK: score=${riskScore}, level=${riskLevel}, recommendation=${recommendation}`);
+  logger.info(`   Factors: ${factors.join('; ')}`);
   
   return {
     agentId,

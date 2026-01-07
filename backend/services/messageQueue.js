@@ -1,4 +1,5 @@
 import amqp from 'amqplib';
+import { logger } from '../services/logger.js';
 
 /**
  * Message Queue Service
@@ -41,21 +42,21 @@ class MessageQueue {
       await this.channel.assertQueue('notifications', { durable: true });
       
       this.isConnected = true;
-      console.log('✅ Connected to RabbitMQ');
+      logger.info('✅ Connected to RabbitMQ');
       
       // Handle connection errors
       this.connection.on('error', (err) => {
-        console.error('❌ RabbitMQ connection error:', err);
+        logger.error('❌ RabbitMQ connection error:', err);
         this.isConnected = false;
       });
       
       this.connection.on('close', () => {
-        console.warn('⚠️ RabbitMQ connection closed');
+        logger.warn('⚠️ RabbitMQ connection closed');
         this.isConnected = false;
       });
       
     } catch (error) {
-      console.warn('⚠️ RabbitMQ not available, using in-memory fallback:', error.message);
+      logger.warn('⚠️ RabbitMQ not available, using in-memory fallback:', error.message);
       this.isConnected = false;
     }
   }
@@ -73,7 +74,7 @@ class MessageQueue {
         );
         return true;
       } catch (error) {
-        console.error('Failed to publish agent task to RabbitMQ:', error);
+        logger.error('Failed to publish agent task to RabbitMQ:', error);
         // Fallback to in-memory queue
         this.fallbackQueue.ai_agent_tasks.push(task);
         return false;
@@ -100,7 +101,7 @@ class MessageQueue {
         });
         return true;
       } catch (error) {
-        console.error('Failed to consume agent tasks from RabbitMQ:', error);
+        logger.error('Failed to consume agent tasks from RabbitMQ:', error);
         return false;
       }
     } else {
@@ -132,7 +133,7 @@ class MessageQueue {
         );
         return true;
       } catch (error) {
-        console.error('Failed to publish trading signal to RabbitMQ:', error);
+        logger.error('Failed to publish trading signal to RabbitMQ:', error);
         this.fallbackQueue.trading_signals.push(signal);
         return false;
       }
@@ -157,7 +158,7 @@ class MessageQueue {
         });
         return true;
       } catch (error) {
-        console.error('Failed to consume trading signals from RabbitMQ:', error);
+        logger.error('Failed to consume trading signals from RabbitMQ:', error);
         return false;
       }
     } else {
@@ -188,7 +189,7 @@ class MessageQueue {
         );
         return true;
       } catch (error) {
-        console.error('Failed to publish notification to RabbitMQ:', error);
+        logger.error('Failed to publish notification to RabbitMQ:', error);
         this.fallbackQueue.notifications.push(notification);
         return false;
       }
@@ -213,7 +214,7 @@ class MessageQueue {
         });
         return true;
       } catch (error) {
-        console.error('Failed to consume notifications from RabbitMQ:', error);
+        logger.error('Failed to consume notifications from RabbitMQ:', error);
         return false;
       }
     } else {
@@ -252,7 +253,7 @@ class MessageQueue {
       await this.connection.close();
     }
     this.isConnected = false;
-    console.log('✅ RabbitMQ connection closed');
+    logger.info('✅ RabbitMQ connection closed');
   }
 
   /**

@@ -2,8 +2,9 @@
 // Purpose: Risk Management Agent implementation
 // Date: 2026-01-03
 
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🤖 Risk Management Agent: ${symbol}`);
+  logger.info(`🤖 Risk Management Agent: ${symbol}`);
   
   return {
     agent_key: 'risk',

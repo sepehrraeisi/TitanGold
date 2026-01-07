@@ -1,5 +1,6 @@
 import express from 'express';
 import fetch from 'node-fetch';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.get('/mexc/ticker/24hr', async (req, res) => {
       ? `${MEXC_API_BASE}/api/v3/ticker/24hr?symbol=${symbol}`
       : `${MEXC_API_BASE}/api/v3/ticker/24hr`;
     
-    console.log('📊 Fetching MEXC ticker:', symbol || 'ALL');
+    logger.info('📊 Fetching MEXC ticker:', symbol || 'ALL');
     
     const response = await fetch(url, {
       headers: {
@@ -41,7 +42,7 @@ router.get('/mexc/ticker/24hr', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ MEXC ticker error:', error.message);
+    logger.error('❌ MEXC ticker error:', error.message);
     res.status(500).json({
       ok: false,
       error: 'Failed to fetch MEXC ticker',
@@ -62,7 +63,7 @@ router.get('/mexc/ticker24hr', async (req, res) => {
       ? `${MEXC_API_BASE}/api/v3/ticker/24hr?symbol=${symbol}`
       : `${MEXC_API_BASE}/api/v3/ticker/24hr`;
     
-    console.log('📊 Fetching MEXC ticker (legacy route):', symbol || 'ALL');
+    logger.info('📊 Fetching MEXC ticker (legacy route):', symbol || 'ALL');
     
     const response = await fetch(url, {
       headers: {
@@ -84,7 +85,7 @@ router.get('/mexc/ticker24hr', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ MEXC ticker error (legacy):', error.message);
+    logger.error('❌ MEXC ticker error (legacy):', error.message);
     res.status(500).json({
       ok: false,
       error: 'Failed to fetch MEXC ticker',
@@ -109,7 +110,7 @@ router.get('/mexc/depth', async (req, res) => {
     
     const url = `${MEXC_API_BASE}/api/v3/depth?symbol=${symbol}&limit=${limit}`;
     
-    console.log(`📊 Fetching MEXC depth: ${symbol} (limit: ${limit})`);
+    logger.info(`📊 Fetching MEXC depth: ${symbol} (limit: ${limit})`);
     
     const response = await fetch(url, {
       headers: {
@@ -131,7 +132,7 @@ router.get('/mexc/depth', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ MEXC depth error:', error.message);
+    logger.error('❌ MEXC depth error:', error.message);
     res.status(500).json({
       ok: false,
       error: 'Failed to fetch MEXC depth',
@@ -147,7 +148,7 @@ router.get('/mexc/exchangeInfo', async (req, res) => {
   try {
     const url = `${MEXC_API_BASE}/api/v3/exchangeInfo`;
     
-    console.log('📊 Fetching MEXC exchange info');
+    logger.info('📊 Fetching MEXC exchange info');
     
     const response = await fetch(url, {
       headers: {
@@ -169,7 +170,7 @@ router.get('/mexc/exchangeInfo', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ MEXC exchangeInfo error:', error.message);
+    logger.error('❌ MEXC exchangeInfo error:', error.message);
     res.status(500).json({
       ok: false,
       error: 'Failed to fetch MEXC exchange info',

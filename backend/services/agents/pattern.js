@@ -2,8 +2,9 @@
 // Purpose: Pattern Recognition Agent implementation
 // Date: 2026-01-03
 
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🤖 Pattern Recognition Agent: ${symbol}`);
+  logger.info(`🤖 Pattern Recognition Agent: ${symbol}`);
   
   return {
     agent_key: 'pattern',

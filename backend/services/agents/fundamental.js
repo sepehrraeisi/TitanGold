@@ -3,6 +3,7 @@
 // Date: 2026-01-04
 
 import fetch from 'node-fetch';
+import { logger } from '../../services/logger.js';
 
 /**
  * Fetch Fear & Greed Index from Alternative.me
@@ -19,7 +20,7 @@ async function fetchFearGreedIndex() {
       };
     }
   } catch (error) {
-    console.warn('⚠️ Fear & Greed API failed:', error.message);
+    logger.warn('⚠️ Fear & Greed API failed:', error.message);
   }
   return { value: 50, classification: 'Neutral', timestamp: Date.now() };
 }
@@ -41,7 +42,7 @@ async function fetchMexcTicker(symbol) {
     if (!response.ok) return null;
     return await response.json();
   } catch (error) {
-    console.warn(`⚠️ MEXC ticker fetch failed for ${symbol}:`, error.message);
+    logger.warn(`⚠️ MEXC ticker fetch failed for ${symbol}:`, error.message);
     return null;
   }
 }
@@ -88,7 +89,7 @@ function calculateNewsSentiment() {
  * Main run function - Fundamental Analysis
  */
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🏢 Fundamental Analysis Agent: ${symbol}`);
+  logger.info(`🏢 Fundamental Analysis Agent: ${symbol}`);
   
   const startTime = Date.now();
   
@@ -426,11 +427,11 @@ export async function run({ userId, symbol, timeframe, config }) {
       }
     };
     
-    console.log(`✅ Fundamental analysis complete for ${symbol}: ${decision} (confidence: ${confidence.toFixed(2)})`);
+    logger.info(`✅ Fundamental analysis complete for ${symbol}: ${decision} (confidence: ${confidence.toFixed(2)})`);
     return result;
     
   } catch (error) {
-    console.error(`❌ Fundamental analysis error for ${symbol}:`, error);
+    logger.error(`❌ Fundamental analysis error for ${symbol}:`, error);
     throw error;
   }
 }

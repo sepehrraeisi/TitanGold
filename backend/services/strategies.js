@@ -1,4 +1,5 @@
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 class StrategyService {
   /**
@@ -40,7 +41,7 @@ class StrategyService {
           dbError.message?.includes('timeout');
         
         if (isDbError) {
-          console.warn('⚠️ Database error (unavailable or table does not exist), returning empty strategies array:', dbError.message);
+          logger.warn('⚠️ Database error (unavailable or table does not exist), returning empty strategies array:', dbError.message);
           return { rows: [] };
         }
         throw dbError; // Re-throw other database errors
@@ -172,7 +173,7 @@ class StrategyService {
           ).catch(insertError => {
             // If table doesn't exist or DB is unavailable, skip this insert
             if (insertError.code === 'ECONNREFUSED' || insertError.message?.includes('ECONNREFUSED') || insertError.message?.includes('relation') || insertError.message?.includes('does not exist')) {
-              console.warn(`⚠️ Cannot insert strategy "${s.name}": database unavailable or table does not exist`);
+              logger.warn(`⚠️ Cannot insert strategy "${s.name}": database unavailable or table does not exist`);
               return null;
             }
             throw insertError;
@@ -188,18 +189,18 @@ class StrategyService {
 
         // If we couldn't insert any strategies due to DB issues, return empty array
         if (inserted.length === 0) {
-          console.warn('⚠️ Could not create default strategies, database may be unavailable');
+          logger.warn('⚠️ Could not create default strategies, database may be unavailable');
           return [];
         }
 
         return inserted;
       } catch (createError) {
         // If creating defaults fails, return empty array instead of crashing
-        console.warn('⚠️ Error creating default strategies, returning empty array:', createError.message);
+        logger.warn('⚠️ Error creating default strategies, returning empty array:', createError.message);
         return [];
       }
     } catch (error) {
-      console.error('Error loading strategies:', error);
+      logger.error('Error loading strategies:', error);
       // On hard DB failure, fall back to an empty list rather than crashing the page
       return [];
     }
@@ -325,7 +326,7 @@ class StrategyService {
 
       return this.getStrategies(userId);
     } catch (error) {
-      console.error('Error generating AI strategy:', error);
+      logger.error('Error generating AI strategy:', error);
       // Fallback: create a default AI strategy if AI service fails
       return this.createStrategy(userId, { name: `AI Strategy ${new Date().toLocaleDateString()}`, type: 'AI' });
     }

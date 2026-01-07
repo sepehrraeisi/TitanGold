@@ -2,8 +2,9 @@
 // Purpose: Liquidity Agent implementation
 // Date: 2026-01-03
 
+import { logger } from '../../services/logger.js';
 export async function run({ userId, symbol, timeframe, config }) {
-  console.log(`🤖 Liquidity Agent: ${symbol}`);
+  logger.info(`🤖 Liquidity Agent: ${symbol}`);
   
   return {
     agent_key: 'liquidity',

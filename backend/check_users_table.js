@@ -1,5 +1,6 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { logger } from './services/logger.js';
 
 dotenv.config();
 
@@ -15,7 +16,7 @@ const pool = new Pool({
 
 async function checkUsersTable() {
   try {
-    console.log('\n📊 Checking users table structure...\n');
+    logger.info('\n📊 Checking users table structure...\n');
     
     // Get table columns
     const columns = await pool.query(`
@@ -25,22 +26,22 @@ async function checkUsersTable() {
       ORDER BY ordinal_position;
     `);
     
-    console.log('Columns in users table:');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.info('Columns in users table:');
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     columns.rows.forEach(col => {
-      console.log(`${col.column_name.padEnd(20)} ${col.data_type.padEnd(20)} ${col.is_nullable}`);
+      logger.info(`${col.column_name.padEnd(20)} ${col.data_type.padEnd(20)} ${col.is_nullable}`);
     });
     
     // Get sample user
-    console.log('\n📋 Sample user data:');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.info('\n📋 Sample user data:');
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     const sampleUser = await pool.query('SELECT * FROM users LIMIT 1');
     if (sampleUser.rows.length > 0) {
-      console.log('Columns:', Object.keys(sampleUser.rows[0]).join(', '));
+      logger.info('Columns:', Object.keys(sampleUser.rows[0]).join(', '));
     }
     
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    logger.error('❌ Error:', error.message);
   } finally {
     await pool.end();
   }

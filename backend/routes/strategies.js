@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { strategyService } from '../services/strategies.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -11,8 +12,8 @@ router.get('/', authenticate, async (req, res) => {
     const strategies = await strategyService.getStrategies(userId);
     res.json(strategies);
   } catch (error) {
-    console.error('Failed to fetch strategies:', error);
-    console.error('Error details:', {
+    logger.error('Failed to fetch strategies:', error);
+    logger.error('Error details:', {
       code: error.code,
       message: error.message,
       name: error.name,
@@ -39,7 +40,7 @@ router.get('/', authenticate, async (req, res) => {
       error.syscall === 'connect';
     
     if (isDbError) {
-      console.warn('⚠️ Database unavailable or table does not exist, returning empty strategies array');
+      logger.warn('⚠️ Database unavailable or table does not exist, returning empty strategies array');
       return res.json([]);
     }
     
@@ -60,7 +61,7 @@ router.post('/:strategyId/toggle', authenticate, authorize('admin', 'trader'), a
     const updated = await strategyService.toggleStrategy(userId, strategyId);
     res.json(updated);
   } catch (error) {
-    console.error('Failed to toggle strategy:', error);
+    logger.error('Failed to toggle strategy:', error);
     res.status(500).json({ error: error.message || 'Failed to toggle strategy' });
   }
 });
@@ -73,7 +74,7 @@ router.post('/', authenticate, authorize('admin', 'trader'), async (req, res) =>
     const updated = await strategyService.createStrategy(userId, { name, type });
     res.status(201).json(updated);
   } catch (error) {
-    console.error('Failed to create strategy:', error);
+    logger.error('Failed to create strategy:', error);
     res.status(500).json({ error: error.message || 'Failed to create strategy' });
   }
 });
@@ -85,7 +86,7 @@ router.post('/ai-generate', authenticate, authorize('admin', 'trader'), async (r
     const updated = await strategyService.generateAIStrategy(userId);
     res.status(201).json(updated);
   } catch (error) {
-    console.error('Failed to generate AI strategy:', error);
+    logger.error('Failed to generate AI strategy:', error);
     res.status(500).json({ error: error.message || 'Failed to generate AI strategy' });
   }
 });
@@ -98,7 +99,7 @@ router.post('/:strategyId/copy', authenticate, authorize('admin', 'trader'), asy
     const updated = await strategyService.copyStrategy(userId, strategyId);
     res.json(updated);
   } catch (error) {
-    console.error('Failed to copy strategy:', error);
+    logger.error('Failed to copy strategy:', error);
     res.status(500).json({ error: error.message || 'Failed to copy strategy' });
   }
 });
@@ -112,7 +113,7 @@ router.put('/:strategyId', authenticate, authorize('admin', 'trader'), async (re
     const updated = await strategyService.updateStrategy(userId, strategyId, { name, type });
     res.json(updated);
   } catch (error) {
-    console.error('Failed to update strategy:', error);
+    logger.error('Failed to update strategy:', error);
     res.status(500).json({ error: error.message || 'Failed to update strategy' });
   }
 });
@@ -129,7 +130,7 @@ router.post('/group-backtest', authenticate, authorize('admin', 'trader'), async
       status: 'pending'
     });
   } catch (error) {
-    console.error('Failed to start group backtest:', error);
+    logger.error('Failed to start group backtest:', error);
     res.status(500).json({ error: error.message || 'Failed to start group backtest' });
   }
 });
@@ -146,7 +147,7 @@ router.post('/optimize-all', authenticate, authorize('admin', 'trader'), async (
       status: 'pending'
     });
   } catch (error) {
-    console.error('Failed to optimize strategies:', error);
+    logger.error('Failed to optimize strategies:', error);
     res.status(500).json({ error: error.message || 'Failed to optimize strategies' });
   }
 });
@@ -177,7 +178,7 @@ router.get('/export/all', authenticate, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="strategies-${new Date().toISOString().split('T')[0]}.csv"`);
     res.send(csv);
   } catch (error) {
-    console.error('Failed to export strategies:', error);
+    logger.error('Failed to export strategies:', error);
     res.status(500).json({ error: error.message || 'Failed to export strategies' });
   }
 });
@@ -194,7 +195,7 @@ router.post('/allocate-portfolio', authenticate, authorize('admin', 'trader'), a
       status: 'success'
     });
   } catch (error) {
-    console.error('Failed to allocate portfolio:', error);
+    logger.error('Failed to allocate portfolio:', error);
     res.status(500).json({ error: error.message || 'Failed to allocate portfolio' });
   }
 });

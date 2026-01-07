@@ -9,6 +9,7 @@
 import express from 'express'
 import { authenticate } from '../middleware/auth.js'
 import pool from '../database/db.js'
+import { logger } from '../services/logger.js';
 // import { LiquidityAnalyzerService } from '../services/liquidity/LiquidityAnalyzerService.js'
 // TODO: Enable after implementing MEXC client and filling TODOs
 
@@ -62,7 +63,7 @@ router.get('/status', authenticate, async (req, res) => {
       isRunning: false  // TODO: Track running state
     })
   } catch (error) {
-    console.error('Error fetching liquidity agent status:', error)
+    logger.error('Error fetching liquidity agent status:', error)
     return res.status(500).json({
       error: 'Failed to fetch status',
       message: error.message
@@ -134,7 +135,7 @@ router.post('/run', authenticate, async (req, res) => {
 
     // res.json({ success: true, result })
   } catch (error) {
-    console.error('Error running liquidity analysis:', error)
+    logger.error('Error running liquidity analysis:', error)
     return res.status(500).json({
       error: 'Analysis failed',
       message: error.message
@@ -190,7 +191,7 @@ router.get('/runs/latest', authenticate, async (req, res) => {
       }
     })
   } catch (error) {
-    console.error('Error fetching latest liquidity run:', error)
+    logger.error('Error fetching latest liquidity run:', error)
     return res.status(500).json({
       error: 'Failed to fetch latest run',
       message: error.message
@@ -231,7 +232,7 @@ router.get('/runs', authenticate, async (req, res) => {
       }))
     })
   } catch (error) {
-    console.error('Error fetching liquidity runs:', error)
+    logger.error('Error fetching liquidity runs:', error)
     return res.status(500).json({
       error: 'Failed to fetch runs',
       message: error.message
@@ -283,7 +284,7 @@ router.get('/metrics', authenticate, async (req, res) => {
       }
     })
   } catch (error) {
-    console.error('Error fetching liquidity metrics:', error)
+    logger.error('Error fetching liquidity metrics:', error)
     return res.status(500).json({
       error: 'Failed to fetch metrics',
       message: error.message
@@ -348,7 +349,7 @@ router.get('/settings', authenticate, async (req, res) => {
       }
     })
   } catch (error) {
-    console.error('Error fetching liquidity settings:', error)
+    logger.error('Error fetching liquidity settings:', error)
     return res.status(500).json({
       error: 'Failed to fetch settings',
       message: error.message
@@ -447,7 +448,7 @@ router.post('/settings', authenticate, async (req, res) => {
 
     return res.json({ success: true })
   } catch (error) {
-    console.error('Error updating liquidity settings:', error)
+    logger.error('Error updating liquidity settings:', error)
     return res.status(500).json({
       error: 'Failed to update settings',
       message: error.message

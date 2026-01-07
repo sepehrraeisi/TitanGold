@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { logger } from './services/logger.js';
 const { Client } = pg;
 
 const client = new Client({
@@ -11,7 +12,7 @@ const client = new Client({
 async function updateArbitrageConfig() {
   try {
     await client.connect();
-    console.log('✅ Connected to PostgreSQL');
+    logger.info('✅ Connected to PostgreSQL');
     
     // Complete arbitrage config
     const config = {
@@ -47,16 +48,16 @@ async function updateArbitrageConfig() {
     );
     
     if (result.rows.length === 0) {
-      console.log('❌ Arbitrage agent not found in database');
+      logger.info('❌ Arbitrage agent not found in database');
       return;
     }
     
-    console.log('✅ Arbitrage config updated successfully');
-    console.log('Agent:', result.rows[0].name);
-    console.log('Config:', JSON.stringify(result.rows[0].config, null, 2));
+    logger.info('✅ Arbitrage config updated successfully');
+    logger.info('Agent:', result.rows[0].name);
+    logger.info('Config:', JSON.stringify(result.rows[0].config, null, 2));
     
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    logger.error('❌ Error:', error.message);
   } finally {
     await client.end();
   }

@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -95,7 +96,7 @@ router.get('/decisions', authenticate, async (req, res) => {
 
     res.send('\ufeff' + csvContent); // BOM for Excel UTF-8 support
   } catch (error) {
-    console.error('Failed to export decisions:', error);
+    logger.error('Failed to export decisions:', error);
     res.status(500).json({ error: 'Failed to export decisions', message: error.message });
   }
 });
@@ -209,7 +210,7 @@ router.get('/trades', authenticate, async (req, res) => {
 
     res.send('\ufeff' + csvContent); // BOM for Excel UTF-8 support
   } catch (error) {
-    console.error('Failed to export trades:', error);
+    logger.error('Failed to export trades:', error);
     
     // If table doesn't exist, try manual_trades table as fallback
     if (error.message?.includes('does not exist') || error.message?.includes('relation')) {
@@ -273,7 +274,7 @@ router.get('/trades', authenticate, async (req, res) => {
         res.send('\ufeff' + csvContent);
         return;
       } catch (fallbackError) {
-        console.error('Fallback export also failed:', fallbackError);
+        logger.error('Fallback export also failed:', fallbackError);
       }
     }
 
@@ -381,7 +382,7 @@ router.get('/manual-trades', authenticate, async (req, res) => {
 
     res.send('\ufeff' + csvContent);
   } catch (error) {
-    console.error('Failed to export manual trades:', error);
+    logger.error('Failed to export manual trades:', error);
     res.status(500).json({ error: 'Failed to export manual trades', message: error.message });
   }
 });

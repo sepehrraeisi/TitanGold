@@ -1,6 +1,7 @@
 import express from 'express';
 import nodemailer from 'nodemailer';
 import { authenticate } from '../middleware/auth.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -50,7 +51,7 @@ router.post('/test', authenticate, async (req, res) => {
       message: 'SMTP connection successful'
     });
   } catch (error) {
-    console.error('SMTP test error:', error);
+    logger.error('SMTP test error:', error);
     
     let errorMessage = 'SMTP connection test failed';
     if (error.code === 'EAUTH') {
@@ -132,7 +133,7 @@ router.post('/send', authenticate, async (req, res) => {
       message: 'Email sent successfully'
     });
   } catch (error) {
-    console.error('Email send error:', error);
+    logger.error('Email send error:', error);
     
     let errorMessage = 'Failed to send email';
     if (error.code === 'EAUTH') {

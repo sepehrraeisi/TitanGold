@@ -5,6 +5,7 @@ import { query } from '../database/db.js';
 import { mexcService } from '../services/mexc.js';
 import { aiService } from '../services/ai.js';
 import { telegramService } from '../services/telegram.js';
+import { logger } from '../services/logger.js';
 
 // ============================================================================
 // AI Rate-Limit Circuit Breaker (Quick Fix for 429 Storm)
@@ -28,12 +29,12 @@ function aiBreakerOn429() {
                 aiRateLimitState.consecutive429 === 2 ? 5 : 10;
   aiRateLimitState.cooldownUntil = Date.now() + mins * 60 * 1000;
   
-  console.warn(`⚠️ AI Rate Limit Breaker: Cooldown for ${mins} minutes (consecutive 429s: ${aiRateLimitState.consecutive429})`);
+  logger.warn(`⚠️ AI Rate Limit Breaker: Cooldown for ${mins} minutes (consecutive 429s: ${aiRateLimitState.consecutive429})`);
 }
 
 function aiBreakerOnSuccess() {
   if (aiRateLimitState.consecutive429 > 0) {
-    console.log('✅ AI Rate Limit Breaker: Reset (successful call)');
+    logger.info('✅ AI Rate Limit Breaker: Reset (successful call)');
   }
   aiRateLimitState.consecutive429 = 0;
   aiRateLimitState.cooldownUntil = 0;
@@ -56,7 +57,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      console.warn(`⏱️ Fetch timeout after ${timeoutMs}ms: ${url}`);
+      logger.warn(`⏱️ Fetch timeout after ${timeoutMs}ms: ${url}`);
       throw new Error(`Timeout after ${timeoutMs}ms`);
     }
     throw error;
@@ -202,12 +203,12 @@ class TradingEngine {
 
     async start() {
         if (this.isRunning) {
-            console.log('⚠️ Trading Engine is already running');
+            logger.info('⚠️ Trading Engine is already running');
             return;
         }
 
         this.isRunning = true;
-        console.log('🚀 Trading Engine Started');
+        logger.info('🚀 Trading Engine Started');
 
         // Load configuration from database
         await this.loadConfig();
@@ -227,7 +228,7 @@ class TradingEngine {
         // Start risk monitor
         this.startRiskMonitor();
 
-        console.log('✅ Trading Engine fully initialized');
+        logger.info('✅ Trading Engine fully initialized');
     }
 
     async stop() {
@@ -242,7 +243,7 @@ class TradingEngine {
         // Close all active trades (optional - depends on strategy)
         // await this.closeAllTrades();
 
-        console.log('🛑 Trading Engine Stopped');
+        logger.info('🛑 Trading Engine Stopped');
     }
 
     async loadConfig() {
@@ -255,7 +256,7 @@ class TradingEngine {
                 this.config = { ...this.config, ...result.rows[0].config };
             }
         } catch (error) {
-            console.error('Failed to load trading engine config:', error);
+            logger.error('Failed to load trading engine config:', error);
             // Use default config
         }
     }
@@ -269,7 +270,7 @@ class TradingEngine {
                 [JSON.stringify(this.config)]
             );
         } catch (error) {
-            console.error('Failed to save trading engine config:', error);
+            logger.error('Failed to save trading engine config:', error);
         }
     }
 
@@ -280,7 +281,7 @@ class TradingEngine {
     // Arbitrage Scanner - Find price differences between exchanges
     startArbitrageScanner() {
         if (!this.config.scanners.arbitrage.enabled) {
-            console.log('⏸️ Arbitrage Scanner is disabled');
+            logger.info('⏸️ Arbitrage Scanner is disabled');
             return;
         }
 
@@ -289,7 +290,7 @@ class TradingEngine {
 
             // 🚨 Circuit Breaker: Skip tick if too many pending operations
             if (this.opportunityQueue.length > 200) {
-                console.warn(`⚠️ Circuit Breaker: Skipping arbitrage scan (queue: ${this.opportunityQueue.length})`);
+                logger.warn(`⚠️ Circuit Breaker: Skipping arbitrage scan (queue: ${this.opportunityQueue.length})`);
                 return;
             }
 
@@ -312,7 +313,7 @@ class TradingEngine {
                             .catch(error => {
                                 // Silent catch - just log and continue
                                 if (!error.message?.includes('throttle')) {
-                                    console.error(`Error scanning ${symbol}:`, error.message);
+                                    logger.error(`Error scanning ${symbol}:`, error.message);
                                 }
                                 return null;
                             })
@@ -333,12 +334,12 @@ class TradingEngine {
                     }
                 }
             } catch (error) {
-                console.error('Arbitrage Scanner error:', error);
+                logger.error('Arbitrage Scanner error:', error);
             }
         }, this.config.scanners.arbitrage.interval);
 
         this.scanners.set('arbitrage', intervalId);
-        console.log(`✅ Arbitrage Scanner started (interval: ${this.config.scanners.arbitrage.interval}ms)`);
+        logger.info(`✅ Arbitrage Scanner started (interval: ${this.config.scanners.arbitrage.interval}ms)`);
     }
 
     async scanArbitrageOpportunity(symbol) {
@@ -372,7 +373,7 @@ class TradingEngine {
 
             return null;
         } catch (error) {
-            console.error(`Arbitrage scan error for ${symbol}:`, error);
+            logger.error(`Arbitrage scan error for ${symbol}:`, error);
             return null;
         }
     }
@@ -380,7 +381,7 @@ class TradingEngine {
     // Price Movement Scanner - Detect significant price movements
     startPriceMovementScanner() {
         if (!this.config.scanners.priceMovement.enabled) {
-            console.log('⏸️ Price Movement Scanner is disabled');
+            logger.info('⏸️ Price Movement Scanner is disabled');
             return;
         }
 
@@ -391,7 +392,7 @@ class TradingEngine {
 
             // 🚨 Circuit Breaker: Skip tick if too many pending operations
             if (this.opportunityQueue.length > 200) {
-                console.warn(`⚠️ Circuit Breaker: Skipping price movement scan (queue: ${this.opportunityQueue.length})`);
+                logger.warn(`⚠️ Circuit Breaker: Skipping price movement scan (queue: ${this.opportunityQueue.length})`);
                 return;
             }
 
@@ -449,18 +450,18 @@ class TradingEngine {
                     }
                 }
             } catch (error) {
-                console.error('Price Movement Scanner error:', error);
+                logger.error('Price Movement Scanner error:', error);
             }
         }, this.config.scanners.priceMovement.interval);
 
         this.scanners.set('priceMovement', intervalId);
-        console.log(`✅ Price Movement Scanner started (interval: ${this.config.scanners.priceMovement.interval}ms)`);
+        logger.info(`✅ Price Movement Scanner started (interval: ${this.config.scanners.priceMovement.interval}ms)`);
     }
 
     // Volume Spike Scanner - Detect unusual volume
     startVolumeSpikeScanner() {
         if (!this.config.scanners.volumeSpike.enabled) {
-            console.log('⏸️ Volume Spike Scanner is disabled');
+            logger.info('⏸️ Volume Spike Scanner is disabled');
             return;
         }
 
@@ -471,7 +472,7 @@ class TradingEngine {
 
             // 🚨 Circuit Breaker: Skip tick if too many pending operations
             if (this.opportunityQueue.length > 200) {
-                console.warn(`⚠️ Circuit Breaker: Skipping volume spike scan (queue: ${this.opportunityQueue.length})`);
+                logger.warn(`⚠️ Circuit Breaker: Skipping volume spike scan (queue: ${this.opportunityQueue.length})`);
                 return;
             }
 
@@ -514,22 +515,22 @@ class TradingEngine {
                         volumes.push(currentVolume);
                         volumeHistory.set(symbol, volumes);
                     } catch (error) {
-                        console.error(`Volume spike scan error for ${symbol}:`, error);
+                        logger.error(`Volume spike scan error for ${symbol}:`, error);
                     }
                 }
             } catch (error) {
-                console.error('Volume Spike Scanner error:', error);
+                logger.error('Volume Spike Scanner error:', error);
             }
         }, this.config.scanners.volumeSpike.interval);
 
         this.scanners.set('volumeSpike', intervalId);
-        console.log(`✅ Volume Spike Scanner started (interval: ${this.config.scanners.volumeSpike.interval}ms)`);
+        logger.info(`✅ Volume Spike Scanner started (interval: ${this.config.scanners.volumeSpike.interval}ms)`);
     }
 
     // Pattern Scanner - Use Pattern Recognition Agent
     startPatternScanner() {
         if (!this.config.scanners.pattern.enabled) {
-            console.log('⏸️ Pattern Scanner is disabled');
+            logger.info('⏸️ Pattern Scanner is disabled');
             return;
         }
 
@@ -562,16 +563,16 @@ class TradingEngine {
                             await this.addOpportunity(opportunity, 'MEDIUM');
                         }
                     } catch (error) {
-                        console.error(`Pattern scan error for ${symbol}:`, error);
+                        logger.error(`Pattern scan error for ${symbol}:`, error);
                     }
                 }
             } catch (error) {
-                console.error('Pattern Scanner error:', error);
+                logger.error('Pattern Scanner error:', error);
             }
         }, this.config.scanners.pattern.interval);
 
         this.scanners.set('pattern', intervalId);
-        console.log(`✅ Pattern Scanner started (interval: ${this.config.scanners.pattern.interval}ms)`);
+        logger.info(`✅ Pattern Scanner started (interval: ${this.config.scanners.pattern.interval}ms)`);
     }
 
     // ============================================================================
@@ -631,13 +632,13 @@ class TradingEngine {
                         await this.executeTrade(opportunity);
                     }
                 } catch (error) {
-                    console.error(`Failed to process opportunity ${opportunity.id}:`, error);
+                    logger.error(`Failed to process opportunity ${opportunity.id}:`, error);
                 }
             }
         }, 1000); // Process every second
 
         this.scanners.set('opportunityProcessor', processInterval);
-        console.log('✅ Opportunity Processor started');
+        logger.info('✅ Opportunity Processor started');
     }
 
     async shouldExecuteTrade(opportunity) {
@@ -662,14 +663,14 @@ class TradingEngine {
         // Check risk limits
         const riskCheck = await this.checkRiskLimits(opportunity);
         if (!riskCheck.allowed) {
-            console.log(`Risk check failed for ${opportunity.symbol}: ${riskCheck.reason}`);
+            logger.info(`Risk check failed for ${opportunity.symbol}: ${riskCheck.reason}`);
             return false;
         }
 
         // Get Artemis approval (integrate with Decision Engine)
         const artemisApproval = await this.getArtemisApproval(opportunity);
         if (!artemisApproval.approved) {
-            console.log(`Artemis rejected ${opportunity.symbol}: ${artemisApproval.reason}`);
+            logger.info(`Artemis rejected ${opportunity.symbol}: ${artemisApproval.reason}`);
             return false;
         }
 
@@ -697,7 +698,7 @@ class TradingEngine {
 
             return { allowed: true, positionSize };
         } catch (error) {
-            console.error('Risk check error:', error);
+            logger.error('Risk check error:', error);
             return { allowed: false, reason: 'Risk check failed' };
         }
     }
@@ -750,7 +751,7 @@ class TradingEngine {
                 return await this.getArtemisApprovalFallback(opportunity);
             }
         } catch (error) {
-            console.error('Artemis approval error:', error);
+            logger.error('Artemis approval error:', error);
             // Fallback to high confidence threshold
             return await this.getArtemisApprovalFallback(opportunity);
         }
@@ -820,7 +821,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                         });
                     }
                 } catch (error) {
-                    console.error('Error calling technical agent:', error);
+                    logger.error('Error calling technical agent:', error);
                 }
 
                 // Use Risk Management Agent
@@ -835,7 +836,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                         });
                     }
                 } catch (error) {
-                    console.error('Error calling risk agent:', error);
+                    logger.error('Error calling risk agent:', error);
                 }
             }
 
@@ -861,11 +862,11 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                     });
                 }
             } catch (error) {
-                console.error('Error calling timing agent:', error);
+                logger.error('Error calling timing agent:', error);
             }
 
         } catch (error) {
-            console.error('Error getting agent signals:', error);
+            logger.error('Error getting agent signals:', error);
         }
 
         return signals;
@@ -874,7 +875,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
     async callTechnicalAgent(symbol) {
         // AI Rate-Limit Circuit Breaker
         if (aiBreakerShouldSkip()) {
-            console.warn(`⏸️ AI call skipped (cooldown): agent-1 for ${symbol}`);
+            logger.warn(`⏸️ AI call skipped (cooldown): agent-1 for ${symbol}`);
             return null;
         }
 
@@ -906,7 +907,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
             }
             return null;
         } catch (error) {
-            console.error('Error calling technical agent:', error);
+            logger.error('Error calling technical agent:', error);
             return null;
         }
     }
@@ -914,7 +915,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
     async callRiskAgent(symbol) {
         // AI Rate-Limit Circuit Breaker
         if (aiBreakerShouldSkip()) {
-            console.warn(`⏸️ AI call skipped (cooldown): agent-2 for ${symbol}`);
+            logger.warn(`⏸️ AI call skipped (cooldown): agent-2 for ${symbol}`);
             return null;
         }
 
@@ -946,7 +947,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
             }
             return null;
         } catch (error) {
-            console.error('Error calling risk agent:', error);
+            logger.error('Error calling risk agent:', error);
             return null;
         }
     }
@@ -954,7 +955,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
     async callTimingAgent(symbol) {
         // AI Rate-Limit Circuit Breaker
         if (aiBreakerShouldSkip()) {
-            console.warn(`⏸️ AI call skipped (cooldown): agent-15 for ${symbol}`);
+            logger.warn(`⏸️ AI call skipped (cooldown): agent-15 for ${symbol}`);
             return null;
         }
 
@@ -986,7 +987,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
             }
             return null;
         } catch (error) {
-            console.error('Error calling timing agent:', error);
+            logger.error('Error calling timing agent:', error);
             return null;
         }
     }
@@ -1033,11 +1034,11 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 if (executed) {
                     trade.status = 'open';
                     trade.executedAt = Date.now();
-                    console.log(`📊 [DEMO] Trade executed: ${trade.side} ${trade.symbol} @ ${trade.entryPrice}`);
+                    logger.info(`📊 [DEMO] Trade executed: ${trade.side} ${trade.symbol} @ ${trade.entryPrice}`);
                 } else {
                     trade.status = 'failed';
                     trade.error = 'Insufficient balance in virtual wallet';
-                    console.log(`❌ [DEMO] Trade failed: Insufficient balance`);
+                    logger.info(`❌ [DEMO] Trade failed: Insufficient balance`);
                 }
             } else {
                 // Live mode - real execution (system-level)
@@ -1053,7 +1054,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                     trade.status = 'open';
                     trade.orderId = order.id;
                     trade.executedAt = Date.now();
-                    console.log(`✅ [LIVE] Trade executed: ${trade.side} ${trade.symbol} @ ${trade.entryPrice}`);
+                    logger.info(`✅ [LIVE] Trade executed: ${trade.side} ${trade.symbol} @ ${trade.entryPrice}`);
                 } else {
                     trade.status = 'failed';
                     throw new Error('Order execution failed');
@@ -1071,7 +1072,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
             await this.notifyTrade(trade);
 
         } catch (error) {
-            console.error(`Trade execution error for ${tradeId}:`, error);
+            logger.error(`Trade execution error for ${tradeId}:`, error);
             trade.status = 'failed';
             trade.error = error.message;
             this.stats.failedTrades++;
@@ -1091,13 +1092,13 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 try {
                     await this.monitorTrade(trade);
                 } catch (error) {
-                    console.error(`Error monitoring trade ${tradeId}:`, error);
+                    logger.error(`Error monitoring trade ${tradeId}:`, error);
                 }
             }
         }, 5000); // Check every 5 seconds
 
         this.scanners.set('tradeMonitor', monitorInterval);
-        console.log('✅ Trade Monitor started');
+        logger.info('✅ Trade Monitor started');
     }
 
     async monitorTrade(trade) {
@@ -1125,7 +1126,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 await this.closeTrade(trade, shouldExit.reason);
             }
         } catch (error) {
-            console.error(`Error monitoring trade ${trade.id}:`, error);
+            logger.error(`Error monitoring trade ${trade.id}:`, error);
         }
     }
 
@@ -1171,7 +1172,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 trade.exitPrice = trade.currentPrice;
                 trade.exitReason = reason;
                 trade.closedAt = Date.now();
-                console.log(`📊 [DEMO] Trade closed: ${trade.symbol} @ ${trade.exitPrice} (${reason})`);
+                logger.info(`📊 [DEMO] Trade closed: ${trade.symbol} @ ${trade.exitPrice} (${reason})`);
             } else {
                 // Live mode - execute opposite order (system-level)
                 const exitSide = trade.side === 'BUY' ? 'SELL' : 'BUY';
@@ -1188,7 +1189,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                     trade.exitOrderId = order.id;
                     trade.exitReason = reason;
                     trade.closedAt = Date.now();
-                    console.log(`✅ [LIVE] Trade closed: ${trade.symbol} @ ${trade.exitPrice} (${reason})`);
+                    logger.info(`✅ [LIVE] Trade closed: ${trade.symbol} @ ${trade.exitPrice} (${reason})`);
                 } else {
                     throw new Error('Exit order failed');
                 }
@@ -1216,7 +1217,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
             await this.notifyTradeClose(trade);
 
         } catch (error) {
-            console.error(`Error closing trade ${trade.id}:`, error);
+            logger.error(`Error closing trade ${trade.id}:`, error);
             trade.error = error.message;
         }
     }
@@ -1235,28 +1236,28 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 const dailyLossLimit = portfolio * this.config.riskLimits.maxDailyLoss;
 
                 if (this.stats.dailyLoss >= dailyLossLimit) {
-                    console.warn('⚠️ Daily loss limit reached! Stopping trading...');
+                    logger.warn('⚠️ Daily loss limit reached! Stopping trading...');
                     await this.emergencyStop('daily_loss_limit');
                 }
 
                 // Check drawdown
                 const drawdown = this.calculateDrawdown();
                 if (drawdown >= this.config.riskLimits.maxDrawdown) {
-                    console.warn('⚠️ Max drawdown reached! Stopping trading...');
+                    logger.warn('⚠️ Max drawdown reached! Stopping trading...');
                     await this.emergencyStop('max_drawdown');
                 }
 
             } catch (error) {
-                console.error('Risk monitor error:', error);
+                logger.error('Risk monitor error:', error);
             }
         }, 60000); // Check every minute
 
         this.scanners.set('riskMonitor', riskInterval);
-        console.log('✅ Risk Monitor started');
+        logger.info('✅ Risk Monitor started');
     }
 
     async emergencyStop(reason) {
-        console.log(`🛑 Emergency stop triggered: ${reason}`);
+        logger.info(`🛑 Emergency stop triggered: ${reason}`);
         
         // Close all open trades
         for (const [tradeId, trade] of this.activeTrades.entries()) {
@@ -1288,7 +1289,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
             }
             return [];
         } catch (error) {
-            console.error('Error getting trading symbols:', error);
+            logger.error('Error getting trading symbols:', error);
             return [];
         }
     }
@@ -1342,7 +1343,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 priceChange,
             };
         } catch (error) {
-            console.error(`Error calling pattern agent for ${symbol}:`, error);
+            logger.error(`Error calling pattern agent for ${symbol}:`, error);
             return null;
         }
     }
@@ -1367,7 +1368,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
             
             return value;
         } catch (error) {
-            console.error('Error getting portfolio value:', error);
+            logger.error('Error getting portfolio value:', error);
             return this._portfolioCache || 10000; // Return cached or default
         }
     }
@@ -1399,7 +1400,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 ]
             );
         } catch (error) {
-            console.error('Error saving trade:', error);
+            logger.error('Error saving trade:', error);
         }
     }
 
@@ -1426,7 +1427,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 ]
             );
         } catch (error) {
-            console.error('Error updating trade:', error);
+            logger.error('Error updating trade:', error);
         }
     }
 
@@ -1445,7 +1446,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
                 ]
             );
         } catch (error) {
-            console.error('Error updating trade P&L:', error);
+            logger.error('Error updating trade P&L:', error);
         }
     }
 
@@ -1461,7 +1462,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
 
             await telegramService.sendMessage(message);
         } catch (error) {
-            console.error('Error sending trade notification:', error);
+            logger.error('Error sending trade notification:', error);
         }
     }
 
@@ -1477,7 +1478,7 @@ Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence
 
             await telegramService.sendMessage(message);
         } catch (error) {
-            console.error('Error sending trade close notification:', error);
+            logger.error('Error sending trade close notification:', error);
         }
     }
 

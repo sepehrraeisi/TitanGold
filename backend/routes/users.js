@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { body, validationResult } from 'express-validator';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { query, transaction } from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.get('/stats/overview', authenticate, authorize('admin'), async (req, res)
 
     res.json(stats.rows[0]);
   } catch (error) {
-    console.error('Get stats error:', error);
+    logger.error('Get stats error:', error);
     res.status(500).json({ error: 'Failed to fetch statistics' });
   }
 });
@@ -73,7 +74,7 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
       offset: parseInt(offset)
     });
   } catch (error) {
-    console.error('Get users error:', error);
+    logger.error('Get users error:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
@@ -98,7 +99,7 @@ router.get('/:id/activity', authenticate, async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
-    console.error('Get activity error:', error);
+    logger.error('Get activity error:', error);
     res.status(500).json({ error: 'Failed to fetch activity log' });
   }
 });
@@ -147,7 +148,7 @@ router.post('/:id/change-password', authenticate, [
 
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
-    console.error('Change password error:', error);
+    logger.error('Change password error:', error);
     res.status(500).json({ error: 'Failed to change password' });
   }
 });
@@ -177,7 +178,7 @@ router.patch('/:id/role', authenticate, authorize('admin'), [
 
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Update role error:', error);
+    logger.error('Update role error:', error);
     res.status(500).json({ error: 'Failed to update role' });
   }
 });
@@ -207,7 +208,7 @@ router.patch('/:id/status', authenticate, authorize('admin'), [
 
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Update status error:', error);
+    logger.error('Update status error:', error);
     res.status(500).json({ error: 'Failed to update status' });
   }
 });
@@ -235,7 +236,7 @@ router.get('/:id', authenticate, async (req, res) => {
     
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Get user error:', error);
+    logger.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to fetch user' });
   }
 });
@@ -308,7 +309,7 @@ router.patch('/:id', authenticate, [
 
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Update user error:', error);
+    logger.error('Update user error:', error);
     res.status(500).json({ error: 'Failed to update user' });
   }
 });
@@ -334,7 +335,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
       user: result.rows[0]
     });
   } catch (error) {
-    console.error('Delete user error:', error);
+    logger.error('Delete user error:', error);
     res.status(500).json({ error: 'Failed to delete user' });
   }
 });

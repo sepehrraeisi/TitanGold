@@ -2,6 +2,7 @@ import { query } from '../database/db.js';
 import { mexcService } from './mexc.js';
 import RiskGateService from './risk-gate.js';
 import * as db from '../database/db.js';
+import { logger } from '../services/logger.js';
 
 // Import mexcService if not already imported
 
@@ -14,17 +15,17 @@ class ManualTradingService {
    */
   async getPageData(userId) {
     try {
-      console.log(`📊 Starting to fetch manual trading page data for user ${userId}`);
+      logger.info(`📊 Starting to fetch manual trading page data for user ${userId}`);
       
       // Get stats (from database - always works)
       const stats = await this.getStats(userId).catch(err => {
-        console.warn('⚠️ Error getting stats, using defaults:', err);
+        logger.warn('⚠️ Error getting stats, using defaults:', err);
         return this.getDefaultStats();
       });
       
       // Get chart data - Real data from MEXC (may fail if MEXC not configured)
       const chart = await this.getChartData(userId, 'BTC/USDT').catch(err => {
-        console.warn('⚠️ Error getting chart data, generating demo data:', err.message);
+        logger.warn('⚠️ Error getting chart data, generating demo data:', err.message);
         // Generate demo data instead of empty array
         const now = Date.now();
         const basePrice = 42000;
@@ -49,7 +50,7 @@ class ManualTradingService {
       
       // Get quick trade config - Real data from MEXC (may fail if MEXC not configured)
       const quickTrade = await this.getQuickTradeConfig(userId, 'BTC/USDT').catch(err => {
-        console.warn('⚠️ Error getting quick trade config, using defaults:', err);
+        logger.warn('⚠️ Error getting quick trade config, using defaults:', err);
         return {
           pair: 'BTC/USDT',
           baseAsset: 'BTC',
@@ -67,13 +68,13 @@ class ManualTradingService {
       
       // Get recommendations - Real data from AI (may fail if MEXC not configured)
       const recommendations = await this.getRecommendations(userId).catch(err => {
-        console.warn('⚠️ Error getting recommendations, using defaults:', err);
+        logger.warn('⚠️ Error getting recommendations, using defaults:', err);
         return [];
       });
       
       // Get sentiment - Real data from market (may fail if MEXC not configured)
       const sentiment = await this.getSentiment(userId).catch(err => {
-        console.warn('⚠️ Error getting sentiment, using defaults:', err);
+        logger.warn('⚠️ Error getting sentiment, using defaults:', err);
         return {
           score: 50,
           labelKey: 'sentiment_neutral',
@@ -82,29 +83,29 @@ class ManualTradingService {
       
       // Get strategies (from database - always works)
       const strategies = await this.getStrategies(userId).catch(err => {
-        console.warn('⚠️ Error getting strategies, using empty array:', err);
+        logger.warn('⚠️ Error getting strategies, using empty array:', err);
         return [];
       });
       
       // Get portfolio (from database - always works)
       const portfolio = await this.getPortfolio(userId).catch(err => {
-        console.warn('⚠️ Error getting portfolio, using empty array:', err);
+        logger.warn('⚠️ Error getting portfolio, using empty array:', err);
         return [];
       });
       
       // Get performance (from database - always works)
       const performance = await this.getPerformance(userId).catch(err => {
-        console.warn('⚠️ Error getting performance, using empty array:', err);
+        logger.warn('⚠️ Error getting performance, using empty array:', err);
         return [];
       });
       
       // Get recent trades (from database - always works)
       const recentTrades = await this.getRecentTrades(userId, 12).catch(err => {
-        console.warn('⚠️ Error getting recent trades, using empty array:', err);
+        logger.warn('⚠️ Error getting recent trades, using empty array:', err);
         return [];
       });
 
-      console.log(`✅ Successfully assembled manual trading page data`);
+      logger.info(`✅ Successfully assembled manual trading page data`);
       return {
         stats,
         chart,
@@ -118,7 +119,7 @@ class ManualTradingService {
         lastUpdated: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('❌ Critical error getting manual trading page data:', error);
+      logger.error('❌ Critical error getting manual trading page data:', error);
       throw error;
     }
   }
@@ -249,14 +250,14 @@ class ManualTradingService {
       ];
       } catch (dbError) {
         // If table doesn't exist or other DB error, return defaults
-        console.warn('⚠️ Database error in getStats, using defaults:', dbError.message);
+        logger.warn('⚠️ Database error in getStats, using defaults:', dbError.message);
         if (dbError.message?.includes('does not exist') || dbError.message?.includes('relation')) {
-          console.warn('⚠️ manual_trades table does not exist. Please run: psql -U postgres -d titangold_db -f backend/scripts/init_manual_trades.sql');
+          logger.warn('⚠️ manual_trades table does not exist. Please run: psql -U postgres -d titangold_db -f backend/scripts/init_manual_trades.sql');
         }
         return this.getDefaultStats();
       }
     } catch (error) {
-      console.error('❌ Error getting stats:', error);
+      logger.error('❌ Error getting stats:', error);
       return this.getDefaultStats();
     }
   }
@@ -286,7 +287,7 @@ class ManualTradingService {
       
       // In demo mode, return simulated chart data
       if (mode === 'demo') {
-        console.log(`📈 Generating demo chart data for ${pair}...`);
+        logger.info(`📈 Generating demo chart data for ${pair}...`);
         const now = Date.now();
         const basePrice = pair.includes('BTC') ? 42000 : pair.includes('ETH') ? 2500 : 100;
         
@@ -313,15 +314,15 @@ class ManualTradingService {
       }
       
       // Live mode: fetch from MEXC
-      console.log(`📈 Fetching chart data for ${pair} from MEXC...`);
+      logger.info(`📈 Fetching chart data for ${pair} from MEXC...`);
       const ohlcv = await mexcService.fetchOHLCV(userId, pair, timeframe, limit);
       
       if (!ohlcv || ohlcv.length === 0) {
-        console.warn(`⚠️ No chart data from MEXC for ${pair}, returning empty array`);
+        logger.warn(`⚠️ No chart data from MEXC for ${pair}, returning empty array`);
         return [];
       }
       
-      console.log(`✅ Fetched ${ohlcv.length} candles from MEXC`);
+      logger.info(`✅ Fetched ${ohlcv.length} candles from MEXC`);
       return ohlcv.map(candle => ({
         timestamp: new Date(candle[0]).toISOString(),
         open: candle[1],
@@ -331,7 +332,7 @@ class ManualTradingService {
         volume: candle[5],
       }));
     } catch (error) {
-      console.error(`❌ Error getting chart data from MEXC for ${pair}:`, error);
+      logger.error(`❌ Error getting chart data from MEXC for ${pair}:`, error);
       // Return empty chart data on error - don't throw to allow other data to load
       return [];
     }
@@ -342,15 +343,15 @@ class ManualTradingService {
    */
   async getQuickTradeConfig(userId, pair = 'BTC/USDT') {
     try {
-      console.log(`💰 Fetching quick trade config for ${pair} from MEXC...`);
+      logger.info(`💰 Fetching quick trade config for ${pair} from MEXC...`);
       // Get current price from MEXC - catch errors gracefully
       const ticker = await mexcService.fetchTicker(userId, pair).catch(err => {
-        console.warn(`⚠️ MEXC fetchTicker failed for ${pair}, using defaults:`, err.message);
+        logger.warn(`⚠️ MEXC fetchTicker failed for ${pair}, using defaults:`, err.message);
         return null;
       });
       
       if (!ticker) {
-        console.warn(`⚠️ No ticker data from MEXC for ${pair}, using default values`);
+        logger.warn(`⚠️ No ticker data from MEXC for ${pair}, using default values`);
         // Don't throw - return default config instead
         const balance = await this.getBalance(userId).catch(() => ({ USDT: 10000, BTC: 0, ETH: 0 }));
         const [baseAsset, quoteAsset] = pair.split('/');
@@ -371,7 +372,7 @@ class ManualTradingService {
       
       const price = ticker.last || 0;
       const changePercent = ticker.percentage || 0;
-      console.log(`✅ Fetched price for ${pair}: $${price} (${changePercent}%)`);
+      logger.info(`✅ Fetched price for ${pair}: $${price} (${changePercent}%)`);
 
       // Get balance
       const balance = await this.getBalance(userId);
@@ -394,7 +395,7 @@ class ManualTradingService {
         baseAssetPrecision: 8,
       };
     } catch (error) {
-      console.error('❌ Error getting quick trade config:', error);
+      logger.error('❌ Error getting quick trade config:', error);
       // Return default config on any error
       const balance = await this.getBalance(userId).catch(() => ({ USDT: 10000, BTC: 0, ETH: 0 }));
       return {
@@ -442,7 +443,7 @@ class ManualTradingService {
         },
       ];
     } catch (error) {
-      console.error('Error getting recommendations:', error);
+      logger.error('Error getting recommendations:', error);
       return [];
     }
   }
@@ -474,7 +475,7 @@ class ManualTradingService {
         labelKey,
       };
     } catch (error) {
-      console.error('Error getting sentiment:', error);
+      logger.error('Error getting sentiment:', error);
       return {
         score: 50,
         labelKey: 'sentiment_neutral',
@@ -491,7 +492,7 @@ class ManualTradingService {
         `SELECT * FROM manual_trading_strategies WHERE user_id = $1`,
         [userId]
       ).catch(err => {
-        console.warn('⚠️ Error querying strategies table, using defaults:', err.message);
+        logger.warn('⚠️ Error querying strategies table, using defaults:', err.message);
         return { rows: [] };
       });
 
@@ -500,7 +501,7 @@ class ManualTradingService {
         try {
           return await this.createDefaultStrategies(userId);
         } catch (createError) {
-          console.warn('⚠️ Could not create default strategies, returning empty array:', createError.message);
+          logger.warn('⚠️ Could not create default strategies, returning empty array:', createError.message);
           return [];
         }
       }
@@ -512,7 +513,7 @@ class ManualTradingService {
         performance: parseFloat(row.performance || 0),
       }));
     } catch (error) {
-      console.error('Error getting strategies:', error);
+      logger.error('Error getting strategies:', error);
       return [];
     }
   }
@@ -560,7 +561,7 @@ class ManualTradingService {
          GROUP BY asset`,
         [userId]
       ).catch(err => {
-        console.warn('⚠️ Error querying portfolio, using empty array:', err.message);
+        logger.warn('⚠️ Error querying portfolio, using empty array:', err.message);
         return { rows: [] };
       });
 
@@ -576,7 +577,7 @@ class ManualTradingService {
         value: parseFloat(row.value || 0),
       }));
     } catch (error) {
-      console.error('Error getting portfolio:', error);
+      logger.error('Error getting portfolio:', error);
       return [];
     }
   }
@@ -599,7 +600,7 @@ class ManualTradingService {
          ORDER BY date ASC`,
         [userId, startDate.toISOString()]
       ).catch(err => {
-        console.warn('⚠️ Error querying performance, using empty array:', err.message);
+        logger.warn('⚠️ Error querying performance, using empty array:', err.message);
         return { rows: [] };
       });
 
@@ -612,7 +613,7 @@ class ManualTradingService {
         };
       });
     } catch (error) {
-      console.error('Error getting performance:', error);
+      logger.error('Error getting performance:', error);
       return [];
     }
   }
@@ -629,7 +630,7 @@ class ManualTradingService {
          LIMIT $2`,
         [userId, limit]
       ).catch(err => {
-        console.warn('⚠️ Error querying recent trades, using empty array:', err.message);
+        logger.warn('⚠️ Error querying recent trades, using empty array:', err.message);
         return { rows: [] };
       });
 
@@ -646,7 +647,7 @@ class ManualTradingService {
         executedAt: row.executed_at.toISOString(),
       }));
     } catch (error) {
-      console.error('Error getting recent trades:', error);
+      logger.error('Error getting recent trades:', error);
       return [];
     }
   }
@@ -660,7 +661,7 @@ class ManualTradingService {
     try {
       // 🔥 Get user's trading mode (per-user, DB-backed)
       const mode = await this.getUserTradingMode(userId);
-      console.log(`🔄 executeQuickTrade for user ${userId}: mode=${mode}, side=${side}, pair=${pair}`);
+      logger.info(`🔄 executeQuickTrade for user ${userId}: mode=${mode}, side=${side}, pair=${pair}`);
       
       // Get current price and balance
       const ticker = await mexcService.fetchTicker(userId, pair);
@@ -701,7 +702,7 @@ class ManualTradingService {
 
       if (mode === 'live') {
         // ⚠️ LIVE MODE: Real execution via MEXC
-        console.log(`🔴 LIVE MODE: Executing real trade on MEXC`);
+        logger.info(`🔴 LIVE MODE: Executing real trade on MEXC`);
         const mexcOrder = await mexcService.createOrder(
           userId,
           pair,
@@ -713,7 +714,7 @@ class ManualTradingService {
         executedPrice = mexcOrder.price || price;
       } else {
         // ✅ DEMO MODE: Simulate execution (NO MEXC call)
-        console.log(`🟢 DEMO MODE: Simulating trade (no MEXC call)`);
+        logger.info(`🟢 DEMO MODE: Simulating trade (no MEXC call)`);
         executedPrice = price * (1 + (Math.random() * 0.001 - 0.0005)); // Small price variation
         orderId = `DEMO-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       }
@@ -784,13 +785,13 @@ class ManualTradingService {
           [userId, JSON.stringify(newBalances)]
         );
         
-        console.log(`✅ Demo wallet updated for user ${userId}:`, newBalances);
+        logger.info(`✅ Demo wallet updated for user ${userId}:`, newBalances);
       }
 
       // Return updated page data
       return await this.getPageData(userId);
     } catch (error) {
-      console.error('Error executing quick trade:', error);
+      logger.error('Error executing quick trade:', error);
       throw error;
     }
   }
@@ -816,7 +817,7 @@ class ManualTradingService {
       // Return updated page data
       return await this.getPageData(userId);
     } catch (error) {
-      console.error('Error toggling strategy:', error);
+      logger.error('Error toggling strategy:', error);
       throw error;
     }
   }
@@ -834,10 +835,10 @@ class ManualTradingService {
       );
       
       const mode = modeResult.rows[0]?.mode || 'demo';
-      console.log(`🎯 getUserTradingMode for user ${userId}: mode=${mode}`);
+      logger.info(`🎯 getUserTradingMode for user ${userId}: mode=${mode}`);
       return mode;
     } catch (error) {
-      console.warn('⚠️ Error getting trading mode, defaulting to demo:', error.message);
+      logger.warn('⚠️ Error getting trading mode, defaulting to demo:', error.message);
       return 'demo';
     }
   }
@@ -849,7 +850,7 @@ class ManualTradingService {
     try {
       // Get trading mode from user_preferences
       const mode = await this.getUserTradingMode(userId);
-      console.log(`💰 getBalance for user ${userId}: mode=${mode}`);
+      logger.info(`💰 getBalance for user ${userId}: mode=${mode}`);
       
       // If demo mode, get from user_preferences
       if (mode === 'demo') {
@@ -863,7 +864,7 @@ class ManualTradingService {
         const balances = demoResult.rows[0]?.balances;
         if (balances) {
           const parsed = JSON.parse(balances);
-          console.log(`✅ Demo balance fetched:`, parsed);
+          logger.info(`✅ Demo balance fetched:`, parsed);
           return parsed;
         }
         
@@ -885,7 +886,7 @@ class ManualTradingService {
           [userId, JSON.stringify(defaults)]
         );
         
-        console.log(`✅ Demo wallet initialized for user ${userId}`);
+        logger.info(`✅ Demo wallet initialized for user ${userId}`);
         return defaults;
       }
       
@@ -924,7 +925,7 @@ class ManualTradingService {
         ETH: parseFloat(balance.ETH || 0),
       };
     } catch (error) {
-      console.error('Error getting balance:', error);
+      logger.error('Error getting balance:', error);
       return { USDT: 0, BTC: 0, ETH: 0 };
     }
   }
@@ -995,7 +996,7 @@ class ManualTradingService {
           timestamp: Date.now(),
           mode: 'demo'
         };
-        console.log('🎮 [DEMO MODE] Simulated advanced order:', mexcOrder);
+        logger.info('🎮 [DEMO MODE] Simulated advanced order:', mexcOrder);
       }
 
       // Save order to database
@@ -1016,14 +1017,14 @@ class ManualTradingService {
           mexcOrder?.status === 'closed' ? 'filled' : 'pending',
         ]
       ).catch(err => {
-        console.warn('⚠️ Could not save order to database:', err.message);
+        logger.warn('⚠️ Could not save order to database:', err.message);
         return { rows: [] };
       });
 
       // Return updated page data
       return await this.getPageData(userId);
     } catch (error) {
-      console.error('Error placing advanced order:', error);
+      logger.error('Error placing advanced order:', error);
       throw error;
     }
   }
@@ -1044,11 +1045,11 @@ class ManualTradingService {
             return mexcOrders;
           }
         } catch (mexcError) {
-          console.warn('⚠️ Could not fetch open orders from MEXC, falling back to database:', mexcError.message);
+          logger.warn('⚠️ Could not fetch open orders from MEXC, falling back to database:', mexcError.message);
         }
       } else {
         // 🎮 DEMO MODE: Only use database
-        console.log('🎮 [DEMO MODE] Fetching open orders from database only');
+        logger.info('🎮 [DEMO MODE] Fetching open orders from database only');
       }
 
       // Fallback to database
@@ -1066,7 +1067,7 @@ class ManualTradingService {
       queryText += ` ORDER BY created_at DESC`;
 
       const result = await query(queryText, params).catch(err => {
-        console.warn('⚠️ Could not fetch open orders from database:', err.message);
+        logger.warn('⚠️ Could not fetch open orders from database:', err.message);
         return { rows: [] };
       });
 
@@ -1083,7 +1084,7 @@ class ManualTradingService {
         createdAt: row.created_at,
       }));
     } catch (error) {
-      console.error('Error getting open orders:', error);
+      logger.error('Error getting open orders:', error);
       return [];
     }
   }
@@ -1108,9 +1109,9 @@ class ManualTradingService {
           // Try to cancel on MEXC
           try {
             await mexcService.cancelOrder(userId, exchangeOrderId, order.pair);
-            console.log(`✅ Order ${exchangeOrderId} cancelled on MEXC`);
+            logger.info(`✅ Order ${exchangeOrderId} cancelled on MEXC`);
           } catch (mexcError) {
-            console.warn('⚠️ Could not cancel order on MEXC:', mexcError.message);
+            logger.warn('⚠️ Could not cancel order on MEXC:', mexcError.message);
             // Continue with database update even if MEXC cancel fails
           }
 
@@ -1119,7 +1120,7 @@ class ManualTradingService {
             `UPDATE manual_trades SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
             [order.id]
           ).catch(err => {
-            console.warn('⚠️ Could not update order status in database:', err.message);
+            logger.warn('⚠️ Could not update order status in database:', err.message);
           });
         } else {
           // Order not in database, try to cancel directly on MEXC (might be an exchange order ID)
@@ -1131,7 +1132,7 @@ class ManualTradingService {
             try {
               await mexcService.cancelOrder(userId, orderId, pair);
               cancelled = true;
-              console.log(`✅ Order ${orderId} cancelled on MEXC for ${pair}`);
+              logger.info(`✅ Order ${orderId} cancelled on MEXC for ${pair}`);
               break;
             } catch (e) {
               // Try next pair
@@ -1152,7 +1153,7 @@ class ManualTradingService {
         throw mexcError;
       }
     } catch (error) {
-      console.error('Error cancelling order:', error);
+      logger.error('Error cancelling order:', error);
       throw error;
     }
   }

@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import { mexcService } from '../services/mexc.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -77,7 +78,7 @@ async function getRealWalletBalances(userId) {
     const mexcBalance = await mexcService.getBalance(userId);
     return mexcBalance;
   } catch (error) {
-    console.error('Error fetching MEXC balance:', error);
+    logger.error('Error fetching MEXC balance:', error);
     // Return empty balances if MEXC not configured
     return { USDT: 0, BTC: 0, ETH: 0 };
   }
@@ -112,7 +113,7 @@ router.get('/', authenticate, async (req, res) => {
       updatedAt: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching wallet:', error);
+    logger.error('Error fetching wallet:', error);
     res.status(500).json({ 
       error: 'Failed to fetch wallet',
       message: error.message 
@@ -143,7 +144,7 @@ router.post('/reset', authenticate, async (req, res) => {
     const defaults = { USDT: 10000, BTC: 0, ETH: 0 };
     await setDemoWalletBalances(userId, defaults);
     
-    console.log(`✅ Demo wallet reset for user ${userId}`);
+    logger.info(`✅ Demo wallet reset for user ${userId}`);
     
     res.json({
       message: 'Demo wallet reset to defaults',
@@ -151,7 +152,7 @@ router.post('/reset', authenticate, async (req, res) => {
       updatedAt: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error resetting demo wallet:', error);
+    logger.error('Error resetting demo wallet:', error);
     res.status(500).json({ 
       error: 'Failed to reset demo wallet',
       message: error.message 
@@ -196,7 +197,7 @@ router.post('/add-funds', authenticate, async (req, res) => {
     // Save updated balances
     await setDemoWalletBalances(userId, balances);
     
-    console.log(`✅ Added ${amount} ${asset} to demo wallet for user ${userId}`);
+    logger.info(`✅ Added ${amount} ${asset} to demo wallet for user ${userId}`);
     
     res.json({
       message: `Added ${amount} ${asset} to demo wallet`,
@@ -204,7 +205,7 @@ router.post('/add-funds', authenticate, async (req, res) => {
       updatedAt: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error adding demo funds:', error);
+    logger.error('Error adding demo funds:', error);
     res.status(500).json({ 
       error: 'Failed to add funds',
       message: error.message 
@@ -234,7 +235,7 @@ router.get('/data', authenticate, async (req, res) => {
       lastSyncedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Error fetching wallet data:', error);
+    logger.error('Error fetching wallet data:', error);
     res.status(500).json({ error: 'Failed to fetch wallet data' });
   }
 });
@@ -254,7 +255,7 @@ router.post('/refresh-connector/:id', authenticate, async (req, res) => {
       message: 'Connector refreshed successfully',
     });
   } catch (error) {
-    console.error('Error refreshing connector:', error);
+    logger.error('Error refreshing connector:', error);
     res.status(500).json({ error: 'Failed to refresh connector' });
   }
 });
@@ -278,7 +279,7 @@ router.put('/security-controls/:id', authenticate, async (req, res) => {
         [enabled, id, userId]
       );
     } catch (err) {
-      console.warn('⚠️ Error updating wallet_security_controls:', err.message);
+      logger.warn('⚠️ Error updating wallet_security_controls:', err.message);
     }
 
     const updatedData = await getWalletData(userId);
@@ -289,7 +290,7 @@ router.put('/security-controls/:id', authenticate, async (req, res) => {
       message: 'Security control updated successfully',
     });
   } catch (error) {
-    console.error('Error toggling security control:', error);
+    logger.error('Error toggling security control:', error);
     res.status(500).json({ error: 'Failed to toggle security control' });
   }
 });
@@ -313,7 +314,7 @@ router.put('/preferences', authenticate, async (req, res) => {
         [userId, JSON.stringify(preferences)]
       );
     } catch (err) {
-      console.warn('⚠️ Error updating wallet_preferences:', err.message);
+      logger.warn('⚠️ Error updating wallet_preferences:', err.message);
     }
 
     const updatedData = await getWalletData(userId);
@@ -324,7 +325,7 @@ router.put('/preferences', authenticate, async (req, res) => {
       message: 'Preferences saved successfully',
     });
   } catch (error) {
-    console.error('Error updating wallet preferences:', error);
+    logger.error('Error updating wallet preferences:', error);
     res.status(500).json({ error: 'Failed to update preferences' });
   }
 });
@@ -361,7 +362,7 @@ async function getSecurityControls(userId) {
     );
     return result.rows;
   } catch (error) {
-    console.error('Error fetching wallet security controls:', error);
+    logger.error('Error fetching wallet security controls:', error);
     return [];
   }
 }
@@ -379,7 +380,7 @@ async function getWalletPreferences(userId) {
     );
     return result.rows[0]?.preferences || {};
   } catch (error) {
-    console.error('Error fetching wallet preferences:', error);
+    logger.error('Error fetching wallet preferences:', error);
     return {};
   }
 }

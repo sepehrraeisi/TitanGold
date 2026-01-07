@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import { getMixtureDecision } from '../services/artemisOrchestrator.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ async function logDecision(level, message, metadata = {}) {
     );
   } catch (e) {
     // لاگ‌نویسی نباید تصمیم‌گیری را بشکند
-    console.error('Failed to log Artemis decision:', e);
+    logger.error('Failed to log Artemis decision:', e);
   }
 }
 
@@ -63,7 +64,7 @@ router.get('/health', authenticate, async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Failed to get providers health:', error);
+    logger.error('Failed to get providers health:', error);
     return res.status(500).json({
       error: 'Failed to check providers health',
       message: error.message
@@ -84,9 +85,9 @@ router.get('/state', authenticate, async (req, res) => {
         [userId]
       );
       userMode = modeResult.rows[0]?.mode || 'demo';
-      console.log(`🎯 /api/artemis/state: user ${userId} mode=${userMode}`);
+      logger.info(`🎯 /api/artemis/state: user ${userId} mode=${userMode}`);
     } catch (modeError) {
-      console.warn('⚠️ Failed to get user trading mode, defaulting to demo:', modeError);
+      logger.warn('⚠️ Failed to get user trading mode, defaulting to demo:', modeError);
     }
     
     // Get Artemis state from database (global state)
@@ -96,7 +97,7 @@ router.get('/state', authenticate, async (req, res) => {
       artemisState = result.rows[0] || {};
     } catch (dbError) {
       if (dbError.code === 'ECONNREFUSED' || dbError.message?.includes('ECONNREFUSED') || dbError.message?.includes('relation') || dbError.message?.includes('does not exist')) {
-        console.warn('⚠️ Database unavailable, returning default Artemis state');
+        logger.warn('⚠️ Database unavailable, returning default Artemis state');
         artemisState = {};
       } else {
         throw dbError;
@@ -109,7 +110,7 @@ router.get('/state', authenticate, async (req, res) => {
       const agentsResult = await query('SELECT id, name, type, status, performance_score, accuracy, is_enabled FROM ai_agents ORDER BY name');
       agents = agentsResult.rows || [];
     } catch (e) {
-      console.warn('⚠️ Failed to fetch AI agents:', e);
+      logger.warn('⚠️ Failed to fetch AI agents:', e);
     }
     
     // Get recent decisions count
@@ -134,7 +135,7 @@ router.get('/state', authenticate, async (req, res) => {
         };
       }
     } catch (e) {
-      console.warn('⚠️ Failed to fetch decision stats:', e);
+      logger.warn('⚠️ Failed to fetch decision stats:', e);
     }
     
     // Build full state object
@@ -180,7 +181,7 @@ router.get('/state', authenticate, async (req, res) => {
     
     res.json(fullState);
   } catch (error) {
-    console.error('Failed to fetch Artemis state:', error);
+    logger.error('Failed to fetch Artemis state:', error);
     // Return default state on error
     res.json({
       status: 'active',
@@ -233,9 +234,9 @@ router.patch('/state', authenticate, async (req, res) => {
            WHERE user_id = $1`,
           [userId, JSON.stringify(mode)]
         );
-        console.log(`🎯 Updated user ${userId} trading mode to: ${mode}`);
+        logger.info(`🎯 Updated user ${userId} trading mode to: ${mode}`);
       } catch (modeError) {
-        console.error('❌ Failed to update user trading mode:', modeError);
+        logger.error('❌ Failed to update user trading mode:', modeError);
         throw modeError;
       }
     }
@@ -254,7 +255,7 @@ router.patch('/state', authenticate, async (req, res) => {
     
     res.json(updatedState);
   } catch (error) {
-    console.error('Failed to update Artemis state:', error);
+    logger.error('Failed to update Artemis state:', error);
     res.status(500).json({ error: 'Failed to update Artemis state', details: error.message });
   }
 });
@@ -313,7 +314,7 @@ router.post('/decision', authenticate, async (req, res) => {
           decisionConfig
         );
       } catch (e) {
-        console.error('Artemis mixture-of-experts error:', e);
+        logger.error('Artemis mixture-of-experts error:', e);
         mixture = null;
       }
     }
@@ -428,7 +429,7 @@ router.post('/decision', authenticate, async (req, res) => {
 
     return res.json(payload);
   } catch (error) {
-    console.error('Artemis decision error:', error);
+    logger.error('Artemis decision error:', error);
     res.status(500).json({ 
       action: 'HOLD',
       approved: false,
@@ -495,7 +496,7 @@ router.patch('/config/decision-engine', authenticate, authorize('admin'), async 
       decisionEngine: updated,
     });
   } catch (error) {
-    console.error('Failed to update decision engine config:', error);
+    logger.error('Failed to update decision engine config:', error);
     res.status(500).json({ error: 'Failed to update decision engine configuration' });
   }
 });
@@ -537,7 +538,7 @@ router.get('/logs', authenticate, async (req, res) => {
       total: result.rows?.length || 0,
     });
   } catch (error) {
-    console.error('Failed to fetch Artemis logs:', error);
+    logger.error('Failed to fetch Artemis logs:', error);
     res.status(500).json({ error: 'Failed to fetch logs' });
   }
 });
@@ -568,7 +569,7 @@ router.delete('/logs', authenticate, authorize('admin'), async (req, res) => {
       decisionsDeleted: decisionsResult.rows?.length || 0,
     });
   } catch (error) {
-    console.error('Failed to clear logs:', error);
+    logger.error('Failed to clear logs:', error);
     res.status(500).json({ error: 'Failed to clear logs' });
   }
 });
@@ -612,7 +613,7 @@ router.put('/config', authenticate, authorize('admin'), async (req, res) => {
     
     res.json(updateResult.rows[0]);
   } catch (error) {
-    console.error('Failed to update Artemis config:', error);
+    logger.error('Failed to update Artemis config:', error);
     res.status(500).json({ error: 'Failed to update configuration' });
   }
 });
@@ -692,7 +693,7 @@ router.get('/learning', authenticate, async (req, res) => {
       lastUpdated: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Failed to fetch learning system:', error);
+    logger.error('Failed to fetch learning system:', error);
     res.status(500).json({ 
       error: 'Failed to fetch learning system',
       improvements: [],
@@ -715,7 +716,7 @@ router.patch('/learning/mistake/:id/mark-learned', authenticate, async (req, res
     );
     res.json({ success: true });
   } catch (error) {
-    console.error('Failed to mark mistake as learned:', error);
+    logger.error('Failed to mark mistake as learned:', error);
     res.status(500).json({ error: 'Failed to update mistake' });
   }
 });
@@ -734,7 +735,7 @@ router.post('/learning/event', authenticate, authorize('admin'), async (req, res
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Failed to create learning event:', error);
+    logger.error('Failed to create learning event:', error);
     res.status(500).json({ error: 'Failed to create learning event' });
   }
 });
@@ -829,7 +830,7 @@ router.get('/orchestration', authenticate, async (req, res) => {
       lastUpdated: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Failed to fetch orchestration state:', error);
+    logger.error('Failed to fetch orchestration state:', error);
     res.status(500).json({ 
       error: 'Failed to fetch orchestration state',
       activeAgents: 0,

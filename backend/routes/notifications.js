@@ -63,7 +63,7 @@ router.get('/settings', authenticate, async (req, res) => {
 
     res.json({ settings: result.rows });
   } catch (error) {
-    console.error('Error fetching notification settings:', error);
+    logger.error('Error fetching notification settings:', error);
     res.status(500).json({ error: 'Failed to fetch notification settings' });
   }
 });
@@ -101,7 +101,7 @@ router.put('/settings', authenticate, async (req, res) => {
       message: 'Notification settings saved successfully',
     });
   } catch (error) {
-    console.error('Error saving notification settings:', error);
+    logger.error('Error saving notification settings:', error);
     res.status(500).json({ error: 'Failed to save notification settings' });
   }
 });
@@ -138,7 +138,7 @@ router.get('/history', authenticate, async (req, res) => {
       total: result.rows.length,
     });
   } catch (error) {
-    console.error('Error fetching notification history:', error);
+    logger.error('Error fetching notification history:', error);
     res.status(500).json({ error: 'Failed to fetch notification history' });
   }
 });
@@ -160,7 +160,7 @@ router.put('/history/:id/read', authenticate, async (req, res) => {
 
     res.json({ success: true, notification: result.rows[0] });
   } catch (error) {
-    console.error('Error marking notification as read:', error);
+    logger.error('Error marking notification as read:', error);
     res.status(500).json({ error: 'Failed to mark notification as read' });
   }
 });
@@ -182,7 +182,7 @@ router.delete('/history/:id', authenticate, async (req, res) => {
 
     res.json({ success: true, message: 'Notification deleted successfully' });
   } catch (error) {
-    console.error('Error deleting notification:', error);
+    logger.error('Error deleting notification:', error);
     res.status(500).json({ error: 'Failed to delete notification' });
   }
 });
@@ -215,7 +215,7 @@ router.post('/test', authenticate, async (req, res) => {
       notification: result.rows[0],
     });
   } catch (error) {
-    console.error('Error sending test notification:', error);
+    logger.error('Error sending test notification:', error);
     res.status(500).json({ error: 'Failed to send test notification' });
   }
 });

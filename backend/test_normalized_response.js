@@ -2,6 +2,7 @@
 // Test: Verify frontend normalization works with backend response
 
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const API_BASE = 'https://titan.zala.ir/api';
 const USERNAME = 'testuser';
@@ -16,7 +17,7 @@ async function test() {
             body: JSON.stringify({ username: USERNAME, password: PASSWORD })
         });
         const { token } = await loginRes.json();
-        console.log('✅ Login successful\n');
+        logger.info('✅ Login successful\n');
 
         // 2. Get agents
         const agentsRes = await fetch(`${API_BASE}/ai-agents`, {
@@ -24,7 +25,7 @@ async function test() {
         });
         const { agents } = await agentsRes.json();
         const fund = agents.find(a => a.agent_key === 'fundamental');
-        console.log('✅ Found Fundamental Agent\n');
+        logger.info('✅ Found Fundamental Agent\n');
 
         // 3. Run analysis
         await fetch(`${API_BASE}/ai-agents/${fund.id}/run`, {
@@ -35,7 +36,7 @@ async function test() {
             },
             body: JSON.stringify({ symbol: 'BTCUSDT' })
         });
-        console.log('✅ Run triggered\n');
+        logger.info('✅ Run triggered\n');
 
         // 4. Get details (source of truth)
         const detailsRes = await fetch(`${API_BASE}/ai-agents/${fund.id}/details`, {
@@ -69,22 +70,22 @@ async function test() {
         const normalized = normalizeFundamentalAnalysis(lastAnalysis);
 
         // 6. Verify UI expectations
-        console.log('📊 Backend → Frontend Mapping Test:\n');
-        console.log('✅ companyData:', normalized.companyData?.length || 0, 'items');
-        console.log('✅ financialRatios:', normalized.financialRatios?.length || 0, 'items');
-        console.log('✅ events.impactAnalysis:', normalized.events?.impactAnalysis?.length || 0, 'items');
-        console.log('✅ onChainData:', normalized.onChainData ? 'Present' : 'Missing');
-        console.log('✅ fairValueHistory:', normalized.fairValueHistory?.length || 0, 'items');
-        console.log('✅ overview:', Object.keys(normalized.overview || {}).length, 'fields');
-        console.log('✅ signals:', normalized.signals?.length || 0, 'items');
-        console.log('✅ averageScore:', normalized.averageScore);
-        console.log('✅ marketSummary:', JSON.stringify(normalized.marketSummary));
-        console.log('✅ alerts:', normalized.alerts?.length || 0, 'items');
+        logger.info('📊 Backend → Frontend Mapping Test:\n');
+        logger.info('✅ companyData:', normalized.companyData?.length || 0, 'items');
+        logger.info('✅ financialRatios:', normalized.financialRatios?.length || 0, 'items');
+        logger.info('✅ events.impactAnalysis:', normalized.events?.impactAnalysis?.length || 0, 'items');
+        logger.info('✅ onChainData:', normalized.onChainData ? 'Present' : 'Missing');
+        logger.info('✅ fairValueHistory:', normalized.fairValueHistory?.length || 0, 'items');
+        logger.info('✅ overview:', Object.keys(normalized.overview || {}).length, 'fields');
+        logger.info('✅ signals:', normalized.signals?.length || 0, 'items');
+        logger.info('✅ averageScore:', normalized.averageScore);
+        logger.info('✅ marketSummary:', JSON.stringify(normalized.marketSummary));
+        logger.info('✅ alerts:', normalized.alerts?.length || 0, 'items');
 
-        console.log('\n✅ All UI fields present - normalization successful!');
+        logger.info('\n✅ All UI fields present - normalization successful!');
 
     } catch (error) {
-        console.error('❌ Test failed:', error.message);
+        logger.error('❌ Test failed:', error.message);
     }
 }
 

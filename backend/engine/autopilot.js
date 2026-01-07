@@ -1,6 +1,7 @@
 import { mexcService } from '../services/mexc.js';
 import { query } from '../database/db.js';
 import { tradingEngine } from './tradingEngine.js';
+import { logger } from '../services/logger.js';
 
 class AutopilotEngine {
     constructor() {
@@ -12,7 +13,7 @@ class AutopilotEngine {
     start() {
         if (this.isRunning) return;
         this.isRunning = true;
-        console.log('🚀 Autopilot Engine Started');
+        logger.info('🚀 Autopilot Engine Started');
         this.runLoop();
         this.intervalId = setInterval(() => this.runLoop(), this.scanInterval);
     }
@@ -20,7 +21,7 @@ class AutopilotEngine {
     stop() {
         this.isRunning = false;
         if (this.intervalId) clearInterval(this.intervalId);
-        console.log('🛑 Autopilot Engine Stopped');
+        logger.info('🛑 Autopilot Engine Stopped');
     }
 
     async runLoop() {
@@ -28,7 +29,7 @@ class AutopilotEngine {
             // 🚨 Circuit Breaker: Skip if trading engine is overloaded
             const queueSize = await tradingEngine.getQueueSize?.() || 0;
             if (queueSize > 500) {
-                console.warn(`⚠️ Autopilot Circuit Breaker: Trading engine overloaded (queue: ${queueSize})`);
+                logger.warn(`⚠️ Autopilot Circuit Breaker: Trading engine overloaded (queue: ${queueSize})`);
                 return;
             }
 
@@ -45,7 +46,7 @@ class AutopilotEngine {
             const autopilotConfig = config.autopilot || {};
             const minMovePercent = autopilotConfig.minMovePercent || 2;
 
-            console.log('🔍 Autopilot scanning markets...');
+            logger.info('🔍 Autopilot scanning markets...');
 
             // 2. Fetch Market Data (limited list for safety / rate limits)
             const tickers = await mexcService.fetchSystemPrices([
@@ -66,12 +67,12 @@ class AutopilotEngine {
                         await tradingEngine.enqueueOpportunity(opportunity, opportunity.priority || 'HIGH');
                     }
                 } catch (err) {
-                    console.error(`Autopilot analysis error for ${symbol}:`, err);
+                    logger.error(`Autopilot analysis error for ${symbol}:`, err);
                 }
             }
 
         } catch (error) {
-            console.error('Autopilot Loop Error:', error);
+            logger.error('Autopilot Loop Error:', error);
         }
     }
 

@@ -267,7 +267,7 @@ app.use((err, req, res, next) => {
         userId: req.user?.id || null
       }
     ).catch(logErr => {
-      console.error('Failed to log error to DB:', logErr);
+      logger.error('Failed to log error to DB:', logErr);
     });
   }
 
@@ -298,14 +298,14 @@ if (process.env.NODE_ENV !== 'test') {
   const address = server.address();
   const boundAddress = address ? `${address.address}:${address.port}` : `0.0.0.0:${PORT}`;
   
-  console.log('');
-  console.log('🚀 ============================================');
-  console.log(`🚀 TitanGold Backend API`);
-  console.log(`🚀 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🚀 Server listening on ${boundAddress}`);
-  console.log(`🚀 Health check: http://localhost:${PORT}/health`);
-  console.log('🚀 ============================================');
-  console.log('');
+  logger.info('');
+  logger.info('🚀 ============================================');
+  logger.info(`🚀 TitanGold Backend API`);
+  logger.info(`🚀 Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`🚀 Server listening on ${boundAddress}`);
+  logger.info(`🚀 Health check: http://localhost:${PORT}/health`);
+  logger.info('🚀 ============================================');
+  logger.info('');
 
   // Initialize background services (non-blocking, wrapped in try/catch)
   // These MUST NOT prevent the server from listening
@@ -313,73 +313,73 @@ if (process.env.NODE_ENV !== 'test') {
     // Initialize Redis
     try {
       await getRedisClient();
-      console.log('✅ Redis client connected and ready');
+      logger.info('✅ Redis client connected and ready');
     } catch (error) {
-      console.warn('⚠️ Redis initialization failed, rate limiter will use fallback mode:', error.message);
+      logger.warn('⚠️ Redis initialization failed, rate limiter will use fallback mode:', error.message);
     }
 
     // Initialize Message Queue
     try {
       await messageQueue.connect();
-      console.log('✅ Message Queue initialized');
+      logger.info('✅ Message Queue initialized');
     } catch (error) {
-      console.warn('⚠️ Message Queue initialization failed, using fallback mode:', error.message);
+      logger.warn('⚠️ Message Queue initialization failed, using fallback mode:', error.message);
     }
 
     // 🔧 Engines permanently disabled in backend API
     // All engines run in separate titan-engine-worker process
-    console.log('🔧 Engines disabled in backend API - running in separate titan-engine-worker');
-    console.log('📊 Backend cluster mode: API requests only');
+    logger.info('🔧 Engines disabled in backend API - running in separate titan-engine-worker');
+    logger.info('📊 Backend cluster mode: API requests only');
 
     // Start Engine Worker (if enabled)
     if (process.env.ENGINE_ENABLED === 'true') {
       try {
         const { engineWorker } = await import('./workers/engineWorker.js');
         await engineWorker.start();
-        console.log('✅ Engine Worker started');
+        logger.info('✅ Engine Worker started');
       } catch (error) {
-        console.error('❌ Failed to start Engine Worker:', error);
+        logger.error('❌ Failed to start Engine Worker:', error);
         // Don't crash server if engine fails to start
       }
     } else {
-      console.log('⏸️ Engine Worker disabled (ENGINE_ENABLED != true)');
+      logger.info('⏸️ Engine Worker disabled (ENGINE_ENABLED != true)');
     }
 
     // Initialize WebSocket Notifications
     try {
       initWebsocket(server);
-      console.log('✅ WebSocket notifications ready at /ws/notifications');
+      logger.info('✅ WebSocket notifications ready at /ws/notifications');
     } catch (error) {
-      console.error('❌ Failed to initialize WebSocket:', error);
+      logger.error('❌ Failed to initialize WebSocket:', error);
     }
     
     // Initialize Favorites WebSocket for real-time price updates
     try {
       favoritesWebSocketService.initialize(server);
-      console.log('✅ Favorites WebSocket ready at /ws/favorites');
+      logger.info('✅ Favorites WebSocket ready at /ws/favorites');
     } catch (error) {
-      console.error('❌ Failed to initialize Favorites WebSocket:', error);
+      logger.error('❌ Failed to initialize Favorites WebSocket:', error);
     }
     
     // Start Autopilot Worker (if enabled)
     try {
       const autopilotWorker = await import('./workers/autopilot-worker.js');
       autopilotWorker.default.start(5); // Run every 5 minutes
-      console.log('✅ Autopilot Worker started (5min interval)');
+      logger.info('✅ Autopilot Worker started (5min interval)');
     } catch (error) {
-      console.error('❌ Failed to start Autopilot Worker:', error);
+      logger.error('❌ Failed to start Autopilot Worker:', error);
       // Don't crash server if autopilot fails
     }
     
     // Start Favorites Alert Monitor
     try {
       favoritesAlertMonitor.start();
-      console.log('✅ Favorites Alert Monitor started (10s interval)');
+      logger.info('✅ Favorites Alert Monitor started (10s interval)');
     } catch (error) {
-      console.error('❌ Failed to start Favorites Alert Monitor:', error);
+      logger.error('❌ Failed to start Favorites Alert Monitor:', error);
     }
   })().catch(error => {
-    console.error('❌ Error initializing background services:', error);
+    logger.error('❌ Error initializing background services:', error);
     // Server is already listening, so we continue
   });
 });
@@ -387,19 +387,19 @@ if (process.env.NODE_ENV !== 'test') {
   // Handle listen errors
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use`);
+      logger.error(`❌ Port ${PORT} is already in use`);
     } else {
-      console.error('❌ Server error:', error);
+      logger.error('❌ Server error:', error);
     }
     process.exit(1);
   });
 } else {
-  console.log('🧪 Running in test mode - server not listening on port');
+  logger.info('🧪 Running in test mode - server not listening on port');
 }
 
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('🛑 SIGTERM signal received: closing HTTP server');
+  logger.info('🛑 SIGTERM signal received: closing HTTP server');
   
   // Shutdown Engine Worker if running
   if (process.env.ENGINE_ENABLED === 'true') {
@@ -407,7 +407,7 @@ process.on('SIGTERM', async () => {
       const { engineWorker } = await import('./workers/engineWorker.js');
       await engineWorker.stop();
     } catch (error) {
-      console.error('Error stopping engine worker:', error);
+      logger.error('Error stopping engine worker:', error);
     }
   }
   
@@ -420,33 +420,33 @@ process.on('SIGTERM', async () => {
   if (server) {
     server.close(() => {
       pool.end(() => {
-        console.log('🛑 Database pool closed');
+        logger.info('🛑 Database pool closed');
         process.exit(0);
       });
     });
   } else {
     pool.end(() => {
-      console.log('🛑 Database pool closed');
+      logger.info('🛑 Database pool closed');
       process.exit(0);
     });
   }
 });
 
 process.on('SIGINT', async () => {
-  console.log('🛑 SIGINT signal received: closing HTTP server');
+  logger.info('🛑 SIGINT signal received: closing HTTP server');
   await messageQueue.close().catch(() => {});
   
   // Close server if it's running
   if (server) {
     server.close(() => {
       pool.end(() => {
-        console.log('🛑 Database pool closed');
+        logger.info('🛑 Database pool closed');
         process.exit(0);
       });
     });
   } else {
     pool.end(() => {
-      console.log('🛑 Database pool closed');
+      logger.info('🛑 Database pool closed');
       process.exit(0);
     });
   }

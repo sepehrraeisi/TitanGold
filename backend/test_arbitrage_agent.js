@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { logger } from './services/logger.js';
 
 const BASE_URL = 'https://titan.zala.ir/api';
 const USERNAME = 'testuser';
@@ -6,7 +7,7 @@ const PASSWORD = 'Test@123456';
 
 async function testArbitrageAgent() {
   try {
-    console.log('🔐 Step 1: Login...');
+    logger.info('🔐 Step 1: Login...');
     
     // Login
     const loginResponse = await fetch(`${BASE_URL}/auth/login`, {
@@ -26,10 +27,10 @@ async function testArbitrageAgent() {
     
     const loginData = await loginResponse.json();
     const token = loginData.token;
-    console.log('✅ Login successful');
+    logger.info('✅ Login successful');
     
     // Get agents
-    console.log('\n📋 Step 2: Get AI Agents...');
+    logger.info('\n📋 Step 2: Get AI Agents...');
     const agentsResponse = await fetch(`${BASE_URL}/ai-agents`, {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -43,7 +44,7 @@ async function testArbitrageAgent() {
     const agentsData = await agentsResponse.json();
     const agents = agentsData.agents || [];
     
-    console.log(`✅ Total agents: ${agents.length}`);
+    logger.info(`✅ Total agents: ${agents.length}`);
     
     // Find arbitrage agent
     const arbitrageAgent = agents.find(a => a.agent_key === 'arbitrage');
@@ -52,12 +53,12 @@ async function testArbitrageAgent() {
       throw new Error('Arbitrage agent not found');
     }
     
-    console.log(`✅ Found arbitrage agent: ${arbitrageAgent.name} (ID: ${arbitrageAgent.id})`);
-    console.log(`   Status: ${arbitrageAgent.status}`);
-    console.log(`   Enabled: ${arbitrageAgent.is_enabled}`);
+    logger.info(`✅ Found arbitrage agent: ${arbitrageAgent.name} (ID: ${arbitrageAgent.id})`);
+    logger.info(`   Status: ${arbitrageAgent.status}`);
+    logger.info(`   Enabled: ${arbitrageAgent.is_enabled}`);
     
     // Run arbitrage scan
-    console.log('\n🚀 Step 3: Run Arbitrage Scan...');
+    logger.info('\n🚀 Step 3: Run Arbitrage Scan...');
     const runResponse = await fetch(`${BASE_URL}/ai-agents/${arbitrageAgent.id}/run`, {
       method: 'POST',
       headers: {
@@ -76,56 +77,56 @@ async function testArbitrageAgent() {
     
     const result = await runResponse.json();
     
-    console.log('\n✅ Arbitrage scan complete!');
-    console.log('\n📊 RESULTS:');
-    console.log('─'.repeat(80));
+    logger.info('\n✅ Arbitrage scan complete!');
+    logger.info('\n📊 RESULTS:');
+    logger.info('─'.repeat(80));
     
     if (result.summary) {
-      console.log('\n📈 Summary:');
-      console.log(`   Total Opportunities: ${result.summary.totalOpportunities}`);
-      console.log(`   Total Profit: $${result.summary.totalProfitUSDT} USDT`);
-      console.log(`   Avg Spread: ${result.summary.avgSpreadPct}%`);
-      console.log(`   Avg Risk Score: ${result.summary.avgRiskScore}/100`);
-      console.log(`   Risk Alerts: ${result.summary.riskAlertCount}`);
+      logger.info('\n📈 Summary:');
+      logger.info(`   Total Opportunities: ${result.summary.totalOpportunities}`);
+      logger.info(`   Total Profit: $${result.summary.totalProfitUSDT} USDT`);
+      logger.info(`   Avg Spread: ${result.summary.avgSpreadPct}%`);
+      logger.info(`   Avg Risk Score: ${result.summary.avgRiskScore}/100`);
+      logger.info(`   Risk Alerts: ${result.summary.riskAlertCount}`);
     }
     
     if (result.opportunities && result.opportunities.length > 0) {
-      console.log(`\n🎯 Top Opportunities (${result.opportunities.length}):`);
+      logger.info(`\n🎯 Top Opportunities (${result.opportunities.length}):`);
       result.opportunities.forEach((opp, idx) => {
-        console.log(`\n   ${idx + 1}. ${opp.symbol} (${opp.exchange})`);
-        console.log(`      Spread: ${opp.spreadPct?.toFixed(2)}%`);
-        console.log(`      Net Spread: ${opp.netSpreadPct?.toFixed(2)}%`);
-        console.log(`      Est. Profit: $${opp.estimatedProfitUSDT?.toFixed(2)} USDT`);
-        console.log(`      Volume 24h: $${opp.volume24hUSDT?.toLocaleString()} USDT`);
-        console.log(`      Risk: ${opp.riskLevel} (${opp.riskScore}/100)`);
-        console.log(`      Bid: $${opp.bidPrice?.toFixed(2)} | Ask: $${opp.askPrice?.toFixed(2)}`);
+        logger.info(`\n   ${idx + 1}. ${opp.symbol} (${opp.exchange})`);
+        logger.info(`      Spread: ${opp.spreadPct?.toFixed(2)}%`);
+        logger.info(`      Net Spread: ${opp.netSpreadPct?.toFixed(2)}%`);
+        logger.info(`      Est. Profit: $${opp.estimatedProfitUSDT?.toFixed(2)} USDT`);
+        logger.info(`      Volume 24h: $${opp.volume24hUSDT?.toLocaleString()} USDT`);
+        logger.info(`      Risk: ${opp.riskLevel} (${opp.riskScore}/100)`);
+        logger.info(`      Bid: $${opp.bidPrice?.toFixed(2)} | Ask: $${opp.askPrice?.toFixed(2)}`);
       });
     } else {
-      console.log('\n⚠️  No opportunities found (spreads too low or volume too low)');
+      logger.info('\n⚠️  No opportunities found (spreads too low or volume too low)');
     }
     
     if (result.riskAlerts && result.riskAlerts.length > 0) {
-      console.log(`\n⚠️  Risk Alerts (${result.riskAlerts.length}):`);
+      logger.info(`\n⚠️  Risk Alerts (${result.riskAlerts.length}):`);
       result.riskAlerts.forEach((alert, idx) => {
-        console.log(`   ${idx + 1}. ${alert.symbol}: ${alert.reason} (Risk: ${alert.riskScore}/100)`);
+        logger.info(`   ${idx + 1}. ${alert.symbol}: ${alert.reason} (Risk: ${alert.riskScore}/100)`);
       });
     }
     
     if (result.config) {
-      console.log('\n⚙️  Config Used:');
-      console.log(`   Symbols: ${result.config.symbols?.join(', ')}`);
-      console.log(`   Min Spread: ${result.config.minSpreadPct}%`);
-      console.log(`   Max Spread: ${result.config.maxSpreadPct}%`);
-      console.log(`   Min Volume: $${result.config.minVolumeUSDT?.toLocaleString()} USDT`);
-      console.log(`   Fee: ${result.config.feeBps} bps (${result.config.feeBps / 100}%)`);
-      console.log(`   Slippage: ${result.config.slippageBps} bps (${result.config.slippageBps / 100}%)`);
+      logger.info('\n⚙️  Config Used:');
+      logger.info(`   Symbols: ${result.config.symbols?.join(', ')}`);
+      logger.info(`   Min Spread: ${result.config.minSpreadPct}%`);
+      logger.info(`   Max Spread: ${result.config.maxSpreadPct}%`);
+      logger.info(`   Min Volume: $${result.config.minVolumeUSDT?.toLocaleString()} USDT`);
+      logger.info(`   Fee: ${result.config.feeBps} bps (${result.config.feeBps / 100}%)`);
+      logger.info(`   Slippage: ${result.config.slippageBps} bps (${result.config.slippageBps / 100}%)`);
     }
     
-    console.log('\n─'.repeat(80));
-    console.log('✅ Test complete!\n');
+    logger.info('\n─'.repeat(80));
+    logger.info('✅ Test complete!\n');
     
   } catch (error) {
-    console.error('\n❌ Test failed:', error.message);
+    logger.error('\n❌ Test failed:', error.message);
     process.exit(1);
   }
 }

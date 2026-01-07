@@ -2,6 +2,7 @@
 // This is the NEW simplified version using agent registry
 // To replace the old 420+ line endpoint in ai-agents.js
 
+import { logger } from '../services/logger.js';
 router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), async (req, res) => {
   const startTime = Date.now();
   
@@ -9,7 +10,7 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
     const { id } = req.params;
     const { symbol, timeframe = '1h', ...extraParams } = req.body || {};
     
-    console.log(`🚀 Running agent: ${id.substring(0, 8)}... | symbol: ${symbol} | timeframe: ${timeframe}`);
+    logger.info(`🚀 Running agent: ${id.substring(0, 8)}... | symbol: ${symbol} | timeframe: ${timeframe}`);
     
     // Step 1: Get agent_key from database
     const agentResult = await query('SELECT agent_key, name FROM ai_agents WHERE id = $1', [id]);
@@ -37,7 +38,7 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
     const cached = getCache(cacheKey);
     
     if (cached) {
-      console.log(`✅ Cache hit for ${cacheKey}`);
+      logger.info(`✅ Cache hit for ${cacheKey}`);
       
       // Track performance even on cache hit
       try {
@@ -51,7 +52,7 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
           [isSuccessful ? 1 : 0, id]
         );
       } catch (perfError) {
-        console.warn('⚠️  Failed to track cached performance:', perfError);
+        logger.warn('⚠️  Failed to track cached performance:', perfError);
       }
       
       // Log decision
@@ -69,7 +70,7 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
     }
     
     // Step 4: Run agent via registry
-    console.log(`🔥 Running ${agent_key} agent via registry...`);
+    logger.info(`🔥 Running ${agent_key} agent via registry...`);
     
     const result = await agentRegistry.runAgent(agent_key, {
       userId: req.user?.id,
@@ -96,9 +97,9 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
          WHERE id = $3`,
         [isSuccessful ? 1 : 0, JSON.stringify(result), id]
       );
-      console.log(`📊 Performance updated for ${name} (${agent_key})`);
+      logger.info(`📊 Performance updated for ${name} (${agent_key})`);
     } catch (perfError) {
-      console.error('⚠️  Failed to update performance:', perfError);
+      logger.error('⚠️  Failed to update performance:', perfError);
     }
     
     // Step 6: Cache result
@@ -120,7 +121,7 @@ router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }),
     );
     
   } catch (error) {
-    console.error('❌ Agent run failed:', error);
+    logger.error('❌ Agent run failed:', error);
     
     // Log failed decision
     const executionTime = Date.now() - startTime;
