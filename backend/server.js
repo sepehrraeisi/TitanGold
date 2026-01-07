@@ -16,7 +16,7 @@ import { requestContextMiddleware, performanceMiddleware, logger } from './servi
 import { requestLogger, logError } from './middleware/requestLogger.js';
 import { addVersionHeader, legacyRedirect } from './middleware/apiVersion.js';
 import swaggerUi from 'swagger-ui-express';
-import swaggerSpec from './swagger.js';
+import openApiSpec from './openapi.js';
 import { initWebsocket, broadcastNotification } from './services/websocket.js';
 import favoritesWebSocketService from './services/favoritesWebSocket.js';
 import favoritesAlertMonitor from './services/favoritesAlertMonitor.js';
@@ -226,8 +226,17 @@ app.use('/api/v1/backtest', backtestRoutes);
 app.use('/api/v1/scenarios', scenariosRoutes);
 
 // API Documentation (remains unversioned for easier access)
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
+  customSiteTitle: 'TitanGold API Documentation',
+  customCss: '.swagger-ui .topbar { display: none }',
+  swaggerOptions: {
+    persistAuthorization: true,
+    displayRequestDuration: true,
+    filter: true,
+    tryItOutEnabled: true,
+  },
+}));
+app.get('/api/docs.json', (req, res) => res.json(openApiSpec));
 
 // 404 handler
 app.use((req, res) => {
