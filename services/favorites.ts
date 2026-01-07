@@ -54,7 +54,7 @@ export interface AlertsResponse {
 // Constants
 // ============================================================================
 
-const API_BASE = '/api/favorites';
+const API_BASE = '/api/v1/favorites';
 const CACHE_KEY = 'titan_favorites_cache';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_RETRIES = 3;

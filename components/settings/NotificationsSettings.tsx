@@ -391,7 +391,7 @@ const NotificationsSettings: React.FC = () => {
             console.log('Testing Telegram with botToken:', settings.telegram.botToken.substring(0, 10) + '...');
             
             // 🚀 NEW: Call Backend API to test Telegram
-            const response = await fetch('/api/user-preferences/telegram/test', {
+            const response = await fetch('/api/v1/user-preferences/telegram/test', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

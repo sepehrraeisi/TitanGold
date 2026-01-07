@@ -1721,7 +1721,7 @@ export const fetchManualTradingPageData = async (): Promise<ManualTradingPageDat
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/manual-trades/page-data', {
+        const response = await fetch('/api/v1/manual-trades/page-data', {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
@@ -1842,7 +1842,7 @@ export const executeManualQuickTrade = async (
 ): Promise<ManualTradingPageData> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/manual-trades/execute', {
+        const response = await fetch('/api/v1/manual-trades/execute', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -1963,7 +1963,7 @@ export const placeAdvancedOrder = async (order: {
 }): Promise<ManualTradingPageData> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/manual-trades/order/advanced', {
+        const response = await fetch('/api/v1/manual-trades/order/advanced', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -1998,7 +1998,7 @@ export const placeAdvancedOrder = async (order: {
 export const fetchOpenOrders = async (pair?: string): Promise<any[]> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        let url = '/api/manual-trades/orders/open';
+        let url = '/api/v1/manual-trades/orders/open';
         if (pair) {
             url += `?pair=${encodeURIComponent(pair)}`;
         }
@@ -2631,7 +2631,7 @@ export const fetchStrategies = async (): Promise<Strategy[]> => {
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/strategies', {
+        const response = await fetch('/api/v1/strategies', {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
@@ -2698,7 +2698,7 @@ export const createStrategy = async (name?: string, type?: string): Promise<Stra
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/strategies', {
+        const response = await fetch('/api/v1/strategies', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -2727,7 +2727,7 @@ export const generateAIStrategy = async (): Promise<Strategy[]> => {
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/strategies/ai-generate', {
+        const response = await fetch('/api/v1/strategies/ai-generate', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -2810,7 +2810,7 @@ export const groupBacktestStrategies = async (strategyIds: string[], startDate: 
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/strategies/group-backtest', {
+        const response = await fetch('/api/v1/strategies/group-backtest', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -2837,7 +2837,7 @@ export const optimizeAllStrategies = async (): Promise<any> => {
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/strategies/optimize-all', {
+        const response = await fetch('/api/v1/strategies/optimize-all', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -2863,7 +2863,7 @@ export const exportAllStrategies = async (): Promise<void> => {
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/strategies/export/all', {
+        const response = await fetch('/api/v1/strategies/export/all', {
             headers: {
                 'Authorization': `Bearer ${token}`,
             },
@@ -2893,7 +2893,7 @@ export const allocatePortfolio = async (allocations: Record<string, number>): Pr
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/strategies/allocate-portfolio', {
+        const response = await fetch('/api/v1/strategies/allocate-portfolio', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -3275,7 +3275,7 @@ export const publishGoldToTelegram = async (payload: {
         return '';
     }).join('\n\n');
 
-    await fetch('/api/data-sources/publish-telegram', {
+    await fetch('/api/v1/data-sources/publish-telegram', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -4137,7 +4137,7 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/ai-agents', {
+        const response = await fetch('/api/v1/ai-agents', {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
@@ -13149,7 +13149,7 @@ export const fetchConnectionSettings = async (): Promise<{ apiKey: string; apiSe
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/connections/mexc', {
+        const response = await fetch('/api/v1/connections/mexc', {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
@@ -13473,10 +13473,10 @@ const getMexcApiUrl = (endpoint: string): string => {
     // Backend proxies requests to MEXC API at /api/market/mexc/*
     // Map /api/v3/ticker/24hr -> /api/market/mexc/ticker/24hr (with slash)
     const proxyEndpoint = endpoint
-        .replace('/api/v3/ticker/24hr', '/ticker/24hr')
-        .replace('/api/v3/depth', '/depth')
-        .replace('/api/v3/exchangeInfo', '/exchangeInfo')
-        .replace('/api/v3/ticker/price', '/price');
+        .replace('/api/v1/v3/ticker/24hr', '/ticker/24hr')
+        .replace('/api/v1/v3/depth', '/depth')
+        .replace('/api/v1/v3/exchangeInfo', '/exchangeInfo')
+        .replace('/api/v1/v3/ticker/price', '/price');
     
     return `/api/market/mexc${proxyEndpoint}`;
 };
@@ -13541,7 +13541,7 @@ export const fetchMexcPrice = async (symbol?: string): Promise<any> => {
 // Get MEXC Exchange Info (all trading pairs)
 export const fetchMexcExchangeInfo = async (): Promise<any> => {
     try {
-        const url = getMexcApiUrl('/api/v3/exchangeInfo');
+        const url = getMexcApiUrl('/api/v1/v3/exchangeInfo');
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`MEXC API error: ${response.status}`);
@@ -16932,7 +16932,7 @@ export const setup2FA = async (): Promise<{ secret: string; qrCode: string | nul
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
         if (!token) throw new Error('Authentication required');
         
-        const response = await fetch('/api/security/2fa/setup', {
+        const response = await fetch('/api/v1/security/2fa/setup', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -16958,7 +16958,7 @@ export const verify2FA = async (token: string): Promise<{ success: boolean; mess
         const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
         if (!authToken) throw new Error('Authentication required');
         
-        const response = await fetch('/api/security/2fa/verify', {
+        const response = await fetch('/api/v1/security/2fa/verify', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${authToken}`,
@@ -16985,7 +16985,7 @@ export const disable2FA = async (token?: string): Promise<{ success: boolean; me
         const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
         if (!authToken) throw new Error('Authentication required');
         
-        const response = await fetch('/api/security/2fa/disable', {
+        const response = await fetch('/api/v1/security/2fa/disable', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${authToken}`,
@@ -18102,7 +18102,7 @@ export const uploadAvatar = async (file: File): Promise<{ avatarUrl: string }> =
     const formData = new FormData();
     formData.append('avatar', file);
 
-    const response = await fetch('/api/profile/avatar', {
+    const response = await fetch('/api/v1/profile/avatar', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -18661,7 +18661,7 @@ export const fetchArtemisState = async (): Promise<ArtemisState> => {
             throw new Error('Authentication required');
         }
 
-        const response = await fetch('/api/artemis/state', {
+        const response = await fetch('/api/v1/artemis/state', {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
@@ -19834,7 +19834,7 @@ export const updateArtemisMode = async (mode: 'demo' | 'real'): Promise<ArtemisS
         }
 
         // Update mode via backend API (PATCH /api/artemis/state)
-        const response = await fetch('/api/artemis/state', {
+        const response = await fetch('/api/v1/artemis/state', {
             method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -20586,7 +20586,7 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
             name: 'MEXC Exchange API',
             type: 'api',
             url: 'https://api.mexc.com',
-            endpoint: '/api/v3/ticker/24hr',
+            endpoint: '/api/v1/v3/ticker/24hr',
             category: 'price_data',
             tags: ['exchange', 'price', 'volume', 'real-time'],
             status: 'active',
@@ -23205,7 +23205,7 @@ const detectFromUrlStructure = (host: string, path: string, normalizedUrl: strin
     if (/\brss\b|\bfeed\b|\.rss|\.xml$/.test(path)) {
         maybeSet('rss', 0.75, 'RSS keyword in path');
     }
-    if (host.startsWith('api.') || path.includes('/api/')) {
+    if (host.startsWith('api.') || path.includes('/api/v1/')) {
         maybeSet('api', 0.6, 'API keyword in host/path');
     }
     if (/webhook|hook/.test(path)) {
@@ -24252,7 +24252,7 @@ export const fetchTradingEngineStatus = async (): Promise<{
 }> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/trading-engine/status', {
+        const response = await fetch('/api/v1/trading-engine/status', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -24328,7 +24328,7 @@ export const fetchTradingEngineStatus = async (): Promise<{
 export const startTradingEngine = async (): Promise<{ success: boolean; message: string }> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/trading-engine/start', {
+        const response = await fetch('/api/v1/trading-engine/start', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -24349,7 +24349,7 @@ export const startTradingEngine = async (): Promise<{ success: boolean; message:
 export const stopTradingEngine = async (): Promise<{ success: boolean; message: string }> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/trading-engine/stop', {
+        const response = await fetch('/api/v1/trading-engine/stop', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -24370,7 +24370,7 @@ export const stopTradingEngine = async (): Promise<{ success: boolean; message: 
 export const fetchActiveTrades = async (): Promise<any[]> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/trading-engine/trades/active', {
+        const response = await fetch('/api/v1/trading-engine/trades/active', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -24391,7 +24391,7 @@ export const fetchActiveTrades = async (): Promise<any[]> => {
 export const fetchTradingOpportunities = async (): Promise<any[]> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/trading-engine/opportunities', {
+        const response = await fetch('/api/v1/trading-engine/opportunities', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -24412,7 +24412,7 @@ export const fetchTradingOpportunities = async (): Promise<any[]> => {
 export const updateTradingEngineConfig = async (config: any): Promise<{ success: boolean; message: string }> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/trading-engine/config', {
+        const response = await fetch('/api/v1/trading-engine/config', {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -24435,7 +24435,7 @@ export const updateTradingEngineConfig = async (config: any): Promise<{ success:
 export const fetchTradingEngineConfig = async (): Promise<any> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/trading-engine/config', {
+        const response = await fetch('/api/v1/trading-engine/config', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -24455,7 +24455,7 @@ export const fetchTradingEngineConfig = async (): Promise<any> => {
 export const emergencyStopTradingEngine = async (reason?: string): Promise<{ success: boolean; message: string }> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        const response = await fetch('/api/trading-engine/emergency-stop', {
+        const response = await fetch('/api/v1/trading-engine/emergency-stop', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -24508,7 +24508,7 @@ export const fetchOrchestrationState = async (): Promise<{
         throw new Error('Authentication required');
     }
 
-    const response = await fetch('/api/artemis/orchestration', {
+    const response = await fetch('/api/v1/artemis/orchestration', {
         headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -24566,7 +24566,7 @@ export const fetchLearningState = async (): Promise<{
         throw new Error('Authentication required');
     }
 
-    const response = await fetch('/api/artemis/learning', {
+    const response = await fetch('/api/v1/artemis/learning', {
         headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -24641,7 +24641,7 @@ export const fetchAutopilotStatus = async (): Promise<{
         throw new Error('Authentication required');
     }
 
-    const response = await fetch('/api/autopilot/status', {
+    const response = await fetch('/api/v1/autopilot/status', {
         headers: {
             'Authorization': `Bearer ${token}`,
         },
@@ -24664,7 +24664,7 @@ export const enableAutopilot = async (): Promise<void> => {
         throw new Error('Authentication required');
     }
 
-    const response = await fetch('/api/autopilot/enable', {
+    const response = await fetch('/api/v1/autopilot/enable', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -24686,7 +24686,7 @@ export const disableAutopilot = async (): Promise<void> => {
         throw new Error('Authentication required');
     }
 
-    const response = await fetch('/api/autopilot/disable', {
+    const response = await fetch('/api/v1/autopilot/disable', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -24827,7 +24827,7 @@ export const runAutopilotOnce = async (hoursWindow?: number): Promise<void> => {
         throw new Error('Authentication required');
     }
 
-    const response = await fetch('/api/autopilot/run-once', {
+    const response = await fetch('/api/v1/autopilot/run-once', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -24870,7 +24870,7 @@ export const fetchTradingMode = async (): Promise<{ mode: 'demo' | 'live' }> => 
     const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
     if (!token) throw new Error('Authentication required');
     
-    const response = await fetch('/api/settings/trading-mode', {
+    const response = await fetch('/api/v1/settings/trading-mode', {
         headers: { 'Authorization': `Bearer ${token}` },
     });
     
@@ -24888,7 +24888,7 @@ export const fetchWalletBalance = async (): Promise<{ mode: 'demo' | 'live', bal
     const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
     if (!token) throw new Error('Authentication required');
     
-    const response = await fetch('/api/wallet', {
+    const response = await fetch('/api/v1/wallet', {
         headers: { 'Authorization': `Bearer ${token}` },
     });
     
@@ -24906,7 +24906,7 @@ export const resetDemoWallet = async (): Promise<void> => {
     const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
     if (!token) throw new Error('Authentication required');
     
-    const response = await fetch('/api/wallet/demo/reset', {
+    const response = await fetch('/api/v1/wallet/demo/reset', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });

@@ -42,7 +42,7 @@ export const getChatResponseStream = async (message: string) => {
     // Note: Currently returning a simulated stream from the full response
     // In a future update, we can implement real SSE for true streaming
     const token = localStorage.getItem('auth_token');
-    const response = await fetch('/api/ai-agents/chat', {
+    const response = await fetch('/api/v1/ai-agents/chat', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

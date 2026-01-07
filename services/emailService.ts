@@ -50,7 +50,7 @@ export const testSMTPConnection = async (config: SMTPConfig): Promise<{ success:
                 headers['Authorization'] = `Bearer ${token}`;
             }
             
-            const response = await fetch('/api/email/test', {
+            const response = await fetch('/api/v1/email/test', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(config),
@@ -91,7 +91,7 @@ export const sendEmail = async (config: SMTPConfig, options: EmailOptions): Prom
                 headers['Authorization'] = `Bearer ${token}`;
             }
             
-            const response = await fetch('/api/email/send', {
+            const response = await fetch('/api/v1/email/send', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ config, options }),

@@ -340,7 +340,7 @@ export async function getAllPreferences(useCache = true): Promise<PreferencesRes
 
     try {
         // 🚀 RETRY: Wrap API call with exponential backoff
-        const response = await retryWithBackoff(() => api.get('/api/user-preferences'));
+        const response = await retryWithBackoff(() => api.get('/api/v1/user-preferences'));
         
         if (response.success && response.data) {
             cache.set(response.data.preferences, response.data.version);
@@ -427,7 +427,7 @@ export async function updateAllPreferences(
     syncSource = 'web'
 ): Promise<PreferencesResponse> {
     try {
-        const response = await retryWithBackoff(() => api.put('/api/user-preferences', {
+        const response = await retryWithBackoff(() => api.put('/api/v1/user-preferences', {
             preferences,
             version: cache.getVersion(),
             syncSource
@@ -479,7 +479,7 @@ export async function bulkUpdatePreferences(
     syncSource = 'web'
 ): Promise<PreferencesResponse> {
     try {
-        const response = await retryWithBackoff(() => api.put('/api/user-preferences/bulk', {
+        const response = await retryWithBackoff(() => api.put('/api/v1/user-preferences/bulk', {
             updates,
             version: cache.getVersion(),
             syncSource
@@ -506,7 +506,7 @@ export async function syncPreferences(
     localTimestamp?: string
 ): Promise<SyncResponse> {
     try {
-        const response = await retryWithBackoff(() => api.post('/api/user-preferences/sync', {
+        const response = await retryWithBackoff(() => api.post('/api/v1/user-preferences/sync', {
             localPreferences,
             localVersion,
             localTimestamp: localTimestamp || new Date().toISOString(),
@@ -557,7 +557,7 @@ export async function getPreferenceHistory(
  */
 export async function getCategories() {
     try {
-        return await retryWithBackoff(() => api.get('/api/user-preferences/categories'));
+        return await retryWithBackoff(() => api.get('/api/v1/user-preferences/categories'));
     } catch (error: any) {
         console.error('Failed to get categories:', error);
         throw error;

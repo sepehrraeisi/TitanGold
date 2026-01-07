@@ -14,6 +14,7 @@ import { tradingEngine } from './engine/tradingEngine.js';
 import { messageQueue } from './services/messageQueue.js';
 import { requestContextMiddleware, performanceMiddleware, logger } from './services/logger.js';
 import { requestLogger, logError } from './middleware/requestLogger.js';
+import { addVersionHeader, legacyRedirect } from './middleware/apiVersion.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
 import { initWebsocket, broadcastNotification } from './services/websocket.js';
@@ -74,6 +75,10 @@ const __dirname = path.dirname(__filename);
 app.use(requestContextMiddleware);
 app.use(performanceMiddleware);
 
+// API Versioning (API-001)
+app.use(addVersionHeader);
+app.use(legacyRedirect);
+
 // Request logging (to DB)
 app.use(requestLogger);
 
@@ -117,13 +122,13 @@ const limiter = rateLimit({
     return req.path === '/health' || req.method === 'GET';
   }
 });
-app.use('/api/', limiter);
+app.use('/api/', limiter); // Applies to both /api/* and /api/v1/*
 
 // ============================================================================
 // ROUTES
 // ============================================================================
 
-// Health check - Safe endpoint (no DB required)
+// Health check - Safe endpoint (no DB required) - remains unversioned
 app.get('/health', async (req, res) => {
   // Always return JSON, even if DB/Redis are down
   const health = {
@@ -185,40 +190,42 @@ app.get('/health', async (req, res) => {
   res.status(statusCode).json(health);
 });
 
-// API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/health', healthRoutes);
-app.use('/api/monitoring', monitoringRoutes);
-app.use('/api/ready', healthRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/portfolios', portfolioRoutes);
-app.use('/api/trades', tradeRoutes);
-app.use('/api/ai-agents', aiAgentRoutes);
-app.use('/api/agents/liquidity', liquidityAgentRoutes);
-app.use('/api/market', marketProxyRoutes);
-app.use('/api/training', trainingRoutes);
-app.use('/api/artemis', artemisRoutes);
-app.use('/api/config', configRoutes);
-app.use('/api/autopilot', autopilotRoutes);
-app.use('/api/data-sources', dataSourceRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/favorites', favoriteRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/email', emailRoutes);
-app.use('/api/scheduler', schedulerRoutes);
-app.use('/api/trading-engine', tradingEngineRoutes);
-app.use('/api/manual-trades', manualTradesRoutes);
-app.use('/api/connections', connectionsRoutes);
-app.use('/api/strategies', strategyRoutes);
-app.use('/api/security', securityRoutes);
-app.use('/api/exports', exportRoutes);
-app.use('/api/wallet', walletRoutes);
-app.use('/api/profile', profileRoutes);
-app.use('/api/user-preferences', userPreferencesRoutes);
-app.use('/api/favorites', favoritesRoutes);
-app.use('/api/favorites', favoriteAlertsRoutes); // Alerts are nested under favorites
-app.use('/api/backtest', backtestRoutes);
-app.use('/api/scenarios', scenariosRoutes);
+// API v1 routes (API-001)
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/health', healthRoutes);
+app.use('/api/v1/monitoring', monitoringRoutes);
+app.use('/api/v1/ready', healthRoutes);
+app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/portfolios', portfolioRoutes);
+app.use('/api/v1/trades', tradeRoutes);
+app.use('/api/v1/ai-agents', aiAgentRoutes);
+app.use('/api/v1/agents/liquidity', liquidityAgentRoutes);
+app.use('/api/v1/market', marketProxyRoutes);
+app.use('/api/v1/training', trainingRoutes);
+app.use('/api/v1/artemis', artemisRoutes);
+app.use('/api/v1/config', configRoutes);
+app.use('/api/v1/autopilot', autopilotRoutes);
+app.use('/api/v1/data-sources', dataSourceRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/favorites', favoriteRoutes);
+app.use('/api/v1/settings', settingsRoutes);
+app.use('/api/v1/email', emailRoutes);
+app.use('/api/v1/scheduler', schedulerRoutes);
+app.use('/api/v1/trading-engine', tradingEngineRoutes);
+app.use('/api/v1/manual-trades', manualTradesRoutes);
+app.use('/api/v1/connections', connectionsRoutes);
+app.use('/api/v1/strategies', strategyRoutes);
+app.use('/api/v1/security', securityRoutes);
+app.use('/api/v1/exports', exportRoutes);
+app.use('/api/v1/wallet', walletRoutes);
+app.use('/api/v1/profile', profileRoutes);
+app.use('/api/v1/user-preferences', userPreferencesRoutes);
+app.use('/api/v1/favorites', favoritesRoutes);
+app.use('/api/v1/favorites', favoriteAlertsRoutes); // Alerts are nested under favorites
+app.use('/api/v1/backtest', backtestRoutes);
+app.use('/api/v1/scenarios', scenariosRoutes);
+
+// API Documentation (remains unversioned for easier access)
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
 
