@@ -1,0 +1,231 @@
+{
+  "dashboard": {
+    "title": "TitanGold Backend Metrics",
+    "tags": ["titangold", "backend", "prometheus"],
+    "timezone": "browser",
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate (req/s)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(titangold_http_requests_total[5m])) by (route)",
+            "legendFormat": "{{route}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Error Rate (%)",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(titangold_http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(titangold_http_requests_total[5m])) * 100",
+            "legendFormat": "Error Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "P95 Response Time (ms)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(titangold_http_request_duration_seconds_bucket[5m])) by (le, route)) * 1000",
+            "legendFormat": "{{route}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Active Requests",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 8, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(titangold_http_active_requests)",
+            "legendFormat": "Active"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Cache Hit Rate (%)",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 8, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "titangold_cache_hit_rate_percent"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 50, "color": "yellow"},
+                {"value": 80, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Memory Usage (MB)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "titangold_process_resident_memory_bytes / 1024 / 1024",
+            "legendFormat": "RSS"
+          },
+          {
+            "expr": "titangold_nodejs_heap_size_used_bytes / 1024 / 1024",
+            "legendFormat": "Heap Used"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "decmbytes"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Event Loop Lag (ms)",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "titangold_nodejs_eventloop_lag_mean_seconds * 1000",
+            "legendFormat": "Mean"
+          },
+          {
+            "expr": "titangold_nodejs_eventloop_lag_max_seconds * 1000",
+            "legendFormat": "Max"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "CPU Usage (%)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(titangold_process_cpu_user_seconds_total[5m]) * 100",
+            "legendFormat": "User"
+          },
+          {
+            "expr": "rate(titangold_process_cpu_system_seconds_total[5m]) * 100",
+            "legendFormat": "System"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Agent Execution Rate",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(titangold_agent_executions_total[5m])) by (agent_type)",
+            "legendFormat": "{{agent_type}}"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Agent P95 Execution Time (s)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(titangold_agent_execution_duration_seconds_bucket[5m])) by (le, agent_type))",
+            "legendFormat": "{{agent_type}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Database Connections",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 32, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "titangold_db_pool_active_connections",
+            "legendFormat": "Active"
+          },
+          {
+            "expr": "titangold_db_pool_idle_connections",
+            "legendFormat": "Idle"
+          },
+          {
+            "expr": "titangold_db_pool_waiting_requests",
+            "legendFormat": "Waiting"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "WebSocket Connections",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 40, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(titangold_websocket_connections_active)"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Trade Execution Rate",
+        "type": "graph",
+        "gridPos": {"x": 8, "y": 40, "w": 16, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(titangold_trades_executed_total[5m])) by (exchange, status)",
+            "legendFormat": "{{exchange}} - {{status}}"
+          }
+        ]
+      }
+    ]
+  }
+}

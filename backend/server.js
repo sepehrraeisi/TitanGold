@@ -15,6 +15,7 @@ import { messageQueue } from './services/messageQueue.js';
 import { requestContextMiddleware, performanceMiddleware, logger } from './services/logger.js';
 import { requestLogger, logError } from './middleware/requestLogger.js';
 import { addVersionHeader, legacyRedirect } from './middleware/apiVersion.js';
+import { metricsMiddleware, metricsHandler } from './middleware/metrics.js';
 import swaggerUi from 'swagger-ui-express';
 import openApiSpec from './openapi.js';
 import { initWebsocket, broadcastNotification } from './services/websocket.js';
@@ -75,6 +76,9 @@ const __dirname = path.dirname(__filename);
 app.use(requestContextMiddleware);
 app.use(performanceMiddleware);
 
+// Prometheus metrics (INFRA-006)
+app.use(metricsMiddleware);
+
 // API Versioning (API-001)
 app.use(addVersionHeader);
 app.use(legacyRedirect);
@@ -127,6 +131,13 @@ app.use('/api/', limiter); // Applies to both /api/* and /api/v1/*
 // ============================================================================
 // ROUTES
 // ============================================================================
+
+// ============================================================================
+// METRICS & HEALTH ENDPOINTS
+// ============================================================================
+
+// Prometheus metrics endpoint (INFRA-006)
+app.get('/metrics', metricsHandler);
 
 // Health check - Safe endpoint (no DB required) - remains unversioned
 app.get('/health', async (req, res) => {
