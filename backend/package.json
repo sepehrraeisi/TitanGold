@@ -8,6 +8,12 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node database/migrate.js",
+    "migrate:up": "node database/migrate.js up",
+    "migrate:down": "node database/migrate.js down",
+    "migrate:create": "node database/migrate.js create",
+    "migrate:status": "node database/migrate.js status",
+    "migrate:redo": "node database/migrate.js redo",
+    "migrate:setup": "node scripts/setup_migrations.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
@@ -55,6 +61,7 @@
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "jest": "^29.7.0",
+    "node-pg-migrate": "^8.0.4",
     "nodemon": "^3.0.2",
     "supertest": "^7.2.2"
   },
