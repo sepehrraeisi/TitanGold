@@ -569,6 +569,19 @@ if (process.env.NODE_ENV !== 'test') {
       logger.error('❌ Failed to initialize WebSocket:', error);
     }
 
+    // Initialize Agent WebSocket Server (BACKEND-023)
+    try {
+      const { initAgentWebSocketServer } = await import('./websocket/server.js');
+      initAgentWebSocketServer(server);
+      backgroundServices.agentWebSocket = { close: async () => {
+        const { closeWebSocketServer } = await import('./websocket/server.js');
+        closeWebSocketServer();
+      }};
+      logger.info('✅ Agent WebSocket server ready at /ws/agents');
+    } catch (error) {
+      logger.error('❌ Failed to initialize Agent WebSocket:', error);
+    }
+
     // Initialize GraphQL API (API-007)
     try {
       await initializeGraphQL();

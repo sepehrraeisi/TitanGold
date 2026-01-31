@@ -14,6 +14,7 @@ import agentRegistry from '../services/agents/registry.js';
 import { logger } from '../services/logger.js';
 import { webhookDispatcher } from '../services/webhookDispatcher.js';
 import * as experiments from '../services/experiments.js'; // BACKEND-022: A/B testing
+import { notifyAgentStarted, notifyAgentCompleted, notifyAgentFailed } from '../websocket/server.js'; // BACKEND-023: WebSocket updates
 
 const router = express.Router();
 
@@ -379,6 +380,18 @@ async function runAgentViaRegistry(req, res) {
 
     // BACKEND-022: Track execution start for experiment metrics (needed in catch block too)
     const executionStart = Date.now();
+
+    // BACKEND-023: Notify WebSocket clients that agent execution started
+    try {
+      notifyAgentStarted(agent.id, agent.agent_key, req.user?.id, {
+        symbol,
+        timeframe,
+        config: mergedConfig
+      });
+    } catch (wsError) {
+      // Don't fail request if WebSocket notification fails
+      logger.warn(`⚠️ Failed to send WebSocket start notification: ${wsError.message}`);
+    }
     
     // Execute via registry with timeout
     const result = await withTimeout(
@@ -479,6 +492,17 @@ async function runAgentViaRegistry(req, res) {
       logger.error(`❌ [Webhook] Failed to trigger for ${agent.agent_key}:`, webhookError.message);
     }
 
+    // BACKEND-023: Notify WebSocket clients of completion
+    try {
+      notifyAgentCompleted(agent.id, agent.agent_key, req.user?.id, uiResult, {
+        execution_time_ms: executionTimeMs,
+        symbol,
+        timeframe
+      });
+    } catch (wsError) {
+      logger.warn(`⚠️ Failed to send WebSocket completion notification: ${wsError.message}`);
+    }
+
     // ✅ Safety: Ensure indicators is always an array
     const safeIndicators = Array.isArray(uiResult?.indicators) ? uiResult.indicators : [];
 
@@ -576,6 +600,16 @@ async function runAgentViaRegistry(req, res) {
     } catch (webhookError) {
       // Don't fail the request if webhooks fail
       logger.error(`❌ [Webhook] Failed to trigger:`, webhookError.message);
+    }
+
+    // BACKEND-023: Notify WebSocket clients of failure
+    try {
+      notifyAgentFailed(req.params.id, error.agentKey || 'unknown', req.user?.id, error, {
+        is_timeout: isTimeout,
+        execution_time_ms: Date.now() - executionStart
+      });
+    } catch (wsError) {
+      logger.warn(`⚠️ Failed to send WebSocket failure notification: ${wsError.message}`);
     }
 
     return sendError(res, errorCode, error.message || 'Failed to run agent', statusCode);
