@@ -3,6 +3,7 @@ import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/apiWithCancellation.ts'; // FRONTEND-010: Use cancellable API
 import type { AIAgent, TechnicalAnalysisConfig, TechnicalIndicator, Timeframe, TechnicalAnalysisResult, AgentPerformanceMetrics } from '../../types.ts';
 import { useIsMounted } from '../../hooks/useMemoryLeakFree.ts';
+import PerformanceMetricsDisplay from './PerformanceMetricsDisplay.tsx'; // FRONTEND-011: Performance metrics display
 
 interface TechnicalAnalysisAgentControlProps {
     agent: AIAgent;
@@ -19,6 +20,15 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
     const [performance, setPerformance] = useState<AgentPerformanceMetrics | null>(agent.performanceMetrics || null);
     const [lastAnalysis, setLastAnalysis] = useState<TechnicalAnalysisResult | null>(agent.lastAnalysis || null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    // FRONTEND-011: Track execution time and cache status
+    const [lastExecutionTime, setLastExecutionTime] = useState<number | undefined>(undefined);
+    const [isCached, setIsCached] = useState<boolean>(false);
+    const [historicalPerformance, setHistoricalPerformance] = useState<Array<{
+        timestamp: string;
+        executionTime: number;
+        cached: boolean;
+        success: boolean;
+    }>>([]);
 
     // FRONTEND-009: Memory leak fix - Add AbortController and cleanup
     useEffect(() => {
@@ -122,9 +132,28 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
     const handleRunAnalysis = async (symbol?: string, timeframe?: Timeframe) => {
         if (!isMountedRef.current) return;
         if (isMountedRef.current) setIsAnalyzing(true);
+        // FRONTEND-011: Track execution time
+        const startTime = performance.now();
         try {
             const result = await api.runTechnicalAnalysis(agent.id, symbol, timeframe);
-            if (isMountedRef.current) setLastAnalysis(result);
+            // FRONTEND-011: Calculate execution time and extract cache status
+            const executionTime = Math.round(performance.now() - startTime);
+            const cached = result._meta?.cached || false;
+            
+            if (isMountedRef.current) {
+                setLastAnalysis(result);
+                setLastExecutionTime(executionTime);
+                setIsCached(cached);
+                
+                // Add to historical performance
+                const newEntry = {
+                    timestamp: new Date().toISOString(),
+                    executionTime,
+                    cached,
+                    success: true
+                };
+                setHistoricalPerformance(prev => [...prev.slice(-9), newEntry]);
+            }
             // Refresh agent data
             await loadAgentData();
             const updatedAgents = await api.fetchAIAgents();
@@ -133,6 +162,17 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
                 onUpdate(currentAgent);
             }
         } catch (error) {
+            // FRONTEND-011: Track failed executions
+            const executionTime = Math.round(performance.now() - startTime);
+            const failedEntry = {
+                timestamp: new Date().toISOString(),
+                executionTime,
+                cached: false,
+                success: false
+            };
+            if (isMountedRef.current) {
+                setHistoricalPerformance(prev => [...prev.slice(-9), failedEntry]);
+            }
             if (isMountedRef.current) {
                 console.error('Failed to run analysis:', error);
                 const errorMessage = error instanceof Error ? error.message : String(error);
@@ -308,7 +348,19 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
                         )
                     )}
                     {activeTab === 'performance' && (
-                        <PerformanceTab performance={performance} />
+                        <div className="space-y-6">
+                            {/* FRONTEND-011: New Performance Metrics Display */}
+                            <PerformanceMetricsDisplay
+                                metrics={performance}
+                                executionTime={lastExecutionTime}
+                                isCached={isCached}
+                                lastExecutionTime={lastExecutionTime}
+                                historicalData={historicalPerformance}
+                            />
+                            
+                            {/* Original Performance Tab Content */}
+                            <PerformanceTab performance={performance} />
+                        </div>
                     )}
                     {activeTab === 'learning' && (
                         <LearningTab agent={agent} />
