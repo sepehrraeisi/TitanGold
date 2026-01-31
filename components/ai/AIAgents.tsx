@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import { AIAgent } from '../../types.ts';
@@ -6,6 +6,7 @@ import ErrorBoundary from '../ErrorBoundary.tsx';
 import { getAgentControl } from './agentRegistry.ts';
 import LoadingSpinner, { AgentLoadingSpinner } from '../ui/LoadingSpinner';
 import SkeletonLoader, { AgentListSkeleton } from '../ui/SkeletonLoader';
+import { useAgentFavorites } from '../../hooks/useAgentFavorites';
 
 const AIAgents: React.FC = () => {
     const { t } = useLanguage();
@@ -13,6 +14,7 @@ const AIAgents: React.FC = () => {
     const [agents, setAgents] = useState<AIAgent[]>([]);
     const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const { isFavorite, toggleFavorite } = useAgentFavorites();
 
     const fetchData = async () => {
         setIsLoading(true);
@@ -38,6 +40,21 @@ const AIAgents: React.FC = () => {
         setAgents(prev => prev.map(a => a.id === updatedAgent.id ? updatedAgent : a));
         setSelectedAgent(updatedAgent);
     };
+
+    // Sort agents: favorites first, then by name
+    const sortedAgents = useMemo(() => {
+        return [...agents].sort((a, b) => {
+            const aFav = isFavorite(a.id);
+            const bFav = isFavorite(b.id);
+            
+            // Favorites first
+            if (aFav && !bFav) return -1;
+            if (!aFav && bFav) return 1;
+            
+            // Then sort by name
+            return a.name.localeCompare(b.name);
+        });
+    }, [agents, isFavorite]);
 
     if (isLoading) {
         return <AgentListSkeleton count={6} />;
@@ -65,11 +82,13 @@ const AIAgents: React.FC = () => {
     return (
         <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {agents.map(agent => (
+                {sortedAgents.map(agent => (
                     <AgentCard
                         key={agent.id}
                         agent={agent}
                         onOpenControlPanel={() => setSelectedAgent(agent)}
+                        isFavorite={isFavorite(agent.id)}
+                        onToggleFavorite={() => toggleFavorite(agent.id)}
                     />
                 ))}
             </div>
@@ -96,13 +115,31 @@ const AIAgents: React.FC = () => {
     );
 };
 
-const AgentCard: React.FC<{ agent: AIAgent; onOpenControlPanel: () => void }> = ({ agent, onOpenControlPanel }) => {
+const AgentCard: React.FC<{ 
+    agent: AIAgent; 
+    onOpenControlPanel: () => void;
+    isFavorite: boolean;
+    onToggleFavorite: () => void;
+}> = ({ agent, onOpenControlPanel, isFavorite, onToggleFavorite }) => {
     const { t } = useLanguage();
     
     return (
-         <div className="bg-card border border-border rounded-lg p-4 flex flex-col justify-between">
+         <div className="bg-card border border-border rounded-lg p-4 flex flex-col justify-between relative">
+            {/* Favorite Star Icon */}
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFavorite();
+                }}
+                className="absolute top-3 right-3 text-2xl hover:scale-110 transition-transform z-10"
+                title={isFavorite ? t('remove_from_favorites') || 'Remove from favorites' : t('add_to_favorites') || 'Add to favorites'}
+                aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
+                {isFavorite ? '⭐' : '☆'}
+            </button>
+            
             <div>
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start pr-8">
                     <div>
                          <h3 className="font-bold text-foreground">{agent.name}: {agent.role}</h3>
                          <p className={`text-xs font-semibold ${agent.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>{t(agent.status)}</p>
