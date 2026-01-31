@@ -89,13 +89,70 @@ app.use(requestLogger);
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
+// CORS configuration (API-006)
+// Whitelist of allowed origins
+const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:5173'
+    ];
+
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
+  // Dynamic origin validation with whitelist
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in whitelist
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      logger.warn(`❌ CORS blocked request from origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  
+  // Allow credentials (cookies, authorization headers)
   credentials: true,
+  
+  // Allowed methods
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  
+  // Allowed headers
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'X-API-Version'
+  ],
+  
+  // Exposed headers (accessible to client)
+  exposedHeaders: [
+    'X-API-Version',
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset',
+    'Content-Disposition'
+  ],
+  
+  // Preflight cache duration (seconds)
+  maxAge: 86400, // 24 hours
+  
+  // Success status for legacy browsers
   optionsSuccessStatus: 200
 };
+
 app.use(cors(corsOptions));
+
+// Handle preflight requests explicitly
+app.options('*', cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
