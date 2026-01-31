@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
+import { useIsMounted } from '../../hooks/useMemoryLeakFree.ts';
 import type {
     AIAgent,
     RiskAssessment,
@@ -40,6 +41,7 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
     onUpdate,
 }) => {
     const { t } = useLanguage();
+    const isMountedRef = useIsMounted(); // FRONTEND-009: Track mounted state
     const [activeTab, setActiveTab] = useState<RiskTab>('overview');
     const [config, setConfig] = useState<RiskManagementConfig | null>(agent.riskManagementConfig ?? null);
     const [metrics, setMetrics] = useState<RiskManagementMetrics | null>(agent.riskMetrics ?? null);
@@ -47,75 +49,120 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
     const [isBusy, setIsBusy] = useState(false);
     const [isAssessing, setIsAssessing] = useState(false);
 
+    // FRONTEND-009: Memory leak fix - Add cleanup
     useEffect(() => {
-        if (!config && agent.id === '2') {
+        let isCancelled = false;
+
+        if (!config && agent.id === '2' && !isCancelled && isMountedRef.current) {
             setConfig(createDefaultConfig());
         }
-        loadAgentSnapshot();
+        
+        const loadData = async () => {
+            if (isCancelled || !isMountedRef.current) return;
+            if (isMountedRef.current) setIsBusy(true);
+            try {
+                const snapshot = await api.fetchRiskManagementAgentData(agent.id);
+                if (!isCancelled && isMountedRef.current) {
+                    if (snapshot.config) setConfig(snapshot.config);
+                    if (snapshot.metrics) setMetrics(snapshot.metrics);
+                    if (snapshot.lastAssessment) setLastAssessment(snapshot.lastAssessment);
+                }
+            } catch (error) {
+                if (isMountedRef.current) {
+                    console.error('Risk agent snapshot failed:', error);
+                }
+            } finally {
+                if (isMountedRef.current) setIsBusy(false);
+            }
+        };
+        
+        loadData();
+
+        return () => {
+            isCancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [agent.id]);
 
+    // FRONTEND-009: Safe async - check mounted before setState
     const loadAgentSnapshot = async () => {
-        setIsBusy(true);
+        if (!isMountedRef.current) return;
+        if (isMountedRef.current) setIsBusy(true);
         try {
             const snapshot = await api.fetchRiskManagementAgentData(agent.id);
-            if (snapshot.config) setConfig(snapshot.config);
-            if (snapshot.metrics) setMetrics(snapshot.metrics);
-            if (snapshot.lastAssessment) setLastAssessment(snapshot.lastAssessment);
+            if (isMountedRef.current) {
+                if (snapshot.config) setConfig(snapshot.config);
+                if (snapshot.metrics) setMetrics(snapshot.metrics);
+                if (snapshot.lastAssessment) setLastAssessment(snapshot.lastAssessment);
+            }
         } catch (error) {
-            console.error('Risk agent snapshot failed:', error);
+            if (isMountedRef.current) {
+                console.error('Risk agent snapshot failed:', error);
+            }
         } finally {
-            setIsBusy(false);
+            if (isMountedRef.current) setIsBusy(false);
         }
     };
 
     const handleRunAssessment = async () => {
-        setIsAssessing(true);
+        if (!isMountedRef.current) return;
+        if (isMountedRef.current) setIsAssessing(true);
         try {
             const result = await api.runRiskAssessment(agent.id);
-            setLastAssessment(result);
+            if (isMountedRef.current) setLastAssessment(result);
             await loadAgentSnapshot();
             const updatedAgents = await api.fetchAIAgents();
             const refreshed = updatedAgents.find(item => item.id === agent.id);
-            if (refreshed) {
+            if (refreshed && isMountedRef.current) {
                 onUpdate(refreshed);
             }
         } catch (error) {
-            console.error('Risk assessment failed:', error);
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            alert((t('assessment_failed') || 'Risk assessment failed') + (errorMessage ? `: ${errorMessage}` : ''));
+            if (isMountedRef.current) {
+                console.error('Risk assessment failed:', error);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                alert((t('assessment_failed') || 'Risk assessment failed') + (errorMessage ? `: ${errorMessage}` : ''));
+            }
         } finally {
-            setIsAssessing(false);
+            if (isMountedRef.current) setIsAssessing(false);
         }
     };
 
     const handleUpdateConfig = async (updated: RiskManagementConfig) => {
-        setIsBusy(true);
+        if (!isMountedRef.current) return;
+        if (isMountedRef.current) setIsBusy(true);
         try {
             await api.updateRiskManagementConfig(agent.id, updated);
-            setConfig(updated);
-            alert(t('config_updated') || 'Configuration updated successfully');
+            if (isMountedRef.current) {
+                setConfig(updated);
+                alert(t('config_updated') || 'Configuration updated successfully');
+            }
         } catch (error) {
-            console.error('Update config failed:', error);
-            alert(t('update_failed') || 'Failed to update configuration');
+            if (isMountedRef.current) {
+                console.error('Update config failed:', error);
+                alert(t('update_failed') || 'Failed to update configuration');
+            }
         } finally {
-            setIsBusy(false);
+            if (isMountedRef.current) setIsBusy(false);
         }
     };
 
     const handleCommand = async (command: string) => {
-        setIsBusy(true);
+        if (!isMountedRef.current) return;
+        if (isMountedRef.current) setIsBusy(true);
         try {
             await api.sendAgentControlCommand(agent.id, command);
             const updatedAgents = await api.fetchAIAgents();
             const refreshed = updatedAgents.find(item => item.id === agent.id);
-            if (refreshed) {
+            if (refreshed && isMountedRef.current) {
                 onUpdate(refreshed);
             }
         } catch (error) {
-            console.error('Command failed:', error);
-            alert(t('command_failed') || 'Command failed');
+            if (isMountedRef.current) {
+                console.error('Command failed:', error);
+                alert(t('command_failed') || 'Command failed');
+            }
         } finally {
-            setIsBusy(false);
+            if (isMountedRef.current) setIsBusy(false);
         }
     };
 

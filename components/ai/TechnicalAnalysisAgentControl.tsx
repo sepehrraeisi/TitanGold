@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import type { AIAgent, TechnicalAnalysisConfig, TechnicalIndicator, Timeframe, TechnicalAnalysisResult, AgentPerformanceMetrics } from '../../types.ts';
+import { useIsMounted } from '../../hooks/useMemoryLeakFree.ts';
 
 interface TechnicalAnalysisAgentControlProps {
     agent: AIAgent;
@@ -11,6 +12,7 @@ interface TechnicalAnalysisAgentControlProps {
 
 const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const isMountedRef = useIsMounted(); // FRONTEND-009: Track mounted state
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'overview' | 'indicators' | 'strategies' | 'performance' | 'settings'>('overview');
     const [config, setConfig] = useState<TechnicalAnalysisConfig | null>(agent.technicalAnalysisConfig || null);
@@ -18,7 +20,11 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
     const [lastAnalysis, setLastAnalysis] = useState<TechnicalAnalysisResult | null>(agent.lastAnalysis || null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+    // FRONTEND-009: Memory leak fix - Add AbortController and cleanup
     useEffect(() => {
+        const abortController = new AbortController();
+        let isCancelled = false;
+
         // Initialize config if not exists
         if (!config && agent.id === '1') {
             // Agent 1 is Technical Analysis - initialize default config
@@ -48,75 +54,124 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
                     realTimeAnalysis: true,
                 },
             };
-            setConfig(defaultConfig);
+            if (!isCancelled && isMountedRef.current) {
+                setConfig(defaultConfig);
+            }
         }
-        loadAgentData();
+
+        // Load agent data with abort support
+        const loadData = async () => {
+            if (!isMountedRef.current) return;
+            
+            if (isMountedRef.current) setIsLoading(true);
+            try {
+                const agentData = await api.fetchTechnicalAnalysisAgentData(agent.id);
+                if (!isCancelled && isMountedRef.current) {
+                    if (agentData.config) setConfig(agentData.config);
+                    if (agentData.performance) setPerformance(agentData.performance);
+                    if (agentData.lastAnalysis) setLastAnalysis(agentData.lastAnalysis);
+                }
+            } catch (error: any) {
+                if (error?.name !== 'AbortError' && isMountedRef.current) {
+                    console.error('Failed to load agent data:', error);
+                }
+            } finally {
+                if (isMountedRef.current) setIsLoading(false);
+            }
+        };
+
+        loadData();
+
+        // Cleanup function
+        return () => {
+            isCancelled = true;
+            abortController.abort();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [agent.id]);
 
+    // FRONTEND-009: Safe async function - checks mounted state before setState
     const loadAgentData = async () => {
-        setIsLoading(true);
+        if (!isMountedRef.current) return;
+        
+        if (isMountedRef.current) setIsLoading(true);
         try {
             const agentData = await api.fetchTechnicalAnalysisAgentData(agent.id);
-            if (agentData.config) setConfig(agentData.config);
-            if (agentData.performance) setPerformance(agentData.performance);
-            if (agentData.lastAnalysis) setLastAnalysis(agentData.lastAnalysis);
+            if (isMountedRef.current) {
+                if (agentData.config) setConfig(agentData.config);
+                if (agentData.performance) setPerformance(agentData.performance);
+                if (agentData.lastAnalysis) setLastAnalysis(agentData.lastAnalysis);
+            }
         } catch (error) {
-            console.error('Failed to load agent data:', error);
+            if (isMountedRef.current) {
+                console.error('Failed to load agent data:', error);
+            }
         } finally {
-            setIsLoading(false);
+            if (isMountedRef.current) setIsLoading(false);
         }
     };
 
     const handleRunAnalysis = async (symbol?: string, timeframe?: Timeframe) => {
-        setIsAnalyzing(true);
+        if (!isMountedRef.current) return;
+        if (isMountedRef.current) setIsAnalyzing(true);
         try {
             const result = await api.runTechnicalAnalysis(agent.id, symbol, timeframe);
-            setLastAnalysis(result);
+            if (isMountedRef.current) setLastAnalysis(result);
             // Refresh agent data
             await loadAgentData();
             const updatedAgents = await api.fetchAIAgents();
             const currentAgent = updatedAgents.find(a => a.id === agent.id);
-            if (currentAgent) {
+            if (currentAgent && isMountedRef.current) {
                 onUpdate(currentAgent);
             }
         } catch (error) {
-            console.error('Failed to run analysis:', error);
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            alert((t('analysis_failed') || 'Analysis failed') + (errorMessage ? `: ${errorMessage}` : ''));
+            if (isMountedRef.current) {
+                console.error('Failed to run analysis:', error);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                alert((t('analysis_failed') || 'Analysis failed') + (errorMessage ? `: ${errorMessage}` : ''));
+            }
         } finally {
-            setIsAnalyzing(false);
+            if (isMountedRef.current) setIsAnalyzing(false);
         }
     };
 
     const handleUpdateConfig = async (updatedConfig: TechnicalAnalysisConfig) => {
-        setIsLoading(true);
+        if (!isMountedRef.current) return;
+        if (isMountedRef.current) setIsLoading(true);
         try {
             await api.updateTechnicalAnalysisConfig(agent.id, updatedConfig);
-            setConfig(updatedConfig);
-            alert(t('config_updated') || 'Configuration updated successfully');
+            if (isMountedRef.current) {
+                setConfig(updatedConfig);
+                alert(t('config_updated') || 'Configuration updated successfully');
+            }
         } catch (error) {
-            console.error('Failed to update config:', error);
-            alert(t('update_failed') || 'Failed to update configuration');
+            if (isMountedRef.current) {
+                console.error('Failed to update config:', error);
+                alert(t('update_failed') || 'Failed to update configuration');
+            }
         } finally {
-            setIsLoading(false);
+            if (isMountedRef.current) setIsLoading(false);
         }
     };
 
     const handleControlCommand = async (command: string) => {
-        setIsLoading(true);
+        if (!isMountedRef.current) return;
+        if (isMountedRef.current) setIsLoading(true);
         try {
             await api.sendAgentControlCommand(agent.id, command);
             // Refresh agent
             const updatedAgents = await api.fetchAIAgents();
             const updatedAgent = updatedAgents.find(a => a.id === agent.id);
-            if (updatedAgent) {
+            if (updatedAgent && isMountedRef.current) {
                 onUpdate(updatedAgent);
             }
         } catch (error) {
-            console.error('Failed to execute command:', error);
-            alert(t('command_failed') || 'Command failed');
+            if (isMountedRef.current) {
+                console.error('Failed to execute command:', error);
+                alert(t('command_failed') || 'Command failed');
+            }
         } finally {
-            setIsLoading(false);
+            if (isMountedRef.current) setIsLoading(false);
         }
     };
 
