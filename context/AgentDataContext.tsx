@@ -1,5 +1,6 @@
 /**
  * Agent Data Context (FRONTEND-004)
+ * Updated with Agent Key Constants (FRONTEND-006)
  * 
  * Provides centralized state management for AI agent data, configs, and metrics.
  * Prevents duplicate fetching by sharing data across all agent control components.
@@ -10,11 +11,13 @@
  * - Loading and error states
  * - Optimistic updates
  * - Context-based data sharing
+ * - Type-safe agent keys with autocomplete
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import * as api from '../services/api.ts';
 import type { AIAgent, AgentPerformanceMetrics } from '../types.ts';
+import { AGENT_KEYS } from '../constants/agentKeys';
 
 // Agent configuration types (generic config that can be specialized per agent)
 export interface AgentConfig {
@@ -146,6 +149,7 @@ export const AgentDataProvider: React.FC<AgentDataProviderProps> = ({
 
   /**
    * Fetch agent-specific data based on agent type
+   * Uses type-safe agent key constants
    */
   const fetchAgentSpecificData = async (agent: AIAgent): Promise<any> => {
     // Map agent types to their specific API calls
@@ -153,15 +157,15 @@ export const AgentDataProvider: React.FC<AgentDataProviderProps> = ({
     
     try {
       switch (agentKey) {
-        case 'technical':
+        case AGENT_KEYS.TECHNICAL:
           return await api.fetchTechnicalAnalysisAgentData(agent.id);
-        case 'risk':
+        case AGENT_KEYS.RISK:
           return await api.fetchRiskManagementAgentData(agent.id);
-        case 'sentiment':
+        case AGENT_KEYS.SENTIMENT:
           return await api.fetchSentimentAgentData(agent.id);
-        case 'fundamental':
+        case AGENT_KEYS.FUNDAMENTAL:
           return await api.fetchFundamentalAgentData(agent.id);
-        case 'liquidity':
+        case AGENT_KEYS.LIQUIDITY:
           return await api.fetchLiquidityAgentData(agent.id);
         // Add more cases as needed for other agent types
         default:

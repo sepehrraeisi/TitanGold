@@ -1,5 +1,6 @@
 /**
  * Agent Registry with Lazy Loading (FRONTEND-003)
+ * Updated with Agent Key Constants (FRONTEND-006)
  * 
  * This registry maps agent keys to their control panel components.
  * All components are lazy-loaded to reduce initial bundle size.
@@ -9,10 +10,12 @@
  * - Faster initial page load
  * - Components loaded on-demand when user opens control panel
  * - Automatic code-splitting by Vite
+ * - Type-safe agent keys with autocomplete
  */
 
 import { lazy, ComponentType } from 'react';
 import { AIAgent } from '../../types.ts';
+import { AGENT_KEYS, AgentKeyType, toRegistryKey } from '../../constants/agentKeys';
 
 // Define the component props interface
 export interface AgentControlProps {
@@ -31,45 +34,46 @@ export interface AgentRegistryEntry {
 /**
  * Agent registry with lazy-loaded components
  * Each component is loaded only when needed
+ * Uses type-safe agent key constants
  */
 export const agentRegistry: Record<string, AgentRegistryEntry> = {
-  technical: {
-    key: 'technical',
+  [AGENT_KEYS.TECHNICAL]: {
+    key: AGENT_KEYS.TECHNICAL,
     component: lazy(() => import('./TechnicalAnalysisAgentControl.tsx')),
     fallbackTitle: 'Technical Analysis Agent Error'
   },
-  risk: {
-    key: 'risk',
+  [AGENT_KEYS.RISK]: {
+    key: AGENT_KEYS.RISK,
     component: lazy(() => import('./RiskManagementAgentControl.tsx')),
     fallbackTitle: 'Risk Management Agent Error'
   },
-  sentiment: {
-    key: 'sentiment',
+  [AGENT_KEYS.SENTIMENT]: {
+    key: AGENT_KEYS.SENTIMENT,
     component: lazy(() => import('./SentimentAgentControl.tsx')),
     fallbackTitle: 'Sentiment Agent Error'
   },
-  pattern: {
-    key: 'pattern',
+  [AGENT_KEYS.PATTERN]: {
+    key: AGENT_KEYS.PATTERN,
     component: lazy(() => import('./PatternAgentControl.tsx')),
     fallbackTitle: 'Pattern Agent Error'
   },
-  price_prediction: {
-    key: 'price_prediction',
+  [AGENT_KEYS.PRICE_PREDICTION]: {
+    key: AGENT_KEYS.PRICE_PREDICTION,
     component: lazy(() => import('./PricePredictionAgentControl.tsx')),
     fallbackTitle: 'Price Prediction Agent Error'
   },
-  arbitrage: {
-    key: 'arbitrage',
+  [AGENT_KEYS.ARBITRAGE]: {
+    key: AGENT_KEYS.ARBITRAGE,
     component: lazy(() => import('./ArbitrageAgentControl.tsx')),
     fallbackTitle: 'Arbitrage Agent Error'
   },
-  portfolio: {
-    key: 'portfolio',
+  [AGENT_KEYS.PORTFOLIO]: {
+    key: AGENT_KEYS.PORTFOLIO,
     component: lazy(() => import('./PortfolioAllocationAgentControl.tsx')),
     fallbackTitle: 'Portfolio Allocation Agent Error'
   },
-  liquidity: {
-    key: 'liquidity',
+  [AGENT_KEYS.LIQUIDITY]: {
+    key: AGENT_KEYS.LIQUIDITY,
     component: lazy(() => import('./LiquidityAgentControl.tsx')),
     fallbackTitle: 'Liquidity Agent Error'
   },
@@ -78,33 +82,33 @@ export const agentRegistry: Record<string, AgentRegistryEntry> = {
     component: lazy(() => import('./TrendAgentControl.tsx')),
     fallbackTitle: 'Trend Agent Error'
   },
-  optimization: {
-    key: 'optimization',
+  [AGENT_KEYS.OPTIMIZATION]: {
+    key: AGENT_KEYS.OPTIMIZATION,
     component: lazy(() => import('./OptimizationAgentControl.tsx')),
     fallbackTitle: 'Optimization Agent Error'
   },
-  order: {
-    key: 'order',
+  [AGENT_KEYS.ORDER]: {
+    key: AGENT_KEYS.ORDER,
     component: lazy(() => import('./OrderManagementAgentControl.tsx')),
     fallbackTitle: 'Order Management Agent Error'
   },
-  fundamental: {
-    key: 'fundamental',
+  [AGENT_KEYS.FUNDAMENTAL]: {
+    key: AGENT_KEYS.FUNDAMENTAL,
     component: lazy(() => import('./FundamentalAgentControl.tsx')),
     fallbackTitle: 'Fundamental Agent Error'
   },
-  market_intelligence: {
-    key: 'market_intelligence',
+  [AGENT_KEYS.MARKET_INTELLIGENCE]: {
+    key: AGENT_KEYS.MARKET_INTELLIGENCE,
     component: lazy(() => import('./MarketIntelligenceAgentControl.tsx')),
     fallbackTitle: 'Market Intelligence Agent Error'
   },
-  volume: {
-    key: 'volume',
+  [AGENT_KEYS.VOLUME]: {
+    key: AGENT_KEYS.VOLUME,
     component: lazy(() => import('./VolumeAgentControl.tsx')),
     fallbackTitle: 'Volume Agent Error'
   },
-  timing: {
-    key: 'timing',
+  [AGENT_KEYS.TIMING]: {
+    key: AGENT_KEYS.TIMING,
     component: lazy(() => import('./TimingAgentControl.tsx')),
     fallbackTitle: 'Timing Agent Error'
   }
@@ -112,11 +116,14 @@ export const agentRegistry: Record<string, AgentRegistryEntry> = {
 
 /**
  * Get agent control component by agent key
+ * Handles mapping from backend agent_key to registry key
  * @param agentKey - The unique identifier for the agent
  * @returns Agent registry entry or undefined if not found
  */
-export function getAgentControl(agentKey: string): AgentRegistryEntry | undefined {
-  return agentRegistry[agentKey];
+export function getAgentControl(agentKey: string | undefined): AgentRegistryEntry | undefined {
+  if (!agentKey) return undefined;
+  const registryKey = toRegistryKey(agentKey);
+  return agentRegistry[registryKey];
 }
 
 /**
