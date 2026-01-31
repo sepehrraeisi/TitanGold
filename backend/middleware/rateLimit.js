@@ -55,7 +55,10 @@ export function rateLimit({ limit, windowMs }) {
       const remaining = Math.max(0, maxRequests - currentCount);
       const resetTime = Math.ceil(now / 1000) + windowSeconds;
       
-      // Set rate limit headers
+      // Set rate limit headers (API-004)
+      // X-RateLimit-Limit: Maximum requests allowed in window
+      // X-RateLimit-Remaining: Requests remaining in current window
+      // X-RateLimit-Reset: Unix timestamp (seconds) when window resets
       res.setHeader('X-RateLimit-Limit', maxRequests);
       res.setHeader('X-RateLimit-Remaining', remaining);
       res.setHeader('X-RateLimit-Reset', resetTime);
