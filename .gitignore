@@ -35,3 +35,10 @@ dist-ssr
 backend/uploads/
 # Test coverage reports
 coverage/
+
+# Playwright E2E test artifacts
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/e2e/screenshots/*.png
+
