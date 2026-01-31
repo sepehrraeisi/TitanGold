@@ -13,6 +13,7 @@ import * as riskAgent from '../services/risk-agent.js';
 import agentRegistry from '../services/agents/registry.js';
 import { logger } from '../services/logger.js';
 import { webhookDispatcher } from '../services/webhookDispatcher.js';
+import * as experiments from '../services/experiments.js'; // BACKEND-022: A/B testing
 
 const router = express.Router();
 
@@ -344,14 +345,46 @@ async function runAgentViaRegistry(req, res) {
 
     logger.info(`✅ [Registry] Agent loaded: ${agent.agent_key} (${agent.name})`);
 
+    // BACKEND-022: Check for active A/B test experiments
+    let experimentData = null;
+    let assignedVariant = null;
+    const experimentKey = req.query.experiment || req.body.experiment;
+    
+    if (experimentKey && req.user?.id) {
+      try {
+        // Get variant assignment for this user
+        const assignment = await experiments.getVariantAssignment(experimentKey, req.user.id);
+        assignedVariant = assignment.variant;
+        experimentData = {
+          experiment_key: experimentKey,
+          experiment_id: assignment.experiment_id,
+          variant: assignedVariant,
+          version: assignment.version,
+          is_new_assignment: assignment.is_new_assignment
+        };
+        
+        logger.info(`🧪 [Experiment] User assigned to variant ${assignedVariant} (version ${assignment.version}) for ${experimentKey}`);
+        
+        // TODO: In future, could dynamically load the assigned version
+        // For now, we track metrics for the current version
+      } catch (expError) {
+        // Don't fail the request if experiment lookup fails
+        logger.warn(`⚠️  [Experiment] Failed to get assignment for ${experimentKey}:`, expError.message);
+      }
+    }
+
     // Get timeout from env or use default (30 seconds)
     const timeoutMs = parseInt(process.env.AGENT_TIMEOUT_MS || '30000', 10);
     logger.info(`⏱️  [Registry] Timeout set to ${timeoutMs}ms for ${agent.agent_key}`);
 
+    // BACKEND-022: Track execution start for experiment metrics (needed in catch block too)
+    const executionStart = Date.now();
+    
     // Execute via registry with timeout
     const result = await withTimeout(
       agentRegistry.runAgent(agent.agent_key, {
         userId: req.user?.id,
+        agent_id: agent.id, // Pass agent_id for metrics
         symbol,
         timeframe,
         config: mergedConfig,
@@ -361,8 +394,32 @@ async function runAgentViaRegistry(req, res) {
       `Agent ${agent.agent_key} execution timed out after ${timeoutMs}ms`,
       agent.agent_key
     );
+    const executionTimeMs = Date.now() - executionStart;
 
-    logger.info(`✅ [Registry] Agent execution complete: ${agent.agent_key}`);
+    logger.info(`✅ [Registry] Agent execution complete: ${agent.agent_key} (${executionTimeMs}ms)`);
+
+    // BACKEND-022: Record experiment metrics if experiment is active
+    if (experimentData && assignedVariant) {
+      try {
+        await experiments.recordMetric({
+          experiment_key: experimentData.experiment_key,
+          variant: assignedVariant,
+          agent_id: agent.id,
+          user_id: req.user?.id,
+          execution_time_ms: executionTimeMs,
+          success: true,
+          cache_hit: result?._meta?.cached || false,
+          confidence: typeof result?.confidence === 'number' ? result.confidence : null,
+          custom_metrics: {
+            symbol,
+            timeframe
+          }
+        });
+        logger.info(`📊 [Experiment] Recorded metric for variant ${assignedVariant}`);
+      } catch (expError) {
+        logger.warn(`⚠️  [Experiment] Failed to record metric:`, expError.message);
+      }
+    }
 
     // Transform result to UI-compatible format
     const uiResult = transformAgentResultForUI(agent.agent_key, result);
@@ -475,6 +532,30 @@ async function runAgentViaRegistry(req, res) {
       }
     } catch (updateErr) {
       // Ignore metadata update errors
+    }
+
+    // BACKEND-022: Record experiment failure metrics if experiment is active
+    if (experimentData && assignedVariant) {
+      try {
+        const executionTimeMs = Date.now() - executionStart;
+        await experiments.recordMetric({
+          experiment_key: experimentData.experiment_key,
+          variant: assignedVariant,
+          agent_id: req.params.id,
+          user_id: req.user?.id,
+          execution_time_ms: executionTimeMs,
+          success: false,
+          error_type: isTimeout ? 'timeout' : 'execution_error',
+          error_message: error.message,
+          custom_metrics: {
+            symbol: req.body.symbol,
+            timeframe: req.body.timeframe
+          }
+        });
+        logger.info(`📊 [Experiment] Recorded failure metric for variant ${assignedVariant}`);
+      } catch (expError) {
+        logger.warn(`⚠️  [Experiment] Failed to record failure metric:`, expError.message);
+      }
     }
 
     // ✅ Trigger webhooks for agent failure (API-008)
