@@ -2,10 +2,12 @@
 // Purpose: Load and route agent modules by agent_key
 // Date: 2026-01-03
 // Updated: 2026-01-31 - Added health check functionality (BACKEND-015)
+// Updated: 2026-01-31 - Added version tracking (BACKEND-017)
 
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { logger } from '../../services/logger.js';
+import pool from '../../database/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -392,6 +394,244 @@ export function enableAgent(agent_key) {
   }
 }
 
+// ============================================================================
+// BACKEND-017: Version Tracking Implementation
+// ============================================================================
+
+/**
+ * Get current version of an agent from database
+ * @param {string} agent_key - Agent identifier
+ * @returns {Promise<string>} Current version
+ */
+export async function getAgentVersion(agent_key) {
+  try {
+    const result = await pool.query(
+      'SELECT version FROM ai_agents WHERE agent_key = $1',
+      [agent_key]
+    );
+    
+    if (result.rows.length === 0) {
+      throw new Error(`Agent not found: ${agent_key}`);
+    }
+    
+    return result.rows[0].version;
+  } catch (error) {
+    logger.error(`❌ Failed to get agent version for ${agent_key}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Bump agent version (increment patch version by default)
+ * @param {string} agent_key - Agent identifier
+ * @param {string} new_version - New semantic version (e.g., "1.2.3")
+ * @param {string} change_description - Description of what changed
+ * @param {string} changed_by - User ID or 'system'
+ * @returns {Promise<Object>} Version update result
+ */
+export async function bumpAgentVersion(agent_key, new_version, change_description = 'Version bumped', changed_by = 'system') {
+  try {
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Get current version
+      const currentResult = await client.query(
+        'SELECT id, version FROM ai_agents WHERE agent_key = $1',
+        [agent_key]
+      );
+      
+      if (currentResult.rows.length === 0) {
+        throw new Error(`Agent not found: ${agent_key}`);
+      }
+      
+      const agent_id = currentResult.rows[0].id;
+      const previous_version = currentResult.rows[0].version;
+      
+      // Update version (trigger will handle version_updated_at and history)
+      await client.query(
+        'UPDATE ai_agents SET version = $1 WHERE agent_key = $2',
+        [new_version, agent_key]
+      );
+      
+      await client.query('COMMIT');
+      
+      logger.info(`✅ Bumped agent ${agent_key} version: ${previous_version} → ${new_version}`);
+      
+      return {
+        success: true,
+        agent_key,
+        previous_version,
+        new_version,
+        change_description,
+        updated_at: new Date().toISOString()
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    logger.error(`❌ Failed to bump agent version for ${agent_key}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Automatically increment patch version (e.g., 1.0.0 → 1.0.1)
+ * @param {string} agent_key - Agent identifier
+ * @param {string} change_description - Description of what changed
+ * @returns {Promise<Object>} Version update result
+ */
+export async function incrementAgentVersion(agent_key, change_description = 'Code updated') {
+  try {
+    const current_version = await getAgentVersion(agent_key);
+    const [major, minor, patch] = current_version.split('.').map(Number);
+    const new_version = `${major}.${minor}.${patch + 1}`;
+    
+    return await bumpAgentVersion(agent_key, new_version, change_description);
+  } catch (error) {
+    logger.error(`❌ Failed to increment agent version for ${agent_key}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get version history for an agent
+ * @param {string} agent_key - Agent identifier
+ * @param {number} limit - Maximum number of history entries to return
+ * @returns {Promise<Array>} Version history
+ */
+export async function getAgentVersionHistory(agent_key, limit = 10) {
+  try {
+    const result = await pool.query(
+      `SELECT 
+        version, 
+        previous_version, 
+        change_type, 
+        change_description, 
+        changed_by, 
+        created_at,
+        metadata
+      FROM ai_agent_version_history
+      WHERE agent_key = $1
+      ORDER BY created_at DESC
+      LIMIT $2`,
+      [agent_key, limit]
+    );
+    
+    return result.rows;
+  } catch (error) {
+    logger.error(`❌ Failed to get version history for ${agent_key}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Rollback agent to a previous version
+ * @param {string} agent_key - Agent identifier
+ * @param {string} target_version - Version to rollback to
+ * @param {string} changed_by - User ID or 'system'
+ * @returns {Promise<Object>} Rollback result
+ */
+export async function rollbackAgentVersion(agent_key, target_version, changed_by = 'system') {
+  try {
+    const result = await pool.query(
+      'SELECT rollback_agent_version($1, $2, $3) as result',
+      [agent_key, target_version, changed_by]
+    );
+    
+    const rollbackResult = result.rows[0].result;
+    
+    if (rollbackResult.success) {
+      logger.info(`✅ Rolled back agent ${agent_key} to version ${target_version}`);
+    } else {
+      logger.error(`❌ Rollback failed for ${agent_key}:`, rollbackResult.error);
+    }
+    
+    return rollbackResult;
+  } catch (error) {
+    logger.error(`❌ Failed to rollback agent ${agent_key}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Query decisions by agent version
+ * @param {string} agent_key - Agent identifier
+ * @param {string} version - Agent version
+ * @param {number} limit - Maximum number of decisions to return
+ * @returns {Promise<Array>} Decisions made by the specified agent version
+ */
+export async function getDecisionsByVersion(agent_key, version, limit = 100) {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM get_decisions_by_version($1, $2, $3)',
+      [agent_key, version, limit]
+    );
+    
+    return result.rows;
+  } catch (error) {
+    logger.error(`❌ Failed to get decisions for ${agent_key} v${version}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get version summary for all agents
+ * @returns {Promise<Array>} Version summary for all agents
+ */
+export async function getAllAgentVersions() {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM agent_version_summary ORDER BY agent_key'
+    );
+    
+    return result.rows;
+  } catch (error) {
+    logger.error('❌ Failed to get agent version summary:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Store agent version when making a decision
+ * This should be called by agents when they make decisions
+ * @param {Object} decision - Decision object with agent_id
+ * @returns {Promise<string>} Agent version used for this decision
+ */
+export async function recordDecisionVersion(decision) {
+  try {
+    // Get agent version from agent_id
+    const result = await pool.query(
+      'SELECT agent_key, version FROM ai_agents WHERE id = $1',
+      [decision.agent_id]
+    );
+    
+    if (result.rows.length === 0) {
+      logger.warn(`⚠️  Agent not found for decision: ${decision.agent_id}`);
+      return null;
+    }
+    
+    const { agent_key, version } = result.rows[0];
+    
+    // Update the decision with agent_version
+    if (decision.id) {
+      await pool.query(
+        'UPDATE ai_decisions SET agent_version = $1 WHERE id = $2',
+        [version, decision.id]
+      );
+    }
+    
+    return version;
+  } catch (error) {
+    logger.error('❌ Failed to record decision version:', error.message);
+    throw error;
+  }
+}
+
 // Export default object for convenience
 export default {
   getAgentService,
@@ -412,5 +652,14 @@ export default {
   startPeriodicHealthChecks,
   stopPeriodicHealthChecks,
   disableUnhealthyAgent,
-  enableAgent
+  enableAgent,
+  // BACKEND-017: Version tracking exports
+  getAgentVersion,
+  bumpAgentVersion,
+  incrementAgentVersion,
+  getAgentVersionHistory,
+  rollbackAgentVersion,
+  getDecisionsByVersion,
+  getAllAgentVersions,
+  recordDecisionVersion
 };
