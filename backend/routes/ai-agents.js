@@ -12,6 +12,7 @@ import { aiService } from '../services/ai.js';
 import * as riskAgent from '../services/risk-agent.js';
 import agentRegistry from '../services/agents/registry.js';
 import { logger } from '../services/logger.js';
+import { webhookDispatcher } from '../services/webhookDispatcher.js';
 
 const router = express.Router();
 
@@ -400,6 +401,27 @@ async function runAgentViaRegistry(req, res) {
 
     logger.info(`📊 [Registry] Agent metadata updated for ${agent.agent_key}`);
 
+    // ✅ Trigger webhooks for agent completion (API-008)
+    try {
+      await webhookDispatcher.triggerAgentEvent(
+        req.user?.id,
+        'agent.completed',
+        {
+          agent_id: agent.id,
+          agent_key: agent.agent_key,
+          agent_name: agent.name,
+          symbol,
+          timeframe,
+          result: uiResult,
+          timestamp: new Date().toISOString()
+        }
+      );
+      logger.info(`🔔 [Webhook] Triggered for agent ${agent.agent_key}`);
+    } catch (webhookError) {
+      // Don't fail the request if webhooks fail
+      logger.error(`❌ [Webhook] Failed to trigger for ${agent.agent_key}:`, webhookError.message);
+    }
+
     // ✅ Safety: Ensure indicators is always an array
     const safeIndicators = Array.isArray(uiResult?.indicators) ? uiResult.indicators : [];
 
@@ -453,6 +475,26 @@ async function runAgentViaRegistry(req, res) {
       }
     } catch (updateErr) {
       // Ignore metadata update errors
+    }
+
+    // ✅ Trigger webhooks for agent failure (API-008)
+    try {
+      const eventType = isTimeout ? 'agent.timeout' : 'agent.failed';
+      await webhookDispatcher.triggerAgentEvent(
+        req.user?.id,
+        eventType,
+        {
+          agent_id: req.params.id,
+          agent_key: error.agentKey || 'unknown',
+          error_message: error.message,
+          is_timeout: isTimeout,
+          timestamp: new Date().toISOString()
+        }
+      );
+      logger.info(`🔔 [Webhook] Triggered ${eventType} for agent`);
+    } catch (webhookError) {
+      // Don't fail the request if webhooks fail
+      logger.error(`❌ [Webhook] Failed to trigger:`, webhookError.message);
     }
 
     return sendError(res, errorCode, error.message || 'Failed to run agent', statusCode);

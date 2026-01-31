@@ -56,6 +56,7 @@ import monitoringRoutes from './routes/monitoring.js';
 import backtestRoutes from './routes/backtest.js';
 import scenariosRoutes from './routes/scenarios.js';
 import liquidityAgentRoutes from './routes/liquidity-agent.js';
+import webhookRoutes from './routes/webhooks.js'; // API-008
 
 // GraphQL (API-007)
 import { ApolloServer } from '@apollo/server';
@@ -302,6 +303,7 @@ app.use('/api/v1/favorites', favoritesRoutes);
 app.use('/api/v1/favorites', favoriteAlertsRoutes); // Alerts are nested under favorites
 app.use('/api/v1/backtest', backtestRoutes);
 app.use('/api/v1/scenarios', scenariosRoutes);
+app.use('/api/v1/webhooks', webhookRoutes); // API-008: Webhook support
 
 // ============================================================================
 // GRAPHQL API (API-007)
