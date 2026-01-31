@@ -57,6 +57,12 @@ import backtestRoutes from './routes/backtest.js';
 import scenariosRoutes from './routes/scenarios.js';
 import liquidityAgentRoutes from './routes/liquidity-agent.js';
 
+// GraphQL (API-007)
+import { ApolloServer } from '@apollo/server';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import resolvers from './graphql/resolvers.js';
+
 dotenv.config();
 
 const app = express();
@@ -297,6 +303,138 @@ app.use('/api/v1/favorites', favoriteAlertsRoutes); // Alerts are nested under f
 app.use('/api/v1/backtest', backtestRoutes);
 app.use('/api/v1/scenarios', scenariosRoutes);
 
+// ============================================================================
+// GRAPHQL API (API-007)
+// ============================================================================
+
+// GraphQL setup - will be initialized asynchronously
+let apolloServer = null;
+
+async function initializeGraphQL() {
+  try {
+    // Load GraphQL schema
+    const schemaPath = join(__dirname, 'graphql', 'schema.graphql');
+    const typeDefs = readFileSync(schemaPath, 'utf-8');
+    
+    // Create Apollo Server instance
+    apolloServer = new ApolloServer({
+      typeDefs,
+      resolvers,
+      introspection: process.env.NODE_ENV !== 'production', // Enable introspection in dev
+      formatError: (error) => {
+        // Log error
+        logger.error('GraphQL Error:', {
+          message: error.message,
+          path: error.path,
+          extensions: error.extensions
+        });
+        
+        // Return formatted error
+        return {
+          message: error.message,
+          code: error.extensions?.code || 'INTERNAL_SERVER_ERROR',
+          path: error.path,
+          extensions: {
+            ...error.extensions,
+            timestamp: new Date().toISOString()
+          }
+        };
+      }
+    });
+    
+    // Start Apollo Server
+    await apolloServer.start();
+    
+    // Mount GraphQL endpoint at /graphql using json-based approach
+    app.post('/graphql', async (req, res) => {
+      try {
+        const { query, variables, operationName } = req.body;
+        
+        const result = await apolloServer.executeOperation(
+          {
+            query,
+            variables,
+            operationName
+          },
+          {
+            contextValue: {
+              userId: req.user?.id,
+              user: req.user,
+              requestId: req.requestId
+            }
+          }
+        );
+        
+        res.status(200).json(result);
+      } catch (error) {
+        logger.error('GraphQL execution error:', error);
+        res.status(500).json({
+          errors: [{
+            message: 'Internal server error',
+            extensions: { code: 'INTERNAL_SERVER_ERROR' }
+          }]
+        });
+      }
+    });
+    
+    // GET endpoint for playground / introspection
+    app.get('/graphql', (req, res) => {
+      if (process.env.NODE_ENV === 'production') {
+        res.status(405).json({ error: 'GraphQL Playground is disabled in production' });
+      } else {
+        // Return simple playground HTML
+        res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TitanGold GraphQL</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; }
+    .container { max-width: 800px; margin: 50px auto; padding: 20px; }
+    h1 { color: #8b5cf6; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+    .info { background: #e0e7ff; border-left: 4px solid #8b5cf6; padding: 15px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 TitanGold GraphQL API</h1>
+    <div class="info">
+      <p><strong>Endpoint:</strong> <code>POST /graphql</code></p>
+      <p><strong>Status:</strong> Ready</p>
+      <p><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
+    </div>
+    <h2>Quick Start</h2>
+    <p>Send POST requests to <code>/graphql</code> with a GraphQL query:</p>
+    <pre><code>{
+  "query": "query { agents { id name status } }"
+}</code></pre>
+    <p>Use tools like <strong>Postman</strong>, <strong>Insomnia</strong>, or <strong>Apollo Client</strong> to interact with the API.</p>
+    <h2>Documentation</h2>
+    <p>See <code>docs/GRAPHQL_API.md</code> for complete query examples and API reference.</p>
+  </div>
+</body>
+</html>
+        `);
+      }
+    });
+    
+    logger.info('✅ GraphQL API enabled at /graphql');
+    
+    // Add GraphQL Playground link in dev mode
+    if (process.env.NODE_ENV !== 'production') {
+      logger.info(`🎮 GraphQL endpoint: http://localhost:${PORT}/graphql`);
+    }
+  } catch (error) {
+    logger.error('❌ Failed to initialize GraphQL:', error);
+    logger.warn('⚠️  GraphQL endpoint will not be available');
+  }
+}
+
+// ============================================================================
+// API DOCUMENTATION
+// ============================================================================
+
 // API Documentation (remains unversioned for easier access)
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
   customSiteTitle: 'TitanGold API Documentation',
@@ -427,6 +565,13 @@ if (process.env.NODE_ENV !== 'test') {
       logger.info('✅ WebSocket notifications ready at /ws/notifications');
     } catch (error) {
       logger.error('❌ Failed to initialize WebSocket:', error);
+    }
+
+    // Initialize GraphQL API (API-007)
+    try {
+      await initializeGraphQL();
+    } catch (error) {
+      logger.error('❌ Failed to initialize GraphQL API:', error);
     }
     
     // Initialize Favorites WebSocket for real-time price updates

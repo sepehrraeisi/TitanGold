@@ -1,0 +1,314 @@
+# TitanGold GraphQL Schema
+# API-007: GraphQL API Implementation
+# Date: 2026-01-31
+
+"""
+AI Agent in the TitanGold system
+"""
+type Agent {
+  id: ID!
+  agent_key: String!
+  name: String!
+  role: String!
+  status: AgentStatus!
+  accuracy: Float!
+  trainingProgress: Float!
+  decisions: Int!
+  learningTime: Int!
+  knowledgeSize: Float!
+  lastUpdate: String!
+  capabilities: [String!]!
+  config: JSON
+  health: AgentHealth
+  version: String
+}
+
+"""
+Agent status enum
+"""
+enum AgentStatus {
+  active
+  inactive
+  training
+  error
+}
+
+"""
+Agent health information
+"""
+type AgentHealth {
+  status: String!
+  checks: [HealthCheck!]!
+  metadata: JSON
+  timestamp: String!
+}
+
+"""
+Individual health check result
+"""
+type HealthCheck {
+  name: String!
+  status: String!
+  message: String
+}
+
+"""
+Agent decision/analysis result
+"""
+type AgentDecision {
+  id: ID!
+  agent_id: ID!
+  user_id: ID
+  decision_type: String!
+  input_data: JSON!
+  output_data: JSON!
+  confidence: Float
+  was_successful: Boolean!
+  execution_time_ms: Int!
+  created_at: String!
+  metadata: JSON
+}
+
+"""
+Agent run result with analysis data
+"""
+type AgentRunResult {
+  agent_key: String!
+  symbol: String
+  timeframe: String
+  signal: String
+  confidence: Float!
+  timestamp: String!
+  indicators: [Indicator!]!
+  summary: JSON
+  opportunities: [JSON!]
+  riskAlerts: [JSON!]
+  _meta: AgentMeta
+}
+
+"""
+Technical indicator
+"""
+type Indicator {
+  name: String!
+  value: Float
+  signal: String
+  metadata: JSON
+}
+
+"""
+Agent metadata
+"""
+type AgentMeta {
+  source: String
+  version: String
+  executionTime: Int
+  agent_key: String
+  timestamp: String
+}
+
+"""
+Agent configuration
+"""
+input AgentConfigInput {
+  enabled: Boolean
+  confidence_threshold: Float
+  timeframe: String
+  dataLimit: Int
+  custom: JSON
+}
+
+"""
+Agent run parameters
+"""
+input AgentRunInput {
+  userId: ID
+  symbol: String!
+  timeframe: String
+  config: AgentConfigInput
+}
+
+"""
+Agent command input
+"""
+input AgentCommandInput {
+  agent_key: String!
+  command: String!
+  params: JSON
+}
+
+"""
+Agent update input
+"""
+input AgentUpdateInput {
+  name: String
+  status: AgentStatus
+  config: JSON
+}
+
+"""
+Pagination input
+"""
+input PaginationInput {
+  page: Int = 1
+  limit: Int = 20
+}
+
+"""
+Agent decisions list with pagination
+"""
+type AgentDecisionsResult {
+  decisions: [AgentDecision!]!
+  total: Int!
+  page: Int!
+  limit: Int!
+  hasMore: Boolean!
+}
+
+"""
+Generic success response
+"""
+type SuccessResponse {
+  ok: Boolean!
+  message: String!
+}
+
+"""
+Custom scalar for JSON data
+"""
+scalar JSON
+
+type Query {
+  """
+  Get all AI agents
+  """
+  agents: [Agent!]!
+  
+  """
+  Get a specific agent by ID
+  """
+  agent(id: ID!): Agent
+  
+  """
+  Get agent by agent_key
+  """
+  agentByKey(agent_key: String!): Agent
+  
+  """
+  Get agent details
+  """
+  agentDetails(agent_key: String!): JSON!
+  
+  """
+  Get agent default configuration
+  """
+  agentDefaultConfig(agent_key: String!): JSON!
+  
+  """
+  Get agent health status
+  """
+  agentHealth(agent_key: String!): AgentHealth!
+  
+  """
+  Get all agent decisions
+  """
+  agentDecisions(
+    agent_id: ID
+    user_id: ID
+    pagination: PaginationInput
+  ): AgentDecisionsResult!
+  
+  """
+  Get decisions by version (BACKEND-017)
+  """
+  agentDecisionsByVersion(
+    agent_key: String!
+    version: String!
+    pagination: PaginationInput
+  ): AgentDecisionsResult!
+  
+  """
+  Get all agent versions (BACKEND-017)
+  """
+  agentVersions: [JSON!]!
+  
+  """
+  Health check for all agents
+  """
+  agentsHealth: [AgentHealth!]!
+}
+
+type Mutation {
+  """
+  Run an AI agent analysis
+  """
+  runAgent(
+    agent_key: String!
+    input: AgentRunInput!
+  ): AgentRunResult!
+  
+  """
+  Execute an agent command
+  """
+  executeAgentCommand(input: AgentCommandInput!): JSON!
+  
+  """
+  Update agent configuration
+  """
+  updateAgent(
+    id: ID!
+    input: AgentUpdateInput!
+  ): Agent!
+  
+  """
+  Update agent configuration
+  """
+  updateAgentConfig(
+    id: ID!
+    config: JSON!
+  ): Agent!
+  
+  """
+  Toggle agent status (enable/disable)
+  """
+  toggleAgentStatus(id: ID!): Agent!
+  
+  """
+  Reset agent (clear cache, reset state)
+  """
+  resetAgent(agent_key: String!): SuccessResponse!
+  
+  """
+  Train agent with message
+  """
+  trainAgent(
+    agent_key: String!
+    message: String!
+  ): JSON!
+  
+  """
+  Validate agent configuration
+  """
+  validateAgentConfig(
+    agent_key: String!
+    config: JSON!
+  ): JSON!
+}
+
+type Subscription {
+  """
+  Subscribe to agent decision updates
+  """
+  agentDecisionCreated(agent_id: ID): AgentDecision!
+  
+  """
+  Subscribe to agent health changes
+  """
+  agentHealthChanged(agent_key: String): AgentHealth!
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
