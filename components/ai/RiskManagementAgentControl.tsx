@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
-import * as api from '../../services/api.ts';
+import * as api from '../../services/apiWithCancellation.ts'; // FRONTEND-010: Use cancellable API
 import { useIsMounted } from '../../hooks/useMemoryLeakFree.ts';
 import type {
     AIAgent,
@@ -51,6 +51,7 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
 
     // FRONTEND-009: Memory leak fix - Add cleanup
     useEffect(() => {
+        const abortController = new AbortController(); // FRONTEND-010: AbortController for cancellation
         let isCancelled = false;
 
         if (!config && agent.id === '2' && !isCancelled && isMountedRef.current) {
@@ -61,13 +62,21 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
             if (isCancelled || !isMountedRef.current) return;
             if (isMountedRef.current) setIsBusy(true);
             try {
-                const snapshot = await api.fetchRiskManagementAgentData(agent.id);
+                // FRONTEND-010: Pass signal for request cancellation
+                const snapshot = await api.fetchRiskManagementAgentData(agent.id, {
+                    signal: abortController.signal
+                });
                 if (!isCancelled && isMountedRef.current) {
                     if (snapshot.config) setConfig(snapshot.config);
                     if (snapshot.metrics) setMetrics(snapshot.metrics);
                     if (snapshot.lastAssessment) setLastAssessment(snapshot.lastAssessment);
                 }
-            } catch (error) {
+            } catch (error: any) {
+                // FRONTEND-010: Use isAbortError helper
+                if (api.isAbortError(error)) {
+                    console.log('Request cancelled (component unmounted)');
+                    return;
+                }
                 if (isMountedRef.current) {
                     console.error('Risk agent snapshot failed:', error);
                 }
@@ -80,6 +89,7 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
 
         return () => {
             isCancelled = true;
+            abortController.abort(); // FRONTEND-010: Cancel in-flight requests
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [agent.id]);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
-import * as api from '../../services/api.ts';
+import * as api from '../../services/apiWithCancellation.ts'; // FRONTEND-010: Use cancellable API
 import type { AIAgent, TechnicalAnalysisConfig, TechnicalIndicator, Timeframe, TechnicalAnalysisResult, AgentPerformanceMetrics } from '../../types.ts';
 import { useIsMounted } from '../../hooks/useMemoryLeakFree.ts';
 
@@ -65,14 +65,22 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
             
             if (isMountedRef.current) setIsLoading(true);
             try {
-                const agentData = await api.fetchTechnicalAnalysisAgentData(agent.id);
+                // FRONTEND-010: Pass signal to API call for request cancellation
+                const agentData = await api.fetchTechnicalAnalysisAgentData(agent.id, {
+                    signal: abortController.signal
+                });
                 if (!isCancelled && isMountedRef.current) {
                     if (agentData.config) setConfig(agentData.config);
                     if (agentData.performance) setPerformance(agentData.performance);
                     if (agentData.lastAnalysis) setLastAnalysis(agentData.lastAnalysis);
                 }
             } catch (error: any) {
-                if (error?.name !== 'AbortError' && isMountedRef.current) {
+                // FRONTEND-010: isAbortError helper for cleaner abort handling
+                if (api.isAbortError(error)) {
+                    console.log('Request cancelled (component unmounted)');
+                    return; // Silent return for cancelled requests
+                }
+                if (isMountedRef.current) {
                     console.error('Failed to load agent data:', error);
                 }
             } finally {
