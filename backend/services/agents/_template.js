@@ -21,6 +21,8 @@
 // ============================================================================
 
 import { logger } from '../../services/logger.js';
+// BACKEND-020: Import exchange abstraction for market data
+// import { getExchange } from '../exchanges/index.js';
 
 // ============================================================================
 // Configuration & Constants

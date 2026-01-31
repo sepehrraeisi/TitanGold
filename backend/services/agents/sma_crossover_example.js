@@ -15,6 +15,9 @@
 // ============================================================================
 
 import { logger } from '../../services/logger.js';
+// BACKEND-020: Import exchange abstraction for market data
+// Uncomment to use real exchange data:
+// import { getExchange } from '../exchanges/index.js';
 
 // ============================================================================
 // Configuration & Constants

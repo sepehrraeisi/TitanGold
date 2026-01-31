@@ -1,6 +1,7 @@
 /**
  * Volume Analysis Agent
  * BACKEND-013: Implement Volume Analysis Agent
+ * BACKEND-020: Updated to use exchange abstraction layer
  * 
  * Provides comprehensive volume analysis for trading decisions:
  * - On-Balance Volume (OBV) with divergence detection
@@ -9,11 +10,11 @@
  * - Volume Spike Detection
  * - Volume-based Trading Signals
  * 
- * Integrates with MEXC for real-time OHLCV data
+ * Integrates with exchanges via abstraction layer for real-time OHLCV data
  */
 
 import { logger } from '../../services/logger.js';
-import MexcService from '../../services/mexc.js';
+import { getDefaultExchange } from '../exchanges/index.js';
 import {
   calculateOBV,
   calculateVWAP,
@@ -76,13 +77,13 @@ export async function run({ userId, symbol, timeframe = '1h', config = {} }) {
       ...config
     };
 
-    // Fetch OHLCV data from MEXC
+    // Fetch OHLCV data from exchange
     let ohlcv;
     try {
-      const mexc = new MexcService();
-      await mexc.initializeExchange(userId);
+      const exchange = getDefaultExchange();
+      await exchange.initialize(userId);
       
-      ohlcv = await mexc.fetchOHLCV(
+      ohlcv = await exchange.fetchOHLCV(
         userId,
         symbol,
         timeframe,
@@ -93,7 +94,7 @@ export async function run({ userId, symbol, timeframe = '1h', config = {} }) {
       logger.error('❌ Failed to fetch OHLCV data', error);
       throw {
         code: 'VOLUME_ANALYSIS_ERROR',
-        message: 'Failed to fetch market data from MEXC',
+        message: 'Failed to fetch market data from exchange',
         error: error.message,
         symbol,
         timeframe
@@ -317,10 +318,10 @@ export async function getDetails({ userId }) {
       'On-Balance Volume (OBV) with divergence detection',
       'Volume Weighted Average Price (VWAP)',
       'Volume Profile with POC and Value Area',
-      'Volume spike detection and anomaly analysis',
+      'Volume Spike detection and anomaly analysis',
       'Buying/Selling pressure calculation',
       'Volume-based trading signals',
-      'Real-time MEXC integration'
+      'Multi-exchange support via abstraction layer'
     ],
     indicators: {
       obv: 'Tracks cumulative volume flow based on price direction',
