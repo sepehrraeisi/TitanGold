@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { logger } from '../../services/logger.js';
 import pool from '../../database/db.js';
+import { startAgentExecution } from '../../middleware/agentMetrics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -106,7 +107,48 @@ function validateAgentInterface(agent_key, agentModule) {
  */
 export async function runAgent(agent_key, params) {
   const agent = await getAgentService(agent_key);
-  return await agent.run(params);
+  
+  // Get agent_id from params or database
+  let agent_id = params.agent_id;
+  if (!agent_id) {
+    // Try to get agent_id from database by agent_key
+    try {
+      const result = await pool.query('SELECT id FROM ai_agents WHERE agent_key = $1', [agent_key]);
+      if (result.rows.length > 0) {
+        agent_id = result.rows[0].id;
+      } else {
+        agent_id = 'unknown';
+      }
+    } catch (error) {
+      agent_id = 'unknown';
+    }
+  }
+  
+  // Start tracking execution metrics (BACKEND-021)
+  const endMetrics = startAgentExecution(agent_key, agent_id);
+  
+  try {
+    const result = await agent.run(params);
+    
+    // Determine if result came from cache
+    const cacheHit = !!(result && result._meta && result._meta.cached);
+    
+    // End metrics tracking - success
+    endMetrics(true, null, cacheHit);
+    
+    return result;
+  } catch (error) {
+    // Determine error type
+    const errorType = error.name === 'TimeoutError' ? 'timeout' :
+                      error.name === 'ValidationError' ? 'validation' :
+                      'internal';
+    
+    // End metrics tracking - failure
+    endMetrics(false, errorType, false);
+    
+    // Re-throw error
+    throw error;
+  }
 }
 
 /**
