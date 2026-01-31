@@ -16,6 +16,7 @@ import { requestContextMiddleware, performanceMiddleware, logger } from './servi
 import { requestLogger, logError } from './middleware/requestLogger.js';
 import { addVersionHeader, legacyRedirect } from './middleware/apiVersion.js';
 import { metricsMiddleware, metricsHandler } from './middleware/metrics.js';
+import { shutdownMiddleware, registerShutdownHandlers } from './utils/shutdown.js';
 import swaggerUi from 'swagger-ui-express';
 import openApiSpec from './openapi.js';
 import { initWebsocket, broadcastNotification } from './services/websocket.js';
@@ -75,6 +76,9 @@ const __dirname = path.dirname(__filename);
 // Request context & performance metrics
 app.use(requestContextMiddleware);
 app.use(performanceMiddleware);
+
+// Shutdown middleware - reject requests during graceful shutdown (INFRA-007)
+app.use(shutdownMiddleware);
 
 // Prometheus metrics (INFRA-006)
 app.use(metricsMiddleware);
@@ -359,6 +363,8 @@ app.use((err, req, res, next) => {
 
 // Only start server if not in test mode (for integration tests with supertest)
 let server;
+let backgroundServices = {}; // Track services for graceful shutdown
+
 if (process.env.NODE_ENV !== 'test') {
   // GUARANTEE HTTP LISTEN - Always execute, even if background services fail
   server = app.listen(PORT, '0.0.0.0', () => {
@@ -389,6 +395,7 @@ if (process.env.NODE_ENV !== 'test') {
     // Initialize Message Queue
     try {
       await messageQueue.connect();
+      backgroundServices.messageQueue = messageQueue;
       logger.info('✅ Message Queue initialized');
     } catch (error) {
       logger.warn('⚠️ Message Queue initialization failed, using fallback mode:', error.message);
@@ -404,6 +411,7 @@ if (process.env.NODE_ENV !== 'test') {
       try {
         const { engineWorker } = await import('./workers/engineWorker.js');
         await engineWorker.start();
+        backgroundServices.engineWorker = engineWorker;
         logger.info('✅ Engine Worker started');
       } catch (error) {
         logger.error('❌ Failed to start Engine Worker:', error);
@@ -424,6 +432,7 @@ if (process.env.NODE_ENV !== 'test') {
     // Initialize Favorites WebSocket for real-time price updates
     try {
       favoritesWebSocketService.initialize(server);
+      backgroundServices.favoritesWebSocketService = favoritesWebSocketService;
       logger.info('✅ Favorites WebSocket ready at /ws/favorites');
     } catch (error) {
       logger.error('❌ Failed to initialize Favorites WebSocket:', error);
@@ -433,6 +442,7 @@ if (process.env.NODE_ENV !== 'test') {
     try {
       const autopilotWorker = await import('./workers/autopilot-worker.js');
       autopilotWorker.default.start(5); // Run every 5 minutes
+      backgroundServices.autopilotWorker = autopilotWorker.default;
       logger.info('✅ Autopilot Worker started (5min interval)');
     } catch (error) {
       logger.error('❌ Failed to start Autopilot Worker:', error);
@@ -442,10 +452,14 @@ if (process.env.NODE_ENV !== 'test') {
     // Start Favorites Alert Monitor
     try {
       favoritesAlertMonitor.start();
+      backgroundServices.favoritesAlertMonitor = favoritesAlertMonitor;
       logger.info('✅ Favorites Alert Monitor started (10s interval)');
     } catch (error) {
       logger.error('❌ Failed to start Favorites Alert Monitor:', error);
     }
+    
+    // Register graceful shutdown handlers (INFRA-007)
+    registerShutdownHandlers({ server, services: backgroundServices });
   })().catch(error => {
     logger.error('❌ Error initializing background services:', error);
     // Server is already listening, so we continue
@@ -464,60 +478,5 @@ if (process.env.NODE_ENV !== 'test') {
 } else {
   logger.info('🧪 Running in test mode - server not listening on port');
 }
-
-// Handle graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('🛑 SIGTERM signal received: closing HTTP server');
-  
-  // Shutdown Engine Worker if running
-  if (process.env.ENGINE_ENABLED === 'true') {
-    try {
-      const { engineWorker } = await import('./workers/engineWorker.js');
-      await engineWorker.stop();
-    } catch (error) {
-      logger.error('Error stopping engine worker:', error);
-    }
-  }
-  
-  // Shutdown services
-  favoritesWebSocketService.shutdown();
-  favoritesAlertMonitor.stop();
-  await messageQueue.close().catch(() => {});
-  
-  // Close server if it's running
-  if (server) {
-    server.close(() => {
-      pool.end(() => {
-        logger.info('🛑 Database pool closed');
-        process.exit(0);
-      });
-    });
-  } else {
-    pool.end(() => {
-      logger.info('🛑 Database pool closed');
-      process.exit(0);
-    });
-  }
-});
-
-process.on('SIGINT', async () => {
-  logger.info('🛑 SIGINT signal received: closing HTTP server');
-  await messageQueue.close().catch(() => {});
-  
-  // Close server if it's running
-  if (server) {
-    server.close(() => {
-      pool.end(() => {
-        logger.info('🛑 Database pool closed');
-        process.exit(0);
-      });
-    });
-  } else {
-    pool.end(() => {
-      logger.info('🛑 Database pool closed');
-      process.exit(0);
-    });
-  }
-});
 
 export default app;
