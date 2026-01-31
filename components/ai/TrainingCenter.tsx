@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useOnlineStatus, OfflineWarning } from '../OfflineIndicator';
 import * as api from '../../services/api.ts';
 import { AITrainingSession, AITrainingStats, AITrainingMode, AITrainingStatus, AITrainingConfig, AIAgent, ArtemisState } from '../../types.ts';
 
@@ -7,6 +8,7 @@ type TrainingTab = 'overview' | 'agents' | 'sessions' | 'recommendations' | 'his
 
 const TrainingCenter: React.FC = () => {
     const { t } = useLanguage();
+    const isOnline = useOnlineStatus();
     const [isLoading, setIsLoading] = useState(true);
     const [data, setData] = useState<AITrainingStats | null>(null);
     const [artemis, setArtemis] = useState<ArtemisState | null>(null);
@@ -22,6 +24,8 @@ const TrainingCenter: React.FC = () => {
     const [isAutoConfiguring, setIsAutoConfiguring] = useState(false);
     const [trainingConfig, setTrainingConfig] = useState<AITrainingConfig | null>(null);
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+    const [showOfflineWarning, setShowOfflineWarning] = useState(false);
+    const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -63,6 +67,23 @@ const TrainingCenter: React.FC = () => {
             alert(`${t('artemis_config_failed') || 'Failed to auto-configure with Artemis'}: ${errorMessage}`);
         } finally {
             setIsAutoConfiguring(false);
+        }
+    };
+
+    // Offline check wrapper for actions requiring network (FRONTEND-008)
+    const checkOnlineAndExecute = (action: () => void, actionName: string = 'action') => {
+        if (!isOnline) {
+            setPendingAction(() => action);
+            setShowOfflineWarning(true);
+            return;
+        }
+        action();
+    };
+
+    const executePendingAction = () => {
+        if (pendingAction) {
+            pendingAction();
+            setPendingAction(null);
         }
     };
 
@@ -267,7 +288,7 @@ const TrainingCenter: React.FC = () => {
                             {t('create_session') || 'Create Session'}
                     </button>
                         <button
-                            onClick={handleTrainAll}
+                            onClick={() => checkOnlineAndExecute(handleTrainAll, 'Train All')}
                             disabled={isScheduling || !agents || agents.length === 0}
                             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
                             title={t('train_all_desc') || 'Create training session for all agents immediately'}
@@ -404,6 +425,15 @@ const TrainingCenter: React.FC = () => {
                     t={t}
                 />
             )}
+            
+            {/* Offline Warning Dialog (FRONTEND-008) */}
+            <OfflineWarning
+                isOpen={showOfflineWarning}
+                onClose={() => setShowOfflineWarning(false)}
+                onContinue={executePendingAction}
+                title={t('offline_training_warning_title') || 'Training requires connection'}
+                message={t('offline_training_warning_message') || 'Training sessions require an internet connection to communicate with the backend. Results may be unavailable offline.'}
+            />
         </div>
     );
 };
