@@ -1,28 +1,49 @@
 // Fundamental Analysis Agent - Real Implementation
 // Purpose: Comprehensive fundamental analysis with macro, funding, on-chain, and news data
 // Date: 2026-01-04
+// Updated: 2026-01-31 - Added circuit breaker for external APIs (BACKEND-016)
 
 import fetch from 'node-fetch';
 import { logger } from '../../services/logger.js';
+import { circuitBreakerManager } from '../../utils/circuitBreaker.js';
+
+// BACKEND-016: Circuit breakers for external APIs
+const fearGreedCircuitBreaker = circuitBreakerManager.getBreaker('fear-greed-api', {
+  failureThreshold: 5,
+  openTimeout: 30000,
+  successThreshold: 2,
+  timeout: 10000
+});
+
+const mexcCircuitBreaker = circuitBreakerManager.getBreaker('mexc-api', {
+  failureThreshold: 5,
+  openTimeout: 30000,
+  successThreshold: 2,
+  timeout: 10000
+});
 
 /**
  * Fetch Fear & Greed Index from Alternative.me
  */
 async function fetchFearGreedIndex() {
   try {
-    const response = await fetch('https://api.alternative.me/fng/?limit=1');
-    const data = await response.json();
-    if (data.data && data.data[0]) {
-      return {
-        value: parseInt(data.data[0].value, 10),
-        classification: data.data[0].value_classification,
-        timestamp: data.data[0].timestamp
-      };
-    }
+    // BACKEND-016: Wrap in circuit breaker
+    return await fearGreedCircuitBreaker.execute(async () => {
+      const response = await fetch('https://api.alternative.me/fng/?limit=1');
+      const data = await response.json();
+      if (data.data && data.data[0]) {
+        return {
+          value: parseInt(data.data[0].value, 10),
+          classification: data.data[0].value_classification,
+          timestamp: data.data[0].timestamp
+        };
+      }
+      throw new Error('Invalid Fear & Greed API response');
+    });
   } catch (error) {
     logger.warn('⚠️ Fear & Greed API failed:', error.message);
+    return { value: 50, classification: 'Neutral', timestamp: Date.now() };
   }
-  return { value: 50, classification: 'Neutral', timestamp: Date.now() };
 }
 
 /**
@@ -30,17 +51,22 @@ async function fetchFearGreedIndex() {
  */
 async function fetchMexcTicker(symbol) {
   try {
-    const baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'http://localhost:5002/api/market/mexc'
-      : 'https://api.mexc.com/api/v3';
-    
-    const response = await fetch(`${baseUrl}/ticker/24hr?symbol=${symbol}`, {
-      headers: { 'User-Agent': 'TitanGold/1.0' },
-      timeout: 10000
+    // BACKEND-016: Wrap in circuit breaker
+    return await mexcCircuitBreaker.execute(async () => {
+      const baseUrl = process.env.NODE_ENV === 'production' 
+        ? 'http://localhost:5002/api/market/mexc'
+        : 'https://api.mexc.com/api/v3';
+      
+      const response = await fetch(`${baseUrl}/ticker/24hr?symbol=${symbol}`, {
+        headers: { 'User-Agent': 'TitanGold/1.0' },
+        timeout: 10000
+      });
+      
+      if (!response.ok) {
+        throw new Error(`MEXC ticker API error: ${response.status}`);
+      }
+      return await response.json();
     });
-    
-    if (!response.ok) return null;
-    return await response.json();
   } catch (error) {
     logger.warn(`⚠️ MEXC ticker fetch failed for ${symbol}:`, error.message);
     return null;

@@ -4,6 +4,11 @@ import { getRedisInfo, isRedisAvailable } from '../utils/redis.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { logger } from '../services/logger.js';
+// BACKEND-015: Import agent health check functions
+import { 
+  getAllAgentHealthStatus, 
+  getHealthSummary 
+} from '../services/agents/registry.js';
 
 const execAsync = promisify(exec);
 const router = express.Router();
@@ -128,6 +133,30 @@ router.get('/ready', async (req, res) => {
     checks.checks.redis = {
       status: 'warning',
       message: 'Redis check failed',
+    };
+  }
+
+  // BACKEND-015: Check AI Agents health
+  try {
+    const agentHealthSummary = getHealthSummary();
+    const agentHealthStatus = getAllAgentHealthStatus();
+    
+    checks.checks.ai_agents = {
+      status: agentHealthSummary.unhealthy > 0 ? 'degraded' : 
+              agentHealthSummary.degraded > 0 ? 'warning' : 'ok',
+      message: `${agentHealthSummary.healthy}/${agentHealthSummary.total} agents healthy`,
+      summary: agentHealthSummary,
+      agents: agentHealthStatus
+    };
+    
+    // Mark as not fully ready if any agents are unhealthy
+    if (agentHealthSummary.unhealthy > 0) {
+      allReady = false;
+    }
+  } catch (error) {
+    checks.checks.ai_agents = {
+      status: 'warning',
+      message: 'Could not check agent health: ' + error.message
     };
   }
 

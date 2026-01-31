@@ -6,6 +6,7 @@ import AIAgents from './ai/AIAgents.tsx';
 import TrainingCenter from './ai/TrainingCenter.tsx';
 import AnalyticsDashboard from './ai/AnalyticsDashboard.tsx';
 import APIConfig from './ai/APIConfig.tsx';
+import OfflineIndicator, { CachedDataBadge, useOnlineStatus } from './OfflineIndicator';
 import * as api from '../services/api.ts';
 
 type AITab = 'manager' | 'agents' | 'training' | 'analytics' | 'config';
@@ -20,6 +21,7 @@ const AICenter: React.FC<Props> = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState<AITab>('agents');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const isOnline = useOnlineStatus();
 
   const prefetchData = async () => {
     setIsLoading(true);
@@ -71,10 +73,17 @@ const AICenter: React.FC<Props> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-6">
+      {/* Offline Mode Indicator Banner (FRONTEND-008) */}
+      <OfflineIndicator />
+      
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex flex-wrap justify-between items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">{t('ai_management_system')}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-foreground">{t('ai_management_system')}</h1>
+              {/* Show cached data badge when offline (FRONTEND-008) */}
+              {!isOnline && <CachedDataBadge />}
+            </div>
             <p className="text-muted-foreground mt-1">{t('ai_management_desc')}</p>
           </div>
         </div>

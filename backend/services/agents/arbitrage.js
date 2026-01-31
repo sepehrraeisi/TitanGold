@@ -1,9 +1,19 @@
 // Arbitrage Agent - Real Implementation
 // Purpose: Scan for arbitrage opportunities across exchanges
 // Date: 2026-01-03
+// Updated: 2026-01-31 - Added circuit breaker for MEXC API (BACKEND-016)
 
 import fetch from 'node-fetch';
 import { logger } from '../../services/logger.js';
+import { circuitBreakerManager } from '../../utils/circuitBreaker.js';
+
+// BACKEND-016: Get or create circuit breaker for MEXC API
+const mexcCircuitBreaker = circuitBreakerManager.getBreaker('mexc-api', {
+  failureThreshold: 5,
+  openTimeout: 30000,
+  successThreshold: 2,
+  timeout: 10000
+});
 
 /**
  * Fetch ticker data from MEXC via backend proxy
@@ -11,9 +21,10 @@ import { logger } from '../../services/logger.js';
  * @returns {Promise<Object>} Ticker data
  */
 async function fetchMexcTicker(symbol) {
-  const url = `http://localhost:5002/api/market/mexc/ticker24hr?symbol=${symbol}`;
-  
-  try {
+  // BACKEND-016: Wrap in circuit breaker
+  return mexcCircuitBreaker.execute(async () => {
+    const url = `http://localhost:5002/api/market/mexc/ticker24hr?symbol=${symbol}`;
+    
     const response = await fetch(url, {
       timeout: 10000,
       headers: {
@@ -32,10 +43,7 @@ async function fetchMexcTicker(symbol) {
     }
     
     return result.data;
-  } catch (error) {
-    logger.error(`❌ Failed to fetch MEXC ticker for ${symbol}:`, error.message);
-    throw error;
-  }
+  });
 }
 
 /**
@@ -45,9 +53,10 @@ async function fetchMexcTicker(symbol) {
  * @returns {Promise<Object>} Orderbook data
  */
 async function fetchMexcDepth(symbol, limit = 20) {
-  const url = `http://localhost:5002/api/market/mexc/depth?symbol=${symbol}&limit=${limit}`;
-  
-  try {
+  // BACKEND-016: Wrap in circuit breaker
+  return mexcCircuitBreaker.execute(async () => {
+    const url = `http://localhost:5002/api/market/mexc/depth?symbol=${symbol}&limit=${limit}`;
+    
     const response = await fetch(url, {
       timeout: 10000,
       headers: {
@@ -66,10 +75,7 @@ async function fetchMexcDepth(symbol, limit = 20) {
     }
     
     return result.data;
-  } catch (error) {
-    logger.error(`❌ Failed to fetch MEXC depth for ${symbol}:`, error.message);
-    throw error;
-  }
+  });
 }
 
 /**
