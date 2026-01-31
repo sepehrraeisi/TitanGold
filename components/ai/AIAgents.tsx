@@ -7,6 +7,7 @@ import { getAgentControl } from './agentRegistry.ts';
 import LoadingSpinner, { AgentLoadingSpinner } from '../ui/LoadingSpinner';
 import SkeletonLoader, { AgentListSkeleton } from '../ui/SkeletonLoader';
 import { useAgentFavorites } from '../../hooks/useAgentFavorites';
+import { useDebounce } from '../../hooks/useDebounce';
 
 const AIAgents: React.FC = () => {
     const { t } = useLanguage();
@@ -15,6 +16,13 @@ const AIAgents: React.FC = () => {
     const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
     const [error, setError] = useState<string | null>(null);
     const { isFavorite, toggleFavorite } = useAgentFavorites();
+    
+    // Search and filter state
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState<string>('all');
+    
+    // Debounced search term (300ms delay)
+    const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
     const fetchData = async () => {
         setIsLoading(true);
@@ -41,9 +49,37 @@ const AIAgents: React.FC = () => {
         setSelectedAgent(updatedAgent);
     };
 
+    // Extract unique categories from agents
+    const categories = useMemo(() => {
+        const uniqueCategories = new Set(agents.map(agent => agent.role));
+        return ['all', ...Array.from(uniqueCategories).sort()];
+    }, [agents]);
+
+    // Filter and search agents
+    const filteredAgents = useMemo(() => {
+        let filtered = [...agents];
+        
+        // Apply category filter
+        if (selectedCategory !== 'all') {
+            filtered = filtered.filter(agent => agent.role === selectedCategory);
+        }
+        
+        // Apply search filter
+        if (debouncedSearchTerm.trim()) {
+            const searchLower = debouncedSearchTerm.toLowerCase();
+            filtered = filtered.filter(agent => 
+                agent.name.toLowerCase().includes(searchLower) ||
+                agent.role.toLowerCase().includes(searchLower) ||
+                agent.capabilities.some(cap => cap.toLowerCase().includes(searchLower))
+            );
+        }
+        
+        return filtered;
+    }, [agents, selectedCategory, debouncedSearchTerm]);
+
     // Sort agents: favorites first, then by name
     const sortedAgents = useMemo(() => {
-        return [...agents].sort((a, b) => {
+        return [...filteredAgents].sort((a, b) => {
             const aFav = isFavorite(a.id);
             const bFav = isFavorite(b.id);
             
@@ -54,7 +90,7 @@ const AIAgents: React.FC = () => {
             // Then sort by name
             return a.name.localeCompare(b.name);
         });
-    }, [agents, isFavorite]);
+    }, [filteredAgents, isFavorite]);
 
     if (isLoading) {
         return <AgentListSkeleton count={6} />;
@@ -81,17 +117,114 @@ const AIAgents: React.FC = () => {
 
     return (
         <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sortedAgents.map(agent => (
-                    <AgentCard
-                        key={agent.id}
-                        agent={agent}
-                        onOpenControlPanel={() => setSelectedAgent(agent)}
-                        isFavorite={isFavorite(agent.id)}
-                        onToggleFavorite={() => toggleFavorite(agent.id)}
+            {/* Search and Filter Bar */}
+            <div className="mb-6 space-y-4">
+                {/* Search Input */}
+                <div className="relative">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder={t('search_agents') || 'Search agents by name, role, or capability...'}
+                        className="w-full px-4 py-3 pl-10 bg-card border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        aria-label="Search agents"
                     />
-                ))}
+                    <svg
+                        className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                    </svg>
+                    {searchTerm && (
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            aria-label="Clear search"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+
+                {/* Category Filter */}
+                <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-sm font-semibold text-muted-foreground">
+                        {t('filter_by_category') || 'Filter by category:'}
+                    </span>
+                    <div className="flex gap-2 flex-wrap">
+                        {categories.map(category => (
+                            <button
+                                key={category}
+                                onClick={() => setSelectedCategory(category)}
+                                className={`
+                                    px-4 py-1.5 rounded-full text-sm font-medium transition-all
+                                    ${selectedCategory === category
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-secondary text-foreground hover:bg-purple-100 dark:hover:bg-purple-900'
+                                    }
+                                `}
+                                aria-label={`Filter by ${category}`}
+                                aria-pressed={selectedCategory === category}
+                            >
+                                {category === 'all' ? t('all_categories') || 'All' : category}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Results Count */}
+                {(debouncedSearchTerm || selectedCategory !== 'all') && (
+                    <div className="text-sm text-muted-foreground">
+                        {t('showing_results', { count: sortedAgents.length, total: agents.length }) || 
+                            `Showing ${sortedAgents.length} of ${agents.length} agents`}
+                    </div>
+                )}
             </div>
+
+            {/* Agent Grid */}
+            {sortedAgents.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {sortedAgents.map(agent => (
+                        <AgentCard
+                            key={agent.id}
+                            agent={agent}
+                            onOpenControlPanel={() => setSelectedAgent(agent)}
+                            isFavorite={isFavorite(agent.id)}
+                            onToggleFavorite={() => toggleFavorite(agent.id)}
+                        />
+                    ))}
+                </div>
+            ) : (
+                <div className="text-center py-12">
+                    <div className="text-6xl mb-4">🔍</div>
+                    <h3 className="text-xl font-semibold text-foreground mb-2">
+                        {t('no_agents_found') || 'No agents found'}
+                    </h3>
+                    <p className="text-muted-foreground mb-4">
+                        {t('try_different_search') || 'Try adjusting your search or filter criteria'}
+                    </p>
+                    {(searchTerm || selectedCategory !== 'all') && (
+                        <button
+                            onClick={() => {
+                                setSearchTerm('');
+                                setSelectedCategory('all');
+                            }}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold"
+                        >
+                            {t('clear_filters') || 'Clear all filters'}
+                        </button>
+                    )}
+                </div>
+            )}
             
             {/* Lazy-loaded agent control panel with loading spinner */}
             {selectedAgent && agentRegistryEntry && (
