@@ -22,6 +22,32 @@ The API version is included in every response via the `X-API-Version` header.
 X-API-Version: 1
 ```
 
+### Standard Response Headers
+
+Every API response includes the following standard headers:
+
+| Header | Description | Reference |
+|--------|-------------|-----------|
+| `X-API-Version` | Current API version (e.g., `1`) | This document |
+| `X-RateLimit-Limit` | Maximum requests allowed in time window | [Rate Limiting](./RATE_LIMITING.md) |
+| `X-RateLimit-Remaining` | Requests remaining in current window | [Rate Limiting](./RATE_LIMITING.md) |
+| `X-RateLimit-Reset` | Unix timestamp when limit resets | [Rate Limiting](./RATE_LIMITING.md) |
+
+**Complete Response Example:**
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-API-Version: 1
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1704638400
+
+{
+  "ok": true,
+  "data": { ... }
+}
+```
+
 ---
 
 ## Endpoint Structure

@@ -249,9 +249,21 @@ Field locations:
 ## Rate Limiting
 
 API rate limits are documented:
-- **Limit**: 500 requests per 15-minute window
-- **Scope**: Per IP address
-- **Exemptions**: GET requests and /health endpoint
+- **Limit**: 100-500 requests per window (configurable via `RATE_LIMIT_MAX`)
+- **Window**: 60 seconds (configurable via `RATE_LIMIT_WINDOW_MS`)
+- **Scope**: Per authenticated user ID or IP address
+- **Headers**: Every response includes `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+
+**Response Headers:**
+```http
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1704638400
+```
+
+For detailed information including client implementation examples, best practices, and troubleshooting, see:
+
+📖 **[Rate Limiting Documentation](./RATE_LIMITING.md)**
 
 Documented in the OpenAPI info section.
 
