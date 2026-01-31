@@ -5,6 +5,7 @@ import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigD
 import { normalizeArbitrageConfig } from '../services/normalizeArbitrageConfig.js';
 import { normalizeFundamentalConfig } from '../services/normalizeFundamentalConfig.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import { contentNegotiation } from '../middleware/contentNegotiation.js';
 import { getCache, setCache, buildCacheKey, invalidateAgentCache } from '../services/cache.js';
 
 import { aiService } from '../services/ai.js';
@@ -461,14 +462,16 @@ async function runAgentViaRegistry(req, res) {
 // ============================================================================
 // Registry-based Run Endpoint (V2) - SAFE MIGRATION PATH
 // POST /api/ai-agents/:id/run-v2
+// Supports: application/json (default), text/csv (export)
 // ============================================================================
-router.post('/:id/run-v2', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), runAgentViaRegistry);
+router.post('/:id/run-v2', authenticate, contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), runAgentViaRegistry);
 
 // ============================================================================
 // LEGACY /run endpoint - NOW USES REGISTRY (same as /run-v2)
 // POST /api/ai-agents/:id/run
+// Supports: application/json (default), text/csv (export)
 // ============================================================================
-router.post('/:id/run', authenticate, rateLimit({ limit: 15, windowMs: 60000 }), runAgentViaRegistry);
+router.post('/:id/run', authenticate, contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), runAgentViaRegistry);
 
 // ============================================================================
 // OLD LEGACY ROUTE (KEPT FOR REFERENCE - DEPRECATED)
