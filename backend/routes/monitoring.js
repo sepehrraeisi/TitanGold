@@ -1,5 +1,5 @@
 import express from 'express';
-import { query } from '../database/db.js';
+import { query, getSlowQueries, getSlowQueryStats, clearSlowQueries, getPoolMetrics } from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
 import { logger } from '../services/logger.js';
 
@@ -222,6 +222,139 @@ router.get('/requests', authenticate, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch request logs'
+    });
+  }
+});
+
+/**
+ * GET /api/monitoring/slow-queries
+ * Admin-only (DATABASE-007)
+ * Query params: ?limit=100 (default: 100, max: 1000)
+ * Returns list of slow queries
+ */
+router.get('/slow-queries', authenticate, async (req, res) => {
+  try {
+    // Check admin role
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      });
+    }
+
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const slowQueries = getSlowQueries(limit);
+
+    res.json({
+      success: true,
+      count: slowQueries.length,
+      queries: slowQueries.map(q => ({
+        id: q.id,
+        query: q.query,
+        duration: q.duration,
+        rows: q.rows,
+        timestamp: q.timestamp,
+      }))
+    });
+
+  } catch (error) {
+    logger.error('Slow queries fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch slow queries'
+    });
+  }
+});
+
+/**
+ * GET /api/monitoring/slow-query-stats
+ * Admin-only (DATABASE-007)
+ * Returns statistics about slow queries
+ */
+router.get('/slow-query-stats', authenticate, async (req, res) => {
+  try {
+    // Check admin role
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      });
+    }
+
+    const stats = getSlowQueryStats();
+
+    res.json({
+      success: true,
+      stats
+    });
+
+  } catch (error) {
+    logger.error('Slow query stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch slow query stats'
+    });
+  }
+});
+
+/**
+ * GET /api/monitoring/db-pool
+ * Admin-only (DATABASE-007)
+ * Returns database pool metrics
+ */
+router.get('/db-pool', authenticate, async (req, res) => {
+  try {
+    // Check admin role
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      });
+    }
+
+    const poolMetrics = getPoolMetrics();
+
+    res.json({
+      success: true,
+      pool: poolMetrics
+    });
+
+  } catch (error) {
+    logger.error('Pool metrics error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch pool metrics'
+    });
+  }
+});
+
+/**
+ * POST /api/monitoring/clear-slow-queries
+ * Admin-only (DATABASE-007)
+ * Clears the slow query log
+ */
+router.post('/clear-slow-queries', authenticate, async (req, res) => {
+  try {
+    // Check admin role
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      });
+    }
+
+    const result = clearSlowQueries();
+
+    res.json({
+      success: true,
+      message: `Cleared ${result.cleared} slow queries`
+    });
+
+  } catch (error) {
+    logger.error('Clear slow queries error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear slow queries'
     });
   }
 });

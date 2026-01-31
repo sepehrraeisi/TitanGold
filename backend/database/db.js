@@ -97,16 +97,55 @@ pool.on('error', (err) => {
   process.exit(-1);
 });
 
-// Query helper function
+// Query helper function with slow query logging (DATABASE-007)
+const SLOW_QUERY_THRESHOLD = parseInt(process.env.SLOW_QUERY_THRESHOLD_MS) || 100; // 100ms default
+const slowQueries = [];
+const MAX_SLOW_QUERIES = 1000; // Keep last 1000 slow queries
+
 export const query = async (text, params) => {
   const start = Date.now();
+  const queryId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
   try {
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
-    logger.info('📊 Query executed:', { text, duration, rows: res.rowCount });
+    
+    // Log slow queries (DATABASE-007)
+    if (duration > SLOW_QUERY_THRESHOLD) {
+      const slowQuery = {
+        id: queryId,
+        query: text,
+        params: params,
+        duration,
+        timestamp: new Date().toISOString(),
+        rows: res.rowCount,
+      };
+      
+      slowQueries.push(slowQuery);
+      
+      // Keep only last MAX_SLOW_QUERIES
+      if (slowQueries.length > MAX_SLOW_QUERIES) {
+        slowQueries.shift();
+      }
+      
+      logger.warn(`🐌 SLOW QUERY (${duration}ms):`, {
+        query: text.substring(0, 200),
+        duration,
+        rows: res.rowCount,
+        threshold: SLOW_QUERY_THRESHOLD,
+      });
+    } else {
+      logger.info('📊 Query executed:', { text: text.substring(0, 100), duration, rows: res.rowCount });
+    }
+    
     return res;
   } catch (error) {
-    logger.error('❌ Query error:', error);
+    const duration = Date.now() - start;
+    logger.error('❌ Query error:', {
+      error: error.message,
+      query: text.substring(0, 200),
+      duration,
+    });
     throw error;
   }
 };
@@ -177,6 +216,94 @@ export const shutdownPool = async () => {
   logger.info('🔄 Shutting down database connection pool...');
   await pool.end();
   logger.info('✅ Database connection pool closed');
+};
+
+// Get slow queries (DATABASE-007)
+export const getSlowQueries = (limit = 100) => {
+  const sorted = [...slowQueries].sort((a, b) => b.duration - a.duration);
+  return sorted.slice(0, limit);
+};
+
+// Get slow query statistics (DATABASE-007)
+export const getSlowQueryStats = () => {
+  if (slowQueries.length === 0) {
+    return {
+      total: 0,
+      avgDuration: 0,
+      maxDuration: 0,
+      p95Duration: 0,
+      p99Duration: 0,
+      threshold: SLOW_QUERY_THRESHOLD,
+    };
+  }
+  
+  const durations = slowQueries.map(q => q.duration).sort((a, b) => a - b);
+  const total = durations.length;
+  const sum = durations.reduce((acc, d) => acc + d, 0);
+  
+  const p95Index = Math.floor(total * 0.95);
+  const p99Index = Math.floor(total * 0.99);
+  
+  return {
+    total,
+    avgDuration: Math.round(sum / total),
+    maxDuration: durations[durations.length - 1],
+    p95Duration: durations[p95Index] || 0,
+    p99Duration: durations[p99Index] || 0,
+    threshold: SLOW_QUERY_THRESHOLD,
+    topPatterns: getTopSlowQueryPatterns(),
+  };
+};
+
+// Get top slow query patterns (DATABASE-007)
+const getTopSlowQueryPatterns = () => {
+  const patterns = new Map();
+  
+  slowQueries.forEach(sq => {
+    // Normalize query by removing specific values
+    const pattern = sq.query
+      .replace(/\$\d+/g, '$?')
+      .replace(/\d+/g, 'N')
+      .replace(/'[^']*'/g, "'?'")
+      .trim();
+    
+    if (!patterns.has(pattern)) {
+      patterns.set(pattern, {
+        pattern,
+        count: 0,
+        totalDuration: 0,
+        maxDuration: 0,
+        avgDuration: 0,
+        examples: [],
+      });
+    }
+    
+    const stats = patterns.get(pattern);
+    stats.count++;
+    stats.totalDuration += sq.duration;
+    stats.maxDuration = Math.max(stats.maxDuration, sq.duration);
+    stats.avgDuration = Math.round(stats.totalDuration / stats.count);
+    
+    // Keep up to 3 examples
+    if (stats.examples.length < 3) {
+      stats.examples.push({
+        query: sq.query,
+        duration: sq.duration,
+        timestamp: sq.timestamp,
+      });
+    }
+  });
+  
+  return Array.from(patterns.values())
+    .sort((a, b) => b.totalDuration - a.totalDuration)
+    .slice(0, 10);
+};
+
+// Clear slow query log (DATABASE-007)
+export const clearSlowQueries = () => {
+  const count = slowQueries.length;
+  slowQueries.length = 0;
+  return { cleared: count };
 };
 
 // Log pool metrics periodically (DATABASE-005)
