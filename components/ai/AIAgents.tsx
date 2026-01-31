@@ -4,6 +4,8 @@ import * as api from '../../services/api.ts';
 import { AIAgent } from '../../types.ts';
 import ErrorBoundary from '../ErrorBoundary.tsx';
 import { getAgentControl } from './agentRegistry.ts';
+import LoadingSpinner, { AgentLoadingSpinner } from '../ui/LoadingSpinner';
+import SkeletonLoader, { AgentListSkeleton } from '../ui/SkeletonLoader';
 
 const AIAgents: React.FC = () => {
     const { t } = useLanguage();
@@ -38,7 +40,7 @@ const AIAgents: React.FC = () => {
     };
 
     if (isLoading) {
-        return <div className="text-center p-10">{t('loading')}</div>;
+        return <AgentListSkeleton count={6} />;
     }
 
     if (error) {
@@ -75,7 +77,13 @@ const AIAgents: React.FC = () => {
             {/* Lazy-loaded agent control panel with loading spinner */}
             {selectedAgent && agentRegistryEntry && (
                 <ErrorBoundary fallbackTitle={agentRegistryEntry.fallbackTitle}>
-                    <Suspense fallback={<AgentLoadingSpinner />}>
+                    <Suspense fallback={
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-card border border-border rounded-lg p-8">
+                                <AgentLoadingSpinner agentName={selectedAgent.name} />
+                            </div>
+                        </div>
+                    }>
                         <agentRegistryEntry.component
                             agent={selectedAgent}
                             onClose={() => setSelectedAgent(null)}
@@ -85,21 +93,6 @@ const AIAgents: React.FC = () => {
                 </ErrorBoundary>
             )}
         </>
-    );
-};
-
-/**
- * Loading spinner shown while agent control panel is being loaded
- * Displayed via React Suspense fallback
- */
-const AgentLoadingSpinner: React.FC = () => {
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-card border border-border rounded-lg p-8 flex flex-col items-center space-y-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
-                <p className="text-foreground text-sm font-medium">Loading Agent Control Panel...</p>
-            </div>
-        </div>
     );
 };
 
