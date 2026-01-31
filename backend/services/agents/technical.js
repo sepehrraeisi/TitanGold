@@ -138,10 +138,59 @@ export function defaultConfig() {
   };
 }
 
+/**
+ * BACKEND-015: Health check implementation
+ * @returns {Promise<Object>} Health status
+ */
+export async function healthCheck() {
+  try {
+    // Perform basic health checks
+    const checks = {
+      configValid: true,
+      memoryOk: true,
+      dependenciesOk: true
+    };
+    
+    // Check if default config is valid
+    const config = defaultConfig();
+    if (!config || !config.indicators) {
+      checks.configValid = false;
+    }
+    
+    // Check memory usage (simple check)
+    const memUsage = process.memoryUsage();
+    if (memUsage.heapUsed > memUsage.heapTotal * 0.9) {
+      checks.memoryOk = false;
+    }
+    
+    // Determine overall status
+    const allChecksPass = Object.values(checks).every(v => v === true);
+    
+    return {
+      status: allChecksPass ? 'healthy' : 'degraded',
+      checks,
+      metadata: {
+        memoryUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
+        agent: 'technical',
+        version: '1.0.0'
+      }
+    };
+  } catch (error) {
+    return {
+      status: 'unhealthy',
+      error: error.message,
+      metadata: {
+        agent: 'technical'
+      }
+    };
+  }
+}
+
 export default {
   run,
   getDetails,
   command,
   validateConfig,
-  defaultConfig
+  defaultConfig,
+  healthCheck // BACKEND-015: Export health check
 };

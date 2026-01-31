@@ -1,6 +1,7 @@
 // Agent Registry - Central dispatcher for all 15 AI Agents
 // Purpose: Load and route agent modules by agent_key
 // Date: 2026-01-03
+// Updated: 2026-01-31 - Added health check functionality (BACKEND-015)
 
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -11,6 +12,13 @@ const __dirname = dirname(__filename);
 
 // Agent Registry Map
 const agents = new Map();
+
+// BACKEND-015: Agent health status tracking
+const agentHealth = new Map();
+
+// BACKEND-015: Health check interval (default: 60 seconds)
+const HEALTH_CHECK_INTERVAL = parseInt(process.env.AGENT_HEALTH_CHECK_INTERVAL) || 60000;
+let healthCheckTimer = null;
 
 // Register all 15 agents
 const AGENT_MODULES = {
@@ -76,7 +84,7 @@ export async function getAgentService(agent_key) {
  */
 function validateAgentInterface(agent_key, agentModule) {
   const requiredMethods = ['run', 'getDetails', 'defaultConfig'];
-  const optionalMethods = ['command', 'validateConfig'];
+  const optionalMethods = ['command', 'validateConfig', 'healthCheck']; // BACKEND-015: healthCheck is optional
   
   // Check required methods
   for (const method of requiredMethods) {
@@ -167,6 +175,223 @@ export async function prewarmAgents(keys = ['technical', 'risk']) {
   }
 }
 
+// ============================================================================
+// BACKEND-015: Health Check Implementation
+// ============================================================================
+
+/**
+ * Perform health check on a single agent
+ * @param {string} agent_key - Agent identifier
+ * @returns {Promise<Object>} Health check result
+ */
+export async function checkAgentHealth(agent_key) {
+  const healthStatus = {
+    agent_key,
+    status: 'unknown',
+    timestamp: new Date().toISOString(),
+    responseTime: 0,
+    error: null,
+    metadata: {}
+  };
+  
+  try {
+    const agent = await getAgentService(agent_key);
+    const startTime = Date.now();
+    
+    // Call agent's healthCheck method if it exists
+    if (typeof agent.healthCheck === 'function') {
+      const result = await agent.healthCheck();
+      healthStatus.responseTime = Date.now() - startTime;
+      
+      if (result && result.status) {
+        healthStatus.status = result.status; // 'healthy', 'degraded', 'unhealthy'
+        healthStatus.metadata = result.metadata || {};
+      } else {
+        healthStatus.status = 'healthy'; // Default if no status returned
+      }
+    } else {
+      // If agent doesn't implement healthCheck, consider it healthy if it loaded
+      healthStatus.status = 'healthy';
+      healthStatus.responseTime = Date.now() - startTime;
+      healthStatus.metadata = { message: 'No healthCheck method, assuming healthy' };
+    }
+  } catch (error) {
+    healthStatus.status = 'unhealthy';
+    healthStatus.error = error.message;
+    logger.warn(`❌ Health check failed for ${agent_key}:`, error.message);
+  }
+  
+  // Store health status
+  agentHealth.set(agent_key, healthStatus);
+  
+  return healthStatus;
+}
+
+/**
+ * Perform health check on all loaded agents
+ * @returns {Promise<Object>} Health check results for all agents
+ */
+export async function checkAllAgentsHealth() {
+  const results = {};
+  const loadedAgents = Array.from(agents.keys());
+  
+  logger.info(`🏥 Running health checks for ${loadedAgents.length} loaded agent(s)...`);
+  
+  for (const agent_key of loadedAgents) {
+    results[agent_key] = await checkAgentHealth(agent_key);
+  }
+  
+  return results;
+}
+
+/**
+ * Get health status for a specific agent
+ * @param {string} agent_key - Agent identifier
+ * @returns {Object|null} Cached health status or null if not checked yet
+ */
+export function getAgentHealthStatus(agent_key) {
+  return agentHealth.get(agent_key) || null;
+}
+
+/**
+ * Get health status for all agents
+ * @returns {Object} All agent health statuses
+ */
+export function getAllAgentHealthStatus() {
+  const status = {};
+  
+  for (const [agent_key, health] of agentHealth.entries()) {
+    status[agent_key] = health;
+  }
+  
+  return status;
+}
+
+/**
+ * Check if an agent is healthy
+ * @param {string} agent_key - Agent identifier
+ * @returns {boolean} True if agent is healthy
+ */
+export function isAgentHealthy(agent_key) {
+  const health = agentHealth.get(agent_key);
+  return !!(health && health.status === 'healthy');
+}
+
+/**
+ * Get count of healthy vs unhealthy agents
+ * @returns {Object} Health summary
+ */
+export function getHealthSummary() {
+  let healthy = 0;
+  let degraded = 0;
+  let unhealthy = 0;
+  let unknown = 0;
+  
+  for (const health of agentHealth.values()) {
+    switch (health.status) {
+      case 'healthy':
+        healthy++;
+        break;
+      case 'degraded':
+        degraded++;
+        break;
+      case 'unhealthy':
+        unhealthy++;
+        break;
+      default:
+        unknown++;
+    }
+  }
+  
+  return {
+    total: agentHealth.size,
+    healthy,
+    degraded,
+    unhealthy,
+    unknown,
+    healthyPercentage: agentHealth.size > 0 ? Math.round((healthy / agentHealth.size) * 100) : 0
+  };
+}
+
+/**
+ * Start periodic health checks
+ * @param {number} interval - Check interval in milliseconds (default: 60000)
+ */
+export function startPeriodicHealthChecks(interval = HEALTH_CHECK_INTERVAL) {
+  if (healthCheckTimer) {
+    logger.warn('⚠️  Periodic health checks already running');
+    return;
+  }
+  
+  logger.info(`🏥 Starting periodic health checks (interval: ${interval}ms)`);
+  
+  // Run initial health check
+  checkAllAgentsHealth().catch(error => {
+    logger.error('❌ Initial health check failed:', error);
+  });
+  
+  // Set up periodic checks
+  healthCheckTimer = setInterval(async () => {
+    try {
+      await checkAllAgentsHealth();
+    } catch (error) {
+      logger.error('❌ Periodic health check failed:', error);
+    }
+  }, interval);
+  
+  // Ensure timer doesn't keep process alive
+  if (healthCheckTimer.unref) {
+    healthCheckTimer.unref();
+  }
+}
+
+/**
+ * Stop periodic health checks
+ */
+export function stopPeriodicHealthChecks() {
+  if (healthCheckTimer) {
+    clearInterval(healthCheckTimer);
+    healthCheckTimer = null;
+    logger.info('🛑 Stopped periodic health checks');
+  }
+}
+
+/**
+ * Mark an agent as disabled due to health issues
+ * @param {string} agent_key - Agent identifier
+ * @param {string} reason - Reason for disabling
+ */
+export function disableUnhealthyAgent(agent_key, reason = 'Health check failed') {
+  const health = agentHealth.get(agent_key);
+  
+  if (health && health.status === 'unhealthy') {
+    // Update health status to reflect disabled state
+    health.disabled = true;
+    health.disabledReason = reason;
+    health.disabledAt = new Date().toISOString();
+    agentHealth.set(agent_key, health);
+    
+    logger.warn(`⚠️  Disabled unhealthy agent: ${agent_key} - ${reason}`);
+  }
+}
+
+/**
+ * Re-enable a previously disabled agent
+ * @param {string} agent_key - Agent identifier
+ */
+export function enableAgent(agent_key) {
+  const health = agentHealth.get(agent_key);
+  
+  if (health && health.disabled) {
+    health.disabled = false;
+    health.disabledReason = null;
+    health.disabledAt = null;
+    agentHealth.set(agent_key, health);
+    
+    logger.info(`✅ Re-enabled agent: ${agent_key}`);
+  }
+}
+
 // Export default object for convenience
 export default {
   getAgentService,
@@ -176,5 +401,16 @@ export default {
   getAgentDefaultConfig,
   listAgentKeys,
   hasAgent,
-  prewarmAgents
+  prewarmAgents,
+  // BACKEND-015: Health check exports
+  checkAgentHealth,
+  checkAllAgentsHealth,
+  getAgentHealthStatus,
+  getAllAgentHealthStatus,
+  isAgentHealthy,
+  getHealthSummary,
+  startPeriodicHealthChecks,
+  stopPeriodicHealthChecks,
+  disableUnhealthyAgent,
+  enableAgent
 };
