@@ -24,7 +24,7 @@
 
 import express from 'express';
 import crypto from 'crypto';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
 import { webhookDispatcher } from '../services/webhookDispatcher.js';
@@ -74,7 +74,7 @@ function validateEvents(events) {
 // Create a new webhook
 // ============================================================================
 
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   const userId = req.user.userId;
   const { url, events, metadata = {} } = req.body;
 
@@ -152,7 +152,7 @@ router.post('/', authenticateToken, async (req, res) => {
 // List user's webhooks
 // ============================================================================
 
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   const userId = req.user.userId;
 
   try {
@@ -191,7 +191,7 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get webhook details
 // ============================================================================
 
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   const userId = req.user.userId;
   const webhookId = parseInt(req.params.id);
 
@@ -251,7 +251,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Update webhook
 // ============================================================================
 
-router.patch('/:id', authenticateToken, async (req, res) => {
+router.patch('/:id', authenticate, async (req, res) => {
   const userId = req.user.userId;
   const webhookId = parseInt(req.params.id);
   const { url, events, is_active, metadata } = req.body;
@@ -375,7 +375,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
 // Delete webhook
 // ============================================================================
 
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   const userId = req.user.userId;
   const webhookId = parseInt(req.params.id);
 
@@ -439,7 +439,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 // Get webhook delivery history
 // ============================================================================
 
-router.get('/:id/deliveries', authenticateToken, async (req, res) => {
+router.get('/:id/deliveries', authenticate, async (req, res) => {
   const userId = req.user.userId;
   const webhookId = parseInt(req.params.id);
   const limit = Math.min(parseInt(req.query.limit) || 50, 100);
@@ -523,7 +523,7 @@ router.get('/:id/deliveries', authenticateToken, async (req, res) => {
 // Test webhook endpoint
 // ============================================================================
 
-router.post('/:id/test', authenticateToken, async (req, res) => {
+router.post('/:id/test', authenticate, async (req, res) => {
   const userId = req.user.userId;
   const webhookId = parseInt(req.params.id);
 
@@ -610,7 +610,7 @@ router.post('/:id/test', authenticateToken, async (req, res) => {
 // List available webhook events
 // ============================================================================
 
-router.get('/events', authenticateToken, async (req, res) => {
+router.get('/events', authenticate, async (req, res) => {
   res.json({
     ok: true,
     events: VALID_EVENTS.map(event => ({
