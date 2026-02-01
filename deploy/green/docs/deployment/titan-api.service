@@ -1,0 +1,33 @@
+[Unit]
+Description=TitanGold API Server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=titangold
+Group=titangold
+WorkingDirectory=/opt/titangold/backend
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/titangold/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=titan-api
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/titangold/backend/logs /opt/titangold/backend/uploads
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target
+

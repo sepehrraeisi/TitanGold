@@ -1,0 +1,15 @@
+{
+  "active": "green",
+  "version": "main",
+  "timestamp": "2026-02-01T15:09:51Z",
+  "blue": {
+    "port": 5002,
+    "directory": "/home/ubuntu/webapp/TitanGold/deploy/blue",
+    "pid_file": "/home/ubuntu/webapp/TitanGold/deploy/blue/.pid"
+  },
+  "green": {
+    "port": 5003,
+    "directory": "/home/ubuntu/webapp/TitanGold/deploy/green",
+    "pid_file": "/home/ubuntu/webapp/TitanGold/deploy/green/.pid"
+  }
+}

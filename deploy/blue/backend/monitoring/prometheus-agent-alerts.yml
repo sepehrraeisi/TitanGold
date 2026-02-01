@@ -1,0 +1,178 @@
+# TitanGold Agent Performance Monitoring - Prometheus Alerting Rules
+# Task: BACKEND-021
+# 
+# These rules define alerts for agent performance issues:
+# - High error rates
+# - Slow execution times
+# - Low cache hit rates
+# - Agent failures
+
+groups:
+  - name: titangold_agent_alerts
+    interval: 30s
+    rules:
+      # ======================================================================
+      # HIGH ERROR RATE ALERTS
+      # ======================================================================
+      
+      - alert: AgentHighErrorRate
+        expr: titangold_agent_error_rate_percent > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: agent
+          alert_type: error_rate
+        annotations:
+          summary: "High error rate for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) has an error rate of {{ $value }}% (threshold: 10%)"
+          runbook_url: "https://docs.titangold.io/runbooks/agent-high-error-rate"
+          dashboard_url: "https://grafana.titangold.io/d/agent-performance"
+      
+      - alert: AgentCriticalErrorRate
+        expr: titangold_agent_error_rate_percent > 50
+        for: 2m
+        labels:
+          severity: critical
+          component: agent
+          alert_type: error_rate
+        annotations:
+          summary: "CRITICAL: Agent {{$labels.agent_key}} failing frequently"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) has a CRITICAL error rate of {{ $value }}% (threshold: 50%). Immediate attention required!"
+          runbook_url: "https://docs.titangold.io/runbooks/agent-critical-error-rate"
+          dashboard_url: "https://grafana.titangold.io/d/agent-performance"
+      
+      # ======================================================================
+      # SLOW EXECUTION TIME ALERTS
+      # ======================================================================
+      
+      - alert: AgentSlowExecution
+        expr: titangold_agent_last_execution_seconds > 30
+        for: 5m
+        labels:
+          severity: warning
+          component: agent
+          alert_type: performance
+        annotations:
+          summary: "Slow execution for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) took {{ $value }}s to execute (threshold: 30s)"
+          runbook_url: "https://docs.titangold.io/runbooks/agent-slow-execution"
+      
+      - alert: AgentVerySlowExecution
+        expr: titangold_agent_last_execution_seconds > 60
+        for: 2m
+        labels:
+          severity: critical
+          component: agent
+          alert_type: performance
+        annotations:
+          summary: "CRITICAL: Very slow execution for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) took {{ $value }}s to execute (threshold: 60s). Performance degradation detected!"
+          runbook_url: "https://docs.titangold.io/runbooks/agent-very-slow-execution"
+      
+      # ======================================================================
+      # LOW CACHE HIT RATE ALERTS
+      # ======================================================================
+      
+      - alert: AgentLowCacheHitRate
+        expr: titangold_agent_cache_hit_rate_percent < 30 and (titangold_agent_cache_hits_total + titangold_agent_cache_misses_total) > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: agent
+          alert_type: cache
+        annotations:
+          summary: "Low cache hit rate for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) has a cache hit rate of {{ $value }}% (threshold: 30%). Consider reviewing cache strategy."
+          runbook_url: "https://docs.titangold.io/runbooks/agent-low-cache-hit-rate"
+      
+      # ======================================================================
+      # AGENT FAILURE ALERTS
+      # ======================================================================
+      
+      - alert: AgentRepeatedFailures
+        expr: increase(titangold_agent_errors_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+          component: agent
+          alert_type: failure
+        annotations:
+          summary: "Repeated failures for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) has failed {{ $value }} times in the last 5 minutes"
+          runbook_url: "https://docs.titangold.io/runbooks/agent-repeated-failures"
+      
+      - alert: AgentNoRecentExecutions
+        expr: (time() - titangold_agent_last_execution_seconds) > 3600 and titangold_agent_success_total > 0
+        for: 5m
+        labels:
+          severity: info
+          component: agent
+          alert_type: inactivity
+        annotations:
+          summary: "No recent executions for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) has not executed in over 1 hour"
+          runbook_url: "https://docs.titangold.io/runbooks/agent-inactivity"
+      
+      # ======================================================================
+      # EXECUTION TIMEOUT ALERTS
+      # ======================================================================
+      
+      - alert: AgentTimeoutErrors
+        expr: rate(titangold_agent_errors_total{error_type="timeout"}[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          component: agent
+          alert_type: timeout
+        annotations:
+          summary: "Frequent timeout errors for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) is experiencing timeout errors at rate {{ $value }} ops/sec"
+          runbook_url: "https://docs.titangold.io/runbooks/agent-timeout-errors"
+      
+      # ======================================================================
+      # VALIDATION ERROR ALERTS
+      # ======================================================================
+      
+      - alert: AgentValidationErrors
+        expr: rate(titangold_agent_errors_total{error_type="validation"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: info
+          component: agent
+          alert_type: validation
+        annotations:
+          summary: "Validation errors for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) is experiencing validation errors at rate {{ $value }} ops/sec. Check input parameters."
+          runbook_url: "https://docs.titangold.io/runbooks/agent-validation-errors"
+      
+      # ======================================================================
+      # P95 LATENCY ALERTS
+      # ======================================================================
+      
+      - alert: AgentHighP95Latency
+        expr: titangold_agent_execution_time_seconds{quantile="0.95"} > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: agent
+          alert_type: latency
+        annotations:
+          summary: "High P95 latency for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) has P95 latency of {{ $value }}s (threshold: 10s)"
+          runbook_url: "https://docs.titangold.io/runbooks/agent-high-latency"
+      
+      # ======================================================================
+      # ACTIVE EXECUTIONS ALERTS
+      # ======================================================================
+      
+      - alert: AgentTooManyActiveExecutions
+        expr: titangold_agent_active_executions > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: agent
+          alert_type: concurrency
+        annotations:
+          summary: "Too many active executions for agent {{$labels.agent_key}}"
+          description: "Agent {{$labels.agent_key}} (ID: {{$labels.agent_id}}) has {{ $value }} active executions. Possible bottleneck or stuck executions."
+          runbook_url: "https://docs.titangold.io/runbooks/agent-too-many-active-executions"

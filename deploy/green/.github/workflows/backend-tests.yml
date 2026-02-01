@@ -1,0 +1,76 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+    
+    - name: Install dependencies
+      run: |
+        cd backend
+        npm ci
+    
+    - name: Run unit tests
+      run: |
+        cd backend
+        npm run test:unit
+    
+    - name: Run integration tests
+      run: |
+        cd backend
+        npm run test:integration
+      continue-on-error: true
+    
+    - name: Run tests with coverage
+      run: |
+        cd backend
+        npm run test:ci
+    
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./backend/coverage/lcov.info
+        flags: backend
+        name: backend-coverage-${{ matrix.node-version }}
+        fail_ci_if_error: false
+    
+    - name: Archive coverage report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: coverage-report-node-${{ matrix.node-version }}
+        path: backend/coverage/
+        retention-days: 30
+    
+    - name: Comment coverage on PR
+      if: github.event_name == 'pull_request'
+      uses: romeovs/lcov-reporter-action@v0.3.1
+      with:
+        lcov-file: ./backend/coverage/lcov.info
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        title: Backend Test Coverage

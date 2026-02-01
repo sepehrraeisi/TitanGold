@@ -1,0 +1,275 @@
+{
+  "dashboard": {
+    "title": "TitanGold - Agent Performance Monitoring",
+    "tags": ["titangold", "agents", "performance"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Agent Execution Times (Last 1h)",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "titangold_agent_execution_time_seconds{quantile=\"0.95\"}",
+            "legendFormat": "{{agent_key}} - p95",
+            "refId": "A"
+          },
+          {
+            "expr": "titangold_agent_execution_time_seconds{quantile=\"0.5\"}",
+            "legendFormat": "{{agent_key}} - p50",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          { "format": "s", "label": "Execution Time" },
+          { "show": false }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Agent Error Rates",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "targets": [
+          {
+            "expr": "titangold_agent_error_rate_percent",
+            "legendFormat": "{{agent_key}} ({{agent_id}})",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "percent", "label": "Error Rate", "max": 100, "min": 0 },
+          { "show": false }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": { "params": [10], "type": "gt" },
+              "operator": { "type": "and" },
+              "query": { "params": ["A", "5m", "now"] },
+              "reducer": { "params": [], "type": "avg" },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Agent Error Rate",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 3,
+        "title": "Agent Cache Hit Rates",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "titangold_agent_cache_hit_rate_percent",
+            "legendFormat": "{{agent_key}} ({{agent_id}})",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "percent", "label": "Cache Hit Rate", "max": 100, "min": 0 },
+          { "show": false }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Agent Executions (Rate)",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+        "targets": [
+          {
+            "expr": "rate(titangold_agent_success_total[5m])",
+            "legendFormat": "{{agent_key}} - Success",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(titangold_agent_errors_total[5m])",
+            "legendFormat": "{{agent_key}} - Errors",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          { "format": "ops", "label": "Executions/sec" },
+          { "show": false }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Active Agent Executions",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+        "targets": [
+          {
+            "expr": "titangold_agent_active_executions",
+            "legendFormat": "{{agent_key}} ({{agent_id}})",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Active Executions", "min": 0 },
+          { "show": false }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Agent Last Execution Time",
+        "type": "stat",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+        "targets": [
+          {
+            "expr": "titangold_agent_last_execution_seconds",
+            "legendFormat": "{{agent_key}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 5 },
+                { "color": "red", "value": 30 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Total Agent Executions",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 },
+        "targets": [
+          {
+            "expr": "sum(titangold_agent_success_total)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "textMode": "value_and_name",
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Total Agent Errors",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 24 },
+        "targets": [
+          {
+            "expr": "sum(titangold_agent_errors_total)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "textMode": "value_and_name",
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 10 },
+                { "color": "red", "value": 100 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Cache Hits",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 24 },
+        "targets": [
+          {
+            "expr": "sum(titangold_agent_cache_hits_total)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "textMode": "value_and_name",
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Cache Misses",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 24 },
+        "targets": [
+          {
+            "expr": "sum(titangold_agent_cache_misses_total)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "textMode": "value_and_name",
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "yellow", "value": null }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m"],
+      "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    }
+  }
+}

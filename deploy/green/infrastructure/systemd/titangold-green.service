@@ -1,0 +1,28 @@
+[Unit]
+Description=TitanGold Backend (Green Environment)
+Documentation=https://github.com/sepehrraeisi/TitanGold
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/var/www/titangold/green/backend
+Environment=NODE_ENV=production
+Environment=PORT=5003
+EnvironmentFile=/var/www/titangold/green/backend/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=titangold-green
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/titangold/green
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,282 @@
+# ============================================================================
+# TitanGold Blue-Green Deployment Workflow (INFRA-010)
+# ============================================================================
+#
+# Purpose: Automated blue-green deployment on push to main branch
+#
+# Features:
+#   - Triggered on push to main or manual dispatch
+#   - Runs full test suite before deployment
+#   - Deploys to inactive environment
+#   - Performs health checks
+#   - Switches traffic atomically
+#   - Automatic rollback on failure
+#
+# Date: 2026-01-31
+# ============================================================================
+
+name: Blue-Green Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - production
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        type: boolean
+        default: false
+      force:
+        description: 'Force deployment even if tests fail'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: '18.x'
+  BLUE_PORT: 5002
+  GREEN_PORT: 5003
+
+jobs:
+  # =========================================================================
+  # Pre-deployment Tests
+  # =========================================================================
+  tests:
+    name: Run Test Suite
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd backend && npm ci
+      
+      - name: Run backend tests
+        run: cd backend && npm test -- --passWithNoTests
+        continue-on-error: ${{ inputs.force }}
+      
+      - name: Run frontend tests
+        run: npm test -- --passWithNoTests
+        continue-on-error: ${{ inputs.force }}
+      
+      - name: Build frontend
+        run: npm run build
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: |
+            backend/coverage/
+            coverage/
+
+  # =========================================================================
+  # Build and Package
+  # =========================================================================
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: tests
+    if: ${{ success() || inputs.force }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          npm ci --production
+          cd backend && npm ci --production
+      
+      - name: Build frontend
+        run: npm run build
+      
+      - name: Create deployment package
+        run: |
+          tar -czf deployment-package.tar.gz \
+            --exclude='node_modules' \
+            --exclude='.git' \
+            --exclude='coverage' \
+            --exclude='*.log' \
+            backend/ dist/ package.json package-lock.json
+      
+      - name: Upload deployment package
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-package
+          path: deployment-package.tar.gz
+          retention-days: 7
+
+  # =========================================================================
+  # Deploy to Production
+  # =========================================================================
+  deploy:
+    name: Blue-Green Deployment
+    runs-on: ubuntu-latest
+    needs: build
+    environment: 
+      name: ${{ inputs.environment || 'production' }}
+      url: https://api.titangold.com/health
+    
+    steps:
+      - name: Checkout deployment scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            infrastructure/
+          sparse-checkout-cone-mode: false
+      
+      - name: Download deployment package
+        uses: actions/download-artifact@v3
+        with:
+          name: deployment-package
+      
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Copy deployment package to server
+        run: |
+          scp deployment-package.tar.gz \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/
+      
+      - name: Copy deployment script to server
+        run: |
+          scp infrastructure/blue-green-deploy.sh \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/
+      
+      - name: Execute blue-green deployment
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
+            set -e
+            
+            # Extract deployment package
+            mkdir -p /tmp/deploy-staging
+            cd /tmp/deploy-staging
+            tar -xzf /tmp/deployment-package.tar.gz
+            
+            # Make deployment script executable
+            chmod +x /tmp/blue-green-deploy.sh
+            
+            # Run deployment
+            sudo /tmp/blue-green-deploy.sh \
+              --version ${{ github.sha }} \
+              --env ${{ inputs.environment || 'production' }} \
+              ${{ inputs.skip_tests && '--skip-tests' || '' }} \
+              ${{ inputs.force && '--force' || '' }}
+            
+            # Cleanup
+            rm -rf /tmp/deploy-staging
+            rm /tmp/deployment-package.tar.gz
+            rm /tmp/blue-green-deploy.sh
+          ENDSSH
+      
+      - name: Verify deployment
+        run: |
+          # Wait for deployment to stabilize
+          sleep 10
+          
+          # Check health endpoint
+          response=$(curl -s -w "\n%{http_code}" https://api.titangold.com/health)
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+          
+          if [ "$http_code" != "200" ]; then
+            echo "Health check failed with HTTP $http_code"
+            exit 1
+          fi
+          
+          status=$(echo "$body" | jq -r '.status')
+          if [ "$status" != "healthy" ]; then
+            echo "Application is not healthy: $status"
+            exit 1
+          fi
+          
+          echo "Deployment verified successfully!"
+      
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
+            sudo /var/www/titangold/infrastructure/blue-green-deploy.sh --rollback
+          ENDSSH
+      
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Version: ${{ github.sha }}"
+          echo "Environment: ${{ inputs.environment || 'production' }}"
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed and rolled back!"
+          echo "Check logs for details"
+
+  # =========================================================================
+  # Post-Deployment Verification
+  # =========================================================================
+  verify:
+    name: Post-Deployment Verification
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+      - name: Smoke tests
+        run: |
+          # Test API endpoints
+          curl -f https://api.titangold.com/health || exit 1
+          curl -f https://api.titangold.com/api/v1/health || exit 1
+          
+          echo "✅ Smoke tests passed!"
+      
+      - name: Performance check
+        run: |
+          # Check response time
+          time=$(curl -o /dev/null -s -w '%{time_total}\n' https://api.titangold.com/health)
+          echo "Response time: ${time}s"
+          
+          # Alert if response time > 2 seconds
+          if (( $(echo "$time > 2.0" | bc -l) )); then
+            echo "⚠️ Warning: Response time is high"
+          fi
