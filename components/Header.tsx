@@ -449,7 +449,7 @@ const ModeToggleWithStatus: React.FC = () => {
     );
 };
 
-const MobileMenu: React.FC<{ navLinks: any[], activeView: string, setActiveView: (view: string) => void, isOpen: boolean, setIsOpen: (isOpen: boolean) => void, statusData?: { aiAgents: { active: number; total: number; percentage: number }; connection: { status: string; text: string }; activeTrades: number; dailyPnL: number } }> = ({ navLinks, activeView, setActiveView, isOpen, setIsOpen, statusData }) => {
+const MobileMenu: React.FC<{ navLinks: any[], activeView: string, onNavigate: OnNavigateHandler, isOpen: boolean, setIsOpen: (isOpen: boolean) => void, statusData?: { aiAgents: { active: number; total: number; percentage: number }; connection: { status: string; text: string }; activeTrades: number; dailyPnL: number } }> = ({ navLinks, activeView, onNavigate, isOpen, setIsOpen, statusData }) => {
     const { t } = useLanguage();
     const [walletBalance, setWalletBalance] = useState<{ total: number; mode: 'demo' | 'live' } | null>(null);
     
@@ -865,7 +865,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, onNavigate, onLogout }) => 
                     <UserDropdown onNavigate={onNavigate} onLogout={onLogout} dailyPnL={statusData.dailyPnL} />
                 </div>
             </header>
-            <MobileMenu navLinks={navLinks} activeView={activeView} setActiveView={setActiveView} isOpen={isMobileMenuOpen} setIsOpen={setIsMobileMenuOpen} statusData={statusData} />
+            <MobileMenu navLinks={navLinks} activeView={activeView} onNavigate={onNavigate} isOpen={isMobileMenuOpen} setIsOpen={setIsMobileMenuOpen} statusData={statusData} />
         </>
     );
 };
