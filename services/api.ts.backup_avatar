@@ -18056,83 +18056,55 @@ export const fetchProfileSettings = async (): Promise<ProfileSettingsData> => {
 };
 
 export const saveProfileDetails = async (updates: ProfileDetailsUpdate): Promise<ProfileSettingsData> => {
-    // First, save to backend API
-    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-    if (!token) {
-        throw new Error('Authentication required');
+    const settings = await fetchProfileSettings();
+
+    // Update profile
+    settings.profile = { ...settings.profile, ...updates };
+
+    // Update user in localStorage if email or name changed
+    if (updates.email || updates.fullName) {
+        try {
+            const userData = localStorage.getItem('titan_user');
+            if (userData) {
+                const parsed = JSON.parse(userData);
+                if (updates.email) parsed.email = updates.email;
+                if (updates.fullName) parsed.name = updates.fullName;
+                localStorage.setItem('titan_user', JSON.stringify(parsed));
+            }
+        } catch (e) {
+            console.warn('Failed to update user in localStorage:', e);
+        }
     }
+
+    // Dispatch event if avatar changed
+    if (updates.avatarUrl) {
+        window.dispatchEvent(new CustomEvent('titan_avatar_updated'));
+    }
+
+    // Record activity
+    settings.activity.unshift({
+        id: `profile-activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timestamp: new Date().toISOString(),
+        messageKey: updates.avatarUrl ? 'profile_activity_avatar_updated' : 'profile_activity_details_updated',
+        context: settings.profile.fullName,
+    });
+
+    // Keep only last 50 activities
+    if (settings.activity.length > 50) {
+        settings.activity = settings.activity.slice(0, 50);
+    }
+
+    settings.lastUpdated = new Date().toISOString();
+
+    await database.save('settings', { key: 'profile_settings', value: settings });
 
     try {
-        const response = await fetch('/api/v1/profile/details', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify(updates),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text().catch(() => '');
-            console.error('Failed to save profile details to backend:', response.status, errorText);
-            throw new Error(errorText || `Failed to save profile details (${response.status})`);
-        }
-
-        const backendData = await response.json();
-        console.log('✅ Profile details saved to backend:', backendData);
-
-        // Update user in localStorage if email or name changed
-        if (updates.email || updates.fullName) {
-            try {
-                const userData = localStorage.getItem('titan_user');
-                if (userData) {
-                    const parsed = JSON.parse(userData);
-                    if (updates.email) parsed.email = updates.email;
-                    if (updates.fullName) parsed.name = updates.fullName;
-                    localStorage.setItem('titan_user', JSON.stringify(parsed));
-                }
-            } catch (e) {
-                console.warn('Failed to update user in localStorage:', e);
-            }
-        }
-
-        // Dispatch event if avatar changed
-        if (updates.avatarUrl) {
-            window.dispatchEvent(new CustomEvent('titan_avatar_updated'));
-        }
-
-        // Now update local settings for UI consistency
-        const settings = await fetchProfileSettings();
-        settings.profile = { ...settings.profile, ...updates };
-
-        // Record activity
-        settings.activity.unshift({
-            id: `profile-activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            timestamp: new Date().toISOString(),
-            messageKey: updates.avatarUrl ? 'profile_activity_avatar_updated' : 'profile_activity_details_updated',
-            context: settings.profile.fullName,
-        });
-
-        // Keep only last 50 activities
-        if (settings.activity.length > 50) {
-            settings.activity = settings.activity.slice(0, 50);
-        }
-
-        settings.lastUpdated = new Date().toISOString();
-
-        await database.save('settings', { key: 'profile_settings', value: settings });
-
-        try {
-            localStorage.setItem('titan_profile_settings', JSON.stringify(settings));
-        } catch (e) {
-            console.warn('Failed to save to localStorage:', e);
-        }
-
-        return settings;
-    } catch (error) {
-        console.error('❌ Error saving profile details:', error);
-        throw error;
+        localStorage.setItem('titan_profile_settings', JSON.stringify(settings));
+    } catch (e) {
+        console.warn('Failed to save to localStorage:', e);
     }
+
+    return settings;
 };
 
 // Upload profile avatar to backend and return avatar URL
