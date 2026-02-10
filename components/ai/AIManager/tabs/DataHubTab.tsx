@@ -174,16 +174,19 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     <Card>
                         <div className="text-center">
                             <p className="text-xs text-muted-foreground mb-1">{t('cache_hit_rate') || 'Cache Hit Rate'}</p>
-                            <p className="text-2xl font-bold text-purple-400">{dataHub.cache.hitRate.toFixed(1)}%</p>
+                            <p className="text-2xl font-bold text-purple-400">
+                                {dataHub?.cache?.hitRate !== undefined ? dataHub.cache.hitRate.toFixed(1) : '0.0'}%
+                            </p>
                         </div>
                     </Card>
                     <Card>
                         <div className="text-center">
                             <p className="text-xs text-muted-foreground mb-1">{t('health_status') || 'Health Status'}</p>
-                            <p className={`text-2xl font-bold ${dataHub.health.overall === 'healthy' ? 'text-green-400' :
-                                dataHub.health.overall === 'degraded' ? 'text-yellow-400' : 'text-red-400'
+                            <p className={`text-2xl font-bold ${
+                                dataHub?.health?.overall === 'healthy' ? 'text-green-400' :
+                                dataHub?.health?.overall === 'degraded' ? 'text-yellow-400' : 'text-red-400'
                                 }`}>
-                                {t(dataHub.health.overall) || dataHub.health.overall}
+                                {dataHub?.health?.overall ? (t(dataHub.health.overall) || dataHub.health.overall) : 'Unknown'}
                             </p>
                         </div>
                     </Card>
