@@ -10,6 +10,7 @@ import { rateLimiters, getRateLimiterStats, globalRateLimiter } from './utils/ra
 import { getSessionFromDB, saveSessionToDB, getSessionStats } from './utils/sessionManager';
 import { decryptSecret } from '../../backend/utils/crypto.js';
 import { processMessage, batchProcessMessages, enrichMessage, isDuplicate } from './utils/dataValidator';
+import sessionRotationService from './services/sessionRotationService';
 
 dotenv.config();
 
@@ -165,6 +166,84 @@ app.post('/api/telegram-collector/session/rotate', rateLimiters.strict, async (r
         res.status(500).json({ 
             error: 'Failed to rotate session',
             message: error.message 
+        });
+    }
+});
+
+// ============================================================================
+// SESSION ROTATION ENDPOINTS (Automatic)
+// ============================================================================
+
+/**
+ * GET /api/telegram-collector/session/health
+ * Get session health status
+ */
+app.get('/api/telegram-collector/session/health', rateLimiters.lenient, async (req, res) => {
+    try {
+        const health = sessionRotationService.getHealthStatus();
+        res.json({
+            success: true,
+            health
+        });
+    } catch (error: any) {
+        console.error('❌ Error getting session health:', error);
+        res.status(500).json({
+            error: 'Failed to get session health',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/telegram-collector/session/check-health
+ * Trigger manual health check
+ */
+app.post('/api/telegram-collector/session/check-health', rateLimiters.strict, async (req, res) => {
+    try {
+        console.log('🏥 Manual health check triggered via API');
+        const health = await sessionRotationService.checkSessionHealth();
+        res.json({
+            success: true,
+            health,
+            message: 'Health check completed'
+        });
+    } catch (error: any) {
+        console.error('❌ Error during manual health check:', error);
+        res.status(500).json({
+            error: 'Failed to perform health check',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/telegram-collector/session/force-rotation
+ * Force immediate session rotation
+ */
+app.post('/api/telegram-collector/session/force-rotation', rateLimiters.strict, async (req, res) => {
+    try {
+        console.log('🔄 Manual session rotation triggered via API');
+        const result = await sessionRotationService.forceRotation();
+        
+        if (result.success) {
+            res.json({
+                success: true,
+                result,
+                message: 'Session rotation completed successfully'
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                result,
+                error: 'Session rotation failed',
+                message: result.error || 'Unknown error'
+            });
+        }
+    } catch (error: any) {
+        console.error('❌ Error during forced rotation:', error);
+        res.status(500).json({
+            error: 'Failed to force session rotation',
+            message: error.message
         });
     }
 });
@@ -659,7 +738,7 @@ app.post('/api/telegram-collector/channels/:channelId/test', rateLimiters.modera
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`🚀 Telegram Collector Service running on port ${PORT}`);
     console.log(`📡 Health check: http://localhost:${PORT}/health`);
     console.log(`\n✅ MTProto integration enabled with GramJS`);
@@ -675,6 +754,14 @@ app.listen(PORT, () => {
         console.log(`✅ Session found - Ready to collect data`);
     } else {
         console.log(`⏳ No session found - Login required`);
+    }
+    
+    // Initialize session rotation service
+    try {
+        console.log('\n🔄 Initializing Session Rotation Service...');
+        await sessionRotationService.initialize();
+    } catch (error: any) {
+        console.error('❌ Failed to initialize Session Rotation Service:', error.message);
     }
 });
 
