@@ -1,6 +1,6 @@
 import express from 'express';
-import { query } from '../utils/db.js';
-import { logger } from '../utils/logger.js';
+import { query } from '../database/db.js';
+import { logger } from '../services/logger.js';
 import { authenticate } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../middleware/rateLimiter.js';
 import { validateBody, validateParams, validateQuery, validateResponse } from '../middleware/validation.js';
@@ -13,8 +13,19 @@ import {
     collectedDataListResponseSchema,
     uuidParamSchema
 } from '../schemas/dataHubSchemas.js';
+import * as deduplicationService from '../services/deduplicationService.js';
 
 const router = express.Router();
+
+// Debug log to verify route is loaded
+console.log('📦 Collected Data routes module loaded');
+
+// List all registered routes for debugging
+router.stack.forEach((r) => {
+    if (r.route) {
+        console.log(`  Route: ${Object.keys(r.route.methods).join(',').toUpperCase()} ${r.route.path}`);
+    }
+});
 
 /**
  * GET /api/v1/collected-data
@@ -330,6 +341,124 @@ router.put('/:id', authenticate, writeRateLimiter, validateParams(uuidParamSchem
  * DELETE /api/v1/collected-data/:id
  * Delete collected data entry
  */
+/**
+ * GET /api/v1/collected-data/deduplication/stats
+ * Get duplicate statistics
+ */
+router.get('/deduplication/stats', authenticate, readRateLimiter, async (req, res) => {
+    try {
+        const { source_id } = req.query;
+
+        const stats = await deduplicationService.getDuplicateStats(source_id || null);
+        const patterns = await deduplicationService.analyzeDuplicatePatterns(source_id || null);
+
+        res.json({
+            statistics: stats,
+            patterns,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        logger.error('Error getting deduplication stats:', error);
+        res.status(500).json({ 
+            error: 'Failed to get deduplication stats',
+            message: error.message 
+        });
+    }
+});
+
+/**
+ * GET /api/v1/collected-data/deduplication/find
+ * Find duplicate messages
+ */
+router.get('/deduplication/find', authenticate, readRateLimiter, async (req, res) => {
+    try {
+        const { source_id, limit = 100, include_content = 'false' } = req.query;
+
+        const duplicates = await deduplicationService.findDuplicates({
+            sourceId: source_id || null,
+            limit: parseInt(limit),
+            includeContent: include_content === 'true'
+        });
+
+        res.json({
+            duplicates,
+            count: duplicates.length,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        logger.error('Error finding duplicates:', error);
+        res.status(500).json({ 
+            error: 'Failed to find duplicates',
+            message: error.message 
+        });
+    }
+});
+
+/**
+ * POST /api/v1/collected-data/deduplication/remove
+ * Remove duplicate messages
+ */
+router.post('/deduplication/remove', authenticate, writeRateLimiter, async (req, res) => {
+    try {
+        const { source_id, dry_run = true, keep_strategy = 'oldest' } = req.body;
+
+        if (!dry_run && req.body.confirm !== 'DELETE_DUPLICATES') {
+            return res.status(400).json({
+                error: 'Confirmation required',
+                message: 'For actual deletion, set confirm="DELETE_DUPLICATES" in request body'
+            });
+        }
+
+        const results = await deduplicationService.removeDuplicates({
+            sourceId: source_id || null,
+            dryRun: dry_run,
+            keepStrategy: keep_strategy
+        });
+
+        if (dry_run) {
+            logger.info(`Dry run: would delete ${results.totalRecordsToDelete} duplicates`);
+        } else {
+            logger.info(`Deleted ${results.totalRecordsToDelete} duplicates`);
+        }
+
+        res.json(results);
+
+    } catch (error) {
+        logger.error('Error removing duplicates:', error);
+        res.status(500).json({ 
+            error: 'Failed to remove duplicates',
+            message: error.message 
+        });
+    }
+});
+
+/**
+ * POST /api/v1/collected-data/deduplication/merge/:contentHash
+ * Merge duplicate messages by content hash
+ */
+router.post('/deduplication/merge/:contentHash', authenticate, writeRateLimiter, async (req, res) => {
+    try {
+        const { contentHash } = req.params;
+
+        const result = await deduplicationService.mergeDuplicates(contentHash);
+
+        if (result.merged) {
+            logger.info(`Merged ${result.totalMerged} duplicates for hash ${contentHash}`);
+        }
+
+        res.json(result);
+
+    } catch (error) {
+        logger.error('Error merging duplicates:', error);
+        res.status(500).json({ 
+            error: 'Failed to merge duplicates',
+            message: error.message 
+        });
+    }
+});
+
 router.delete('/:id', authenticate, writeRateLimiter, validateParams(uuidParamSchema), async (req, res) => {
     try {
         const { id } = req.params;
@@ -409,4 +538,13 @@ router.get('/:id', authenticate, readRateLimiter, validateParams(uuidParamSchema
     }
 });
 
+
+
+// Debug: Log all registered routes
+console.log("📋 Registered routes in collected-data:");
+router.stack.forEach((r) => {
+    if (r.route) {
+        console.log(`  ${Object.keys(r.route.methods).join(",").toUpperCase()} ${r.route.path}`);
+    }
+});
 export default router;
