@@ -1,10 +1,11 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { body, validationResult } from 'express-validator';
 import { query, transaction } from '../database/db.js';
 import { authenticate } from '../middleware/auth.js';
 import { logger } from '../services/logger.js';
+import { validateBody, validateResponse } from '../middleware/validation.js';
+import { registerBodySchema, loginBodySchema, authResponseSchema } from '../schemas/authSchemas.js';
 
 const router = express.Router();
 
@@ -30,19 +31,9 @@ const generateRefreshToken = (userId) => {
 // REGISTER
 // ============================================================================
 
-router.post('/register', [
-  body('email').isEmail().normalizeEmail(),
-  body('username').isLength({ min: 3 }).trim(),
-  body('password').isLength({ min: 6 }),
-  body('fullName').optional().trim()
-], async (req, res) => {
+router.post('/register', validateBody(registerBodySchema), validateResponse(authResponseSchema), async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email, username, password, fullName } = req.body;
+    const { email, username, password, full_name } = req.validatedBody;
 
     // Check if user exists
     const existingUser = await query(
@@ -64,7 +55,7 @@ router.post('/register', [
         `INSERT INTO users (email, username, password_hash, full_name)
          VALUES ($1, $2, $3, $4)
          RETURNING id, email, username, full_name, role, created_at`,
-        [email, username, passwordHash, fullName || username]
+        [email, username, passwordHash, full_name || username]
       );
 
       const user = userResult.rows[0];
@@ -103,8 +94,8 @@ router.post('/register', [
       refreshToken
     });
   } catch (error) {
-    logger.error('Register error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    logger.error('Registration error:', error);
+    res.status(500).json({ error: 'Failed to register user' });
   }
 });
 
@@ -112,35 +103,23 @@ router.post('/register', [
 // LOGIN
 // ============================================================================
 
-router.post('/login', [
-  body('username').trim().notEmpty(),
-  body('password').notEmpty()
-], async (req, res) => {
+router.post('/login', validateBody(loginBodySchema), validateResponse(authResponseSchema), async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { username, password } = req.body;
+    const { username, password } = req.validatedBody;
 
     // Find user by username or email
-    const result = await query(
-      `SELECT id, email, username, password_hash, full_name, role, is_active
+    const userResult = await query(
+      `SELECT id, email, username, full_name, password_hash, role, created_at
        FROM users 
        WHERE (username = $1 OR email = $1)`,
       [username]
     );
 
-    if (result.rows.length === 0) {
+    if (userResult.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const user = result.rows[0];
-
-    if (!user.is_active) {
-      return res.status(401).json({ error: 'Account is inactive' });
-    }
+    const user = userResult.rows[0];
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
@@ -153,7 +132,7 @@ router.post('/login', [
     const refreshToken = generateRefreshToken(user.id);
 
     // Save session
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
     await query(
       `INSERT INTO user_sessions (user_id, token, refresh_token, expires_at, ip_address, user_agent)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -166,9 +145,6 @@ router.post('/login', [
       [user.id]
     );
 
-    // Remove password hash from response
-    delete user.password_hash;
-
     res.json({
       user,
       token,
@@ -176,7 +152,7 @@ router.post('/login', [
     });
   } catch (error) {
     logger.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Failed to login' });
   }
 });
 

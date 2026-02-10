@@ -20,7 +20,7 @@ const MarketStatsWidget: React.FC = () => {
         totalVolume24h: number;
         totalMarketCap: number;
     } | null>(null);
-    
+
     useEffect(() => {
         const fetchStats = async () => {
             try {
@@ -35,7 +35,7 @@ const MarketStatsWidget: React.FC = () => {
         const interval = setInterval(fetchStats, 60000);
         return () => clearInterval(interval);
     }, []);
-    
+
     const formatVolume = (volume: number): string => {
         if (volume >= 1000000000000) {
             return `$${(volume / 1000000000000).toFixed(2)}T`;
@@ -46,7 +46,7 @@ const MarketStatsWidget: React.FC = () => {
         }
         return `$${volume.toFixed(2)}`;
     };
-    
+
     return (
         <div className="bg-gradient-to-br from-[#1c1e2f] to-[#1a1c2a] border border-gray-700/50 rounded-xl p-5 shadow-lg">
             <div className="flex items-center gap-2 mb-4">
@@ -94,14 +94,14 @@ const SummaryCard: React.FC<{ title: string; value: string | number; icon: React
         green: 'from-green-500/20 to-green-600/10 border-green-500/30 text-green-300',
         red: 'from-red-500/20 to-red-600/10 border-red-500/30 text-red-300',
     };
-    
+
     const iconBgClasses = {
         purple: 'bg-gradient-to-br from-purple-500/30 to-purple-600/20',
         yellow: 'bg-gradient-to-br from-yellow-500/30 to-yellow-600/20',
         green: 'bg-gradient-to-br from-green-500/30 to-green-600/20',
         red: 'bg-gradient-to-br from-red-500/30 to-red-600/20',
     };
-    
+
     return (
         <div className={`bg-gradient-to-br from-[#1c1e2f] to-[#1a1c2a] border ${colorClasses[color as keyof typeof colorClasses]} rounded-xl p-5 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02]`}>
             <div className="flex items-center justify-between">
@@ -121,12 +121,12 @@ const FearAndGreedGauge: React.FC<{ value: number; agents?: AIAgent[]; fearGreed
     const { t } = useLanguage();
     const percentage = value / 100;
     const strokeDashoffset = 282.7 * (1 - (percentage * 0.5)); // Semicircle
-    
+
     let colorClass = 'text-green-500';
     let bgGradient = 'from-green-500/20 to-emerald-500/10';
     let borderColor = 'border-green-500/30';
     let label = t('greed') || 'Greed';
-    
+
     if (value < 25) {
         colorClass = 'text-red-500';
         bgGradient = 'from-red-500/20 to-rose-500/10';
@@ -140,7 +140,7 @@ const FearAndGreedGauge: React.FC<{ value: number; agents?: AIAgent[]; fearGreed
     }
 
     // Filter relevant agents (Sentiment Analysis, Market Intelligence, Fundamental Analysis)
-    const relevantAgents = agents.filter(agent => 
+    const relevantAgents = agents.filter(agent =>
         agent.id === '3' || // Sentiment Analysis
         agent.id === '13' || // Market Intelligence
         agent.id === '12' // Fundamental Analysis
@@ -160,7 +160,7 @@ const FearAndGreedGauge: React.FC<{ value: number; agents?: AIAgent[]; fearGreed
         if (agent.status === 'training') return 'training';
         return 'inactive';
     };
-    
+
     return (
         <div className={`bg-gradient-to-br from-[#1c1e2f] to-[#1a1c2a] border ${borderColor} rounded-xl p-5 shadow-lg h-full flex flex-col`}>
             <div className="flex items-center justify-between w-full mb-3">
@@ -173,7 +173,7 @@ const FearAndGreedGauge: React.FC<{ value: number; agents?: AIAgent[]; fearGreed
                     <h3 className="text-sm font-semibold text-gray-300">{t('fear_and_greed')}</h3>
                 </div>
             </div>
-            
+
             <div className="relative flex-1 flex items-center justify-center mb-4">
                 <svg className="h-32 w-32 transform" viewBox="0 0 100 100">
                     <defs>
@@ -203,9 +203,9 @@ const FearAndGreedGauge: React.FC<{ value: number; agents?: AIAgent[]; fearGreed
                         {relevantAgents.map(agent => {
                             const status = getAgentStatus(agent);
                             const statusColor = status === 'active' ? 'bg-green-500/20 text-green-400 border-green-500/30' :
-                                                status === 'training' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
-                                                'bg-gray-500/20 text-gray-400 border-gray-500/30';
-                            
+                                status === 'training' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                                    'bg-gray-500/20 text-gray-400 border-gray-500/30';
+
                             // Get agent output/result
                             const getAgentOutput = (agent: AIAgent) => {
                                 if (agent.id === '3') {
@@ -281,7 +281,7 @@ const FearAndGreedGauge: React.FC<{ value: number; agents?: AIAgent[]; fearGreed
                             };
 
                             const output = getAgentOutput(agent);
-                            
+
                             return (
                                 <div key={agent.id} className={`p-3 rounded-lg border ${statusColor} text-xs transition-all duration-200 hover:shadow-lg`}>
                                     <div className="flex items-center justify-between mb-2">
@@ -290,8 +290,8 @@ const FearAndGreedGauge: React.FC<{ value: number; agents?: AIAgent[]; fearGreed
                                             <div className={`w-2 h-2 rounded-full ${status === 'active' ? 'bg-green-400 animate-pulse shadow-[0_0_4px_rgba(74,222,128,0.8)]' : status === 'training' ? 'bg-yellow-400 animate-pulse shadow-[0_0_4px_rgba(250,204,21,0.8)]' : 'bg-gray-500'}`}></div>
                                             <span className="text-[10px] font-semibold text-gray-300">
                                                 {status === 'active' ? (t('active') || 'Active') :
-                                                 status === 'training' ? (t('training') || 'Training') :
-                                                 (t('inactive') || 'Inactive')}
+                                                    status === 'training' ? (t('training') || 'Training') :
+                                                        (t('inactive') || 'Inactive')}
                                             </span>
                                         </div>
                                     </div>
@@ -318,7 +318,7 @@ const MoversList: React.FC<{ title: string; data: MarketMover[]; isGainers: bool
     const bgGradient = isGainers ? 'from-green-500/20 to-emerald-500/10' : 'from-red-500/20 to-rose-500/10';
     const borderColor = isGainers ? 'border-green-500/30' : 'border-red-500/30';
     const iconBg = isGainers ? 'bg-green-500/20' : 'bg-red-500/20';
-    
+
     return (
         <div className={`bg-gradient-to-br from-[#1c1e2f] to-[#1a1c2a] border ${borderColor} rounded-xl p-5 shadow-lg h-full`}>
             <div className="flex items-center gap-2 mb-4">
@@ -337,8 +337,8 @@ const MoversList: React.FC<{ title: string; data: MarketMover[]; isGainers: bool
             </div>
             <div className="space-y-2">
                 {data.map(item => (
-                    <div 
-                        key={item.id} 
+                    <div
+                        key={item.id}
                         className="flex justify-between items-center p-3 bg-gray-800/30 rounded-lg hover:bg-gray-800/50 transition-all duration-200 group"
                     >
                         <div className="flex-1 min-w-0">
@@ -355,7 +355,7 @@ const MoversList: React.FC<{ title: string; data: MarketMover[]; isGainers: bool
     );
 }
 
-const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActiveView}) => {
+const Favorites: React.FC<{ setActiveView: (view: string) => void }> = ({ setActiveView }) => {
     const { t } = useLanguage();
     const [isLoading, setIsLoading] = useState(true);
     const [data, setData] = useState<FavoritesPageData | null>(null);
@@ -375,42 +375,42 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
     // 🚀 WebSocket for Real-time Price Updates (TEMPORARILY DISABLED - using polling instead)
     // Token: align with rest of app (titan_token), fallback to sessionStorage, optional for cookie-based auth
     const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token') || undefined;
-    
+
     // 🔒 Dynamic WebSocket URL: Use WSS for HTTPS, WS for HTTP
     const getWebSocketUrl = () => {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host; // includes port if present
         return `${protocol}//${host}/ws/favorites`;
     };
-    
+
     // TEMPORARILY DISABLED WebSocket - using polling instead until Cloudflare WebSocket is configured
     const { isConnected, isConnecting, error: wsError } = useWebSocket({
         url: getWebSocketUrl(),
         token: authToken,
-        autoConnect: false, // DISABLED - was true
+        autoConnect: true, // ENABLED - was false
         onMessage: (message: WebSocketMessage) => {
             if (message.type === 'price_update' && message.data) {
                 console.log('💹 Real-time price update:', message.data);
-                
+
                 // Update prices in real-time
                 setData(prevData => {
                     if (!prevData) return prevData;
-                    
+
                     const updatedFavorites = prevData.favorites.map(fav => {
                         // Find matching price update
                         const priceUpdate = message.data.prices?.find(
                             (p: any) => p.symbol === fav.symbol || p.asset_id === fav.id
                         );
-                        
+
                         if (priceUpdate) {
                             // Track price change direction for animation
                             const priceChanged = priceUpdate.price !== fav.price;
                             const priceDirection: 'up' | 'down' | null = priceUpdate.price > fav.price ? 'up' : priceUpdate.price < fav.price ? 'down' : null;
-                            
+
                             // Build price history (last 20 prices)
                             const existingHistory = fav.priceHistory || [];
                             const newHistory = [...existingHistory, priceUpdate.price].slice(-20);
-                            
+
                             return {
                                 ...fav,
                                 price: priceUpdate.price,
@@ -424,7 +424,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                         }
                         return fav;
                     });
-                    
+
                     return {
                         ...prevData,
                         favorites: updatedFavorites,
@@ -449,16 +449,16 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
         try {
             // Fetch favorites from backend
             const backendFavorites = await favoritesService.getAllFavorites();
-            
+
             // Fetch full page data (for catalog, gainers, losers, prices)
             const favoritesData = await api.fetchFavoritesPageData();
-            
+
             // Merge backend favorites with price data
             const mergedFavorites: FavoriteItem[] = backendFavorites.map(fav => {
                 const existing = favoritesData.favorites.find(
                     f => f.id === fav.asset_id || f.symbol === fav.symbol
                 );
-                
+
                 return {
                     id: fav.asset_id,
                     symbol: fav.symbol,
@@ -473,7 +473,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                     _priceUpdateTime: existing?._priceUpdateTime
                 };
             });
-            
+
             // Update state
             setData({
                 ...favoritesData,
@@ -492,18 +492,18 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                 console.log('🔄 Fetching favorites from backend...');
                 await refreshFavorites();
                 console.log('✅ Favorites loaded successfully');
-                
+
                 // Fetch AI Agents
                 try {
                     const agents = await api.fetchAIAgents();
                     setAiAgents(agents);
-                    
+
                     // Try to get Fear & Greed Index from Sentiment Analysis Agent
                     const sentimentAgent = agents.find(a => a.id === '3');
                     if (sentimentAgent?.lastSentimentAnalysis?.marketContext) {
                         const fgIndex = sentimentAgent.lastSentimentAnalysis.marketContext.fearGreedIndex;
-                        const fgLabel = sentimentAgent.lastSentimentAnalysis.marketContext.fearGreedLabel || 
-                                       (fgIndex < 25 ? 'Fear' : fgIndex < 45 ? 'Neutral' : 'Greed');
+                        const fgLabel = sentimentAgent.lastSentimentAnalysis.marketContext.fearGreedLabel ||
+                            (fgIndex < 25 ? 'Fear' : fgIndex < 45 ? 'Neutral' : 'Greed');
                         if (fgIndex !== undefined) {
                             setFearGreedIndex({ index: fgIndex, label: fgLabel });
                         }
@@ -511,7 +511,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                 } catch (error) {
                     console.warn('⚠️ Failed to load AI agents:', error);
                 }
-                
+
                 // Fetch Fear & Greed Index directly if not available from agent
                 const currentFearGreed = fearGreedIndex;
                 if (!currentFearGreed) {
@@ -523,9 +523,9 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                             if (entry) {
                                 const value = parseInt(entry.value || '50', 10);
                                 const classification = entry.value_classification || 'Neutral';
-                                setFearGreedIndex({ 
-                                    index: value, 
-                                    label: classification 
+                                setFearGreedIndex({
+                                    index: value,
+                                    label: classification
                                 });
                             }
                         }
@@ -556,27 +556,27 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                     // Use id if it's a MEXC symbol, otherwise construct from symbol
                     return fav.id.includes('USDT') ? fav.id : `${fav.symbol}USDT`;
                 });
-                
+
                 // Update only prices
                 const priceMap = await api.updateWatchlistPrices(symbols);
-                
+
                 // Update state with new prices
                 setData(prevData => {
                     if (!prevData) return prevData;
-                    
+
                     const updatedFavorites = prevData.favorites.map(fav => {
                         const mexcSymbol = fav.id.includes('USDT') ? fav.id : `${fav.symbol}USDT`;
                         const priceData = priceMap.get(mexcSymbol);
-                        
+
                         if (priceData) {
                             // Track price change direction for animation
                             const priceChanged = priceData.price !== fav.price;
                             const priceDirection: 'up' | 'down' | null = priceData.price > fav.price ? 'up' : priceData.price < fav.price ? 'down' : null;
-                            
+
                             // Build price history (last 20 prices)
                             const existingHistory = fav.priceHistory || [];
                             const newHistory = [...existingHistory, priceData.price].slice(-20); // Keep last 20 prices
-                            
+
                             return {
                                 ...fav,
                                 price: priceData.price,
@@ -590,14 +590,14 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                         }
                         return fav;
                     });
-                    
+
                     // Update summary based on new prices
                     const updatedSummary = {
                         ...prevData.summary,
                         gainers: updatedFavorites.filter(f => f.change24h > 0).length,
                         decliners: updatedFavorites.filter(f => f.change24h < 0).length,
                     };
-                    
+
                     return {
                         ...prevData,
                         favorites: updatedFavorites,
@@ -608,8 +608,8 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
             } catch (error) {
                 console.warn('⚠️ Failed to update prices:', error);
             }
-        }, 5000); // Update every 5 seconds
-        
+        }, isConnected ? 30000 : 5000); // 30s fallback if connected, 5s if polling only
+
         return () => clearInterval(priceUpdateInterval);
     }, [data?.favorites.length]); // Re-run only when favorites count changes
 
@@ -618,15 +618,15 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
         const timeout = setTimeout(() => setStatus(null), 4000);
         return () => clearTimeout(timeout);
     }, [status]);
-    
+
     const handleAddFavorite = async (asset: CryptoAsset) => {
         try {
             // Add to backend
             await favoritesService.addFavorite(asset.id, asset.symbol, asset.name);
-            
+
             // Refresh data
             await refreshFavorites();
-            
+
             setStatus({ type: 'success', text: t('favorite_added', { asset: asset.symbol }) });
             setIsAddModalOpen(false); // Close modal after successful add
         } catch (error) {
@@ -639,10 +639,10 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
         try {
             // Remove from backend by asset ID
             await favoritesService.removeFavoriteByAssetId(item.id);
-            
+
             // Refresh data
             await refreshFavorites();
-            
+
             setStatus({ type: 'success', text: t('favorite_removed', { asset: item.symbol }) });
         } catch (error) {
             console.error('Failed to remove favorite', error);
@@ -717,7 +717,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
             }
 
             if (typeof aValue === 'string' && typeof bValue === 'string') {
-                return sortOrder === 'asc' 
+                return sortOrder === 'asc'
                     ? aValue.localeCompare(bValue)
                     : bValue.localeCompare(aValue);
             } else {
@@ -729,7 +729,7 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
 
         return items;
     }, [data?.favorites, searchTerm, sortBy, sortOrder, filterBy]);
-    
+
     const filteredItems = filteredAndSortedItems;
 
     if (isLoading) {
@@ -744,30 +744,27 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
 
     return (
         <div className="space-y-6">
-             {status && (
+            {status && (
                 <div
-                    className={`rounded-lg border px-4 py-3 text-sm ${
-                        status.type === 'success'
-                            ? 'border-green-500/40 bg-green-500/10 text-green-300'
-                            : 'border-red-500/40 bg-red-500/10 text-red-300'
-                    }`}
+                    className={`rounded-lg border px-4 py-3 text-sm ${status.type === 'success'
+                        ? 'border-green-500/40 bg-green-500/10 text-green-300'
+                        : 'border-red-500/40 bg-red-500/10 text-red-300'
+                        }`}
                 >
                     {status.text}
                 </div>
             )}
-            
+
             {/* 🚀 NEW: WebSocket Connection Indicator */}
             <div className="flex items-center justify-end gap-2 text-xs">
-                <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-                    isConnected ? 'bg-green-500/20 text-green-400' : 
-                    isConnecting ? 'bg-yellow-500/20 text-yellow-400' : 
-                    'bg-red-500/20 text-red-400'
-                }`}>
-                    <div className={`w-2 h-2 rounded-full ${
-                        isConnected ? 'bg-green-400 animate-pulse' : 
-                        isConnecting ? 'bg-yellow-400 animate-pulse' : 
-                        'bg-red-400'
-                    }`}></div>
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${isConnected ? 'bg-green-500/20 text-green-400' :
+                    isConnecting ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-red-500/20 text-red-400'
+                    }`}>
+                    <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400 animate-pulse' :
+                        isConnecting ? 'bg-yellow-400 animate-pulse' :
+                            'bg-red-400'
+                        }`}></div>
                     <span>
                         {isConnected ? 'Live' : isConnecting ? 'Connecting...' : 'Disconnected'}
                     </span>
@@ -776,15 +773,15 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                     <span className="text-red-400">{wsError}</span>
                 )}
             </div>
-            
-             <div className="flex flex-wrap justify-between items-center gap-4">
+
+            <div className="flex flex-wrap justify-between items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">{t('favorites_list')}</h1>
                     <p className="text-gray-400 mt-1 text-sm">{t('favorites_desc')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <button 
-                        onClick={() => setShowAnalytics(!showAnalytics)} 
+                    <button
+                        onClick={() => setShowAnalytics(!showAnalytics)}
                         className="group relative bg-gradient-to-r from-blue-600 via-blue-600 to-cyan-600 hover:from-blue-700 hover:via-blue-700 hover:to-cyan-700 text-white font-medium py-2 px-4 rounded-lg flex items-center space-x-2 shadow-md hover:shadow-lg hover:shadow-blue-500/50 transition-all duration-300 hover:scale-105 active:scale-95 overflow-hidden text-sm"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
@@ -795,8 +792,8 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                             <span className="relative z-10">{showAnalytics ? t('show_favorites') || 'Show Favorites' : t('show_analytics') || 'Show Analytics'}</span>
                         </div>
                     </button>
-                    <button 
-                        onClick={() => setIsAddModalOpen(true)} 
+                    <button
+                        onClick={() => setIsAddModalOpen(true)}
                         className="group relative bg-gradient-to-r from-purple-600 via-purple-600 to-pink-600 hover:from-purple-700 hover:via-purple-700 hover:to-pink-700 text-white font-medium py-2 px-4 rounded-lg flex items-center space-x-2 shadow-md hover:shadow-lg hover:shadow-purple-500/50 transition-all duration-300 hover:scale-105 active:scale-95 overflow-hidden text-sm"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
@@ -809,228 +806,228 @@ const Favorites: React.FC<{setActiveView: (view: string) => void}> = ({setActive
                     </button>
                 </div>
             </div>
-            
+
             {/* Conditional Rendering: Analytics or Favorites List */}
             {showAnalytics ? (
                 <FavoritesAnalytics />
             ) : (
                 <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <SummaryCard 
-                    title={t('total_items')} 
-                    value={summary.totalItems} 
-                    color="purple"
-                    icon={<svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>} 
-                />
-                <SummaryCard 
-                    title={t('active_alerts')} 
-                    value={summary.activeAlerts} 
-                    color="yellow"
-                    icon={<svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>} 
-                />
-                <SummaryCard 
-                    title={t('gainers')} 
-                    value={summary.gainers} 
-                    color="green"
-                    icon={<svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>} 
-                />
-                <SummaryCard 
-                    title={t('decliners')} 
-                    value={summary.decliners} 
-                    color="red"
-                    icon={<svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" /></svg>} 
-                />
-            </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <SummaryCard
+                            title={t('total_items')}
+                            value={summary.totalItems}
+                            color="purple"
+                            icon={<svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>}
+                        />
+                        <SummaryCard
+                            title={t('active_alerts')}
+                            value={summary.activeAlerts}
+                            color="yellow"
+                            icon={<svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>}
+                        />
+                        <SummaryCard
+                            title={t('gainers')}
+                            value={summary.gainers}
+                            color="green"
+                            icon={<svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>}
+                        />
+                        <SummaryCard
+                            title={t('decliners')}
+                            value={summary.decliners}
+                            color="red"
+                            icon={<svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" /></svg>}
+                        />
+                    </div>
 
-            <div className="bg-gradient-to-br from-[#1c1e2f] to-[#1a1c2a] border border-gray-700/50 rounded-xl shadow-lg overflow-hidden">
-                <div className="p-5 border-b border-gray-700/50 bg-gradient-to-r from-gray-800/30 to-transparent">
-                    <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
-                        <div className="flex items-center gap-2">
-                            <div className="p-2 bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-lg">
-                                <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
+                    <div className="bg-gradient-to-br from-[#1c1e2f] to-[#1a1c2a] border border-gray-700/50 rounded-xl shadow-lg overflow-hidden">
+                        <div className="p-5 border-b border-gray-700/50 bg-gradient-to-r from-gray-800/30 to-transparent">
+                            <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-lg">
+                                        <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                    </div>
+                                    <h2 className="font-semibold text-white text-lg">{t('real_time_prices')}</h2>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {/* Filter Buttons */}
+                                    <div className="flex gap-1 bg-gray-800/50 rounded-lg p-1 border border-gray-700/50">
+                                        {(['all', 'gainers', 'decliners', 'alerts'] as const).map(filter => (
+                                            <button
+                                                key={filter}
+                                                onClick={() => setFilterBy(filter)}
+                                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${filterBy === filter
+                                                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-lg'
+                                                    : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                                                    }`}
+                                            >
+                                                {t(`filter_${filter}`) || filter}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
-                            <h2 className="font-semibold text-white text-lg">{t('real_time_prices')}</h2>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {/* Filter Buttons */}
-                            <div className="flex gap-1 bg-gray-800/50 rounded-lg p-1 border border-gray-700/50">
-                                {(['all', 'gainers', 'decliners', 'alerts'] as const).map(filter => (
-                                    <button
-                                        key={filter}
-                                        onClick={() => setFilterBy(filter)}
-                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
-                                            filterBy === filter
-                                                ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-lg'
-                                                : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-                                        }`}
+                            <div className="flex flex-wrap gap-4 items-center">
+                                {/* Search */}
+                                <div className="relative flex-1 min-w-[200px]">
+                                    <input
+                                        type="text"
+                                        placeholder={t('search_assets')}
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full bg-gray-800/50 border border-gray-700 rounded-xl py-2 px-4 pl-10 text-sm text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+                                    />
+                                    <svg className="h-4 w-4 text-gray-400 absolute top-1/2 left-3 -translate-y-1/2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>
+                                </div>
+                                {/* Sort */}
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-gray-400 font-medium">{t('sort_by') || 'Sort by:'}</label>
+                                    <select
+                                        value={sortBy}
+                                        onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                                        className="bg-gray-800/50 border border-gray-700 rounded-xl py-2 px-3 text-sm text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+                                        title={t('sort_by') || 'Sort by'}
                                     >
-                                        {t(`filter_${filter}`) || filter}
+                                        <option value="symbol">{t('symbol') || 'Symbol'}</option>
+                                        <option value="price">{t('price') || 'Price'}</option>
+                                        <option value="change24h">{t('change_24h') || '24h Change'}</option>
+                                        <option value="volume">{t('volume') || 'Volume'}</option>
+                                    </select>
+                                    <button
+                                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                                        className="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all"
+                                        title={sortOrder === 'asc' ? t('sort_desc') || 'Descending' : t('sort_asc') || 'Ascending'}
+                                    >
+                                        {sortOrder === 'asc' ? (
+                                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        )}
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto lg:overflow-visible relative">
+                            <table className="w-full text-sm text-left">
+                                <thead className="text-xs text-gray-400 uppercase bg-gray-800/30">
+                                    <tr>
+                                        <th className="px-6 py-4 font-semibold">{t('symbol')}</th>
+                                        <th className="px-6 py-4 font-semibold">{t('price')}</th>
+                                        <th className="px-6 py-4 font-semibold">{t('change_24h')}</th>
+                                        <th className="px-6 py-4 font-semibold">{t('volume')}</th>
+                                        <th className="px-6 py-4 font-semibold">{t('chart') || 'Chart'}</th>
+                                        <th className="px-6 py-4 font-semibold">{t('alert')}</th>
+                                        <th className="px-6 py-4 text-right font-semibold">{t('action')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-gray-200">
+                                    {filteredItems.map(item => {
+                                        const priceChangeDirection = item._priceChangeDirection;
+                                        const isHighlighted = priceChangeDirection && item._priceUpdateTime && (Date.now() - item._priceUpdateTime) < 2000;
+
+                                        return (
+                                            <tr key={item.id} className="border-b border-gray-800/50 hover:bg-gradient-to-r hover:from-gray-800/30 hover:to-transparent transition-all duration-200 group">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-white">{item.symbol}</span>
+                                                        <span className="text-gray-400 font-normal text-xs">{item.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className={`px-6 py-4 font-semibold relative ${isHighlighted && priceChangeDirection === 'up' ? 'price-up-animation' : isHighlighted && priceChangeDirection === 'down' ? 'price-down-animation' : ''}`}>
+                                                    <span className="text-white">${item.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                </td>
+                                                <td className={`px-6 py-4 font-semibold ${item.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                    <span className="inline-flex items-center gap-1">
+                                                        {item.change24h >= 0 ? (
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                                                            </svg>
+                                                        )}
+                                                        {item.change24h >= 0 ? '+' : ''}{item.change24h.toFixed(2)}%
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-300">{item.volume}</td>
+                                                <td className="px-6 py-4">
+                                                    <MiniChart
+                                                        prices={item.priceHistory || []}
+                                                        change24h={item.change24h || 0}
+                                                    />
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {item.hasAlert && (
+                                                        <div className="inline-flex items-center justify-center w-8 h-8 bg-yellow-500/20 rounded-lg">
+                                                            <svg className="h-4 w-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" /></svg>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <ActionMenu
+                                                        item={item}
+                                                        onSetAlert={() => handleSetAlert(item)}
+                                                        onTrade={() => setActiveView('trades')}
+                                                        onRemove={() => handleRemoveFavorite(item)}
+                                                    />
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <FearAndGreedGauge
+                                value={fearGreedIndex?.index || 50}
+                                agents={aiAgents}
+                                fearGreedData={fearGreedIndex || undefined}
+                            />
+                            <MoversList title={t('top_gainers')} data={data.gainers} isGainers={true} />
+                            <MoversList title={t('top_losers')} data={data.losers} isGainers={false} />
+                            <MarketStatsWidget />
+                        </div>
+                        <div className="bg-gradient-to-br from-[#1c1e2f] to-[#1a1c2a] border border-gray-700/50 rounded-xl p-5 shadow-lg">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="p-2 bg-gradient-to-br from-orange-500/20 to-orange-600/10 rounded-lg">
+                                    <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-sm font-semibold text-gray-300">{t('trending_coins')}</h3>
+                            </div>
+                            <div className="space-y-2">
+                                {data.trending.map(item => (
+                                    <div
+                                        key={item.id}
+                                        className="flex justify-between items-center p-3 bg-gray-800/30 rounded-lg hover:bg-gray-800/50 transition-all duration-200 group"
+                                    >
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-bold text-white truncate">{item.symbol}</p>
+                                            <p className="text-xs text-gray-400 truncate">{item.name}</p>
+                                        </div>
+                                        <div className="text-right ml-3">
+                                            <p className={`font-bold text-lg ${item.change >= 0 ? 'text-green-400' : 'text-red-400'} drop-shadow-lg`}>
+                                                {item.change > 0 ? '+' : ''}{item.change.toFixed(2)}%
+                                            </p>
+                                        </div>
+                                    </div>
                                 ))}
                             </div>
                         </div>
                     </div>
-                    <div className="flex flex-wrap gap-4 items-center">
-                        {/* Search */}
-                        <div className="relative flex-1 min-w-[200px]">
-                            <input 
-                                type="text"
-                                placeholder={t('search_assets')}
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full bg-gray-800/50 border border-gray-700 rounded-xl py-2 px-4 pl-10 text-sm text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
-                            />
-                            <svg className="h-4 w-4 text-gray-400 absolute top-1/2 left-3 -translate-y-1/2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>
-                        </div>
-                        {/* Sort */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-xs text-gray-400 font-medium">{t('sort_by') || 'Sort by:'}</label>
-                            <select
-                                value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                                className="bg-gray-800/50 border border-gray-700 rounded-xl py-2 px-3 text-sm text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
-                                title={t('sort_by') || 'Sort by'}
-                            >
-                                <option value="symbol">{t('symbol') || 'Symbol'}</option>
-                                <option value="price">{t('price') || 'Price'}</option>
-                                <option value="change24h">{t('change_24h') || '24h Change'}</option>
-                                <option value="volume">{t('volume') || 'Volume'}</option>
-                            </select>
-                            <button
-                                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                                className="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all"
-                                title={sortOrder === 'asc' ? t('sort_desc') || 'Descending' : t('sort_asc') || 'Ascending'}
-                            >
-                                {sortOrder === 'asc' ? (
-                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                    </svg>
-                                ) : (
-                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div className="overflow-x-auto lg:overflow-visible relative">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs text-gray-400 uppercase bg-gray-800/30">
-                            <tr>
-                                <th className="px-6 py-4 font-semibold">{t('symbol')}</th>
-                                <th className="px-6 py-4 font-semibold">{t('price')}</th>
-                                <th className="px-6 py-4 font-semibold">{t('change_24h')}</th>
-                                <th className="px-6 py-4 font-semibold">{t('volume')}</th>
-                                <th className="px-6 py-4 font-semibold">{t('chart') || 'Chart'}</th>
-                                <th className="px-6 py-4 font-semibold">{t('alert')}</th>
-                                <th className="px-6 py-4 text-right font-semibold">{t('action')}</th>
-                            </tr>
-                        </thead>
-                        <tbody className="text-gray-200">
-                           {filteredItems.map(item => {
-                                const priceChangeDirection = item._priceChangeDirection;
-                                const isHighlighted = priceChangeDirection && item._priceUpdateTime && (Date.now() - item._priceUpdateTime) < 2000;
-                                
-                                return (
-                             <tr key={item.id} className="border-b border-gray-800/50 hover:bg-gradient-to-r hover:from-gray-800/30 hover:to-transparent transition-all duration-200 group">
-                                <td className="px-6 py-4">
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-white">{item.symbol}</span>
-                                        <span className="text-gray-400 font-normal text-xs">{item.name}</span>
-                                    </div>
-                                </td>
-                                <td className={`px-6 py-4 font-semibold relative ${isHighlighted && priceChangeDirection === 'up' ? 'price-up-animation' : isHighlighted && priceChangeDirection === 'down' ? 'price-down-animation' : ''}`}>
-                                    <span className="text-white">${item.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                </td>
-                                <td className={`px-6 py-4 font-semibold ${item.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    <span className="inline-flex items-center gap-1">
-                                        {item.change24h >= 0 ? (
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                            </svg>
-                                        ) : (
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-                                            </svg>
-                                        )}
-                                        {item.change24h >= 0 ? '+' : ''}{item.change24h.toFixed(2)}%
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-gray-300">{item.volume}</td>
-                                <td className="px-6 py-4">
-                                    <MiniChart 
-                                        prices={item.priceHistory || []} 
-                                        change24h={item.change24h || 0}
-                                    />
-                                </td>
-                                <td className="px-6 py-4">
-                                    {item.hasAlert && (
-                                        <div className="inline-flex items-center justify-center w-8 h-8 bg-yellow-500/20 rounded-lg">
-                                            <svg className="h-4 w-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" /></svg>
-                                        </div>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <ActionMenu
-                                        item={item}
-                                        onSetAlert={() => handleSetAlert(item)}
-                                        onTrade={() => setActiveView('trades')}
-                                        onRemove={() => handleRemoveFavorite(item)}
-                                    />
-                                </td>
-                            </tr>
-                           )})}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                   <FearAndGreedGauge 
-                       value={fearGreedIndex?.index || 50} 
-                       agents={aiAgents}
-                       fearGreedData={fearGreedIndex || undefined}
-                   />
-                   <MoversList title={t('top_gainers')} data={data.gainers} isGainers={true} />
-                   <MoversList title={t('top_losers')} data={data.losers} isGainers={false} />
-                   <MarketStatsWidget />
-                </div>
-                 <div className="bg-gradient-to-br from-[#1c1e2f] to-[#1a1c2a] border border-gray-700/50 rounded-xl p-5 shadow-lg">
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="p-2 bg-gradient-to-br from-orange-500/20 to-orange-600/10 rounded-lg">
-                            <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                            </svg>
-                        </div>
-                        <h3 className="text-sm font-semibold text-gray-300">{t('trending_coins')}</h3>
-                    </div>
-                    <div className="space-y-2">
-                         {data.trending.map(item => (
-                            <div 
-                                key={item.id} 
-                                className="flex justify-between items-center p-3 bg-gray-800/30 rounded-lg hover:bg-gray-800/50 transition-all duration-200 group"
-                            >
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-bold text-white truncate">{item.symbol}</p>
-                                    <p className="text-xs text-gray-400 truncate">{item.name}</p>
-                                </div>
-                                <div className="text-right ml-3">
-                                    <p className={`font-bold text-lg ${item.change >= 0 ? 'text-green-400' : 'text-red-400'} drop-shadow-lg`}>
-                                        {item.change > 0 ? '+' : ''}{item.change.toFixed(2)}%
-                                    </p>
-                                </div>
-                            </div>
-                         ))}
-                    </div>
-                </div>
-            </div>
-            </>
+                </>
             )}
-            
+
             {isAddModalOpen && data && (
                 <AddFavoriteModal
                     onClose={() => setIsAddModalOpen(false)}

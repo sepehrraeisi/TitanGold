@@ -6,10 +6,11 @@ import AIAgents from './ai/AIAgents.tsx';
 import TrainingCenter from './ai/TrainingCenter.tsx';
 import AnalyticsDashboard from './ai/AnalyticsDashboard.tsx';
 import APIConfig from './ai/APIConfig.tsx';
+import TopicRouting from './ai/TopicRouting.tsx';
 import OfflineIndicator, { CachedDataBadge, useOnlineStatus } from './OfflineIndicator';
 import * as api from '../services/api.ts';
 
-type AITab = 'manager' | 'agents' | 'training' | 'analytics' | 'config';
+type AITab = 'manager' | 'agents' | 'training' | 'analytics' | 'config' | 'topic_routing';
 
 type Props = {
   onNavigate?: OnNavigateHandler;
@@ -58,6 +59,8 @@ const AICenter: React.FC<Props> = ({ onNavigate }) => {
         return <AnalyticsDashboard />;
       case 'config':
         return <APIConfig onNavigate={onNavigate} />;
+      case 'topic_routing':
+        return <TopicRouting />;
       default:
         return null;
     }
@@ -69,13 +72,14 @@ const AICenter: React.FC<Props> = ({ onNavigate }) => {
     { id: 'training', label: t('ai_training') },
     { id: 'analytics', label: t('ai_analytics') },
     { id: 'config', label: t('ai_config') },
+    { id: 'topic_routing', label: 'Topic Routing' },
   ];
 
   return (
     <div className="space-y-6">
       {/* Offline Mode Indicator Banner (FRONTEND-008) */}
       <OfflineIndicator />
-      
+
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex flex-wrap justify-between items-center gap-4">
           <div>
@@ -93,11 +97,10 @@ const AICenter: React.FC<Props> = ({ onNavigate }) => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === tab.id
+                className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
                     ? 'border-purple-500 text-purple-400'
                     : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>

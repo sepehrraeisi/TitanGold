@@ -26,168 +26,168 @@ export interface RecentActivity {
 }
 
 export interface ChatMessage {
-    id: number;
-    sender: 'user' | 'bot';
-    text: string;
-    isTyping?: boolean;
+  id: number;
+  sender: 'user' | 'bot';
+  text: string;
+  isTyping?: boolean;
 }
 
 export interface GroundingSource {
-    web?: {
-        uri: string;
-        title: string;
-    };
+  web?: {
+    uri: string;
+    title: string;
+  };
 }
 
 export interface User {
-    id: string;
-    name: string;
-    email: string;
-    role: 'Admin' | 'Trader' | 'Viewer';
-    password?: string; // For mock auth
+  id: string;
+  name: string;
+  email: string;
+  role: 'Admin' | 'Trader' | 'Viewer' | 'Analyst';
+  password?: string; // For mock auth
 }
 
 export interface Asset {
-    id: string;
-    name: string;
-    symbol: string;
-    amount: number;
-    currentValue: number;
-    change24h: number;
+  id: string;
+  name: string;
+  symbol: string;
+  amount: number;
+  currentValue: number;
+  change24h: number;
 }
 
 export interface Trade {
-    id: string;
-    pair: string;
-    side: 'buy' | 'sell';
-    price: number;
-    amount: number;
-    time: string;
+  id: string;
+  pair: string;
+  side: 'buy' | 'sell';
+  price: number;
+  amount: number;
+  time: string;
 }
 
 export type TradingTimeRange = '1H' | '24H' | '7D' | '1M' | '1Y';
 
 export interface ChartPoint {
-    timestamp: string;
-    value: number;
+  timestamp: string;
+  value: number;
 }
 
 export type ManualTradingStatFormat = 'percent' | 'currency' | 'plain';
 
 export interface ManualTradingStat {
-    id: string;
-    labelKey: string;
-    value: number;
-    format: ManualTradingStatFormat;
-    decimals?: number;
-    showSign?: boolean;
-    subLabelKey?: string;
+  id: string;
+  labelKey: string;
+  value: number;
+  format: ManualTradingStatFormat;
+  decimals?: number;
+  showSign?: boolean;
+  subLabelKey?: string;
 }
 
 export interface ManualTradingChartPoint {
-    timestamp: string;
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-    volume: number;
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
 }
 
 export interface ManualTradingQuickTradeConfig {
-    pair: string;
-    baseAsset: string;
-    quoteAsset: string;
-    price: number;
-    changePercent: number;
-    availableBalance: number;
-    amountPresets: number[];
-    defaultPreset: number;
-    stopLossPercent: number;
-    takeProfitPercent: number;
-    baseAssetPrecision: number;
+  pair: string;
+  baseAsset: string;
+  quoteAsset: string;
+  price: number;
+  changePercent: number;
+  availableBalance: number;
+  amountPresets: number[];
+  defaultPreset: number;
+  stopLossPercent: number;
+  takeProfitPercent: number;
+  baseAssetPrecision: number;
 }
 
 export interface ManualQuickTradeOrder {
-    side: 'buy' | 'sell';
-    amountPercent: number;
-    stopLossPercent?: number;
-    takeProfitPercent?: number;
-    pair?: string; // Trading pair (e.g., 'BTC/USDT')
+  side: 'buy' | 'sell';
+  amountPercent: number;
+  stopLossPercent?: number;
+  takeProfitPercent?: number;
+  pair?: string; // Trading pair (e.g., 'BTC/USDT')
 }
 
 export interface ManualTradingRecommendation {
-    id: string;
-    titleKey: string;
-    descriptionKey: string;
-    type: 'buy' | 'sell' | 'hold';
-    confidence: number;
+  id: string;
+  titleKey: string;
+  descriptionKey: string;
+  type: 'buy' | 'sell' | 'hold';
+  confidence: number;
 }
 
 export interface ManualTradingSentiment {
-    score: number;
-    labelKey: string;
+  score: number;
+  labelKey: string;
 }
 
 export interface ManualTradingStrategy {
-    id: string;
-    nameKey: string;
-    isActive: boolean;
-    performance: number;
+  id: string;
+  nameKey: string;
+  isActive: boolean;
+  performance: number;
 }
 
 export interface ManualTradingPortfolioSlice {
-    id: string;
-    asset: string;
-    percentage: number;
-    color: string;
-    value: number;
+  id: string;
+  asset: string;
+  percentage: number;
+  color: string;
+  value: number;
 }
 
 export interface ManualTradingPerformancePoint {
-    timestamp: string;
-    value: number;
+  timestamp: string;
+  value: number;
 }
 
 export interface ManualTradingRecentTrade {
-    id: string;
-    side: 'buy' | 'sell';
-    asset: string;
-    pair: string;
-    price: number;
-    amount: number;
-    pnl: number;
-    pnlPercent: number;
-    confidence?: number;
-    executedAt: string;
+  id: string;
+  side: 'buy' | 'sell';
+  asset: string;
+  pair: string;
+  price: number;
+  amount: number;
+  pnl: number;
+  pnlPercent: number;
+  confidence?: number;
+  executedAt: string;
 }
 
 export interface ManualTradingPageData {
-    stats: ManualTradingStat[];
-    chart: ManualTradingChartPoint[];
-    quickTrade: ManualTradingQuickTradeConfig;
-    recommendations: ManualTradingRecommendation[];
-    sentiment: ManualTradingSentiment;
-    strategies: ManualTradingStrategy[];
-    portfolio: ManualTradingPortfolioSlice[];
-    performance: ManualTradingPerformancePoint[];
-    recentTrades: ManualTradingRecentTrade[];
-    lastUpdated: string;
+  stats: ManualTradingStat[];
+  chart: ManualTradingChartPoint[];
+  quickTrade: ManualTradingQuickTradeConfig;
+  recommendations: ManualTradingRecommendation[];
+  sentiment: ManualTradingSentiment;
+  strategies: ManualTradingStrategy[];
+  portfolio: ManualTradingPortfolioSlice[];
+  performance: ManualTradingPerformancePoint[];
+  recentTrades: ManualTradingRecentTrade[];
+  lastUpdated: string;
 }
 
 export interface TradingKPI {
-    id: string;
-    labelKey: string;
-    value: string;
-    change?: string;
-    positive: boolean;
+  id: string;
+  labelKey: string;
+  value: string;
+  change?: string;
+  positive: boolean;
 }
 
 export interface TradingDashboardData {
-    kpis: TradingKPI[];
-    trades: Trade[];
-    assets: Asset[];
-    chart: Record<TradingTimeRange, ChartPoint[]>;
-    lastUpdated: string;
+  kpis: TradingKPI[];
+  trades: Trade[];
+  assets: Asset[];
+  chart: Record<TradingTimeRange, ChartPoint[]>;
+  lastUpdated: string;
 }
 
 export interface AIPrediction {
@@ -411,98 +411,98 @@ export interface PortfolioPageData {
 }
 
 export interface RiskMetric {
-    label: string;
-    value: string;
+  label: string;
+  value: string;
 }
 
 export type AnalysisTimeRange = '1W' | '1M' | '3M' | '6M' | '1Y';
 
 export interface AnalysisPerformancePoint {
-    timestamp: string;
-    equity: number;
-    pnl: number;
-    drawdown: number;
+  timestamp: string;
+  equity: number;
+  pnl: number;
+  drawdown: number;
 }
 
 export interface AnalysisStat {
-    id: string;
-    labelKey: string;
-    subLabelKey: string;
-    subLabelParams?: Record<string, string | number>;
-    value: number;
-    format: 'currency' | 'percent' | 'plain' | 'ratio';
-    decimals?: number;
-    prefix?: string;
-    suffix?: string;
-    change?: number;
-    changeFormat?: 'percent' | 'plain';
-    changeDecimals?: number;
-    changeDirection?: 'up' | 'down';
+  id: string;
+  labelKey: string;
+  subLabelKey: string;
+  subLabelParams?: Record<string, string | number>;
+  value: number;
+  format: 'currency' | 'percent' | 'plain' | 'ratio';
+  decimals?: number;
+  prefix?: string;
+  suffix?: string;
+  change?: number;
+  changeFormat?: 'percent' | 'plain';
+  changeDecimals?: number;
+  changeDirection?: 'up' | 'down';
 }
 
 export interface AnalysisDistributionSlice {
-    id: string;
-    labelKey: string;
-    value: number;
-    color: string;
+  id: string;
+  labelKey: string;
+  value: number;
+  color: string;
 }
 
 export interface AnalysisRiskMetric {
-    id: string;
-    labelKey: string;
-    descriptionKey?: string;
-    value: number;
-    format: 'currency' | 'percent' | 'plain' | 'ratio';
-    decimals?: number;
-    prefix?: string;
-    suffix?: string;
-    change?: number;
-    changeFormat?: 'percent' | 'plain';
-    changeDecimals?: number;
-    changeDirection?: 'up' | 'down';
+  id: string;
+  labelKey: string;
+  descriptionKey?: string;
+  value: number;
+  format: 'currency' | 'percent' | 'plain' | 'ratio';
+  decimals?: number;
+  prefix?: string;
+  suffix?: string;
+  change?: number;
+  changeFormat?: 'percent' | 'plain';
+  changeDecimals?: number;
+  changeDirection?: 'up' | 'down';
 }
 
 export interface AnalysisReportTemplate {
-    id: string;
-    format: 'pdf' | 'excel' | 'csv' | 'full';
-    labelKey: string;
-    descriptionKey?: string;
-    isPrimary?: boolean;
-    lastGeneratedAt?: string;
+  id: string;
+  format: 'pdf' | 'excel' | 'csv' | 'full';
+  labelKey: string;
+  descriptionKey?: string;
+  isPrimary?: boolean;
+  lastGeneratedAt?: string;
 }
 
 export interface AnalysisPageData {
-    stats: AnalysisStat[];
-    performance: Record<AnalysisTimeRange, AnalysisPerformancePoint[]>;
-    activeRange: AnalysisTimeRange;
-    distribution: AnalysisDistributionSlice[];
-    riskMetrics: AnalysisRiskMetric[];
-    predictions: SmartPrediction[];
-    trades: PerformanceTrade[];
-    reports: AnalysisReportTemplate[];
-    lastUpdated: string;
+  stats: AnalysisStat[];
+  performance: Record<AnalysisTimeRange, AnalysisPerformancePoint[]>;
+  activeRange: AnalysisTimeRange;
+  distribution: AnalysisDistributionSlice[];
+  riskMetrics: AnalysisRiskMetric[];
+  predictions: SmartPrediction[];
+  trades: PerformanceTrade[];
+  reports: AnalysisReportTemplate[];
+  lastUpdated: string;
 }
 
 export interface SmartPrediction {
-    id: string;
-    symbol: string;
-    trend: 'Bullish' | 'Neutral' | 'Bearish';
-    targetPrice: string;
-    timeframe: string;
-    confidence: number;
-    analysis: string;
+  id: string;
+  symbol: string;
+  trend: 'Bullish' | 'Neutral' | 'Bearish';
+  targetPrice: string;
+  timeframe: string;
+  confidence: number;
+  analysis: string;
 }
 
 export interface PerformanceTrade {
-    id: string;
-    date: string;
-    symbol: string;
-    type: 'BUY' | 'SELL';
-    amount: number;
-    entryPrice: number;
-    exitPrice: number;
-    pnl: number;
-    pnlPercent: number;
+  id: string;
+  date: string;
+  symbol: string;
+  type: 'BUY' | 'SELL';
+  amount: number;
+  entryPrice: number;
+  exitPrice: number;
+  pnl: number;
+  pnlPercent: number;
 }
 
 export interface NewsArticle {
@@ -532,107 +532,107 @@ export interface NewsArticle {
 }
 
 export interface EconomicEvent {
-    id: string;
-    time: string;
-    country: string;
-    event: string;
-    importance: 'high' | 'medium' | 'low';
-    previous: string;
-    forecast: string;
-    actual: string;
+  id: string;
+  time: string;
+  country: string;
+  event: string;
+  importance: 'high' | 'medium' | 'low';
+  previous: string;
+  forecast: string;
+  actual: string;
 }
 
 export interface NewsSummaryStat {
-    id: string;
-    labelKey: string;
-    value: number;
-    delta: number;
-    direction: 'up' | 'down' | 'flat';
-    suffix?: string;
+  id: string;
+  labelKey: string;
+  value: number;
+  delta: number;
+  direction: 'up' | 'down' | 'flat';
+  suffix?: string;
 }
 
 export interface NewsSentimentAsset {
-    id: string;
-    name: string;
-    sentiment: 'Bullish' | 'Bearish' | 'Neutral';
-    change: number;
+  id: string;
+  name: string;
+  sentiment: 'Bullish' | 'Bearish' | 'Neutral';
+  change: number;
 }
 
 export interface NewsSentimentHeatmapCell {
-    id: string;
-    label: string;
-    value: number;
+  id: string;
+  label: string;
+  value: number;
 }
 
 export interface NewsSentimentSnapshot {
-    marketScore: number;
-    bias: 'Bullish' | 'Bearish' | 'Neutral';
-    change: number;
-    trend: 'up' | 'down' | 'flat';
-    trendingAssets: NewsSentimentAsset[];
-    heatmap: NewsSentimentHeatmapCell[];
+  marketScore: number;
+  bias: 'Bullish' | 'Bearish' | 'Neutral';
+  change: number;
+  trend: 'up' | 'down' | 'flat';
+  trendingAssets: NewsSentimentAsset[];
+  heatmap: NewsSentimentHeatmapCell[];
 }
 
 export type NewsAlertSeverity = 'critical' | 'high' | 'medium' | 'low';
 
 export interface NewsAlert {
-    id: string;
-    titleKey: string;
-    descriptionKey: string;
-    severity: NewsAlertSeverity;
-    acknowledged: boolean;
-    relatedArticleId?: string;
-    timestamp: string;
+  id: string;
+  titleKey: string;
+  descriptionKey: string;
+  severity: NewsAlertSeverity;
+  acknowledged: boolean;
+  relatedArticleId?: string;
+  timestamp: string;
 }
 
 export interface NewsSource {
-    id: string;
-    name: string;
-    reliability: number;
-    verified: boolean;
-    isPriority: boolean;
-    lastCheckedAt: string;
+  id: string;
+  name: string;
+  reliability: number;
+  verified: boolean;
+  isPriority: boolean;
+  lastCheckedAt: string;
 }
 
 export type NewsWatchlistItemType = 'asset' | 'macro' | 'defi' | 'custom';
 
 export interface NewsWatchlistItem {
-    id: string;
-    name: string;
-    type: NewsWatchlistItemType;
-    isActive: boolean;
+  id: string;
+  name: string;
+  type: NewsWatchlistItemType;
+  isActive: boolean;
 }
 
 export interface NewsFilterPreset {
-    id: string;
-    nameKey: string;
-    categories: Array<NewsArticle['category'] | 'All'>;
-    sentiments: Array<NewsArticle['sentiment'] | 'All'>;
-    minImpact?: number;
-    sources?: string[];
+  id: string;
+  nameKey: string;
+  categories: Array<NewsArticle['category'] | 'All'>;
+  sentiments: Array<NewsArticle['sentiment'] | 'All'>;
+  minImpact?: number;
+  sources?: string[];
 }
 
 export interface NewsBriefing {
-    title: string;
-    summary: string;
-    highlights: string[];
-    generatedAt: string;
+  title: string;
+  summary: string;
+  highlights: string[];
+  generatedAt: string;
 }
 
 export interface NewsPageData {
-    stats: NewsSummaryStat[];
-    sentiment: NewsSentimentSnapshot;
-    sources: NewsSource[];
-    alerts: NewsAlert[];
-    watchlist: NewsWatchlistItem[];
-    filterPresets: NewsFilterPreset[];
-    activeFilterId: string;
-    articles: NewsArticle[];
-    events: EconomicEvent[];
-    breakingArticleId?: string;
-    pinnedArticleIds?: string[];
-    lastUpdated: string;
-    lastBriefingGeneratedAt?: string;
+  stats: NewsSummaryStat[];
+  sentiment: NewsSentimentSnapshot;
+  sources: NewsSource[];
+  alerts: NewsAlert[];
+  watchlist: NewsWatchlistItem[];
+  filterPresets: NewsFilterPreset[];
+  activeFilterId: string;
+  articles: NewsArticle[];
+  events: EconomicEvent[];
+  breakingArticleId?: string;
+  pinnedArticleIds?: string[];
+  lastUpdated: string;
+  lastBriefingGeneratedAt?: string;
 }
 
 export interface WalletAsset {
@@ -653,42 +653,42 @@ export interface WalletTransaction {
 }
 
 export interface WalletConnector {
-    id: string;
-    name: string;
-    type: 'exchange' | 'wallet' | 'defi';
-    status: 'connected' | 'error' | 'disconnected' | 'syncing';
-    lastSyncedAt: string;
-    descriptionKey: string;
+  id: string;
+  name: string;
+  type: 'exchange' | 'wallet' | 'defi';
+  status: 'connected' | 'error' | 'disconnected' | 'syncing';
+  lastSyncedAt: string;
+  descriptionKey: string;
 }
 
 export interface WalletSecurityControl {
-    id: string;
-    labelKey: string;
-    enabled: boolean;
+  id: string;
+  labelKey: string;
+  enabled: boolean;
 }
 
 export interface WalletPreferences {
-    baseCurrency: string;
-    autoRefreshIntervalMinutes: number;
-    lowBalanceThreshold: number;
-    showZeroBalance: boolean;
+  baseCurrency: string;
+  autoRefreshIntervalMinutes: number;
+  lowBalanceThreshold: number;
+  showZeroBalance: boolean;
 }
 
 export interface WalletStatsOverview {
-    totalAssets: number;
-    activeWallets: number;
-    profit24h: number;
-    coldStorage: number;
+  totalAssets: number;
+  activeWallets: number;
+  profit24h: number;
+  coldStorage: number;
 }
 
 export interface WalletSettingsData {
-    stats: WalletStatsOverview;
-    assets: WalletAsset[];
-    transactions: WalletTransaction[];
-    connectors: WalletConnector[];
-    securityControls: WalletSecurityControl[];
-    preferences: WalletPreferences;
-    lastSyncedAt: string;
+  stats: WalletStatsOverview;
+  assets: WalletAsset[];
+  transactions: WalletTransaction[];
+  connectors: WalletConnector[];
+  securityControls: WalletSecurityControl[];
+  preferences: WalletPreferences;
+  lastSyncedAt: string;
 }
 
 export type ProfileStatus = 'verified' | 'pending' | 'restricted';
@@ -696,160 +696,169 @@ export type ProfileStatus = 'verified' | 'pending' | 'restricted';
 export type ProfileIntegrationType = 'exchange' | 'wallet' | 'ai' | 'messaging';
 
 export interface ProfileMetric {
-    id: string;
-    labelKey: string;
-    value: string;
-    change?: number;
-    direction?: 'up' | 'down';
+  id: string;
+  labelKey: string;
+  value: string;
+  change?: number;
+  direction?: 'up' | 'down';
 }
 
 export interface ProfileIntegration {
-    id: string;
-    nameKey: string;
-    type: ProfileIntegrationType;
-    status: 'connected' | 'error' | 'syncing';
-    lastSyncedAt: string;
+  id: string;
+  nameKey: string;
+  type: ProfileIntegrationType;
+  status: 'connected' | 'error' | 'syncing';
+  lastSyncedAt: string;
 }
 
 export interface ProfileActivityEntry {
-    id: string;
-    timestamp: string;
-    messageKey: string;
-    context?: string;
+  id: string;
+  timestamp: string;
+  messageKey: string;
+  context?: string;
 }
 
 export interface ProfileCommunicationSettings {
-    emailReports: boolean;
-    smsAlerts: boolean;
-    aiSummaries: boolean;
-    tradePush: boolean;
-    weeklyDigest: boolean;
+  emailReports: boolean;
+  smsAlerts: boolean;
+  aiSummaries: boolean;
+  tradePush: boolean;
+  weeklyDigest: boolean;
 }
 
 export interface ProfileDetails {
-    id: string;
-    fullName: string;
-    email: string;
-    username: string;
-    jobTitle: string;
-    phone: string;
-    timezone: string;
-    language: 'en' | 'fa';
-    location: string;
-    status: ProfileStatus;
-    memberSince: string;
-    lastLoginAt: string;
-    avatarUrl?: string;
+  id: string;
+  fullName: string;
+  email: string;
+  username: string;
+  jobTitle: string;
+  phone: string;
+  timezone: string;
+  language: 'en' | 'fa';
+  location: string;
+  status: ProfileStatus;
+  memberSince: string;
+  lastLoginAt: string;
+  avatarUrl?: string;
 }
 
 export interface ProfileSettingsData {
-    profile: ProfileDetails;
-    communications: ProfileCommunicationSettings;
-    metrics: ProfileMetric[];
-    integrations: ProfileIntegration[];
-    activity: ProfileActivityEntry[];
-    lastUpdated: string;
+  profile: ProfileDetails;
+  communications: ProfileCommunicationSettings;
+  metrics: ProfileMetric[];
+  integrations: ProfileIntegration[];
+  activity: ProfileActivityEntry[];
+  lastUpdated: string;
 }
 
 export type ProfileDetailsUpdate = Partial<Pick<ProfileDetails,
-    'fullName' | 'email' | 'jobTitle' | 'phone' | 'timezone' | 'language' | 'location'>>;
+  'fullName' | 'email' | 'jobTitle' | 'phone' | 'timezone' | 'language' | 'location'>>;
 
 export interface ProfilePasswordChangeRequest {
-    currentPassword: string;
-    newPassword: string;
+  currentPassword: string;
+  newPassword: string;
 }
 
 export interface SecurityMethod {
-    id: string;
-    type: 'authenticator' | 'sms' | 'hardware_key';
-    enabled: boolean;
-    lastUsedAt?: string;
-    deviceName?: string;
+  id: string;
+  type: 'authenticator' | 'sms' | 'hardware_key';
+  enabled: boolean;
+  lastUsedAt?: string;
+  deviceName?: string;
 }
 
 export type SecuritySeverity = 'low' | 'medium' | 'high';
 
 export interface SecuritySession {
-    id: string;
-    device: string;
-    location: string;
-    ipAddress: string;
-    lastActiveAt: string;
-    current: boolean;
-    risk: SecuritySeverity;
+  id: string;
+  device: string;
+  location: string;
+  ipAddress: string;
+  lastActiveAt: string;
+  current: boolean;
+  risk: SecuritySeverity;
 }
 
 export interface SecurityEvent {
-    id: string;
-    timestamp: string;
-    titleKey: string;
-    descriptionKey: string;
-    severity: SecuritySeverity;
+  id: string;
+  timestamp: string;
+  titleKey: string;
+  descriptionKey: string;
+  severity: SecuritySeverity;
 }
 
 export interface SecurityAlertSettings {
-    suspiciousLogin: boolean;
-    largeWithdrawal: boolean;
-    newDevice: boolean;
+  suspiciousLogin: boolean;
+  largeWithdrawal: boolean;
+  newDevice: boolean;
 }
 
 export interface SecuritySettingsData {
-    score: number;
-    twoFactor: {
-        enabled: boolean;
-        primaryMethod: SecurityMethod['type'];
-        backupCodesRemaining: number;
-        lastUpdated: string;
-    };
-    methods: SecurityMethod[];
-    sessions: SecuritySession[];
-    events: SecurityEvent[];
-    alerts: SecurityAlertSettings;
-    trustedLocations: string[];
-    lastReviewed: string;
+  score: number;
+  twoFactor: {
+    enabled: boolean;
+    primaryMethod: SecurityMethod['type'];
+    backupCodesRemaining: number;
+    lastUpdated: string;
+  };
+  methods: SecurityMethod[];
+  sessions: SecuritySession[];
+  events: SecurityEvent[];
+  alerts: SecurityAlertSettings;
+  trustedLocations: string[];
+  lastReviewed: string;
 }
 
 export interface ManagedUser {
-    id: string;
-    name: string;
-    email: string;
-    username?: string; // Username for login (derived from email or name)
-    password?: string; // Password hash (stored separately for security)
-    roleKey: string;
-    status: 'active' | 'invited' | 'suspended';
-    lastActiveAt?: string;
-    createdAt: string;
-    twoFactorEnabled: boolean;
-    permissions: string[];
+  id: string;
+  name: string;
+  email: string;
+  username?: string; // Username for login (derived from email or name)
+  password?: string; // Password hash (stored separately for security)
+  roleKey: string;
+  status: 'active' | 'invited' | 'suspended';
+  lastActiveAt?: string;
+  createdAt: string;
+  twoFactorEnabled: boolean;
+  permissions: string[];
 }
 
 export interface UserInvitation {
-    id: string;
-    email: string;
-    roleKey: string;
-    invitedAt: string;
-    invitedBy: string;
-    lastSentAt: string;
+  id: string;
+  email: string;
+  roleKey: string;
+  invitedAt: string;
+  invitedBy: string;
+  lastSentAt: string;
+}
+export interface UserActivity {
+  id: string;
+  userId: string;
+  action: string;
+  details?: string;
+  timestamp: string;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 export interface UserRoleOption {
-    roleKey: string;
-    descriptionKey: string;
-    permissions: string[]; // Add permissions array
-    isCustom?: boolean; // Whether this is a custom role or system role
-    createdAt?: string; // When custom role was created
-    createdBy?: string; // Who created the custom role
+  roleKey: string;
+  descriptionKey: string;
+  permissions: string[]; // Add permissions array
+  isCustom?: boolean; // Whether this is a custom role or system role
+  createdAt?: string; // When custom role was created
+  createdBy?: string; // Who created the custom role
 }
 
 export interface UserManagementData {
-    users: ManagedUser[];
-    invitations: UserInvitation[];
-    availableRoles: UserRoleOption[];
-    defaultRoleKey: string;
-    lastUpdated: string;
-    activityLog?: UserActivity[]; // Activity log for all users
-    registrationEnabled: boolean; // Enable/disable public registration
-    registrationDefaultRole: string; // Default role for new registrations
+  users: ManagedUser[];
+  invitations: UserInvitation[];
+  availableRoles: UserRoleOption[];
+  defaultRoleKey: string;
+  lastUpdated: string;
+  activityLog?: UserActivity[]; // Activity log for all users
+  registrationEnabled: boolean; // Enable/disable public registration
+  registrationDefaultRole: string; // Default role for new registrations
 }
 
 export interface AIAgent {
@@ -858,29 +867,29 @@ export interface AIAgent {
   name: string;
   role: string;
   status: 'active' | 'inactive' | 'training';
-  
+
   // ML-specific metrics (null for rule-based agents like fundamental)
   accuracy?: number | null;
   trainingProgress?: number | null;
   learningTime?: number | null;
   knowledgeSize?: number | null;
-  
+
   // Universal metrics
   decisions: number;
   level: 'Expert' | 'Advanced' | 'Intermediate';
   capabilities: string[];
   lastUpdate: string;
-  
+
   // Fundamental-specific metrics
   totalAnalyses?: number;
   activeHours?: number;
   dataStoredMB?: number;
-  
+
   // Arbitrage-specific metrics
   totalScans?: number;
   opportunitiesFound?: number;
   totalProfitUSDT?: number;
-  
+
   // Technical Analysis Agent specific fields
   technicalAnalysisConfig?: TechnicalAnalysisConfig;
   performanceMetrics?: AgentPerformanceMetrics;
@@ -934,18 +943,7 @@ export interface AIAgent {
   marketIntelligenceConfig?: MarketIntelligenceConfig;
   marketIntelligenceMetrics?: MarketIntelligenceMetrics;
   lastMarketIntelligenceResult?: MarketIntelligenceResult;
-  // Volume Analysis Agent specific fields
-  volumeAnalysisConfig?: VolumeAnalysisConfig;
-  volumeMetrics?: VolumeAnalysisMetrics;
-  lastVolumeAnalysis?: VolumeAnalysisResult;
-  // Timing Agent specific fields
-  timingAnalysisConfig?: TimingAnalysisConfig;
-  timingMetrics?: TimingAnalysisMetrics;
   lastTimingAnalysis?: TimingAnalysisResult;
-  // Volume Analysis Agent specific fields
-  volumeAnalysisConfig?: VolumeAnalysisConfig;
-  volumeMetrics?: VolumeAnalysisMetrics;
-  lastVolumeAnalysis?: VolumeAnalysisResult;
   // Learning and adaptation
   learningData?: {
     mistakes: Array<{
@@ -3277,7 +3275,7 @@ export interface OpportunityRiskAlert {
   action?: string;
 }
 
-export interface EventImpactAnalysis {
+export interface MarketEventImpactAnalysis {
   id: string;
   eventType: 'economic' | 'political' | 'regulatory' | 'corporate' | 'crypto' | 'other';
   title: string;
@@ -3333,7 +3331,7 @@ export interface MarketIntelligenceResult {
   macroTrendSignals?: MacroTrendSignal[];
   flowActivity?: FlowActivityData[];
   opportunityRiskAlerts?: OpportunityRiskAlert[];
-  eventImpacts?: EventImpactAnalysis[];
+  eventImpacts?: MarketEventImpactAnalysis[];
   correlationMatrix?: CorrelationMatrixEntry[];
   heatmapRanking?: HeatmapRanking[];
   notes?: string;
@@ -3732,7 +3730,7 @@ export interface RiskAdjustment {
   confidence: number;
 }
 
-export interface RiskAssessment {
+export interface AdvancedRiskAssessment {
   timestamp: string;
   overallRisk: 'low' | 'medium' | 'high' | 'critical';
   riskScore: number; // 0-100
@@ -3920,6 +3918,8 @@ export interface DecisionEngineState {
     avgConfidence: number;
     avgExecutionTime: number;
   };
+  macroTrendSignals?: MacroTrendSignal[];
+  flowActivity?: FlowActivityData[];
 }
 
 export interface Decision {
@@ -4119,7 +4119,7 @@ export interface TelegramCollectorHealthSummary {
 export interface DataSource {
   id: string;
   name: string;
-  type: 'api' | 'webhook' | 'rss' | 'telegram' | 'website' | 'aggregator' | 'third_party';
+  type: 'api' | 'webhook' | 'rss' | 'web' | 'telegram' | 'website' | 'aggregator' | 'third_party';
   url?: string;
   endpoint?: string;
   category: string;
@@ -4147,6 +4147,10 @@ export interface DataSource {
     timeout?: number;
     retryCount?: number;
     format?: 'json' | 'xml' | 'rss' | 'html' | 'csv';
+    maxDepth?: number;
+    selector?: string;
+    delay?: number;
+    renderJS?: boolean;
   };
   metadata?: {
     description?: string;
@@ -4162,6 +4166,8 @@ export interface DataCategory {
   id: string;
   name: string;
   description?: string;
+  color?: string;
+  icon?: string;
   tags: string[];
   sourceCount: number;
   dataTypes: string[];
@@ -4249,6 +4255,8 @@ export interface DataPipelineSnapshot {
   passed24h: number;
   failed24h: number;
   pending24h: number;
+  totalRecords: number;
+  normalizedPercent: number;
   sources: DataPipelineSourceSnapshot[];
   categories: DataPipelineCategorySnapshot[];
 }
@@ -4507,20 +4515,20 @@ export interface DataHubAdvancedFeatures {
 }
 
 export interface DetectedSourceType {
-    type: DataSource['type'];
-    confidence: number;
-    reason: string;
-    normalizedUrl: string;
-    indicators: string[];
-    contentType?: string;
-    meta?: Record<string, any>;
+  type: DataSource['type'];
+  confidence: number;
+  reason: string;
+  normalizedUrl: string;
+  indicators: string[];
+  contentType?: string;
+  meta?: Record<string, any>;
 }
 
 export interface DetectedSourceRecord extends DetectedSourceType {
-    id: string;
-    originalUrl: string;
-    detectedAt: string;
-    attempts?: string[];
+  id: string;
+  originalUrl: string;
+  detectedAt: string;
+  attempts?: string[];
 }
 
 // Trading Scenario
@@ -4540,12 +4548,12 @@ export interface TradingScenario {
     target: number;
     percentage: number;
   };
-  trades: Trade[];
+  trades: ScenarioTrade[];
   createdAt: string;
   updatedAt: string;
 }
 
-export interface Trade {
+export interface ScenarioTrade {
   id: string;
   symbol: string;
   type: 'buy' | 'sell';
@@ -4558,49 +4566,49 @@ export interface Trade {
 }
 
 export interface AIProvider {
-    id: 'google' | 'anthropic' | 'openai' | 'deepseek';
-    name: string;
-    performance: number;
-    usage: number;
+  id: 'google' | 'anthropic' | 'openai' | 'deepseek';
+  name: string;
+  performance: number;
+  usage: number;
 }
 
 export interface AISystemSummary {
-    totalAgents: number;
-    activeAgents: number;
-    inTraining: number;
-    avgAccuracy: number;
+  totalAgents: number;
+  activeAgents: number;
+  inTraining: number;
+  avgAccuracy: number;
 }
 
 export interface AIManagerOverview {
-    summary: AISystemSummary;
-    providers: AIProvider[];
-    topAgents: Array<Pick<AIAgent, 'id' | 'name' | 'role' | 'accuracy' | 'status'>>;
-    lastUpdated: string;
-    artemis?: ArtemisState;
+  summary: AISystemSummary;
+  providers: AIProvider[];
+  topAgents: Array<Pick<AIAgent, 'id' | 'name' | 'role' | 'accuracy' | 'status'>>;
+  lastUpdated: string;
+  artemis?: ArtemisState;
 }
 
 export interface AIAnalyticsMetrics {
-    realtime: {
-        decisionRate: number;
-        successRate: number;
-        systemUptime: number;
-        agentDistribution: { active: number; training: number; offline: number };
-    };
-    performance: {
-        totalDecisions: number;
-        totalLearningHours: number;
-        avgAccuracy: number;
-        monthlyImprovement: number;
-    };
-    resourceUsage: {
-        cpu: number;
-        gpu: number;
-        memory: number;
-        precision: number[];
-        recall: number[];
-    };
-    agentMatrix: Array<{ id: string; name: string; accuracy: number; successRate: number; progress: number; status: 'active' | 'training' | 'error' }>;
-    lastUpdated: string;
+  realtime: {
+    decisionRate: number;
+    successRate: number;
+    systemUptime: number;
+    agentDistribution: { active: number; training: number; offline: number };
+  };
+  performance: {
+    totalDecisions: number;
+    totalLearningHours: number;
+    avgAccuracy: number;
+    monthlyImprovement: number;
+  };
+  resourceUsage: {
+    cpu: number;
+    gpu: number;
+    memory: number;
+    precision: number[];
+    recall: number[];
+  };
+  agentMatrix: Array<{ id: string; name: string; accuracy: number; successRate: number; progress: number; status: 'active' | 'training' | 'error' }>;
+  lastUpdated: string;
 }
 
 export type AITrainingMode = 'individual' | 'collective' | 'cross-functional';
@@ -4608,311 +4616,311 @@ export type AITrainingMode = 'individual' | 'collective' | 'cross-functional';
 export type AITrainingStatus = 'scheduled' | 'running' | 'completed';
 
 export interface AITrainingSession {
-    id: string;
-    title: string;
-    mode: AITrainingMode;
-    agentIds: string[];
-    status: AITrainingStatus;
-    startedAt: string;
-    expectedCompletionMinutes: number;
-    completedAt?: string;
-    accuracyGain?: number;
+  id: string;
+  title: string;
+  mode: AITrainingMode;
+  agentIds: string[];
+  status: AITrainingStatus;
+  startedAt: string;
+  expectedCompletionMinutes: number;
+  completedAt?: string;
+  accuracyGain?: number;
 }
 
 export interface AITrainingStats {
-    sessions: number;
-    avgAccuracy: number;
-    activeTrainingAgents: number;
-    runningSessions: AITrainingSession[];
-    queue: AITrainingSession[];
-    recentHistory: AITrainingSession[];
-    lastUpdated: string;
-    config?: AITrainingConfig;
+  sessions: number;
+  avgAccuracy: number;
+  activeTrainingAgents: number;
+  runningSessions: AITrainingSession[];
+  queue: AITrainingSession[];
+  recentHistory: AITrainingSession[];
+  lastUpdated: string;
+  config?: AITrainingConfig;
 }
 
 export interface AITrainingConfig {
-    autoTraining: {
-        enabled: boolean;
-        minAccuracyThreshold: number; // Trigger training if accuracy drops below this
-        scheduleInterval: number; // hours
-        priorityAgents: string[]; // Agent IDs that should be trained more frequently
+  autoTraining: {
+    enabled: boolean;
+    minAccuracyThreshold: number; // Trigger training if accuracy drops below this
+    scheduleInterval: number; // hours
+    priorityAgents: string[]; // Agent IDs that should be trained more frequently
+  };
+  trainingPolicies: {
+    individualTraining: {
+      enabled: boolean;
+      minAccuracyForTraining: number;
+      maxSessionsPerDay: number;
+      preferredTimeSlots: string[]; // e.g., ['00:00-06:00']
     };
-    trainingPolicies: {
-        individualTraining: {
-            enabled: boolean;
-            minAccuracyForTraining: number;
-            maxSessionsPerDay: number;
-            preferredTimeSlots: string[]; // e.g., ['00:00-06:00']
-        };
-        collectiveTraining: {
-            enabled: boolean;
-            minAgentsForCollective: number;
-            maxSessionsPerWeek: number;
-            requireMinimumAccuracy: number;
-        };
-        crossTraining: {
-            enabled: boolean;
-            agentPairs: Array<{ agent1: string; agent2: string; priority: number }>;
-            maxSessionsPerWeek: number;
-        };
+    collectiveTraining: {
+      enabled: boolean;
+      minAgentsForCollective: number;
+      maxSessionsPerWeek: number;
+      requireMinimumAccuracy: number;
     };
-    resourceManagement: {
-        maxConcurrentSessions: number;
-        maxQueueSize: number;
-        priorityQueue: boolean;
-        resourceAllocation: {
-            cpuLimit: number; // percentage
-            memoryLimit: number; // percentage
-            gpuEnabled: boolean;
-        };
+    crossTraining: {
+      enabled: boolean;
+      agentPairs: Array<{ agent1: string; agent2: string; priority: number }>;
+      maxSessionsPerWeek: number;
     };
-    qualityControl: {
-        minAccuracyGain: number; // Minimum accuracy gain to consider training successful
-        requireBacktest: boolean;
-        backtestAccuracyThreshold: number;
-        autoRetrainOnFailure: boolean;
+  };
+  resourceManagement: {
+    maxConcurrentSessions: number;
+    maxQueueSize: number;
+    priorityQueue: boolean;
+    resourceAllocation: {
+      cpuLimit: number; // percentage
+      memoryLimit: number; // percentage
+      gpuEnabled: boolean;
     };
-    scheduling: {
-        preferredDays: string[]; // ['monday', 'tuesday', ...]
-        avoidPeakHours: boolean;
-        peakHours: string[]; // ['09:00-17:00']
-        timezone: string;
+  };
+  qualityControl: {
+    minAccuracyGain: number; // Minimum accuracy gain to consider training successful
+    requireBacktest: boolean;
+    backtestAccuracyThreshold: number;
+    autoRetrainOnFailure: boolean;
+  };
+  scheduling: {
+    preferredDays: string[]; // ['monday', 'tuesday', ...]
+    avoidPeakHours: boolean;
+    peakHours: string[]; // ['09:00-17:00']
+    timezone: string;
+  };
+  notifications: {
+    onSessionStart: boolean;
+    onSessionComplete: boolean;
+    onAccuracyGain: boolean;
+    onTrainingFailure: boolean;
+    channels: {
+      dashboard: boolean;
+      telegram: boolean;
+      email: boolean;
     };
-    notifications: {
-        onSessionStart: boolean;
-        onSessionComplete: boolean;
-        onAccuracyGain: boolean;
-        onTrainingFailure: boolean;
-        channels: {
-            dashboard: boolean;
-            telegram: boolean;
-            email: boolean;
-        };
-    };
-    artemisControl: {
-        allowArtemisAutoConfig: boolean;
-        requireArtemisApproval: boolean;
-        artemisOptimizationLevel: 'conservative' | 'balanced' | 'aggressive';
-    };
+  };
+  artemisControl: {
+    allowArtemisAutoConfig: boolean;
+    requireArtemisApproval: boolean;
+    artemisOptimizationLevel: 'conservative' | 'balanced' | 'aggressive';
+  };
 }
 
 export interface APIKeyEntry {
-    id: string;
-    key: string;
-    secret?: string;
-    label?: string; // User-friendly label like "Free Tier", "Paid Tier 1", etc.
-    isActive: boolean;
-    usageCount: number;
-    lastUsed?: string;
-    lastTested?: string;
-    config?: any; // Additional configuration for services (SMTP, On-chain, News, etc.)
-    rateLimit?: {
-        requestsPerMinute: number;
-        requestsPerDay: number;
-        tokensPerMonth?: number;
-    };
-    costPerRequest?: number;
-    status: 'active' | 'rate_limited' | 'error' | 'disabled';
-    errorMessage?: string;
+  id: string;
+  key: string;
+  secret?: string;
+  label?: string; // User-friendly label like "Free Tier", "Paid Tier 1", etc.
+  isActive: boolean;
+  usageCount: number;
+  lastUsed?: string;
+  lastTested?: string;
+  config?: any; // Additional configuration for services (SMTP, On-chain, News, etc.)
+  rateLimit?: {
+    requestsPerMinute: number;
+    requestsPerDay: number;
+    tokensPerMonth?: number;
+  };
+  costPerRequest?: number;
+  status: 'active' | 'rate_limited' | 'error' | 'disabled';
+  errorMessage?: string;
 }
 
 export interface APIServiceIntegration {
-    id: string;
-    name: string;
-    category: 'ai' | 'exchange' | 'communication' | 'market_data';
-    hasSecret: boolean;
-    connected: boolean;
-    maskedKey: string;
-    lastTestedAt?: string;
-    issues?: string;
-    // Multiple API keys support
-    apiKeys?: APIKeyEntry[];
-    // Load balancing settings
-    loadBalancing?: {
-        strategy: 'round_robin' | 'least_used' | 'random' | 'weighted';
-        weights?: { [keyId: string]: number };
-    };
-    // Mixture agents settings (for AI services)
-    mixtureAgents?: {
-        enabled: boolean;
-        models: Array<{
-            serviceId: string;
-            weight: number;
-            minConfidence?: number;
-        }>;
-    };
+  id: string;
+  name: string;
+  category: 'ai' | 'exchange' | 'communication' | 'market_data';
+  hasSecret: boolean;
+  connected: boolean;
+  maskedKey: string;
+  lastTestedAt?: string;
+  issues?: string;
+  // Multiple API keys support
+  apiKeys?: APIKeyEntry[];
+  // Load balancing settings
+  loadBalancing?: {
+    strategy: 'round_robin' | 'least_used' | 'random' | 'weighted';
+    weights?: { [keyId: string]: number };
+  };
+  // Mixture agents settings (for AI services)
+  mixtureAgents?: {
+    enabled: boolean;
+    models: Array<{
+      serviceId: string;
+      weight: number;
+      minConfidence?: number;
+    }>;
+  };
 }
 
 export interface AIAPIConfigData {
-    aiServices: APIServiceIntegration[];
-    exchangeServices: APIServiceIntegration[];
-    communicationServices: APIServiceIntegration[];
-    marketDataServices: APIServiceIntegration[];
-    lastUpdated: string;
+  aiServices: APIServiceIntegration[];
+  exchangeServices: APIServiceIntegration[];
+  communicationServices: APIServiceIntegration[];
+  marketDataServices: APIServiceIntegration[];
+  lastUpdated: string;
 }
 
 export interface AICenterData {
-    overview: AIManagerOverview;
-    agents: AIAgent[];
-    analytics: AIAnalyticsMetrics;
-    training: AITrainingStats;
-    apiConfig: AIAPIConfigData;
+  overview: AIManagerOverview;
+  agents: AIAgent[];
+  analytics: AIAnalyticsMetrics;
+  training: AITrainingStats;
+  apiConfig: AIAPIConfigData;
 }
 
 export type GoldTimeRange = '1D' | '1W' | '1M' | '3M' | '1Y';
 
 export interface GoldAsset {
-    id: string;
-    name: string;
-    buyPrice: number;
-    sellPrice: number;
-    change: number;
+  id: string;
+  name: string;
+  buyPrice: number;
+  sellPrice: number;
+  change: number;
 }
 
 export interface GoldOverviewStat {
-    id: string;
-    labelKey: string;
-    value: string;
-    delta: number;
-    direction: 'up' | 'down' | 'flat';
-    hintKey?: string;
+  id: string;
+  labelKey: string;
+  value: string;
+  delta: number;
+  direction: 'up' | 'down' | 'flat';
+  hintKey?: string;
 }
 
 export interface GoldPricePoint {
-    timestamp: string;
-    price: number;
-    change: number;
-    volume: number;
+  timestamp: string;
+  price: number;
+  change: number;
+  volume: number;
 }
 
 export interface GoldMarketDriver {
-    id: string;
-    labelKey: string;
-    value: string;
-    change: number;
-    descriptionKey: string;
-    updatedAt: string;
+  id: string;
+  labelKey: string;
+  value: string;
+  change: number;
+  descriptionKey: string;
+  updatedAt: string;
 }
 
 export interface GoldPredictionSignal {
-    id: string;
-    labelKey: string;
-    descriptionKey: string;
-    strength: 'strong' | 'moderate' | 'weak';
-    confidence: number;
-    lastUpdated: string;
+  id: string;
+  labelKey: string;
+  descriptionKey: string;
+  strength: 'strong' | 'moderate' | 'weak';
+  confidence: number;
+  lastUpdated: string;
 }
 
 export interface GoldPrediction {
-    id: string;
-    title: string;
-    shortTerm: string;
-    longTerm: string;
-    confidence: number;
-    horizon: string;
-    updatedAt: string;
-    scenarios: {
-        bullish: string;
-        bearish: string;
-    };
-    confidenceBreakdown: {
-        ai: number;
-        fundamental: number;
-        technical: number;
-    };
-    signals: GoldPredictionSignal[];
-    recommendedActions: string[];
-    fullAnalysis: string;
+  id: string;
+  title: string;
+  shortTerm: string;
+  longTerm: string;
+  confidence: number;
+  horizon: string;
+  updatedAt: string;
+  scenarios: {
+    bullish: string;
+    bearish: string;
+  };
+  confidenceBreakdown: {
+    ai: number;
+    fundamental: number;
+    technical: number;
+  };
+  signals: GoldPredictionSignal[];
+  recommendedActions: string[];
+  fullAnalysis: string;
 }
 
 export interface GoldNewsArticle {
-    id: string;
-    headline: string;
-    source: string;
-    verificationStatus: 'Verified' | 'Unverified';
-    impactScore: number;
-    aiAnalysis: string;
-    sentiment: 'Bullish' | 'Bearish' | 'Neutral';
-    category: string;
-    publishedAt: string;
-    watchlisted: boolean;
-    pinned?: boolean;
-    tags: string[];
+  id: string;
+  headline: string;
+  source: string;
+  verificationStatus: 'Verified' | 'Unverified';
+  impactScore: number;
+  aiAnalysis: string;
+  sentiment: 'Bullish' | 'Bearish' | 'Neutral';
+  category: string;
+  publishedAt: string;
+  watchlisted: boolean;
+  pinned?: boolean;
+  tags: string[];
 }
 
 export interface GoldAlert {
-    id: string;
-    labelKey: string;
-    direction: 'up' | 'down';
-    threshold: number;
-    assetId: string;
-    active: boolean;
-    createdAt: string;
-    lastTriggeredAt?: string;
+  id: string;
+  labelKey: string;
+  direction: 'up' | 'down';
+  threshold: number;
+  assetId: string;
+  active: boolean;
+  createdAt: string;
+  lastTriggeredAt?: string;
 }
 
 export interface GoldAlertInput {
-    assetId: string;
-    direction: 'up' | 'down';
-    threshold: number;
-    labelKey?: string;
-    active?: boolean;
+  assetId: string;
+  direction: 'up' | 'down';
+  threshold: number;
+  labelKey?: string;
+  active?: boolean;
 }
 
 export interface GoldTelegramChannel {
-    id: string;
-    name: string;
-    handle: string;
-    type: 'public' | 'vip' | 'private';
-    subscribers: number;
-    autoPost: {
-        predictions: boolean;
-        news: boolean;
-        alerts: boolean;
-    };
-    lastPublishedAt?: string;
+  id: string;
+  name: string;
+  handle: string;
+  type: 'public' | 'vip' | 'private';
+  subscribers: number;
+  autoPost: {
+    predictions: boolean;
+    news: boolean;
+    alerts: boolean;
+  };
+  lastPublishedAt?: string;
 }
 
 export interface GoldPublishTemplate {
-    id: string;
-    nameKey: string;
-    descriptionKey: string;
+  id: string;
+  nameKey: string;
+  descriptionKey: string;
 }
 
 export interface GoldPublishItem {
-    id: string;
-    type: 'Prediction' | 'News' | 'Alert';
-    content: string;
+  id: string;
+  type: 'Prediction' | 'News' | 'Alert';
+  content: string;
 }
 
 export interface GoldTelegramSettings {
-    channels: GoldTelegramChannel[];
-    templates: GoldPublishTemplate[];
-    defaultChannelId: string;
-    lastPublishedAt?: string;
+  channels: GoldTelegramChannel[];
+  templates: GoldPublishTemplate[];
+  defaultChannelId: string;
+  lastPublishedAt?: string;
 }
 
 export interface GoldPageData {
-    lastUpdated: string;
-    activeRange: GoldTimeRange;
-    stats: GoldOverviewStat[];
-    priceRanges: Record<GoldTimeRange, GoldPricePoint[]>;
-    assets: GoldAsset[];
-    prediction: GoldPrediction;
-    news: GoldNewsArticle[];
-    marketDrivers: GoldMarketDriver[];
-    telegram: GoldTelegramSettings;
-    alerts: GoldAlert[];
+  lastUpdated: string;
+  activeRange: GoldTimeRange;
+  stats: GoldOverviewStat[];
+  priceRanges: Record<GoldTimeRange, GoldPricePoint[]>;
+  assets: GoldAsset[];
+  prediction: GoldPrediction;
+  news: GoldNewsArticle[];
+  marketDrivers: GoldMarketDriver[];
+  telegram: GoldTelegramSettings;
+  alerts: GoldAlert[];
 }
 
 export interface GoldPublishResponse {
-    data: GoldPageData;
-    channel: GoldTelegramChannel;
-    publishedAt: string;
-    message: string;
+  data: GoldPageData;
+  channel: GoldTelegramChannel;
+  publishedAt: string;
+  message: string;
 }
 
-export interface DataSource {
+export interface AutomationDataSource {
   id: string;
   type: 'Telegram Channel' | 'News Website' | 'Custom API';
   value: string;
@@ -4944,29 +4952,29 @@ export interface TelegramPublisherConfig {
 }
 
 export interface WorkflowTrigger {
-    type: 'new_news_article' | 'new_crypto_signal' | 'market_event';
-    source: string;
+  type: 'new_news_article' | 'new_crypto_signal' | 'market_event';
+  source: string;
 }
 
 export interface WorkflowCondition {
-    field: string;
-    operator: 'greater_than' | 'equals' | 'contains';
-    value: string | number;
+  field: string;
+  operator: 'greater_than' | 'equals' | 'contains';
+  value: string | number;
 }
 
 export interface WorkflowAction {
-    type: 'execute_trade' | 'send_telegram_post';
-    target: string; // e.g., 'BTC' or channel ID
-    parameters: any;
+  type: 'execute_trade' | 'send_telegram_post';
+  target: string; // e.g., 'BTC' or channel ID
+  parameters: any;
 }
 
 export interface Workflow {
-    id: string;
-    name: string;
-    enabled: boolean;
-    trigger: WorkflowTrigger;
-    conditions: WorkflowCondition[];
-    actions: WorkflowAction[];
+  id: string;
+  name: string;
+  enabled: boolean;
+  trigger: WorkflowTrigger;
+  conditions: WorkflowCondition[];
+  actions: WorkflowAction[];
 }
 
 export type AutopilotMode = 'balanced' | 'aggressive' | 'scalping' | 'capital_preservation';
@@ -4974,84 +4982,116 @@ export type AutopilotMode = 'balanced' | 'aggressive' | 'scalping' | 'capital_pr
 export type AutopilotRiskLevel = 'conservative' | 'balanced' | 'aggressive';
 
 export interface AutopilotGoal {
-    startCapital: number;
-    targetCapital: number;
-    progress: number;
-    etaMinutes: number;
-    lastSyncSeconds: number;
-    activeTrades: number;
-    maxConcurrentTrades: number;
-    successRate: number;
-    agentsOnline: number;
-    agentsTraining: number;
-    agentsTotal: number;
-    mode: 'auto' | 'paused';
-    nextActionKey: string;
+  startCapital: number;
+  targetCapital: number;
+  progress: number;
+  etaMinutes: number;
+  lastSyncSeconds: number;
+  activeTrades: number;
+  maxConcurrentTrades: number;
+  successRate: number;
+  agentsOnline: number;
+  agentsTraining: number;
+  agentsTotal: number;
+  mode: 'auto' | 'paused';
+  nextActionKey: string;
 }
 
 export interface AutopilotMetrics {
-    totalPerformance: number;
-    winRate: number;
-    totalTrades: number;
-    todayProfit: number;
+  totalPerformance: number;
+  winRate: number;
+  totalTrades: number;
+  todayProfit: number;
 }
 
 export interface AutopilotState {
-    isActive: boolean;
-    operatingMode: AutopilotMode;
-    tradingBudget: number;
-    riskLevel: AutopilotRiskLevel;
-    goal: AutopilotGoal;
-    metrics: AutopilotMetrics;
-    statusMessageKey: string;
-    lastUpdated: string;
+  isActive: boolean;
+  operatingMode: AutopilotMode;
+  tradingBudget: number;
+  riskLevel: AutopilotRiskLevel;
+  goal: AutopilotGoal;
+  metrics: AutopilotMetrics;
+  statusMessageKey: string;
+  lastUpdated: string;
 }
 
 export type AutopilotQuickAction = 'ai_decisions' | 'performance_report' | 'export_settings';
 
 export interface AutopilotQuickActionResult {
-    state: AutopilotState;
-    actionKey: string;
+  state: AutopilotState;
+  actionKey: string;
 }
 
 // Ethereum Provider Types
 declare global {
-    interface Window {
-        ethereum?: {
-            request: (args: { method: string; params?: any[] }) => Promise<any>;
-            isMetaMask?: boolean;
-        };
-    }
+  interface Window {
+    ethereum?: {
+      request: (args: { method: string; params?: any[] }) => Promise<any>;
+      isMetaMask?: boolean;
+    };
+  }
 }
 
 // DeFi Types
 export interface DeFiPosition {
-    id: string;
-    protocol: string;
-    type: 'yield_farming' | 'liquidity_pool' | 'staking';
-    asset: string;
-    amount: number;
-    apy: number;
-    value: number;
-    status: 'active' | 'pending' | 'completed';
-    createdAt: string;
-    lastUpdated: string;
+  id: string;
+  protocol: string;
+  type: 'yield_farming' | 'liquidity_pool' | 'staking';
+  asset: string;
+  amount: number;
+  apy: number;
+  value: number;
+  status: 'active' | 'pending' | 'completed';
+  createdAt: string;
+  lastUpdated: string;
 }
 
 export interface DeFiProtocol {
-    id: string;
-    name: string;
-    type: 'yield_farming' | 'liquidity_pool' | 'staking';
-    apy: number;
-    tvl: number;
-    supported: boolean;
-    description: string;
+  id: string;
+  name: string;
+  type: 'yield_farming' | 'liquidity_pool' | 'staking';
+  apy: number;
+  tvl: number;
+  supported: boolean;
+  description: string;
 }
 
 export interface DeFiData {
-    positions: DeFiPosition[];
-    protocols: DeFiProtocol[];
-    totalValue: number;
-    totalYield: number;
-    lastSyncedAt: string;
+  positions: DeFiPosition[];
+  protocols: DeFiProtocol[];
+  totalValue: number;
+  totalYield: number;
+  lastSyncedAt: string;
 }
+// ============================================================================
+// TOPIC ROUTING (TASK-BE-013)
+// ============================================================================
+
+export interface TopicRoutingRule {
+  id: string;
+  name: string;
+  keywords: string[];
+  agent_key: string;
+  priority: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TopicRoutingLog {
+  id: string;
+  data_id: string;
+  rule_id: string | null;
+  matched_keywords: string[];
+  agent_key: string;
+  created_at: string;
+  rule_name?: string;
+  raw_data?: any;
+}
+
+export interface TopicRoutingState {
+  rules: TopicRoutingRule[];
+  logs: TopicRoutingLog[];
+  totalLogs: number;
+}
+

@@ -1,310 +1,271 @@
-import React from 'react';
-import { DataSource } from '../../../../../../types.ts';
+import React, { useState, useEffect, useMemo } from 'react';
+import { DataSource } from '../../../../../../types';
+import * as api from '../../../../../../services/api';
 
 type Props = {
     source: DataSource;
-    data: any;
-    isLoading: boolean;
     onClose: () => void;
-    onRefresh: () => void;
     t: (key: string) => string;
 };
 
-const ViewSourceDataModal: React.FC<Props> = ({ source, data, isLoading, onClose, onRefresh, t }) => {
+const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
+    const [historyData, setHistoryData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [pagination, setPagination] = useState({ limit: 10, offset: 0, total: 0 });
+    const [filters, setFilters] = useState({
+        status: 'all',
+        startDate: '',
+        endDate: '',
+        search: ''
+    });
+    const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
+
+    // Debounce search
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(filters.search);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [filters.search]);
+
+    const loadHistory = async () => {
+        setIsLoading(true);
+        try {
+            const apiFilters: any = {
+                source_id: source.id,
+                limit: pagination.limit,
+                offset: pagination.offset
+            };
+
+            if (filters.status !== 'all') apiFilters.status = filters.status;
+            if (filters.startDate) apiFilters.start_date = filters.startDate;
+            if (filters.endDate) apiFilters.end_date = filters.endDate;
+
+            const response = await api.fetchCollectedData(apiFilters);
+            setHistoryData(response.data);
+            setPagination(prev => ({ ...prev, total: response.pagination.total }));
+        } catch (e) {
+            console.error('Failed to load history:', e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadHistory();
+    }, [pagination.offset, filters.status, filters.startDate, filters.endDate, source.id]);
+
+    // Client-side search filtering (since backend might not support partial text search on all fields efficiently yet)
+    // Or if backend supports it, we would add it to apiFilters.
+    // Assuming backend DOES NOT support 'search' param based on previous api.ts check.
+    const displayedData = useMemo(() => {
+        if (!debouncedSearch) return historyData;
+        const lowerSearch = debouncedSearch.toLowerCase();
+        return historyData.filter(record =>
+            JSON.stringify(record).toLowerCase().includes(lowerSearch)
+        );
+    }, [historyData, debouncedSearch]);
+
     const formatData = (data: any): string => {
         if (!data) return t('no_data') || 'No data';
-        
         try {
-            if (typeof data === 'string') {
-                return data;
-            }
             return JSON.stringify(data, null, 2);
         } catch (e) {
             return String(data);
         }
     };
-    
-    const formatPriceData = (data: any) => {
-        if (!data) return null;
-        if (data.symbol && data.price) {
-            return {
-                symbol: data.symbol,
-                price: typeof data.price === 'number' ? data.price.toFixed(2) : data.price,
-                change24h: data.change24h ? `${data.change24h > 0 ? '+' : ''}${data.change24h.toFixed(2)}%` : 'N/A',
-                volume: data.volume ? typeof data.volume === 'number' ? data.volume.toLocaleString() : data.volume : 'N/A',
-            };
-        }
-        return null;
-    };
-    
-    const formatNewsData = (data: any) => {
-        if (!data) return null;
-        // For Telegram sources, prefer articles format (structured for agents)
-        if (data.articles && Array.isArray(data.articles)) {
-            return data.articles;
-        }
-        return null;
-    };
-    
-    const priceData = formatPriceData(data);
-    const newsData = formatNewsData(data);
-    
-    // For Telegram sources, check if we have articles (structured format for agents)
-    const telegramArticles = source.type === 'telegram' && data?.articles && Array.isArray(data.articles) ? data.articles : null;
-    
+
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-card border border-border rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                <div className="flex justify-between items-center mb-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+                {/* Header */}
+                <div className="p-4 border-b border-border flex justify-between items-center bg-secondary/10">
                     <div>
-                        <h3 className="text-lg font-semibold text-foreground">
-                            {t('view_source_data') || 'View Source Data'}
+                        <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                            {t('source_data_history') || 'Source Data History'}
+                            <span className="text-xs font-normal text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded">
+                                {source.name}
+                            </span>
                         </h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                            {source.name} • {source.type}
-                        </p>
                     </div>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={onRefresh}
-                            disabled={isLoading}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded text-sm"
+                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+
+                {/* Filters */}
+                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4 border-b border-border bg-card">
+                    <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">{t('search') || 'Search'}</label>
+                        <input
+                            type="text"
+                            value={filters.search}
+                            onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                            placeholder={t('search_placeholder') || 'Search data...'}
+                            className="w-full bg-background border border-border rounded px-3 py-1.5 text-sm"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">{t('status') || 'Status'}</label>
+                        <select
+                            value={filters.status}
+                            onChange={(e) => {
+                                setFilters(prev => ({ ...prev, status: e.target.value }));
+                                setPagination(prev => ({ ...prev, offset: 0 }));
+                            }}
+                            className="w-full bg-background border border-border rounded px-3 py-1.5 text-sm"
                         >
-                            {isLoading ? t('loading') || 'Loading...' : t('refresh') || 'Refresh'}
-                        </button>
-                        <button
-                            onClick={onClose}
-                            className="px-3 py-1.5 bg-secondary hover:bg-accent text-secondary-foreground rounded text-sm"
-                        >
-                            {t('close') || 'Close'}
-                        </button>
+                            <option value="all">{t('all') || 'All'}</option>
+                            <option value="processed">{t('processed') || 'Processed'}</option>
+                            <option value="pending">{t('pending') || 'Pending'}</option>
+                            <option value="error">{t('error') || 'Error'}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">{t('start_date') || 'Start Date'}</label>
+                        <input
+                            type="date"
+                            value={filters.startDate}
+                            onChange={(e) => {
+                                setFilters(prev => ({ ...prev, startDate: e.target.value }));
+                                setPagination(prev => ({ ...prev, offset: 0 }));
+                            }}
+                            className="w-full bg-background border border-border rounded px-3 py-1.5 text-sm"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">{t('end_date') || 'End Date'}</label>
+                        <input
+                            type="date"
+                            value={filters.endDate}
+                            onChange={(e) => {
+                                setFilters(prev => ({ ...prev, endDate: e.target.value }));
+                                setPagination(prev => ({ ...prev, offset: 0 }));
+                            }}
+                            className="w-full bg-background border border-border rounded px-3 py-1.5 text-sm"
+                        />
                     </div>
                 </div>
-                
-                <div className="flex-1 overflow-y-auto">
-                    {isLoading ? (
-                        <div className="flex items-center justify-center h-64">
-                            <div className="text-center">
-                                <div className="animate-spin text-4xl mb-2">⚙️</div>
-                                <p className="text-muted-foreground">{t('loading_data') || 'Loading data...'}</p>
+
+                {/* Content */}
+                <div className="flex-1 overflow-hidden flex">
+                    {/* List */}
+                    <div className={`${selectedRecord ? 'w-1/3 hidden md:block' : 'w-full'} border-r border-border overflow-y-auto`}>
+                        {isLoading ? (
+                            <div className="flex justify-center items-center h-40">
+                                <div className="animate-spin text-2xl text-primary">⚙️</div>
                             </div>
-                        </div>
-                    ) : !data ? (
-                        <div className="text-center p-10 text-muted-foreground">
-                            {t('no_data_available') || 'No data available'}
-                        </div>
-                    ) : data.error ? (
-                        <div className="space-y-4">
-                            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-                                <h4 className="font-semibold text-red-400 mb-2">{t('error_fetching_data') || 'Error Fetching Data'}</h4>
-                                <p className="text-sm text-muted-foreground mb-2">{data.message || data.details || 'Unknown error'}</p>
-                                {data.url && data.url !== 'Not configured' && (
-                                    <p className="text-xs text-muted-foreground">
-                                        {t('source_url') || 'Source URL'}: {data.url}
-                                    </p>
-                                )}
-                                {data.channel && (
-                                    <p className="text-xs text-muted-foreground">
-                                        {t('channel') || 'Channel'}: @{data.channel}
-                                    </p>
-                                )}
-                                {data.note && (
-                                    <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded">
-                                        <p className="text-sm text-yellow-400">{data.note}</p>
-                                    </div>
-                                )}
-                                {data.suggestion && (
-                                    <div className="mt-2 p-2 bg-blue-500/10 border border-blue-500/30 rounded">
-                                        <p className="text-xs text-blue-400">{data.suggestion}</p>
-                                    </div>
-                                )}
-                                {data.instructions && Array.isArray(data.instructions) && (
-                                    <div className="mt-3 p-3 bg-secondary/50 rounded">
-                                        <p className="text-xs font-semibold text-foreground mb-2">{t('instructions') || 'Instructions'}:</p>
-                                        <ul className="text-xs text-muted-foreground space-y-1">
-                                            {data.instructions.map((instruction: string, idx: number) => (
-                                                <li key={idx}>{instruction}</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
+                        ) : displayedData.length === 0 ? (
+                            <div className="p-8 text-center text-muted-foreground">
+                                {t('no_records_found') || 'No records found'}
                             </div>
-                            {data.source && (
-                                <div className="bg-secondary/50 rounded-lg p-4">
-                                    <h4 className="font-semibold text-foreground mb-2 text-sm">{t('raw_data') || 'Raw Data'}</h4>
-                                    <pre className="text-xs text-muted-foreground overflow-x-auto">
-                                        {formatData(data)}
+                        ) : (
+                            <div className="divide-y divide-border">
+                                {displayedData.map((record) => (
+                                    <div
+                                        key={record.id}
+                                        onClick={() => setSelectedRecord(record)}
+                                        className={`p-3 cursor-pointer hover:bg-accent/50 transition-colors ${selectedRecord?.id === record.id ? 'bg-accent text-accent-foreground' : ''}`}
+                                    >
+                                        <div className="flex justify-between items-start mb-1">
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${record.status === 'processed' ? 'bg-green-500/20 text-green-400' :
+                                                    record.status === 'error' ? 'bg-red-500/20 text-red-400' :
+                                                        'bg-yellow-500/20 text-yellow-400'
+                                                }`}>
+                                                {record.status}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {new Date(record.collected_at).toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground truncate">
+                                            {new Date(record.collected_at).toLocaleTimeString()}
+                                        </div>
+                                        <div className="text-xs mt-1 truncate font-mono opacity-70">
+                                            ID: {record.id.substring(0, 8)}...
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Pagination */}
+                        <div className="p-2 border-t border-border flex justify-between items-center text-xs">
+                            <button
+                                onClick={() => setPagination(prev => ({ ...prev, offset: Math.max(0, prev.offset - prev.limit) }))}
+                                disabled={pagination.offset === 0 || isLoading}
+                                className="px-2 py-1 bg-secondary rounded disabled:opacity-50"
+                            >
+                                {t('prev') || 'Prev'}
+                            </button>
+                            <span className="text-muted-foreground">
+                                {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, pagination.total)} / {pagination.total}
+                            </span>
+                            <button
+                                onClick={() => setPagination(prev => ({ ...prev, offset: prev.offset + prev.limit }))}
+                                disabled={pagination.offset + pagination.limit >= pagination.total || isLoading}
+                                className="px-2 py-1 bg-secondary rounded disabled:opacity-50"
+                            >
+                                {t('next') || 'Next'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Details */}
+                    {selectedRecord ? (
+                        <div className="flex-1 overflow-y-auto p-4 bg-secondary/5">
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="font-semibold">{t('record_details') || 'Record Details'}</h4>
+                                <button
+                                    onClick={() => setSelectedRecord(null)}
+                                    className="md:hidden text-sm text-blue-400"
+                                >
+                                    {t('back_to_list') || 'Back to List'}
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div className="p-3 bg-secondary/20 rounded">
+                                        <div className="text-xs text-muted-foreground mb-1">{t('id') || 'ID'}</div>
+                                        <div className="font-mono">{selectedRecord.id}</div>
+                                    </div>
+                                    <div className="p-3 bg-secondary/20 rounded">
+                                        <div className="text-xs text-muted-foreground mb-1">{t('collected_at') || 'Collected At'}</div>
+                                        <div>{new Date(selectedRecord.collected_at).toLocaleString()}</div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div className="text-xs text-muted-foreground mb-2 font-bold uppercase">{t('raw_data') || 'Raw Data'}</div>
+                                    <pre className="bg-black/20 p-4 rounded text-xs font-mono overflow-x-auto border border-border/50">
+                                        {formatData(selectedRecord.raw_data)}
                                     </pre>
                                 </div>
-                            )}
-                        </div>
-                    ) : telegramArticles && telegramArticles.length > 0 ? (
-                        <div className="space-y-4">
-                            <div className="bg-secondary/50 rounded-lg p-4">
-                                <h4 className="font-semibold text-foreground mb-3">
-                                    {t('telegram_articles') || 'Telegram Articles'}
-                                    {data.channel && ` - @${data.channel}`}
-                                </h4>
-                                {data.totalMessages && (
-                                    <p className="text-xs text-muted-foreground mb-3">
-                                        {t('total_articles') || 'Total Articles'}: {telegramArticles.length}
-                                    </p>
-                                )}
-                                <div className="space-y-3">
-                                    {telegramArticles.map((article: any, idx: number) => (
-                                        <div key={idx} className="border border-border rounded p-3 hover:bg-secondary/30 transition-colors">
-                                            <h5 className="font-semibold text-foreground mb-2">{article.title}</h5>
-                                            <p className="text-sm text-muted-foreground mb-3 whitespace-pre-wrap">{article.content}</p>
-                                            <div className="flex justify-between items-center text-xs text-muted-foreground">
-                                                <div className="flex gap-3">
-                                                    {article.author && <span>{article.author}</span>}
-                                                    {article.source && <span>{article.source}</span>}
-                                                </div>
-                                                <div className="flex gap-3">
-                                                    {article.link && (
-                                                        <a 
-                                                            href={article.link} 
-                                                            target="_blank" 
-                                                            rel="noopener noreferrer"
-                                                            className="text-blue-400 hover:text-blue-300"
-                                                        >
-                                                            {t('view_message') || 'View Message'}
-                                                        </a>
-                                                    )}
-                                                    <span>{new Date(article.publishedAt).toLocaleString()}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                {data.note && (
-                                    <div className="mt-3 p-2 bg-blue-500/10 border border-blue-500/30 rounded">
-                                        <p className="text-xs text-blue-400">{data.note}</p>
+
+                                {selectedRecord.normalized_data && (
+                                    <div>
+                                        <div className="text-xs text-muted-foreground mb-2 font-bold uppercase">{t('normalized_data') || 'Normalized Data'}</div>
+                                        <pre className="bg-black/20 p-4 rounded text-xs font-mono overflow-x-auto border border-border/50 text-green-400/80">
+                                            {formatData(selectedRecord.normalized_data)}
+                                        </pre>
                                     </div>
                                 )}
-                            </div>
-                            <div className="bg-secondary/30 rounded-lg p-4">
-                                <h4 className="font-semibold text-foreground mb-2 text-sm">{t('raw_data') || 'Raw Data'}</h4>
-                                <pre className="text-xs text-muted-foreground overflow-x-auto max-h-64 overflow-y-auto">
-                                    {formatData(data)}
-                                </pre>
-                            </div>
-                        </div>
-                    ) : data.messages && Array.isArray(data.messages) ? (
-                        <div className="space-y-4">
-                            <div className="bg-secondary/50 rounded-lg p-4">
-                                <h4 className="font-semibold text-foreground mb-3">
-                                    {t('telegram_messages') || 'Telegram Messages'}
-                                    {data.channel && ` - @${data.channel}`}
-                                </h4>
-                                {data.totalMessages && (
-                                    <p className="text-xs text-muted-foreground mb-3">
-                                        {t('total_messages') || 'Total'}: {data.totalMessages}
-                                    </p>
-                                )}
-                                <div className="space-y-3">
-                                    {data.messages.map((msg: any, idx: number) => (
-                                        <div key={idx} className="border border-border rounded p-3">
-                                            <p className="text-sm text-foreground mb-2">{msg.text}</p>
-                                            <div className="flex justify-between items-center text-xs text-muted-foreground">
-                                                <span>{msg.chat || data.channel}</span>
-                                                <span>{new Date(msg.timestamp).toLocaleString()}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                {data.note && (
-                                    <div className="mt-3 p-2 bg-blue-500/10 border border-blue-500/30 rounded">
-                                        <p className="text-xs text-blue-400">{data.note}</p>
+
+                                {selectedRecord.error_message && (
+                                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded">
+                                        <div className="text-xs text-red-400 mb-1 font-bold uppercase">{t('error') || 'Error'}</div>
+                                        <div className="text-sm text-red-300">{selectedRecord.error_message}</div>
                                     </div>
                                 )}
-                            </div>
-                            <div className="bg-secondary/30 rounded-lg p-4">
-                                <h4 className="font-semibold text-foreground mb-2 text-sm">{t('raw_data') || 'Raw Data'}</h4>
-                                <pre className="text-xs text-muted-foreground overflow-x-auto max-h-64 overflow-y-auto">
-                                    {formatData(data)}
-                                </pre>
-                            </div>
-                        </div>
-                    ) : priceData ? (
-                        <div className="space-y-4">
-                            <div className="bg-secondary/50 rounded-lg p-4">
-                                <h4 className="font-semibold text-foreground mb-3">{t('price_data') || 'Price Data'}</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div>
-                                        <p className="text-xs text-muted-foreground mb-1">{t('symbol') || 'Symbol'}</p>
-                                        <p className="font-semibold text-foreground">{priceData.symbol}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-muted-foreground mb-1">{t('price') || 'Price'}</p>
-                                        <p className="font-semibold text-foreground">${priceData.price}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-muted-foreground mb-1">{t('change_24h') || '24h Change'}</p>
-                                        <p className={`font-semibold ${priceData.change24h.startsWith('+') ? 'text-green-400' : priceData.change24h.startsWith('-') ? 'text-red-400' : 'text-foreground'}`}>
-                                            {priceData.change24h}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-muted-foreground mb-1">{t('volume') || 'Volume'}</p>
-                                        <p className="font-semibold text-foreground">{priceData.volume}</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-secondary/30 rounded-lg p-4">
-                                <h4 className="font-semibold text-foreground mb-2 text-sm">{t('raw_data') || 'Raw Data'}</h4>
-                                <pre className="text-xs text-muted-foreground overflow-x-auto">
-                                    {formatData(data)}
-                                </pre>
-                            </div>
-                        </div>
-                    ) : newsData ? (
-                        <div className="space-y-4">
-                            <div className="bg-secondary/50 rounded-lg p-4">
-                                <h4 className="font-semibold text-foreground mb-3">{t('news_articles') || 'News Articles'}</h4>
-                                <div className="space-y-3">
-                                    {newsData.slice(0, 10).map((article: any, idx: number) => (
-                                        <div key={idx} className="border border-border rounded p-3">
-                                            <h5 className="font-semibold text-foreground mb-1">{article.title || t('no_title') || 'No Title'}</h5>
-                                            {article.content && (
-                                                <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{article.content}</p>
-                                            )}
-                                            {article.timestamp && (
-                                                <p className="text-xs text-muted-foreground">
-                                                    {new Date(article.timestamp).toLocaleString()}
-                                                </p>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="bg-secondary/30 rounded-lg p-4">
-                                <h4 className="font-semibold text-foreground mb-2 text-sm">{t('raw_data') || 'Raw Data'}</h4>
-                                <pre className="text-xs text-muted-foreground overflow-x-auto max-h-64 overflow-y-auto">
-                                    {formatData(data)}
-                                </pre>
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            <div className="bg-secondary/50 rounded-lg p-4">
-                                <h4 className="font-semibold text-foreground mb-3">{t('data_preview') || 'Data Preview'}</h4>
-                                <pre className="text-xs text-muted-foreground overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap break-words">
-                                    {formatData(data)}
-                                </pre>
-                            </div>
+                        <div className="hidden md:flex flex-1 items-center justify-center text-muted-foreground flex-col gap-2">
+                            <div className="text-4xl opacity-20">📋</div>
+                            <p>{t('select_record_to_view') || 'Select a record to view details'}</p>
                         </div>
-                    )}
-                </div>
-                
-                <div className="mt-4 pt-4 border-t border-border text-xs text-muted-foreground">
-                    <p>
-                        {t('source_url') || 'Source URL'}: {source.url || t('not_configured') || 'Not configured'}
-                    </p>
-                    {source.endpoint && (
-                        <p>
-                            {t('endpoint') || 'Endpoint'}: {source.endpoint}
-                        </p>
                     )}
                 </div>
             </div>

@@ -1,9 +1,21 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
-import { body, validationResult } from 'express-validator';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { query, transaction } from '../database/db.js';
 import { logger } from '../services/logger.js';
+import { validateBody, validateParams, validateQuery, validateResponse } from '../middleware/validation.js';
+import {
+  listUsersQuerySchema,
+  userListResponseSchema,
+  userStatsResponseSchema,
+  baseUserSchema,
+  userProfileResponseSchema,
+  updateUserBodySchema,
+  updateUserRoleSchema,
+  updateUserStatusSchema,
+  changePasswordSchema,
+  getUserParamsSchema
+} from '../schemas/userSchemas.js';
 
 const router = express.Router();
 
@@ -12,7 +24,7 @@ const router = express.Router();
 // ============================================================================
 
 // GET USER STATISTICS (Admin only)
-router.get('/stats/overview', authenticate, authorize('admin'), async (req, res) => {
+router.get('/stats/overview', authenticate, authorize('admin'), validateResponse(userStatsResponseSchema), async (req, res) => {
   try {
     const stats = await query(`
       SELECT 
@@ -35,10 +47,10 @@ router.get('/stats/overview', authenticate, authorize('admin'), async (req, res)
 });
 
 // GET ALL USERS (Admin only)
-router.get('/', authenticate, authorize('admin'), async (req, res) => {
+router.get('/', authenticate, authorize('admin'), validateQuery(listUsersQuerySchema), validateResponse(userListResponseSchema), async (req, res) => {
   try {
-    const { search, role, is_active, limit = 50, offset = 0 } = req.query;
-    
+    const { search, role, is_active, limit, offset } = req.validatedQuery;
+
     let sql = 'SELECT id, email, username, full_name, phone, avatar_url, role, is_active, is_verified, created_at, last_login_at FROM users WHERE 1=1';
     const params = [];
     let paramCount = 1;
@@ -57,21 +69,21 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
 
     if (is_active !== undefined) {
       sql += ` AND is_active = $${paramCount}`;
-      params.push(is_active === 'true');
+      params.push(is_active);
       paramCount++;
     }
 
     sql += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-    params.push(parseInt(limit), parseInt(offset));
+    params.push(limit, offset);
 
     const result = await query(sql, params);
-    const countResult = await query('SELECT COUNT(*) FROM users');
-    
+    const countResult = await query('SELECT COUNT(*) as count FROM users');
+
     res.json({
       users: result.rows,
       total: parseInt(countResult.rows[0].count),
-      limit: parseInt(limit),
-      offset: parseInt(offset)
+      limit,
+      offset
     });
   } catch (error) {
     logger.error('Get users error:', error);
@@ -79,10 +91,42 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
   }
 });
 
-// GET USER ACTIVITY LOG
-router.get('/:id/activity', authenticate, async (req, res) => {
+// GET USER BY ID
+router.get('/:id', authenticate, validateParams(getUserParamsSchema), validateResponse(userProfileResponseSchema), async (req, res) => {
   try {
-    if (req.user.id !== req.params.id && req.user.role !== 'admin') {
+    const { id } = req.validatedParams;
+
+    if (req.user.id !== id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const result = await query(
+      `SELECT u.id, u.email, u.username, u.full_name, u.phone, u.avatar_url, 
+              u.role, u.is_active, u.is_verified, u.created_at, u.last_login_at,
+              s.theme, s.language, s.timezone, s.currency
+       FROM users u
+       LEFT JOIN user_settings s ON u.id = s.user_id
+       WHERE u.id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    logger.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// GET USER ACTIVITY LOG
+router.get('/:id/activity', authenticate, validateParams(getUserParamsSchema), async (req, res) => {
+  try {
+    const { id } = req.validatedParams;
+
+    if (req.user.id !== id && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -94,7 +138,7 @@ router.get('/:id/activity', authenticate, async (req, res) => {
        WHERE user_id = $1
        ORDER BY created_at DESC
        LIMIT $2 OFFSET $3`,
-      [req.params.id, parseInt(limit), parseInt(offset)]
+      [id, parseInt(limit), parseInt(offset)]
     );
 
     res.json(result.rows);
@@ -105,25 +149,18 @@ router.get('/:id/activity', authenticate, async (req, res) => {
 });
 
 // CHANGE PASSWORD
-router.post('/:id/change-password', authenticate, [
-  body('current_password').notEmpty(),
-  body('new_password').isLength({ min: 6 })
-], async (req, res) => {
+router.post('/:id/change-password', authenticate, validateParams(getUserParamsSchema), validateBody(changePasswordSchema), async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    const { id } = req.validatedParams;
+    const { current_password, new_password } = req.validatedBody;
 
-    if (req.user.id !== req.params.id) {
+    if (req.user.id !== id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const { current_password, new_password } = req.body;
-
     const userResult = await query(
       'SELECT password_hash FROM users WHERE id = $1',
-      [req.params.id]
+      [id]
     );
 
     if (userResult.rows.length === 0) {
@@ -143,7 +180,7 @@ router.post('/:id/change-password', authenticate, [
 
     await query(
       'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
-      [newPasswordHash, req.params.id]
+      [newPasswordHash, id]
     );
 
     res.json({ message: 'Password changed successfully' });
@@ -154,22 +191,16 @@ router.post('/:id/change-password', authenticate, [
 });
 
 // UPDATE USER ROLE (Admin only)
-router.patch('/:id/role', authenticate, authorize('admin'), [
-  body('role').isIn(['user', 'admin', 'trader', 'vip'])
-], async (req, res) => {
+router.patch('/:id/role', authenticate, authorize('admin'), validateParams(getUserParamsSchema), validateBody(updateUserRoleSchema), validateResponse(baseUserSchema), async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { role } = req.body;
+    const { id } = req.validatedParams;
+    const { role } = req.validatedBody;
 
     const result = await query(
       `UPDATE users SET role = $1, updated_at = NOW() 
        WHERE id = $2 
-       RETURNING id, email, username, full_name, role`,
-      [role, req.params.id]
+       RETURNING id, email, username, full_name, role, created_at, is_active, is_verified`,
+      [role, id]
     );
 
     if (result.rows.length === 0) {
@@ -184,22 +215,16 @@ router.patch('/:id/role', authenticate, authorize('admin'), [
 });
 
 // ACTIVATE/DEACTIVATE USER (Admin only)
-router.patch('/:id/status', authenticate, authorize('admin'), [
-  body('is_active').isBoolean()
-], async (req, res) => {
+router.patch('/:id/status', authenticate, authorize('admin'), validateParams(getUserParamsSchema), validateBody(updateUserStatusSchema), validateResponse(baseUserSchema), async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { is_active } = req.body;
+    const { id } = req.validatedParams;
+    const { is_active } = req.validatedBody;
 
     const result = await query(
       `UPDATE users SET is_active = $1, updated_at = NOW() 
        WHERE id = $2 
-       RETURNING id, email, username, is_active`,
-      [is_active, req.params.id]
+       RETURNING id, email, username, full_name, role, created_at, is_active, is_verified`,
+      [is_active, id]
     );
 
     if (result.rows.length === 0) {
@@ -213,52 +238,16 @@ router.patch('/:id/status', authenticate, authorize('admin'), [
   }
 });
 
-// GET USER BY ID
-router.get('/:id', authenticate, async (req, res) => {
-  try {
-    if (req.user.id !== req.params.id && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const result = await query(
-      `SELECT u.id, u.email, u.username, u.full_name, u.phone, u.avatar_url, 
-              u.role, u.is_active, u.is_verified, u.created_at, u.last_login_at,
-              s.theme, s.language, s.timezone, s.currency
-       FROM users u
-       LEFT JOIN user_settings s ON u.id = s.user_id
-       WHERE u.id = $1`,
-      [req.params.id]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json(result.rows[0]);
-  } catch (error) {
-    logger.error('Get user error:', error);
-    res.status(500).json({ error: 'Failed to fetch user' });
-  }
-});
-
 // UPDATE USER PROFILE
-router.patch('/:id', authenticate, [
-  body('email').optional().isEmail().normalizeEmail(),
-  body('full_name').optional().trim(),
-  body('phone').optional().trim(),
-  body('avatar_url').optional().trim()
-], async (req, res) => {
+router.patch('/:id', authenticate, validateParams(getUserParamsSchema), validateBody(updateUserBodySchema), validateResponse(baseUserSchema), async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    const { id } = req.validatedParams;
+    const { email, fullName, phone, avatarUrl, role, isActive } = req.validatedBody;
 
-    if (req.user.id !== req.params.id && req.user.role !== 'admin') {
+    if (req.user.id !== id && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const { email, full_name, phone, avatar_url } = req.body;
     const updates = [];
     const values = [];
     let paramCount = 1;
@@ -266,7 +255,7 @@ router.patch('/:id', authenticate, [
     if (email !== undefined) {
       const emailCheck = await query(
         'SELECT id FROM users WHERE email = $1 AND id != $2',
-        [email, req.params.id]
+        [email, id]
       );
       if (emailCheck.rows.length > 0) {
         return res.status(400).json({ error: 'Email already in use' });
@@ -275,9 +264,9 @@ router.patch('/:id', authenticate, [
       values.push(email);
     }
 
-    if (full_name !== undefined) {
+    if (fullName !== undefined) {
       updates.push(`full_name = $${paramCount++}`);
-      values.push(full_name);
+      values.push(fullName);
     }
 
     if (phone !== undefined) {
@@ -285,21 +274,31 @@ router.patch('/:id', authenticate, [
       values.push(phone);
     }
 
-    if (avatar_url !== undefined) {
+    if (avatarUrl !== undefined) {
       updates.push(`avatar_url = $${paramCount++}`);
-      values.push(avatar_url);
+      values.push(avatarUrl);
+    }
+
+    if (role !== undefined && req.user.role === 'admin') {
+      updates.push(`role = $${paramCount++}`);
+      values.push(role);
+    }
+
+    if (isActive !== undefined && req.user.role === 'admin') {
+      updates.push(`is_active = $${paramCount++}`);
+      values.push(isActive);
     }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    values.push(req.params.id);
+    values.push(id);
 
     const result = await query(
       `UPDATE users SET ${updates.join(', ')}, updated_at = NOW() 
        WHERE id = $${paramCount} 
-       RETURNING id, email, username, full_name, phone, avatar_url, role, created_at, updated_at`,
+       RETURNING id, email, username, full_name, phone, avatar_url, role, is_active, is_verified, created_at, updated_at`,
       values
     );
 
@@ -315,22 +314,24 @@ router.patch('/:id', authenticate, [
 });
 
 // DELETE USER (Admin only)
-router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+router.delete('/:id', authenticate, authorize('admin'), validateParams(getUserParamsSchema), async (req, res) => {
   try {
-    if (req.user.id === req.params.id) {
+    const { id } = req.validatedParams;
+
+    if (req.user.id === id) {
       return res.status(400).json({ error: 'Cannot delete your own account' });
     }
 
     const result = await query(
       'DELETE FROM users WHERE id = $1 RETURNING id, username',
-      [req.params.id]
+      [id]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ 
+    res.json({
       message: 'User deleted successfully',
       user: result.rows[0]
     });

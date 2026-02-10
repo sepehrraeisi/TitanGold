@@ -4,6 +4,7 @@ import * as api from '../../services/api.ts';
 import { AIManagerOverview, ArtemisState, TradingScenario, ArtemisConfig, ArtemisLog, DataHubState, DataSource, DataCategory, DataHubAdvancedFeatures, DetectedSourceType, DataPipelineSourceSnapshot, DataPipelineCategorySnapshot, DataNormalizationSummary, AIAgent, AgentTopicRoute, NormalizedDataStatus, TelegramPublisher, PublisherQueueItem, NormalizedDataRecord, AgentHealth, AgentTask, ResourceAllocation, Decision, DecisionEngineState, AgentSignal } from '../../types.ts';
 import { Backtesting, SystemLogs, ArtemisSettings } from './ArtemisComponents.tsx';
 import { useArtemisState } from './hooks/useArtemisState.ts';
+import CollectedDataPanel from './AIManager/tabs/DataHub/CollectedDataPanel.tsx';
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
         {children}
@@ -19,7 +20,7 @@ const AIManager: React.FC = () => {
     const { state: artemis, loading: artemisLoading, error: artemisError, reload: reloadArtemis, setSafeState: setArtemis } = useArtemisState();
     const [activeTab, setActiveTab] = useState<ArtemisTab>('overview');
     const [error, setError] = useState<string | null>(null);
-    
+
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -51,8 +52,8 @@ const AIManager: React.FC = () => {
         return (
             <div className="text-center p-10">
                 <p className="text-red-400 mb-4">{t('error_loading') || 'Error loading data'}: {combinedError}</p>
-                <button 
-                    onClick={() => window.location.reload()} 
+                <button
+                    onClick={() => window.location.reload()}
                     className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
                 >
                     {t('reload') || 'Reload'}
@@ -64,7 +65,7 @@ const AIManager: React.FC = () => {
     if (!data || !artemis) {
         return <div className="text-center p-10">{t('no_data') || 'No data available'}</div>;
     }
-    
+
     const tabs: { id: ArtemisTab; label: string }[] = [
         { id: 'overview', label: t('artemis_overview') || 'Overview' },
         { id: 'decision_engine', label: t('artemis_decision_engine') || 'Decision Engine' },
@@ -77,7 +78,7 @@ const AIManager: React.FC = () => {
         { id: 'logs', label: t('artemis_logs') || 'System Logs' },
         { id: 'settings', label: t('artemis_settings') || 'Settings' },
     ];
-    
+
     const refreshArtemis = async () => {
         try {
             await reloadArtemis();
@@ -85,8 +86,8 @@ const AIManager: React.FC = () => {
             console.error('Failed to refresh Artemis state:', e);
         }
     };
-    
-    
+
+
     return (
         <div className="space-y-6">
             <Card>
@@ -98,12 +99,11 @@ const AIManager: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex gap-2 items-center">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            artemis.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${artemis.status === 'active' ? 'bg-green-500/20 text-green-400' :
                             artemis.status === 'standby' ? 'bg-yellow-500/20 text-yellow-400' :
-                            artemis.status === 'maintenance' ? 'bg-blue-500/20 text-blue-400' :
-                            'bg-red-500/20 text-red-400'
-                        }`}>
+                                artemis.status === 'maintenance' ? 'bg-blue-500/20 text-blue-400' :
+                                    'bg-red-500/20 text-red-400'
+                            }`}>
                             {t(artemis.status) || artemis.status}
                         </span>
                         <button
@@ -120,9 +120,8 @@ const AIManager: React.FC = () => {
                                     }
                                 }
                             }}
-                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-80 ${
-                                artemis.mode === 'real' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                            }`}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-80 ${artemis.mode === 'real' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                                }`}
                             title={t('click_to_switch_mode') || 'Click to switch between demo and real mode'}
                         >
                             {artemis.mode === 'real' ? '🔴 ' : '🟢 '}
@@ -130,18 +129,17 @@ const AIManager: React.FC = () => {
                         </button>
                     </div>
                 </div>
-                
+
                 <div className="border-b border-border">
                     <nav className="-mb-px flex space-x-6 overflow-x-auto">
                         {tabs.map(tab => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-                                    activeTab === tab.id
-                                        ? 'border-purple-500 text-purple-400'
-                                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                                }`}
+                                className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
+                                    ? 'border-purple-500 text-purple-400'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                                    }`}
                             >
                                 {tab.label}
                             </button>
@@ -172,7 +170,7 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
     const [recentLogs, setRecentLogs] = useState<ArtemisLog[]>([]);
     const [scenarios, setScenarios] = useState<TradingScenario[]>([]);
     const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-    
+
     const loadAdditionalData = async () => {
         try {
             setIsLoadingLogs(true);
@@ -188,32 +186,32 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
             setIsLoadingLogs(false);
         }
     };
-    
+
     useEffect(() => {
         loadAdditionalData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-    
+
     useEffect(() => {
         if (!autoRefresh) return;
-        
+
         const interval = setInterval(() => {
             onRefresh();
             loadAdditionalData();
         }, refreshInterval * 1000);
-        
+
         return () => clearInterval(interval);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoRefresh, refreshInterval]);
-    
+
     if (!artemis) {
         return <Card><div className="text-center p-10">{t('loading') || 'Loading...'}</div></Card>;
     }
-    
+
     const dataHub = artemis.dataHub;
     const learningSystem = artemis.learningSystem;
     const orchestration = artemis.orchestration;
-    
+
     return (
         <div className="space-y-6">
             {/* Header with Auto-refresh */}
@@ -259,46 +257,46 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                     </div>
                 </div>
             </Card>
-            
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-6">
                     {/* Core Metrics & System Summary */}
-                <Card className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                    <h3 className="font-semibold text-foreground mb-3">{t('artemis_core_metrics') || 'Core Metrics'}</h3>
-                         <div className="space-y-2">
+                    <Card className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h3 className="font-semibold text-foreground mb-3">{t('artemis_core_metrics') || 'Core Metrics'}</h3>
+                            <div className="space-y-2">
                                 <ProgressBar label={t('total_decisions') || 'Total Decisions'} value={artemis.totalDecisions || 0} />
                                 <ProgressBar label={t('success_rate') || 'Success Rate'} value={artemis.successRate || 0} />
                                 <ProgressBar label={t('active_agents') || 'Active Agents'} value={artemis.activeAgents?.length || 0} maxValue={15} />
-                        <ProgressBar label={t('system_health') || 'System Health'} 
+                                <ProgressBar label={t('system_health') || 'System Health'}
                                     value={artemis.systemHealth?.overall === 'healthy' ? 100 : artemis.systemHealth?.overall === 'degraded' ? 70 : 30} />
-                         </div>
-                    </div>
-                     <div>
+                            </div>
+                        </div>
+                        <div>
                             <h3 className="font-semibold text-foreground mb-3">{t('system_summary') || 'System Summary'}</h3>
-                        <div className="grid grid-cols-2 gap-4 text-center">
+                            <div className="grid grid-cols-2 gap-4 text-center">
                                 <Stat value={data?.summary?.totalAgents || 0} label={t('total_agents')} />
                                 <Stat value={data?.summary?.activeAgents || 0} label={t('active_agents_count')} />
                                 <Stat value={data?.summary?.inTraining || 0} label={t('in_training')} />
                                 <Stat value={`${(data?.summary?.avgAccuracy || 0).toFixed(1)}%`} label={t('avg_accuracy')} />
+                            </div>
                         </div>
-                    </div>
-                </Card>
-                    
+                    </Card>
+
                     {/* Decision Engine Status */}
-                <Card>
-                <h3 className="font-semibold text-foreground mb-3">{t('decision_engine_status') || 'Decision Engine Status'}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="text-center p-3 border border-border rounded-lg">
-                        <p className="text-xs text-muted-foreground">{t('strategy') || 'Strategy'}</p>
+                    <Card>
+                        <h3 className="font-semibold text-foreground mb-3">{t('decision_engine_status') || 'Decision Engine Status'}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="text-center p-3 border border-border rounded-lg">
+                                <p className="text-xs text-muted-foreground">{t('strategy') || 'Strategy'}</p>
                                 <p className="font-bold text-foreground mt-1">{t(artemis.decisionEngine?.strategy) || artemis.decisionEngine?.strategy || 'N/A'}</p>
-                    </div>
-                    <div className="text-center p-3 border border-border rounded-lg">
-                        <p className="text-xs text-muted-foreground">{t('active_model') || 'Active Model'}</p>
+                            </div>
+                            <div className="text-center p-3 border border-border rounded-lg">
+                                <p className="text-xs text-muted-foreground">{t('active_model') || 'Active Model'}</p>
                                 <p className="font-bold text-foreground mt-1">{t(artemis.decisionEngine?.activeModel) || artemis.decisionEngine?.activeModel || 'N/A'}</p>
-                    </div>
-                    <div className="text-center p-3 border border-border rounded-lg">
-                        <p className="text-xs text-muted-foreground">{t('confidence_threshold') || 'Confidence Threshold'}</p>
+                            </div>
+                            <div className="text-center p-3 border border-border rounded-lg">
+                                <p className="text-xs text-muted-foreground">{t('confidence_threshold') || 'Confidence Threshold'}</p>
                                 <p className="font-bold text-foreground mt-1">{artemis.decisionEngine?.confidenceThreshold || 0}%</p>
                             </div>
                         </div>
@@ -324,22 +322,22 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                             <div className="bg-secondary/40 rounded p-2 text-center">
                                 <p className="text-muted-foreground text-xs">{t('total_decisions') || 'Total'}</p>
                                 <p className="text-lg font-semibold text-foreground">{artemis.totalDecisions || 0}</p>
-                    </div>
-                    </div>
-                </Card>
-                    
+                            </div>
+                        </div>
+                    </Card>
+
                     {/* Data Hub Summary */}
                     {dataHub && (
                         <Card>
                             <div className="flex justify-between items-center mb-3">
                                 <h3 className="font-semibold text-foreground">{t('data_hub_summary') || 'Data Hub Summary'}</h3>
-                                <button 
+                                <button
                                     onClick={() => onNavigate('data_hub')}
                                     className="text-xs text-purple-400 hover:text-purple-300 cursor-pointer"
                                 >
                                     {t('view_details') || 'View Details'} →
                                 </button>
-            </div>
+                            </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                                 <div className="bg-secondary/40 rounded p-2 text-center">
                                     <p className="text-muted-foreground text-xs">{t('total_sources') || 'Total Sources'}</p>
@@ -355,23 +353,22 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                                 </div>
                                 <div className="bg-secondary/40 rounded p-2 text-center">
                                     <p className="text-muted-foreground text-xs">{t('health_status') || 'Health'}</p>
-                                    <p className={`text-lg font-semibold ${
-                                        dataHub?.health?.overall === 'healthy' ? 'text-green-400' :
+                                    <p className={`text-lg font-semibold ${dataHub?.health?.overall === 'healthy' ? 'text-green-400' :
                                         dataHub?.health?.overall === 'degraded' ? 'text-yellow-400' : 'text-red-400'
-                                    }`}>
+                                        }`}>
                                         {t(dataHub?.health?.overall) || dataHub?.health?.overall || 'N/A'}
                                     </p>
                                 </div>
                             </div>
                         </Card>
                     )}
-                    
+
                     {/* Learning System Summary */}
                     {learningSystem && (
                         <Card>
                             <div className="flex justify-between items-center mb-3">
                                 <h3 className="font-semibold text-foreground">{t('learning_system_summary') || 'Learning System Summary'}</h3>
-                                <button 
+                                <button
                                     onClick={() => onNavigate('learning')}
                                     className="text-xs text-purple-400 hover:text-purple-300 cursor-pointer"
                                 >
@@ -398,13 +395,13 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                             </div>
                         </Card>
                     )}
-                    
+
                     {/* Trading Scenarios & Backtesting Summary */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Card>
                             <div className="flex justify-between items-center mb-3">
                                 <h3 className="font-semibold text-foreground">{t('trading_scenarios') || 'Trading Scenarios'}</h3>
-                                <button 
+                                <button
                                     onClick={() => onNavigate('scenarios')}
                                     className="text-xs text-purple-400 hover:text-purple-300 cursor-pointer"
                                 >
@@ -427,7 +424,7 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                         <Card>
                             <div className="flex justify-between items-center mb-3">
                                 <h3 className="font-semibold text-foreground">{t('backtesting') || 'Backtesting'}</h3>
-                                <button 
+                                <button
                                     onClick={() => onNavigate('backtesting')}
                                     className="text-xs text-purple-400 hover:text-purple-300 cursor-pointer"
                                 >
@@ -448,12 +445,12 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                             </div>
                         </Card>
                     </div>
-                    
+
                     {/* Recent Activity */}
                     <Card>
                         <div className="flex justify-between items-center mb-3">
                             <h3 className="font-semibold text-foreground">{t('recent_activity') || 'Recent Activity'}</h3>
-                            <button 
+                            <button
                                 onClick={() => onNavigate('logs')}
                                 className="text-xs text-purple-400 hover:text-purple-300 cursor-pointer"
                             >
@@ -474,11 +471,10 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                                                 {t(log.source) || log.source} · {new Date(log.timestamp).toLocaleString()}
                                             </p>
                                         </div>
-                                        <span className={`px-2 py-0.5 rounded text-xs ${
-                                            log.level === 'error' || log.level === 'critical' ? 'bg-red-500/20 text-red-400' :
+                                        <span className={`px-2 py-0.5 rounded text-xs ${log.level === 'error' || log.level === 'critical' ? 'bg-red-500/20 text-red-400' :
                                             log.level === 'warning' ? 'bg-yellow-500/20 text-yellow-400' :
-                                            'bg-blue-500/20 text-blue-400'
-                                        }`}>
+                                                'bg-blue-500/20 text-blue-400'
+                                            }`}>
                                             {t(log.level) || log.level}
                                         </span>
                                     </div>
@@ -491,53 +487,52 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                         )}
                     </Card>
                 </div>
-                
+
                 {/* Sidebar */}
-            <div className="space-y-6">
+                <div className="space-y-6">
                     {/* System Health */}
-                <Card>
-                <h3 className="font-semibold text-foreground mb-3">{t('system_health') || 'System Health'}</h3>
-                    <div className="space-y-2 text-sm">
-                    <Metric label={t('overall_status') || 'Overall'} 
-                        value={<span className={`font-semibold ${
-                                    artemis.systemHealth?.overall === 'healthy' ? 'text-green-400' :
+                    <Card>
+                        <h3 className="font-semibold text-foreground mb-3">{t('system_health') || 'System Health'}</h3>
+                        <div className="space-y-2 text-sm">
+                            <Metric label={t('overall_status') || 'Overall'}
+                                value={<span className={`font-semibold ${artemis.systemHealth?.overall === 'healthy' ? 'text-green-400' :
                                     artemis.systemHealth?.overall === 'degraded' ? 'text-yellow-400' : 'text-red-400'
-                                }`}>{t(artemis.systemHealth?.overall) || artemis.systemHealth?.overall || 'N/A'}</span>} />
+                                    }`}>{t(artemis.systemHealth?.overall) || artemis.systemHealth?.overall || 'N/A'}</span>} />
                             <Metric label={t('cpu_usage') || 'CPU'} value={`${artemis.systemHealth?.resources?.cpu?.toFixed(1) || '0.0'}%`} />
                             <Metric label={t('memory_usage') || 'Memory'} value={`${artemis.systemHealth?.resources?.memory?.toFixed(1) || '0.0'}%`} />
-                    <Metric label={t('api_quota') || 'API Quota'} 
+                            <Metric label={t('api_quota') || 'API Quota'}
                                 value={`${artemis.systemHealth?.resources?.apiQuota?.used || 0}/${artemis.systemHealth?.resources?.apiQuota?.limit || 0}`} />
-                    </div>
-                </Card>
-                    
+                        </div>
+                    </Card>
+
                     {/* Top Agents */}
-                <Card>
+                    <Card>
                         <h3 className="font-semibold text-foreground mb-3">{t('top_agents') || 'Top Agents'}</h3>
-                    <div className="space-y-3">
+                        <div className="space-y-3">
                             {(data?.topAgents && data.topAgents.length > 0) ? (
                                 data.topAgents.map(agent => (
-                            <div key={agent.id} className="flex justify-between items-center text-sm">
-                                <div>
-                                    <p className="font-semibold text-foreground">{agent.name}</p>
-                                    <p className="text-xs text-muted-foreground">{agent.role}</p>
-                                </div>
-                                <span className="font-bold text-purple-400">{agent.accuracy.toFixed(1)}%</span>
-                            </div>
+                                    <div key={agent.id} className="flex justify-between items-center text-sm">
+                                        <div>
+                                            <p className="font-semibold text-foreground">{agent.name}</p>
+                                            <p className="text-xs text-muted-foreground">{agent.role}</p>
+                                        </div>
+                                        <span className="font-bold text-purple-400">{agent.accuracy.toFixed(1)}%</span>
+                                    </div>
                                 ))
                             ) : (
                                 <p className="text-sm text-muted-foreground text-center py-2">
                                     {t('no_agents_available') || 'No agents available'}
                                 </p>
                             )}
-                    </div>
-                </Card>
-                    
+                        </div>
+                    </Card>
+
                     {/* Orchestration Summary */}
                     {orchestration && (
                         <Card>
                             <div className="flex justify-between items-center mb-3">
                                 <h3 className="font-semibold text-foreground">{t('orchestration') || 'Orchestration'}</h3>
-                                <button 
+                                <button
                                     onClick={() => onNavigate('orchestration')}
                                     className="text-xs text-purple-400 hover:text-purple-300 cursor-pointer"
                                 >
@@ -551,30 +546,30 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                             </div>
                         </Card>
                     )}
-                    
+
                     {/* Quick Actions */}
                     <Card>
                         <h3 className="font-semibold text-foreground mb-3">{t('quick_actions') || 'Quick Actions'}</h3>
                         <div className="space-y-2">
-                            <button 
+                            <button
                                 onClick={() => onNavigate('decision_engine')}
                                 className="block w-full text-left px-3 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded text-sm cursor-pointer"
                             >
                                 {t('make_decision') || 'Make Decision'}
                             </button>
-                            <button 
+                            <button
                                 onClick={() => onNavigate('scenarios')}
                                 className="block w-full text-left px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-sm cursor-pointer"
                             >
                                 {t('create_scenario') || 'Create Scenario'}
                             </button>
-                            <button 
+                            <button
                                 onClick={() => onNavigate('backtesting')}
                                 className="block w-full text-left px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded text-sm cursor-pointer"
                             >
                                 {t('run_backtest') || 'Run Backtest'}
                             </button>
-                            <button 
+                            <button
                                 onClick={() => onNavigate('data_hub')}
                                 className="block w-full text-left px-3 py-2 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 rounded text-sm cursor-pointer"
                             >
@@ -607,7 +602,7 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             timestamp: d.createdAt || d.timestamp || d.id,
         }));
     }, [artemis.decisionEngine?.recentDecisions]);
-    
+
     const handleMakeDecision = async () => {
         setIsMakingDecision(true);
         try {
@@ -630,7 +625,7 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
                     timestamp: new Date().toISOString(),
                 },
             ];
-            
+
             const decision = await api.makeArtemisDecision(mockSignals);
             alert(t('decision_made') || `Decision made: ${decision.output.action} (${decision.output.confidence}% confidence)`);
             onRefresh(); // Use onRefresh instead of reload
@@ -641,7 +636,7 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             setIsMakingDecision(false);
         }
     };
-    
+
     const handleUpdateConfig = async (updates: Partial<DecisionEngineState>) => {
         setIsUpdatingConfig(true);
         try {
@@ -661,7 +656,7 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             setIsUpdatingConfig(false);
         }
     };
-    
+
     const filteredDecisions = React.useMemo(() => {
         return artemis.decisionEngine.recentDecisions.filter(decision => {
             if (decisionFilter !== 'all' && decision.type !== decisionFilter) {
@@ -672,7 +667,7 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             }
             if (searchQuery.trim()) {
                 const query = searchQuery.trim().toLowerCase();
-                if (!decision.output.action.toLowerCase().includes(query) && 
+                if (!decision.output.action.toLowerCase().includes(query) &&
                     !decision.process.method.toLowerCase().includes(query) &&
                     !decision.type.toLowerCase().includes(query)) {
                     return false;
@@ -681,15 +676,15 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             return true;
         });
     }, [artemis.decisionEngine.recentDecisions, decisionFilter, statusFilter, searchQuery]);
-    
+
     const performanceStats = React.useMemo(() => {
         const decisions = artemis.decisionEngine.recentDecisions;
         const executed = decisions.filter(d => d.execution.status === 'executed');
         const successful = executed.filter(d => d.learning.accuracy !== undefined && d.learning.accuracy >= 70);
-        const avgConfidence = decisions.length > 0 
-            ? decisions.reduce((sum, d) => sum + d.output.confidence, 0) / decisions.length 
+        const avgConfidence = decisions.length > 0
+            ? decisions.reduce((sum, d) => sum + d.output.confidence, 0) / decisions.length
             : 0;
-        
+
         return {
             total: decisions.length,
             executed: executed.length,
@@ -699,34 +694,34 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             avgExecutionTime: artemis.decisionEngine.performance.avgExecutionTime,
         };
     }, [artemis.decisionEngine]);
-    
+
     return (
         <div className="space-y-6">
             <Card>
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                <div>
-                    <h3 className="font-semibold text-foreground">{t('decision_engine_configuration') || 'Decision Engine Configuration'}</h3>
-                    <p className="text-xs text-muted-foreground">
-                        {t('decision_engine_desc') || 'Configure decision-making strategy, models, and thresholds'}
-                    </p>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                    <div>
+                        <h3 className="font-semibold text-foreground">{t('decision_engine_configuration') || 'Decision Engine Configuration'}</h3>
+                        <p className="text-xs text-muted-foreground">
+                            {t('decision_engine_desc') || 'Configure decision-making strategy, models, and thresholds'}
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setShowConfigModal(true)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                        >
+                            {t('configure') || 'Configure'}
+                        </button>
+                        <button
+                            onClick={handleMakeDecision}
+                            disabled={isMakingDecision}
+                            className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                        >
+                            {isMakingDecision ? t('processing') || 'Processing...' : t('make_decision') || 'Make Decision'}
+                        </button>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => setShowConfigModal(true)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
-                    >
-                        {t('configure') || 'Configure'}
-                    </button>
-                    <button
-                        onClick={handleMakeDecision}
-                        disabled={isMakingDecision}
-                        className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg text-sm"
-                    >
-                        {isMakingDecision ? t('processing') || 'Processing...' : t('make_decision') || 'Make Decision'}
-                    </button>
-                </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center">
                     <div>
                         <p className="text-sm text-muted-foreground mb-1">{t('strategy') || 'Strategy'}</p>
                         <p className="font-semibold text-foreground">{t(artemis.decisionEngine.strategy) || artemis.decisionEngine.strategy}</p>
@@ -744,150 +739,148 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
                         <p className="font-semibold text-foreground">{artemis.decisionEngine.performance.accuracy.toFixed(1)}%</p>
                     </div>
                 </div>
-            {performanceStats.total > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('total_decisions') || 'Total'}</p>
-                        <p className="text-xl font-semibold text-foreground">{performanceStats.total}</p>
+                {performanceStats.total > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('total_decisions') || 'Total'}</p>
+                            <p className="text-xl font-semibold text-foreground">{performanceStats.total}</p>
+                        </div>
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('executed') || 'Executed'}</p>
+                            <p className="text-xl font-semibold text-blue-400">{performanceStats.executed}</p>
+                        </div>
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('successful') || 'Successful'}</p>
+                            <p className="text-xl font-semibold text-green-400">{performanceStats.successful}</p>
+                        </div>
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('success_rate') || 'Success Rate'}</p>
+                            <p className="text-xl font-semibold text-foreground">{performanceStats.successRate.toFixed(1)}%</p>
+                        </div>
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('avg_confidence') || 'Avg Confidence'}</p>
+                            <p className="text-xl font-semibold text-foreground">{performanceStats.avgConfidence.toFixed(1)}%</p>
+                        </div>
                     </div>
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('executed') || 'Executed'}</p>
-                        <p className="text-xl font-semibold text-blue-400">{performanceStats.executed}</p>
-                    </div>
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('successful') || 'Successful'}</p>
-                        <p className="text-xl font-semibold text-green-400">{performanceStats.successful}</p>
-                    </div>
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('success_rate') || 'Success Rate'}</p>
-                        <p className="text-xl font-semibold text-foreground">{performanceStats.successRate.toFixed(1)}%</p>
-                    </div>
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('avg_confidence') || 'Avg Confidence'}</p>
-                        <p className="text-xl font-semibold text-foreground">{performanceStats.avgConfidence.toFixed(1)}%</p>
-                    </div>
-                </div>
-            )}
-            </Card>
-        
-            <Card>
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-foreground">{t('recent_decisions') || 'Recent Decisions'}</h3>
-                <div className="flex gap-2">
-                    <select
-                        value={decisionFilter}
-                        onChange={(e) => setDecisionFilter(e.target.value as any)}
-                        className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
-                    >
-                        <option value="all">{t('all_types') || 'All Types'}</option>
-                        <option value="trade">{t('trade') || 'Trade'}</option>
-                        <option value="risk_management">{t('risk_management') || 'Risk Management'}</option>
-                        <option value="portfolio_adjustment">{t('portfolio_adjustment') || 'Portfolio Adjustment'}</option>
-                        <option value="agent_control">{t('agent_control') || 'Agent Control'}</option>
-                    </select>
-                    <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as any)}
-                        className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
-                    >
-                        <option value="all">{t('all_statuses') || 'All Statuses'}</option>
-                        <option value="pending">{t('pending') || 'Pending'}</option>
-                        <option value="executed">{t('executed') || 'Executed'}</option>
-                        <option value="failed">{t('failed') || 'Failed'}</option>
-                        <option value="cancelled">{t('cancelled') || 'Cancelled'}</option>
-                    </select>
-                </div>
-            </div>
-
-            {/* Decision Performance Chart */}
-            <Card>
-                <div className="flex items-center justify-between mb-3">
-                    <div>
-                        <h4 className="font-semibold text-foreground">{t('decision_performance') || 'Decision Performance'}</h4>
-                        <p className="text-xs text-muted-foreground">
-                            {t('decision_performance_desc') || 'Recent decisions confidence & success'}
-                        </p>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                        {t('last_n_decisions', { n: decisionSeries.length }) || `Last ${decisionSeries.length} decisions`}
-                    </div>
-                </div>
-                {decisionSeries.length >= 2 ? (
-                    <div className="h-48 w-full bg-[#0d0f19] rounded-md border border-border flex items-center justify-center">
-                        <svg width="100%" height="100%" viewBox="0 0 500 180" preserveAspectRatio="none">
-                            {/* Grid */}
-                            {[1,2,3,4,5].map(i => (
-                                <line key={`row-${i}`} x1="0" y1={i*30} x2="500" y2={i*30} stroke="#1f2434" strokeWidth="1" />
-                            ))}
-                            {/* Confidence line */}
-                            {(() => {
-                                const maxConf = Math.max(...decisionSeries.map(d => d.confidence), 100);
-                                const minConf = Math.min(...decisionSeries.map(d => d.confidence), 0);
-                                const range = maxConf - minConf || 1;
-                                const points = decisionSeries.map((d, i) => {
-                                    const x = (i / Math.max(decisionSeries.length - 1, 1)) * 500;
-                                    const y = 170 - ((d.confidence - minConf) / range) * 150;
-                                    return `${x},${y}`;
-                                }).join(' ');
-                                return <polyline points={points} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" />;
-                            })()}
-                            {/* Accuracy markers */}
-                            {(() => {
-                                const maxAcc = 100;
-                                const minAcc = 0;
-                                const range = maxAcc - minAcc || 1;
-                                return decisionSeries.map((d, i) => {
-                                    const x = (i / Math.max(decisionSeries.length - 1, 1)) * 500;
-                                    const y = 170 - (( (d.accuracy ?? d.confidence) - minAcc) / range) * 150;
-                                    const color = d.wasSuccessful === null ? '#9ca3af' : d.wasSuccessful ? '#22c55e' : '#ef4444';
-                                    return <circle key={`acc-${i}`} cx={x} cy={y} r={4} fill={color} opacity="0.9" />;
-                                });
-                            })()}
-                        </svg>
-                    </div>
-                ) : (
-                    <p className="text-sm text-muted-foreground">{t('not_enough_data') || 'Not enough data to render chart.'}</p>
                 )}
             </Card>
-            <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t('search_decisions') || 'Search decisions...'}
-                className="w-full px-2 py-1 mb-2 bg-background border border-border rounded text-xs text-foreground"
-            />
-            {filteredDecisions.length > 0 ? (
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {filteredDecisions.slice(0, 20).map(decision => (
-                        <div 
-                            key={decision.id} 
-                            className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
-                            onClick={() => setSelectedDecision(decision)}
+
+            <Card>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-semibold text-foreground">{t('recent_decisions') || 'Recent Decisions'}</h3>
+                    <div className="flex gap-2">
+                        <select
+                            value={decisionFilter}
+                            onChange={(e) => setDecisionFilter(e.target.value as any)}
+                            className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
                         >
+                            <option value="all">{t('all_types') || 'All Types'}</option>
+                            <option value="trade">{t('trade') || 'Trade'}</option>
+                            <option value="risk_management">{t('risk_management') || 'Risk Management'}</option>
+                            <option value="portfolio_adjustment">{t('portfolio_adjustment') || 'Portfolio Adjustment'}</option>
+                            <option value="agent_control">{t('agent_control') || 'Agent Control'}</option>
+                        </select>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value as any)}
+                            className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
+                        >
+                            <option value="all">{t('all_statuses') || 'All Statuses'}</option>
+                            <option value="pending">{t('pending') || 'Pending'}</option>
+                            <option value="executed">{t('executed') || 'Executed'}</option>
+                            <option value="failed">{t('failed') || 'Failed'}</option>
+                            <option value="cancelled">{t('cancelled') || 'Cancelled'}</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* Decision Performance Chart */}
+                <Card>
+                    <div className="flex items-center justify-between mb-3">
+                        <div>
+                            <h4 className="font-semibold text-foreground">{t('decision_performance') || 'Decision Performance'}</h4>
+                            <p className="text-xs text-muted-foreground">
+                                {t('decision_performance_desc') || 'Recent decisions confidence & success'}
+                            </p>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            {t('last_n_decisions', { n: decisionSeries.length }) || `Last ${decisionSeries.length} decisions`}
+                        </div>
+                    </div>
+                    {decisionSeries.length >= 2 ? (
+                        <div className="h-48 w-full bg-[#0d0f19] rounded-md border border-border flex items-center justify-center">
+                            <svg width="100%" height="100%" viewBox="0 0 500 180" preserveAspectRatio="none">
+                                {/* Grid */}
+                                {[1, 2, 3, 4, 5].map(i => (
+                                    <line key={`row-${i}`} x1="0" y1={i * 30} x2="500" y2={i * 30} stroke="#1f2434" strokeWidth="1" />
+                                ))}
+                                {/* Confidence line */}
+                                {(() => {
+                                    const maxConf = Math.max(...decisionSeries.map(d => d.confidence), 100);
+                                    const minConf = Math.min(...decisionSeries.map(d => d.confidence), 0);
+                                    const range = maxConf - minConf || 1;
+                                    const points = decisionSeries.map((d, i) => {
+                                        const x = (i / Math.max(decisionSeries.length - 1, 1)) * 500;
+                                        const y = 170 - ((d.confidence - minConf) / range) * 150;
+                                        return `${x},${y}`;
+                                    }).join(' ');
+                                    return <polyline points={points} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" />;
+                                })()}
+                                {/* Accuracy markers */}
+                                {(() => {
+                                    const maxAcc = 100;
+                                    const minAcc = 0;
+                                    const range = maxAcc - minAcc || 1;
+                                    return decisionSeries.map((d, i) => {
+                                        const x = (i / Math.max(decisionSeries.length - 1, 1)) * 500;
+                                        const y = 170 - (((d.accuracy ?? d.confidence) - minAcc) / range) * 150;
+                                        const color = d.wasSuccessful === null ? '#9ca3af' : d.wasSuccessful ? '#22c55e' : '#ef4444';
+                                        return <circle key={`acc-${i}`} cx={x} cy={y} r={4} fill={color} opacity="0.9" />;
+                                    });
+                                })()}
+                            </svg>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">{t('not_enough_data') || 'Not enough data to render chart.'}</p>
+                    )}
+                </Card>
+                <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={t('search_decisions') || 'Search decisions...'}
+                    className="w-full px-2 py-1 mb-2 bg-background border border-border rounded text-xs text-foreground"
+                />
+                {filteredDecisions.length > 0 ? (
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {filteredDecisions.slice(0, 20).map(decision => (
+                            <div
+                                key={decision.id}
+                                className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
+                                onClick={() => setSelectedDecision(decision)}
+                            >
                                 <div className="flex justify-between items-start mb-2">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <p className="font-semibold text-foreground">{t(decision.type) || decision.type}</p>
-                                        <span className={`px-2 py-0.5 rounded text-xs ${
-                                            decision.execution.status === 'executed' ? 'bg-green-500/20 text-green-400' :
-                                            decision.execution.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                                            decision.execution.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
-                                            'bg-yellow-500/20 text-yellow-400'
-                                        }`}>
-                                            {t(decision.execution.status) || decision.execution.status}
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="font-semibold text-foreground">{t(decision.type) || decision.type}</p>
+                                            <span className={`px-2 py-0.5 rounded text-xs ${decision.execution.status === 'executed' ? 'bg-green-500/20 text-green-400' :
+                                                decision.execution.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                                                    decision.execution.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
+                                                        'bg-yellow-500/20 text-yellow-400'
+                                                }`}>
+                                                {t(decision.execution.status) || decision.execution.status}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">{new Date(decision.timestamp).toLocaleString()}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className={`px-2 py-1 rounded-full text-xs ${decision.output.confidence >= 80 ? 'bg-green-500/20 text-green-400' :
+                                            decision.output.confidence >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                                                'bg-red-500/20 text-red-400'
+                                            }`}>
+                                            {decision.output.confidence}%
                                         </span>
                                     </div>
-                                    <p className="text-xs text-muted-foreground">{new Date(decision.timestamp).toLocaleString()}</p>
-                                </div>
-                                <div className="text-right">
-                                    <span className={`px-2 py-1 rounded-full text-xs ${
-                                        decision.output.confidence >= 80 ? 'bg-green-500/20 text-green-400' :
-                                        decision.output.confidence >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
-                                        'bg-red-500/20 text-red-400'
-                                    }`}>
-                                        {decision.output.confidence}%
-                                    </span>
-                                </div>
                                 </div>
                                 <div className="text-xs text-muted-foreground">
                                     <p>{t('method') || 'Method'}: {t(decision.process.method) || decision.process.method}</p>
@@ -904,27 +897,27 @@ const DecisionEngine: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
                         ))}
                     </div>
                 ) : (
-                <p className="text-center text-muted-foreground py-10">{t('no_decisions_found') || 'No decisions found.'}</p>
+                    <p className="text-center text-muted-foreground py-10">{t('no_decisions_found') || 'No decisions found.'}</p>
                 )}
             </Card>
-        
-        {selectedDecision && (
-            <DecisionDetailsModal
-                decision={selectedDecision}
-                onClose={() => setSelectedDecision(null)}
-                t={t}
-            />
-        )}
-        
-        {showConfigModal && (
-            <DecisionConfigModal
-                decisionEngine={artemis.decisionEngine}
-                onClose={() => setShowConfigModal(false)}
-                onUpdate={handleUpdateConfig}
-                isUpdating={isUpdatingConfig}
-                t={t}
-            />
-        )}
+
+            {selectedDecision && (
+                <DecisionDetailsModal
+                    decision={selectedDecision}
+                    onClose={() => setSelectedDecision(null)}
+                    t={t}
+                />
+            )}
+
+            {showConfigModal && (
+                <DecisionConfigModal
+                    decisionEngine={artemis.decisionEngine}
+                    onClose={() => setShowConfigModal(false)}
+                    onUpdate={handleUpdateConfig}
+                    isUpdating={isUpdatingConfig}
+                    t={t}
+                />
+            )}
         </div>
     );
 };
@@ -949,7 +942,7 @@ const DecisionDetailsModal: React.FC<{
                         {t('close') || 'Close'}
                     </button>
                 </div>
-                
+
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
@@ -958,12 +951,11 @@ const DecisionDetailsModal: React.FC<{
                         </div>
                         <div>
                             <p className="text-xs text-muted-foreground mb-1">{t('status') || 'Status'}</p>
-                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                decision.execution.status === 'executed' ? 'bg-green-500/20 text-green-400' :
+                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${decision.execution.status === 'executed' ? 'bg-green-500/20 text-green-400' :
                                 decision.execution.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                                decision.execution.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
-                                'bg-yellow-500/20 text-yellow-400'
-                            }`}>
+                                    decision.execution.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
+                                        'bg-yellow-500/20 text-yellow-400'
+                                }`}>
                                 {t(decision.execution.status) || decision.execution.status}
                             </span>
                         </div>
@@ -976,21 +968,21 @@ const DecisionDetailsModal: React.FC<{
                             <p className="text-sm font-semibold text-foreground">{t(decision.process.method) || decision.process.method}</p>
                         </div>
                     </div>
-                    
+
                     <div>
                         <p className="text-xs text-muted-foreground mb-2">{t('action') || 'Action'}</p>
                         <p className="text-sm font-semibold text-foreground bg-secondary/40 p-3 rounded border border-border">
                             {decision.output.action}
                         </p>
                     </div>
-                    
+
                     <div>
                         <p className="text-xs text-muted-foreground mb-2">{t('reasoning') || 'Reasoning'}</p>
                         <p className="text-sm text-foreground bg-secondary/40 p-3 rounded border border-border">
                             {decision.process.reasoning}
                         </p>
                     </div>
-                    
+
                     {decision.input.signals && decision.input.signals.length > 0 && (
                         <div>
                             <p className="text-xs text-muted-foreground mb-2">{t('input_signals') || 'Input Signals'}</p>
@@ -1000,10 +992,9 @@ const DecisionDetailsModal: React.FC<{
                                         <div className="flex justify-between items-center">
                                             <span className="font-semibold text-foreground">{signal.agentName || signal.agentId}</span>
                                             <div className="flex items-center gap-2">
-                                                <span className={`px-2 py-0.5 rounded ${
-                                                    signal.signalType === 'buy' || signal.signalType === 'entry' ? 'bg-green-500/20 text-green-400' :
+                                                <span className={`px-2 py-0.5 rounded ${signal.signalType === 'buy' || signal.signalType === 'entry' ? 'bg-green-500/20 text-green-400' :
                                                     'bg-red-500/20 text-red-400'
-                                                }`}>
+                                                    }`}>
                                                     {t(signal.signalType) || signal.signalType}
                                                 </span>
                                                 <span className="text-muted-foreground">{signal.confidence}%</span>
@@ -1014,7 +1005,7 @@ const DecisionDetailsModal: React.FC<{
                             </div>
                         </div>
                     )}
-                    
+
                     {decision.learning.learned && decision.learning.accuracy !== undefined && (
                         <div>
                             <p className="text-xs text-muted-foreground mb-1">{t('learning_accuracy') || 'Learning Accuracy'}</p>
@@ -1040,7 +1031,7 @@ const DecisionConfigModal: React.FC<{
     const [strategy, setStrategy] = useState(decisionEngine.strategy);
     const [activeModel, setActiveModel] = useState(decisionEngine.activeModel);
     const [confidenceThreshold, setConfidenceThreshold] = useState(decisionEngine.confidenceThreshold);
-    
+
     const handleSubmit = async () => {
         await onUpdate({
             strategy,
@@ -1048,7 +1039,7 @@ const DecisionConfigModal: React.FC<{
             confidenceThreshold,
         });
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
@@ -1058,7 +1049,7 @@ const DecisionConfigModal: React.FC<{
                         {t('close') || 'Close'}
                     </button>
                 </div>
-                
+
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('strategy') || 'Strategy'}</label>
@@ -1073,7 +1064,7 @@ const DecisionConfigModal: React.FC<{
                             <option value="consensus">{t('consensus') || 'Consensus'}</option>
                         </select>
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('active_model') || 'Active Model'}</label>
                         <select
@@ -1090,7 +1081,7 @@ const DecisionConfigModal: React.FC<{
                             <option value="hybrid">{t('hybrid') || 'Hybrid'}</option>
                         </select>
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">
                             {t('confidence_threshold') || 'Confidence Threshold'} (%)
@@ -1105,7 +1096,7 @@ const DecisionConfigModal: React.FC<{
                         />
                     </div>
                 </div>
-                
+
                 <div className="flex justify-end gap-2 mt-6">
                     <button
                         onClick={onClose}
@@ -1133,7 +1124,7 @@ const Orchestration: React.FC<{ artemis: ArtemisState; t: (key: string) => strin
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTask, setSelectedTask] = useState<AgentTask | null>(null);
     const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-    
+
     const taskStats = React.useMemo(() => {
         const tasks = artemis.orchestration.agentTasks;
         return {
@@ -1145,7 +1136,7 @@ const Orchestration: React.FC<{ artemis: ArtemisState; t: (key: string) => strin
             completionRate: tasks.length > 0 ? (tasks.filter(t => t.status === 'completed').length / tasks.length) * 100 : 0,
         };
     }, [artemis.orchestration.agentTasks]);
-    
+
     const filteredTasks = React.useMemo(() => {
         return artemis.orchestration.agentTasks.filter(task => {
             if (taskFilter !== 'all' && task.status !== taskFilter) {
@@ -1156,7 +1147,7 @@ const Orchestration: React.FC<{ artemis: ArtemisState; t: (key: string) => strin
             }
             if (searchQuery.trim()) {
                 const query = searchQuery.trim().toLowerCase();
-                if (!task.agentId.toLowerCase().includes(query) && 
+                if (!task.agentId.toLowerCase().includes(query) &&
                     !task.task.toLowerCase().includes(query)) {
                     return false;
                 }
@@ -1164,7 +1155,7 @@ const Orchestration: React.FC<{ artemis: ArtemisState; t: (key: string) => strin
             return true;
         });
     }, [artemis.orchestration.agentTasks, taskFilter, priorityFilter, searchQuery]);
-    
+
     const formatDuration = (assignedAt: string, completedAt?: string) => {
         const start = new Date(assignedAt).getTime();
         const end = completedAt ? new Date(completedAt).getTime() : Date.now();
@@ -1173,7 +1164,7 @@ const Orchestration: React.FC<{ artemis: ArtemisState; t: (key: string) => strin
         if (duration < 3600) return `${Math.floor(duration / 60)}m`;
         return `${Math.floor(duration / 3600)}h ${Math.floor((duration % 3600) / 60)}m`;
     };
-    
+
     const handleCancelTask = async (task: AgentTask) => {
         if (!confirm(t('cancel_task_confirm') || `Cancel task "${task.task}" for agent "${task.agentId}"?`)) {
             return;
@@ -1187,7 +1178,7 @@ const Orchestration: React.FC<{ artemis: ArtemisState; t: (key: string) => strin
             alert(t('cancel_task_failed') || 'Failed to cancel task');
         }
     };
-    
+
     const handleRetryTask = async (task: AgentTask) => {
         if (!confirm(t('retry_task_confirm') || `Retry task "${task.task}" for agent "${task.agentId}"?`)) {
             return;
@@ -1201,277 +1192,275 @@ const Orchestration: React.FC<{ artemis: ArtemisState; t: (key: string) => strin
             alert(t('retry_task_failed') || 'Failed to retry task');
         }
     };
-    
+
     return (
-    <div className="space-y-6">
-        <Card>
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                <div>
-                    <h3 className="font-semibold text-foreground">{t('agent_orchestration') || 'Agent Orchestration'}</h3>
-                    <p className="text-xs text-muted-foreground">
-                        {t('orchestration_desc') || 'Manage agent coordination, task distribution, and resource allocation'}
-                    </p>
-                </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center">
-                <Stat value={artemis.orchestration.activeAgents} label={t('active_agents') || 'Active Agents'} />
-                <Stat value={artemis.orchestration.agentTasks.length} label={t('total_tasks') || 'Total Tasks'} />
-                <Stat value={Object.keys(artemis.orchestration.resourceAllocation).length} label={t('allocated_resources') || 'Allocated Resources'} />
-                <Stat value={`${taskStats.completionRate.toFixed(1)}%`} label={t('completion_rate') || 'Completion Rate'} />
-            </div>
-            {taskStats.total > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('pending') || 'Pending'}</p>
-                        <p className="text-xl font-semibold text-yellow-400">{taskStats.pending}</p>
-                    </div>
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('running') || 'Running'}</p>
-                        <p className="text-xl font-semibold text-blue-400">{taskStats.running}</p>
-                    </div>
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('completed') || 'Completed'}</p>
-                        <p className="text-xl font-semibold text-green-400">{taskStats.completed}</p>
-                    </div>
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('failed') || 'Failed'}</p>
-                        <p className="text-xl font-semibold text-red-400">{taskStats.failed}</p>
-                    </div>
-                    <div className="bg-secondary/40 rounded p-3">
-                        <p className="text-muted-foreground text-xs">{t('completion_rate') || 'Completion Rate'}</p>
-                        <p className="text-xl font-semibold text-foreground">{taskStats.completionRate.toFixed(1)}%</p>
-                    </div>
-                </div>
-            )}
-        </Card>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-foreground">{t('agent_tasks') || 'Agent Tasks'}</h3>
-                    <div className="flex gap-2">
-                        <select
-                            value={taskFilter}
-                            onChange={(e) => setTaskFilter(e.target.value as any)}
-                            className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
-                        >
-                            <option value="all">{t('all_statuses') || 'All Statuses'}</option>
-                            <option value="pending">{t('pending') || 'Pending'}</option>
-                            <option value="running">{t('running') || 'Running'}</option>
-                            <option value="completed">{t('completed') || 'Completed'}</option>
-                            <option value="failed">{t('failed') || 'Failed'}</option>
-                        </select>
-                        <select
-                            value={priorityFilter}
-                            onChange={(e) => setPriorityFilter(e.target.value as any)}
-                            className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
-                        >
-                            <option value="all">{t('all_priorities') || 'All Priorities'}</option>
-                            <option value="low">{t('low') || 'Low'}</option>
-                            <option value="medium">{t('medium') || 'Medium'}</option>
-                            <option value="high">{t('high') || 'High'}</option>
-                            <option value="critical">{t('critical') || 'Critical'}</option>
-                        </select>
-                    </div>
-                </div>
-                <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={t('search_tasks') || 'Search tasks...'}
-                    className="w-full px-2 py-1 mb-2 bg-background border border-border rounded text-xs text-foreground"
-                />
-                {filteredTasks.length > 0 ? (
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {filteredTasks.map(task => (
-                            <div 
-                                key={`${task.agentId}-${task.task}-${task.assignedAt}`} 
-                                className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
-                                onClick={() => setSelectedTask(task)}
-                            >
-                                <div className="flex justify-between items-start">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                    <p className="font-semibold text-foreground">{task.agentId}</p>
-                                            <span className={`px-2 py-0.5 rounded text-xs ${
-                                                task.priority === 'critical' ? 'bg-red-500/20 text-red-400' :
-                                                task.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                                                task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                'bg-gray-500/20 text-gray-400'
-                                            }`}>
-                                                {t(task.priority) || task.priority}
-                                            </span>
-                                        </div>
-                                    <p className="text-xs text-muted-foreground">{task.task}</p>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            {t('assigned_at') || 'Assigned'}: {new Date(task.assignedAt).toLocaleString()}
-                                        </p>
-                                        {task.completedAt && (
-                                            <p className="text-xs text-muted-foreground">
-                                                {t('completed_at') || 'Completed'}: {new Date(task.completedAt).toLocaleString()}
-                                            </p>
-                                        )}
-                                        <p className="text-xs text-muted-foreground">
-                                            {t('duration') || 'Duration'}: {formatDuration(task.assignedAt, task.completedAt)}
-                                        </p>
-                                </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                    task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                                    task.status === 'running' ? 'bg-blue-500/20 text-blue-400' :
-                                    task.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                                    'bg-gray-500/20 text-gray-400'
-                                }`}>
-                                    {t(task.status) || task.status}
-                                </span>
-                                        {(task.status === 'running' || task.status === 'pending') && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleCancelTask(task);
-                                                }}
-                                                className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
-                                            >
-                                                {t('cancel') || 'Cancel'}
-                                            </button>
-                                        )}
-                                        {task.status === 'failed' && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleRetryTask(task);
-                                                }}
-                                                className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
-                                            >
-                                                {t('retry') || 'Retry'}
-                                            </button>
-                                        )}
-                                    </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                    <p className="text-center text-muted-foreground py-10">{t('no_tasks_found') || 'No tasks found.'}</p>
-            )}
-        </Card>
-            
+        <div className="space-y-6">
             <Card>
-                <h3 className="font-semibold text-foreground mb-4">{t('resource_allocation') || 'Resource Allocation'}</h3>
-                {Object.keys(artemis.orchestration.resourceAllocation).length > 0 ? (
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {Object.entries(artemis.orchestration.resourceAllocation).map(([agentId, allocation]) => (
-                            <div 
-                                key={agentId}
-                                className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
-                                onClick={() => setSelectedAgent(agentId)}
-                            >
-                                <div className="flex justify-between items-start mb-2">
-                                    <p className="font-semibold text-foreground">{agentId}</p>
-                                    <span className="text-xs text-muted-foreground">
-                                        {t('priority') || 'Priority'}: {allocation.priority}
-                                    </span>
-                                </div>
-                                <div className="space-y-2">
-                                    <div>
-                                        <div className="flex justify-between text-xs mb-1">
-                                            <span className="text-muted-foreground">{t('cpu_usage') || 'CPU'}</span>
-                                            <span className="text-foreground">{allocation.cpu.toFixed(1)}%</span>
-                                        </div>
-                                        <div className="w-full bg-secondary rounded-full h-2">
-                                            <div 
-                                                className="bg-blue-500 h-2 rounded-full" 
-                                                style={{width: `${allocation.cpu}%`}}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="flex justify-between text-xs mb-1">
-                                            <span className="text-muted-foreground">{t('memory_usage') || 'Memory'}</span>
-                                            <span className="text-foreground">{allocation.memory.toFixed(1)}%</span>
-                                        </div>
-                                        <div className="w-full bg-secondary rounded-full h-2">
-                                            <div 
-                                                className="bg-purple-500 h-2 rounded-full" 
-                                                style={{width: `${allocation.memory}%`}}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                        {t('max_concurrent_tasks') || 'Max Concurrent Tasks'}: {allocation.maxConcurrentTasks}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                    <div>
+                        <h3 className="font-semibold text-foreground">{t('agent_orchestration') || 'Agent Orchestration'}</h3>
+                        <p className="text-xs text-muted-foreground">
+                            {t('orchestration_desc') || 'Manage agent coordination, task distribution, and resource allocation'}
+                        </p>
                     </div>
-                ) : (
-                    <p className="text-center text-muted-foreground py-10">{t('no_resource_allocation') || 'No resource allocation configured.'}</p>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center">
+                    <Stat value={artemis.orchestration.activeAgents} label={t('active_agents') || 'Active Agents'} />
+                    <Stat value={artemis.orchestration.agentTasks.length} label={t('total_tasks') || 'Total Tasks'} />
+                    <Stat value={Object.keys(artemis.orchestration.resourceAllocation).length} label={t('allocated_resources') || 'Allocated Resources'} />
+                    <Stat value={`${taskStats.completionRate.toFixed(1)}%`} label={t('completion_rate') || 'Completion Rate'} />
+                </div>
+                {taskStats.total > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('pending') || 'Pending'}</p>
+                            <p className="text-xl font-semibold text-yellow-400">{taskStats.pending}</p>
+                        </div>
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('running') || 'Running'}</p>
+                            <p className="text-xl font-semibold text-blue-400">{taskStats.running}</p>
+                        </div>
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('completed') || 'Completed'}</p>
+                            <p className="text-xl font-semibold text-green-400">{taskStats.completed}</p>
+                        </div>
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('failed') || 'Failed'}</p>
+                            <p className="text-xl font-semibold text-red-400">{taskStats.failed}</p>
+                        </div>
+                        <div className="bg-secondary/40 rounded p-3">
+                            <p className="text-muted-foreground text-xs">{t('completion_rate') || 'Completion Rate'}</p>
+                            <p className="text-xl font-semibold text-foreground">{taskStats.completionRate.toFixed(1)}%</p>
+                        </div>
+                    </div>
                 )}
             </Card>
-        </div>
-        
-        {artemis.orchestration.failoverStatus.enabled && (
-            <Card>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-foreground">{t('failover_status') || 'Failover Status'}</h3>
-                    <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded-full text-xs">
-                        {t('enabled') || 'Enabled'}
-                    </span>
-                </div>
-                {artemis.orchestration.failoverStatus.lastFailover && (
-                    <div className="p-3 border border-border rounded-lg text-sm">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <p className="font-semibold text-foreground">
-                                    {t('last_failover') || 'Last Failover'}: {artemis.orchestration.failoverStatus.lastFailover.fromAgent} → {artemis.orchestration.failoverStatus.lastFailover.toAgent}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {artemis.orchestration.failoverStatus.lastFailover.reason}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {new Date(artemis.orchestration.failoverStatus.lastFailover.timestamp).toLocaleString()}
-                                </p>
-                            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-foreground">{t('agent_tasks') || 'Agent Tasks'}</h3>
+                        <div className="flex gap-2">
+                            <select
+                                value={taskFilter}
+                                onChange={(e) => setTaskFilter(e.target.value as any)}
+                                className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
+                            >
+                                <option value="all">{t('all_statuses') || 'All Statuses'}</option>
+                                <option value="pending">{t('pending') || 'Pending'}</option>
+                                <option value="running">{t('running') || 'Running'}</option>
+                                <option value="completed">{t('completed') || 'Completed'}</option>
+                                <option value="failed">{t('failed') || 'Failed'}</option>
+                            </select>
+                            <select
+                                value={priorityFilter}
+                                onChange={(e) => setPriorityFilter(e.target.value as any)}
+                                className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
+                            >
+                                <option value="all">{t('all_priorities') || 'All Priorities'}</option>
+                                <option value="low">{t('low') || 'Low'}</option>
+                                <option value="medium">{t('medium') || 'Medium'}</option>
+                                <option value="high">{t('high') || 'High'}</option>
+                                <option value="critical">{t('critical') || 'Critical'}</option>
+                            </select>
                         </div>
                     </div>
-                )}
-                {Object.keys(artemis.orchestration.failoverStatus.fallbackAgents).length > 0 && (
-                    <div className="mt-4">
-                        <p className="text-sm text-muted-foreground mb-2">{t('fallback_agents') || 'Fallback Agents'}</p>
-                        <div className="space-y-2">
-                            {Object.entries(artemis.orchestration.failoverStatus.fallbackAgents).map(([agentId, fallbacks]) => (
-                                <div key={agentId} className="p-2 border border-border rounded text-xs">
-                                    <span className="font-semibold text-foreground">{agentId}</span>
-                                    <span className="text-muted-foreground ml-2">→</span>
-                                    <span className="text-foreground ml-2">{fallbacks.join(', ')}</span>
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={t('search_tasks') || 'Search tasks...'}
+                        className="w-full px-2 py-1 mb-2 bg-background border border-border rounded text-xs text-foreground"
+                    />
+                    {filteredTasks.length > 0 ? (
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {filteredTasks.map(task => (
+                                <div
+                                    key={`${task.agentId}-${task.task}-${task.assignedAt}`}
+                                    className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
+                                    onClick={() => setSelectedTask(task)}
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <p className="font-semibold text-foreground">{task.agentId}</p>
+                                                <span className={`px-2 py-0.5 rounded text-xs ${task.priority === 'critical' ? 'bg-red-500/20 text-red-400' :
+                                                    task.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                                                        task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                            'bg-gray-500/20 text-gray-400'
+                                                    }`}>
+                                                    {t(task.priority) || task.priority}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">{task.task}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {t('assigned_at') || 'Assigned'}: {new Date(task.assignedAt).toLocaleString()}
+                                            </p>
+                                            {task.completedAt && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t('completed_at') || 'Completed'}: {new Date(task.completedAt).toLocaleString()}
+                                                </p>
+                                            )}
+                                            <p className="text-xs text-muted-foreground">
+                                                {t('duration') || 'Duration'}: {formatDuration(task.assignedAt, task.completedAt)}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-2">
+                                            <span className={`px-2 py-1 rounded-full text-xs ${task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                                                task.status === 'running' ? 'bg-blue-500/20 text-blue-400' :
+                                                    task.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                                                        'bg-gray-500/20 text-gray-400'
+                                                }`}>
+                                                {t(task.status) || task.status}
+                                            </span>
+                                            {(task.status === 'running' || task.status === 'pending') && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleCancelTask(task);
+                                                    }}
+                                                    className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+                                                >
+                                                    {t('cancel') || 'Cancel'}
+                                                </button>
+                                            )}
+                                            {task.status === 'failed' && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRetryTask(task);
+                                                    }}
+                                                    className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
+                                                >
+                                                    {t('retry') || 'Retry'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
+                    ) : (
+                        <p className="text-center text-muted-foreground py-10">{t('no_tasks_found') || 'No tasks found.'}</p>
+                    )}
+                </Card>
+
+                <Card>
+                    <h3 className="font-semibold text-foreground mb-4">{t('resource_allocation') || 'Resource Allocation'}</h3>
+                    {Object.keys(artemis.orchestration.resourceAllocation).length > 0 ? (
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {Object.entries(artemis.orchestration.resourceAllocation).map(([agentId, allocation]) => (
+                                <div
+                                    key={agentId}
+                                    className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
+                                    onClick={() => setSelectedAgent(agentId)}
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <p className="font-semibold text-foreground">{agentId}</p>
+                                        <span className="text-xs text-muted-foreground">
+                                            {t('priority') || 'Priority'}: {allocation.priority}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div>
+                                            <div className="flex justify-between text-xs mb-1">
+                                                <span className="text-muted-foreground">{t('cpu_usage') || 'CPU'}</span>
+                                                <span className="text-foreground">{allocation.cpu.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="w-full bg-secondary rounded-full h-2">
+                                                <div
+                                                    className="bg-blue-500 h-2 rounded-full"
+                                                    style={{ width: `${allocation.cpu}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="flex justify-between text-xs mb-1">
+                                                <span className="text-muted-foreground">{t('memory_usage') || 'Memory'}</span>
+                                                <span className="text-foreground">{allocation.memory.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="w-full bg-secondary rounded-full h-2">
+                                                <div
+                                                    className="bg-purple-500 h-2 rounded-full"
+                                                    style={{ width: `${allocation.memory}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {t('max_concurrent_tasks') || 'Max Concurrent Tasks'}: {allocation.maxConcurrentTasks}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-center text-muted-foreground py-10">{t('no_resource_allocation') || 'No resource allocation configured.'}</p>
+                    )}
+                </Card>
+            </div>
+
+            {artemis.orchestration.failoverStatus.enabled && (
+                <Card>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-foreground">{t('failover_status') || 'Failover Status'}</h3>
+                        <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded-full text-xs">
+                            {t('enabled') || 'Enabled'}
+                        </span>
                     </div>
-                )}
-            </Card>
-        )}
-        
-        {selectedTask && (
-            <TaskDetailsModal
-                task={selectedTask}
-                onClose={() => setSelectedTask(null)}
-                onCancel={handleCancelTask}
-                onRetry={handleRetryTask}
-                t={t}
-            />
-        )}
-        
-        {selectedAgent && (
-            <AgentResourceModal
-                agentId={selectedAgent}
-                allocation={artemis.orchestration.resourceAllocation[selectedAgent]}
-                onClose={() => setSelectedAgent(null)}
-                t={t}
-            />
-        )}
-    </div>
-);
+                    {artemis.orchestration.failoverStatus.lastFailover && (
+                        <div className="p-3 border border-border rounded-lg text-sm">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <p className="font-semibold text-foreground">
+                                        {t('last_failover') || 'Last Failover'}: {artemis.orchestration.failoverStatus.lastFailover.fromAgent} → {artemis.orchestration.failoverStatus.lastFailover.toAgent}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {artemis.orchestration.failoverStatus.lastFailover.reason}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {new Date(artemis.orchestration.failoverStatus.lastFailover.timestamp).toLocaleString()}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {Object.keys(artemis.orchestration.failoverStatus.fallbackAgents).length > 0 && (
+                        <div className="mt-4">
+                            <p className="text-sm text-muted-foreground mb-2">{t('fallback_agents') || 'Fallback Agents'}</p>
+                            <div className="space-y-2">
+                                {Object.entries(artemis.orchestration.failoverStatus.fallbackAgents).map(([agentId, fallbacks]) => (
+                                    <div key={agentId} className="p-2 border border-border rounded text-xs">
+                                        <span className="font-semibold text-foreground">{agentId}</span>
+                                        <span className="text-muted-foreground ml-2">→</span>
+                                        <span className="text-foreground ml-2">{fallbacks.join(', ')}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </Card>
+            )}
+
+            {selectedTask && (
+                <TaskDetailsModal
+                    task={selectedTask}
+                    onClose={() => setSelectedTask(null)}
+                    onCancel={handleCancelTask}
+                    onRetry={handleRetryTask}
+                    t={t}
+                />
+            )}
+
+            {selectedAgent && (
+                <AgentResourceModal
+                    agentId={selectedAgent}
+                    allocation={artemis.orchestration.resourceAllocation[selectedAgent]}
+                    onClose={() => setSelectedAgent(null)}
+                    t={t}
+                />
+            )}
+        </div>
+    );
 };
 
 // Task Details Modal
@@ -1490,7 +1479,7 @@ const TaskDetailsModal: React.FC<{
         if (duration < 3600) return `${Math.floor(duration / 60)}m`;
         return `${Math.floor(duration / 3600)}h ${Math.floor((duration % 3600) / 60)}m`;
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1505,7 +1494,7 @@ const TaskDetailsModal: React.FC<{
                         {t('close') || 'Close'}
                     </button>
                 </div>
-                
+
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -1514,23 +1503,21 @@ const TaskDetailsModal: React.FC<{
                         </div>
                         <div>
                             <p className="text-xs text-muted-foreground mb-1">{t('status') || 'Status'}</p>
-                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
                                 task.status === 'running' ? 'bg-blue-500/20 text-blue-400' :
-                                task.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                                'bg-gray-500/20 text-gray-400'
-                            }`}>
+                                    task.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                                        'bg-gray-500/20 text-gray-400'
+                                }`}>
                                 {t(task.status) || task.status}
                             </span>
                         </div>
                         <div>
                             <p className="text-xs text-muted-foreground mb-1">{t('priority') || 'Priority'}</p>
-                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                task.priority === 'critical' ? 'bg-red-500/20 text-red-400' :
+                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${task.priority === 'critical' ? 'bg-red-500/20 text-red-400' :
                                 task.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                                task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                'bg-gray-500/20 text-gray-400'
-                            }`}>
+                                    task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                                        'bg-gray-500/20 text-gray-400'
+                                }`}>
                                 {t(task.priority) || task.priority}
                             </span>
                         </div>
@@ -1549,7 +1536,7 @@ const TaskDetailsModal: React.FC<{
                             </div>
                         )}
                     </div>
-                    
+
                     <div className="flex gap-2 pt-4 border-t border-border">
                         {(task.status === 'running' || task.status === 'pending') && (
                             <button
@@ -1601,7 +1588,7 @@ const AgentResourceModal: React.FC<{
                         {t('close') || 'Close'}
                     </button>
                 </div>
-                
+
                 <div className="space-y-4">
                     <div>
                         <p className="text-xs text-muted-foreground mb-1">{t('priority') || 'Priority'}</p>
@@ -1610,9 +1597,9 @@ const AgentResourceModal: React.FC<{
                     <div>
                         <p className="text-xs text-muted-foreground mb-2">{t('cpu_usage') || 'CPU Usage'}</p>
                         <div className="w-full bg-secondary rounded-full h-3">
-                            <div 
-                                className="bg-blue-500 h-3 rounded-full" 
-                                style={{width: `${allocation.cpu}%`}}
+                            <div
+                                className="bg-blue-500 h-3 rounded-full"
+                                style={{ width: `${allocation.cpu}%` }}
                             ></div>
                         </div>
                         <p className="text-xs text-foreground mt-1">{allocation.cpu.toFixed(1)}%</p>
@@ -1620,9 +1607,9 @@ const AgentResourceModal: React.FC<{
                     <div>
                         <p className="text-xs text-muted-foreground mb-2">{t('memory_usage') || 'Memory Usage'}</p>
                         <div className="w-full bg-secondary rounded-full h-3">
-                            <div 
-                                className="bg-purple-500 h-3 rounded-full" 
-                                style={{width: `${allocation.memory}%`}}
+                            <div
+                                className="bg-purple-500 h-3 rounded-full"
+                                style={{ width: `${allocation.memory}%` }}
                             ></div>
                         </div>
                         <p className="text-xs text-foreground mt-1">{allocation.memory.toFixed(1)}%</p>
@@ -1644,7 +1631,7 @@ const LearningSystem: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
     const [selectedImprovement, setSelectedImprovement] = useState<any>(null);
     const [selectedMistake, setSelectedMistake] = useState<any>(null);
     const [isTriggeringTraining, setIsTriggeringTraining] = useState(false);
-    
+
     const handleTriggerTraining = async () => {
         if (!confirm(t('trigger_training_confirm') || 'Trigger manual training session?')) {
             return;
@@ -1664,12 +1651,12 @@ const LearningSystem: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             setIsTriggeringTraining(false);
         }
     };
-    
+
     const improvementAreas = React.useMemo(() => {
         const areas = new Set(artemis.learningSystem.improvements.map(i => i.area));
         return Array.from(areas);
     }, [artemis.learningSystem.improvements]);
-    
+
     const filteredImprovements = React.useMemo(() => {
         return artemis.learningSystem.improvements.filter(improvement => {
             if (improvementFilter !== 'all' && improvement.area !== improvementFilter) {
@@ -1677,7 +1664,7 @@ const LearningSystem: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             }
             if (searchQuery.trim()) {
                 const query = searchQuery.trim().toLowerCase();
-                if (!improvement.area.toLowerCase().includes(query) && 
+                if (!improvement.area.toLowerCase().includes(query) &&
                     !improvement.method.toLowerCase().includes(query)) {
                     return false;
                 }
@@ -1685,7 +1672,7 @@ const LearningSystem: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             return true;
         });
     }, [artemis.learningSystem.improvements, improvementFilter, searchQuery]);
-    
+
     const filteredMistakes = React.useMemo(() => {
         return artemis.learningSystem.mistakes.filter(mistake => {
             if (mistakeFilter === 'learned' && !mistake.learned) {
@@ -1696,7 +1683,7 @@ const LearningSystem: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             }
             if (searchQuery.trim()) {
                 const query = searchQuery.trim().toLowerCase();
-                if (!mistake.type.toLowerCase().includes(query) && 
+                if (!mistake.type.toLowerCase().includes(query) &&
                     !mistake.correction.toLowerCase().includes(query)) {
                     return false;
                 }
@@ -1704,7 +1691,7 @@ const LearningSystem: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             return true;
         });
     }, [artemis.learningSystem.mistakes, mistakeFilter, searchQuery]);
-    
+
     const accuracyStats = React.useMemo(() => {
         if (artemis.learningSystem.accuracyHistory.length === 0) {
             return null;
@@ -1716,7 +1703,7 @@ const LearningSystem: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
         const avgAccuracy = history.reduce((sum, e) => sum + e.accuracy, 0) / history.length;
         const maxAccuracy = Math.max(...history.map(e => e.accuracy));
         const minAccuracy = Math.min(...history.map(e => e.accuracy));
-        
+
         return {
             current: latest.accuracy,
             trend,
@@ -1725,221 +1712,219 @@ const LearningSystem: React.FC<{ artemis: ArtemisState; t: (key: string) => stri
             minAccuracy,
         };
     }, [artemis.learningSystem.accuracyHistory]);
-    
+
     const improvementRate = React.useMemo(() => {
         if (artemis.learningSystem.improvements.length === 0) return 0;
         const recentImprovements = artemis.learningSystem.improvements
             .filter(i => new Date(i.timestamp) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
         return recentImprovements.length;
     }, [artemis.learningSystem.improvements]);
-    
+
     return (
-    <div className="space-y-6">
-        <Card>
-            <h3 className="font-semibold text-foreground mb-4">{t('learning_system_status') || 'Learning System Status'}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                <Stat value={artemis.learningSystem.totalDecisions} label={t('total_decisions') || 'Total Decisions'} />
-                <Stat value={artemis.learningSystem.totalTrades} label={t('total_trades') || 'Total Trades'} />
-                <Stat value={artemis.learningSystem.improvements.length} label={t('improvements') || 'Improvements'} />
-                <Stat value={artemis.learningSystem.mistakes.length} label={t('mistakes') || 'Mistakes'} />
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">{t('active_learning') || 'Active Learning'}:</span>
-                <span className={`px-2 py-1 rounded-full text-xs ${
-                    artemis.learningSystem.activeLearning ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
-                }`}>
-                    {artemis.learningSystem.activeLearning ? t('enabled') || 'Enabled' : t('disabled') || 'Disabled'}
-                </span>
-                <span className="text-muted-foreground ml-4">{t('last_training') || 'Last Training'}:</span>
-                <span className="text-foreground">{new Date(artemis.learningSystem.lastTraining).toLocaleString()}</span>
-            </div>
-        </Card>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
             <Card>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-foreground">{t('recent_improvements') || 'Recent Improvements'}</h3>
-                    <select
-                        value={improvementFilter}
-                        onChange={(e) => setImprovementFilter(e.target.value)}
-                        className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
-                    >
-                        <option value="all">{t('all_areas') || 'All Areas'}</option>
-                        {improvementAreas.map(area => (
-                            <option key={area} value={area}>{area}</option>
-                        ))}
-                    </select>
+                <h3 className="font-semibold text-foreground mb-4">{t('learning_system_status') || 'Learning System Status'}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                    <Stat value={artemis.learningSystem.totalDecisions} label={t('total_decisions') || 'Total Decisions'} />
+                    <Stat value={artemis.learningSystem.totalTrades} label={t('total_trades') || 'Total Trades'} />
+                    <Stat value={artemis.learningSystem.improvements.length} label={t('improvements') || 'Improvements'} />
+                    <Stat value={artemis.learningSystem.mistakes.length} label={t('mistakes') || 'Mistakes'} />
                 </div>
-                <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={t('search_improvements') || 'Search improvements...'}
-                    className="w-full px-2 py-1 mb-2 bg-background border border-border rounded text-xs text-foreground"
-                />
-                {filteredImprovements.length > 0 ? (
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {filteredImprovements.slice(0, 10).map(improvement => (
-                            <div 
-                                key={improvement.id} 
-                                className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
-                                onClick={() => setSelectedImprovement(improvement)}
-                            >
+                <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">{t('active_learning') || 'Active Learning'}:</span>
+                    <span className={`px-2 py-1 rounded-full text-xs ${artemis.learningSystem.activeLearning ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+                        }`}>
+                        {artemis.learningSystem.activeLearning ? t('enabled') || 'Enabled' : t('disabled') || 'Disabled'}
+                    </span>
+                    <span className="text-muted-foreground ml-4">{t('last_training') || 'Last Training'}:</span>
+                    <span className="text-foreground">{new Date(artemis.learningSystem.lastTraining).toLocaleString()}</span>
+                </div>
+            </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-foreground">{t('recent_improvements') || 'Recent Improvements'}</h3>
+                        <select
+                            value={improvementFilter}
+                            onChange={(e) => setImprovementFilter(e.target.value)}
+                            className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
+                        >
+                            <option value="all">{t('all_areas') || 'All Areas'}</option>
+                            {improvementAreas.map(area => (
+                                <option key={area} value={area}>{area}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={t('search_improvements') || 'Search improvements...'}
+                        className="w-full px-2 py-1 mb-2 bg-background border border-border rounded text-xs text-foreground"
+                    />
+                    {filteredImprovements.length > 0 ? (
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {filteredImprovements.slice(0, 10).map(improvement => (
+                                <div
+                                    key={improvement.id}
+                                    className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
+                                    onClick={() => setSelectedImprovement(improvement)}
+                                >
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <p className="font-semibold text-foreground">{improvement.area}</p>
+                                            <p className="text-xs text-muted-foreground">{improvement.method}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {new Date(improvement.timestamp).toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-green-400 font-semibold">+{improvement.improvement.toFixed(1)}%</span>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {improvement.before.toFixed(1)}% → {improvement.after.toFixed(1)}%
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-center text-muted-foreground py-10">{t('no_improvements_found') || 'No improvements found.'}</p>
+                    )}
+                </Card>
+
+                <Card>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-foreground">{t('recent_mistakes') || 'Recent Mistakes'}</h3>
+                        <select
+                            value={mistakeFilter}
+                            onChange={(e) => setMistakeFilter(e.target.value as any)}
+                            className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
+                        >
+                            <option value="all">{t('all') || 'All'}</option>
+                            <option value="learned">{t('learned') || 'Learned'}</option>
+                            <option value="pending">{t('pending') || 'Pending'}</option>
+                        </select>
+                    </div>
+                    {filteredMistakes.length > 0 ? (
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {filteredMistakes.slice(0, 10).map(mistake => (
+                                <div
+                                    key={mistake.id}
+                                    className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
+                                    onClick={() => setSelectedMistake(mistake)}
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-semibold text-foreground">{t(mistake.type) || mistake.type}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">{mistake.correction}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {new Date(mistake.timestamp).toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`px-2 py-1 rounded-full text-xs ${mistake.learned ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
+                                                }`}>
+                                                {mistake.learned ? t('learned') || 'Learned' : t('pending') || 'Pending'}
+                                            </span>
+                                            <p className="text-xs text-red-400 mt-1">Error: {mistake.error.toFixed(1)}%</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-center text-muted-foreground py-10">{t('no_mistakes_found') || 'No mistakes found.'}</p>
+                    )}
+                </Card>
+            </div>
+
+            {artemis.learningSystem.modelVersions.length > 0 && (
+                <Card>
+                    <h3 className="font-semibold text-foreground mb-4">{t('model_versions') || 'Model Versions'}</h3>
+                    <div className="space-y-2">
+                        {artemis.learningSystem.modelVersions.map((version, idx) => (
+                            <div key={idx} className="p-3 border border-border rounded-lg text-sm">
                                 <div className="flex justify-between items-center">
                                     <div>
-                                        <p className="font-semibold text-foreground">{improvement.area}</p>
-                                        <p className="text-xs text-muted-foreground">{improvement.method}</p>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-semibold text-foreground">v{version.version}</span>
+                                            {version.active && (
+                                                <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full text-xs">
+                                                    {t('active') || 'Active'}
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-xs text-muted-foreground mt-1">
-                                            {new Date(improvement.timestamp).toLocaleString()}
+                                            {t('trained_at') || 'Trained at'}: {new Date(version.trainedAt).toLocaleString()}
                                         </p>
                                     </div>
                                     <div className="text-right">
-                                        <span className="text-green-400 font-semibold">+{improvement.improvement.toFixed(1)}%</span>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            {improvement.before.toFixed(1)}% → {improvement.after.toFixed(1)}%
+                                        <p className="text-sm font-semibold text-foreground">
+                                            {t('accuracy') || 'Accuracy'}: {version.accuracy.toFixed(1)}%
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {t('performance') || 'Performance'}: {version.performance.toFixed(1)}%
                                         </p>
                                     </div>
                                 </div>
                             </div>
                         ))}
                     </div>
-                ) : (
-                    <p className="text-center text-muted-foreground py-10">{t('no_improvements_found') || 'No improvements found.'}</p>
-                )}
-            </Card>
-            
-            <Card>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-foreground">{t('recent_mistakes') || 'Recent Mistakes'}</h3>
-                    <select
-                        value={mistakeFilter}
-                        onChange={(e) => setMistakeFilter(e.target.value as any)}
-                        className="px-2 py-1 bg-background border border-border rounded text-xs text-foreground"
-                    >
-                        <option value="all">{t('all') || 'All'}</option>
-                        <option value="learned">{t('learned') || 'Learned'}</option>
-                        <option value="pending">{t('pending') || 'Pending'}</option>
-                    </select>
-                </div>
-                {filteredMistakes.length > 0 ? (
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {filteredMistakes.slice(0, 10).map(mistake => (
-                            <div 
-                                key={mistake.id} 
-                                className="p-3 border border-border rounded-lg text-sm hover:border-purple-500/50 transition-colors cursor-pointer"
-                                onClick={() => setSelectedMistake(mistake)}
-                            >
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="font-semibold text-foreground">{t(mistake.type) || mistake.type}</p>
-                                        <p className="text-xs text-muted-foreground mt-1">{mistake.correction}</p>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            {new Date(mistake.timestamp).toLocaleString()}
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        <span className={`px-2 py-1 rounded-full text-xs ${
-                                            mistake.learned ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-                                        }`}>
-                                            {mistake.learned ? t('learned') || 'Learned' : t('pending') || 'Pending'}
-                                        </span>
-                                        <p className="text-xs text-red-400 mt-1">Error: {mistake.error.toFixed(1)}%</p>
+                </Card>
+            )}
+
+            {artemis.learningSystem.accuracyHistory.length > 0 && (
+                <Card>
+                    <h3 className="font-semibold text-foreground mb-4">{t('accuracy_history') || 'Accuracy History'}</h3>
+                    <div className="space-y-2">
+                        {artemis.learningSystem.accuracyHistory.slice(-14).map((entry, idx) => {
+                            const prevEntry = idx > 0 ? artemis.learningSystem.accuracyHistory.slice(-14)[idx - 1] : null;
+                            const trend = prevEntry ? entry.accuracy - prevEntry.accuracy : 0;
+                            return (
+                                <div key={idx} className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground w-24">{new Date(entry.date).toLocaleDateString()}</span>
+                                    <div className="flex items-center gap-3 flex-1">
+                                        <div className="flex-1 bg-secondary rounded-full h-3 relative">
+                                            <div
+                                                className="bg-purple-500 h-3 rounded-full transition-all"
+                                                style={{ width: `${entry.accuracy}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="flex items-center gap-2 w-24 justify-end">
+                                            <span className="font-semibold text-foreground">{entry.accuracy.toFixed(1)}%</span>
+                                            {trend !== 0 && (
+                                                <span className={`text-xs ${trend > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                    {trend > 0 ? '↑' : '↓'}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
-                ) : (
-                    <p className="text-center text-muted-foreground py-10">{t('no_mistakes_found') || 'No mistakes found.'}</p>
-                )}
-            </Card>
+                </Card>
+            )}
+
+            {selectedImprovement && (
+                <ImprovementDetailsModal
+                    improvement={selectedImprovement}
+                    onClose={() => setSelectedImprovement(null)}
+                    t={t}
+                />
+            )}
+
+            {selectedMistake && (
+                <MistakeDetailsModal
+                    mistake={selectedMistake}
+                    onClose={() => setSelectedMistake(null)}
+                    t={t}
+                />
+            )}
         </div>
-        
-        {artemis.learningSystem.modelVersions.length > 0 && (
-            <Card>
-                <h3 className="font-semibold text-foreground mb-4">{t('model_versions') || 'Model Versions'}</h3>
-                <div className="space-y-2">
-                    {artemis.learningSystem.modelVersions.map((version, idx) => (
-                        <div key={idx} className="p-3 border border-border rounded-lg text-sm">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-foreground">v{version.version}</span>
-                                        {version.active && (
-                                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full text-xs">
-                                                {t('active') || 'Active'}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        {t('trained_at') || 'Trained at'}: {new Date(version.trainedAt).toLocaleString()}
-                                    </p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-semibold text-foreground">
-                                        {t('accuracy') || 'Accuracy'}: {version.accuracy.toFixed(1)}%
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {t('performance') || 'Performance'}: {version.performance.toFixed(1)}%
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </Card>
-        )}
-        
-        {artemis.learningSystem.accuracyHistory.length > 0 && (
-            <Card>
-                <h3 className="font-semibold text-foreground mb-4">{t('accuracy_history') || 'Accuracy History'}</h3>
-                <div className="space-y-2">
-                    {artemis.learningSystem.accuracyHistory.slice(-14).map((entry, idx) => {
-                        const prevEntry = idx > 0 ? artemis.learningSystem.accuracyHistory.slice(-14)[idx - 1] : null;
-                        const trend = prevEntry ? entry.accuracy - prevEntry.accuracy : 0;
-                        return (
-                        <div key={idx} className="flex justify-between items-center text-sm">
-                                <span className="text-muted-foreground w-24">{new Date(entry.date).toLocaleDateString()}</span>
-                                <div className="flex items-center gap-3 flex-1">
-                                    <div className="flex-1 bg-secondary rounded-full h-3 relative">
-                                        <div 
-                                            className="bg-purple-500 h-3 rounded-full transition-all" 
-                                        style={{width: `${entry.accuracy}%`}}
-                                    ></div>
-                                </div>
-                                    <div className="flex items-center gap-2 w-24 justify-end">
-                                        <span className="font-semibold text-foreground">{entry.accuracy.toFixed(1)}%</span>
-                                        {trend !== 0 && (
-                                            <span className={`text-xs ${trend > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                {trend > 0 ? '↑' : '↓'}
-                                            </span>
-                                        )}
-                            </div>
-                        </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </Card>
-        )}
-        
-        {selectedImprovement && (
-            <ImprovementDetailsModal
-                improvement={selectedImprovement}
-                onClose={() => setSelectedImprovement(null)}
-                t={t}
-            />
-        )}
-        
-        {selectedMistake && (
-            <MistakeDetailsModal
-                mistake={selectedMistake}
-                onClose={() => setSelectedMistake(null)}
-                t={t}
-            />
-        )}
-    </div>
-);
+    );
 };
 
 // Improvement Details Modal
@@ -1962,7 +1947,7 @@ const ImprovementDetailsModal: React.FC<{
                         {t('close') || 'Close'}
                     </button>
                 </div>
-                
+
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -1974,7 +1959,7 @@ const ImprovementDetailsModal: React.FC<{
                             <p className="text-sm font-semibold text-foreground">{new Date(improvement.timestamp).toLocaleString()}</p>
                         </div>
                     </div>
-                    
+
                     <div>
                         <p className="text-xs text-muted-foreground mb-2">{t('improvement_progress') || 'Improvement Progress'}</p>
                         <div className="space-y-2">
@@ -1983,9 +1968,9 @@ const ImprovementDetailsModal: React.FC<{
                                 <span className="text-foreground font-semibold">{improvement.before.toFixed(1)}%</span>
                             </div>
                             <div className="w-full bg-secondary rounded-full h-2">
-                                <div 
-                                    className="bg-red-500 h-2 rounded-full" 
-                                    style={{width: `${improvement.before}%`}}
+                                <div
+                                    className="bg-red-500 h-2 rounded-full"
+                                    style={{ width: `${improvement.before}%` }}
                                 ></div>
                             </div>
                             <div className="flex justify-between text-sm">
@@ -1993,9 +1978,9 @@ const ImprovementDetailsModal: React.FC<{
                                 <span className="text-foreground font-semibold">{improvement.after.toFixed(1)}%</span>
                             </div>
                             <div className="w-full bg-secondary rounded-full h-2">
-                                <div 
-                                    className="bg-green-500 h-2 rounded-full" 
-                                    style={{width: `${improvement.after}%`}}
+                                <div
+                                    className="bg-green-500 h-2 rounded-full"
+                                    style={{ width: `${improvement.after}%` }}
                                 ></div>
                             </div>
                             <div className="flex justify-between text-sm mt-2">
@@ -2030,14 +2015,13 @@ const MistakeDetailsModal: React.FC<{
                         {t('close') || 'Close'}
                     </button>
                 </div>
-                
+
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <p className="text-xs text-muted-foreground mb-1">{t('status') || 'Status'}</p>
-                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                mistake.learned ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-                            }`}>
+                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${mistake.learned ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
+                                }`}>
                                 {mistake.learned ? t('learned') || 'Learned' : t('pending') || 'Pending'}
                             </span>
                         </div>
@@ -2054,14 +2038,14 @@ const MistakeDetailsModal: React.FC<{
                             <p className="text-sm font-semibold text-foreground">{new Date(mistake.timestamp).toLocaleString()}</p>
                         </div>
                     </div>
-                    
+
                     <div>
                         <p className="text-xs text-muted-foreground mb-1">{t('correction') || 'Correction'}</p>
                         <p className="text-sm text-foreground bg-secondary/40 p-3 rounded border border-border">
                             {mistake.correction}
                         </p>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <p className="text-xs text-muted-foreground mb-1">{t('prediction') || 'Prediction'}</p>
@@ -2092,7 +2076,7 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
     const [autoRefresh, setAutoRefresh] = useState(false);
     const [autoRefreshInterval, setAutoRefreshInterval] = useState(30); // seconds
     const [healthHistory, setHealthHistory] = useState<Array<{ timestamp: string; overall: string; agents: number; alerts: number }>>([]);
-    
+
     React.useEffect(() => {
         if (autoRefresh) {
             const interval = setInterval(() => {
@@ -2101,13 +2085,13 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
             return () => clearInterval(interval);
         }
     }, [autoRefresh, autoRefreshInterval]);
-    
+
     const handleHealthCheck = async (silent = false) => {
         setIsCheckingHealth(true);
         try {
             const health = await api.checkSystemHealth();
             setLastHealthCheck(new Date().toISOString());
-            
+
             // Add to history
             setHealthHistory(prev => [
                 {
@@ -2118,28 +2102,28 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                 },
                 ...prev.slice(0, 49), // Keep last 50
             ]);
-            
+
             if (!silent) {
-            alert(t('health_check_complete') || `Health check complete. Overall: ${t(health.overall) || health.overall}`);
+                alert(t('health_check_complete') || `Health check complete. Overall: ${t(health.overall) || health.overall}`);
             }
             onRefresh(); // Refresh instead of reload
         } catch (e) {
             console.error('Failed to check health:', e);
             if (!silent) {
-            alert(t('health_check_failed') || 'Failed to check system health');
+                alert(t('health_check_failed') || 'Failed to check system health');
             }
         } finally {
             setIsCheckingHealth(false);
         }
     };
-    
+
     const handleResolveAlert = async (alertId: string) => {
         try {
             const artemis = await api.fetchArtemisState();
             const alert = artemis.systemHealth.alerts.find(a => a.id === alertId);
             if (alert) {
                 alert.resolved = true;
-                artemis.systemHealth.alerts = artemis.systemHealth.alerts.map(a => 
+                artemis.systemHealth.alerts = artemis.systemHealth.alerts.map(a =>
                     a.id === alertId ? { ...a, resolved: true } : a
                 );
                 await api.updateArtemisConfig(artemis);
@@ -2150,7 +2134,7 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
             alert(t('resolve_alert_failed') || 'Failed to resolve alert');
         }
     };
-    
+
     const handleDismissAlert = async (alertId: string) => {
         try {
             const artemis = await api.fetchArtemisState();
@@ -2162,7 +2146,7 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
             alert(t('dismiss_alert_failed') || 'Failed to dismiss alert');
         }
     };
-    
+
     const filteredAgents = React.useMemo(() => {
         return artemis.systemHealth.agents.filter(agent => {
             if (agentFilter !== 'all' && agent.status !== agentFilter) {
@@ -2177,7 +2161,7 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
             return true;
         });
     }, [artemis.systemHealth.agents, agentFilter, searchQuery]);
-    
+
     const filteredIntegrations = React.useMemo(() => {
         return artemis.systemHealth.integrations.filter(integration => {
             if (integrationFilter !== 'all' && integration.status !== integrationFilter) {
@@ -2185,7 +2169,7 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
             }
             if (searchQuery.trim()) {
                 const query = searchQuery.trim().toLowerCase();
-                if (!integration.name.toLowerCase().includes(query) && 
+                if (!integration.name.toLowerCase().includes(query) &&
                     !integration.type.toLowerCase().includes(query)) {
                     return false;
                 }
@@ -2193,7 +2177,7 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
             return true;
         });
     }, [artemis.systemHealth.integrations, integrationFilter, searchQuery]);
-    
+
     const formatUptime = (seconds: number) => {
         const days = Math.floor(seconds / 86400);
         const hours = Math.floor((seconds % 86400) / 3600);
@@ -2202,13 +2186,13 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
         if (hours > 0) return `${hours}h ${minutes}m`;
         return `${minutes}m`;
     };
-    
+
     return (
         <div className="space-y-6">
             <Card>
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                     <div>
-                    <h3 className="font-semibold text-foreground">{t('system_health_monitoring') || 'System Health Monitoring'}</h3>
+                        <h3 className="font-semibold text-foreground">{t('system_health_monitoring') || 'System Health Monitoring'}</h3>
                         <p className="text-xs text-muted-foreground">
                             {t('monitoring_desc') || 'Monitor system health, agents, integrations, and resources'}
                         </p>
@@ -2249,20 +2233,19 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                         )}
                     </div>
                 </div>
-                
+
                 <div className="mb-4">
                     <div className="flex items-center gap-3 mb-2">
                         <span className="text-sm text-muted-foreground">{t('overall_status') || 'Overall Status'}:</span>
-                        <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                            artemis.systemHealth.overall === 'healthy' ? 'bg-green-500/20 text-green-400' :
+                        <span className={`px-3 py-1 rounded-full text-sm font-semibold ${artemis.systemHealth.overall === 'healthy' ? 'bg-green-500/20 text-green-400' :
                             artemis.systemHealth.overall === 'degraded' ? 'bg-yellow-500/20 text-yellow-400' :
-                            'bg-red-500/20 text-red-400'
-                        }`}>
+                                'bg-red-500/20 text-red-400'
+                            }`}>
                             {t(artemis.systemHealth.overall) || artemis.systemHealth.overall}
                         </span>
                     </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
                         <div className="flex justify-between items-center mb-2">
@@ -2289,37 +2272,36 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                         <div className="space-y-2 max-h-64 overflow-y-auto">
                             {filteredAgents.length > 0 ? (
                                 filteredAgents.map(agent => (
-                                    <div 
-                                        key={agent.agentId} 
+                                    <div
+                                        key={agent.agentId}
                                         className="p-2 border border-border rounded text-xs hover:border-purple-500/50 transition-colors cursor-pointer"
                                         onClick={() => setSelectedAgent(agent)}
                                     >
-                                    <div className="flex justify-between items-center">
-                                        <span className="font-semibold">{agent.agentId}</span>
-                                        <span className={`px-2 py-0.5 rounded ${
-                                            agent.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                                            agent.status === 'error' ? 'bg-red-500/20 text-red-400' :
-                                                agent.status === 'training' ? 'bg-blue-500/20 text-blue-400' :
-                                            'bg-gray-500/20 text-gray-400'
-                                        }`}>
-                                            {t(agent.status) || agent.status}
-                                        </span>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-2 mt-1 text-xs text-muted-foreground">
-                                        <span>CPU: {agent.resourceUsage.cpu.toFixed(1)}%</span>
-                                        <span>Mem: {agent.resourceUsage.memory.toFixed(1)}%</span>
-                                        <span>API: {agent.resourceUsage.apiCalls}</span>
-                                    </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-semibold">{agent.agentId}</span>
+                                            <span className={`px-2 py-0.5 rounded ${agent.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                                                agent.status === 'error' ? 'bg-red-500/20 text-red-400' :
+                                                    agent.status === 'training' ? 'bg-blue-500/20 text-blue-400' :
+                                                        'bg-gray-500/20 text-gray-400'
+                                                }`}>
+                                                {t(agent.status) || agent.status}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2 mt-1 text-xs text-muted-foreground">
+                                            <span>CPU: {agent.resourceUsage.cpu.toFixed(1)}%</span>
+                                            <span>Mem: {agent.resourceUsage.memory.toFixed(1)}%</span>
+                                            <span>API: {agent.resourceUsage.apiCalls}</span>
+                                        </div>
                                         <div className="grid grid-cols-2 gap-2 mt-1 text-xs text-muted-foreground">
                                             <span>{t('performance') || 'Performance'}: {agent.performance.toFixed(1)}%</span>
                                             <span>{t('uptime') || 'Uptime'}: {formatUptime(agent.uptime)}</span>
-                                    </div>
-                                    {agent.errors.length > 0 && (
-                                        <div className="mt-1 text-xs text-red-400">
-                                                {t('errors') || 'Errors'}: {agent.errors.join(', ')}
                                         </div>
-                                    )}
-                                </div>
+                                        {agent.errors.length > 0 && (
+                                            <div className="mt-1 text-xs text-red-400">
+                                                {t('errors') || 'Errors'}: {agent.errors.join(', ')}
+                                            </div>
+                                        )}
+                                    </div>
                                 ))
                             ) : (
                                 <div className="text-center py-4 text-xs text-muted-foreground">
@@ -2345,34 +2327,33 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                         <div className="space-y-2 max-h-64 overflow-y-auto">
                             {filteredIntegrations.length > 0 ? (
                                 filteredIntegrations.map((integration, idx) => (
-                                <div key={idx} className="p-2 border border-border rounded text-xs">
-                                    <div className="flex justify-between items-center">
+                                    <div key={idx} className="p-2 border border-border rounded text-xs">
+                                        <div className="flex justify-between items-center">
                                             <div>
-                                        <span className="font-semibold">{integration.name}</span>
+                                                <span className="font-semibold">{integration.name}</span>
                                                 <span className="ml-2 text-xs text-muted-foreground">({t(integration.type) || integration.type})</span>
                                             </div>
-                                        <span className={`px-2 py-0.5 rounded ${
-                                            integration.status === 'connected' ? 'bg-green-500/20 text-green-400' :
+                                            <span className={`px-2 py-0.5 rounded ${integration.status === 'connected' ? 'bg-green-500/20 text-green-400' :
                                                 integration.status === 'error' ? 'bg-red-500/20 text-red-400' :
-                                                'bg-gray-500/20 text-gray-400'
-                                        }`}>
-                                            {t(integration.status) || integration.status}
-                                        </span>
-                                    </div>
+                                                    'bg-gray-500/20 text-gray-400'
+                                                }`}>
+                                                {t(integration.status) || integration.status}
+                                            </span>
+                                        </div>
                                         {integration.latency !== undefined && (
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            {t('latency') || 'Latency'}: {integration.latency}ms
-                                        </p>
-                                    )}
-                                    {integration.errorRate !== undefined && (
-                                        <p className="text-xs text-muted-foreground">
-                                            {t('error_rate') || 'Error Rate'}: {integration.errorRate.toFixed(2)}%
-                                        </p>
-                                    )}
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {t('latency') || 'Latency'}: {integration.latency}ms
+                                            </p>
+                                        )}
+                                        {integration.errorRate !== undefined && (
+                                            <p className="text-xs text-muted-foreground">
+                                                {t('error_rate') || 'Error Rate'}: {integration.errorRate.toFixed(2)}%
+                                            </p>
+                                        )}
                                         <p className="text-xs text-muted-foreground mt-1">
                                             {t('last_check') || 'Last check'}: {new Date(integration.lastCheck).toLocaleString()}
                                         </p>
-                                </div>
+                                    </div>
                                 ))
                             ) : (
                                 <div className="text-center py-4 text-xs text-muted-foreground">
@@ -2382,14 +2363,14 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                         </div>
                     </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <p className="text-xs text-muted-foreground mb-1">{t('cpu_usage') || 'CPU Usage'}</p>
                         <div className="w-full bg-secondary rounded-full h-2">
-                            <div 
-                                className="bg-blue-500 h-2 rounded-full" 
-                                style={{width: `${artemis.systemHealth.resources.cpu}%`}}
+                            <div
+                                className="bg-blue-500 h-2 rounded-full"
+                                style={{ width: `${artemis.systemHealth.resources.cpu}%` }}
                             ></div>
                         </div>
                         <p className="text-xs text-foreground mt-1">{artemis.systemHealth.resources.cpu.toFixed(1)}%</p>
@@ -2397,9 +2378,9 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                     <div>
                         <p className="text-xs text-muted-foreground mb-1">{t('memory_usage') || 'Memory Usage'}</p>
                         <div className="w-full bg-secondary rounded-full h-2">
-                            <div 
-                                className="bg-purple-500 h-2 rounded-full" 
-                                style={{width: `${artemis.systemHealth.resources.memory}%`}}
+                            <div
+                                className="bg-purple-500 h-2 rounded-full"
+                                style={{ width: `${artemis.systemHealth.resources.memory}%` }}
                             ></div>
                         </div>
                         <p className="text-xs text-foreground mt-1">{artemis.systemHealth.resources.memory.toFixed(1)}%</p>
@@ -2407,9 +2388,9 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                     <div>
                         <p className="text-xs text-muted-foreground mb-1">{t('network_usage') || 'Network Usage'}</p>
                         <div className="w-full bg-secondary rounded-full h-2">
-                            <div 
-                                className="bg-green-500 h-2 rounded-full" 
-                                style={{width: `${artemis.systemHealth.resources.network}%`}}
+                            <div
+                                className="bg-green-500 h-2 rounded-full"
+                                style={{ width: `${artemis.systemHealth.resources.network}%` }}
                             ></div>
                         </div>
                         <p className="text-xs text-foreground mt-1">{artemis.systemHealth.resources.network.toFixed(1)}%</p>
@@ -2417,9 +2398,9 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                     <div>
                         <p className="text-xs text-muted-foreground mb-1">{t('api_quota') || 'API Quota'}</p>
                         <div className="w-full bg-secondary rounded-full h-2">
-                            <div 
-                                className="bg-yellow-500 h-2 rounded-full" 
-                                style={{width: `${(artemis.systemHealth.resources.apiQuota.used / artemis.systemHealth.resources.apiQuota.limit) * 100}%`}}
+                            <div
+                                className="bg-yellow-500 h-2 rounded-full"
+                                style={{ width: `${(artemis.systemHealth.resources.apiQuota.used / artemis.systemHealth.resources.apiQuota.limit) * 100}%` }}
                             ></div>
                         </div>
                         <p className="text-xs text-foreground mt-1">
@@ -2428,7 +2409,7 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                     </div>
                 </div>
             </Card>
-            
+
             {artemis.orchestration.failoverStatus.lastFailover && (
                 <Card>
                     <h3 className="font-semibold text-foreground mb-4">{t('failover_status') || 'Failover Status'}</h3>
@@ -2445,16 +2426,15 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                                     {new Date(artemis.orchestration.failoverStatus.lastFailover.timestamp).toLocaleString()}
                                 </p>
                             </div>
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                                artemis.orchestration.failoverStatus.enabled ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
-                            }`}>
+                            <span className={`px-2 py-1 rounded-full text-xs ${artemis.orchestration.failoverStatus.enabled ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+                                }`}>
                                 {artemis.orchestration.failoverStatus.enabled ? t('enabled') || 'Enabled' : t('disabled') || 'Disabled'}
                             </span>
                         </div>
                     </div>
                 </Card>
             )}
-            
+
             {artemis.systemHealth.alerts.length > 0 && (
                 <Card>
                     <div className="flex justify-between items-center mb-4">
@@ -2472,53 +2452,51 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                                 return (typeOrder[a.type] || 3) - (typeOrder[b.type] || 3);
                             })
                             .map(alert => (
-                            <div key={alert.id} className={`p-3 border rounded-lg text-sm ${
-                                alert.type === 'critical' ? 'border-red-500 bg-red-500/10' :
-                                alert.type === 'error' ? 'border-red-500/70 bg-red-500/5' :
-                                alert.type === 'warning' ? 'border-yellow-500 bg-yellow-500/10' :
-                                'border-blue-500 bg-blue-500/10'
-                            }`}>
-                                <div className="flex justify-between items-start">
-                                    <div className="flex-1">
-                                        <p className="font-semibold text-foreground">{alert.message}</p>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            {t('source') || 'Source'}: {alert.source} · {new Date(alert.timestamp).toLocaleString()}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                    <span className={`px-2 py-1 rounded-full text-xs ${
-                                        alert.resolved ? 'bg-green-500/20 text-green-400' :
-                                        alert.type === 'critical' ? 'bg-red-500/20 text-red-400' :
-                                            alert.type === 'error' ? 'bg-red-500/20 text-red-400' :
-                                        alert.type === 'warning' ? 'bg-yellow-500/20 text-yellow-400' :
-                                        'bg-blue-500/20 text-blue-400'
+                                <div key={alert.id} className={`p-3 border rounded-lg text-sm ${alert.type === 'critical' ? 'border-red-500 bg-red-500/10' :
+                                    alert.type === 'error' ? 'border-red-500/70 bg-red-500/5' :
+                                        alert.type === 'warning' ? 'border-yellow-500 bg-yellow-500/10' :
+                                            'border-blue-500 bg-blue-500/10'
                                     }`}>
-                                        {alert.resolved ? t('resolved') || 'Resolved' : t(alert.type) || alert.type}
-                                    </span>
-                                        {!alert.resolved && (
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                            <p className="font-semibold text-foreground">{alert.message}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {t('source') || 'Source'}: {alert.source} · {new Date(alert.timestamp).toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`px-2 py-1 rounded-full text-xs ${alert.resolved ? 'bg-green-500/20 text-green-400' :
+                                                alert.type === 'critical' ? 'bg-red-500/20 text-red-400' :
+                                                    alert.type === 'error' ? 'bg-red-500/20 text-red-400' :
+                                                        alert.type === 'warning' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                            'bg-blue-500/20 text-blue-400'
+                                                }`}>
+                                                {alert.resolved ? t('resolved') || 'Resolved' : t(alert.type) || alert.type}
+                                            </span>
+                                            {!alert.resolved && (
+                                                <button
+                                                    onClick={() => handleResolveAlert(alert.id)}
+                                                    className="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded"
+                                                    title={t('resolve_alert') || 'Resolve Alert'}
+                                                >
+                                                    ✓
+                                                </button>
+                                            )}
                                             <button
-                                                onClick={() => handleResolveAlert(alert.id)}
-                                                className="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded"
-                                                title={t('resolve_alert') || 'Resolve Alert'}
+                                                onClick={() => handleDismissAlert(alert.id)}
+                                                className="text-xs px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded"
+                                                title={t('dismiss_alert') || 'Dismiss Alert'}
                                             >
-                                                ✓
+                                                ×
                                             </button>
-                                        )}
-                                        <button
-                                            onClick={() => handleDismissAlert(alert.id)}
-                                            className="text-xs px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded"
-                                            title={t('dismiss_alert') || 'Dismiss Alert'}
-                                        >
-                                            ×
-                                        </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
                     </div>
                 </Card>
             )}
-            
+
             {healthHistory.length > 0 && (
                 <Card>
                     <h3 className="font-semibold text-foreground mb-4">{t('health_history') || 'Health Check History'}</h3>
@@ -2527,11 +2505,10 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                             <div key={idx} className="flex justify-between items-center p-2 border border-border rounded text-xs">
                                 <span className="text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</span>
                                 <div className="flex items-center gap-3">
-                                    <span className={`px-2 py-0.5 rounded ${
-                                        entry.overall === 'healthy' ? 'bg-green-500/20 text-green-400' :
+                                    <span className={`px-2 py-0.5 rounded ${entry.overall === 'healthy' ? 'bg-green-500/20 text-green-400' :
                                         entry.overall === 'degraded' ? 'bg-yellow-500/20 text-yellow-400' :
-                                        'bg-red-500/20 text-red-400'
-                                    }`}>
+                                            'bg-red-500/20 text-red-400'
+                                        }`}>
                                         {t(entry.overall) || entry.overall}
                                     </span>
                                     <span className="text-muted-foreground">{entry.agents} {t('agents') || 'agents'}</span>
@@ -2544,7 +2521,7 @@ const SystemMonitoring: React.FC<{ artemis: ArtemisState; t: (key: string) => st
                     </div>
                 </Card>
             )}
-            
+
             {selectedAgent && (
                 <AgentDetailsModal
                     agent={selectedAgent}
@@ -2567,7 +2544,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
     const [searchQuery, setSearchQuery] = React.useState('');
     const [statusFilter, setStatusFilter] = React.useState<'all' | 'active' | 'paused' | 'completed' | 'cancelled'>('all');
     const [typeFilter, setTypeFilter] = React.useState<'all' | 'target_profit' | 'max_trades' | 'risk_reward' | 'custom'>('all');
-    
+
     React.useEffect(() => {
         const load = async () => {
             setIsLoading(true);
@@ -2582,7 +2559,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
         };
         load();
     }, []);
-    
+
     const filteredScenarios = React.useMemo(() => {
         return scenarios.filter(scenario => {
             if (searchQuery.trim()) {
@@ -2600,7 +2577,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
             return true;
         });
     }, [scenarios, searchQuery, statusFilter, typeFilter]);
-    
+
     const scenarioStats = React.useMemo(() => {
         const stats = {
             total: scenarios.length,
@@ -2615,7 +2592,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
         };
         return stats;
     }, [scenarios]);
-    
+
     const handleGenerateAIStrategy = async () => {
         setIsGeneratingAI(true);
         try {
@@ -2629,11 +2606,11 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
             setIsGeneratingAI(false);
         }
     };
-    
+
     if (isLoading) {
         return <Card><div className="text-center p-10">{t('loading')}</div></Card>;
     }
-    
+
     const handleRunBacktest = async (scenarioId: string) => {
         if (!confirm(t('scenario_backtest_confirm') || 'Run backtest for this scenario?')) {
             return;
@@ -2642,13 +2619,13 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
         // This would require parent component coordination, for now just show message
         alert(t('scenario_backtest_note') || 'Please go to Backtesting tab and select this scenario to run backtest.');
     };
-    
+
     return (
         <div className="space-y-6">
             <Card>
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                     <div>
-                    <h3 className="font-semibold text-foreground">{t('trading_scenarios') || 'Trading Scenarios'}</h3>
+                        <h3 className="font-semibold text-foreground">{t('trading_scenarios') || 'Trading Scenarios'}</h3>
                         <p className="text-xs text-muted-foreground">
                             {t('scenarios_desc') || 'Create and manage trading scenarios with specific targets and rules'}
                         </p>
@@ -2679,7 +2656,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
                         </button>
                     </div>
                 </div>
-                
+
                 {scenarios.length > 0 && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-sm">
                         <div className="bg-secondary/40 rounded p-3">
@@ -2702,7 +2679,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
                         </div>
                     </div>
                 )}
-                
+
                 {scenarios.length > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
                         <input
@@ -2736,156 +2713,155 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
                         </select>
                     </div>
                 )}
-                
+
                 {filteredScenarios.length > 0 ? (
                     <div className="space-y-3">
                         {filteredScenarios.map(scenario => {
                             const tradesProfit = scenario.trades.reduce((sum, t) => sum + (t.profit || 0), 0);
                             const profitableTrades = scenario.trades.filter(t => (t.profit || 0) > 0).length;
                             const winRate = scenario.trades.length > 0 ? (profitableTrades / scenario.trades.length) * 100 : 0;
-                            
+
                             return (
-                            <div key={scenario.id} className="p-4 border border-border rounded-lg hover:border-purple-500/50 transition-colors">
-                                <div className="flex justify-between items-start mb-3">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <p className="font-semibold text-foreground">{scenario.name}</p>
-                                            {scenario.name.includes('AI') || scenario.name.includes('Artemis') ? (
-                                                <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-purple-400 rounded-full text-xs font-semibold flex items-center gap-1">
-                                                    <span>🤖</span>
-                                                    <span>AI</span>
-                                                </span>
-                                            ) : null}
-                                        </div>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            {t(scenario.type) || scenario.type} · {t(scenario.status) || scenario.status}
-                                        </p>
-                                        {(scenario.target as any)?.description && (
-                                            <p className="text-xs text-muted-foreground mt-2 italic border-l-2 border-purple-500/30 pl-2">
-                                                💡 {(scenario.target as any).description}
+                                <div key={scenario.id} className="p-4 border border-border rounded-lg hover:border-purple-500/50 transition-colors">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <p className="font-semibold text-foreground">{scenario.name}</p>
+                                                {scenario.name.includes('AI') || scenario.name.includes('Artemis') ? (
+                                                    <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-purple-400 rounded-full text-xs font-semibold flex items-center gap-1">
+                                                        <span>🤖</span>
+                                                        <span>AI</span>
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {t(scenario.type) || scenario.type} · {t(scenario.status) || scenario.status}
                                             </p>
+                                            {(scenario.target as any)?.description && (
+                                                <p className="text-xs text-muted-foreground mt-2 italic border-l-2 border-purple-500/30 pl-2">
+                                                    💡 {(scenario.target as any).description}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <span className={`px-2 py-1 rounded-full text-xs ${scenario.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                                            scenario.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
+                                                scenario.status === 'paused' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                    'bg-gray-500/20 text-gray-400'
+                                            }`}>
+                                            {t(scenario.status) || scenario.status}
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                                        {scenario.target.profit && (
+                                            <div>
+                                                <p className="text-xs text-muted-foreground">{t('target_profit') || 'Target Profit'}</p>
+                                                <p className="font-semibold text-foreground">${scenario.target.profit.toFixed(2)}</p>
+                                            </div>
                                         )}
-                                    </div>
-                                    <span className={`px-2 py-1 rounded-full text-xs ${
-                                        scenario.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                                        scenario.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
-                                        scenario.status === 'paused' ? 'bg-yellow-500/20 text-yellow-400' :
-                                        'bg-gray-500/20 text-gray-400'
-                                    }`}>
-                                        {t(scenario.status) || scenario.status}
-                                    </span>
-                                </div>
-                                
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                                    {scenario.target.profit && (
+                                        {scenario.target.maxTrades && (
+                                            <div>
+                                                <p className="text-xs text-muted-foreground">{t('max_trades') || 'Max Trades'}</p>
+                                                <p className="font-semibold text-foreground">{scenario.target.maxTrades}</p>
+                                            </div>
+                                        )}
+                                        {scenario.target.riskRewardRatio && (
+                                            <div>
+                                                <p className="text-xs text-muted-foreground">{t('risk_reward_ratio') || 'Risk/Reward'}</p>
+                                                <p className="font-semibold text-foreground">{scenario.target.riskRewardRatio.toFixed(2)}</p>
+                                            </div>
+                                        )}
                                         <div>
-                                            <p className="text-xs text-muted-foreground">{t('target_profit') || 'Target Profit'}</p>
-                                            <p className="font-semibold text-foreground">${scenario.target.profit.toFixed(2)}</p>
+                                            <p className="text-xs text-muted-foreground">{t('progress') || 'Progress'}</p>
+                                            <p className="font-semibold text-foreground">{scenario.progress.percentage.toFixed(1)}%</p>
+                                        </div>
+                                    </div>
+
+                                    {scenario.trades.length > 0 && (
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-xs">
+                                            <div>
+                                                <p className="text-muted-foreground">{t('current_profit') || 'Current Profit'}</p>
+                                                <p className={`font-semibold ${tradesProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                    ${tradesProfit.toFixed(2)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-muted-foreground">{t('win_rate') || 'Win Rate'}</p>
+                                                <p className="font-semibold text-foreground">{winRate.toFixed(1)}%</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-muted-foreground">{t('profitable_trades') || 'Profitable'}</p>
+                                                <p className="font-semibold text-foreground">{profitableTrades}/{scenario.trades.length}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-muted-foreground">{t('avg_profit') || 'Avg Profit'}</p>
+                                                <p className={`font-semibold ${tradesProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                    ${scenario.trades.length > 0 ? (tradesProfit / scenario.trades.length).toFixed(2) : '0.00'}
+                                                </p>
+                                            </div>
                                         </div>
                                     )}
-                                    {scenario.target.maxTrades && (
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">{t('max_trades') || 'Max Trades'}</p>
-                                            <p className="font-semibold text-foreground">{scenario.target.maxTrades}</p>
-                                        </div>
-                                    )}
-                                    {scenario.target.riskRewardRatio && (
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">{t('risk_reward_ratio') || 'Risk/Reward'}</p>
-                                            <p className="font-semibold text-foreground">{scenario.target.riskRewardRatio.toFixed(2)}</p>
-                                        </div>
-                                    )}
-                                    <div>
-                                        <p className="text-xs text-muted-foreground">{t('progress') || 'Progress'}</p>
-                                        <p className="font-semibold text-foreground">{scenario.progress.percentage.toFixed(1)}%</p>
+
+                                    <div className="w-full bg-secondary rounded-full h-2 mb-2">
+                                        <div
+                                            className="bg-purple-500 h-2 rounded-full"
+                                            style={{ width: `${scenario.progress.percentage}%` }}
+                                        ></div>
                                     </div>
-                                </div>
-                                
-                                {scenario.trades.length > 0 && (
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-xs">
-                                        <div>
-                                            <p className="text-muted-foreground">{t('current_profit') || 'Current Profit'}</p>
-                                            <p className={`font-semibold ${tradesProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                ${tradesProfit.toFixed(2)}
-                                            </p>
+
+                                    <div className="flex justify-between items-center">
+                                        <div className="text-xs text-muted-foreground">
+                                            <span>{t('trades') || 'Trades'}: {scenario.trades.length}</span>
+                                            <span className="ml-3">{new Date(scenario.updatedAt).toLocaleString()}</span>
                                         </div>
-                                        <div>
-                                            <p className="text-muted-foreground">{t('win_rate') || 'Win Rate'}</p>
-                                            <p className="font-semibold text-foreground">{winRate.toFixed(1)}%</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-muted-foreground">{t('profitable_trades') || 'Profitable'}</p>
-                                            <p className="font-semibold text-foreground">{profitableTrades}/{scenario.trades.length}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-muted-foreground">{t('avg_profit') || 'Avg Profit'}</p>
-                                            <p className={`font-semibold ${tradesProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                ${scenario.trades.length > 0 ? (tradesProfit / scenario.trades.length).toFixed(2) : '0.00'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                <div className="w-full bg-secondary rounded-full h-2 mb-2">
-                                    <div 
-                                        className="bg-purple-500 h-2 rounded-full" 
-                                        style={{width: `${scenario.progress.percentage}%`}}
-                                    ></div>
-                                </div>
-                                
-                                <div className="flex justify-between items-center">
-                                    <div className="text-xs text-muted-foreground">
-                                        <span>{t('trades') || 'Trades'}: {scenario.trades.length}</span>
-                                        <span className="ml-3">{new Date(scenario.updatedAt).toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {scenario.trades.length > 0 && (
+                                        <div className="flex gap-2">
+                                            {scenario.trades.length > 0 && (
+                                                <button
+                                                    onClick={() => setViewingScenario(scenario)}
+                                                    className="text-xs px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded"
+                                                >
+                                                    {t('view_trades') || 'View Trades'}
+                                                </button>
+                                            )}
                                             <button
-                                                onClick={() => setViewingScenario(scenario)}
-                                                className="text-xs px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded"
+                                                onClick={() => handleRunBacktest(scenario.id)}
+                                                className="text-xs px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded"
                                             >
-                                                {t('view_trades') || 'View Trades'}
+                                                {t('run_backtest') || 'Backtest'}
                                             </button>
-                                        )}
-                                        <button
-                                            onClick={() => handleRunBacktest(scenario.id)}
-                                            className="text-xs px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded"
-                                        >
-                                            {t('run_backtest') || 'Backtest'}
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setEditingScenario(scenario);
-                                                setShowEditModal(true);
-                                            }}
-                                            className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
-                                        >
-                                            {t('edit') || 'Edit'}
-                                        </button>
-                                        <button
-                                            onClick={async () => {
-                                                const confirmed = window.confirm(
-                                                    t('confirm_delete_scenario') || `Are you sure you want to delete "${scenario.name}"?`
-                                                );
-                                                if (confirmed) {
-                                                    try {
-                                                        await api.deleteTradingScenario(scenario.id);
-                                                        setScenarios(scenarios.filter(s => s.id !== scenario.id));
-                                                        alert(t('scenario_deleted') || 'Scenario deleted successfully');
-                                                    } catch (e) {
-                                                        console.error('Failed to delete scenario:', e);
-                                                        alert(t('delete_failed') || 'Failed to delete scenario');
+                                            <button
+                                                onClick={() => {
+                                                    setEditingScenario(scenario);
+                                                    setShowEditModal(true);
+                                                }}
+                                                className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
+                                            >
+                                                {t('edit') || 'Edit'}
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    const confirmed = window.confirm(
+                                                        t('confirm_delete_scenario') || `Are you sure you want to delete "${scenario.name}"?`
+                                                    );
+                                                    if (confirmed) {
+                                                        try {
+                                                            await api.deleteTradingScenario(scenario.id);
+                                                            setScenarios(scenarios.filter(s => s.id !== scenario.id));
+                                                            alert(t('scenario_deleted') || 'Scenario deleted successfully');
+                                                        } catch (e) {
+                                                            console.error('Failed to delete scenario:', e);
+                                                            alert(t('delete_failed') || 'Failed to delete scenario');
+                                                        }
                                                     }
-                                                }
-                                            }}
-                                            className="text-xs px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
-                                        >
-                                            {t('delete') || 'Delete'}
-                                        </button>
+                                                }}
+                                                className="text-xs px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+                                            >
+                                                {t('delete') || 'Delete'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        );
+                            );
                         })}
                     </div>
                 ) : scenarios.length === 0 ? (
@@ -2904,7 +2880,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
                     </div>
                 )}
             </Card>
-            
+
             {showCreateModal && (
                 <CreateScenarioModal
                     onClose={() => setShowCreateModal(false)}
@@ -2916,7 +2892,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
                     t={t}
                 />
             )}
-            
+
             {showEditModal && editingScenario && (
                 <EditScenarioModal
                     scenario={editingScenario}
@@ -2933,7 +2909,7 @@ const TradingScenarios: React.FC<{ t: (key: string) => string; onRefresh: () => 
                     t={t}
                 />
             )}
-            
+
             {viewingScenario && (
                 <ScenarioTradesModal
                     scenario={viewingScenario}
@@ -2954,7 +2930,7 @@ const ScenarioTradesModal: React.FC<{
     const tradesProfit = scenario.trades.reduce((sum, t) => sum + (t.profit || 0), 0);
     const profitableTrades = scenario.trades.filter(t => (t.profit || 0) > 0).length;
     const winRate = scenario.trades.length > 0 ? (profitableTrades / scenario.trades.length) * 100 : 0;
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -2969,7 +2945,7 @@ const ScenarioTradesModal: React.FC<{
                         {t('close') || 'Close'}
                     </button>
                 </div>
-                
+
                 {scenario.trades.length > 0 ? (
                     <>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-sm">
@@ -2994,7 +2970,7 @@ const ScenarioTradesModal: React.FC<{
                                 </p>
                             </div>
                         </div>
-                        
+
                         <div className="space-y-2">
                             {scenario.trades.map(trade => (
                                 <div key={trade.id} className="border border-border rounded-lg p-3 text-sm">
@@ -3002,17 +2978,15 @@ const ScenarioTradesModal: React.FC<{
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className="font-semibold text-foreground">{trade.symbol}</span>
-                                                <span className={`px-2 py-0.5 rounded text-xs ${
-                                                    trade.type === 'buy' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                                                }`}>
+                                                <span className={`px-2 py-0.5 rounded text-xs ${trade.type === 'buy' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                                    }`}>
                                                     {t(trade.type) || trade.type}
                                                 </span>
-                                                <span className={`px-2 py-0.5 rounded text-xs ${
-                                                    trade.status === 'executed' ? 'bg-green-500/20 text-green-400' :
+                                                <span className={`px-2 py-0.5 rounded text-xs ${trade.status === 'executed' ? 'bg-green-500/20 text-green-400' :
                                                     trade.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                                                    trade.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
-                                                    'bg-yellow-500/20 text-yellow-400'
-                                                }`}>
+                                                        trade.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
+                                                            'bg-yellow-500/20 text-yellow-400'
+                                                    }`}>
                                                     {t(trade.status) || trade.status}
                                                 </span>
                                             </div>
@@ -3057,13 +3031,13 @@ const EditScenarioModal: React.FC<{
     );
     const [maxTrades, setMaxTrades] = React.useState(scenario.target.maxTrades || 0);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
-    
+
     const handleSubmit = async () => {
         if (!name) {
             alert(t('scenario_name_required') || 'Scenario name is required');
             return;
         }
-        
+
         setIsSubmitting(true);
         try {
             const target: TradingScenario['target'] = {};
@@ -3092,7 +3066,7 @@ const EditScenarioModal: React.FC<{
                     target.customRules = { description: targetProfit.toString() };
                 }
             }
-            
+
             await onUpdate({
                 name,
                 type,
@@ -3106,12 +3080,12 @@ const EditScenarioModal: React.FC<{
             setIsSubmitting(false);
         }
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
                 <h3 className="text-lg font-semibold text-foreground mb-4">{t('edit_scenario') || 'Edit Scenario'}</h3>
-                
+
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">
@@ -3125,7 +3099,7 @@ const EditScenarioModal: React.FC<{
                             placeholder={t('scenario_name') || 'Scenario name'}
                         />
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('type') || 'Type'}</label>
                         <select
@@ -3139,7 +3113,7 @@ const EditScenarioModal: React.FC<{
                             <option value="custom">{t('custom') || 'Custom'}</option>
                         </select>
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('status') || 'Status'}</label>
                         <select
@@ -3153,7 +3127,7 @@ const EditScenarioModal: React.FC<{
                             <option value="cancelled">{t('cancelled') || 'Cancelled'}</option>
                         </select>
                     </div>
-                    
+
                     {type === 'target_profit' && (
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">{t('target_profit') || 'Target Profit'} ($)</label>
@@ -3167,7 +3141,7 @@ const EditScenarioModal: React.FC<{
                             />
                         </div>
                     )}
-                    
+
                     {type === 'max_trades' && (
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">{t('max_trades') || 'Max Trades'}</label>
@@ -3220,7 +3194,7 @@ const EditScenarioModal: React.FC<{
                         </div>
                     )}
                 </div>
-                
+
                 <div className="flex justify-end gap-2 mt-6">
                     <button
                         onClick={onClose}
@@ -3252,13 +3226,13 @@ const CreateScenarioModal: React.FC<{
     const [targetProfit, setTargetProfit] = React.useState(0);
     const [maxTrades, setMaxTrades] = React.useState(0);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
-    
+
     const handleSubmit = async () => {
         if (!name) {
             alert(t('scenario_name_required') || 'Scenario name is required');
             return;
         }
-        
+
         setIsSubmitting(true);
         try {
             const target: TradingScenario['target'] = {};
@@ -3287,7 +3261,7 @@ const CreateScenarioModal: React.FC<{
                     target.customRules = { description: targetProfit.toString() };
                 }
             }
-            
+
             await onCreate({
                 name,
                 type,
@@ -3301,12 +3275,12 @@ const CreateScenarioModal: React.FC<{
             setIsSubmitting(false);
         }
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
                 <h3 className="text-lg font-semibold text-foreground mb-4">{t('create_scenario') || 'Create Trading Scenario'}</h3>
-                
+
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('scenario_name') || 'Scenario Name'}</label>
@@ -3318,7 +3292,7 @@ const CreateScenarioModal: React.FC<{
                             placeholder={t('enter_scenario_name') || 'Enter scenario name'}
                         />
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('scenario_type') || 'Scenario Type'}</label>
                         <select
@@ -3332,7 +3306,7 @@ const CreateScenarioModal: React.FC<{
                             <option value="custom">{t('custom') || 'Custom'}</option>
                         </select>
                     </div>
-                    
+
                     {type === 'target_profit' && (
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">{t('target_profit_amount') || 'Target Profit ($)'}</label>
@@ -3345,7 +3319,7 @@ const CreateScenarioModal: React.FC<{
                             />
                         </div>
                     )}
-                    
+
                     {type === 'max_trades' && (
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">{t('max_trades_count') || 'Max Trades'}</label>
@@ -3359,7 +3333,7 @@ const CreateScenarioModal: React.FC<{
                         </div>
                     )}
                 </div>
-                
+
                 <div className="flex gap-3 mt-6">
                     <button
                         onClick={onClose}
@@ -3380,26 +3354,26 @@ const CreateScenarioModal: React.FC<{
     );
 };
 
-const ProgressBar: React.FC<{label: string, value: number, maxValue?: number}> = ({ label, value, maxValue = 100 }) => (
+const ProgressBar: React.FC<{ label: string, value: number, maxValue?: number }> = ({ label, value, maxValue = 100 }) => (
     <div>
         <div className="flex justify-between text-xs mb-1">
             <span className="text-muted-foreground">{label}</span>
             <span className="text-foreground font-semibold">{value}</span>
         </div>
         <div className="w-full bg-secondary rounded-full h-1.5">
-            <div className="bg-purple-500 h-1.5 rounded-full" style={{width: `${(value / maxValue) * 100}%`}}></div>
+            <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: `${(value / maxValue) * 100}%` }}></div>
         </div>
     </div>
 );
 
-const Stat: React.FC<{ value: string|number, label: string }> = ({ value, label }) => (
+const Stat: React.FC<{ value: string | number, label: string }> = ({ value, label }) => (
     <div className="bg-secondary p-3 rounded-lg">
         <p className="text-2xl font-bold text-foreground">{value}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
     </div>
 );
 
-const Metric: React.FC<{label: string, value: React.ReactNode}> = ({label, value}) => (
+const Metric: React.FC<{ label: string, value: React.ReactNode }> = ({ label, value }) => (
     <div className="flex justify-between items-center">
         <span className="text-card-foreground">{label}</span>
         <span className="font-semibold text-foreground">{value}</span>
@@ -3503,7 +3477,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
     const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
     const [isRunningPrioritization, setIsRunningPrioritization] = useState(false);
     const [isSavingAccess, setIsSavingAccess] = useState(false);
-    const [activeView, setActiveView] = useState<'sources' | 'categories' | 'health' | 'logs' | 'advanced' | 'telegram' | 'pipeline'>('sources');
+    const [activeView, setActiveView] = useState<'sources' | 'categories' | 'health' | 'logs' | 'advanced' | 'telegram' | 'pipeline' | 'collected'>('sources');
     const [showCreateSourceModal, setShowCreateSourceModal] = useState(false);
     const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false);
     const [editingSource, setEditingSource] = useState<DataSource | null>(null);
@@ -3547,7 +3521,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
     const [visibleLogs, setVisibleLogs] = useState(50);
     const [isDispatchingAutomation, setIsDispatchingAutomation] = useState(false);
     const telegramCollectorUrl = typeof api.getTelegramCollectorBaseUrl === 'function' ? api.getTelegramCollectorBaseUrl() : undefined;
-    const telegramCollectorState = dataHub?.telegramCollector;    const telegramChannels = telegramCollectorState?.channels || [];
+    const telegramCollectorState = dataHub?.telegramCollector; const telegramChannels = telegramCollectorState?.channels || [];
     const pipelineSnapshot = dataHub?.pipelineSnapshot;
     const pipelineHistory = dataHub?.pipelineHistory || [];
     const latestSnapshot = pipelineSnapshot || pipelineHistory[0]?.snapshot;
@@ -3642,7 +3616,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             return acc;
         }, {});
     }, [filteredLogs]);
-    
+
     useEffect(() => {
         if (artemis.dataHub) {
             setDataHub(artemis.dataHub);
@@ -3650,15 +3624,15 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
         }
         let cancelled = false;
         const loadDataHub = async () => {
-                setIsLoading(true);
-                try {
-                    const hub = await api.fetchDataHubState();
+            setIsLoading(true);
+            try {
+                const hub = await api.fetchDataHubState();
                 if (!cancelled) {
                     setDataHub(hub);
                 }
-                } catch (e) {
-                    console.error('Failed to load Data Hub:', e);
-                } finally {
+            } catch (e) {
+                console.error('Failed to load Data Hub:', e);
+            } finally {
                 if (!cancelled) {
                     setIsLoading(false);
                 }
@@ -3692,7 +3666,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             cancelled = true;
         };
     }, []);
-    
+
     const handleCheckHealth = async () => {
         setIsLoading(true);
         try {
@@ -3821,7 +3795,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             setIsLoadingCollector(false);
         }
     };
-    
+
     const handleRefreshCollectorChannels = async () => {
         setIsRefreshingChannels(true);
         setCollectorError(null);
@@ -3851,7 +3825,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             setCollectorError(error?.message || t('collector_link_source_failed') || 'Failed to link channel.');
         }
     };
-    
+
     const handleTestCollectorChannel = async (channelId: string) => {
         setTestingChannelId(channelId);
         setCollectorError(null);
@@ -3881,7 +3855,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             setTestingChannelId(null);
         }
     };
-    
+
     const handleTestSource = async (sourceId: string) => {
         setIsLoading(true);
         try {
@@ -3901,7 +3875,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             setIsLoading(false);
         }
     };
-    
+
     const handleRefreshPipelineSnapshot = async () => {
         setIsLoadingPipeline(true);
         setPipelineError(null);
@@ -3915,7 +3889,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             setIsLoadingPipeline(false);
         }
     };
-    
+
     useEffect(() => {
         if (activeView !== 'pipeline') {
             return;
@@ -3931,7 +3905,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
             setSelectedSnapshotId('latest');
         }
     }, [pipelineSnapshot?.lastRefreshed]);
-    
+
     const formatTimeAgo = (timestamp?: string): string => {
         if (!timestamp) return t('never') || 'Never';
         const now = new Date();
@@ -3940,21 +3914,21 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
-        
+
         if (diffMins < 1) return t('just_now') || 'Just now';
         if (diffMins < 60) return `${diffMins} ${t('minutes_ago') || 'min ago'}`;
         if (diffHours < 24) return `${diffHours} ${t('hours_ago') || 'hours ago'}`;
         return `${diffDays} ${t('days_ago') || 'days ago'}`;
     };
-    
+
     if (isLoading && !dataHub) {
         return <div className="text-center p-10">{t('loading')}</div>;
     }
-    
+
     if (!dataHub) {
         return <div className="text-center p-10">{t('data_hub_not_available') || 'Data Hub not available'}</div>;
     }
-    
+
     return (
         <div className="space-y-6">
             {/* Overview Stats */}
@@ -3980,90 +3954,91 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                 <Card>
                     <div className="text-center">
                         <p className="text-xs text-muted-foreground mb-1">{t('health_status') || 'Health Status'}</p>
-                        <p className={`text-2xl font-bold ${
-                            dataHub.health.overall === 'healthy' ? 'text-green-400' :
+                        <p className={`text-2xl font-bold ${dataHub.health.overall === 'healthy' ? 'text-green-400' :
                             dataHub.health.overall === 'degraded' ? 'text-yellow-400' : 'text-red-400'
-                        }`}>
+                            }`}>
                             {t(dataHub.health.overall) || dataHub.health.overall}
                         </p>
                     </div>
                 </Card>
             </div>
-            
+
             {/* Navigation Tabs */}
             <div className="flex gap-2 border-b border-border">
                 <button
                     onClick={() => setActiveView('sources')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeView === 'sources' 
-                            ? 'border-b-2 border-purple-500 text-purple-400' 
-                            : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeView === 'sources'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                 >
                     {t('data_sources') || 'Data Sources'}
                 </button>
                 <button
                     onClick={() => setActiveView('categories')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeView === 'categories' 
-                            ? 'border-b-2 border-purple-500 text-purple-400' 
-                            : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeView === 'categories'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                 >
                     {t('categories') || 'Categories'}
                 </button>
                 <button
                     onClick={() => setActiveView('pipeline')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeView === 'pipeline' 
-                            ? 'border-b-2 border-purple-500 text-purple-400' 
-                            : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeView === 'pipeline'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                 >
                     {t('data_pipeline') || 'Data Pipeline'}
                 </button>
                 <button
                     onClick={() => setActiveView('health')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeView === 'health' 
-                            ? 'border-b-2 border-purple-500 text-purple-400' 
-                            : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeView === 'health'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                 >
                     {t('health_monitoring') || 'Health'}
                 </button>
                 <button
                     onClick={() => setActiveView('logs')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeView === 'logs' 
-                            ? 'border-b-2 border-purple-500 text-purple-400' 
-                            : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeView === 'logs'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                 >
                     {t('access_logs') || 'Access Logs'}
                 </button>
                 <button
+                    onClick={() => setActiveView('collected')}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeView === 'collected'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                >
+                    {t('collected_data') || 'Collected Data'}
+                </button>
+                <button
                     onClick={() => setActiveView('advanced')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeView === 'advanced' 
-                            ? 'border-b-2 border-purple-500 text-purple-400' 
-                            : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeView === 'advanced'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                 >
                     {t('advanced_features') || 'Advanced'}
                 </button>
                 <button
                     onClick={() => setActiveView('telegram')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeView === 'telegram' 
-                            ? 'border-b-2 border-purple-500 text-purple-400' 
-                            : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeView === 'telegram'
+                        ? 'border-b-2 border-purple-500 text-purple-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                 >
                     {t('telegram_collector') || 'Telegram Collector'}
                 </button>
             </div>
-            
+
             {/* Content Views */}
             {activeView === 'sources' && (
                 <Card>
@@ -4088,19 +4063,17 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                         <p className="text-xs text-muted-foreground">{source.type} • {source.category}</p>
                                     </div>
                                     <div className="flex gap-2">
-                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                            source.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${source.status === 'active' ? 'bg-green-500/20 text-green-400' :
                                             source.status === 'error' ? 'bg-red-500/20 text-red-400' :
-                                            'bg-yellow-500/20 text-yellow-400'
-                                        }`}>
+                                                'bg-yellow-500/20 text-yellow-400'
+                                            }`}>
                                             {t(source.status) || source.status}
                                         </span>
-                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                            source.priority === 'critical' ? 'bg-red-500/20 text-red-400' :
+                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${source.priority === 'critical' ? 'bg-red-500/20 text-red-400' :
                                             source.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                                            source.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                            'bg-gray-500/20 text-gray-400'
-                                        }`}>
+                                                source.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                    'bg-gray-500/20 text-gray-400'
+                                            }`}>
                                             {t(source.priority) || source.priority}
                                         </span>
                                     </div>
@@ -4123,22 +4096,21 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                         <p className="font-semibold text-foreground">{t(source.updateInterval) || source.updateInterval}</p>
                                     </div>
                                 </div>
-                                
+
                                 {/* Connection Status */}
                                 <div className="mt-3 pt-3 border-t border-border">
                                     <div className="flex items-center justify-between text-xs">
                                         <div className="flex items-center gap-2">
-                                            <div className={`w-2 h-2 rounded-full ${
-                                                source.status === 'active' ? 'bg-green-500 animate-pulse' :
+                                            <div className={`w-2 h-2 rounded-full ${source.status === 'active' ? 'bg-green-500 animate-pulse' :
                                                 source.status === 'error' ? 'bg-red-500' :
-                                                source.status === 'testing' ? 'bg-yellow-500 animate-pulse' :
-                                                'bg-gray-500'
-                                            }`}></div>
+                                                    source.status === 'testing' ? 'bg-yellow-500 animate-pulse' :
+                                                        'bg-gray-500'
+                                                }`}></div>
                                             <span className="text-muted-foreground">
                                                 {source.status === 'active' ? (t('connected') || 'Connected') :
-                                                 source.status === 'error' ? (t('error') || 'Error') :
-                                                 source.status === 'testing' ? (t('testing') || 'Testing...') :
-                                                 (t('inactive') || 'Inactive')}
+                                                    source.status === 'error' ? (t('error') || 'Error') :
+                                                        source.status === 'testing' ? (t('testing') || 'Testing...') :
+                                                            (t('inactive') || 'Inactive')}
                                             </span>
                                         </div>
                                         <div className="text-muted-foreground">
@@ -4161,7 +4133,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                         </div>
                                     )}
                                 </div>
-                                
+
                                 <div className="flex gap-2 mt-3">
                                     <button
                                         onClick={async () => {
@@ -4182,14 +4154,14 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                                 } else if (source.tags && source.tags.some(tag => tag.toLowerCase().includes('news'))) {
                                                     dataType = 'news';
                                                 }
-                                                
+
                                                 const response = await api.requestData({
                                                     sourceId: source.id,
                                                     agentId: 'preview',
                                                     dataType: dataType as any,
                                                     cache: false, // Force fresh data
                                                 });
-                                                
+
                                                 // Always set data, even if it contains error info or is mock data
                                                 if (response.data) {
                                                     setSourceData(response.data);
@@ -4276,12 +4248,12 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                     </div>
                 </Card>
             )}
-            
+
             {activeView === 'categories' && (
                 <Card>
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
                         <div>
-                        <h3 className="font-semibold text-foreground">{t('data_categories') || 'Data Categories'}</h3>
+                            <h3 className="font-semibold text-foreground">{t('data_categories') || 'Data Categories'}</h3>
                             <p className="text-xs text-muted-foreground">
                                 {t('data_categories_desc') || 'Filter categories by name, tag or data type to inspect their health.'}
                             </p>
@@ -4308,12 +4280,12 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                             >
                                 {t('reset_filters') || 'Reset'}
                             </button>
-                        <button
-                            onClick={() => setShowCreateCategoryModal(true)}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
-                        >
-                            {t('add_category') || '+ Add Category'}
-                        </button>
+                            <button
+                                onClick={() => setShowCreateCategoryModal(true)}
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                            >
+                                {t('add_category') || '+ Add Category'}
+                            </button>
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4325,14 +4297,14 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                         <div className="flex justify-between gap-4">
                                             <div>
                                                 <h4 className="font-semibold text-foreground">{category.name}</h4>
-                                {category.description && (
+                                                {category.description && (
                                                     <p className="text-xs text-muted-foreground mt-1">{category.description}</p>
-                                )}
-                                </div>
+                                                )}
+                                            </div>
                                             <div className="text-right text-xs text-muted-foreground">
                                                 <div>{t('sources') || 'Sources'}: <span className="text-foreground font-semibold">{category.sourceCount}</span></div>
                                                 <div>{t('data_types') || 'Data Types'}: <span className="text-foreground font-semibold">{category.dataTypes.length}</span></div>
-                            </div>
+                                            </div>
                                         </div>
                                         {metrics && (
                                             <div className="flex gap-3 text-xs">
@@ -4369,7 +4341,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                     </div>
                 </Card>
             )}
-            
+
             {activeView === 'health' && (
                 <Card>
                     <div className="flex justify-between items-center mb-4">
@@ -4402,16 +4374,16 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                     </div>
                 </Card>
             )}
-            
+
             {activeView === 'logs' && (
                 <Card>
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
-                                        <div>
+                        <div>
                             <h3 className="font-semibold text-foreground">{t('access_logs') || 'Access Logs'}</h3>
                             <p className="text-xs text-muted-foreground">
                                 {t('access_logs_desc') || 'Filter by source, agent or status to debug requests quickly.'}
                             </p>
-                                        </div>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs w-full lg:w-auto">
                             <input
                                 value={logsSourceFilter}
@@ -4468,12 +4440,11 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                             </p>
                                             <p className="text-[11px] text-muted-foreground">{new Date(log.timestamp).toLocaleString()}</p>
                                         </div>
-                                        <span className={`px-2 py-1 rounded text-xs ${
-                                            log.status === 'success' ? 'bg-green-500/20 text-green-400' :
+                                        <span className={`px-2 py-1 rounded text-xs ${log.status === 'success' ? 'bg-green-500/20 text-green-400' :
                                             log.status === 'cached' ? 'bg-blue-500/20 text-blue-400' :
-                                            log.status === 'timeout' ? 'bg-yellow-500/20 text-yellow-400' :
-                                            'bg-red-500/20 text-red-400'
-                                        }`}>
+                                                log.status === 'timeout' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                    'bg-red-500/20 text-red-400'
+                                            }`}>
                                             {t(log.status) || log.status}
                                         </span>
                                     </div>
@@ -4606,11 +4577,10 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                                         {t('inflow') || 'Inflow'}: {category.inflow}
                                                     </p>
                                                 </div>
-                                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                    category.passRate >= 90 ? 'bg-green-500/20 text-green-400' :
+                                                <span className={`px-2 py-1 rounded text-xs font-semibold ${category.passRate >= 90 ? 'bg-green-500/20 text-green-400' :
                                                     category.passRate >= 70 ? 'bg-yellow-500/20 text-yellow-400' :
-                                                    'bg-red-500/20 text-red-400'
-                                                }`}>
+                                                        'bg-red-500/20 text-red-400'
+                                                    }`}>
                                                     {category.passRate.toFixed(1)}%
                                                 </span>
                                             </div>
@@ -4630,12 +4600,11 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                                         <p className="font-semibold text-foreground">{source.name}</p>
                                                         <p className="text-muted-foreground">{source.category}</p>
                                                     </div>
-                                                    <span className={`px-2 py-1 rounded text-xs ${
-                                                        source.lastStatus === 'success' ? 'bg-green-500/20 text-green-400' :
+                                                    <span className={`px-2 py-1 rounded text-xs ${source.lastStatus === 'success' ? 'bg-green-500/20 text-green-400' :
                                                         source.lastStatus === 'cached' ? 'bg-blue-500/20 text-blue-400' :
-                                                        source.lastStatus === 'timeout' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                        'bg-red-500/20 text-red-400'
-                                                    }`}>
+                                                            source.lastStatus === 'timeout' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                                'bg-red-500/20 text-red-400'
+                                                        }`}>
                                                         {t(source.lastStatus) || source.lastStatus}
                                                     </span>
                                                 </div>
@@ -4702,13 +4671,12 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                                             {record.sourceId} • {record.dataType}
                                                         </p>
                                                     </div>
-                                                    <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
-                                                        record.status === 'ready'
-                                                            ? 'bg-green-500/20 text-green-400'
-                                                            : record.status === 'warning'
-                                                                ? 'bg-yellow-500/20 text-yellow-400'
-                                                                : 'bg-red-500/20 text-red-400'
-                                                    }`}>
+                                                    <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${record.status === 'ready'
+                                                        ? 'bg-green-500/20 text-green-400'
+                                                        : record.status === 'warning'
+                                                            ? 'bg-yellow-500/20 text-yellow-400'
+                                                            : 'bg-red-500/20 text-red-400'
+                                                        }`}>
                                                         {t(`normalized_status_${record.status}`) || record.status}
                                                     </span>
                                                 </div>
@@ -4737,7 +4705,19 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                     )}
                 </Card>
             )}
-            
+
+            {activeView === 'collected' && (
+                <Card>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-foreground">{t('collected_data_monitoring') || 'Collected Data Monitoring'}</h3>
+                    </div>
+                    <CollectedDataPanel
+                        sources={dataHub.sources}
+                        t={t}
+                    />
+                </Card>
+            )}
+
             {activeView === 'advanced' && dataHub && (
                 <AdvancedFeatures
                     dataHub={dataHub}
@@ -4948,12 +4928,11 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                                     )}
                                                 </td>
                                                 <td className="py-3 pr-4">
-                                                    <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
-                                                        channel.status === 'error' ? 'bg-red-500/20 text-red-300' :
+                                                    <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${channel.status === 'error' ? 'bg-red-500/20 text-red-300' :
                                                         channel.status === 'syncing' ? 'bg-yellow-500/20 text-yellow-300' :
-                                                        channel.status === 'paused' ? 'bg-slate-500/20 text-slate-300' :
-                                                        'bg-green-500/20 text-green-300'
-                                                    }`}>
+                                                            channel.status === 'paused' ? 'bg-slate-500/20 text-slate-300' :
+                                                                'bg-green-500/20 text-green-300'
+                                                        }`}>
                                                         {t(`collector_status_${channel.status}`) || channel.status}
                                                     </span>
                                                 </td>
@@ -4973,11 +4952,10 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                                     <div className="flex flex-col gap-1">
                                                         <span>{channel.lastTestAt ? formatTimeAgo(channel.lastTestAt) : (t('never') || 'Never')}</span>
                                                         {channel.lastTestStatus && (
-                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                                                channel.lastTestStatus === 'success'
-                                                                    ? 'bg-green-500/20 text-green-300'
-                                                                    : 'bg-red-500/20 text-red-300'
-                                                            }`}>
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${channel.lastTestStatus === 'success'
+                                                                ? 'bg-green-500/20 text-green-300'
+                                                                : 'bg-red-500/20 text-red-300'
+                                                                }`}>
                                                                 {channel.lastTestStatus === 'success'
                                                                     ? (t('collector_test_status_success') || 'Success')
                                                                     : (t('collector_test_status_failed') || 'Failed')}
@@ -4986,9 +4964,8 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                                                     </div>
                                                 </td>
                                                 <td className="py-3 pr-4">
-                                                    <span className={`px-2 py-1 rounded text-[11px] font-semibold ${
-                                                        channel.usingCollector ? 'bg-purple-500/20 text-purple-300' : 'bg-orange-500/20 text-orange-300'
-                                                    }`}>
+                                                    <span className={`px-2 py-1 rounded text-[11px] font-semibold ${channel.usingCollector ? 'bg-purple-500/20 text-purple-300' : 'bg-orange-500/20 text-orange-300'
+                                                        }`}>
                                                         {channel.usingCollector
                                                             ? (t('collector_source_collector') || 'Collector')
                                                             : (t('collector_source_fallback') || 'Fallback')}
@@ -5052,9 +5029,8 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                             </div>
                         )}
                         {channelTestPreview && (
-                            <div className={`mt-4 p-3 rounded border text-xs ${
-                                channelTestPreview.success ? 'border-green-500/30 bg-green-500/5 text-green-200' : 'border-red-500/30 bg-red-500/5 text-red-200'
-                            }`}>
+                            <div className={`mt-4 p-3 rounded border text-xs ${channelTestPreview.success ? 'border-green-500/30 bg-green-500/5 text-green-200' : 'border-red-500/30 bg-red-500/5 text-red-200'
+                                }`}>
                                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                                     <p className="font-semibold">@{channelTestPreview.channelHandle.replace(/^@/, '')}</p>
                                     <div className="flex gap-3 text-[11px]">
@@ -5083,7 +5059,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                     </div>
                 </Card>
             )}
-            
+
             {/* Create/Edit Source Modal */}
             {showCreateSourceModal && (
                 <CreateSourceModal
@@ -5112,7 +5088,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                     t={t}
                 />
             )}
-            
+
             {/* Create Category Modal */}
             {showCreateCategoryModal && (
                 <CreateCategoryModal
@@ -5131,7 +5107,7 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                     t={t}
                 />
             )}
-            
+
             {/* View Source Data Modal */}
             {viewingSourceData && (
                 <ViewSourceDataModal
@@ -5154,14 +5130,14 @@ const DataHub: React.FC<{ artemis: ArtemisState; t: (key: string) => string; onR
                             } else if (viewingSourceData.type === 'telegram') {
                                 dataType = 'telegram';
                             }
-                            
+
                             const response = await api.requestData({
                                 sourceId: viewingSourceData.id,
                                 agentId: 'preview',
                                 dataType: dataType as any,
                                 cache: false,
                             });
-                            
+
                             if (response.success && response.data) {
                                 setSourceData(response.data);
                             } else {
@@ -5202,18 +5178,18 @@ const CreateSourceModal: React.FC<{
     const [autoDetection, setAutoDetection] = useState<DetectedSourceType | null>(null);
     const [detectionError, setDetectionError] = useState<string | null>(null);
     const [autoFields, setAutoFields] = useState<Record<string, boolean>>({});
-    
+
     // Telegram specific fields
     const [telegramUsername, setTelegramUsername] = useState(source?.credentials?.username || '');
     const [telegramToken, setTelegramToken] = useState(source?.credentials?.token || '');
-    
+
     // API credentials
     const [apiKey, setApiKey] = useState(source?.credentials?.apiKey || '');
     const [apiSecret, setApiSecret] = useState(source?.credentials?.secret || '');
-    
+
     // Webhook specific
     const [webhookUrl, setWebhookUrl] = useState(source?.url || '');
-    
+
     useEffect(() => {
         if (!url || url.length < 6) {
             setAutoDetection(null);
@@ -5229,7 +5205,7 @@ const CreateSourceModal: React.FC<{
         return () => clearTimeout(handle);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [url]);
-    
+
     const markAutoField = (field: string) => {
         setAutoFields(prev => ({ ...prev, [field]: true }));
     };
@@ -5252,7 +5228,7 @@ const CreateSourceModal: React.FC<{
             setIsDetectingType(false);
         }
     };
-    
+
     const defaultCategoryForType = (detType: DataSource['type']): string => {
         switch (detType) {
             case 'rss':
@@ -5271,7 +5247,7 @@ const CreateSourceModal: React.FC<{
                 return category || 'fundamental';
         }
     };
-    
+
     const defaultTagsForType = (detType: DataSource['type'], metaTags?: string[]) => {
         if (metaTags && metaTags.length > 0) return metaTags.join(', ');
         switch (detType) {
@@ -5334,7 +5310,7 @@ const CreateSourceModal: React.FC<{
             return result.normalizedUrl;
         }
     };
-    
+
     const autoBadge = (field: string) => (
         autoFields[field]
             ? <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded border border-purple-500/40 bg-purple-500/15 text-purple-200">
@@ -5388,7 +5364,7 @@ const CreateSourceModal: React.FC<{
             markAutoField('telegramUsername');
         }
     };
-    
+
     // Initialize fields from source when editing
     useEffect(() => {
         if (source) {
@@ -5407,11 +5383,11 @@ const CreateSourceModal: React.FC<{
             setWebhookUrl(source.url || '');
         }
     }, [source]);
-    
+
     useEffect(() => {
         setAutoFields({});
     }, [source?.id]);
-    
+
     // Reset fields when type changes (only for new sources)
     useEffect(() => {
         if (!source) {
@@ -5434,7 +5410,7 @@ const CreateSourceModal: React.FC<{
             }
         }
     }, [type, source]);
-    
+
     const handleSubmit = async () => {
         if (!name || !category) {
             alert(t('fill_required_fields') || 'Please fill all required fields');
@@ -5442,9 +5418,9 @@ const CreateSourceModal: React.FC<{
         }
         if (type === 'telegram') {
             alert(t('telegram_source_manage_in_collector') || 'Telegram sources are managed via Telegram Collector.');
-                return;
-            }
-        
+            return;
+        }
+
         // Validate based on type
         if (type === 'api' || type === 'webhook' || type === 'rss' || type === 'website') {
             if (!url && type !== 'webhook') {
@@ -5456,11 +5432,11 @@ const CreateSourceModal: React.FC<{
                 return;
             }
         }
-        
+
         setIsSaving(true);
         try {
             const credentials: DataSource['credentials'] = {};
-            
+
             // Set credentials based on type
             if (type === 'telegram') {
                 credentials.username = telegramUsername;
@@ -5469,7 +5445,7 @@ const CreateSourceModal: React.FC<{
                 if (apiKey) credentials.apiKey = apiKey;
                 if (apiSecret) credentials.secret = apiSecret;
             }
-            
+
             // Set URL based on type
             let finalUrl = url;
             if (type === 'telegram') {
@@ -5478,7 +5454,7 @@ const CreateSourceModal: React.FC<{
             } else if (type === 'webhook') {
                 finalUrl = webhookUrl;
             }
-            
+
             await onSave({
                 name,
                 type,
@@ -5497,7 +5473,7 @@ const CreateSourceModal: React.FC<{
             setIsSaving(false);
         }
     };
-    
+
     const isExistingTelegram = source?.type === 'telegram';
     const canCreateTelegram = !source;
     const availableTypes: DataSource['type'][] = source
@@ -5505,7 +5481,7 @@ const CreateSourceModal: React.FC<{
             ? ['telegram']
             : ['api', 'webhook', 'rss', 'website', 'aggregator', 'third_party'])
         : ['api', 'webhook', 'rss', 'website', 'aggregator', 'third_party'];
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -5522,7 +5498,7 @@ const CreateSourceModal: React.FC<{
                         {t('telegram_source_edit_hint') || 'This Telegram source is read-only. Manage details through the Telegram Collector tab.'}
                     </div>
                 )}
-                
+
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('name') || 'Name'} *</label>
@@ -5534,7 +5510,7 @@ const CreateSourceModal: React.FC<{
                             placeholder={t('enter_source_name') || 'Enter source name'}
                         />
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
@@ -5553,7 +5529,7 @@ const CreateSourceModal: React.FC<{
                                 ))}
                             </select>
                         </div>
-                        
+
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
                                 {t('category') || 'Category'} * {autoBadge('category')}
@@ -5570,7 +5546,7 @@ const CreateSourceModal: React.FC<{
                             </select>
                         </div>
                     </div>
-                    
+
                     {/* Dynamic fields based on type */}
                     {type === 'telegram' && (
                         <>
@@ -5609,7 +5585,7 @@ const CreateSourceModal: React.FC<{
                             </div>
                         </>
                     )}
-                    
+
                     {type === 'webhook' && (
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
@@ -5627,7 +5603,7 @@ const CreateSourceModal: React.FC<{
                             </p>
                         </div>
                     )}
-                    
+
                     {(type === 'api' || type === 'rss' || type === 'website' || type === 'aggregator' || type === 'third_party') && (
                         <>
                             <div>
@@ -5635,18 +5611,18 @@ const CreateSourceModal: React.FC<{
                                     {t('url') || 'URL'} {type === 'api' || type === 'rss' || type === 'website' ? '*' : ''} {autoBadge('url')}
                                 </label>
                                 <div className="flex gap-2">
-                                <input
-                                    type="url"
-                                    value={url}
-                                    onChange={(e) => setUrl(e.target.value)}
+                                    <input
+                                        type="url"
+                                        value={url}
+                                        onChange={(e) => setUrl(e.target.value)}
                                         className="flex-1 p-2 bg-secondary border border-border rounded text-foreground"
-                                    placeholder={
-                                        type === 'api' ? 'https://api.example.com' :
-                                        type === 'rss' ? 'https://example.com/feed.xml' :
-                                        type === 'website' ? 'https://example.com' :
-                                        'https://example.com'
-                                    }
-                                />
+                                        placeholder={
+                                            type === 'api' ? 'https://api.example.com' :
+                                                type === 'rss' ? 'https://example.com/feed.xml' :
+                                                    type === 'website' ? 'https://example.com' :
+                                                        'https://example.com'
+                                        }
+                                    />
                                     <button
                                         type="button"
                                         onClick={() => detectTypeForUrl(url, 'ui-manual-detect')}
@@ -5686,7 +5662,7 @@ const CreateSourceModal: React.FC<{
                                     <p className="text-xs text-red-400 mt-1">{detectionError}</p>
                                 )}
                             </div>
-                            
+
                             {type === 'api' && (
                                 <>
                                     <div>
@@ -5734,7 +5710,7 @@ const CreateSourceModal: React.FC<{
                             )}
                         </>
                     )}
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">
                             {t('tags') || 'Tags'} (comma-separated) {autoBadge('tags')}
@@ -5747,7 +5723,7 @@ const CreateSourceModal: React.FC<{
                             placeholder="price, real-time, market"
                         />
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
@@ -5764,7 +5740,7 @@ const CreateSourceModal: React.FC<{
                                 <option value="critical">{t('critical') || 'Critical'}</option>
                             </select>
                         </div>
-                        
+
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
                                 {t('update_interval') || 'Update Interval'} {autoBadge('updateInterval')}
@@ -5785,7 +5761,7 @@ const CreateSourceModal: React.FC<{
                         </div>
                     </div>
                 </div>
-                
+
                 <div className="flex justify-end gap-2 mt-6">
                     <button
                         onClick={onClose}
@@ -5818,13 +5794,13 @@ const CreateCategoryModal: React.FC<{
     const [tags, setTags] = useState('');
     const [dataTypes, setDataTypes] = useState('');
     const [isSaving, setIsSaving] = useState(false);
-    
+
     const handleSubmit = async () => {
         if (!name) {
             alert(t('fill_required_fields') || 'Please fill all required fields');
             return;
         }
-        
+
         setIsSaving(true);
         try {
             await onSave({
@@ -5839,12 +5815,12 @@ const CreateCategoryModal: React.FC<{
             setIsSaving(false);
         }
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
                 <h3 className="text-lg font-semibold text-foreground mb-4">{t('create_category') || 'Create Category'}</h3>
-                
+
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('name') || 'Name'} *</label>
@@ -5856,7 +5832,7 @@ const CreateCategoryModal: React.FC<{
                             placeholder={t('enter_category_name') || 'Enter category name'}
                         />
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('description') || 'Description'}</label>
                         <textarea
@@ -5867,7 +5843,7 @@ const CreateCategoryModal: React.FC<{
                             placeholder={t('enter_description') || 'Enter description'}
                         />
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('tags') || 'Tags'} (comma-separated)</label>
                         <input
@@ -5878,7 +5854,7 @@ const CreateCategoryModal: React.FC<{
                             placeholder="price, news, analysis"
                         />
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('data_types') || 'Data Types'} (comma-separated)</label>
                         <input
@@ -5890,7 +5866,7 @@ const CreateCategoryModal: React.FC<{
                         />
                     </div>
                 </div>
-                
+
                 <div className="flex justify-end gap-2 mt-6">
                     <button
                         onClick={onClose}
@@ -5946,7 +5922,7 @@ const AdvancedFeatures: React.FC<{
     const [previewQueueItem, setPreviewQueueItem] = useState<PublisherQueueItem | null>(null);
     const [isUpdatingSchedule, setIsUpdatingSchedule] = useState(false);
     const [isDispatchingAutomation, setIsDispatchingAutomation] = useState(false);
-    
+
     const advanced = dataHub.advanced || {
         webCrawlers: [],
         autoDiscovery: { enabled: false, rules: [], discoveredSources: [] },
@@ -6013,7 +5989,7 @@ const AdvancedFeatures: React.FC<{
     }, [dataHub.normalizedData]);
     const pipelineSnapshot = dataHub.pipelineSnapshot;
     const normalizationSummary: DataNormalizationSummary | undefined = dataHub.normalizationSummary;
-    
+
     const sourceQualityMap = useMemo<Record<string, DataPipelineSourceSnapshot>>(() => {
         if (!pipelineSnapshot?.sources?.length) {
             return {};
@@ -6023,7 +5999,7 @@ const AdvancedFeatures: React.FC<{
             return acc;
         }, {} as Record<string, DataPipelineSourceSnapshot>);
     }, [pipelineSnapshot?.sources]);
-    
+
     const categoryQualityMap = useMemo<Record<string, DataPipelineCategorySnapshot>>(() => {
         if (!pipelineSnapshot?.categories?.length) {
             return {};
@@ -6033,7 +6009,7 @@ const AdvancedFeatures: React.FC<{
             return acc;
         }, {} as Record<string, DataPipelineCategorySnapshot>);
     }, [pipelineSnapshot?.categories]);
-    
+
     const categoryQualityByName = useMemo<Record<string, DataPipelineCategorySnapshot>>(() => {
         if (!pipelineSnapshot?.categories?.length) {
             return {};
@@ -6043,24 +6019,24 @@ const AdvancedFeatures: React.FC<{
             return acc;
         }, {} as Record<string, DataPipelineCategorySnapshot>);
     }, [pipelineSnapshot?.categories]);
-    
+
     const findCategorySignal = (categoryKey: string) => {
         if (!categoryKey) return undefined;
         return categoryQualityMap[categoryKey] || categoryQualityByName[categoryKey.toLowerCase()];
     };
-    
+
     const flaggedSources = useMemo(() => {
         if (!pipelineSnapshot?.sources) return [];
         return pipelineSnapshot.sources.filter(
             snapshot => snapshot.lastStatus === 'failed' || (snapshot.issues?.length ?? 0) > 0
         );
     }, [pipelineSnapshot?.sources]);
-    
+
     const pipelinePassRate = useMemo(() => {
         if (!pipelineSnapshot || pipelineSnapshot.totalRequests24h === 0) return null;
         return ((pipelineSnapshot.passed24h / pipelineSnapshot.totalRequests24h) * 100).toFixed(1);
     }, [pipelineSnapshot]);
-    
+
     const getStatusBadgeClass = (status?: string) => {
         switch (status) {
             case 'failed':
@@ -6088,12 +6064,12 @@ const AdvancedFeatures: React.FC<{
         totalRules: advanced.smartPrioritization.rules.length,
         lastUpdate: advanced.smartPrioritization.lastUpdate,
     }), [advanced.smartPrioritization]);
-    
+
     const handleAddCrawler = () => {
         setEditingCrawler(null);
         setShowCrawlerModal(true);
     };
-    
+
     const handleSaveCrawler = async (crawlerData: any) => {
         setIsSavingCrawler(true);
         try {
@@ -6113,7 +6089,7 @@ const AdvancedFeatures: React.FC<{
             setIsSavingCrawler(false);
         }
     };
-    
+
     const handleDeleteCrawler = async (crawlerId: string) => {
         const confirmed = window.confirm(t('confirm_delete') || 'Are you sure?');
         if (confirmed) {
@@ -6130,15 +6106,15 @@ const AdvancedFeatures: React.FC<{
             }
         }
     };
-    
+
     const handleAddPublisher = () => {
         setEditingPublisher(null);
         setShowPublisherModal(true);
     };
-    
+
     const [publisherSavingId, setPublisherSavingId] = useState<string | null>(null);
     const [publisherDeletingId, setPublisherDeletingId] = useState<string | null>(null);
-    
+
     const handleSavePublisher = async (publisherData: any) => {
         setPublisherSavingId(editingPublisher?.id || 'new');
         try {
@@ -6158,7 +6134,7 @@ const AdvancedFeatures: React.FC<{
             setPublisherSavingId(null);
         }
     };
-    
+
     const handleDeletePublisher = async (publisherId: string) => {
         const confirmed = window.confirm(t('confirm_delete') || 'Are you sure?');
         if (confirmed) {
@@ -6175,12 +6151,12 @@ const AdvancedFeatures: React.FC<{
             }
         }
     };
-    
+
     const handleToggleAutoDiscovery = async (enabled: boolean) => {
         setIsLoading(true);
         try {
             const updated = await api.setAutoDiscoveryEnabled(enabled);
-                setDataHub(updated);
+            setDataHub(updated);
             onRefresh();
         } catch (e) {
             alert(t('update_failed') || 'Failed to update');
@@ -6188,12 +6164,12 @@ const AdvancedFeatures: React.FC<{
             setIsLoading(false);
         }
     };
-    
+
     const handleToggleSmartPrioritization = async (enabled: boolean) => {
         setIsLoading(true);
         try {
             const updated = await api.setSmartPrioritizationEnabled(enabled);
-                setDataHub(updated);
+            setDataHub(updated);
             onRefresh();
         } catch (e) {
             alert(t('update_failed') || 'Failed to update');
@@ -6201,7 +6177,7 @@ const AdvancedFeatures: React.FC<{
             setIsLoading(false);
         }
     };
-    
+
     const handleRemoveFromBlacklist = async (sourceId: string) => {
         setIsLoading(true);
         try {
@@ -6215,7 +6191,7 @@ const AdvancedFeatures: React.FC<{
             setIsLoading(false);
         }
     };
-    
+
     const handleRemoveFromWhitelist = async (sourceId: string) => {
         setIsLoading(true);
         try {
@@ -6229,7 +6205,7 @@ const AdvancedFeatures: React.FC<{
             setIsLoading(false);
         }
     };
-    
+
     const handleAddToBlacklist = async (sourceId: string) => {
         setIsLoading(true);
         try {
@@ -6243,7 +6219,7 @@ const AdvancedFeatures: React.FC<{
             setIsLoading(false);
         }
     };
-    
+
     const handleAddToWhitelist = async (sourceId: string) => {
         setIsLoading(true);
         try {
@@ -6388,7 +6364,7 @@ const AdvancedFeatures: React.FC<{
             setIsUpdatingSchedule(false);
         }
     };
-    
+
     return (
         <div className="space-y-6">
             <div className="flex gap-2 flex-wrap border-b border-border pb-2">
@@ -6405,15 +6381,14 @@ const AdvancedFeatures: React.FC<{
                     <button
                         key={feature.id}
                         onClick={() => setActiveFeature(feature.id as any)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                            activeFeature === feature.id ? 'bg-purple-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-accent'
-                        }`}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${activeFeature === feature.id ? 'bg-purple-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-accent'
+                            }`}
                     >
                         {feature.label}
                     </button>
                 ))}
             </div>
-            
+
             {(pipelineSnapshot || normalizationSummary) ? (
                 <Card className="bg-secondary/30 border-dashed border-purple-500/30">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
@@ -6463,12 +6438,12 @@ const AdvancedFeatures: React.FC<{
                     {t('pipeline_signal_empty') || 'No pipeline snapshot yet. Refresh Data Pipeline tab to start linking signals.'}
                 </Card>
             )}
-            
+
             {activeFeature === 'crawlers' && (
                 <Card>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-semibold text-foreground">{t('web_crawlers') || 'Web Crawlers'}</h3>
-                        <button 
+                        <button
                             onClick={handleAddCrawler}
                             className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
                         >
@@ -6480,38 +6455,38 @@ const AdvancedFeatures: React.FC<{
                             {advanced.webCrawlers.map(crawler => {
                                 const sourceSignal = crawler.sourceId ? sourceQualityMap[crawler.sourceId] : undefined;
                                 return (
-                                <div key={crawler.id} className="border border-border rounded-lg p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h4 className="font-semibold">{crawler.name}</h4>
+                                    <div key={crawler.id} className="border border-border rounded-lg p-4">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h4 className="font-semibold">{crawler.name}</h4>
                                                 <p className="text-xs text-muted-foreground break-words">{crawler.url}</p>
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                {t('interval') || 'Interval'}: {crawler.interval}
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <span className={`px-2 py-1 rounded text-xs ${crawler.enabled ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
-                                                {crawler.enabled ? t('enabled') || 'Enabled' : t('disabled') || 'Disabled'}
-                                            </span>
-                                            <button
-                                                onClick={() => {
-                                                    setEditingCrawler(crawler);
-                                                    setShowCrawlerModal(true);
-                                                }}
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    {t('interval') || 'Interval'}: {crawler.interval}
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <span className={`px-2 py-1 rounded text-xs ${crawler.enabled ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                                    {crawler.enabled ? t('enabled') || 'Enabled' : t('disabled') || 'Disabled'}
+                                                </span>
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingCrawler(crawler);
+                                                        setShowCrawlerModal(true);
+                                                    }}
                                                     disabled={isSavingCrawler || Boolean(isDeletingCrawler)}
                                                     className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded"
-                                            >
-                                                {t('edit') || 'Edit'}
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteCrawler(crawler.id)}
+                                                >
+                                                    {t('edit') || 'Edit'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteCrawler(crawler.id)}
                                                     disabled={isDeletingCrawler === crawler.id || isSavingCrawler}
                                                     className="text-xs px-3 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded"
-                                            >
+                                                >
                                                     {isDeletingCrawler === crawler.id ? (t('deleting') || 'Deleting...') : (t('delete') || 'Delete')}
-                                            </button>
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
                                         {sourceSignal && (
                                             <div className="mt-3 bg-secondary/30 rounded p-2 text-[11px] text-muted-foreground">
                                                 <p className="uppercase tracking-wide text-purple-300 text-[10px]">
@@ -6534,7 +6509,7 @@ const AdvancedFeatures: React.FC<{
                                                     {sourceSignal.issues && sourceSignal.issues.length > 0 && (
                                                         <span>{t('pipeline_signal_issues') || 'Issues'}: {sourceSignal.issues.join(', ')}</span>
                                                     )}
-                                </div>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -6546,18 +6521,18 @@ const AdvancedFeatures: React.FC<{
                     )}
                 </Card>
             )}
-            
+
             {activeFeature === 'discovery' && (
                 <Card>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-semibold text-foreground">{t('auto_discovery') || 'Auto Discovery'}</h3>
                         <div className="flex gap-2">
                             <label className="flex items-center gap-2 text-sm">
-                                <input 
-                                    type="checkbox" 
-                                    checked={advanced.autoDiscovery.enabled} 
+                                <input
+                                    type="checkbox"
+                                    checked={advanced.autoDiscovery.enabled}
                                     onChange={(e) => handleToggleAutoDiscovery(e.target.checked)}
-                                    className="rounded" 
+                                    className="rounded"
                                 />
                                 {t('enable') || 'Enable'}
                             </label>
@@ -6649,18 +6624,18 @@ const AdvancedFeatures: React.FC<{
                     )}
                 </Card>
             )}
-            
+
             {activeFeature === 'prioritization' && (
                 <Card>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-semibold text-foreground">{t('smart_prioritization') || 'Smart Prioritization'}</h3>
                         <div className="flex gap-2">
                             <label className="flex items-center gap-2 text-sm">
-                                <input 
-                                    type="checkbox" 
-                                    checked={advanced.smartPrioritization.enabled} 
+                                <input
+                                    type="checkbox"
+                                    checked={advanced.smartPrioritization.enabled}
                                     onChange={(e) => handleToggleSmartPrioritization(e.target.checked)}
-                                    className="rounded" 
+                                    className="rounded"
                                 />
                                 {t('enable') || 'Enable'}
                             </label>
@@ -6731,7 +6706,7 @@ const AdvancedFeatures: React.FC<{
                     )}
                 </Card>
             )}
-            
+
             {activeFeature === 'access' && (
                 <Card>
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
@@ -6758,62 +6733,62 @@ const AdvancedFeatures: React.FC<{
                                 );
                             })
                             .map(source => {
-                            const control = advanced.accessControl.find(ac => ac.sourceId === source.id);
-                            const sourceSignal = sourceQualityMap[source.id];
-                            return (
-                                <div key={source.id} className="border border-border rounded-lg p-4">
-                                    <div className="flex justify-between">
-                                        <div>
-                                            <h4 className="font-semibold">{source.name}</h4>
-                                            <p className="text-xs text-muted-foreground">
-                                                {control ? `${t('allowed_agents') || 'Allowed'}: ${control.allowedAgents.length || t('all') || 'All'}` : t('no_restrictions') || 'No restrictions'}
-                                            </p>
-                                            {control && (
-                                                <div className="text-[11px] text-muted-foreground mt-1 space-x-2">
-                                                    {control.maxRequestsPerMinute && (
-                                                        <span>{t('rate_limit_min') || 'Per minute'}: {control.maxRequestsPerMinute}</span>
-                                                    )}
-                                                    {control.maxRequestsPerDay && (
-                                                        <span>{t('rate_limit_day') || 'Per day'}: {control.maxRequestsPerDay}</span>
-                                                    )}
-                                                </div>
-                                            )}
+                                const control = advanced.accessControl.find(ac => ac.sourceId === source.id);
+                                const sourceSignal = sourceQualityMap[source.id];
+                                return (
+                                    <div key={source.id} className="border border-border rounded-lg p-4">
+                                        <div className="flex justify-between">
+                                            <div>
+                                                <h4 className="font-semibold">{source.name}</h4>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {control ? `${t('allowed_agents') || 'Allowed'}: ${control.allowedAgents.length || t('all') || 'All'}` : t('no_restrictions') || 'No restrictions'}
+                                                </p>
+                                                {control && (
+                                                    <div className="text-[11px] text-muted-foreground mt-1 space-x-2">
+                                                        {control.maxRequestsPerMinute && (
+                                                            <span>{t('rate_limit_min') || 'Per minute'}: {control.maxRequestsPerMinute}</span>
+                                                        )}
+                                                        {control.maxRequestsPerDay && (
+                                                            <span>{t('rate_limit_day') || 'Per day'}: {control.maxRequestsPerDay}</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={() => setEditingAccessControl(source.id)}
+                                                disabled={isSavingAccess}
+                                                className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded"
+                                            >
+                                                {isSavingAccess ? (t('saving') || 'Saving...') : (t('configure') || 'Configure')}
+                                            </button>
                                         </div>
-                                        <button 
-                                            onClick={() => setEditingAccessControl(source.id)}
-                                            disabled={isSavingAccess}
-                                            className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded"
-                                        >
-                                            {isSavingAccess ? (t('saving') || 'Saving...') : (t('configure') || 'Configure')}
-                                        </button>
-                                    </div>
-                                    {sourceSignal && (
-                                        <div className="text-[11px] text-muted-foreground mt-2 flex flex-wrap gap-3">
-                                            <span className="flex items-center gap-1">
-                                                {t('pipeline_signal_last_status') || 'Last status'}:
-                                                <span className={`px-2 py-0.5 rounded-full font-semibold ${getStatusBadgeClass(sourceSignal.lastStatus)}`}>
-                                                    {t(`log_status_${sourceSignal.lastStatus}` as any) || t(sourceSignal.lastStatus as any) || sourceSignal.lastStatus}
+                                        {sourceSignal && (
+                                            <div className="text-[11px] text-muted-foreground mt-2 flex flex-wrap gap-3">
+                                                <span className="flex items-center gap-1">
+                                                    {t('pipeline_signal_last_status') || 'Last status'}:
+                                                    <span className={`px-2 py-0.5 rounded-full font-semibold ${getStatusBadgeClass(sourceSignal.lastStatus)}`}>
+                                                        {t(`log_status_${sourceSignal.lastStatus}` as any) || t(sourceSignal.lastStatus as any) || sourceSignal.lastStatus}
+                                                    </span>
                                                 </span>
-                                            </span>
-                                            {typeof sourceSignal.lastResponseTime === 'number' && (
-                                                <span>{t('pipeline_signal_last_response') || 'Response'}: {sourceSignal.lastResponseTime} ms</span>
-                                            )}
-                                            <span>
-                                                {t('pipeline_signal_last_checked') || 'Checked'}:{' '}
-                                                {sourceSignal.lastChecked ? formatTimeAgo(sourceSignal.lastChecked) : t('never') || 'Never'}
-                                            </span>
-                                            {sourceSignal.issues && sourceSignal.issues.length > 0 && (
-                                                <span>{t('pipeline_signal_issues') || 'Issues'}: {sourceSignal.issues.join(', ')}</span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                                {typeof sourceSignal.lastResponseTime === 'number' && (
+                                                    <span>{t('pipeline_signal_last_response') || 'Response'}: {sourceSignal.lastResponseTime} ms</span>
+                                                )}
+                                                <span>
+                                                    {t('pipeline_signal_last_checked') || 'Checked'}:{' '}
+                                                    {sourceSignal.lastChecked ? formatTimeAgo(sourceSignal.lastChecked) : t('never') || 'Never'}
+                                                </span>
+                                                {sourceSignal.issues && sourceSignal.issues.length > 0 && (
+                                                    <span>{t('pipeline_signal_issues') || 'Issues'}: {sourceSignal.issues.join(', ')}</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                     </div>
                 </Card>
             )}
-            
+
             {activeFeature === 'blacklist' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Card>
@@ -6829,7 +6804,7 @@ const AdvancedFeatures: React.FC<{
                                 .filter(sourceId => {
                                     if (!blacklistSearch.trim()) return true;
                                     const query = blacklistSearch.trim().toLowerCase();
-                                const source = dataHub.sources.find(s => s.id === sourceId);
+                                    const source = dataHub.sources.find(s => s.id === sourceId);
                                     const reason = advanced.blacklist.reasons[sourceId];
                                     return (
                                         (source?.name.toLowerCase().includes(query) ?? false) ||
@@ -6837,34 +6812,34 @@ const AdvancedFeatures: React.FC<{
                                     );
                                 })
                                 .map(sourceId => {
-                                const source = dataHub.sources.find(s => s.id === sourceId);
-                                const sourceSignal = sourceQualityMap[sourceId];
-                                const reason = advanced.blacklist.reasons[sourceId];
-                                return (
-                                    <div key={sourceId} className="border border-red-500/20 bg-red-500/10 rounded p-2 text-sm mb-2">
-                                        <div className="flex justify-between">
-                                            <div>
-                                                <span className="font-semibold block">{source?.name || sourceId}</span>
-                                                {reason && <span className="text-[11px] text-red-300">{reason}</span>}
-                                                {sourceSignal && (
-                                                    <div className="text-[11px] text-red-200 mt-1 flex flex-wrap gap-2">
-                                                        <span>{t('pipeline_signal_last_status') || 'Last status'}: {t(`log_status_${sourceSignal.lastStatus}` as any) || t(sourceSignal.lastStatus as any) || sourceSignal.lastStatus}</span>
-                                                        {sourceSignal.lastChecked && (
-                                                            <span>{t('pipeline_signal_last_checked') || 'Checked'}: {formatTimeAgo(sourceSignal.lastChecked)}</span>
-                                                        )}
-                                                    </div>
-                                                )}
+                                    const source = dataHub.sources.find(s => s.id === sourceId);
+                                    const sourceSignal = sourceQualityMap[sourceId];
+                                    const reason = advanced.blacklist.reasons[sourceId];
+                                    return (
+                                        <div key={sourceId} className="border border-red-500/20 bg-red-500/10 rounded p-2 text-sm mb-2">
+                                            <div className="flex justify-between">
+                                                <div>
+                                                    <span className="font-semibold block">{source?.name || sourceId}</span>
+                                                    {reason && <span className="text-[11px] text-red-300">{reason}</span>}
+                                                    {sourceSignal && (
+                                                        <div className="text-[11px] text-red-200 mt-1 flex flex-wrap gap-2">
+                                                            <span>{t('pipeline_signal_last_status') || 'Last status'}: {t(`log_status_${sourceSignal.lastStatus}` as any) || t(sourceSignal.lastStatus as any) || sourceSignal.lastStatus}</span>
+                                                            {sourceSignal.lastChecked && (
+                                                                <span>{t('pipeline_signal_last_checked') || 'Checked'}: {formatTimeAgo(sourceSignal.lastChecked)}</span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemoveFromBlacklist(sourceId)}
+                                                    className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+                                                >
+                                                    {t('remove') || 'Remove'}
+                                                </button>
                                             </div>
-                                            <button 
-                                                onClick={() => handleRemoveFromBlacklist(sourceId)}
-                                                className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
-                                            >
-                                                {t('remove') || 'Remove'}
-                                            </button>
                                         </div>
-                                    </div>
-                                );
-                            })
+                                    );
+                                })
                         ) : (
                             <p className="text-center text-muted-foreground py-10">{t('no_blacklisted') || 'No blacklisted sources'}</p>
                         )}
@@ -6882,7 +6857,7 @@ const AdvancedFeatures: React.FC<{
                                 .filter(sourceId => {
                                     if (!whitelistSearch.trim()) return true;
                                     const query = whitelistSearch.trim().toLowerCase();
-                                const source = dataHub.sources.find(s => s.id === sourceId);
+                                    const source = dataHub.sources.find(s => s.id === sourceId);
                                     const notes = source?.notes;
                                     return (
                                         (source?.name.toLowerCase().includes(query) ?? false) ||
@@ -6890,30 +6865,30 @@ const AdvancedFeatures: React.FC<{
                                     );
                                 })
                                 .map(sourceId => {
-                                const source = dataHub.sources.find(s => s.id === sourceId);
-                                const sourceSignal = sourceQualityMap[sourceId];
-                                return (
-                                    <div key={sourceId} className="border border-green-500/20 bg-green-500/10 rounded p-2 text-sm mb-2">
-                                        <div className="flex justify-between">
-                                            <span className="font-semibold">{source?.name || sourceId}</span>
-                                            <button 
-                                                onClick={() => handleRemoveFromWhitelist(sourceId)}
-                                                className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
-                                            >
-                                                {t('remove') || 'Remove'}
-                                            </button>
-                                        </div>
-                                        {sourceSignal && (
-                                            <div className="text-[11px] text-green-200 mt-1 flex flex-wrap gap-2">
-                                                <span>{t('pipeline_signal_last_status') || 'Last status'}: {t(`log_status_${sourceSignal.lastStatus}` as any) || t(sourceSignal.lastStatus as any) || sourceSignal.lastStatus}</span>
-                                                {sourceSignal.lastChecked && (
-                                                    <span>{t('pipeline_signal_last_checked') || 'Checked'}: {formatTimeAgo(sourceSignal.lastChecked)}</span>
-                                                )}
+                                    const source = dataHub.sources.find(s => s.id === sourceId);
+                                    const sourceSignal = sourceQualityMap[sourceId];
+                                    return (
+                                        <div key={sourceId} className="border border-green-500/20 bg-green-500/10 rounded p-2 text-sm mb-2">
+                                            <div className="flex justify-between">
+                                                <span className="font-semibold">{source?.name || sourceId}</span>
+                                                <button
+                                                    onClick={() => handleRemoveFromWhitelist(sourceId)}
+                                                    className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+                                                >
+                                                    {t('remove') || 'Remove'}
+                                                </button>
                                             </div>
-                                        )}
-                                    </div>
-                                );
-                            })
+                                            {sourceSignal && (
+                                                <div className="text-[11px] text-green-200 mt-1 flex flex-wrap gap-2">
+                                                    <span>{t('pipeline_signal_last_status') || 'Last status'}: {t(`log_status_${sourceSignal.lastStatus}` as any) || t(sourceSignal.lastStatus as any) || sourceSignal.lastStatus}</span>
+                                                    {sourceSignal.lastChecked && (
+                                                        <span>{t('pipeline_signal_last_checked') || 'Checked'}: {formatTimeAgo(sourceSignal.lastChecked)}</span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })
                         ) : (
                             <p className="text-center text-muted-foreground py-10">{t('no_whitelisted') || 'No whitelisted sources'}</p>
                         )}
@@ -7331,7 +7306,7 @@ const AdvancedFeatures: React.FC<{
                     )}
                 </Card>
             )}
-            
+
             {activeFeature === 'archive' && (
                 <Card>
                     <h3 className="font-semibold text-foreground mb-4">{t('data_archiving') || 'Data Archiving'}</h3>
@@ -7354,12 +7329,12 @@ const AdvancedFeatures: React.FC<{
                     </button>
                 </Card>
             )}
-            
+
             {activeFeature === 'telegram' && (
                 <Card>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-semibold text-foreground">{t('telegram_publisher') || 'Telegram Publisher'}</h3>
-                        <button 
+                        <button
                             onClick={handleAddPublisher}
                             className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
                         >
@@ -7370,56 +7345,56 @@ const AdvancedFeatures: React.FC<{
                         advanced.telegramPublishers.map(publisher => {
                             const filterAgents = publisher.filters?.agentIds?.map(id => agentMap[id]?.name || id) || [];
                             return (
-                            <div key={publisher.id} className="border border-border rounded-lg p-4 mb-3">
-                                <div className="flex justify-between">
-                                    <div>
-                                        <h4 className="font-semibold">{publisher.name}</h4>
-                                        <p className="text-xs text-muted-foreground">{t('chat_id') || 'Chat'}: {publisher.chatId}</p>
-                                    </div>
-                                    <div className="flex gap-2 items-center">
-                                        <span className={`px-2 py-1 rounded text-xs ${publisher.enabled ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
-                                            {publisher.enabled ? t('enabled') || 'Enabled' : t('disabled') || 'Disabled'}
-                                        </span>
-                                        <button
-                                            onClick={() => {
-                                                setEditingPublisher(publisher);
-                                                setShowPublisherModal(true);
-                                            }}
-                                            className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
+                                <div key={publisher.id} className="border border-border rounded-lg p-4 mb-3">
+                                    <div className="flex justify-between">
+                                        <div>
+                                            <h4 className="font-semibold">{publisher.name}</h4>
+                                            <p className="text-xs text-muted-foreground">{t('chat_id') || 'Chat'}: {publisher.chatId}</p>
+                                        </div>
+                                        <div className="flex gap-2 items-center">
+                                            <span className={`px-2 py-1 rounded text-xs ${publisher.enabled ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                                {publisher.enabled ? t('enabled') || 'Enabled' : t('disabled') || 'Disabled'}
+                                            </span>
+                                            <button
+                                                onClick={() => {
+                                                    setEditingPublisher(publisher);
+                                                    setShowPublisherModal(true);
+                                                }}
+                                                className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
                                                 disabled={publisherSavingId === publisher.id || publisherDeletingId === publisher.id}
-                                        >
+                                            >
                                                 {publisherSavingId === publisher.id ? (t('saving') || 'Saving...') : (t('edit') || 'Edit')}
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeletePublisher(publisher.id)}
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeletePublisher(publisher.id)}
                                                 disabled={publisherDeletingId === publisher.id || publisherSavingId === publisher.id}
                                                 className="text-xs px-3 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded"
-                                        >
+                                            >
                                                 {publisherDeletingId === publisher.id ? (t('deleting') || 'Deleting...') : (t('delete') || 'Delete')}
-                                        </button>
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
                                     {(publisher.filters?.sources?.length ||
                                         publisher.filters?.categories?.length ||
                                         filterAgents.length) && (
-                                        <div className="mt-3 text-xs text-muted-foreground space-y-1">
-                                            {publisher.filters?.sources?.length && (
-                                                <p>
-                                                    {t('filter_sources') || 'Sources'}: {publisher.filters.sources.length}
-                                                </p>
-                                            )}
-                                            {publisher.filters?.categories?.length && (
-                                                <p>
-                                                    {t('filter_categories') || 'Categories'}: {publisher.filters.categories.length}
-                                                </p>
-                                            )}
-                                            {filterAgents.length > 0 && (
-                                                <p>
-                                                    {t('filter_agents') || 'Agents'}: {filterAgents.join(', ')}
-                                                </p>
-                                            )}
-                            </div>
-                                    )}
+                                            <div className="mt-3 text-xs text-muted-foreground space-y-1">
+                                                {publisher.filters?.sources?.length && (
+                                                    <p>
+                                                        {t('filter_sources') || 'Sources'}: {publisher.filters.sources.length}
+                                                    </p>
+                                                )}
+                                                {publisher.filters?.categories?.length && (
+                                                    <p>
+                                                        {t('filter_categories') || 'Categories'}: {publisher.filters.categories.length}
+                                                    </p>
+                                                )}
+                                                {filterAgents.length > 0 && (
+                                                    <p>
+                                                        {t('filter_agents') || 'Agents'}: {filterAgents.join(', ')}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
                                 </div>
                             );
                         })
@@ -7428,7 +7403,7 @@ const AdvancedFeatures: React.FC<{
                     )}
                 </Card>
             )}
-            
+
             {/* Web Crawler Modal */}
             {showCrawlerModal && (
                 <WebCrawlerModal
@@ -7442,7 +7417,7 @@ const AdvancedFeatures: React.FC<{
                     t={t}
                 />
             )}
-            
+
             {/* Telegram Publisher Modal */}
             {showPublisherModal && (
                 <TelegramPublisherModal
@@ -7458,7 +7433,7 @@ const AdvancedFeatures: React.FC<{
                     t={t}
                 />
             )}
-            
+
             {/* Access Control Modal */}
             {editingAccessControl && (
                 <AccessControlModal
@@ -7541,7 +7516,7 @@ const WebCrawlerModal: React.FC<{
     });
     const [isSaving, setIsSaving] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
-    
+
     const handleSubmit = async () => {
         const newErrors: Record<string, string> = {};
         if (!name.trim()) {
@@ -7563,13 +7538,13 @@ const WebCrawlerModal: React.FC<{
         if (!hasSelectors) {
             newErrors.selectors = t('crawler_selector_required') || 'Provide at least one CSS selector to extract data.';
         }
-        
+
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
             return;
         }
         setErrors({});
-        
+
         setIsSaving(true);
         try {
             await onSave({
@@ -7588,14 +7563,14 @@ const WebCrawlerModal: React.FC<{
             setIsSaving(false);
         }
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-semibold text-foreground mb-4">
                     {crawler ? t('edit_crawler') || 'Edit Crawler' : t('create_crawler') || 'Create Web Crawler'}
                 </h3>
-                
+
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('name') || 'Name'} *</label>
@@ -7608,7 +7583,7 @@ const WebCrawlerModal: React.FC<{
                         />
                         {errors.name && <p className="text-xs text-red-400 mt-1">{errors.name}</p>}
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('url') || 'URL'} *</label>
                         <input
@@ -7620,7 +7595,7 @@ const WebCrawlerModal: React.FC<{
                         />
                         {errors.url && <p className="text-xs text-red-400 mt-1">{errors.url}</p>}
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('link_to_source') || 'Link to Source'} (Optional)</label>
                         <select
@@ -7634,7 +7609,7 @@ const WebCrawlerModal: React.FC<{
                             ))}
                         </select>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">{t('interval') || 'Interval'}</label>
@@ -7652,7 +7627,7 @@ const WebCrawlerModal: React.FC<{
                                 <option value="daily">{t('daily') || 'Daily'}</option>
                             </select>
                         </div>
-                        
+
                         <div className="flex items-center pt-6">
                             <label className="flex items-center gap-2 text-sm">
                                 <input
@@ -7665,7 +7640,7 @@ const WebCrawlerModal: React.FC<{
                             </label>
                         </div>
                     </div>
-                    
+
                     <div className="border-t border-border pt-4">
                         <h4 className="text-sm font-semibold text-foreground mb-3">{t('css_selectors') || 'CSS Selectors'} (Optional)</h4>
                         <div className="grid grid-cols-2 gap-3">
@@ -7723,7 +7698,7 @@ const WebCrawlerModal: React.FC<{
                         {errors.selectors && <p className="text-xs text-red-400 mt-2">{errors.selectors}</p>}
                     </div>
                 </div>
-                
+
                 <div className="flex justify-end gap-2 mt-6">
                     <button
                         onClick={onClose}
@@ -7765,7 +7740,7 @@ const TelegramPublisherModal: React.FC<{
     const [selectedAgents, setSelectedAgents] = useState<string[]>(publisher?.filters?.agentIds || []);
     const [isSaving, setIsSaving] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
-    
+
     const handleSubmit = async () => {
         const newErrors: Record<string, string> = {};
         if (!name.trim()) {
@@ -7786,13 +7761,13 @@ const TelegramPublisherModal: React.FC<{
         if (!template.includes('{{data}}')) {
             newErrors.template = t('publisher_template_placeholder_required') || 'Template must include {{data}} placeholder.';
         }
-        
+
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
             return;
         }
         setErrors({});
-        
+
         setIsSaving(true);
         try {
             await onSave({
@@ -7813,14 +7788,14 @@ const TelegramPublisherModal: React.FC<{
             setIsSaving(false);
         }
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-semibold text-foreground mb-4">
                     {publisher ? t('edit_publisher') || 'Edit Publisher' : t('create_publisher') || 'Create Telegram Publisher'}
                 </h3>
-                
+
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('name') || 'Name'} *</label>
@@ -7833,7 +7808,7 @@ const TelegramPublisherModal: React.FC<{
                         />
                         {errors.name && <p className="text-xs text-red-400 mt-1">{errors.name}</p>}
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('telegram_bot_token') || 'Telegram Bot Token'} *</label>
                         <input
@@ -7845,7 +7820,7 @@ const TelegramPublisherModal: React.FC<{
                         />
                         {errors.botToken && <p className="text-xs text-red-400 mt-1">{errors.botToken}</p>}
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('chat_id') || 'Chat ID'} *</label>
                         <input
@@ -7857,7 +7832,7 @@ const TelegramPublisherModal: React.FC<{
                         />
                         {errors.chatId && <p className="text-xs text-red-400 mt-1">{errors.chatId}</p>}
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">{t('message_template') || 'Message Template'}</label>
                         <textarea
@@ -7872,7 +7847,7 @@ const TelegramPublisherModal: React.FC<{
                         </p>
                         {errors.template && <p className="text-xs text-red-400 mt-1">{errors.template}</p>}
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-2">{t('filter_sources') || 'Filter Sources'} (Optional)</label>
                         <div className="max-h-32 overflow-y-auto border border-border rounded p-2">
@@ -7895,7 +7870,7 @@ const TelegramPublisherModal: React.FC<{
                             ))}
                         </div>
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-2">{t('filter_categories') || 'Filter Categories'} (Optional)</label>
                         <div className="max-h-32 overflow-y-auto border border-border rounded p-2">
@@ -7918,7 +7893,7 @@ const TelegramPublisherModal: React.FC<{
                             ))}
                         </div>
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-2">{t('filter_agents') || 'Filter Agents'} (Optional)</label>
                         <div className="max-h-32 overflow-y-auto border border-border rounded p-2">
@@ -7945,7 +7920,7 @@ const TelegramPublisherModal: React.FC<{
                             )}
                         </div>
                     </div>
-                    
+
                     <div className="flex items-center">
                         <label className="flex items-center gap-2 text-sm">
                             <input
@@ -7958,7 +7933,7 @@ const TelegramPublisherModal: React.FC<{
                         </label>
                     </div>
                 </div>
-                
+
                 <div className="flex justify-end gap-2 mt-6">
                     <button
                         onClick={onClose}
@@ -7995,7 +7970,7 @@ const AccessControlModal: React.FC<{
     const [requireAuth, setRequireAuth] = useState(accessControl?.requireAuth ?? false);
     const [maxRequestsPerMinute, setMaxRequestsPerMinute] = useState(accessControl?.maxRequestsPerMinute || '');
     const [isSaving, setIsSaving] = useState(false);
-    
+
     const handleSubmit = async () => {
         setIsSaving(true);
         try {
@@ -8014,7 +7989,7 @@ const AccessControlModal: React.FC<{
             setIsSaving(false);
         }
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -8024,7 +7999,7 @@ const AccessControlModal: React.FC<{
                 <p className="text-sm text-muted-foreground mb-4">
                     {source?.name || sourceId}
                 </p>
-                
+
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm text-muted-foreground mb-2">
@@ -8038,7 +8013,7 @@ const AccessControlModal: React.FC<{
                             placeholder="agent1, agent2, agent3"
                         />
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-2">
                             {t('blocked_agents') || 'Blocked Agents'}
@@ -8051,7 +8026,7 @@ const AccessControlModal: React.FC<{
                             placeholder="agent1, agent2"
                         />
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm text-muted-foreground mb-2">
                             {t('allowed_data_types') || 'Allowed Data Types'} ({t('empty_for_all') || 'Empty = All'})
@@ -8064,7 +8039,7 @@ const AccessControlModal: React.FC<{
                             placeholder="price, news, analysis"
                         />
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
@@ -8078,7 +8053,7 @@ const AccessControlModal: React.FC<{
                                 placeholder="60"
                             />
                         </div>
-                        
+
                         <div className="flex items-center pt-6">
                             <label className="flex items-center gap-2 text-sm">
                                 <input
@@ -8092,7 +8067,7 @@ const AccessControlModal: React.FC<{
                         </div>
                     </div>
                 </div>
-                
+
                 <div className="flex justify-end gap-2 mt-6">
                     <button
                         onClick={onClose}
@@ -8380,7 +8355,7 @@ const ViewSourceDataModal: React.FC<{
 }> = ({ source, data, isLoading, onClose, onRefresh, t }) => {
     const formatData = (data: any): string => {
         if (!data) return t('no_data') || 'No data';
-        
+
         try {
             if (typeof data === 'string') {
                 return data;
@@ -8390,7 +8365,7 @@ const ViewSourceDataModal: React.FC<{
             return String(data);
         }
     };
-    
+
     const formatPriceData = (data: any) => {
         if (!data) return null;
         if (data.symbol && data.price) {
@@ -8403,7 +8378,7 @@ const ViewSourceDataModal: React.FC<{
         }
         return null;
     };
-    
+
     const formatNewsData = (data: any) => {
         if (!data) return null;
         // For Telegram sources, prefer articles format (structured for agents)
@@ -8412,13 +8387,13 @@ const ViewSourceDataModal: React.FC<{
         }
         return null;
     };
-    
+
     const priceData = formatPriceData(data);
     const newsData = formatNewsData(data);
-    
+
     // For Telegram sources, check if we have articles (structured format for agents)
     const telegramArticles = source.type === 'telegram' && data?.articles && Array.isArray(data.articles) ? data.articles : null;
-    
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -8447,7 +8422,7 @@ const ViewSourceDataModal: React.FC<{
                         </button>
                     </div>
                 </div>
-                
+
                 <div className="flex-1 overflow-y-auto">
                     {isLoading ? (
                         <div className="flex items-center justify-center h-64">
@@ -8529,9 +8504,9 @@ const ViewSourceDataModal: React.FC<{
                                                 </div>
                                                 <div className="flex gap-3">
                                                     {article.link && (
-                                                        <a 
-                                                            href={article.link} 
-                                                            target="_blank" 
+                                                        <a
+                                                            href={article.link}
+                                                            target="_blank"
                                                             rel="noopener noreferrer"
                                                             className="text-blue-400 hover:text-blue-300"
                                                         >
@@ -8663,7 +8638,7 @@ const ViewSourceDataModal: React.FC<{
                         </div>
                     )}
                 </div>
-                
+
                 <div className="mt-4 pt-4 border-t border-border text-xs text-muted-foreground">
                     <p>
                         {t('source_url') || 'Source URL'}: {source.url || t('not_configured') || 'Not configured'}

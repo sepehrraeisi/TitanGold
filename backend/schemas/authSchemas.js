@@ -8,6 +8,23 @@
 import { z } from 'zod';
 
 // ============================================================================
+// AUTH RESPONSE SCHEMAS
+// ============================================================================
+
+export const authResponseSchema = z.object({
+  user: z.object({
+    id: z.string().uuid(),
+    email: z.string().email(),
+    username: z.string(),
+    full_name: z.string().optional().nullable(),
+    role: z.string(),
+    created_at: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString())
+  }),
+  token: z.string(),
+  refreshToken: z.string().optional()
+});
+
+// ============================================================================
 // AUTH SCHEMAS
 // ============================================================================
 
@@ -17,13 +34,13 @@ export const registerBodySchema = z.object({
   username: z.string()
     .min(3, { message: 'Username must be at least 3 characters' })
     .max(50, { message: 'Username must not exceed 50 characters' })
-    .regex(/^[a-zA-Z0-9_-]+$/, { 
-      message: 'Username can only contain letters, numbers, hyphens, and underscores' 
+    .regex(/^[a-zA-Z0-9_-]+$/, {
+      message: 'Username can only contain letters, numbers, hyphens, and underscores'
     }),
   password: z.string()
     .min(6, { message: 'Password must be at least 6 characters' })
     .max(128, { message: 'Password must not exceed 128 characters' }),
-  fullName: z.string()
+  full_name: z.string()
     .min(1)
     .max(255)
     .optional()
@@ -81,4 +98,5 @@ export default {
   forgotPasswordBodySchema,
   resetPasswordBodySchema,
   changePasswordBodySchema,
+  authResponseSchema
 };

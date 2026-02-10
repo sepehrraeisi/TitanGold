@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AIAgent, DataCategory, TelegramPublisher, AgentTopicRoute, AgentTopicFormValues, NormalizedDataStatus } from '../../../../../../types.ts';
+import { AIAgent, DataCategory, TelegramPublisher, AgentTopicRoute, AgentTopicFormValues, NormalizedDataStatus } from '../../../../../../types';
 
 const AutomationTopicModal: React.FC<{
     topic: AgentTopicRoute | null;

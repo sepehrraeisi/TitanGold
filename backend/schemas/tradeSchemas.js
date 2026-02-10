@@ -46,7 +46,7 @@ export const createTradeBodySchema = z.object({
     }
     return true;
   },
-  { 
+  {
     message: 'Limit price required for limit orders, stop price required for stop orders',
     path: ['orderType'],
   }
@@ -101,6 +101,29 @@ export const getTradeHistoryQuerySchema = z.object({
   offset: z.coerce.number().int().nonnegative().optional().default(0),
 });
 
+// Trade Response Schema
+export const tradeResponseSchema = z.object({
+  id: uuidSchema,
+  user_id: uuidSchema,
+  portfolio_id: uuidSchema,
+  symbol: symbolSchema,
+  side: z.enum(['buy', 'sell', 'swap']),
+  type: z.enum(['market', 'limit', 'stop_loss', 'stop_limit']),
+  amount: z.coerce.number(),
+  price: z.coerce.number().optional().nullable(),
+  exchange: z.string(),
+  status: z.enum(['pending', 'executed', 'cancelled', 'failed']),
+  executed_price: z.coerce.number().optional().nullable(),
+  executed_amount: z.coerce.number().optional().nullable(),
+  executed_at: z.string().datetime().or(z.date()).transform(val => val ? new Date(val).toISOString() : null).optional().nullable(),
+  notes: z.string().optional().nullable(),
+  created_at: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString()),
+  updated_at: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString()).optional().nullable(),
+});
+
+// Trade List Response Schema
+export const tradeListResponseSchema = z.array(tradeResponseSchema);
+
 // Export all schemas
 export default {
   listTradesQuerySchema,
@@ -112,4 +135,6 @@ export default {
   executeTradeParamsSchema,
   executeTradeBodySchema,
   getTradeHistoryQuerySchema,
+  tradeResponseSchema,
+  tradeListResponseSchema,
 };

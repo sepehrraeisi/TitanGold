@@ -1,0 +1,80 @@
+import express from 'express';
+
+// Import routes
+import authRoutes from '../auth.js';
+import userRoutes from '../users.js';
+import portfolioRoutes from '../portfolios.js';
+import tradeRoutes from '../trades.js';
+import aiAgentRoutes from '../ai-agents.js';
+import trainingRoutes from '../training.js';
+import artemisRoutes from '../artemis.js';
+import configRoutes from '../config.js';
+import autopilotRoutes from '../autopilot.js';
+import dataSourceRoutes from '../data-sources.js';
+import notificationRoutes from '../notifications.js';
+import favoriteRoutes from '../favorites.js';
+import settingsRoutes from '../settings.js';
+import emailRoutes from '../email.js';
+import schedulerRoutes from '../scheduler.js';
+import tradingEngineRoutes from '../trading-engine.js';
+import manualTradesRoutes from '../manual-trades.js';
+import connectionsRoutes from '../connections.js';
+import strategyRoutes from '../strategies.js';
+import securityRoutes from '../security.js';
+import marketProxyRoutes from '../market-proxy.js';
+import exportRoutes from '../exports.js';
+import walletRoutes from '../wallet.js';
+import profileRoutes from '../profile.js';
+import userPreferencesRoutes from '../userPreferences.js';
+import favoriteAlertsRoutes from '../favoriteAlerts.js';
+import healthRoutes from '../health.js';
+import monitoringRoutes from '../monitoring.js';
+import backtestRoutes from '../backtest.js';
+import scenariosRoutes from '../scenarios.js';
+import liquidityAgentRoutes from '../liquidity-agent.js';
+import webhookRoutes from '../webhooks.js';
+import dataCategoryRoutes from '../data-categories.js';
+import accessControlRoutes from '../access-control.js';
+import topicRoutingRoutes from '../topic-routing.js';
+
+const router = express.Router();
+
+// Mount routes
+router.use('/auth', authRoutes);
+router.use('/health', healthRoutes);
+router.use('/monitoring', monitoringRoutes);
+router.use('/ready', healthRoutes);
+router.use('/users', userRoutes);
+router.use('/portfolios', portfolioRoutes);
+router.use('/trades', tradeRoutes);
+router.use('/ai-agents', aiAgentRoutes);
+router.use('/agents/liquidity', liquidityAgentRoutes);
+router.use('/market', marketProxyRoutes);
+router.use('/training', trainingRoutes);
+router.use('/artemis', artemisRoutes);
+router.use('/config', configRoutes);
+router.use('/autopilot', autopilotRoutes);
+router.use('/data-sources', dataSourceRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/favorites', favoriteRoutes);
+router.use('/settings', settingsRoutes);
+router.use('/email', emailRoutes);
+router.use('/scheduler', schedulerRoutes);
+router.use('/trading-engine', tradingEngineRoutes);
+router.use('/manual-trades', manualTradesRoutes);
+router.use('/connections', connectionsRoutes);
+router.use('/strategies', strategyRoutes);
+router.use('/security', securityRoutes);
+router.use('/exports', exportRoutes);
+router.use('/wallet', walletRoutes);
+router.use('/profile', profileRoutes);
+router.use('/user-preferences', userPreferencesRoutes);
+router.use('/favorite-alerts', favoriteAlertsRoutes); // Standardized name
+router.use('/backtest', backtestRoutes);
+router.use('/scenarios', scenariosRoutes);
+router.use('/webhooks', webhookRoutes);
+router.use('/data-categories', dataCategoryRoutes);
+router.use('/data-hub/access-control', accessControlRoutes);
+router.use('/topic-routing', topicRoutingRoutes);
+
+export default router;

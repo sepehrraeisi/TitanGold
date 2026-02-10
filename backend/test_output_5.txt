@@ -1,0 +1,1288 @@
+  console.warn
+    {"level":"warn","message":"⚠️ Gemini API Key not provided (GEMINI_API_KEY). AI features may return fallback responses.","timestamp":"2026-02-08T12:03:41.733Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at new AIService (services/ai.js:116:14)
+      at services/ai.js:210:26
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:25:30)
+
+  console.warn
+    {"level":"warn","message":"Telegram token not provided","timestamp":"2026-02-08T12:03:41.809Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at new TelegramService (services/telegram.js:15:20)
+      at services/telegram.js:44:32
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:25:30)
+
+  console.log
+    {"level":"info","message":"Prometheus default metrics enabled","timestamp":"2026-02-08T12:03:41.831Z","prefix":"titangold_","metrics":["process_cpu_user_seconds_total","process_cpu_system_seconds_total","process_resident_memory_bytes","process_heap_bytes","nodejs_eventloop_lag_seconds","nodejs_gc_duration_seconds"]}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"Prometheus metrics initialized","timestamp":"2026-02-08T12:03:41.838Z","endpoint":"/metrics","customMetrics":["http_request_duration_seconds","http_requests_total","http_active_requests","agent_execution_duration_seconds","agent_executions_total","cache_operations_total","cache_hit_rate_percent","db_query_duration_seconds","db_pool_*_connections","trades_executed_total","websocket_connections_active"]}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"Agent performance monitoring initialized","timestamp":"2026-02-08T12:03:41.895Z","metrics":["agent_errors_total","agent_success_total","agent_cache_hits_total","agent_cache_misses_total","agent_cache_hit_rate_percent","agent_error_rate_percent","agent_execution_time_seconds (summary)","agent_last_execution_seconds","agent_active_executions"]}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"🛡️ RiskGateService initialized (mode: demo)","timestamp":"2026-02-08T12:03:41.945Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+(node:10504) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+  console.log
+    {"level":"info","message":"🧪 Running in test mode - server not listening on port","timestamp":"2026-02-08T12:03:42.382Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:42.810Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (497ms):","timestamp":"2026-02-08T12:03:42.885Z","query":"INSERT INTO users (email, username, password_hash, full_name, role, is_active)\n         VALUES ($1, $2, $3, $4, $5, $6)\n         ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email\n         RETUR","duration":497,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:37:32)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:42.955Z","text":"INSERT INTO user_sessions (user_id, token, expires_at, last_activity_at)\n         VALUES ($1, $2, NO","duration":54,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:43.177Z","text":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":9,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:43.183Z","text":"SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:43.189Z","text":"UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1","duration":5,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:43.197Z","text":"INSERT INTO data_categories (name, description, color, icon, created_by) VALUES ($1, $2, $3, $4, $5)","duration":6,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-08T12:03:43.209Z","requestId":"feff8692-bb9c-4c49-996c-15c1e3e2bb32","method":"POST","path":"/api/v1/data-categories","status":201,"durationMs":164.767}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [08/Feb/2026:12:03:43 +0000] "POST /api/v1/data-categories HTTP/1.1" 201 279 "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:43.257Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":45}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-08T12:03:43.263Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:43.613Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (323ms):","timestamp":"2026-02-08T12:03:43.622Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":323,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:43.629Z","text":"SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:43.634Z","text":"UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:43.653Z","error":"duplicate key value violates unique constraint \"data_categories_name_key\"","query":"INSERT INTO data_categories (name, description, color, icon, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING *","duration":15}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+      at routes/data-categories.js:45:24
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-08T12:03:43.659Z","requestId":"984c3fc8-ecc6-4f79-9026-937c9c9138e9","method":"POST","path":"/api/v1/data-categories","status":409,"durationMs":368.374}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [08/Feb/2026:12:03:43 +0000] "POST /api/v1/data-categories HTTP/1.1" 409 50 "-" "-"
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:43.982Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:43.988Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":327}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-08T12:03:43.991Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:44.475Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (801ms):","timestamp":"2026-02-08T12:03:44.483Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":801,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:44.491Z","text":"SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1","duration":4,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:44.494Z","text":"UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1","duration":2,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:44.500Z","text":"SELECT * FROM data_categories ORDER BY name ASC","duration":4,"rows":2}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-08T12:03:44.505Z","requestId":"42083bd7-089f-4ced-b416-876c8bd31644","method":"GET","path":"/api/v1/data-categories","status":200,"durationMs":826.733}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [08/Feb/2026:12:03:44 +0000] "GET /api/v1/data-categories HTTP/1.1" 200 516 "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:44.522Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":15}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-08T12:03:44.526Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:44.943Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (416ms):","timestamp":"2026-02-08T12:03:44.952Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":416,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:44.960Z","text":"SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:44.964Z","text":"UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1","duration":2,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:44.971Z","text":"UPDATE data_categories SET name = $1, description = $2, color = $3, icon = $4, updated_at = NOW() WH","duration":5,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-08T12:03:44.976Z","requestId":"26395212-e2b0-4f31-9045-ee92e0bf438a","method":"PUT","path":"/api/v1/data-categories/de4ad718-6957-4be3-8789-ba16f15f6939","status":200,"durationMs":445.055}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [08/Feb/2026:12:03:44 +0000] "PUT /api/v1/data-categories/de4ad718-6957-4be3-8789-ba16f15f6939 HTTP/1.1" 200 252 "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:44.992Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":14}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-08T12:03:44.996Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:45.302Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (302ms):","timestamp":"2026-02-08T12:03:45.310Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":302,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:45.315Z","text":"SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:45.320Z","text":"UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:45.342Z","text":"INSERT INTO data_sources (name, type, url, category, config, credentials) VALUES ($1, $2, $3, $4, $5","duration":14,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-08T12:03:45.354Z","requestId":"9d3fc25d-0691-4413-86d4-0cf559d8ffb5","method":"POST","path":"/api/v1/data-sources","status":201,"durationMs":353.476}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [08/Feb/2026:12:03:45 +0000] "POST /api/v1/data-sources HTTP/1.1" 201 427 "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:45.373Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":17}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-08T12:03:45.377Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:45.783Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (405ms):","timestamp":"2026-02-08T12:03:45.794Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":405,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:45.800Z","text":"SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:45.805Z","text":"UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:45.811Z","text":"SELECT COUNT(*) as total FROM data_sources","duration":4,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:45.815Z","text":"SELECT * FROM data_sources ORDER BY name LIMIT $1 OFFSET $2","duration":2,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-08T12:03:45.823Z","requestId":"6a4e9c61-6791-4d82-b336-a41ea20e9827","method":"GET","path":"/api/v1/data-sources","status":200,"durationMs":440.385}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [08/Feb/2026:12:03:45 +0000] "GET /api/v1/data-sources HTTP/1.1" 200 561 "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:45.845Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":21}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-08T12:03:45.849Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:46.131Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (281ms):","timestamp":"2026-02-08T12:03:46.141Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":281,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:46.148Z","text":"SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1","duration":4,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:46.153Z","text":"UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:46.161Z","text":"SELECT * FROM data_sources WHERE id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:46.168Z","text":"UPDATE data_sources \n       SET name = $1, type = $2, url = $3, category = $4, config = $5, credenti","duration":6,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:46.173Z","error":"column \"level\" of relation \"data_hub_logs\" does not exist","query":"INSERT INTO data_hub_logs (source_id, level, message, metadata) VALUES ($1, $2, $3, $4)","duration":3}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+      at routes/data-sources.js:149:7
+
+  console.error
+    {"level":"error","message":"Failed to write to data_hub_logs:","timestamp":"2026-02-08T12:03:46.176Z","length":131,"name":"error","severity":"ERROR","code":"42703","position":"39","file":"parse_target.c","line":"1070","routine":"checkInsertTargets"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at routes/data-sources.js:155:14
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-08T12:03:46.182Z","requestId":"1dae571f-d176-45f5-a3b3-654c0bb0f49c","method":"PUT","path":"/api/v1/data-sources/3016fe60-60ba-4545-b895-47426aba689a","status":200,"durationMs":327.797}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [08/Feb/2026:12:03:46 +0000] "PUT /api/v1/data-sources/3016fe60-60ba-4545-b895-47426aba689a HTTP/1.1" 200 469 "-" "-"
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:46.567Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:46.573Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":389}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-08T12:03:46.576Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:46.716Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (514ms):","timestamp":"2026-02-08T12:03:46.722Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":514,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:46.729Z","text":"SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1","duration":4,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:46.735Z","text":"UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1","duration":4,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:46.741Z","text":"SELECT * FROM data_sources WHERE id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:46.747Z","text":"UPDATE data_sources SET is_active = false, updated_at = NOW(), updated_by = $1 WHERE id = $2","duration":4,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:46.750Z","error":"column \"level\" of relation \"data_hub_logs\" does not exist","query":"INSERT INTO data_hub_logs (source_id, level, message, metadata) VALUES ($1, $2, $3, $4)","duration":2}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+      at routes/data-sources.js:201:9
+
+  console.error
+    {"level":"error","message":"Failed to log soft deletion:","timestamp":"2026-02-08T12:03:46.754Z","length":131,"name":"error","severity":"ERROR","code":"42703","position":"39","file":"parse_target.c","line":"1070","routine":"checkInsertTargets"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at routes/data-sources.js:206:16
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-08T12:03:46.759Z","requestId":"aa637d33-a14c-4311-bfe7-d689c4b2cc60","method":"DELETE","path":"/api/v1/data-sources/3016fe60-60ba-4545-b895-47426aba689a","status":204,"durationMs":555.447}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [08/Feb/2026:12:03:46 +0000] "DELETE /api/v1/data-sources/3016fe60-60ba-4545-b895-47426aba689a HTTP/1.1" 204 - "-" "-"
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:47.060Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:47.064Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":303}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-08T12:03:47.067Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:47.241Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (451ms):","timestamp":"2026-02-08T12:03:47.247Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":451,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:47.255Z","text":"SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1","duration":5,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:47.259Z","text":"UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:47.263Z","text":"SELECT name FROM data_categories WHERE id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:47.268Z","text":"SELECT count(*) FROM data_sources WHERE category = $1","duration":4,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:47.271Z","text":"DELETE FROM data_categories WHERE id = $1 RETURNING *","duration":2,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-08T12:03:47.275Z","requestId":"3b98ccc0-8cc5-42da-90ea-918b9dbfab1d","method":"DELETE","path":"/api/v1/data-categories/de4ad718-6957-4be3-8789-ba16f15f6939","status":200,"durationMs":484.304}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [08/Feb/2026:12:03:47 +0000] "DELETE /api/v1/data-categories/de4ad718-6957-4be3-8789-ba16f15f6939 HTTP/1.1" 200 43 "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-08T12:03:47.292Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":14}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-08T12:03:47.295Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-08T12:03:47.550Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (273ms):","timestamp":"2026-02-08T12:03:47.560Z","query":"DELETE FROM data_sources WHERE id = $1","duration":273,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:70:17)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:47.565Z","text":"DELETE FROM data_categories WHERE id = $1","duration":2,"rows":0}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-08T12:03:47.570Z","text":"DELETE FROM user_sessions WHERE user_id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:47.627Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:47.642Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:47.648Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:47.705Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:47.750Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:47.872Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:47.912Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:48.111Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:48.131Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:48.347Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:48.365Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:48.630Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:48.637Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:48.941Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:48.945Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:49.300Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:49.305Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:49.717Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:49.724Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:50.184Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:50.190Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-08T12:03:50.694Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis: Max reconnection attempts reached","timestamp":"2026-02-08T12:03:50.698Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Object.reconnectStrategy (utils/redis.js:33:20)
+      at RedisSocket._RedisSocket_reconnectStrategy (node_modules/@redis/client/dist/lib/client/socket.js:119:85)
+      at RedisSocket._RedisSocket_shouldReconnect (node_modules/@redis/client/dist/lib/client/socket.js:131:111)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:162:117)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-08T12:03:50.701Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_shouldReconnect (node_modules/@redis/client/dist/lib/client/socket.js:139:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:162:117)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.error
+    {"0":"M","1":"a","2":"x","3":" ","4":"r","5":"e","6":"c","7":"o","8":"n","9":"n","10":"e","11":"c","12":"t","13":"i","14":"o","15":"n","16":" ","17":"a","18":"t","19":"t","20":"e","21":"m","22":"p","23":"t","24":"s","25":" ","26":"r","27":"e","28":"a","29":"c","30":"h","31":"e","32":"d","level":"error","message":"❌ Redis connection failed:","timestamp":"2026-02-08T12:03:50.706Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at getRedisClient (utils/redis.js:71:12)
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:80:27)
+
+  console.error
+    Cleanup error: ReconnectStrategyError: Max reconnection attempts reached
+        at RedisSocket._RedisSocket_shouldReconnect (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\node_modules\@redis\client\dist\lib\client\socket.js:140:16)
+        at RedisSocket._RedisSocket_connect (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\node_modules\@redis\client\dist\lib\client\socket.js:162:117)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at Commander.connect (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\node_modules\@redis\client\dist\lib\client\index.js:185:9)
+        at getRedisClient (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\utils\redis.js:65:5)
+        at Object.<anonymous> (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\__tests__\integration\dataHub.test.js:80:27) {
+      originalError: Error: Max reconnection attempts reached
+          at Object.reconnectStrategy (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\utils\redis.js:34:20)
+          at RedisSocket._RedisSocket_reconnectStrategy (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\node_modules\@redis\client\dist\lib\client\socket.js:119:85)
+          at RedisSocket._RedisSocket_shouldReconnect (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\node_modules\@redis\client\dist\lib\client\socket.js:131:111)
+          at RedisSocket._RedisSocket_connect (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\node_modules\@redis\client\dist\lib\client\socket.js:162:117)
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at Commander.connect (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\node_modules\@redis\client\dist\lib\client\index.js:185:9)
+          at getRedisClient (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\utils\redis.js:65:5)
+          at Object.<anonymous> (C:\Users\simin\Desktop\github\AntiGravity\TitanGold\backend\__tests__\integration\dataHub.test.js:80:27),
+      socketError: AggregateError: 
+          at internalConnectMultiple (node:net:1139:18)
+          at afterConnectMultiple (node:net:1712:7) {
+        code: 'ECONNREFUSED',
+        [errors]: [ [Error], [Error] ]
+      }
+    }
+
+    [0m [90m 86 |[39m             [36mawait[39m pool[33m.[39mend()[33m;[39m
+     [90m 87 |[39m         } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 88 |[39m             console[33m.[39merror([32m'Cleanup error:'[39m[33m,[39m error)[33m;[39m
+     [90m    |[39m                     [31m[1m^[22m[39m
+     [90m 89 |[39m         }
+     [90m 90 |[39m     }[33m,[39m [35m10000[39m)[33m;[39m
+     [90m 91 |[39m[0m
+
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:88:21)
+
+FAIL TITANGOLD __tests__/integration/dataHub.test.js (26.625 s)
+  Data Hub Integration Tests
+    Data Categories API
+      √ POST /api/v1/data-categories - Should create a new category (281 ms)
+      √ POST /api/v1/data-categories - Should prevent duplicate names (423 ms)
+      √ GET /api/v1/data-categories - Should list categories (844 ms)
+      √ PUT /api/v1/data-categories/:id - Should update category (470 ms)
+    Data Sources API
+      √ POST /api/v1/data-sources - Should create a new source (377 ms)
+      × GET /api/v1/data-sources - Should list sources (472 ms)
+      √ PUT /api/v1/data-sources/:id - Should update source (356 ms)
+      × DELETE /api/v1/data-sources/:id - Should delete source (584 ms)
+    Data Categories Cleanup
+      √ DELETE /api/v1/data-categories/:id - Should delete category (506 ms)
+
+  ● Data Hub Integration Tests › Data Sources API › GET /api/v1/data-sources - Should list sources
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    [0m [90m 180 |[39m
+     [90m 181 |[39m             expect(response[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 182 |[39m             expect([33mArray[39m[33m.[39misArray(response[33m.[39mbody))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+     [90m     |[39m                                                  [31m[1m^[22m[39m
+     [90m 183 |[39m             [36mconst[39m source [33m=[39m response[33m.[39mbody[33m.[39mfind(s [33m=>[39m s[33m.[39mid [33m===[39m createdSourceId)[33m;[39m
+     [90m 184 |[39m             expect(source)[33m.[39mtoBeDefined()[33m;[39m
+     [90m 185 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:182:50)
+
+  ● Data Hub Integration Tests › Data Sources API › DELETE /api/v1/data-sources/:id - Should delete source
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 204
+
+    [0m [90m 202 |[39m                 [33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m [32m`Bearer ${validToken}`[39m)[33m;[39m
+     [90m 203 |[39m
+    [31m[1m>[22m[39m[90m 204 |[39m             expect(response[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                                     [31m[1m^[22m[39m
+     [90m 205 |[39m         })[33m;[39m
+     [90m 206 |[39m     })[33m;[39m
+     [90m 207 |[39m[0m
+
+      at Object.<anonymous> (__tests__/integration/dataHub.test.js:204:37)
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 7 passed, 9 total
+Snapshots:   0 total
+Time:        27.029 s, estimated 38 s
+Ran all test suites matching /__tests__\\integration\\dataHub.test.js/i.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.

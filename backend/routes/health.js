@@ -4,10 +4,12 @@ import { getRedisInfo, isRedisAvailable } from '../utils/redis.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { logger } from '../services/logger.js';
+import { validateResponse } from '../middleware/validation.js';
+import { healthResponseSchema, readinessResponseSchema } from '../schemas/commonSchemas.js';
 // BACKEND-015: Import agent health check functions
-import { 
-  getAllAgentHealthStatus, 
-  getHealthSummary 
+import {
+  getAllAgentHealthStatus,
+  getHealthSummary
 } from '../services/agents/registry.js';
 
 const execAsync = promisify(exec);
@@ -26,7 +28,7 @@ try {
  * Basic health check (fast)
  * Returns 200 if service is running
  */
-router.get('/', async (req, res) => {
+router.get('/', validateResponse(healthResponseSchema), async (req, res) => {
   try {
     const health = {
       status: 'ok',
@@ -58,7 +60,7 @@ router.get('/', async (req, res) => {
  * Returns 200 only if all critical services are ready
  * Accessible via both /api/ready and /api/health/ready
  */
-router.get('/ready', async (req, res) => {
+router.get('/ready', validateResponse(readinessResponseSchema), async (req, res) => {
   const checks = {
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -118,7 +120,7 @@ router.get('/ready', async (req, res) => {
       const redisInfo = await getRedisInfo();
       checks.checks.redis = {
         status: redisInfo.status === 'connected' ? 'ok' : 'error',
-        message: redisInfo.status === 'connected' 
+        message: redisInfo.status === 'connected'
           ? `Redis ${redisInfo.version} - Hit rate: ${redisInfo.stats.hit_rate}%`
           : redisInfo.message,
         memory_used: redisInfo.memory?.used_memory_human || 'unknown'
@@ -140,15 +142,15 @@ router.get('/ready', async (req, res) => {
   try {
     const agentHealthSummary = getHealthSummary();
     const agentHealthStatus = getAllAgentHealthStatus();
-    
+
     checks.checks.ai_agents = {
-      status: agentHealthSummary.unhealthy > 0 ? 'degraded' : 
-              agentHealthSummary.degraded > 0 ? 'warning' : 'ok',
+      status: agentHealthSummary.unhealthy > 0 ? 'degraded' :
+        agentHealthSummary.degraded > 0 ? 'warning' : 'ok',
       message: `${agentHealthSummary.healthy}/${agentHealthSummary.total} agents healthy`,
       summary: agentHealthSummary,
       agents: agentHealthStatus
     };
-    
+
     // Mark as not fully ready if any agents are unhealthy
     if (agentHealthSummary.unhealthy > 0) {
       allReady = false;

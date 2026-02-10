@@ -1,0 +1,1312 @@
+  console.warn
+    {"level":"warn","message":"⚠️ Gemini API Key not provided (GEMINI_API_KEY). AI features may return fallback responses.","timestamp":"2026-02-09T09:54:27.336Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at new AIService (services/ai.js:116:14)
+      at services/ai.js:210:26
+
+  console.warn
+    {"level":"warn","message":"Telegram token not provided","timestamp":"2026-02-09T09:54:27.363Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at new TelegramService (services/telegram.js:15:20)
+      at services/telegram.js:44:32
+
+  console.log
+    {"level":"info","message":"Prometheus default metrics enabled","timestamp":"2026-02-09T09:54:27.372Z","prefix":"titangold_","metrics":["process_cpu_user_seconds_total","process_cpu_system_seconds_total","process_resident_memory_bytes","process_heap_bytes","nodejs_eventloop_lag_seconds","nodejs_gc_duration_seconds"]}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"Prometheus metrics initialized","timestamp":"2026-02-09T09:54:27.374Z","endpoint":"/metrics","customMetrics":["http_request_duration_seconds","http_requests_total","http_active_requests","agent_execution_duration_seconds","agent_executions_total","cache_operations_total","cache_hit_rate_percent","db_query_duration_seconds","db_pool_*_connections","trades_executed_total","websocket_connections_active"]}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"Agent performance monitoring initialized","timestamp":"2026-02-09T09:54:27.401Z","metrics":["agent_errors_total","agent_success_total","agent_cache_hits_total","agent_cache_misses_total","agent_cache_hit_rate_percent","agent_error_rate_percent","agent_execution_time_seconds (summary)","agent_last_execution_seconds","agent_active_executions"]}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"🛡️ RiskGateService initialized (mode: demo)","timestamp":"2026-02-09T09:54:27.423Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+(node:6000) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:6000) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+  console.log
+    {"level":"info","message":"🧪 Running in test mode - server not listening on port","timestamp":"2026-02-09T09:54:27.574Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:27.743Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (202ms):","timestamp":"2026-02-09T09:54:27.787Z","query":"\n      INSERT INTO ai_agents (name, type, agent_key, status, is_enabled)\n      VALUES ('Test Technical Agent', 'technical', 'technical', 'active', true)\n      ON CONFLICT (agent_key) DO UPDATE SET nam","duration":202,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at Object.<anonymous> (__tests__/integration/aiResponseValidation.test.js:17:21)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:27.793Z","text":"\n      INSERT INTO artemis_state (status, mode, strategy)\n      VALUES ('active', 'demo', 'mixture_o","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:27.834Z","text":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":8,"rows":0}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"⚠️ Using JWT-only authentication (database unavailable)","timestamp":"2026-02-09T09:54:27.836Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:27.846Z","text":"SELECT \n        id, \n        agent_key, \n        name, \n        type,\n        status,\n        config","duration":6,"rows":15}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:27.851Z","text":"SELECT \n        agent_id,\n        COUNT(*) as total,\n        COUNT(*) FILTER (WHERE was_successful =","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"Response validation failed","timestamp":"2026-02-09T09:54:27.859Z","path":"/api/v1/ai-agents","method":"GET","errors":[{"code":"invalid_type","expected":"number","received":"null","path":["agents",0,"accuracy"],"message":"Expected number, received null"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",0,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",0,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",0,"created_at"],"message":"Invalid input"},{"received":"fundamental_analysis","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",1,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_type","expected":"number","received":"null","path":["agents",1,"accuracy"],"message":"Expected number, received null"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",1,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",1,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",1,"created_at"],"message":"Invalid input"},{"received":"liquidity_analysis","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",2,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_type","expected":"number","received":"null","path":["agents",2,"accuracy"],"message":"Expected number, received null"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",2,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",2,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",2,"created_at"],"message":"Invalid input"},{"received":"market_intelligence","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",3,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",3,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",3,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",3,"created_at"],"message":"Invalid input"},{"received":"optimization","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",4,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",4,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",4,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",4,"created_at"],"message":"Invalid input"},{"received":"order_management","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",5,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",5,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",5,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",5,"created_at"],"message":"Invalid input"},{"received":"pattern_recognition","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",6,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",6,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",6,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",6,"created_at"],"message":"Invalid input"},{"received":"portfolio_management","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",7,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",7,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",7,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",7,"created_at"],"message":"Invalid input"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",8,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",8,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",8,"created_at"],"message":"Invalid input"},{"received":"risk_management","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",9,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",9,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",9,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",9,"created_at"],"message":"Invalid input"},{"received":"sentiment_analysis","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",10,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",10,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",10,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",10,"created_at"],"message":"Invalid input"},{"received":"technical_analysis","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",11,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",11,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",11,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",11,"created_at"],"message":"Invalid input"},{"received":"timing","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",12,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",12,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",12,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",12,"created_at"],"message":"Invalid input"},{"received":"trend_detection","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",13,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",13,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",13,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",13,"created_at"],"message":"Invalid input"},{"received":"volume_analysis","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["agents",14,"type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_union","unionErrors":[{"issues":[{"code":"invalid_type","expected":"string","received":"undefined","path":["agents",14,"created_at"],"message":"Required"}],"name":"ZodError"},{"issues":[{"code":"invalid_type","expected":"date","received":"undefined","path":["agents",14,"created_at"],"message":"Required"}],"name":"ZodError"}],"path":["agents",14,"created_at"],"message":"Invalid input"},{"code":"invalid_type","expected":"number","received":"undefined","path":["total"],"message":"Required"},{"code":"invalid_type","expected":"number","received":"undefined","path":["limit"],"message":"Required"},{"code":"invalid_type","expected":"number","received":"undefined","path":["offset"],"message":"Required"}],"data":"[REDACTED]"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at ServerResponse.res.json (middleware/validation.js:232:18)
+      at routes/ai-agents.js:1691:9
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-09T09:54:27.877Z","requestId":"cdd712dc-dafc-46a7-9088-e00d3453cb70","method":"GET","path":"/api/v1/ai-agents","status":200,"durationMs":59.93}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [09/Feb/2026:09:54:27 +0000] "GET /api/v1/ai-agents HTTP/1.1" 200 - "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:27.886Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":8}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-09T09:54:27.890Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:28.065Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (159ms):","timestamp":"2026-02-09T09:54:28.070Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":159,"rows":0,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"⚠️ Using JWT-only authentication (database unavailable)","timestamp":"2026-02-09T09:54:28.072Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:28.076Z","text":"SELECT * FROM ai_agents WHERE id = $1","duration":3,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"Response validation failed","timestamp":"2026-02-09T09:54:28.077Z","path":"/api/v1/ai-agents/56f4f88c-5bd0-4aba-9916-adaf94c785a3","method":"GET","errors":[{"received":"technical_analysis","code":"invalid_enum_value","options":["technical","sentiment","pattern","price_prediction","arbitrage","portfolio","liquidity","risk","fundamental","market_timing"],"path":["type"],"message":"Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing"},{"code":"invalid_type","expected":"number","received":"string","path":["accuracy"],"message":"Expected number, received string"}],"data":"[REDACTED]"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at ServerResponse.res.json (middleware/validation.js:232:18)
+      at routes/ai-agents.js:1713:9
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-09T09:54:28.082Z","requestId":"ca8a069e-367f-47e0-9cb2-fa81f20cf36c","method":"GET","path":"/api/v1/ai-agents/56f4f88c-5bd0-4aba-9916-adaf94c785a3","status":200,"durationMs":173.767}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [09/Feb/2026:09:54:28 +0000] "GET /api/v1/ai-agents/56f4f88c-5bd0-4aba-9916-adaf94c785a3 HTTP/1.1" 200 - "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:28.087Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":4}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-09T09:54:28.089Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:28.273Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (156ms):","timestamp":"2026-02-09T09:54:28.277Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":156,"rows":0,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"⚠️ Using JWT-only authentication (database unavailable)","timestamp":"2026-02-09T09:54:28.279Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:28.289Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:28.298Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:28.301Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:28.360Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:28.364Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:28.467Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:28.471Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:28.624Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:28.628Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:28.841Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:28.846Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:29.103Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:29.108Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:29.427Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:29.433Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:29.802Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:29.807Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:30.223Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:30.226Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:30.690Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:30.693Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:166:18)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.log
+    {"level":"info","message":"🔄 Redis: Reconnecting...","timestamp":"2026-02-09T09:54:31.201Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Redis: Max reconnection attempts reached","timestamp":"2026-02-09T09:54:31.207Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Object.reconnectStrategy (utils/redis.js:33:20)
+      at RedisSocket._RedisSocket_reconnectStrategy (node_modules/@redis/client/dist/lib/client/socket.js:119:85)
+      at RedisSocket._RedisSocket_shouldReconnect (node_modules/@redis/client/dist/lib/client/socket.js:131:111)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:162:117)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.error
+    {"level":"error","message":"❌ Redis Client Error:","timestamp":"2026-02-09T09:54:31.211Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Commander.<anonymous> (utils/redis.js:50:14)
+      at RedisSocket.<anonymous> (node_modules/@redis/client/dist/lib/client/index.js:412:14)
+      at RedisSocket._RedisSocket_shouldReconnect (node_modules/@redis/client/dist/lib/client/socket.js:139:14)
+      at RedisSocket._RedisSocket_connect (node_modules/@redis/client/dist/lib/client/socket.js:162:117)
+      at Commander.connect (node_modules/@redis/client/dist/lib/client/index.js:185:9)
+      at getRedisClient (utils/redis.js:65:5)
+      at middleware/rateLimit.js:20:21
+
+  console.error
+    {"0":"M","1":"a","2":"x","3":" ","4":"r","5":"e","6":"c","7":"o","8":"n","9":"n","10":"e","11":"c","12":"t","13":"i","14":"o","15":"n","16":" ","17":"a","18":"t","19":"t","20":"e","21":"m","22":"p","23":"t","24":"s","25":" ","26":"r","27":"e","28":"a","29":"c","30":"h","31":"e","32":"d","level":"error","message":"❌ Redis connection failed:","timestamp":"2026-02-09T09:54:31.216Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at getRedisClient (utils/redis.js:71:12)
+      at middleware/rateLimit.js:20:21
+
+  console.error
+    {"0":"M","1":"a","2":"x","3":" ","4":"r","5":"e","6":"c","7":"o","8":"n","9":"n","10":"e","11":"c","12":"t","13":"i","14":"o","15":"n","16":" ","17":"a","18":"t","19":"t","20":"e","21":"m","22":"p","23":"t","24":"s","25":" ","26":"r","27":"e","28":"a","29":"c","30":"h","31":"e","32":"d","level":"error","message":"❌ Rate limiter error:","timestamp":"2026-02-09T09:54:31.219Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/rateLimit.js:86:14
+
+  console.warn
+    {"level":"warn","message":"⚠️  Rate limiter failed, allowing request (fail-open)","timestamp":"2026-02-09T09:54:31.222Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at middleware/rateLimit.js:89:14
+
+  console.log
+    {"level":"info","message":"🚀 [Registry] Running agent: 56f4f88c... | symbol: BTC/USDT | timeframe: 1h","timestamp":"2026-02-09T09:54:31.227Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:31.235Z","text":"SELECT id, agent_key, name, type, status, config, metadata, is_enabled\n       FROM ai_agents\n       ","duration":6,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"✅ [Registry] Agent loaded: technical (Test Technical Agent)","timestamp":"2026-02-09T09:54:31.236Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"⏱️  [Registry] Timeout set to 30000ms for technical","timestamp":"2026-02-09T09:54:31.237Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"⚠️ WebSocket server not initialized, cannot broadcast","timestamp":"2026-02-09T09:54:31.239Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at broadcastAgentUpdate (websocket/server.js:295:12)
+      at notifyAgentStarted (websocket/server.js:339:3)
+      at runAgentViaRegistry (routes/ai-agents.js:403:7)
+
+  console.warn
+    {"level":"warn","message":"⚠️ WebSocket server not initialized, cannot broadcast","timestamp":"2026-02-09T09:54:31.244Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at broadcastAgentUpdate (websocket/server.js:295:12)
+      at notifyAgentStarted (websocket/server.js:347:3)
+      at runAgentViaRegistry (routes/ai-agents.js:403:7)
+
+  console.log
+    {"level":"info","message":"✅ Validated agent interface: technical","timestamp":"2026-02-09T09:54:31.254Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"✅ Loaded agent: technical","timestamp":"2026-02-09T09:54:31.256Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"🔍 Technical Analysis: BTC/USDT (1h)","timestamp":"2026-02-09T09:54:31.258Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"✅ Technical Analysis complete: NEUTRAL (0.55)","timestamp":"2026-02-09T09:54:31.260Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"✅ [Registry] Agent execution complete: technical (27ms)","timestamp":"2026-02-09T09:54:31.266Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:31.289Z","text":"INSERT INTO ai_decisions (agent_id, decision_type, confidence, input_data, output_data, created_at)\n","duration":20,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📝 [Registry] Decision logged for technical","timestamp":"2026-02-09T09:54:31.290Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:31.298Z","text":"UPDATE ai_agents\n       SET last_active_at = NOW(),\n           updated_at = NOW(),\n           metada","duration":7,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 [Registry] Agent metadata updated for technical","timestamp":"2026-02-09T09:54:31.300Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:31.304Z","error":"relation \"webhooks\" does not exist","query":"\n      SELECT id, url, secret\n      FROM webhooks\n      WHERE user_id = $1\n        AND is_active = true\n        AND $2 = ANY(events)\n    ","duration":2}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+      at Object.triggerAgentEvent (services/webhookDispatcher.js:350:20)
+      at runAgentViaRegistry (routes/ai-agents.js:493:7)
+
+  console.error
+    {"level":"error","message":"Failed to trigger agent event agent.completed for user 00000000-0000-0000-0000-000000000001:","timestamp":"2026-02-09T09:54:31.308Z","length":107,"name":"error","severity":"ERROR","code":"42P01","position":"42","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Object.triggerAgentEvent (services/webhookDispatcher.js:372:12)
+      at runAgentViaRegistry (routes/ai-agents.js:493:7)
+
+  console.error
+    {"0":"r","1":"e","2":"l","3":"a","4":"t","5":"i","6":"o","7":"n","8":" ","9":"\"","10":"w","11":"e","12":"b","13":"h","14":"o","15":"o","16":"k","17":"s","18":"\"","19":" ","20":"d","21":"o","22":"e","23":"s","24":" ","25":"n","26":"o","27":"t","28":" ","29":"e","30":"x","31":"i","32":"s","33":"t","level":"error","message":"❌ [Webhook] Failed to trigger for technical:","timestamp":"2026-02-09T09:54:31.312Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at runAgentViaRegistry (routes/ai-agents.js:509:14)
+
+  console.warn
+    {"level":"warn","message":"⚠️ WebSocket server not initialized, cannot broadcast","timestamp":"2026-02-09T09:54:31.316Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at broadcastAgentUpdate (websocket/server.js:295:12)
+      at notifyAgentCompleted (websocket/server.js:360:3)
+      at runAgentViaRegistry (routes/ai-agents.js:514:7)
+
+  console.warn
+    {"level":"warn","message":"⚠️ WebSocket server not initialized, cannot broadcast","timestamp":"2026-02-09T09:54:31.319Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at broadcastAgentUpdate (websocket/server.js:295:12)
+      at notifyAgentCompleted (websocket/server.js:369:3)
+      at runAgentViaRegistry (routes/ai-agents.js:514:7)
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-09T09:54:31.327Z","requestId":"e3a4e43b-8847-4181-a8f3-c9eed29ee966","method":"POST","path":"/api/v1/ai-agents/56f4f88c-5bd0-4aba-9916-adaf94c785a3/run","status":200,"durationMs":3226.687}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [09/Feb/2026:09:54:31 +0000] "POST /api/v1/ai-agents/56f4f88c-5bd0-4aba-9916-adaf94c785a3/run HTTP/1.1" 200 - "-" "-"
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:31.658Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:31.662Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":334}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-09T09:54:31.664Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:32.029Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (687ms):","timestamp":"2026-02-09T09:54:32.035Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":687,"rows":0,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"⚠️ Using JWT-only authentication (database unavailable)","timestamp":"2026-02-09T09:54:32.037Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:32.042Z","error":"relation \"api_integrations\" does not exist","query":"\n    SELECT\n      i.provider,\n      COUNT(*) AS total_keys,\n      COUNT(*) FILTER (WHERE r.status = 'healthy' AND (r.cooldown_until IS NULL OR r.cooldown_until <= NOW())) AS healthy_keys,\n      COUNT(","duration":2}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+      at getProviderHealth (services/providerPool.js:211:15)
+      at routes/artemis.js:39:27
+
+  console.error
+    {"level":"error","message":"Failed to get providers health:","timestamp":"2026-02-09T09:54:32.045Z","length":116,"name":"error","severity":"ERROR","code":"42P01","position":"377","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at routes/artemis.js:73:12
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-09T09:54:32.049Z","requestId":"86abee91-0588-4907-be21-f7f297c1442f","method":"GET","path":"/api/v1/artemis/health","status":500,"durationMs":704.173}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [09/Feb/2026:09:54:32 +0000] "GET /api/v1/artemis/health HTTP/1.1" 500 101 "-" "-"
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:32.210Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:32.213Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":163}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-09T09:54:32.215Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:32.328Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (267ms):","timestamp":"2026-02-09T09:54:32.332Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":267,"rows":0,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"⚠️ Using JWT-only authentication (database unavailable)","timestamp":"2026-02-09T09:54:32.334Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:32.336Z","error":"relation \"user_preferences\" does not exist","query":"SELECT preferences->'trading'->>'mode' as mode\n         FROM user_preferences\n         WHERE user_id = $1 AND is_deleted = FALSE","duration":1}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+      at routes/artemis.js:87:26
+
+  console.warn
+    {"level":"warn","message":"⚠️ Failed to get user trading mode, defaulting to demo:","timestamp":"2026-02-09T09:54:32.338Z","length":115,"name":"error","severity":"ERROR","code":"42P01","position":"62","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at routes/artemis.js:96:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:32.487Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (151ms):","timestamp":"2026-02-09T09:54:32.491Z","query":"SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1","duration":151,"rows":1,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at routes/artemis.js:102:22
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:32.495Z","text":"SELECT id, name, type, status, performance_score, accuracy, is_enabled FROM ai_agents ORDER BY name","duration":2,"rows":15}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:32.497Z","text":"SELECT \n          COUNT(*) as total,\n          COUNT(*) FILTER (WHERE was_successful = true) as succ","duration":1,"rows":1}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.error
+    {"level":"error","message":"Response validation failed","timestamp":"2026-02-09T09:54:32.500Z","path":"/api/v1/artemis/state","method":"GET","errors":[{"code":"invalid_type","expected":"number","received":"string","path":["overallAccuracy"],"message":"Expected number, received string"}],"data":"[REDACTED]"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at ServerResponse.res.json (middleware/validation.js:232:18)
+      at routes/artemis.js:188:9
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-09T09:54:32.504Z","requestId":"73351239-8725-4bdd-8c01-65394835ee4f","method":"GET","path":"/api/v1/artemis/state","status":200,"durationMs":441.579}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [09/Feb/2026:09:54:32 +0000] "GET /api/v1/artemis/state HTTP/1.1" 200 - "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:32.507Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":2}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-09T09:54:32.509Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:32.855Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (340ms):","timestamp":"2026-02-09T09:54:32.861Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":340,"rows":0,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"⚠️ Using JWT-only authentication (database unavailable)","timestamp":"2026-02-09T09:54:32.864Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:32.868Z","text":"SELECT role FROM users WHERE id = $1","duration":3,"rows":0}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-09T09:54:32.871Z","requestId":"3ab191f9-c2d6-4b64-89df-42829d322086","method":"GET","path":"/api/v1/autopilot/status","status":403,"durationMs":352.47}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [09/Feb/2026:09:54:32 +0000] "GET /api/v1/autopilot/status HTTP/1.1" 403 52 "-" "-"
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:32.881Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":9}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-09T09:54:32.883Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+  console.log
+    {"level":"info","message":"✅ Connected to PostgreSQL database","timestamp":"2026-02-09T09:54:33.189Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.warn
+    {"level":"warn","message":"🐌 SLOW QUERY (305ms):","timestamp":"2026-02-09T09:54:33.195Z","query":"SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()","duration":305,"rows":0,"threshold":100}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.warn (services/logger.js:24:28)
+      at query (database/db.js:131:14)
+      at authenticate (middleware/auth.js:19:29)
+
+  console.log
+    {"level":"info","message":"⚠️ Using JWT-only authentication (database unavailable)","timestamp":"2026-02-09T09:54:33.199Z"}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"📊 Query executed:","timestamp":"2026-02-09T09:54:33.203Z","text":"SELECT role FROM users WHERE id = $1","duration":3,"rows":0}
+
+      at baseLog (services/logger.js:16:77)
+
+  console.log
+    {"level":"info","message":"request_completed","timestamp":"2026-02-09T09:54:33.206Z","requestId":"821520fd-336a-41ec-b989-6c6ddf40cbb6","method":"GET","path":"/api/v1/autopilot/suggestions","status":403,"durationMs":319.197}
+
+      at baseLog (services/logger.js:16:77)
+
+::ffff:127.0.0.1 - - [09/Feb/2026:09:54:33 +0000] "GET /api/v1/autopilot/suggestions HTTP/1.1" 403 52 "-" "-"
+FAIL TITANGOLD __tests__/integration/aiResponseValidation.test.js (11.436 s)
+  AI Response Validation Integration Tests
+    AI Agents Endpoints
+      √ GET /api/v1/ai-agents should return validated agent list (108 ms)
+      √ GET /api/v1/ai-agents/:id should return validated agent (190 ms)
+      √ POST /api/v1/ai-agents/:id/run should return validated analysis result (3241 ms)
+    Artemis Endpoints
+      × GET /api/v1/artemis/health should return validated health status (716 ms)
+      √ GET /api/v1/artemis/state should return validated orchestrator state (456 ms)
+    Autopilot Endpoints
+      × GET /api/v1/autopilot/status should return validated status (363 ms)
+      × GET /api/v1/autopilot/suggestions should return validated list (335 ms)
+
+  ● AI Response Validation Integration Tests › Artemis Endpoints › GET /api/v1/artemis/health should return validated health status
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 81 |[39m                 [33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m [32m`Bearer ${adminToken}`[39m)[33m;[39m
+     [90m 82 |[39m
+    [31m[1m>[22m[39m[90m 83 |[39m             expect(response[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m    |[39m                                     [31m[1m^[22m[39m
+     [90m 84 |[39m             expect(response[33m.[39mbody)[33m.[39mtoHaveProperty([32m'providers'[39m)[33m;[39m
+     [90m 85 |[39m             expect(response[33m.[39mbody)[33m.[39mtoHaveProperty([32m'ready'[39m)[33m;[39m
+     [90m 86 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (__tests__/integration/aiResponseValidation.test.js:83:37)
+
+  ● AI Response Validation Integration Tests › Autopilot Endpoints › GET /api/v1/autopilot/status should return validated status
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 403
+
+    [0m [90m 103 |[39m                 [33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m [32m`Bearer ${adminToken}`[39m)[33m;[39m
+     [90m 104 |[39m
+    [31m[1m>[22m[39m[90m 105 |[39m             expect(response[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                                     [31m[1m^[22m[39m
+     [90m 106 |[39m             expect(response[33m.[39mbody)[33m.[39mtoHaveProperty([32m'enabled'[39m)[33m;[39m
+     [90m 107 |[39m         })[33m;[39m
+     [90m 108 |[39m[0m
+
+      at Object.<anonymous> (__tests__/integration/aiResponseValidation.test.js:105:37)
+
+  ● AI Response Validation Integration Tests › Autopilot Endpoints › GET /api/v1/autopilot/suggestions should return validated list
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 403
+
+    [0m [90m 112 |[39m                 [33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m [32m`Bearer ${adminToken}`[39m)[33m;[39m
+     [90m 113 |[39m
+    [31m[1m>[22m[39m[90m 114 |[39m             expect(response[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                                     [31m[1m^[22m[39m
+     [90m 115 |[39m             expect(response[33m.[39mbody)[33m.[39mtoHaveProperty([32m'suggestions'[39m)[33m;[39m
+     [90m 116 |[39m             expect([33mArray[39m[33m.[39misArray(response[33m.[39mbody[33m.[39msuggestions))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+     [90m 117 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (__tests__/integration/aiResponseValidation.test.js:114:37)
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 4 passed, 7 total
+Snapshots:   0 total
+Time:        11.535 s
+Ran all test suites matching /__tests__\\integration\\aiResponseValidation.test.js/i.
+  console.error
+    {"level":"error","message":"❌ Query error:","timestamp":"2026-02-09T09:54:33.255Z","error":"relation \"request_logs\" does not exist","query":"INSERT INTO request_logs (method, path, status, duration_ms, user_id)\n       VALUES ($1, $2, $3, $4, $5)","duration":48}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at query (database/db.js:144:12)
+
+  console.error
+    {"level":"error","message":"Request logger error:","timestamp":"2026-02-09T09:54:33.261Z","length":111,"name":"error","severity":"ERROR","code":"42P01","position":"13","file":"parse_relation.c","line":"1452","routine":"parserOpenTable"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at middleware/requestLogger.js:39:14
+
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.
+  console.error
+    {"level":"error","message":"⏱️  TIMEOUT: Agent technical exceeded 30000ms limit","timestamp":"2026-02-09T09:55:01.263Z"}
+
+    [0m [90m 14 |[39m   [90m// Avoid circular structures in meta[39m
+     [90m 15 |[39m   [36mtry[39m {
+    [31m[1m>[22m[39m[90m 16 |[39m     console[level [33m===[39m [32m'error'[39m [33m?[39m [32m'error'[39m [33m:[39m level [33m===[39m [32m'warn'[39m [33m?[39m [32m'warn'[39m [33m:[39m [32m'log'[39m]([33mJSON[39m[33m.[39mstringify(payload))[33m;[39m
+     [90m    |[39m                                                                             [31m[1m^[22m[39m
+     [90m 17 |[39m   } [36mcatch[39m (e) {
+     [90m 18 |[39m     console[33m.[39mlog([32m`[logger-fallback] ${level}: ${message}`[39m)[33m;[39m
+     [90m 19 |[39m   }[0m
+
+      at baseLog (services/logger.js:16:77)
+      at Object.error (services/logger.js:25:29)
+      at Timeout._onTimeout (routes/ai-agents.js:75:14)
+

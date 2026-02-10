@@ -53,23 +53,23 @@ export async function getAgentService(agent_key) {
   if (agents.has(agent_key)) {
     return agents.get(agent_key);
   }
-  
+
   // Check if agent exists in registry
   if (!AGENT_MODULES[agent_key]) {
     throw new Error(`Agent not found: ${agent_key}`);
   }
-  
+
   try {
     // Dynamically import agent module
     const modulePath = AGENT_MODULES[agent_key];
     const agentModule = await import(modulePath);
-    
+
     // Validate agent interface
     validateAgentInterface(agent_key, agentModule);
-    
+
     // Cache loaded agent
     agents.set(agent_key, agentModule);
-    
+
     logger.info(`✅ Loaded agent: ${agent_key}`);
     return agentModule;
   } catch (error) {
@@ -88,14 +88,14 @@ export async function getAgentService(agent_key) {
 function validateAgentInterface(agent_key, agentModule) {
   const requiredMethods = ['run', 'getDetails', 'defaultConfig'];
   const optionalMethods = ['command', 'validateConfig', 'healthCheck']; // BACKEND-015: healthCheck is optional
-  
+
   // Check required methods
   for (const method of requiredMethods) {
     if (typeof agentModule[method] !== 'function') {
       throw new Error(`Agent ${agent_key} missing required method: ${method}`);
     }
   }
-  
+
   logger.info(`✅ Validated agent interface: ${agent_key}`);
 }
 
@@ -107,7 +107,7 @@ function validateAgentInterface(agent_key, agentModule) {
  */
 export async function runAgent(agent_key, params) {
   const agent = await getAgentService(agent_key);
-  
+
   // Get agent_id from params or database
   let agent_id = params.agent_id;
   if (!agent_id) {
@@ -123,29 +123,29 @@ export async function runAgent(agent_key, params) {
       agent_id = 'unknown';
     }
   }
-  
+
   // Start tracking execution metrics (BACKEND-021)
   const endMetrics = startAgentExecution(agent_key, agent_id);
-  
+
   try {
     const result = await agent.run(params);
-    
+
     // Determine if result came from cache
     const cacheHit = !!(result && result._meta && result._meta.cached);
-    
+
     // End metrics tracking - success
     endMetrics(true, null, cacheHit);
-    
+
     return result;
   } catch (error) {
     // Determine error type
     const errorType = error.name === 'TimeoutError' ? 'timeout' :
-                      error.name === 'ValidationError' ? 'validation' :
-                      'internal';
-    
+      error.name === 'ValidationError' ? 'validation' :
+        'internal';
+
     // End metrics tracking - failure
     endMetrics(false, errorType, false);
-    
+
     // Re-throw error
     throw error;
   }
@@ -171,11 +171,11 @@ export async function getAgentDetails(agent_key, params) {
  */
 export async function executeAgentCommand(agent_key, command, payload) {
   const agent = await getAgentService(agent_key);
-  
+
   if (typeof agent.command !== 'function') {
     throw new Error(`Agent ${agent_key} does not support commands`);
   }
-  
+
   return await agent.command({ command, payload });
 }
 
@@ -209,7 +209,7 @@ export function hasAgent(agent_key) {
 // Pre-warm critical agents (optional)
 export async function prewarmAgents(keys = ['technical', 'risk']) {
   logger.info(`🔥 Pre-warming agents: ${keys.join(', ')}`);
-  
+
   for (const key of keys) {
     try {
       await getAgentService(key);
@@ -237,16 +237,16 @@ export async function checkAgentHealth(agent_key) {
     error: null,
     metadata: {}
   };
-  
+
   try {
     const agent = await getAgentService(agent_key);
     const startTime = Date.now();
-    
+
     // Call agent's healthCheck method if it exists
     if (typeof agent.healthCheck === 'function') {
       const result = await agent.healthCheck();
       healthStatus.responseTime = Date.now() - startTime;
-      
+
       if (result && result.status) {
         healthStatus.status = result.status; // 'healthy', 'degraded', 'unhealthy'
         healthStatus.metadata = result.metadata || {};
@@ -264,10 +264,10 @@ export async function checkAgentHealth(agent_key) {
     healthStatus.error = error.message;
     logger.warn(`❌ Health check failed for ${agent_key}:`, error.message);
   }
-  
+
   // Store health status
   agentHealth.set(agent_key, healthStatus);
-  
+
   return healthStatus;
 }
 
@@ -278,13 +278,13 @@ export async function checkAgentHealth(agent_key) {
 export async function checkAllAgentsHealth() {
   const results = {};
   const loadedAgents = Array.from(agents.keys());
-  
+
   logger.info(`🏥 Running health checks for ${loadedAgents.length} loaded agent(s)...`);
-  
+
   for (const agent_key of loadedAgents) {
     results[agent_key] = await checkAgentHealth(agent_key);
   }
-  
+
   return results;
 }
 
@@ -303,11 +303,11 @@ export function getAgentHealthStatus(agent_key) {
  */
 export function getAllAgentHealthStatus() {
   const status = {};
-  
+
   for (const [agent_key, health] of agentHealth.entries()) {
     status[agent_key] = health;
   }
-  
+
   return status;
 }
 
@@ -330,7 +330,7 @@ export function getHealthSummary() {
   let degraded = 0;
   let unhealthy = 0;
   let unknown = 0;
-  
+
   for (const health of agentHealth.values()) {
     switch (health.status) {
       case 'healthy':
@@ -346,7 +346,7 @@ export function getHealthSummary() {
         unknown++;
     }
   }
-  
+
   return {
     total: agentHealth.size,
     healthy,
@@ -366,14 +366,14 @@ export function startPeriodicHealthChecks(interval = HEALTH_CHECK_INTERVAL) {
     logger.warn('⚠️  Periodic health checks already running');
     return;
   }
-  
+
   logger.info(`🏥 Starting periodic health checks (interval: ${interval}ms)`);
-  
+
   // Run initial health check
   checkAllAgentsHealth().catch(error => {
     logger.error('❌ Initial health check failed:', error);
   });
-  
+
   // Set up periodic checks
   healthCheckTimer = setInterval(async () => {
     try {
@@ -382,7 +382,7 @@ export function startPeriodicHealthChecks(interval = HEALTH_CHECK_INTERVAL) {
       logger.error('❌ Periodic health check failed:', error);
     }
   }, interval);
-  
+
   // Ensure timer doesn't keep process alive
   if (healthCheckTimer.unref) {
     healthCheckTimer.unref();
@@ -407,14 +407,14 @@ export function stopPeriodicHealthChecks() {
  */
 export function disableUnhealthyAgent(agent_key, reason = 'Health check failed') {
   const health = agentHealth.get(agent_key);
-  
+
   if (health && health.status === 'unhealthy') {
     // Update health status to reflect disabled state
     health.disabled = true;
     health.disabledReason = reason;
     health.disabledAt = new Date().toISOString();
     agentHealth.set(agent_key, health);
-    
+
     logger.warn(`⚠️  Disabled unhealthy agent: ${agent_key} - ${reason}`);
   }
 }
@@ -425,13 +425,13 @@ export function disableUnhealthyAgent(agent_key, reason = 'Health check failed')
  */
 export function enableAgent(agent_key) {
   const health = agentHealth.get(agent_key);
-  
+
   if (health && health.disabled) {
     health.disabled = false;
     health.disabledReason = null;
     health.disabledAt = null;
     agentHealth.set(agent_key, health);
-    
+
     logger.info(`✅ Re-enabled agent: ${agent_key}`);
   }
 }
@@ -451,11 +451,11 @@ export async function getAgentVersion(agent_key) {
       'SELECT version FROM ai_agents WHERE agent_key = $1',
       [agent_key]
     );
-    
+
     if (result.rows.length === 0) {
       throw new Error(`Agent not found: ${agent_key}`);
     }
-    
+
     return result.rows[0].version;
   } catch (error) {
     logger.error(`❌ Failed to get agent version for ${agent_key}:`, error.message);
@@ -474,33 +474,33 @@ export async function getAgentVersion(agent_key) {
 export async function bumpAgentVersion(agent_key, new_version, change_description = 'Version bumped', changed_by = 'system') {
   try {
     const client = await pool.connect();
-    
+
     try {
       await client.query('BEGIN');
-      
+
       // Get current version
       const currentResult = await client.query(
         'SELECT id, version FROM ai_agents WHERE agent_key = $1',
         [agent_key]
       );
-      
+
       if (currentResult.rows.length === 0) {
         throw new Error(`Agent not found: ${agent_key}`);
       }
-      
+
       const agent_id = currentResult.rows[0].id;
       const previous_version = currentResult.rows[0].version;
-      
+
       // Update version (trigger will handle version_updated_at and history)
       await client.query(
         'UPDATE ai_agents SET version = $1 WHERE agent_key = $2',
         [new_version, agent_key]
       );
-      
+
       await client.query('COMMIT');
-      
+
       logger.info(`✅ Bumped agent ${agent_key} version: ${previous_version} → ${new_version}`);
-      
+
       return {
         success: true,
         agent_key,
@@ -532,7 +532,7 @@ export async function incrementAgentVersion(agent_key, change_description = 'Cod
     const current_version = await getAgentVersion(agent_key);
     const [major, minor, patch] = current_version.split('.').map(Number);
     const new_version = `${major}.${minor}.${patch + 1}`;
-    
+
     return await bumpAgentVersion(agent_key, new_version, change_description);
   } catch (error) {
     logger.error(`❌ Failed to increment agent version for ${agent_key}:`, error.message);
@@ -563,7 +563,7 @@ export async function getAgentVersionHistory(agent_key, limit = 10) {
       LIMIT $2`,
       [agent_key, limit]
     );
-    
+
     return result.rows;
   } catch (error) {
     logger.error(`❌ Failed to get version history for ${agent_key}:`, error.message);
@@ -584,15 +584,15 @@ export async function rollbackAgentVersion(agent_key, target_version, changed_by
       'SELECT rollback_agent_version($1, $2, $3) as result',
       [agent_key, target_version, changed_by]
     );
-    
+
     const rollbackResult = result.rows[0].result;
-    
+
     if (rollbackResult.success) {
       logger.info(`✅ Rolled back agent ${agent_key} to version ${target_version}`);
     } else {
       logger.error(`❌ Rollback failed for ${agent_key}:`, rollbackResult.error);
     }
-    
+
     return rollbackResult;
   } catch (error) {
     logger.error(`❌ Failed to rollback agent ${agent_key}:`, error.message);
@@ -613,7 +613,7 @@ export async function getDecisionsByVersion(agent_key, version, limit = 100) {
       'SELECT * FROM get_decisions_by_version($1, $2, $3)',
       [agent_key, version, limit]
     );
-    
+
     return result.rows;
   } catch (error) {
     logger.error(`❌ Failed to get decisions for ${agent_key} v${version}:`, error.message);
@@ -630,7 +630,7 @@ export async function getAllAgentVersions() {
     const result = await pool.query(
       'SELECT * FROM agent_version_summary ORDER BY agent_key'
     );
-    
+
     return result.rows;
   } catch (error) {
     logger.error('❌ Failed to get agent version summary:', error.message);
@@ -651,14 +651,14 @@ export async function recordDecisionVersion(decision) {
       'SELECT agent_key, version FROM ai_agents WHERE id = $1',
       [decision.agent_id]
     );
-    
+
     if (result.rows.length === 0) {
       logger.warn(`⚠️  Agent not found for decision: ${decision.agent_id}`);
       return null;
     }
-    
+
     const { agent_key, version } = result.rows[0];
-    
+
     // Update the decision with agent_version
     if (decision.id) {
       await pool.query(
@@ -666,7 +666,7 @@ export async function recordDecisionVersion(decision) {
         [version, decision.id]
       );
     }
-    
+
     return version;
   } catch (error) {
     logger.error('❌ Failed to record decision version:', error.message);

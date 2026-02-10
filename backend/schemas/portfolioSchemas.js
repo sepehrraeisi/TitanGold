@@ -83,6 +83,22 @@ export const getPortfolioSummaryParamsSchema = z.object({
   id: uuidSchema,
 });
 
+// Portfolio Response Schema
+export const portfolioResponseSchema = z.object({
+  id: uuidSchema,
+  user_id: uuidSchema,
+  name: z.string(),
+  description: z.string().optional().nullable(),
+  base_currency: z.string().length(3),
+  is_main: z.boolean(),
+  is_public: z.boolean(),
+  created_at: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString()),
+  updated_at: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString()).optional().nullable(),
+});
+
+// Portfolio List Response Schema
+export const portfolioListResponseSchema = z.array(portfolioResponseSchema);
+
 // Export all schemas
 export default {
   listPortfoliosQuerySchema,
@@ -96,4 +112,6 @@ export default {
   getPortfolioPerformanceParamsSchema,
   getPortfolioPerformanceQuerySchema,
   getPortfolioSummaryParamsSchema,
+  portfolioResponseSchema,
+  portfolioListResponseSchema,
 };

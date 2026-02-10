@@ -1,0 +1,448 @@
+import { useState, useEffect, useMemo } from 'react';
+import * as api from '../../../../../../services/api.ts';
+import {
+    ArtemisState,
+    DataHubState,
+    DataSource,
+    DataCategory,
+    DataPipelineSnapshot,
+    DataNormalizationSummary,
+    AIAgent,
+} from '../../../../../../types.ts';
+import {
+    useDataHubQuery,
+    useAgentsQuery,
+    useUpdateSourceMutation,
+    useCreateSourceMutation,
+    useDeleteSourceMutation,
+    useUpdateCategoryMutation,
+    useCreateCategoryMutation,
+    useDeleteCategoryMutation
+} from '../../../../../../hooks/useDataHubState.ts';
+import { useAsync } from '../../../../../../hooks/useAsync';
+
+export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key: string) => string) => {
+    // React Query Hooks
+    const { data: dataHub, isLoading: isLoadingDataHub, error: dataHubErrorObj, refetch: loadDataHub } = useDataHubQuery();
+    const { data: agentsData, isLoading: isLoadingAgentsQuery } = useAgentsQuery();
+
+    const updateSourceMutation = useUpdateSourceMutation();
+    const createSourceMutation = useCreateSourceMutation();
+    const deleteSourceMutation = useDeleteSourceMutation();
+    const updateCategoryMutation = useUpdateCategoryMutation();
+    const createCategoryMutation = useCreateCategoryMutation();
+    const deleteCategoryMutation = useDeleteCategoryMutation();
+
+    // Local Selection & View State
+    const [activeView, setActiveView] = useState<'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram'>('sources');
+
+    // Modals & Selection State
+    const [showCreateSourceModal, setShowCreateSourceModal] = useState(false);
+    const [editingSource, setEditingSource] = useState<DataSource | null>(null);
+    const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false);
+    const [editingCategory, setEditingCategory] = useState<DataCategory | null>(null);
+    const [viewingSourceData, setViewingSourceData] = useState<DataSource | null>(null);
+
+    // Pipeline State
+    const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
+
+    const pipelineAsync = useAsync(api.fetchDataPipelineSnapshot);
+    const healthAsync = useAsync(api.checkDataHubHealth);
+    const logsAsync = useAsync(async () => {
+        // Mocking log refresh for now as there's no direct API in the snippet,
+        // but we keep the structure for standardization.
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return api.fetchDataHubState();
+    });
+
+    // Derived State from Query
+    const agents = agentsData || [];
+    const isLoading = isLoadingDataHub;
+    const isLoadingAgents = isLoadingAgentsQuery;
+    const dataHubError = dataHubErrorObj instanceof Error ? dataHubErrorObj.message : null;
+
+    // Handlers
+    const handleCheckHealth = async () => {
+        try {
+            await healthAsync.execute();
+        } catch (error) {
+            console.error('Failed to check health:', error);
+        }
+    };
+
+    const handleCreateSource = async (source: Omit<DataSource, 'id' | 'createdAt' | 'lastUpdate'>) => {
+        try {
+            await createSourceMutation.mutateAsync(source);
+            setShowCreateSourceModal(false);
+        } catch (error) {
+            console.error('Failed to create source:', error);
+        }
+    };
+
+    const handleUpdateSource = async (id: string, updates: Partial<DataSource>) => {
+        try {
+            await updateSourceMutation.mutateAsync({ id, updates });
+            setEditingSource(null);
+        } catch (error) {
+            console.error('Failed to update source:', error);
+        }
+    };
+
+    const handleDeleteSource = async (id: string) => {
+        if (!window.confirm(t('confirm_delete_source') || 'Are you sure you want to delete this source?')) return;
+        try {
+            await deleteSourceMutation.mutateAsync(id);
+        } catch (error) {
+            console.error('Failed to delete source:', error);
+        }
+    };
+
+    const handleCreateCategory = async (category: Omit<DataCategory, 'id' | 'createdAt'>) => {
+        try {
+            await createCategoryMutation.mutateAsync(category);
+            setShowCreateCategoryModal(false);
+        } catch (error) {
+            console.error('Failed to create category:', error);
+        }
+    };
+
+    const handleUpdateCategory = async (id: string, updates: Partial<DataCategory>) => {
+        try {
+            await updateCategoryMutation.mutateAsync({ id, updates });
+            setEditingCategory(null);
+        } catch (error) {
+            console.error('Failed to update category:', error);
+        }
+    };
+
+    const handleDeleteCategory = async (id: string) => {
+        if (!window.confirm(t('confirm_delete_category') || 'Are you sure you want to delete this category?')) return;
+        try {
+            await deleteCategoryMutation.mutateAsync(id);
+        } catch (error) {
+            console.error('Failed to delete category:', error);
+        }
+    };
+
+    const handleCollectorHealth = async () => {
+        setIsLoadingCollector(true);
+        setCollectorError(null);
+        try {
+            const response = await fetch(`${telegramCollectorUrl}/health`);
+            const data = await response.json();
+            setCollectorMessage(`Collector Status: ${data.status}`);
+        } catch (error) {
+            setCollectorError('Failed to connect to Telegram Collector');
+        } finally {
+            setIsLoadingCollector(false);
+        }
+    };
+
+    const handleCollectorInputChange = (field: keyof typeof collectorForm, value: string) => {
+        setCollectorForm(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleStartCollectorLogin = async () => {
+        if (!collectorForm.phone) {
+            setCollectorError('Phone number is required');
+            return;
+        }
+
+        setIsLoadingCollector(true);
+        setCollectorError(null);
+        try {
+            const response = await fetch(`${telegramCollectorUrl}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: collectorForm.phone })
+            });
+            const data = await response.json();
+            if (data.success) {
+                setCollectorAuthId(data.authId);
+                setCollectorMessage('Verification code sent');
+            } else {
+                setCollectorError(data.error || 'Failed to start login');
+            }
+        } catch (error) {
+            setCollectorError('Connection error');
+        } finally {
+            setIsLoadingCollector(false);
+        }
+    };
+
+    const handleConfirmCollectorLogin = async () => {
+        if (!collectorForm.code) {
+            setCollectorError('Verification code is required');
+            return;
+        }
+
+        setIsLoadingCollector(true);
+        setCollectorError(null);
+        try {
+            const response = await fetch(`${telegramCollectorUrl}/auth/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    authId: collectorAuthId,
+                    code: collectorForm.code,
+                    password: collectorForm.password
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                setCollectorMessage('Login successful');
+                setCollectorAuthId(null);
+                setCollectorForm({ phone: '', code: '', password: '' });
+                loadDataHub();
+            } else {
+                setCollectorError(data.error || 'Verification failed');
+            }
+        } catch (error) {
+            setCollectorError('Connection error');
+        } finally {
+            setIsLoadingCollector(false);
+        }
+    };
+
+    const handleCancelCollectorLogin = async () => {
+        setIsLoadingCollector(true);
+        try {
+            if (collectorAuthId) {
+                await fetch(`${telegramCollectorUrl}/auth/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ authId: collectorAuthId })
+                });
+            }
+            setCollectorAuthId(null);
+            setCollectorForm({ phone: '', code: '', password: '' });
+            setCollectorMessage('Login cancelled');
+        } catch (error) {
+            console.error('Failed to cancel login:', error);
+        } finally {
+            setIsLoadingCollector(false);
+        }
+    };
+
+    const handleRefreshCollectorChannels = async () => {
+        setIsRefreshingChannels(true);
+        try {
+            const response = await fetch(`${telegramCollectorUrl}/channels/refresh`, { method: 'POST' });
+            const data = await response.json();
+            if (data.success) {
+                setCollectorMessage('Channels refreshed');
+            } else {
+                setCollectorError(data.error || 'Failed to refresh channels');
+            }
+        } catch (error) {
+            setCollectorError('Connection error');
+        } finally {
+            setIsRefreshingChannels(false);
+        }
+    };
+
+    const handleLinkChannelToSource = async (channelId: string, sourceId?: string) => {
+        try {
+            await fetch(`${telegramCollectorUrl}/channels/link`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channelId, sourceId })
+            });
+        } catch (error) {
+            console.error('Failed to link channel:', error);
+        }
+    };
+
+    const handleTestCollectorChannel = async (channelId: string) => {
+        setTestingChannelId(channelId);
+        setChannelTestPreview(null);
+        try {
+            const response = await fetch(`${telegramCollectorUrl}/channels/test/${channelId}`);
+            const data = await response.json();
+            if (data.success) {
+                setChannelTestPreview(data.messages);
+            } else {
+                setCollectorError(data.error || 'Channel test failed');
+            }
+        } catch (error) {
+            setCollectorError('Connection error');
+        } finally {
+            setTestingChannelId(null);
+        }
+    };
+
+    const handleTestSource = async (sourceId: string) => {
+        try {
+            const result = await api.testDataSourceConnection(sourceId);
+            if (result.success) {
+                alert(t('connection_test_success') || 'Connection test successful!');
+            } else {
+                alert(`${t('connection_test_failed') || 'Connection test failed:'} ${result.message}`);
+            }
+        } catch (e) {
+            alert(t('connection_test_error') || 'An error occurred during connection test');
+        }
+    };
+
+    const handleRefreshPipelineSnapshot = async () => {
+        try {
+            await pipelineAsync.execute();
+        } catch (error) {
+            console.error('Failed to refresh pipeline:', error);
+        }
+    };
+
+    // Utils
+    const formatTimeAgo = (timestamp?: string): string => {
+        if (!timestamp) return t('never') || 'never';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+        if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+        return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    };
+
+    const downloadCSV = (data: any[], filename: string) => {
+        if (!data || data.length === 0) return;
+        const headers = Object.keys(data[0]);
+        const csvContent = [
+            headers.join(','),
+            ...data.map(row => headers.map(header => JSON.stringify(row[header])).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const categoryMetricsById = useMemo(() => {
+        if (!dataHub || !dataHub.pipelineSnapshot) return {};
+        const metrics: Record<string, { inflow: number; passRate: number }> = {};
+        dataHub.pipelineSnapshot.categories.forEach(cat => {
+            metrics[cat.categoryId] = {
+                inflow: cat.inflow,
+                passRate: cat.passRate
+            };
+        });
+        return metrics;
+    }, [dataHub]);
+
+    const logStatusCounts = useMemo(() => {
+        if (!dataHub) return { success: 0, error: 0, warning: 0 };
+        return dataHub.accessLogs.reduce((acc, log) => {
+            const status = log.status.toLowerCase();
+            if (status.includes('success') || status === 'ok' || status === '200') acc.success++;
+            else if (status.includes('error') || status.includes('fail') || status === '500') acc.error++;
+            else acc.warning++;
+            return acc;
+        }, { success: 0, error: 0, warning: 0 });
+    }, [dataHub]);
+
+    const combinedCollectorHealth = useMemo(() => {
+        if (!dataHub || !dataHub.telegramCollector) return 'unknown';
+        return dataHub.telegramCollector.status === 'online' ? 'healthy' : 'degraded';
+    }, [dataHub]);
+
+    const [isLoadingCollector, setIsLoadingCollector] = useState(false);
+    const [collectorMessage, setCollectorMessage] = useState<string | null>(null);
+    const [collectorError, setCollectorError] = useState<string | null>(null);
+
+    const [collectorForm, setCollectorForm] = useState({
+        phone: '',
+        code: '',
+        password: ''
+    });
+    const [collectorAuthId, setCollectorAuthId] = useState<string | null>(null);
+    const [testingChannelId, setTestingChannelId] = useState<string | null>(null);
+    const [channelTestPreview, setChannelTestPreview] = useState<any[] | null>(null);
+    const [isRefreshingChannels, setIsRefreshingChannels] = useState(false);
+
+    const telegramCollectorUrl = 'http://localhost:3005';
+
+    return {
+        dataHub,
+        isLoading,
+        dataHubError,
+        activeView,
+        setActiveView,
+        showCreateSourceModal,
+        setShowCreateSourceModal,
+        editingSource,
+        setEditingSource,
+        showCreateCategoryModal,
+        setShowCreateCategoryModal,
+        editingCategory,
+        setEditingCategory,
+        viewingSourceData,
+        setViewingSourceData,
+        selectedSnapshotId,
+        setSelectedSnapshotId,
+        isLoadingPipeline: pipelineAsync.isLoading,
+        pipelineError: pipelineAsync.error,
+        setPipelineError: pipelineAsync.setError,
+        agents,
+        isLoadingAgents,
+        isLoadingCollector,
+        collectorError,
+        setCollectorError,
+        collectorMessage,
+        setCollectorMessage,
+        categoriesError: null, // Categories use mutation error usually
+        setCategoriesError: () => { },
+        healthError: healthAsync.error,
+        setHealthError: healthAsync.setError,
+        logsError: logsAsync.error,
+        setLogsError: logsAsync.setError,
+        isLoadingHealth: healthAsync.isLoading,
+        isLoadingLogs: logsAsync.isLoading,
+        collectorForm,
+        collectorAuthId,
+        testingChannelId,
+        channelTestPreview,
+        isRefreshingChannels,
+        telegramCollectorUrl,
+        handleCheckHealth: async () => {
+            setIsLoadingHealth(true);
+            setHealthError(null);
+            try {
+                await handleCheckHealth();
+            } catch (err: any) {
+                setHealthError(err.message || 'Failed to check health');
+                throw err;
+            } finally {
+                setIsLoadingHealth(false);
+            }
+        },
+        handleCollectorHealth,
+        handleCollectorInputChange,
+        handleStartCollectorLogin,
+        handleConfirmCollectorLogin,
+        handleCancelCollectorLogin,
+        handleRefreshCollectorChannels,
+        handleLinkChannelToSource,
+        handleTestCollectorChannel,
+        handleTestSource,
+        handleRefreshPipelineSnapshot,
+        formatTimeAgo,
+        downloadCSV,
+        categoryMetricsById,
+        logStatusCounts,
+        combinedCollectorHealth,
+        onRefresh,
+        handleCreateSource,
+        handleUpdateSource,
+        handleDeleteSource,
+        handleCreateCategory,
+        handleUpdateCategory,
+        handleDeleteCategory,
+    };
+};

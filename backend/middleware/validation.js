@@ -49,12 +49,16 @@ export const validateBody = (schema) => {
         return res.status(400).json(formatZodError(error));
       }
       // Unexpected error
-      logger.error('Validation middleware error:', error);
+      logger.error('Validation middleware error:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       return res.status(500).json({
         ok: false,
         error: {
           code: 'INTERNAL_ERROR',
-          message: 'An unexpected error occurred during validation',
+          message: 'An unexpected error occurred during validation: ' + error.message,
         },
       });
     }
@@ -205,5 +209,51 @@ export const validate = (schemas) => {
         },
       });
     }
+  };
+};
+
+/**
+ * Middleware factory to validate outgoing responses against a Zod schema
+ * @param {import('zod').ZodSchema} schema - Zod schema to validate against
+ * @returns {Function} Express middleware
+ */
+export const validateResponse = (schema) => {
+  return (req, res, next) => {
+    const originalJson = res.json;
+
+    res.json = function (data) {
+      try {
+        // Only validate successful responses (2xx)
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          schema.parse(data);
+        }
+      } catch (error) {
+        if (error instanceof ZodError) {
+          logger.error('Response validation failed', {
+            path: req.originalUrl,
+            method: req.method,
+            errors: error.errors,
+            data: process.env.NODE_ENV === 'development' ? data : '[REDACTED]'
+          });
+
+          if (process.env.NODE_ENV === 'development') {
+            return originalJson.call(this, {
+              ok: false,
+              error: {
+                code: 'RESPONSE_VALIDATION_ERROR',
+                message: 'Internal API response validation failed',
+                details: error.errors,
+              },
+            });
+          }
+        } else {
+          logger.error('Unexpected error during response validation:', error);
+        }
+      }
+
+      return originalJson.call(this, data);
+    };
+
+    next();
   };
 };

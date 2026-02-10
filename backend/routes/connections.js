@@ -3,6 +3,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import exchangesRouter from './exchanges.js';
 import { logger } from '../services/logger.js';
+import { encryptSecret, decryptSecret, isEncrypted, maskSecret } from '../utils/crypto.js';
 
 const router = express.Router();
 
@@ -30,9 +31,14 @@ router.get('/mexc', authenticate, async (req, res) => {
     }
 
     const connection = result.rows[0];
+
+    // Decrypt if necessary, but mask for safety in response
+    const rawApiKey = isEncrypted(connection.api_key) ? decryptSecret(connection.api_key) : (connection.api_key || '');
+    const rawApiSecret = isEncrypted(connection.api_secret) ? decryptSecret(connection.api_secret) : (connection.api_secret || '');
+
     res.json({
-      apiKey: connection.api_key || '',
-      apiSecret: connection.api_secret || '',
+      apiKey: maskSecret(rawApiKey),
+      apiSecret: maskSecret(rawApiSecret),
       isConnected: connection.is_active || false,
       isTestnet: connection.is_testnet || false,
       lastSyncAt: connection.last_sync_at,
@@ -64,7 +70,11 @@ router.post('/mexc', authenticate, authorize('admin', 'trader'), async (req, res
 
     // Test connection first
     const testResult = await testMexcConnection(apiKey, apiSecret);
-    
+
+    // Encrypt before saving
+    const encryptedApiKey = encryptSecret(apiKey);
+    const encryptedApiSecret = encryptSecret(apiSecret);
+
     const result = await query(
       `INSERT INTO exchange_connections (user_id, exchange, api_key, api_secret, is_active, is_testnet, last_sync_at)
        VALUES ($1, 'MEXC', $2, $3, $4, $5, NOW())
@@ -77,7 +87,7 @@ router.post('/mexc', authenticate, authorize('admin', 'trader'), async (req, res
          last_sync_at = NOW(),
          updated_at = NOW()
        RETURNING *`,
-      [userId, apiKey, apiSecret, testResult.success, isTestnet || false]
+      [userId, encryptedApiKey, encryptedApiSecret, testResult.success, isTestnet || false]
     );
 
     res.json({
@@ -114,8 +124,9 @@ router.post('/mexc/test', authenticate, async (req, res) => {
         return res.status(404).json({ error: 'MEXC connection not configured' });
       }
 
-      testApiKey = result.rows[0].api_key;
-      testApiSecret = result.rows[0].api_secret;
+      const connection = result.rows[0];
+      testApiKey = isEncrypted(connection.api_key) ? decryptSecret(connection.api_key) : connection.api_key;
+      testApiSecret = isEncrypted(connection.api_secret) ? decryptSecret(connection.api_secret) : connection.api_secret;
     }
 
     const testResult = await testMexcConnection(testApiKey, testApiSecret);
@@ -143,10 +154,10 @@ async function testMexcConnection(apiKey, apiSecret) {
     return { success: true, message: 'Connection successful' };
   } catch (error) {
     logger.error('MEXC connection test failed:', error);
-    return { 
-      success: false, 
+    return {
+      success: false,
       message: error.message || 'Connection test failed',
-      error: error.message 
+      error: error.message
     };
   }
 }

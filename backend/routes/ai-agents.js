@@ -15,6 +15,23 @@ import { logger } from '../services/logger.js';
 import { webhookDispatcher } from '../services/webhookDispatcher.js';
 import * as experiments from '../services/experiments.js'; // BACKEND-022: A/B testing
 import { notifyAgentStarted, notifyAgentCompleted, notifyAgentFailed } from '../websocket/server.js'; // BACKEND-023: WebSocket updates
+import { validateBody, validateParams, validateQuery, validateResponse } from '../middleware/validation.js';
+import {
+  listAgentsQuerySchema,
+  getAgentParamsSchema,
+  createAgentBodySchema,
+  updateAgentParamsSchema,
+  updateAgentBodySchema,
+  analyzeParamsSchema,
+  analyzeBodySchema,
+  chatParamsSchema,
+  chatBodySchema,
+  agentListResponseSchema,
+  agentResponseSchema,
+  agentAnalysisResponseSchema,
+  agentChatResponseSchema,
+  managerOverviewResponseSchema
+} from '../schemas/agentSchemas.js';
 
 const router = express.Router();
 
@@ -22,7 +39,117 @@ const router = express.Router();
 // Production++ Helpers for AI Routes
 // ============================================================================
 
-// 1) Normalized Error Response (with UI crash prevention)
+/**
+ * Shared transformation helper for AI agents to ensure consistency between
+ * list and detail views, and to conform to UI contracts.
+ */
+const transformAgent = (agent, decisionStats = { total: 0, successful: 0, learning_hours: 0 }) => {
+  // Safe JSON parse
+  const safeParse = (value) => {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try { return JSON.parse(value); } catch { return {}; }
+  };
+
+  const config = safeParse(agent.config);
+  const metadata = safeParse(agent.metadata);
+
+  // Status mapping: idle/error -> inactive, active/training -> as-is
+  let mappedStatus = agent.status;
+  if (agent.status === 'idle' || agent.status === 'error') {
+    mappedStatus = 'inactive';
+  }
+
+  // Extract capabilities from metadata
+  const capabilities = metadata.capabilities || [];
+  const role = metadata.role || 'AI Agent';
+
+  const realAccuracy = decisionStats.total > 0
+    ? (decisionStats.successful / decisionStats.total) * 100
+    : 0;
+  const learningHours = parseFloat(decisionStats.learning_hours) || 0;
+
+  // Calculate knowledge size from decision data
+  const avgDecisionSize = 2; // KB per decision (estimate)
+  const knowledgeMB = ((decisionStats.total * avgDecisionSize) / 1024).toFixed(1);
+
+  // Agent-specific metrics (based on agent type)
+  const baseMetrics = {
+    id: agent.id,
+    agent_key: agent.agent_key,
+    name: agent.name,
+    role,
+    status: mappedStatus,
+    decisions: parseInt(decisionStats.total, 10),
+    capabilities,
+    lastUpdate: agent.updated_at || agent.created_at,
+    // Additional fields for compatibility
+    type: agent.type,
+    is_enabled: agent.is_enabled,
+    config,
+    metadata,
+    created_at: agent.created_at,
+    updated_at: agent.updated_at,
+    last_active_at: agent.last_active_at,
+    accuracy: agent.accuracy ? parseFloat(agent.accuracy) : 0,
+    performance_score: agent.performance_score ? parseFloat(agent.performance_score) : 0
+  };
+
+  // For rule-based agents (fundamental, arbitrage): Don't show ML-specific metrics
+  if (agent.agent_key === 'fundamental') {
+    return {
+      ...baseMetrics,
+      accuracy: null,
+      trainingProgress: null,
+      learningTime: null,
+      knowledgeSize: null,
+      totalAnalyses: parseInt(decisionStats.total, 10),
+      activeHours: parseFloat(learningHours.toFixed(1)),
+      dataStoredMB: parseFloat(knowledgeMB)
+    };
+  }
+
+  if (agent.agent_key === 'arbitrage') {
+    return {
+      ...baseMetrics,
+      accuracy: null,
+      trainingProgress: null,
+      learningTime: null,
+      knowledgeSize: null,
+      totalScans: parseInt(decisionStats.total, 10),
+      activeHours: parseFloat(learningHours.toFixed(1)),
+      dataStoredMB: parseFloat(knowledgeMB),
+      opportunitiesFound: metadata?.last_result?.summary?.totalOpportunities || 0,
+      totalProfitUSDT: metadata?.last_result?.summary?.totalProfitUSDT || 0
+    };
+  }
+
+  if (agent.agent_key === 'liquidity') {
+    return {
+      ...baseMetrics,
+      accuracy: null,
+      trainingProgress: null,
+      learningTime: null,
+      knowledgeSize: null,
+      totalScans: parseInt(decisionStats.total, 10),
+      activeHours: parseFloat(learningHours.toFixed(1)),
+      avgLiquidityScore: metadata?.avg_liquidity_score || 0,
+      avgSpread: metadata?.avg_spread || 0,
+      avgSlippage50k: metadata?.avg_slippage_50k || 0,
+      riskLevel: metadata?.current_risk_level || 'low',
+      alertsTriggered: metadata?.alerts_count || 0
+    };
+  }
+
+  // For ML agents: Show all metrics
+  return {
+    ...baseMetrics,
+    accuracy: parseFloat(realAccuracy.toFixed(1)),
+    trainingProgress: decisionStats.total > 0 ? 100 : 0,
+    learningTime: learningHours.toFixed(1) + 'h',
+    knowledgeSize: knowledgeMB + 'MB'
+  };
+};// 1) Normalized Error Response (with UI crash prevention)
 function sendError(res, code, message, status = 400, details = null) {
   return res.status(status).json({
     ok: false,
@@ -95,7 +222,7 @@ async function logAndReturn(res, agentId, userId, decisionType, inputData, outpu
   try {
     // wasSuccessful is now explicit parameter (not guessed from output)
     const confidence = outputData?.confidence || null;
-    
+
     await query(`
       INSERT INTO ai_decisions 
       (agent_id, user_id, decision_type, input_data, output_data, confidence, was_successful, execution_time_ms, created_at, metadata)
@@ -112,12 +239,12 @@ async function logAndReturn(res, agentId, userId, decisionType, inputData, outpu
       executionTimeMs,
       JSON.stringify({ cached: isCached })
     ]);
-    logger.info(`📝 Decision logged: agent=${agentId.substring(0,8)}, type=${decisionType}, success=${wasSuccessful}, cached=${isCached}, time=${executionTimeMs}ms`);
+    logger.info(`📝 Decision logged: agent=${agentId.substring(0, 8)}, type=${decisionType}, success=${wasSuccessful}, cached=${isCached}, time=${executionTimeMs}ms`);
   } catch (err) {
     logger.error('❌ Failed to log decision:', err.message);
     // Don't throw - logging failures shouldn't break the agent response
   }
-  
+
   return res.json(outputData);
 }
 
@@ -131,25 +258,25 @@ async function logAndReturn(res, agentId, userId, decisionType, inputData, outpu
 function transformAgentResultForUI(agent_key, rawResult) {
   try {
     const { symbol, timeframe, confidence, signal, indicators, timestamp, _meta } = rawResult;
-    
+
     // Special handling for arbitrage agent
     if (agent_key === 'arbitrage') {
       return {
         timestamp: rawResult.timestamp || new Date().toISOString(),
         confidence: typeof rawResult.confidence === 'number' ? rawResult.confidence : 0.5,
         indicators: [], // Arbitrage doesn't use indicators
-        
+
         // Arbitrage-specific fields
         summary: rawResult.summary || {},
         opportunities: rawResult.opportunities || [],
         riskAlerts: rawResult.riskAlerts || [],
         config: rawResult.config || {},
-        
+
         // Meta
         _meta: rawResult._meta || { source: 'real', version: '1.0.0' }
       };
     }
-    
+
     // Special handling for fundamental agent
     if (agent_key === 'fundamental') {
       return {
@@ -158,7 +285,7 @@ function transformAgentResultForUI(agent_key, rawResult) {
         timeframe: rawResult.timeframe || '1d',
         decision: rawResult.decision || 'hold',
         confidence: typeof rawResult.confidence === 'number' ? rawResult.confidence : 0.5,
-        
+
         // UI-expected fields
         averageScore: typeof rawResult.averageScore === 'number' ? rawResult.averageScore : (rawResult.score?.total || 0),
         marketSummary: rawResult.marketSummary || {
@@ -167,7 +294,7 @@ function transformAgentResultForUI(agent_key, rawResult) {
           fundingImbalance: 0
         },
         alerts: Array.isArray(rawResult.alerts) ? rawResult.alerts : [],
-        
+
         // Fundamental-specific fields (preserve all)
         score: rawResult.score || { total: 0, macro: 0, funding: 0, onchain: 0, news: 0 },
         overview: rawResult.overview || {},
@@ -178,12 +305,12 @@ function transformAgentResultForUI(agent_key, rawResult) {
         fair_value: rawResult.fair_value || {},
         signals: Array.isArray(rawResult.signals) ? rawResult.signals : [],
         raw: rawResult.raw || {},
-        
+
         // Meta
         _meta: rawResult._meta || { source: 'real', version: '2.0.0' }
       };
     }
-    
+
     // Default structure for other agents
     const uiResult = {
       timestamp: timestamp || new Date().toISOString(),
@@ -200,7 +327,7 @@ function transformAgentResultForUI(agent_key, rawResult) {
     if (indicators && typeof indicators === 'object' && !Array.isArray(indicators)) {
       // Technical agent format: { rsi: 54, macd: {...}, trend: 'bullish', ... }
       const indicatorArray = [];
-      
+
       Object.entries(indicators).forEach(([key, value]) => {
         if (typeof value === 'number') {
           // Simple numeric indicator (e.g., rsi: 54)
@@ -214,11 +341,11 @@ function transformAgentResultForUI(agent_key, rawResult) {
           // Complex indicator (e.g., macd: { value: -0.38, signal: 'bearish', histogram: ... })
           const indicatorValue = value.value || 0;
           let indicatorSignal = 'neutral';
-          
+
           // Normalize signal: can be numeric (MACD signal line) or string ('bearish')
           if (typeof value.signal === 'string') {
-            indicatorSignal = value.signal.toLowerCase() === 'bearish' ? 'sell' : 
-                              value.signal.toLowerCase() === 'bullish' ? 'buy' : 'neutral';
+            indicatorSignal = value.signal.toLowerCase() === 'bearish' ? 'sell' :
+              value.signal.toLowerCase() === 'bullish' ? 'buy' : 'neutral';
           } else if (typeof value.signal === 'number') {
             // For MACD: if histogram is negative → sell, positive → buy
             if (value.histogram !== undefined) {
@@ -227,7 +354,7 @@ function transformAgentResultForUI(agent_key, rawResult) {
               indicatorSignal = indicatorValue > value.signal ? 'buy' : indicatorValue < value.signal ? 'sell' : 'neutral';
             }
           }
-          
+
           indicatorArray.push({
             indicatorId: key.toUpperCase(),
             value: indicatorValue,
@@ -244,7 +371,7 @@ function transformAgentResultForUI(agent_key, rawResult) {
           });
         }
       });
-      
+
       uiResult.indicators = indicatorArray;
     } else if (Array.isArray(indicators)) {
       // Already in array format
@@ -271,22 +398,22 @@ function transformAgentResultForUI(agent_key, rawResult) {
 // Routes
 // ============================================================================
 
-router.post('/chat', authenticate, rateLimit({ limit: 10, windowMs: 60000 }), async (req, res) => {
+router.post('/chat', authenticate, rateLimit({ limit: 10, windowMs: 60000 }), validateBody(chatBodySchema), validateResponse(agentChatResponseSchema), async (req, res) => {
   try {
     const { message, context } = req.body;
-    
+
     // Validation
     if (!validateMessage(message)) {
       return sendError(res, 'VALIDATION_ERROR', 'Message must be 1-4000 characters', 400);
     }
-    
+
     // Timeout wrapper (25s)
     const response = await withTimeout(
       aiService.askArtemis(message, context),
       25000,
       'AI chat timeout after 25s'
     );
-    
+
     res.json({ text: response });
   } catch (error) {
     logger.error('AI chat error:', error);
@@ -350,7 +477,7 @@ async function runAgentViaRegistry(req, res) {
     let experimentData = null;
     let assignedVariant = null;
     const experimentKey = req.query.experiment || req.body.experiment;
-    
+
     if (experimentKey && req.user?.id) {
       try {
         // Get variant assignment for this user
@@ -363,9 +490,9 @@ async function runAgentViaRegistry(req, res) {
           version: assignment.version,
           is_new_assignment: assignment.is_new_assignment
         };
-        
+
         logger.info(`🧪 [Experiment] User assigned to variant ${assignedVariant} (version ${assignment.version}) for ${experimentKey}`);
-        
+
         // TODO: In future, could dynamically load the assigned version
         // For now, we track metrics for the current version
       } catch (expError) {
@@ -392,7 +519,7 @@ async function runAgentViaRegistry(req, res) {
       // Don't fail request if WebSocket notification fails
       logger.warn(`⚠️ Failed to send WebSocket start notification: ${wsError.message}`);
     }
-    
+
     // Execute via registry with timeout
     const result = await withTimeout(
       agentRegistry.runAgent(agent.agent_key, {
@@ -513,11 +640,11 @@ async function runAgentViaRegistry(req, res) {
       ok: true,
       agent_id: agent.id,
       agent_key: agent.agent_key,
-      
+
       // ✅ TOP-LEVEL fields (UI reads: response.indicators.filter(...))
       ...uiResult,
       indicators: safeIndicators,
-      
+
       // ✅ Backward/Alt compatibility (UI reads: response.result.indicators.filter(...))
       result: {
         ...uiResult,
@@ -531,7 +658,7 @@ async function runAgentViaRegistry(req, res) {
     const isTimeout = error.isTimeout === true;
     const statusCode = isTimeout ? 504 : 500;
     const errorCode = isTimeout ? 'AGENT_TIMEOUT' : 'AI_ERROR';
-    
+
     if (isTimeout) {
       logger.error(`⏱️  [Registry] TIMEOUT ERROR: ${error.agentKey} - ${error.message}`);
     }
@@ -621,14 +748,14 @@ async function runAgentViaRegistry(req, res) {
 // POST /api/ai-agents/:id/run-v2
 // Supports: application/json (default), text/csv (export)
 // ============================================================================
-router.post('/:id/run-v2', authenticate, contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), runAgentViaRegistry);
+router.post('/:id/run-v2', authenticate, contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), validateParams(analyzeParamsSchema), validateBody(analyzeBodySchema), validateResponse(agentAnalysisResponseSchema), runAgentViaRegistry);
 
 // ============================================================================
 // LEGACY /run endpoint - NOW USES REGISTRY (same as /run-v2)
 // POST /api/ai-agents/:id/run
 // Supports: application/json (default), text/csv (export)
 // ============================================================================
-router.post('/:id/run', authenticate, contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), runAgentViaRegistry);
+router.post('/:id/run', authenticate, contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), validateParams(analyzeParamsSchema), validateBody(analyzeBodySchema), validateResponse(agentAnalysisResponseSchema), runAgentViaRegistry);
 
 // ============================================================================
 // OLD LEGACY ROUTE (KEPT FOR REFERENCE - DEPRECATED)
@@ -1133,7 +1260,7 @@ router.post('/:id/command', authenticate, rateLimit({ limit: 20, windowMs: 60000
       WHERE id = $3
     `, [newStatus, isEnabled, id]);
 
-    logger.info(`✅ Agent ${id.substring(0,8)}... ${command} → status: ${newStatus}, enabled: ${isEnabled}`);
+    logger.info(`✅ Agent ${id.substring(0, 8)}... ${command} → status: ${newStatus}, enabled: ${isEnabled}`);
 
     res.json({
       success: true,
@@ -1164,7 +1291,7 @@ router.patch('/:id/config', authenticate, async (req, res) => {
 
     // Get current agent to access agent_key
     const currentAgent = await query('SELECT agent_key, config FROM ai_agents WHERE id = $1', [id]);
-    
+
     if (currentAgent.rows.length === 0) {
       logger.error('❌ Agent not found:', id);
       return sendError(res, 'NOT_FOUND', 'Agent not found', 404);
@@ -1172,7 +1299,7 @@ router.patch('/:id/config', authenticate, async (req, res) => {
 
     const agent_key = currentAgent.rows[0].agent_key;
     const currentConfig = currentAgent.rows[0].config;
-    
+
     // Parse current config
     let existingConfig = {};
     if (currentConfig) {
@@ -1220,13 +1347,13 @@ router.patch('/:id/config', authenticate, async (req, res) => {
 
     const agent = result.rows[0];
     logger.info(`✅ Config updated for ${agent.name} (${agent.agent_key})`);
-    
+
     // Invalidate cache for this agent
     if (agent.agent_key) {
       const deletedKeys = await invalidateAgentCache(agent.agent_key);
       logger.info(`🔄 Invalidated ${deletedKeys} cache entries for ${agent.agent_key}`);
     }
-    
+
     // Config is already parsed by PostgreSQL driver (JSONB -> Object)
     const savedConfig = agent.config;
     logger.info(`✅ Saved config keys:`, Object.keys(savedConfig));
@@ -1254,7 +1381,7 @@ router.get('/:id/details', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
 
-    logger.info(`📊 Fetching details for agent: ${id.substring(0,8)}...`);
+    logger.info(`📊 Fetching details for agent: ${id.substring(0, 8)}...`);
 
     const result = await query(
       `SELECT id, name, type, status, is_enabled, agent_key,
@@ -1338,7 +1465,7 @@ router.get('/:id/details', authenticate, async (req, res) => {
     if (agent.agent_key === 'arbitrage') {
       // Get recent scan from metadata
       const lastScan = metadata?.last_result || null;
-      
+
       // Calculate metrics from last scan
       const metrics = {
         netProfitCapturedUSDT: lastScan?.summary?.totalProfitUSDT || 0,
@@ -1354,15 +1481,15 @@ router.get('/:id/details', authenticate, async (req, res) => {
         executionHistory: [],
         opportunityHistory: []
       };
-      
+
       response.metrics = metrics;
       response.lastScan = lastScan;
     }
-    
+
     // For fundamental, add metrics and lastAnalysis
     if (agent.agent_key === 'fundamental') {
       const lastResult = metadata?.last_result || null;
-      
+
       // Build metrics from last result
       const metrics = {
         totalAnalyses: parseInt(agent.total_decisions, 10) || 0,
@@ -1373,9 +1500,9 @@ router.get('/:id/details', authenticate, async (req, res) => {
         bearishCount: lastResult?.decision === 'sell' ? 1 : 0,
         neutralCount: lastResult?.decision === 'hold' ? 1 : 0
       };
-      
+
       response.metrics = metrics;
-      
+
       // lastAnalysis with full fundamental data
       if (lastResult) {
         response.lastAnalysis = lastResult;
@@ -1390,10 +1517,10 @@ router.get('/:id/details', authenticate, async (req, res) => {
   }
 });
 
-router.get('/manager-overview', authenticate, async (req, res) => {
+router.get('/manager-overview', authenticate, validateResponse(managerOverviewResponseSchema), async (req, res) => {
   try {
     const userId = req.user?.id;
-    
+
     // Get all agents
     let agents = [];
     try {
@@ -1402,7 +1529,7 @@ router.get('/manager-overview', authenticate, async (req, res) => {
     } catch (e) {
       logger.warn('⚠️ Failed to fetch agents:', e);
     }
-    
+
     // Get decision statistics
     let decisionStats = {
       total: 0,
@@ -1433,7 +1560,7 @@ router.get('/manager-overview', authenticate, async (req, res) => {
     } catch (e) {
       logger.warn('⚠️ Failed to fetch decision stats:', e);
     }
-    
+
     // Get Artemis state
     let artemisState = {};
     try {
@@ -1442,7 +1569,7 @@ router.get('/manager-overview', authenticate, async (req, res) => {
     } catch (e) {
       logger.warn('⚠️ Failed to fetch Artemis state:', e);
     }
-    
+
     // Calculate agent performance summary
     const agentSummary = {
       total: agents.length,
@@ -1450,14 +1577,14 @@ router.get('/manager-overview', authenticate, async (req, res) => {
       idle: agents.filter(a => a.status === 'idle').length,
       training: agents.filter(a => a.status === 'training').length,
       error: agents.filter(a => a.status === 'error').length,
-      avgAccuracy: agents.length > 0 
-        ? agents.reduce((sum, a) => sum + (parseFloat(a.accuracy) || 0), 0) / agents.length 
+      avgAccuracy: agents.length > 0
+        ? agents.reduce((sum, a) => sum + (parseFloat(a.accuracy) || 0), 0) / agents.length
         : 0,
       avgPerformance: agents.length > 0
         ? agents.reduce((sum, a) => sum + (parseFloat(a.performance_score) || 0), 0) / agents.length
         : 0
     };
-    
+
     const overview = {
       artemis: {
         status: artemisState.status || 'active',
@@ -1476,7 +1603,7 @@ router.get('/manager-overview', authenticate, async (req, res) => {
       },
       lastUpdated: new Date().toISOString()
     };
-    
+
     res.json(overview);
   } catch (error) {
     logger.error('Failed to fetch manager overview:', error);
@@ -1517,7 +1644,7 @@ router.get('/manager-overview', authenticate, async (req, res) => {
 });
 
 // Get all AI agents
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, validateQuery(listAgentsQuerySchema), validateResponse(agentListResponseSchema), async (req, res) => {
   try {
     const result = await query(
       `SELECT 
@@ -1539,7 +1666,7 @@ router.get('/', authenticate, async (req, res) => {
       FROM ai_agents 
       ORDER BY agent_key`
     );
-    
+
     // Get real-time decision stats for all agents
     const decisionsResult = await query(
       `SELECT 
@@ -1550,126 +1677,14 @@ router.get('/', authenticate, async (req, res) => {
       FROM ai_decisions
       GROUP BY agent_id`
     );
-    
+
     const decisionsMap = new Map(
       decisionsResult.rows.map(d => [d.agent_id, d])
     );
-    
-    // Map DB fields to UI contract
-    const agents = result.rows.map(agent => {
-      // Safe JSON parse
-      const safeParse = (value) => {
-        if (!value) return {};
-        if (typeof value === 'object') return value;
-        try { return JSON.parse(value); } catch { return {}; }
-      };
-      
-      const config = safeParse(agent.config);
-      const metadata = safeParse(agent.metadata);
-      
-      // Status mapping: idle/error -> inactive, active/training -> as-is
-      let mappedStatus = agent.status;
-      if (agent.status === 'idle' || agent.status === 'error') {
-        mappedStatus = 'inactive';
-      }
-      
-      // Extract capabilities from metadata
-      const capabilities = metadata.capabilities || [];
-      const role = metadata.role || 'AI Agent';
-      
-      // Get real decision stats
-      const decisionStats = decisionsMap.get(agent.id) || { total: 0, successful: 0, learning_hours: 0 };
-      const realAccuracy = decisionStats.total > 0 
-        ? (decisionStats.successful / decisionStats.total) * 100 
-        : 0;
-      const learningHours = parseFloat(decisionStats.learning_hours) || 0;
-      
-      // Calculate knowledge size from decision data
-      const avgDecisionSize = 2; // KB per decision (estimate)
-      const knowledgeMB = ((decisionStats.total * avgDecisionSize) / 1024).toFixed(1);
-      
-      // Agent-specific metrics (based on agent type)
-      const baseMetrics = {
-        id: agent.id,
-        agent_key: agent.agent_key,
-        name: agent.name,
-        role,
-        status: mappedStatus,
-        decisions: parseInt(decisionStats.total, 10),
-        capabilities,
-        lastUpdate: agent.updated_at || agent.created_at,
-        // Additional fields for compatibility
-        type: agent.type,
-        is_enabled: agent.is_enabled,
-        config,
-        metadata
-      };
-      
-      // For rule-based agents (fundamental, arbitrage): Don't show ML-specific metrics
-      if (agent.agent_key === 'fundamental') {
-        return {
-          ...baseMetrics,
-          // Hide ML metrics
-          accuracy: null,
-          trainingProgress: null,
-          learningTime: null,
-          knowledgeSize: null,
-          // Fundamental-specific metrics
-          totalAnalyses: parseInt(decisionStats.total, 10),
-          activeHours: parseFloat(learningHours.toFixed(1)),
-          dataStoredMB: parseFloat(knowledgeMB)
-        };
-      }
-      
-      if (agent.agent_key === 'arbitrage') {
-        return {
-          ...baseMetrics,
-          // Hide ML metrics
-          accuracy: null,
-          trainingProgress: null,
-          learningTime: null,
-          knowledgeSize: null,
-          // Arbitrage-specific metrics
-          totalScans: parseInt(decisionStats.total, 10),
-          activeHours: parseFloat(learningHours.toFixed(1)),
-          dataStoredMB: parseFloat(knowledgeMB),
-          // Arbitrage-specific from last scan
-          opportunitiesFound: metadata?.last_result?.summary?.totalOpportunities || 0,
-          totalProfitUSDT: metadata?.last_result?.summary?.totalProfitUSDT || 0
-        };
-      }
-      
-      if (agent.agent_key === 'liquidity') {
-        // Get liquidity-specific metrics from agent_metrics_liquidity table
-        // For now, use basic metrics (will be populated after first run)
-        return {
-          ...baseMetrics,
-          // Hide ML metrics
-          accuracy: null,
-          trainingProgress: null,
-          learningTime: null,
-          knowledgeSize: null,
-          // Liquidity-specific metrics
-          totalScans: parseInt(decisionStats.total, 10),
-          activeHours: parseFloat(learningHours.toFixed(1)),
-          avgLiquidityScore: metadata?.avg_liquidity_score || 0,
-          avgSpread: metadata?.avg_spread || 0,
-          avgSlippage50k: metadata?.avg_slippage_50k || 0,
-          riskLevel: metadata?.current_risk_level || 'low',
-          alertsTriggered: metadata?.alerts_count || 0
-        };
-      }
-      
-      // For ML agents: Show all metrics
-      return {
-        ...baseMetrics,
-        accuracy: parseFloat(realAccuracy.toFixed(1)),
-        trainingProgress: decisionStats.total > 0 ? 100 : 0,
-        learningTime: learningHours.toFixed(1) + 'h',
-        knowledgeSize: knowledgeMB + 'MB'
-      };
-    });
-    
+
+    // Map DB fields to UI contract using a shared helper
+    const agents = result.rows.map(agent => transformAgent(agent, decisionsMap.get(agent.id)));
+
     // Wrap in { agents: [...] } for UI compatibility
     res.json({ agents });
   } catch (error) {
@@ -1684,7 +1699,7 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // Get AI agent by ID
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, validateParams(getAgentParamsSchema), validateResponse(agentResponseSchema), async (req, res) => {
   try {
     const result = await query(
       'SELECT * FROM ai_agents WHERE id = $1',
@@ -1693,14 +1708,24 @@ router.get('/:id', authenticate, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'AI agent not found' });
     }
-    res.json(result.rows[0]);
+    const decisionsResult = await query(
+      `SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE was_successful = true) as successful,
+        EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))/3600 as learning_hours
+      FROM ai_decisions
+      WHERE agent_id = $1`,
+      [req.params.id]
+    );
+
+    res.json(transformAgent(result.rows[0], decisionsResult.rows[0]));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch AI agent' });
   }
 });
 
 // Update AI agent
-router.patch('/:id', authenticate, async (req, res) => {
+router.patch('/:id', authenticate, validateParams(updateAgentParamsSchema), validateBody(updateAgentBodySchema), validateResponse(agentResponseSchema), async (req, res) => {
   try {
     const { status, config, is_enabled } = req.body;
     const updates = [];

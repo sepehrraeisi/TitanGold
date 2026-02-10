@@ -3,6 +3,12 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import { getMixtureDecision } from '../services/artemisOrchestrator.js';
 import { logger } from '../services/logger.js';
+import { validateBody, validateParams, validateResponse } from '../middleware/validation.js';
+import {
+  artemisHealthResponseSchema,
+  artemisStateResponseSchema,
+  artemisDecisionResponseSchema
+} from '../schemas/artemisSchemas.js';
 
 const router = express.Router();
 
@@ -24,21 +30,21 @@ async function logDecision(level, message, metadata = {}) {
 // GET /api/artemis/health
 // Check all AI providers status (DB-driven)
 // ============================================
-router.get('/health', authenticate, async (req, res) => {
+router.get('/health', authenticate, validateResponse(artemisHealthResponseSchema), async (req, res) => {
   try {
     const { getProviderHealth, getProviderInstances, getQuorum } = await import('../services/providerPool.js');
     const { PROVIDER_DEFAULTS } = await import('../services/providerDefaults.js');
-    
+
     // Get DB health summary
     const healthSummary = await getProviderHealth();
     const allInstances = await getProviderInstances();
-    
+
     // Group instances by provider
     const providerStatus = {};
     for (const [key, defaults] of Object.entries(PROVIDER_DEFAULTS)) {
       const summary = healthSummary.find(h => h.provider === key);
       const instances = allInstances.filter(i => i.provider === key);
-      
+
       providerStatus[key] = {
         name: defaults.name,
         totalKeys: parseInt(summary?.total_keys || 0),
@@ -52,9 +58,9 @@ router.get('/health', authenticate, async (req, res) => {
         defaultModel: defaults.defaultModel
       };
     }
-    
+
     const quorum = getQuorum(allInstances.length);
-    
+
     return res.json({
       providers: providerStatus,
       activeInstances: allInstances.length,
@@ -71,10 +77,10 @@ router.get('/health', authenticate, async (req, res) => {
     });
   }
 });
-router.get('/state', authenticate, async (req, res) => {
+router.get('/state', authenticate, validateResponse(artemisStateResponseSchema), async (req, res) => {
   try {
     const userId = req.user?.id;
-    
+
     // 🎯 Get user's trading mode from user_preferences (per-user)
     let userMode = 'demo';
     try {
@@ -89,7 +95,7 @@ router.get('/state', authenticate, async (req, res) => {
     } catch (modeError) {
       logger.warn('⚠️ Failed to get user trading mode, defaulting to demo:', modeError);
     }
-    
+
     // Get Artemis state from database (global state)
     let artemisState;
     try {
@@ -103,7 +109,7 @@ router.get('/state', authenticate, async (req, res) => {
         throw dbError;
       }
     }
-    
+
     // Get AI agents status
     let agents = [];
     try {
@@ -112,7 +118,7 @@ router.get('/state', authenticate, async (req, res) => {
     } catch (e) {
       logger.warn('⚠️ Failed to fetch AI agents:', e);
     }
-    
+
     // Get recent decisions count
     let decisionStats = {
       total: 0,
@@ -137,7 +143,7 @@ router.get('/state', authenticate, async (req, res) => {
     } catch (e) {
       logger.warn('⚠️ Failed to fetch decision stats:', e);
     }
-    
+
     // Build full state object
     const fullState = {
       status: artemisState.status || 'active',
@@ -178,7 +184,7 @@ router.get('/state', authenticate, async (req, res) => {
       created_at: artemisState.created_at,
       updated_at: artemisState.updated_at
     };
-    
+
     res.json(fullState);
   } catch (error) {
     logger.error('Failed to fetch Artemis state:', error);
@@ -215,11 +221,11 @@ router.get('/state', authenticate, async (req, res) => {
   }
 });
 
-router.patch('/state', authenticate, async (req, res) => {
+router.patch('/state', authenticate, validateResponse(artemisStateResponseSchema), async (req, res) => {
   try {
     const userId = req.user?.id;
     const { status, mode, strategy, config } = req.body;
-    
+
     // 🎯 If mode is being updated, save it to user_preferences (per-user)
     if (mode !== undefined) {
       try {
@@ -240,19 +246,19 @@ router.patch('/state', authenticate, async (req, res) => {
         throw modeError;
       }
     }
-    
+
     // Also update global artemis_state (for backward compatibility)
     const result = await query(
       'UPDATE artemis_state SET status = COALESCE($1, status), mode = COALESCE($2, mode), strategy = COALESCE($3, strategy), config = COALESCE($4, config), updated_at = NOW() RETURNING *',
       [status, mode, strategy, config ? JSON.stringify(config) : null]
     );
-    
+
     // Return updated state (but with user's mode)
     const updatedState = result.rows[0];
     if (mode !== undefined) {
       updatedState.mode = mode;
     }
-    
+
     res.json(updatedState);
   } catch (error) {
     logger.error('Failed to update Artemis state:', error);
@@ -272,14 +278,14 @@ router.get('/scenarios', authenticate, async (req, res) => {
 });
 
 // Decision endpoint for Trading Engine integration
-router.post('/decision', authenticate, async (req, res) => {
+router.post('/decision', authenticate, validateResponse(artemisDecisionResponseSchema), async (req, res) => {
   try {
     const { opportunity, signals, context } = req.body;
-    
+
     // Get Artemis state
     const stateResult = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');
     const artemisState = stateResult.rows[0];
-    
+
     if (!artemisState || artemisState.status !== 'active') {
       const payload = {
         action: 'HOLD',
@@ -321,7 +327,7 @@ router.post('/decision', authenticate, async (req, res) => {
 
     // منطق ساده قبلی به عنوان fallback
     const baseApproved = opportunity.confidence >= minConfidence;
-    
+
     // Check if we have enough capacity
     if (context && context.activeTrades >= context.maxTrades) {
       const payload = {
@@ -407,13 +413,13 @@ router.post('/decision', authenticate, async (req, res) => {
           : 'SELL'
         : 'HOLD',
       approved: finalApproved,
-      reason: finalApproved 
+      reason: finalApproved
         ? `High confidence opportunity (${totalConfidence.toFixed(
-            1
-          )}%) with ${signalCount} agent signals`
+          1
+        )}%) with ${signalCount} agent signals`
         : `Confidence ${totalConfidence.toFixed(
-            1
-          )}% below threshold ${minConfidence}%`,
+          1
+        )}% below threshold ${minConfidence}%`,
       confidence: totalConfidence,
       signals: signalCount,
     };
@@ -430,7 +436,7 @@ router.post('/decision', authenticate, async (req, res) => {
     return res.json(payload);
   } catch (error) {
     logger.error('Artemis decision error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       action: 'HOLD',
       approved: false,
       reason: 'Decision engine error',
@@ -505,15 +511,15 @@ router.patch('/config/decision-engine', authenticate, authorize('admin'), async 
 router.get('/logs', authenticate, async (req, res) => {
   try {
     const { limit = 50, offset = 0, level, category } = req.query;
-    
+
     let whereClause = "category = 'artemis_decision'";
     const params = [parseInt(limit), parseInt(offset)];
-    
+
     if (level) {
       whereClause += " AND level = $3";
       params.push(level);
     }
-    
+
     const result = await query(
       `SELECT id, level, category, message, metadata, created_at 
        FROM system_logs 
@@ -522,7 +528,7 @@ router.get('/logs', authenticate, async (req, res) => {
        LIMIT $1 OFFSET $2`,
       params
     );
-    
+
     // Also get AI decisions for decision-specific logs
     const decisionsResult = await query(
       `SELECT id, agent_id, input, output, was_successful, confidence, created_at 
@@ -531,7 +537,7 @@ router.get('/logs', authenticate, async (req, res) => {
        LIMIT $1`,
       [parseInt(limit)]
     );
-    
+
     res.json({
       systemLogs: result.rows || [],
       decisions: decisionsResult.rows || [],
@@ -547,7 +553,7 @@ router.get('/logs', authenticate, async (req, res) => {
 router.delete('/logs', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { days = 30 } = req.query;
-    
+
     // Delete old system logs
     const systemResult = await query(
       `DELETE FROM system_logs 
@@ -555,14 +561,14 @@ router.delete('/logs', authenticate, authorize('admin'), async (req, res) => {
        AND created_at < NOW() - INTERVAL '${parseInt(days)} days'
        RETURNING id`
     );
-    
+
     // Delete old AI decisions
     const decisionsResult = await query(
       `DELETE FROM ai_decisions 
        WHERE created_at < NOW() - INTERVAL '${parseInt(days)} days'
        RETURNING id`
     );
-    
+
     res.json({
       message: 'Logs cleared successfully',
       systemLogsDeleted: systemResult.rows?.length || 0,
@@ -578,10 +584,10 @@ router.delete('/logs', authenticate, authorize('admin'), async (req, res) => {
 router.put('/config', authenticate, authorize('admin'), async (req, res) => {
   try {
     const updates = req.body;
-    
+
     // Get latest Artemis state
     const stateResult = await query('SELECT id, config FROM artemis_state ORDER BY created_at DESC LIMIT 1');
-    
+
     if (stateResult.rows.length === 0) {
       // Create initial state if not exists
       const createResult = await query(
@@ -592,10 +598,10 @@ router.put('/config', authenticate, authorize('admin'), async (req, res) => {
       );
       return res.json(createResult.rows[0]);
     }
-    
+
     const { id, config } = stateResult.rows[0];
     const currentConfig = config || {};
-    
+
     // Deep merge configs
     const newConfig = {
       ...currentConfig,
@@ -605,12 +611,12 @@ router.put('/config', authenticate, authorize('admin'), async (req, res) => {
         ...(updates.decisionEngine || {}),
       },
     };
-    
+
     const updateResult = await query(
       'UPDATE artemis_state SET config = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
       [JSON.stringify(newConfig), id]
     );
-    
+
     res.json(updateResult.rows[0]);
   } catch (error) {
     logger.error('Failed to update Artemis config:', error);
@@ -685,16 +691,16 @@ router.get('/learning', authenticate, async (req, res) => {
         totalMistakes: mistakesResult.rows.length,
         learnedMistakes,
         pendingMistakes: mistakesResult.rows.length - learnedMistakes,
-        autoGenerated: improvementsResult.rows.filter(i => i.source === 'auto').length + 
-                       mistakesResult.rows.filter(m => m.source === 'auto').length,
-        manualAnnotations: improvementsResult.rows.filter(i => i.source !== 'auto').length + 
-                           mistakesResult.rows.filter(m => m.source !== 'auto').length
+        autoGenerated: improvementsResult.rows.filter(i => i.source === 'auto').length +
+          mistakesResult.rows.filter(m => m.source === 'auto').length,
+        manualAnnotations: improvementsResult.rows.filter(i => i.source !== 'auto').length +
+          mistakesResult.rows.filter(m => m.source !== 'auto').length
       },
       lastUpdated: new Date().toISOString()
     });
   } catch (error) {
     logger.error('Failed to fetch learning system:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch learning system',
       improvements: [],
       mistakes: [],
@@ -725,7 +731,7 @@ router.patch('/learning/mistake/:id/mark-learned', authenticate, async (req, res
 router.post('/learning/event', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { eventType, agentId, area, method, impact, correction, metadata } = req.body;
-    
+
     const result = await query(`
       INSERT INTO ai_learning_events (
         event_type, agent_id, area, method, impact, correction, source, metadata
@@ -807,7 +813,7 @@ router.get('/orchestration', authenticate, async (req, res) => {
     for (const agent of agentsResult.rows) {
       const agentTasksForAgent = tasksResult.rows.filter(t => t.agent_id === agent.id);
       const taskCount = agentTasksForAgent.length;
-      
+
       // Calculate resource metrics
       const avgExecutionTime = taskCount > 0
         ? agentTasksForAgent.reduce((sum, t) => sum + (t.execution_time_ms || 0), 0) / taskCount
@@ -831,7 +837,7 @@ router.get('/orchestration', authenticate, async (req, res) => {
     });
   } catch (error) {
     logger.error('Failed to fetch orchestration state:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch orchestration state',
       activeAgents: 0,
       agentTasks: [],

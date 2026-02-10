@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DataSource, DataCategory, AIAgent } from '../../../../../../types.ts';
+import { DataSource, DataCategory, AIAgent } from '../../../../../../types';
 
 const TelegramPublisherModal: React.FC<{
     publisher?: any;

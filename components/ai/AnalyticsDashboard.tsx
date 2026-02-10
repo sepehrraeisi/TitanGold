@@ -33,13 +33,13 @@ const AnalyticsDashboard: React.FC = () => {
                     api.fetchAIAgents(),
                     api.fetchArtemisState(),
                 ]);
-            setData(analyticsData);
+                setData(analyticsData);
                 setAgents(agentsData);
                 setArtemis(artemisState);
             } catch (e) {
                 console.error('Failed to load analytics:', e);
             } finally {
-            setIsLoading(false);
+                setIsLoading(false);
             }
         };
         fetchData();
@@ -63,8 +63,8 @@ const AnalyticsDashboard: React.FC = () => {
         // Filter by search query
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
-            filtered = filtered.filter(a => 
-                a.name.toLowerCase().includes(query) || 
+            filtered = filtered.filter(a =>
+                a.name.toLowerCase().includes(query) ||
                 a.id.toLowerCase().includes(query)
             );
         }
@@ -96,7 +96,7 @@ const AnalyticsDashboard: React.FC = () => {
             }
 
             if (typeof aVal === 'string' && typeof bVal === 'string') {
-                return sortOrder === 'asc' 
+                return sortOrder === 'asc'
                     ? aVal.localeCompare(bVal)
                     : bVal.localeCompare(aVal);
             }
@@ -118,7 +118,7 @@ const AnalyticsDashboard: React.FC = () => {
 
     const trendData = useMemo(() => {
         if (!data) return { precision: [], recall: [], accuracy: [] };
-        
+
         // Generate trend data from precision/recall arrays (no random jitter)
         const days = data.resourceUsage.precision.length;
         return {
@@ -226,7 +226,22 @@ const AnalyticsDashboard: React.FC = () => {
                 a.click();
                 URL.revokeObjectURL(url);
             } else if (format === 'pdf') {
-                alert(t('pdf_export_coming_soon') || 'PDF export coming soon!');
+                // Add a temporary print class to handle high-fidelity PDF generation via browser print
+                const style = document.createElement('style');
+                style.innerHTML = `@media print { 
+                    body * { visibility: hidden; } 
+                    #analytics-content, #analytics-content * { visibility: visible; }
+                    #analytics-content { position: absolute; left: 0; top: 0; width: 100%; }
+                    .no-print { display: none !important; }
+                    .bg-card { border: 1px solid #ddd !important; break-inside: avoid; }
+                }`;
+                document.head.appendChild(style);
+
+                // Add id to main container if not exists, or just print
+                window.print();
+
+                // Cleanup
+                document.head.removeChild(style);
             }
         } catch (e) {
             console.error('Export failed:', e);
@@ -244,7 +259,7 @@ const AnalyticsDashboard: React.FC = () => {
             </div>
         );
     }
-    
+
     if (!data) {
         return (
             <div className="text-center p-10 text-red-400">
@@ -262,7 +277,7 @@ const AnalyticsDashboard: React.FC = () => {
     ];
 
     return (
-        <div className="space-y-6">
+        <div id="analytics-content" className="space-y-6">
             {/* Header */}
             <div className="bg-card border border-border rounded-lg p-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -295,11 +310,10 @@ const AnalyticsDashboard: React.FC = () => {
                                 const newInterval = refreshInterval ? null : 30000;
                                 setRefreshInterval(newInterval);
                             }}
-                            className={`px-3 py-2 rounded text-sm font-semibold transition-colors ${
-                                refreshInterval
-                                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                                    : 'bg-secondary hover:bg-accent text-secondary-foreground'
-                            }`}
+                            className={`px-3 py-2 rounded text-sm font-semibold transition-colors ${refreshInterval
+                                ? 'bg-green-600 hover:bg-green-700 text-white'
+                                : 'bg-secondary hover:bg-accent text-secondary-foreground'
+                                }`}
                         >
                             {refreshInterval ? t('auto_refresh_on') || 'Auto: ON' : t('auto_refresh_off') || 'Auto: OFF'}
                         </button>
@@ -339,11 +353,10 @@ const AnalyticsDashboard: React.FC = () => {
                         <button
                             key={mode.id}
                             onClick={() => setViewMode(mode.id)}
-                            className={`py-4 px-6 border-b-2 text-sm font-medium transition-colors whitespace-nowrap ${
-                                viewMode === mode.id
-                                    ? 'border-purple-500 text-purple-400'
-                                    : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
-                            }`}
+                            className={`py-4 px-6 border-b-2 text-sm font-medium transition-colors whitespace-nowrap ${viewMode === mode.id
+                                ? 'border-purple-500 text-purple-400'
+                                : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
+                                }`}
                         >
                             <span className="mr-2">{mode.icon}</span>
                             {mode.label}
@@ -413,18 +426,18 @@ const OverviewView: React.FC<{
     ];
 
     const agentDistributionPercentages = {
-        active: (data.realtime.agentDistribution.active / 
-            (data.realtime.agentDistribution.active + 
-             data.realtime.agentDistribution.training + 
-             data.realtime.agentDistribution.offline || 1)) * 100,
-        training: (data.realtime.agentDistribution.training / 
-            (data.realtime.agentDistribution.active + 
-             data.realtime.agentDistribution.training + 
-             data.realtime.agentDistribution.offline || 1)) * 100,
-        offline: (data.realtime.agentDistribution.offline / 
-            (data.realtime.agentDistribution.active + 
-             data.realtime.agentDistribution.training + 
-             data.realtime.agentDistribution.offline || 1)) * 100,
+        active: (data.realtime.agentDistribution.active /
+            (data.realtime.agentDistribution.active +
+                data.realtime.agentDistribution.training +
+                data.realtime.agentDistribution.offline || 1)) * 100,
+        training: (data.realtime.agentDistribution.training /
+            (data.realtime.agentDistribution.active +
+                data.realtime.agentDistribution.training +
+                data.realtime.agentDistribution.offline || 1)) * 100,
+        offline: (data.realtime.agentDistribution.offline /
+            (data.realtime.agentDistribution.active +
+                data.realtime.agentDistribution.training +
+                data.realtime.agentDistribution.offline || 1)) * 100,
     };
 
     return (
@@ -458,7 +471,7 @@ const OverviewView: React.FC<{
             </div>
 
             {/* Performance Metrics */}
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
                     label={t('total_decisions') || 'Total Decisions'}
                     value={data.performance.totalDecisions.toLocaleString()}
@@ -532,21 +545,20 @@ const OverviewView: React.FC<{
                         </div>
                     </div>
                 </Card>
-             </div>
-             
+            </div>
+
             {/* Top Agents & Agent Distribution */}
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card title={t('top_performing_agents') || 'Top Performing Agents'}>
                     <div className="space-y-3">
                         {topAgents.map((agent, idx) => (
                             <div key={agent.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors">
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                                        idx === 0 ? 'bg-yellow-500/20 text-yellow-400' :
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${idx === 0 ? 'bg-yellow-500/20 text-yellow-400' :
                                         idx === 1 ? 'bg-gray-400/20 text-gray-400' :
-                                        idx === 2 ? 'bg-orange-500/20 text-orange-400' :
-                                        'bg-purple-500/20 text-purple-400'
-                                    }`}>
+                                            idx === 2 ? 'bg-orange-500/20 text-orange-400' :
+                                                'bg-purple-500/20 text-purple-400'
+                                        }`}>
                                         {idx + 1}
                                     </div>
                                     <div>
@@ -556,11 +568,10 @@ const OverviewView: React.FC<{
                                         </p>
                                     </div>
                                 </div>
-                                <div className={`px-2 py-1 rounded text-xs font-semibold ${
-                                    agent.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                                <div className={`px-2 py-1 rounded text-xs font-semibold ${agent.status === 'active' ? 'bg-green-500/20 text-green-400' :
                                     agent.status === 'training' ? 'bg-yellow-500/20 text-yellow-400' :
-                                    'bg-red-500/20 text-red-400'
-                                }`}>
+                                        'bg-red-500/20 text-red-400'
+                                    }`}>
                                     {t(agent.status)}
                                 </div>
                             </div>
@@ -609,7 +620,7 @@ const OverviewView: React.FC<{
                         </div>
                     </div>
                 </Card>
-             </div>
+            </div>
         </div>
     );
 };
@@ -691,9 +702,8 @@ const AgentsView: React.FC<{
                                 agents.map((agent, idx) => (
                                     <tr
                                         key={agent.id}
-                                        className={`border-b border-border hover:bg-secondary/30 transition-colors ${
-                                            idx % 2 === 0 ? 'bg-background/20' : ''
-                                        }`}
+                                        className={`border-b border-border hover:bg-secondary/30 transition-colors ${idx % 2 === 0 ? 'bg-background/20' : ''
+                                            }`}
                                     >
                                         <td className="px-4 py-3 font-semibold">{agent.name}</td>
                                         <td className="px-4 py-3 text-center">
@@ -701,11 +711,10 @@ const AgentsView: React.FC<{
                                                 <span>{agent.accuracy}%</span>
                                                 <div className="w-24 bg-secondary rounded-full h-2">
                                                     <div
-                                                        className={`h-full rounded-full transition-all ${
-                                                            agent.accuracy >= 90 ? 'bg-green-500' :
+                                                        className={`h-full rounded-full transition-all ${agent.accuracy >= 90 ? 'bg-green-500' :
                                                             agent.accuracy >= 80 ? 'bg-yellow-500' :
-                                                            'bg-red-500'
-                                                        }`}
+                                                                'bg-red-500'
+                                                            }`}
                                                         style={{ width: `${agent.accuracy}%` }}
                                                     ></div>
                                                 </div>
@@ -724,15 +733,14 @@ const AgentsView: React.FC<{
                                             </div>
                                         </td>
                                         <td className="px-4 py-3 text-center">
-                                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                agent.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                                            <span className={`px-2 py-1 rounded text-xs font-semibold ${agent.status === 'active' ? 'bg-green-500/20 text-green-400' :
                                                 agent.status === 'training' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                'bg-red-500/20 text-red-400'
-                                            }`}>
+                                                    'bg-red-500/20 text-red-400'
+                                                }`}>
                                                 {t(agent.status)}
                                             </span>
                                         </td>
-                                </tr>
+                                    </tr>
                                 ))
                             )}
                         </tbody>
@@ -824,11 +832,10 @@ const ComparisonView: React.FC<{
                             key={agent.id}
                             onClick={() => toggleAgent(agent.id)}
                             disabled={!selectedAgents.includes(agent.id) && selectedAgents.length >= 5}
-                            className={`p-3 border rounded-lg text-left transition-all ${
-                                selectedAgents.includes(agent.id)
-                                    ? 'border-purple-500 bg-purple-500/10'
-                                    : 'border-border hover:border-purple-500/50'
-                            } ${!selectedAgents.includes(agent.id) && selectedAgents.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`p-3 border rounded-lg text-left transition-all ${selectedAgents.includes(agent.id)
+                                ? 'border-purple-500 bg-purple-500/10'
+                                : 'border-border hover:border-purple-500/50'
+                                } ${!selectedAgents.includes(agent.id) && selectedAgents.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             <div className="flex items-center justify-between">
                                 <span className="font-semibold text-foreground">{agent.name}</span>
@@ -888,16 +895,15 @@ const InsightsView: React.FC<{
                         insights.map((insight, idx) => (
                             <div
                                 key={idx}
-                                className={`p-4 rounded-lg border ${
-                                    insight.type === 'warning' ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300' :
+                                className={`p-4 rounded-lg border ${insight.type === 'warning' ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300' :
                                     insight.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-300' :
-                                    'bg-blue-500/10 border-blue-500/30 text-blue-300'
-                                }`}
+                                        'bg-blue-500/10 border-blue-500/30 text-blue-300'
+                                    }`}
                             >
                                 <div className="flex items-start gap-3">
                                     <span className="text-xl">
                                         {insight.type === 'warning' ? '⚠️' :
-                                         insight.type === 'success' ? '✅' : 'ℹ️'}
+                                            insight.type === 'success' ? '✅' : 'ℹ️'}
                                     </span>
                                     <p className="flex-1">{insight.message}</p>
                                 </div>
@@ -1003,7 +1009,7 @@ const StatCard: React.FC<{
 }> = ({ label, value, icon, trend }) => (
     <div className="bg-card border border-border p-6 rounded-lg hover:border-purple-500/50 transition-all">
         <div className="flex items-center justify-between mb-2">
-        <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-sm text-muted-foreground">{label}</p>
             {icon && <span className="text-2xl">{icon}</span>}
         </div>
         <div className="flex items-center gap-2">

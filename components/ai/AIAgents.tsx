@@ -8,6 +8,7 @@ import LoadingSpinner, { AgentLoadingSpinner } from '../ui/LoadingSpinner';
 import SkeletonLoader, { AgentListSkeleton } from '../ui/SkeletonLoader';
 import { useAgentFavorites } from '../../hooks/useAgentFavorites';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useWebSocket, WebSocketMessage } from '../../hooks/useWebSocket.ts';
 
 const AIAgents: React.FC = () => {
     const { t } = useLanguage();
@@ -16,11 +17,11 @@ const AIAgents: React.FC = () => {
     const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
     const [error, setError] = useState<string | null>(null);
     const { isFavorite, toggleFavorite } = useAgentFavorites();
-    
+
     // Search and filter state
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
-    
+
     // Debounced search term (300ms delay)
     const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -46,8 +47,51 @@ const AIAgents: React.FC = () => {
 
     const handleAgentUpdate = (updatedAgent: AIAgent) => {
         setAgents(prev => prev.map(a => a.id === updatedAgent.id ? updatedAgent : a));
-        setSelectedAgent(updatedAgent);
+        // Only update selected agent if it's the one being updated
+        setSelectedAgent(prev => prev && prev.id === updatedAgent.id ? updatedAgent : prev);
     };
+
+    // 🚀 WebSocket for Real-time Agent Updates
+    const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token') || undefined;
+
+    const getWebSocketUrl = () => {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        return `${protocol}//${host}/ws/agents`;
+    };
+
+    const { isConnected, send } = useWebSocket({
+        url: getWebSocketUrl(),
+        token: authToken,
+        onMessage: (message: WebSocketMessage) => {
+            if (message.type === 'agent_update' && message.data) {
+                const agentData = message.data;
+                // If it's a status change or result, we might need to refetch or update locally
+                // For now, let's update the local agent state if the data is complete
+                if (agentData.agent_id) {
+                    setAgents(prev => prev.map(a => {
+                        if (a.id === agentData.agent_id) {
+                            return {
+                                ...a,
+                                status: agentData.new_status || a.status,
+                                accuracy: agentData.result?.confidence * 100 || a.accuracy,
+                                lastUpdate: new Date().toISOString()
+                            };
+                        }
+                        return a;
+                    }));
+                }
+            } else if (message.type === 'connected') {
+                // Subscribe to all agent updates
+                send({
+                    type: 'subscribe',
+                    payload: { channel: 'agent:*' }
+                });
+            }
+        },
+        onConnect: () => console.log('✅ WebSocket connected for Agent updates'),
+        onError: (err) => console.error('❌ Agent WebSocket error:', err)
+    });
 
     // Extract unique categories from agents
     const categories = useMemo(() => {
@@ -58,22 +102,22 @@ const AIAgents: React.FC = () => {
     // Filter and search agents
     const filteredAgents = useMemo(() => {
         let filtered = [...agents];
-        
+
         // Apply category filter
         if (selectedCategory !== 'all') {
             filtered = filtered.filter(agent => agent.role === selectedCategory);
         }
-        
+
         // Apply search filter
         if (debouncedSearchTerm.trim()) {
             const searchLower = debouncedSearchTerm.toLowerCase();
-            filtered = filtered.filter(agent => 
+            filtered = filtered.filter(agent =>
                 agent.name.toLowerCase().includes(searchLower) ||
                 agent.role.toLowerCase().includes(searchLower) ||
                 agent.capabilities.some(cap => cap.toLowerCase().includes(searchLower))
             );
         }
-        
+
         return filtered;
     }, [agents, selectedCategory, debouncedSearchTerm]);
 
@@ -82,11 +126,11 @@ const AIAgents: React.FC = () => {
         return [...filteredAgents].sort((a, b) => {
             const aFav = isFavorite(a.id);
             const bFav = isFavorite(b.id);
-            
+
             // Favorites first
             if (aFav && !bFav) return -1;
             if (!aFav && bFav) return 1;
-            
+
             // Then sort by name
             return a.name.localeCompare(b.name);
         });
@@ -184,7 +228,7 @@ const AIAgents: React.FC = () => {
                 {/* Results Count */}
                 {(debouncedSearchTerm || selectedCategory !== 'all') && (
                     <div className="text-sm text-muted-foreground">
-                        {t('showing_results', { count: sortedAgents.length, total: agents.length }) || 
+                        {t('showing_results', { count: sortedAgents.length, total: agents.length }) ||
                             `Showing ${sortedAgents.length} of ${agents.length} agents`}
                     </div>
                 )}
@@ -225,7 +269,7 @@ const AIAgents: React.FC = () => {
                     )}
                 </div>
             )}
-            
+
             {/* Lazy-loaded agent control panel with loading spinner */}
             {selectedAgent && agentRegistryEntry && (
                 <ErrorBoundary fallbackTitle={agentRegistryEntry.fallbackTitle}>
@@ -248,16 +292,16 @@ const AIAgents: React.FC = () => {
     );
 };
 
-const AgentCard: React.FC<{ 
-    agent: AIAgent; 
+const AgentCard: React.FC<{
+    agent: AIAgent;
     onOpenControlPanel: () => void;
     isFavorite: boolean;
     onToggleFavorite: () => void;
 }> = ({ agent, onOpenControlPanel, isFavorite, onToggleFavorite }) => {
     const { t } = useLanguage();
-    
+
     return (
-         <div className="bg-card border border-border rounded-lg p-4 flex flex-col justify-between relative">
+        <div className="bg-card border border-border rounded-lg p-4 flex flex-col justify-between relative">
             {/* Favorite Star Icon */}
             <button
                 onClick={(e) => {
@@ -270,12 +314,12 @@ const AgentCard: React.FC<{
             >
                 {isFavorite ? '⭐' : '☆'}
             </button>
-            
+
             <div>
                 <div className="flex justify-between items-start pr-8">
                     <div>
-                         <h3 className="font-bold text-foreground">{agent.name}: {agent.role}</h3>
-                         <p className={`text-xs font-semibold ${agent.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>{t(agent.status)}</p>
+                        <h3 className="font-bold text-foreground">{agent.name}: {agent.role}</h3>
+                        <p className={`text-xs font-semibold ${agent.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>{t(agent.status)}</p>
                     </div>
                     <div className="text-right">
                         <p className="text-xl font-bold text-purple-400">{agent.accuracy.toFixed(1)}%</p>
@@ -288,41 +332,41 @@ const AgentCard: React.FC<{
                     <Metric label={t('learning_time_hours')} value={agent.learningTime.toLocaleString()} />
                     <Metric label={t('knowledge_size_mb')} value={`${agent.knowledgeSize.toFixed(1)}MB`} />
                 </div>
-                 <div>
+                <div>
                     <h4 className="text-xs font-semibold text-muted-foreground mb-1">{t('capabilities')}</h4>
                     <div className="flex flex-wrap gap-1">
                         {agent.capabilities.map(c => <span key={c} className="text-xs bg-secondary px-2 py-0.5 rounded">{c}</span>)}
                     </div>
-                 </div>
+                </div>
             </div>
             <div className="mt-4 pt-3 border-t border-border flex justify-between items-center">
-                 <button
-                     onClick={onOpenControlPanel}
-                     className="text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold py-1 px-3 rounded-md"
-                 >
-                     {t('control_panel')}
-                 </button>
-                 <span className="text-xs text-muted-foreground">{t('last_update')}: {new Date(agent.lastUpdate).toLocaleTimeString()}</span>
+                <button
+                    onClick={onOpenControlPanel}
+                    className="text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold py-1 px-3 rounded-md"
+                >
+                    {t('control_panel')}
+                </button>
+                <span className="text-xs text-muted-foreground">{t('last_update')}: {new Date(agent.lastUpdate).toLocaleTimeString()}</span>
             </div>
         </div>
     )
 };
 
-const Metric: React.FC<{label: string, value: string}> = ({label, value}) => (
+const Metric: React.FC<{ label: string, value: string }> = ({ label, value }) => (
     <div className="flex justify-between items-center">
         <span className="text-muted-foreground">{label}</span>
         <span className="font-semibold text-foreground">{value}</span>
     </div>
 );
 
-const ProgressBar: React.FC<{label: string, value: number}> = ({ label, value }) => (
+const ProgressBar: React.FC<{ label: string, value: number }> = ({ label, value }) => (
     <div>
         <div className="flex justify-between text-xs mb-1">
             <span className="text-muted-foreground">{label}</span>
             <span className="text-foreground font-semibold">{value.toFixed(1)}%</span>
         </div>
         <div className="w-full bg-secondary rounded-full h-1.5">
-            <div className="bg-purple-500 h-1.5 rounded-full" style={{width: `${value}%`}}></div>
+            <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: `${value}%` }}></div>
         </div>
     </div>
 );

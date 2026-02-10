@@ -42,10 +42,23 @@ export const agentTypeSchema = z.enum([
   'liquidity',
   'risk',
   'fundamental',
-  'market_timing'
+  'market_timing',
+  'technical_analysis',
+  'fundamental_analysis',
+  'liquidity_analysis',
+  'market_intelligence',
+  'optimization',
+  'order_management',
+  'pattern_recognition',
+  'portfolio_management',
+  'sentiment_analysis',
+  'timing',
+  'trend_detection',
+  'volume_analysis',
+  'risk_management'
 ], {
-  errorMap: () => ({ 
-    message: 'Invalid agent type. Must be one of: technical, sentiment, pattern, price_prediction, arbitrage, portfolio, liquidity, risk, fundamental, market_timing' 
+  errorMap: () => ({
+    message: 'Invalid agent type.'
   }),
 });
 
@@ -55,8 +68,119 @@ export const agentStatusSchema = z.enum(['active', 'paused', 'archived'], {
 });
 
 // Confidence score (0-1)
-export const confidenceSchema = z.number().min(0).max(1, { 
-  message: 'Confidence must be between 0 and 1' 
+export const confidenceSchema = z.number().min(0).max(1, {
+  message: 'Confidence must be between 0 and 1'
+});
+
+// ============================================================================
+// RESPONSE SCHEMAS
+// ============================================================================
+
+export const baseAgentResponseSchema = z.object({
+  id: agentIdSchema,
+  agent_key: z.string().optional(),
+  name: z.string(),
+  type: agentTypeSchema,
+  status: agentStatusSchema,
+  performanceScore: z.number().optional().nullable().default(0),
+  accuracy: z.number().optional().nullable().default(0),
+  enabled: z.boolean().optional().default(true),
+  last_active_at: z.string().datetime().or(z.date()).transform(val => val ? new Date(val).toISOString() : null).optional().nullable(),
+  created_at: z.string().datetime().or(z.date()).transform(val => val ? new Date(val).toISOString() : null).optional().nullable(),
+  updated_at: z.string().datetime().or(z.date()).transform(val => val ? new Date(val).toISOString() : null).optional().nullable(),
+  // UI fields added in transformation
+  role: z.string().optional(),
+  decisions: z.number().optional(),
+  capabilities: z.array(z.string()).optional(),
+  lastUpdate: z.union([z.string(), z.date()]).optional().nullable(),
+  trainingProgress: z.number().optional().nullable(),
+  learningTime: z.string().optional().nullable(),
+  knowledgeSize: z.string().optional().nullable()
+});
+
+export const agentResponseSchema = baseAgentResponseSchema.extend({
+  config: z.record(z.any()).optional().default({}),
+  metadata: z.record(z.any()).optional().default({}),
+});
+
+export const agentListResponseSchema = z.object({
+  agents: z.array(baseAgentResponseSchema),
+  total: z.number().int().optional(),
+  limit: z.number().int().optional(),
+  offset: z.number().int().optional()
+});
+
+export const indicatorResponseSchema = z.object({
+  indicatorId: z.string(),
+  value: z.number(),
+  signal: z.enum(['buy', 'sell', 'neutral']),
+  weight: z.number().optional().default(50)
+});
+
+export const agentAnalysisResponseSchema = z.object({
+  timestamp: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString()),
+  symbol: z.string().optional().default('UNKNOWN'),
+  timeframe: timeframeSchema.optional().default('1h'),
+  signal: z.enum(['buy', 'sell', 'hold', 'neutral', 'long', 'short']).optional().transform(val => val ? val.toLowerCase() : 'neutral'),
+  confidence: confidenceSchema.optional().default(0.5),
+  indicators: z.array(indicatorResponseSchema).optional().default([]),
+  reasoning: z.string().optional(),
+
+  // Specific agent segments
+  opportunities: z.array(z.any()).optional(),
+  riskAlerts: z.array(z.any()).optional(),
+  summary: z.record(z.any()).optional(),
+
+  // Fundamental specific
+  decision: z.string().optional(),
+  averageScore: z.number().optional(),
+  marketSummary: z.record(z.any()).optional(),
+  alerts: z.array(z.any()).optional(),
+  score: z.record(z.any()).optional(),
+
+  _meta: z.object({
+    source: z.string(),
+    version: z.string()
+  }).optional().default({ source: 'real', version: '1.0.0' })
+});
+
+export const agentChatResponseSchema = z.object({
+  message: z.string(),
+  context: z.record(z.any()).optional(),
+  timestamp: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString())
+});
+
+export const managerOverviewResponseSchema = z.object({
+  artemis: z.object({
+    status: z.string(),
+    mode: z.string(),
+    strategy: z.string(),
+    overallAccuracy: z.number(),
+    totalDecisions: z.number().int(),
+    successfulDecisions: z.number().int()
+  }),
+  agents: z.object({
+    total: z.number().int(),
+    active: z.number().int(),
+    idle: z.number().int(),
+    training: z.number().int(),
+    error: z.number().int(),
+    avgAccuracy: z.number(),
+    avgPerformance: z.number()
+  }),
+  decisions: z.object({
+    total: z.number().int(),
+    successful: z.number().int(),
+    accuracy: z.number(),
+    recent24h: z.number().int(),
+    recent7d: z.number().int()
+  }),
+  systemHealth: z.object({
+    cpu: z.number(),
+    memory: z.number(),
+    apiQuota: z.number()
+  }),
+  lastUpdated: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString())
 });
 
 // ============================================================================
@@ -131,8 +255,8 @@ export const chatParamsSchema = z.object({
 });
 
 export const chatBodySchema = z.object({
-  message: z.string().min(1).max(4000, { 
-    message: 'Message must be 1-4000 characters' 
+  message: z.string().min(1).max(4000, {
+    message: 'Message must be 1-4000 characters'
   }),
   context: z.object({
     symbol: symbolSchema.optional(),
@@ -198,8 +322,8 @@ export const pricePredictionConfigSchema = z.object({
 
 export const arbitrageConfigSchema = z.object({
   symbol: symbolSchema,
-  exchanges: z.array(z.string().min(1)).min(2, { 
-    message: 'At least 2 exchanges required for arbitrage' 
+  exchanges: z.array(z.string().min(1)).min(2, {
+    message: 'At least 2 exchanges required for arbitrage'
   }),
   minProfitPercent: z.number().positive().max(100).optional().default(0.5),
   includeFees: z.boolean().optional().default(true),
@@ -210,8 +334,8 @@ export const arbitrageConfigSchema = z.object({
 // ============================================================================
 
 export const portfolioAllocationConfigSchema = z.object({
-  assets: z.array(symbolSchema).min(2, { 
-    message: 'At least 2 assets required for portfolio allocation' 
+  assets: z.array(symbolSchema).min(2, {
+    message: 'At least 2 assets required for portfolio allocation'
   }),
   strategy: z.enum(['equal_weight', 'market_cap', 'risk_parity', 'mean_variance']).optional().default('mean_variance'),
   riskTolerance: z.enum(['low', 'medium', 'high']).optional().default('medium'),
@@ -255,7 +379,7 @@ export const agentPerformanceQuerySchema = z.object({
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
   metrics: z.array(z.enum([
-    'accuracy', 'precision', 'recall', 'f1_score', 
+    'accuracy', 'precision', 'recall', 'f1_score',
     'profit_loss', 'sharpe_ratio', 'win_rate'
   ])).optional(),
 });
@@ -309,7 +433,7 @@ export default {
   agentTypeSchema,
   agentStatusSchema,
   confidenceSchema,
-  
+
   // CRUD
   listAgentsQuerySchema,
   getAgentParamsSchema,
@@ -317,13 +441,13 @@ export default {
   updateAgentParamsSchema,
   updateAgentBodySchema,
   deleteAgentParamsSchema,
-  
+
   // Analysis
   analyzeParamsSchema,
   analyzeBodySchema,
   chatParamsSchema,
   chatBodySchema,
-  
+
   // Specific analyses
   technicalAnalysisConfigSchema,
   sentimentAnalysisConfigSchema,
@@ -333,12 +457,20 @@ export default {
   portfolioAllocationConfigSchema,
   liquidityAnalysisConfigSchema,
   riskAssessmentConfigSchema,
-  
+
   // Performance & Training
   agentPerformanceQuerySchema,
   trainAgentParamsSchema,
   trainAgentBodySchema,
-  
+
   // Batch
   batchAnalyzeBodySchema,
+
+  // Responses
+  baseAgentResponseSchema,
+  agentResponseSchema,
+  agentListResponseSchema,
+  agentAnalysisResponseSchema,
+  agentChatResponseSchema,
+  managerOverviewResponseSchema
 };

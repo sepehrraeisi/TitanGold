@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DataSource } from '../../../../../../types.ts';
+import { DataSource } from '../../../../../../types';
 
 const WebCrawlerModal: React.FC<{
     crawler?: any;

@@ -3,6 +3,8 @@
 
 import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
+import { runDataFetchJob } from '../jobs/dataFetchScheduler.js';
+import { maintenanceService } from '../services/maintenance.js';
 
 class SchedulerService {
     constructor() {
@@ -17,7 +19,7 @@ class SchedulerService {
             },
             dataHub: {
                 enabled: true,
-                interval: 2 * 60 * 1000, // 2 minutes
+                interval: parseInt(process.env.DATAHUB_FETCH_INTERVAL_MS) || 2 * 60 * 1000, // 2 minutes default
                 autoRefresh: true,
                 autoNormalize: true
             },
@@ -35,6 +37,11 @@ class SchedulerService {
                 enabled: true,
                 interval: 1 * 60 * 1000, // 1 minute
                 autoDecisions: true
+            },
+            maintenance: {
+                enabled: true,
+                interval: 24 * 60 * 60 * 1000, // 24 hours
+                autoRun: true
             }
         };
     }
@@ -58,6 +65,7 @@ class SchedulerService {
             this.startTrainingScheduler();
             this.startAnalyticsScheduler();
             this.startArtemisScheduler();
+            this.startMaintenanceScheduler();
 
             logger.info('✅ All schedulers initialized');
         } catch (error) {
@@ -69,7 +77,7 @@ class SchedulerService {
 
     async stop() {
         this.isRunning = false;
-        
+
         // Clear all intervals
         this.intervals.forEach((intervalId) => {
             clearInterval(intervalId);
@@ -85,7 +93,7 @@ class SchedulerService {
             const result = await query(
                 'SELECT config FROM scheduler_config WHERE id = 1'
             );
-            
+
             if (result.rows.length > 0 && result.rows[0].config) {
                 this.config = { ...this.config, ...result.rows[0].config };
             }
@@ -144,13 +152,13 @@ class SchedulerService {
 
             try {
                 logger.info('🤖 Running scheduled agent executions...');
-                
+
                 for (let i = 0; i < agentIds.length; i++) {
                     const agentId = agentIds[i];
                     const funcName = agentFunctions[i];
-                    
+
                     // Check if agent is enabled
-                    if (this.config.agents.agents.length > 0 && 
+                    if (this.config.agents.agents.length > 0 &&
                         !this.config.agents.agents.includes(agentId)) {
                         continue;
                     }
@@ -158,7 +166,7 @@ class SchedulerService {
                     try {
                         // Execute agent function
                         await this.executeAgentFunction(agentId, funcName);
-                        
+
                         // Small delay between agents to avoid overload
                         await new Promise(resolve => setTimeout(resolve, 2000));
                     } catch (error) {
@@ -185,7 +193,7 @@ class SchedulerService {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ function: funcName })
             });
-            
+
             if (!response.ok) {
                 throw new Error(`API call failed: ${response.status}`);
             }
@@ -206,35 +214,7 @@ class SchedulerService {
             if (!this.isRunning || !this.config.dataHub.enabled) return;
 
             try {
-                logger.info('📊 Refreshing Data Hub sources...');
-                
-                // Get all active data sources
-                const dataHubState = await this.fetchDataHubState();
-                
-                if (dataHubState && dataHubState.sources) {
-                    for (const source of dataHubState.sources) {
-                        if (!source.enabled) continue;
-
-                        try {
-                            // Refresh source data
-                            if (this.config.dataHub.autoRefresh) {
-                                await this.refreshDataSource(source.id);
-                            }
-
-                            // Normalize data if enabled
-                            if (this.config.dataHub.autoNormalize && source.normalize) {
-                                await this.normalizeDataSource(source.id);
-                            }
-
-                            // Small delay between sources
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        } catch (error) {
-                            logger.error(`❌ Failed to refresh source ${source.id}:`, error);
-                        }
-                    }
-                }
-
-                logger.info('✅ Data Hub refresh cycle completed');
+                await runDataFetchJob();
             } catch (error) {
                 logger.error('❌ Data Hub scheduler error:', error);
             }
@@ -242,39 +222,6 @@ class SchedulerService {
 
         this.intervals.set('dataHub', intervalId);
         logger.info(`✅ Data Hub Scheduler started (interval: ${this.config.dataHub.interval / 1000}s)`);
-    }
-
-    async fetchDataHubState() {
-        try {
-            const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/artemis/data-hub`);
-            if (response.ok) {
-                return await response.json();
-            }
-            return null;
-        } catch (error) {
-            logger.error('Failed to fetch Data Hub state:', error);
-            return null;
-        }
-    }
-
-    async refreshDataSource(sourceId) {
-        try {
-            await fetch(`http://localhost:${process.env.PORT || 5001}/api/data-sources/${sourceId}/refresh`, {
-                method: 'POST'
-            });
-        } catch (error) {
-            logger.error(`Failed to refresh source ${sourceId}:`, error);
-        }
-    }
-
-    async normalizeDataSource(sourceId) {
-        try {
-            await fetch(`http://localhost:${process.env.PORT || 5001}/api/data-sources/${sourceId}/normalize`, {
-                method: 'POST'
-            });
-        } catch (error) {
-            logger.error(`Failed to normalize source ${sourceId}:`, error);
-        }
     }
 
     // Training Scheduler - Auto-schedule training sessions
@@ -290,10 +237,10 @@ class SchedulerService {
             try {
                 if (this.config.training.autoSchedule) {
                     logger.info('🎓 Checking for training opportunities...');
-                    
+
                     // Check if any agents need training
                     const trainingData = await this.fetchTrainingData();
-                    
+
                     if (trainingData && trainingData.recommendations) {
                         for (const recommendation of trainingData.recommendations) {
                             if (recommendation.priority === 'high' || recommendation.priority === 'critical') {
@@ -395,23 +342,54 @@ class SchedulerService {
         logger.info(`✅ Artemis Scheduler started (interval: ${this.config.artemis.interval / 1000}s)`);
     }
 
+    // Maintenance Scheduler - Auto-run daily maintenance
+    startMaintenanceScheduler() {
+        if (!this.config.maintenance.enabled) {
+            logger.info('⏸️ Maintenance Scheduler is disabled');
+            return;
+        }
+
+        const intervalId = setInterval(async () => {
+            if (!this.isRunning || !this.config.maintenance.enabled) return;
+
+            try {
+                if (this.config.maintenance.autoRun) {
+                    await maintenanceService.runFullSiteMaintenance();
+                }
+            } catch (error) {
+                logger.error('❌ Maintenance scheduler error:', error);
+            }
+        }, this.config.maintenance.interval);
+
+        this.intervals.set('maintenance', intervalId);
+        logger.info(`✅ Maintenance Scheduler started (interval: ${this.config.maintenance.interval / (1000 * 60 * 60)}h)`);
+
+        // Run once on startup after a small delay
+        setTimeout(() => {
+            if (this.isRunning && this.config.maintenance.autoRun) {
+                maintenanceService.runFullSiteMaintenance();
+            }
+        }, 30000); // 30 seconds after startup
+    }
+
     // Update configuration
     async updateConfig(section, updates) {
         if (this.config[section]) {
             this.config[section] = { ...this.config[section], ...updates };
             await this.saveConfig();
-            
+
             // Restart affected scheduler
             if (this.intervals.has(section)) {
                 clearInterval(this.intervals.get(section));
                 this.intervals.delete(section);
-                
+
                 // Restart scheduler
                 if (section === 'agents') this.startAgentScheduler();
                 else if (section === 'dataHub') this.startDataHubScheduler();
                 else if (section === 'training') this.startTrainingScheduler();
                 else if (section === 'analytics') this.startAnalyticsScheduler();
                 else if (section === 'artemis') this.startArtemisScheduler();
+                else if (section === 'maintenance') this.startMaintenanceScheduler();
             }
         }
     }

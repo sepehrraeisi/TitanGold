@@ -25,3 +25,14 @@
     scrollbar-width: thin;
     scrollbar-color: rgba(107, 114, 128, 0.5) transparent;
 }
+
+/* Shimmer Animation */
+@keyframes shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.animate-shimmer {
+    animation: shimmer 2s infinite;
+}

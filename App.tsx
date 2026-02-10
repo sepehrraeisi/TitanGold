@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Dashboard from './components/Dashboard.tsx';
 import Login from './components/Login.tsx';
 import { LanguageProvider } from './context/LanguageContext.tsx';
@@ -42,7 +43,7 @@ const AppContent: React.FC = () => {
         setUser(sessionUser);
       } else {
         console.log('⚠️ No session found');
-        
+
         // Development fallback: Auto-login with mock user in dev mode
         // This helps during frontend development when backend is not available
         if (import.meta.env.DEV && window.location.search.includes('dev-login')) {
@@ -67,10 +68,10 @@ const AppContent: React.FC = () => {
   const handleLogin = async (username: string, pass: string) => {
     setAuthError(null);
     console.log('🔐 Attempting login with backend API...');
-    
+
     // Use real backend API for login
     const loggedInUser = await loginWithBackend(username, pass);
-    
+
     if (loggedInUser) {
       console.log('✅ Login successful, user:', loggedInUser);
       setUser(loggedInUser);
@@ -80,7 +81,7 @@ const AppContent: React.FC = () => {
       if (import.meta.env.DEV) {
         console.warn('⚠️ Backend login failed, using development fallback');
         console.warn('💡 This is a temporary development mode. Backend connection is required in production.');
-        
+
         // Create a mock user for development
         const mockUser: User = {
           id: 'dev-user-' + Date.now(),
@@ -89,13 +90,13 @@ const AppContent: React.FC = () => {
           username: username || 'dev',
           role: 'Admin' as const,
         };
-        
+
         // Store mock user in session
         sessionStorage.setItem('titan_user', JSON.stringify(mockUser));
         localStorage.setItem('titan_user', JSON.stringify(mockUser));
         sessionStorage.setItem('titan_token', 'dev-token-' + Date.now());
         localStorage.setItem('titan_token', 'dev-token-' + Date.now());
-        
+
         console.log('✅ Development mode: Mock user created', mockUser);
         setUser(mockUser);
       } else {
@@ -104,7 +105,7 @@ const AppContent: React.FC = () => {
       }
     }
   };
-  
+
   const handleLogout = () => {
     console.log('👋 Logging out...');
     logoutUser(); // Clear session storage
@@ -131,14 +132,26 @@ const AppContent: React.FC = () => {
 };
 
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      refetchOnWindowFocus: true,
+      retry: 1,
+    },
+  },
+});
+
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <LanguageProvider>
-        <AppProvider>
-          <AppContent />
-        </AppProvider>
-      </LanguageProvider>
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider>
+          <AppProvider>
+            <AppContent />
+          </AppProvider>
+        </LanguageProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 };

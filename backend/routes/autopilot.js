@@ -15,6 +15,12 @@ import { rateLimit } from 'express-rate-limit';
 import { query } from '../database/db.js';
 import autopilotService from '../services/autopilot.js';
 import { logger } from '../services/logger.js';
+import { validateBody, validateParams, validateQuery, validateResponse } from '../middleware/validation.js';
+import {
+  autopilotStatusResponseSchema,
+  autopilotSuggestionListResponseSchema,
+  autopilotSuggestionSchema
+} from '../schemas/autopilotSchemas.js';
 
 const router = express.Router();
 
@@ -40,7 +46,7 @@ const requireAdmin = async (req, res, next) => {
     );
 
     if (result.rows.length === 0 || result.rows[0].role !== 'admin') {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Admin access required',
         code: 'FORBIDDEN'
       });
@@ -64,7 +70,7 @@ router.use(autopilotLimiter);
  * GET /api/autopilot/status
  * Get current autopilot status
  */
-router.get('/status', async (req, res) => {
+router.get('/status', validateResponse(autopilotStatusResponseSchema), async (req, res) => {
   try {
     const result = await query(
       `SELECT 
@@ -187,7 +193,7 @@ router.post('/disable', async (req, res) => {
  * GET /api/autopilot/suggestions
  * Get all autopilot suggestions
  */
-router.get('/suggestions', async (req, res) => {
+router.get('/suggestions', validateResponse(autopilotSuggestionListResponseSchema), async (req, res) => {
   try {
     const { status, agent_id, limit = 50 } = req.query;
 
@@ -235,7 +241,7 @@ router.get('/suggestions', async (req, res) => {
  * POST /api/autopilot/suggestions/:id/approve
  * Approve and apply a suggestion
  */
-router.post('/suggestions/:id/approve', async (req, res) => {
+router.post('/suggestions/:id/approve', validateResponse(autopilotSuggestionSchema), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -252,11 +258,11 @@ router.post('/suggestions/:id/approve', async (req, res) => {
 
   } catch (error) {
     logger.error('[Autopilot] Error approving suggestion:', error);
-    
+
     if (error.message.includes('not found')) {
       return res.status(404).json({ error: 'Suggestion not found' });
     }
-    
+
     if (error.message.includes('already')) {
       return res.status(400).json({ error: error.message });
     }

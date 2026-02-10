@@ -12,6 +12,10 @@ View your app in AI Studio: https://ai.studio/apps/temp/1
 
 **Prerequisites:**  Node.js
 
+## Documentation
+
+- **[Architecture Overview](ARCHITECTURE.md)**: High-level system design, components, and security model.
+- **[User Guide](USER_GUIDE.md)**: Manual for traders and administrators.
 
 1. Install dependencies:
    `npm install`

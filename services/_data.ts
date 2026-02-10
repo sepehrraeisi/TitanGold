@@ -48,6 +48,7 @@ import type {
     WalletTransaction,
     GoldPageData,
     DataSource,
+    AutomationDataSource,
     TelegramPublisherConfig,
     Workflow,
     AutopilotState,
@@ -1033,7 +1034,7 @@ const aiAgents: AIAgent[] = Array.from({ length: 15 }, (_, i) => ({
     knowledgeSize: Math.random() * 4000,
     level: 'Expert',
     capabilities: ['Capability A', 'Capability B', 'Capability C'],
-    lastUpdate: `2023-11-26, ${Math.floor(Math.random()*24)}:${Math.floor(Math.random()*60)}`,
+    lastUpdate: `2023-11-26, ${Math.floor(Math.random() * 24)}:${Math.floor(Math.random() * 60)}`,
 }));
 
 const aiProviders: AIProvider[] = [
@@ -1441,12 +1442,15 @@ const userManagement: UserManagementData = {
         },
     ],
     availableRoles: [
-        { roleKey: 'role_admin', descriptionKey: 'role_admin_desc' },
-        { roleKey: 'role_trader', descriptionKey: 'role_trader_desc' },
-        { roleKey: 'role_analyst', descriptionKey: 'role_analyst_desc' },
+        { roleKey: 'role_admin', descriptionKey: 'role_admin_desc', permissions: [] },
+        { roleKey: 'role_trader', descriptionKey: 'role_trader_desc', permissions: [] },
+        { roleKey: 'role_analyst', descriptionKey: 'role_analyst_desc', permissions: [] },
     ],
     defaultRoleKey: 'role_trader',
     lastUpdated: new Date().toISOString(),
+    registrationEnabled: true,
+    registrationDefaultRole: 'role_trader',
+    activityLog: [],
 };
 
 const generateGoldSeries = (points: number, minutesStep: number, startPrice: number, volatility: number) => {
@@ -1698,7 +1702,7 @@ const automationSettings = {
         { id: '1', type: 'Telegram Channel', value: '@CryptoNews', status: 'connected' },
         { id: '2', type: 'News Website', value: 'https://cointelegraph.com', status: 'connected' },
         { id: '3', type: 'Custom API', value: 'https://api.someprovider.com/data', status: 'error' },
-    ] as DataSource[],
+    ] as AutomationDataSource[],
     telegramConfigs: [
         {
             id: '1',
@@ -1763,7 +1767,7 @@ const automationSettings = {
                 { type: 'send_telegram_post', target: '@vip_signals', parameters: { content: 'Executing automated trade based on high-impact BTC news.' } },
             ]
         },
-         {
+        {
             id: '2',
             name: 'Gold Price Spike Alert',
             enabled: false,

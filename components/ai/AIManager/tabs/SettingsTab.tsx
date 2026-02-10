@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import * as api from '../../../../services/api.ts';
-import { ArtemisConfig, ArtemisState } from '../../../../types.ts';
-import { OnNavigateHandler } from '../../../../types/navigation.ts';
-import { useAppContext } from '../../../../context/AppContext.tsx';
-import { isAdminRole } from '../../../../utils/auth.ts';
-import SchedulerSettings from '../../SchedulerSettings.tsx';
+import * as api from '../../../../services/api';
+import { ArtemisConfig, ArtemisState } from '../../../../types';
+import { OnNavigateHandler } from '../../../../types/navigation';
+import { useAppContext } from '../../../../context/AppContext';
+import { isAdminRole } from '../../../../utils/auth';
+import SchedulerSettings from '../../SchedulerSettings';
 
 type Props = {
     artemis: ArtemisState;
@@ -41,7 +41,7 @@ const RedirectCard: React.FC<RedirectCardProps> = ({
 }) => {
     const handleOpenSettings = () => {
         if (!isAdmin) return;
-        
+
         if (onNavigate) {
             onNavigate({
                 view: 'settings',
@@ -186,7 +186,7 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate 
     const safeInitialConfig = useMemo(() => {
         const defaults = getDefaultConfig();
         const raw = artemis.config || {};
-        
+
         return {
             decisionEngine: { ...defaults.decisionEngine, ...(raw.decisionEngine || {}) },
             learning: { ...defaults.learning, ...(raw.learning || {}) },
@@ -378,11 +378,10 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate 
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-2 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
-                                activeTab === tab.id
+                            className={`px-4 py-2 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id
                                     ? 'border-purple-500 text-purple-400'
                                     : 'border-transparent text-muted-foreground hover:text-foreground'
-                            }`}
+                                }`}
                         >
                             <span className="mr-2">{tab.icon}</span>
                             {tab.label}
@@ -420,7 +419,7 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate 
                                     <input
                                         type="checkbox"
                                         checked={config.learning.activeLearning}
-                                        onChange={(e) => setConfig({...config, learning: {...config.learning, activeLearning: e.target.checked}})}
+                                        onChange={(e) => setConfig({ ...config, learning: { ...config.learning, activeLearning: e.target.checked } })}
                                         className="w-4 h-4"
                                     />
                                     <label className="text-sm text-foreground">{t('active_learning') || 'Active Learning'}</label>
@@ -429,7 +428,7 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate 
                                     <input
                                         type="checkbox"
                                         checked={config.learning.autoRetrain}
-                                        onChange={(e) => setConfig({...config, learning: {...config.learning, autoRetrain: e.target.checked}})}
+                                        onChange={(e) => setConfig({ ...config, learning: { ...config.learning, autoRetrain: e.target.checked } })}
                                         className="w-4 h-4"
                                     />
                                     <label className="text-sm text-foreground">{t('auto_retrain') || 'Auto Retrain'}</label>
@@ -439,7 +438,7 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate 
                                     <input
                                         type="number"
                                         value={config.learning.retrainInterval}
-                                        onChange={(e) => setConfig({...config, learning: {...config.learning, retrainInterval: parseInt(e.target.value) || 24}})}
+                                        onChange={(e) => setConfig({ ...config, learning: { ...config.learning, retrainInterval: parseInt(e.target.value) || 24 } })}
                                         className="w-full p-2 bg-secondary border border-border rounded text-foreground"
                                         min="1"
                                     />
@@ -449,7 +448,7 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate 
                                     <input
                                         type="number"
                                         value={config.learning.minAccuracyForRetrain}
-                                        onChange={(e) => setConfig({...config, learning: {...config.learning, minAccuracyForRetrain: parseInt(e.target.value) || 70}})}
+                                        onChange={(e) => setConfig({ ...config, learning: { ...config.learning, minAccuracyForRetrain: parseInt(e.target.value) || 70 } })}
                                         className="w-full p-2 bg-secondary border border-border rounded text-foreground"
                                         min="0"
                                         max="100"
@@ -459,7 +458,7 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate 
                                     <input
                                         type="checkbox"
                                         checked={config.learning.backtestBeforeRetrain}
-                                        onChange={(e) => setConfig({...config, learning: {...config.learning, backtestBeforeRetrain: e.target.checked}})}
+                                        onChange={(e) => setConfig({ ...config, learning: { ...config.learning, backtestBeforeRetrain: e.target.checked } })}
                                         className="w-4 h-4"
                                     />
                                     <label className="text-sm text-foreground">{t('backtest_before_retrain') || 'Backtest Before Retrain'}</label>
@@ -541,7 +540,7 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate 
                                     <label className="block text-sm text-muted-foreground mb-1">{t('language') || 'Language'}</label>
                                     <select
                                         value={config.ui.language}
-                                        onChange={(e) => setConfig({...config, ui: {...config.ui, language: e.target.value as 'en' | 'fa'}})}
+                                        onChange={(e) => setConfig({ ...config, ui: { ...config.ui, language: e.target.value as 'en' | 'fa' } })}
                                         className="w-full p-2 bg-secondary border border-border rounded text-foreground"
                                     >
                                         <option value="en">{t('english') || 'English'}</option>
@@ -552,7 +551,7 @@ const SettingsTab: React.FC<Props> = ({ artemis, t, onRefresh, Card, onNavigate 
                                     <label className="block text-sm text-muted-foreground mb-1">{t('theme') || 'Theme'}</label>
                                     <select
                                         value={config.ui.theme}
-                                        onChange={(e) => setConfig({...config, ui: {...config.ui, theme: e.target.value as 'dark' | 'light'}})}
+                                        onChange={(e) => setConfig({ ...config, ui: { ...config.ui, theme: e.target.value as 'dark' | 'light' } })}
                                         className="w-full p-2 bg-secondary border border-border rounded text-foreground"
                                     >
                                         <option value="dark">{t('dark') || 'Dark'}</option>

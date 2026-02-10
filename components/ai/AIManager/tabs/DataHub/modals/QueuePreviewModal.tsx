@@ -1,5 +1,5 @@
 import React from 'react';
-import { PublisherQueueItem, AgentTopicRoute, NormalizedDataRecord, AIAgent, TelegramPublisher } from '../../../../../../types.ts';
+import { PublisherQueueItem, AgentTopicRoute, NormalizedDataRecord, AIAgent, TelegramPublisher } from '../../../../../../types';
 
 const QueuePreviewModal: React.FC<{
     item: PublisherQueueItem;

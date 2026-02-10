@@ -32,14 +32,14 @@ try {
   // Build the node-pg-migrate command
   const npmBin = 'npx';
   const migrateBin = 'node-pg-migrate';
-  
+
   let cmd;
   switch (command) {
     case 'up':
-      cmd = `${npmBin} ${migrateBin} up`;
+      cmd = `${npmBin} ${migrateBin} up --migrations-dir database/migrations --no-check-order`;
       break;
     case 'down':
-      cmd = `${npmBin} ${migrateBin} down`;
+      cmd = `${npmBin} ${migrateBin} down --migrations-dir database/migrations --no-check-order`;
       break;
     case 'create':
       const name = args[0];
@@ -47,7 +47,7 @@ try {
         logger.error('❌ Migration name required: npm run migrate:create <name>');
         process.exit(1);
       }
-      cmd = `${npmBin} ${migrateBin} create ${name}`;
+      cmd = `${npmBin} ${migrateBin} create ${name} --migrations-dir database/migrations`;
       break;
     case 'status':
       // Custom status implementation since node-pg-migrate doesn't have a status command
@@ -55,20 +55,20 @@ try {
       process.exit(0);
       break;
     case 'redo':
-      cmd = `${npmBin} ${migrateBin} redo`;
+      cmd = `${npmBin} ${migrateBin} redo --migrations-dir database/migrations`;
       break;
     default:
       logger.error(`❌ Unknown command: ${command}`);
       logger.error('Available commands: up, down, create, status, redo');
       process.exit(1);
   }
-  
+
   // Execute the migration command
   execSync(cmd, {
     stdio: 'inherit',
     env: { ...process.env },
   });
-  
+
   logger.info('\n✅ Migration command completed');
 } catch (error) {
   logger.error('\n❌ Migration failed:', error.message);
@@ -82,11 +82,11 @@ async function showMigrationStatus() {
       FROM pgmigrations 
       ORDER BY run_on DESC
     `);
-    
+
     logger.info('📊 Migration Status');
     logger.info('═'.repeat(70));
     logger.info(`\nTotal migrations applied: ${rows.length}\n`);
-    
+
     if (rows.length > 0) {
       logger.info('Recent migrations:');
       rows.slice(0, 10).forEach((row, index) => {
@@ -94,14 +94,14 @@ async function showMigrationStatus() {
         logger.info(`  ${index + 1}. ${row.name}`);
         logger.info(`     Applied: ${date}`);
       });
-      
+
       if (rows.length > 10) {
         logger.info(`\n  ... and ${rows.length - 10} more`);
       }
     } else {
       logger.info('No migrations have been applied yet.');
     }
-    
+
     logger.info('\n' + '═'.repeat(70));
   } catch (error) {
     logger.error('❌ Failed to get migration status:', error.message);

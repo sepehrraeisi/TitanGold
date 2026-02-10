@@ -10,6 +10,10 @@ import authSchemas from './authSchemas.js';
 import userSchemas from './userSchemas.js';
 import portfolioSchemas from './portfolioSchemas.js';
 import tradeSchemas from './tradeSchemas.js';
+import artemisSchemas from './artemisSchemas.js';
+import autopilotSchemas from './autopilotSchemas.js';
+import * as dataHubSchemas from './dataHubSchemas.js';
+import accessControlSchemas from './accessControlSchemas.js';
 
 export {
   agentSchemas,
@@ -17,6 +21,10 @@ export {
   userSchemas,
   portfolioSchemas,
   tradeSchemas,
+  artemisSchemas,
+  autopilotSchemas,
+  dataHubSchemas,
+  accessControlSchemas
 };
 
 // Re-export validation middleware
