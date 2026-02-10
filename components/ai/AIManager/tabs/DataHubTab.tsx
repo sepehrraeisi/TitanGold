@@ -12,6 +12,7 @@ import { useDataHub } from './DataHub/hooks/useDataHub';
 import ErrorBoundary from '../../../common/ErrorBoundary';
 import SkeletonLoader from '../../../common/SkeletonLoader';
 import ApiWrapper from '../../../common/ApiWrapper';
+import ErrorNotification from './DataHub/components/ErrorNotification';
 
 interface Props {
     artemis: ArtemisState;
@@ -84,6 +85,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         setLogsError,
         isLoadingHealth,
         isLoadingLogs,
+        currentError,
+        clearError,
     } = useDataHub(artemis, onRefresh, t);
 
     if (isLoading && !dataHub) {
@@ -146,6 +149,13 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
     return (
         <ApiWrapper error={dataHubError} setError={() => { }} isLoading={isLoading}>
             <div className="space-y-6">
+                {/* Error Notification */}
+                {currentError && (
+                    <ErrorNotification
+                        error={currentError}
+                        onClose={clearError}
+                    />
+                )}
 
                 {/* Overview Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
