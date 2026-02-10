@@ -9,6 +9,7 @@ import { withRetry, CircuitBreaker } from './utils/retry';
 import { rateLimiters, getRateLimiterStats, globalRateLimiter } from './utils/rateLimit';
 import { getSessionFromDB, saveSessionToDB, getSessionStats } from './utils/sessionManager';
 import { decryptSecret } from '../../backend/utils/crypto.js';
+import { processMessage, batchProcessMessages, enrichMessage, isDuplicate } from './utils/dataValidator';
 
 dotenv.config();
 
@@ -360,6 +361,8 @@ app.get('/telegram/:channel/recent', rateLimiters.strict, async (req, res) => {
     try {
         const { channel } = req.params;
         const limit = parseInt(req.query.limit as string) || 20;
+        const validate = req.query.validate !== 'false'; // default true
+        const normalize = req.query.normalize !== 'false'; // default true
 
         const sessionString = process.env.TELEGRAM_SESSION_STRING;
         if (!sessionString) {
@@ -385,17 +388,68 @@ app.get('/telegram/:channel/recent', rateLimiters.strict, async (req, res) => {
                     text: msg.message,
                     date: msg.date,
                     views: msg.views,
-                    forwards: msg.forwards
+                    forwards: msg.forwards,
+                    media: msg.media ? { type: msg.media.className } : undefined,
+                    replyTo: msg.replyTo?.replyToMsgId,
+                    edited: msg.editDate
                 }));
 
                 await client.disconnect();
 
+                // Process messages with validation and normalization
+                let processedMessages = formattedMessages;
+                let validationSummary = null;
+                let normalizedData = null;
+
+                if (validate || normalize) {
+                    const batchResults = batchProcessMessages(formattedMessages);
+                    
+                    // Validation summary
+                    const validCount = batchResults.filter(r => r.validation.valid).length;
+                    const errorCount = batchResults.filter(r => !r.validation.valid).length;
+                    const warningCount = batchResults.filter(r => r.validation.warnings.length > 0).length;
+
+                    validationSummary = {
+                        total: formattedMessages.length,
+                        valid: validCount,
+                        invalid: errorCount,
+                        warnings: warningCount,
+                        errors: batchResults
+                            .filter(r => !r.validation.valid)
+                            .map(r => ({
+                                index: r.index,
+                                message_id: formattedMessages[r.index].id,
+                                errors: r.validation.errors
+                            }))
+                    };
+
+                    // Add normalized data if requested
+                    if (normalize) {
+                        normalizedData = batchResults
+                            .filter(r => r.validation.valid && r.normalized)
+                            .map(r => ({
+                                raw_message_id: formattedMessages[r.index].id,
+                                normalized: enrichMessage(r.normalized!),
+                                content_hash: r.contentHash
+                            }));
+                    }
+
+                    // Filter out invalid messages if validating
+                    if (validate) {
+                        processedMessages = formattedMessages.filter((_, index) => 
+                            batchResults[index].validation.valid
+                        );
+                    }
+                }
+
                 return {
                     channel,
-                    messages: formattedMessages,
-                    count: formattedMessages.length,
+                    messages: processedMessages,
+                    count: processedMessages.length,
                     cached: false,
-                    fetchedAt: new Date().toISOString()
+                    fetchedAt: new Date().toISOString(),
+                    validation: validationSummary,
+                    normalized: normalizedData
                 };
             }, {
                 maxRetries: 3,
@@ -423,6 +477,57 @@ app.get('/telegram/:channel/recent', rateLimiters.strict, async (req, res) => {
         res.status(500).json({ 
             error: 'Failed to fetch channel messages',
             message: error.message 
+        });
+    }
+});
+
+// Validate message data
+app.post('/api/telegram-collector/validate', rateLimiters.lenient, async (req, res) => {
+    try {
+        const { message, batch } = req.body;
+
+        if (batch && Array.isArray(batch)) {
+            // Batch validation
+            const results = batchProcessMessages(batch);
+            const summary = {
+                total: batch.length,
+                valid: results.filter(r => r.validation.valid).length,
+                invalid: results.filter(r => !r.validation.valid).length,
+                warnings: results.filter(r => r.validation.warnings.length > 0).length
+            };
+
+            return res.json({
+                summary,
+                results: results.map(r => ({
+                    index: r.index,
+                    valid: r.validation.valid,
+                    errors: r.validation.errors,
+                    warnings: r.validation.warnings,
+                    content_hash: r.contentHash,
+                    normalized: r.normalized ? enrichMessage(r.normalized) : null
+                }))
+            });
+        } else if (message) {
+            // Single message validation
+            const result = processMessage(message);
+            return res.json({
+                valid: result.validation.valid,
+                errors: result.validation.errors,
+                warnings: result.validation.warnings,
+                content_hash: result.contentHash,
+                normalized: result.normalized ? enrichMessage(result.normalized) : null
+            });
+        } else {
+            return res.status(400).json({
+                error: 'Invalid request',
+                message: 'Please provide either "message" or "batch" in request body'
+            });
+        }
+    } catch (error: any) {
+        console.error('❌ Validation error:', error);
+        res.status(500).json({
+            error: 'Validation failed',
+            message: error.message
         });
     }
 });
