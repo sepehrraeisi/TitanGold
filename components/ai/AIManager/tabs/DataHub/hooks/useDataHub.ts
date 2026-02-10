@@ -20,6 +20,7 @@ import {
     useDeleteCategoryMutation
 } from '../../../../../../hooks/useDataHubState.ts';
 import { useAsync } from '../../../../../../hooks/useAsync';
+import { createTelegramDataSource, isChannelLinked, type TelegramChannel } from '../utils/telegramIntegration';
 
 export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key: string) => string) => {
     // React Query Hooks
@@ -243,13 +244,54 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const handleLinkChannelToSource = async (channelId: string, sourceId?: string) => {
         try {
-            await fetch(`${telegramCollectorUrl}/channels/link`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ channelId, sourceId })
+            setCollectorMessage(null);
+            setCollectorError(null);
+
+            // Find the channel info from telegramCollectorState
+            const channel = telegramCollectorState?.channels?.find(ch => ch.id === channelId);
+            
+            if (!channel) {
+                setCollectorError('Channel not found');
+                return;
+            }
+
+            // Check if already linked
+            const existingSources = dataHub?.sources || [];
+            if (isChannelLinked(channelId, existingSources)) {
+                setCollectorMessage(`Channel "${channel.title}" is already linked as a data source`);
+                return;
+            }
+
+            // Create the Telegram channel object
+            const telegramChannel: TelegramChannel = {
+                id: channel.id,
+                title: channel.title,
+                username: channel.username
+            };
+
+            // Create data source
+            setCollectorMessage('Creating data source...');
+            const createdSource = await createTelegramDataSource({
+                channel: telegramChannel,
+                refreshInterval: 5, // 5 minutes
+                priority: 'medium',
+                config: {
+                    fetchLimit: 50,
+                    includeMedia: true,
+                    parseUrls: true,
+                    tags: ['telegram', 'news', channel.title.toLowerCase().replace(/\s+/g, '-')]
+                }
             });
+
+            setCollectorMessage(`✅ Successfully linked channel "${channel.title}" as data source!`);
+            
+            // Refresh data hub to show new source
+            await loadDataHub();
+            
+            console.log('✅ Telegram channel linked:', createdSource);
         } catch (error) {
-            console.error('Failed to link channel:', error);
+            console.error('❌ Failed to link channel:', error);
+            setCollectorError(error instanceof Error ? error.message : 'Failed to link channel to data source');
         }
     };
 
