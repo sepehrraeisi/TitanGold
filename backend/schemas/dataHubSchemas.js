@@ -260,3 +260,121 @@ export const dataHubStateSchema = z.object({
         config: z.record(z.any()).optional().nullable()
     }))
 });
+
+// ========================================
+// TASK-DH-008: Collected Data Schemas
+// ========================================
+
+// Telegram Message Validation Schema (matches telegram-collector validation)
+export const telegramMessageSchema = z.object({
+    id: z.number().int().positive('Message ID must be a positive integer'),
+    date: z.number().int().positive('Date must be a Unix timestamp'),
+    text: z.string().optional().nullable(),
+    views: z.number().int().nonnegative('Views must be non-negative').optional().nullable(),
+    forwards: z.number().int().nonnegative('Forwards must be non-negative').optional().nullable(),
+    media: z.any().optional().nullable(),
+    replyTo: z.number().int().optional().nullable(),
+    edited: z.number().int().optional().nullable()
+});
+
+// Normalized Message Metadata Schema
+export const normalizedMetadataSchema = z.object({
+    views: z.number().int().nonnegative().default(0),
+    forwards: z.number().int().nonnegative().default(0),
+    has_media: z.boolean().default(false),
+    media_type: z.string().optional().nullable(),
+    is_reply: z.boolean().default(false),
+    is_edited: z.boolean().default(false),
+    char_count: z.number().int().nonnegative().default(0),
+    word_count: z.number().int().nonnegative().default(0),
+    has_url: z.boolean().default(false),
+    has_hashtag: z.boolean().default(false),
+    has_mention: z.boolean().default(false),
+    language: z.string().default('en'),
+    sentiment: z.enum(['positive', 'negative', 'neutral']).optional().nullable()
+});
+
+// Normalized Message Extracted Content Schema
+export const normalizedExtractedSchema = z.object({
+    urls: z.array(z.string().url()).default([]),
+    hashtags: z.array(z.string()).default([]),
+    mentions: z.array(z.string()).default([]),
+    prices: z.array(z.object({
+        value: z.number(),
+        currency: z.string()
+    })).optional().nullable(),
+    dates: z.array(z.string()).optional().nullable()
+});
+
+// Full Normalized Message Schema
+export const normalizedMessageSchema = z.object({
+    message_id: z.number().int().positive(),
+    content: z.string().default(''),
+    timestamp: z.string().datetime(),
+    metadata: normalizedMetadataSchema,
+    extracted: normalizedExtractedSchema
+});
+
+// Create Collected Data Schema (POST)
+export const createCollectedDataSchema = z.object({
+    source_id: z.string().uuid('Source ID must be a valid UUID'),
+    raw_data: z.record(z.any()), // JSONB - any valid JSON
+    normalized_data: normalizedMessageSchema.optional().nullable(),
+    content_hash: z.string()
+        .min(1, 'Content hash cannot be empty')
+        .max(64, 'Content hash must not exceed 64 characters')
+        .optional()
+        .nullable(),
+    status: z.enum(['pending', 'processed', 'error']).optional().default('pending'),
+    error_message: z.string().max(1000, 'Error message must not exceed 1000 characters').optional().nullable(),
+    metadata: z.record(z.any()).optional().nullable()
+});
+
+// Batch Create Collected Data Schema
+export const batchCreateCollectedDataSchema = z.object({
+    source_id: z.string().uuid('Source ID must be a valid UUID'),
+    messages: z.array(createCollectedDataSchema.omit({ source_id: true }))
+        .min(1, 'At least one message must be provided')
+        .max(100, 'Cannot process more than 100 messages at once')
+});
+
+// Update Collected Data Schema (PUT)
+export const updateCollectedDataSchema = z.object({
+    normalized_data: normalizedMessageSchema.optional().nullable(),
+    status: z.enum(['pending', 'processed', 'error']).optional(),
+    processed_at: z.string().datetime().or(z.date()).optional().nullable(),
+    error_message: z.string().max(1000).optional().nullable(),
+    metadata: z.record(z.any()).optional().nullable()
+}).refine(
+    (data) => Object.keys(data).length > 0,
+    { message: 'At least one field must be provided for update' }
+});
+
+// Query/Filter Schema for Collected Data
+export const collectedDataFilterSchema = z.object({
+    source_id: z.string().uuid().optional(),
+    status: z.enum(['pending', 'processed', 'error']).optional(),
+    from_date: z.string().datetime().or(z.date()).optional(),
+    to_date: z.string().datetime().or(z.date()).optional(),
+    has_normalized: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+    language: z.string().optional(),
+    sentiment: z.enum(['positive', 'negative', 'neutral']).optional(),
+    has_url: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+    has_hashtag: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+    limit: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).optional().default('50'),
+    offset: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).optional().default('0')
+});
+
+// Validation Result Schema (from telegram-collector)
+export const validationResultSchema = z.object({
+    valid: z.boolean(),
+    errors: z.array(z.string()).default([]),
+    warnings: z.array(z.string()).default([])
+});
+
+// Process Message Response Schema
+export const processMessageResponseSchema = z.object({
+    validation: validationResultSchema,
+    normalized: normalizedMessageSchema.nullable(),
+    content_hash: z.string()
+});
