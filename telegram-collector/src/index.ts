@@ -7,6 +7,8 @@ import { Api } from 'telegram/tl';
 import input from 'input';
 import { withRetry, CircuitBreaker } from './utils/retry';
 import { rateLimiters, getRateLimiterStats, globalRateLimiter } from './utils/rateLimit';
+import { getSessionFromDB, saveSessionToDB, getSessionStats } from './utils/sessionManager';
+import { decryptSecret } from '../../backend/utils/crypto.js';
 
 dotenv.config();
 
@@ -32,7 +34,34 @@ async function getTelegramClient(sessionString?: string): Promise<TelegramClient
         throw new Error('TELEGRAM_API_ID and TELEGRAM_API_HASH must be configured');
     }
 
-    const session = new StringSession(sessionString || '');
+    // If no session string provided, try to load from database
+    let finalSessionString = sessionString;
+    
+    if (!finalSessionString) {
+        try {
+            const dbSession = await getSessionFromDB('telegram-collector');
+            if (dbSession && dbSession.sessionString) {
+                // Decrypt session string from database
+                finalSessionString = decryptSecret(dbSession.sessionString);
+                console.log('✅ Loaded session from database');
+            } else {
+                // Fallback to .env
+                finalSessionString = process.env.TELEGRAM_SESSION_STRING || '';
+                if (finalSessionString) {
+                    console.log('⚠️  Using session from .env (fallback)');
+                }
+            }
+        } catch (error) {
+            console.error('❌ Failed to load session from database:', error);
+            // Fallback to .env
+            finalSessionString = process.env.TELEGRAM_SESSION_STRING || '';
+            if (finalSessionString) {
+                console.log('⚠️  Using session from .env (fallback after error)');
+            }
+        }
+    }
+
+    const session = new StringSession(finalSessionString || '');
     const client = new TelegramClient(session, apiId, apiHash, {
         connectionRetries: 5,
     });
@@ -41,11 +70,18 @@ async function getTelegramClient(sessionString?: string): Promise<TelegramClient
 }
 
 // Health check endpoints (both paths for compatibility)
-app.get('/health', rateLimiters.lenient, (req, res) => {
+app.get('/health', rateLimiters.lenient, async (req, res) => {
+    let sessionStats = null;
+    try {
+        sessionStats = await getSessionStats('telegram-collector');
+    } catch (error) {
+        console.error('⚠️  Could not fetch session stats:', error);
+    }
+
     res.json({
         status: 'healthy',
         service: 'telegram-collector',
-        version: '0.4.0',
+        version: '0.5.0',
         timestamp: new Date().toISOString(),
         configured: {
             apiId: !!process.env.TELEGRAM_API_ID,
@@ -57,15 +93,93 @@ app.get('/health', rateLimiters.lenient, (req, res) => {
         rateLimit: {
             globalTokens: globalRateLimiter.getAvailableTokens(),
             stats: getRateLimiterStats()
+        },
+        session: {
+            in_database: sessionStats?.inDatabase || false,
+            last_used: sessionStats?.lastUsed || null
         }
     });
 });
 
-app.get('/api/telegram-collector/health', rateLimiters.lenient, (req, res) => {
+// Session Management Endpoints
+app.get('/api/telegram-collector/session/status', rateLimiters.lenient, async (req, res) => {
+    try {
+        const dbSession = await getSessionFromDB('telegram-collector');
+        
+        if (!dbSession) {
+            return res.json({
+                stored_in_db: false,
+                message: 'No session found in database',
+                fallback_to_env: !!process.env.TELEGRAM_SESSION_STRING
+            });
+        }
+
+        res.json({
+            stored_in_db: true,
+            service_name: dbSession.serviceName,
+            phone_number: dbSession.phoneNumber,
+            is_active: dbSession.isActive,
+            last_used_at: dbSession.lastUsedAt,
+            created_at: dbSession.createdAt,
+            has_env_fallback: !!process.env.TELEGRAM_SESSION_STRING
+        });
+    } catch (error: any) {
+        console.error('❌ Error checking session status:', error);
+        res.status(500).json({ 
+            error: 'Failed to check session status',
+            message: error.message 
+        });
+    }
+});
+
+app.post('/api/telegram-collector/session/rotate', rateLimiters.strict, async (req, res) => {
+    try {
+        const { new_session_string } = req.body;
+
+        if (!new_session_string) {
+            return res.status(400).json({ 
+                error: 'new_session_string is required' 
+            });
+        }
+
+        const apiId = process.env.TELEGRAM_API_ID;
+        const apiHash = process.env.TELEGRAM_API_HASH;
+        const phoneNumber = process.env.TELEGRAM_PHONE_NUMBER;
+
+        const sessionId = await saveSessionToDB(
+            'telegram-collector',
+            new_session_string,
+            phoneNumber,
+            apiId,
+            apiHash
+        );
+
+        res.json({
+            success: true,
+            message: 'Session rotated successfully',
+            session_id: sessionId
+        });
+    } catch (error: any) {
+        console.error('❌ Error rotating session:', error);
+        res.status(500).json({ 
+            error: 'Failed to rotate session',
+            message: error.message 
+        });
+    }
+});
+
+app.get('/api/telegram-collector/health', rateLimiters.lenient, async (req, res) => {
+    let sessionStats = null;
+    try {
+        sessionStats = await getSessionStats('telegram-collector');
+    } catch (error) {
+        console.error('⚠️  Could not fetch session stats:', error);
+    }
+
     res.json({
         status: 'healthy',
         service: 'telegram-collector',
-        version: '0.4.0',
+        version: '0.5.0',
         timestamp: new Date().toISOString(),
         configured: {
             apiId: !!process.env.TELEGRAM_API_ID,
@@ -77,6 +191,12 @@ app.get('/api/telegram-collector/health', rateLimiters.lenient, (req, res) => {
         rateLimit: {
             globalTokens: globalRateLimiter.getAvailableTokens(),
             stats: getRateLimiterStats()
+        },
+        session: {
+            in_database: sessionStats?.inDatabase || false,
+            last_used: sessionStats?.lastUsed || null,
+            created_at: sessionStats?.createdAt || null,
+            phone_number: sessionStats?.phoneNumber || null
         }
     });
 });
