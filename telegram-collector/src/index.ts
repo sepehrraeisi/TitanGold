@@ -5,11 +5,15 @@ import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { Api } from 'telegram/tl';
 import input from 'input';
+import { withRetry, CircuitBreaker } from './utils/retry';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3002;
+
+// Circuit breaker for Telegram API calls
+const telegramCircuitBreaker = new CircuitBreaker(5, 60000, 2);
 
 // Middleware
 app.use(cors());
@@ -40,14 +44,15 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
         service: 'telegram-collector',
-        version: '0.2.0',
+        version: '0.3.0',
         timestamp: new Date().toISOString(),
         configured: {
             apiId: !!process.env.TELEGRAM_API_ID,
             apiHash: !!process.env.TELEGRAM_API_HASH,
             session: !!process.env.TELEGRAM_SESSION_STRING
         },
-        mtproto: 'enabled'
+        mtproto: 'enabled',
+        circuitBreaker: telegramCircuitBreaker.getStats()
     });
 });
 
@@ -55,14 +60,15 @@ app.get('/api/telegram-collector/health', (req, res) => {
     res.json({
         status: 'healthy',
         service: 'telegram-collector',
-        version: '0.2.0',
+        version: '0.3.0',
         timestamp: new Date().toISOString(),
         configured: {
             apiId: !!process.env.TELEGRAM_API_ID,
             apiHash: !!process.env.TELEGRAM_API_HASH,
             session: !!process.env.TELEGRAM_SESSION_STRING
         },
-        mtproto: 'enabled'
+        mtproto: 'enabled',
+        circuitBreaker: telegramCircuitBreaker.getStats()
     });
 });
 
@@ -236,32 +242,55 @@ app.get('/telegram/:channel/recent', async (req, res) => {
 
         console.log('📱 Fetching messages from channel:', channel);
 
-        const client = await getTelegramClient(sessionString);
-        await client.connect();
+        // Use circuit breaker + retry logic
+        const result = await telegramCircuitBreaker.execute(async () => {
+            return await withRetry(async () => {
+                const client = await getTelegramClient(sessionString);
+                await client.connect();
 
-        // Get messages from channel
-        const messages = await client.getMessages(channel, { limit });
+                // Get messages from channel
+                const messages = await client.getMessages(channel, { limit });
 
-        const formattedMessages = messages.map((msg: any) => ({
-            id: msg.id,
-            text: msg.message,
-            date: msg.date,
-            views: msg.views,
-            forwards: msg.forwards
-        }));
+                const formattedMessages = messages.map((msg: any) => ({
+                    id: msg.id,
+                    text: msg.message,
+                    date: msg.date,
+                    views: msg.views,
+                    forwards: msg.forwards
+                }));
 
-        await client.disconnect();
+                await client.disconnect();
 
-        res.json({
-            channel,
-            messages: formattedMessages,
-            count: formattedMessages.length,
-            cached: false,
-            fetchedAt: new Date().toISOString()
+                return {
+                    channel,
+                    messages: formattedMessages,
+                    count: formattedMessages.length,
+                    cached: false,
+                    fetchedAt: new Date().toISOString()
+                };
+            }, {
+                maxRetries: 3,
+                initialDelayMs: 1000,
+                onRetry: (error, attempt) => {
+                    console.warn(`🔄 Retry ${attempt}/3 for channel ${channel}: ${error.message}`);
+                }
+            });
         });
+
+        res.json(result);
 
     } catch (error: any) {
         console.error('❌ Channel fetch error:', error);
+        
+        // Check if circuit breaker is open
+        if (error.message?.includes('Circuit breaker is OPEN')) {
+            return res.status(503).json({
+                error: 'Service temporarily unavailable',
+                message: 'Too many failures. Please try again later.',
+                circuitBreaker: telegramCircuitBreaker.getStats()
+            });
+        }
+        
         res.status(500).json({ 
             error: 'Failed to fetch channel messages',
             message: error.message 
@@ -280,28 +309,50 @@ app.get('/api/telegram-collector/channels', async (req, res) => {
             });
         }
 
-        const client = await getTelegramClient(sessionString);
-        await client.connect();
+        // Use circuit breaker + retry logic
+        const result = await telegramCircuitBreaker.execute(async () => {
+            return await withRetry(async () => {
+                const client = await getTelegramClient(sessionString);
+                await client.connect();
 
-        // Get all dialogs (channels, groups, chats)
-        const dialogs = await client.getDialogs({ limit: 100 });
-        
-        const channels = dialogs
-            .filter((dialog: any) => dialog.isChannel)
-            .map((dialog: any) => ({
-                id: dialog.id,
-                title: dialog.title,
-                username: dialog.entity?.username
-            }));
+                // Get all dialogs (channels, groups, chats)
+                const dialogs = await client.getDialogs({ limit: 100 });
+                
+                const channels = dialogs
+                    .filter((dialog: any) => dialog.isChannel)
+                    .map((dialog: any) => ({
+                        id: dialog.id,
+                        title: dialog.title,
+                        username: dialog.entity?.username
+                    }));
 
-        await client.disconnect();
+                await client.disconnect();
 
-        res.json({
-            channels,
-            count: channels.length
+                return {
+                    channels,
+                    count: channels.length
+                };
+            }, {
+                maxRetries: 3,
+                initialDelayMs: 1000,
+                onRetry: (error, attempt) => {
+                    console.warn(`🔄 Retry ${attempt}/3 for channels list: ${error.message}`);
+                }
+            });
         });
+
+        res.json(result);
     } catch (error: any) {
         console.error('❌ Channels list error:', error);
+        
+        if (error.message?.includes('Circuit breaker is OPEN')) {
+            return res.status(503).json({
+                error: 'Service temporarily unavailable',
+                message: 'Too many failures. Please try again later.',
+                circuitBreaker: telegramCircuitBreaker.getStats()
+            });
+        }
+        
         res.status(500).json({ 
             error: 'Failed to fetch channels',
             message: error.message 
@@ -323,26 +374,49 @@ app.post('/api/telegram-collector/channels/:channelId/test', async (req, res) =>
         }
 
         const startTime = Date.now();
-        const client = await getTelegramClient(sessionString);
-        await client.connect();
 
-        // Try to get one message to test access
-        const messages = await client.getMessages(channelId, { limit: 1 });
-        const latency = Date.now() - startTime;
+        // Use circuit breaker + retry logic
+        const result = await telegramCircuitBreaker.execute(async () => {
+            return await withRetry(async () => {
+                const client = await getTelegramClient(sessionString);
+                await client.connect();
 
-        await client.disconnect();
+                // Try to get one message to test access
+                const messages = await client.getMessages(channelId, { limit: 1 });
+                const latency = Date.now() - startTime;
 
-        res.json({
-            success: true,
-            channelId,
-            channelHandle: `@${channelId}`,
-            latency,
-            messages: messages.length,
-            accessible: messages.length > 0
+                await client.disconnect();
+
+                return {
+                    success: true,
+                    channelId,
+                    channelHandle: `@${channelId}`,
+                    latency,
+                    messages: messages.length,
+                    accessible: messages.length > 0
+                };
+            }, {
+                maxRetries: 2,
+                initialDelayMs: 500,
+                onRetry: (error, attempt) => {
+                    console.warn(`🔄 Retry ${attempt}/2 for channel test ${channelId}: ${error.message}`);
+                }
+            });
         });
+
+        res.json(result);
 
     } catch (error: any) {
         console.error('❌ Channel test error:', error);
+        
+        if (error.message?.includes('Circuit breaker is OPEN')) {
+            return res.status(503).json({
+                error: 'Service temporarily unavailable',
+                message: 'Too many failures. Please try again later.',
+                circuitBreaker: telegramCircuitBreaker.getStats()
+            });
+        }
+        
         res.status(500).json({ 
             error: 'Failed to test channel',
             message: error.message 
