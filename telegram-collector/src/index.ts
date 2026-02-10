@@ -6,6 +6,7 @@ import { StringSession } from 'telegram/sessions';
 import { Api } from 'telegram/tl';
 import input from 'input';
 import { withRetry, CircuitBreaker } from './utils/retry';
+import { rateLimiters, getRateLimiterStats, globalRateLimiter } from './utils/rateLimit';
 
 dotenv.config();
 
@@ -40,11 +41,11 @@ async function getTelegramClient(sessionString?: string): Promise<TelegramClient
 }
 
 // Health check endpoints (both paths for compatibility)
-app.get('/health', (req, res) => {
+app.get('/health', rateLimiters.lenient, (req, res) => {
     res.json({
         status: 'healthy',
         service: 'telegram-collector',
-        version: '0.3.0',
+        version: '0.4.0',
         timestamp: new Date().toISOString(),
         configured: {
             apiId: !!process.env.TELEGRAM_API_ID,
@@ -52,15 +53,19 @@ app.get('/health', (req, res) => {
             session: !!process.env.TELEGRAM_SESSION_STRING
         },
         mtproto: 'enabled',
-        circuitBreaker: telegramCircuitBreaker.getStats()
+        circuitBreaker: telegramCircuitBreaker.getStats(),
+        rateLimit: {
+            globalTokens: globalRateLimiter.getAvailableTokens(),
+            stats: getRateLimiterStats()
+        }
     });
 });
 
-app.get('/api/telegram-collector/health', (req, res) => {
+app.get('/api/telegram-collector/health', rateLimiters.lenient, (req, res) => {
     res.json({
         status: 'healthy',
         service: 'telegram-collector',
-        version: '0.3.0',
+        version: '0.4.0',
         timestamp: new Date().toISOString(),
         configured: {
             apiId: !!process.env.TELEGRAM_API_ID,
@@ -68,12 +73,16 @@ app.get('/api/telegram-collector/health', (req, res) => {
             session: !!process.env.TELEGRAM_SESSION_STRING
         },
         mtproto: 'enabled',
-        circuitBreaker: telegramCircuitBreaker.getStats()
+        circuitBreaker: telegramCircuitBreaker.getStats(),
+        rateLimit: {
+            globalTokens: globalRateLimiter.getAvailableTokens(),
+            stats: getRateLimiterStats()
+        }
     });
 });
 
 // Start login flow - send verification code
-app.post('/api/telegram-collector/login/start', async (req, res) => {
+app.post('/api/telegram-collector/login/start', rateLimiters.auth, async (req, res) => {
     try {
         const { phoneNumber } = req.body;
 
@@ -124,7 +133,7 @@ app.post('/api/telegram-collector/login/start', async (req, res) => {
 });
 
 // Confirm login - verify code
-app.post('/api/telegram-collector/login/confirm', async (req, res) => {
+app.post('/api/telegram-collector/login/confirm', rateLimiters.auth, async (req, res) => {
     try {
         const { authId, code, password } = req.body;
 
@@ -227,7 +236,7 @@ app.post('/api/telegram-collector/login/cancel', async (req, res) => {
 });
 
 // Get channel messages
-app.get('/telegram/:channel/recent', async (req, res) => {
+app.get('/telegram/:channel/recent', rateLimiters.strict, async (req, res) => {
     try {
         const { channel } = req.params;
         const limit = parseInt(req.query.limit as string) || 20;
@@ -299,7 +308,7 @@ app.get('/telegram/:channel/recent', async (req, res) => {
 });
 
 // Get channels list
-app.get('/api/telegram-collector/channels', async (req, res) => {
+app.get('/api/telegram-collector/channels', rateLimiters.moderate, async (req, res) => {
     try {
         const sessionString = process.env.TELEGRAM_SESSION_STRING;
         if (!sessionString) {
@@ -361,7 +370,7 @@ app.get('/api/telegram-collector/channels', async (req, res) => {
 });
 
 // Test channel
-app.post('/api/telegram-collector/channels/:channelId/test', async (req, res) => {
+app.post('/api/telegram-collector/channels/:channelId/test', rateLimiters.moderate, async (req, res) => {
     try {
         const { channelId } = req.params;
 
