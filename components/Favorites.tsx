@@ -355,7 +355,9 @@ const MoversList: React.FC<{ title: string; data: MarketMover[]; isGainers: bool
     );
 }
 
-const Favorites: React.FC<{ setActiveView: (view: string) => void }> = ({ setActiveView }) => {
+import type { ViewKey, OnNavigateHandler } from '../types/navigation.ts';
+
+const Favorites: React.FC<{ onNavigate: OnNavigateHandler }> = ({ onNavigate }) => {
     const { t } = useLanguage();
     const [isLoading, setIsLoading] = useState(true);
     const [data, setData] = useState<FavoritesPageData | null>(null);
@@ -973,7 +975,7 @@ const Favorites: React.FC<{ setActiveView: (view: string) => void }> = ({ setAct
                                                     <ActionMenu
                                                         item={item}
                                                         onSetAlert={() => handleSetAlert(item)}
-                                                        onTrade={() => setActiveView('trades')}
+                                                        onTrade={() => onNavigate('trades')}
                                                         onRemove={() => handleRemoveFavorite(item)}
                                                     />
                                                 </td>

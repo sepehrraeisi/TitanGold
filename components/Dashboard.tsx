@@ -139,7 +139,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const renderView = () => {
     switch (activeView) {
       case 'favorites':
-        return <Favorites setActiveView={setActiveView} />;
+        return <Favorites onNavigate={handleNavigation} />;
       case 'trades':
         return <Trades />;
       case 'portfolio':
@@ -180,7 +180,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     >
       <div className="relative flex h-screen w-full overflow-hidden">
         <div className="flex h-full w-full flex-col">
-          <Header activeView={activeView} setActiveView={setActiveView} onLogout={onLogout} />
+          <Header activeView={activeView} onNavigate={handleNavigation} onLogout={onLogout} />
           <main className="flex-1 overflow-y-auto bg-background px-4 py-6 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-7xl">{renderView()}</div>
           </main>

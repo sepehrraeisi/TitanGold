@@ -6,9 +6,11 @@ import type { ArtemisState } from '../types.ts';
 import { Toast } from './ui/toast.tsx';
 import { ConfirmModal } from './ui/confirm-modal.tsx';
 
+import type { ViewKey, OnNavigateHandler } from '../types/navigation.ts';
+
 interface HeaderProps {
     activeView: string | 'dashboard' | 'favorites' | 'trades' | 'portfolio' | 'analysis' | 'news' | 'ai' | 'gold' | 'settings' | 'profile' | 'wallet';
-    setActiveView: (view: string) => void;
+    onNavigate: OnNavigateHandler;
     onLogout: () => void;
 }
 
@@ -31,7 +33,7 @@ const NavLink: React.FC<{ text: string; view: string; activeView: string; onClic
 );
 };
 
-const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: () => void; dailyPnL?: number;}> = ({ setActiveView, onLogout, dailyPnL = 0 }) => {
+const UserDropdown: React.FC<{onNavigate: OnNavigateHandler; onLogout: () => void; dailyPnL?: number;}> = ({ onNavigate, onLogout, dailyPnL = 0 }) => {
     const { t } = useLanguage();
     const { user, isDemoMode, toggleDemoMode, avatarUrl } = useAppContext();
     const [isOpen, setIsOpen] = useState(false);
@@ -116,7 +118,7 @@ const UserDropdown: React.FC<{setActiveView: (view: string) => void; onLogout: (
     }, [loadAvatar]);
 
     const handleNavigation = (view: string) => {
-        setActiveView(view);
+        onNavigate(view as ViewKey);
         setIsOpen(false);
     };
 
@@ -510,7 +512,7 @@ const MobileMenu: React.FC<{ navLinks: any[], activeView: string, setActiveView:
             
             <nav className="p-4 space-y-1 overflow-y-auto flex-1">
                 {navLinks.map(link => (
-                    <NavLink key={link.view} {...link} activeView={activeView} onClick={(view) => { setActiveView(view); setIsOpen(false); }} isMobile />
+                    <NavLink key={link.view} {...link} activeView={activeView} onClick={(view) => { onNavigate(view as ViewKey); setIsOpen(false); }} isMobile />
                 ))}
             </nav>
             
@@ -685,7 +687,7 @@ const WalletBalance: React.FC = () => {
     );
 };
 
-const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ activeView, onNavigate, onLogout }) => {
     const { t } = useLanguage();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [statusData, setStatusData] = useState<{
@@ -831,7 +833,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
                     </div>
                     <nav className="hidden lg:flex items-center space-x-0.5 xl:space-x-1 min-w-0 overflow-x-auto">
                         {navLinks.map(link => (
-                            <NavLink key={link.view} {...link} activeView={activeView} onClick={setActiveView} />
+                            <NavLink key={link.view} {...link} activeView={activeView} onClick={(view) => onNavigate(view as ViewKey)} />
                         ))}
                     </nav>
                 </div>
@@ -860,7 +862,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
                     <div className="hidden lg:block border-r border-gray-700/50 pr-1 sm:pr-2 md:pr-3">
                         <ModeToggleWithStatus />
                     </div>
-                    <UserDropdown setActiveView={setActiveView} onLogout={onLogout} dailyPnL={statusData.dailyPnL} />
+                    <UserDropdown onNavigate={onNavigate} onLogout={onLogout} dailyPnL={statusData.dailyPnL} />
                 </div>
             </header>
             <MobileMenu navLinks={navLinks} activeView={activeView} setActiveView={setActiveView} isOpen={isMobileMenuOpen} setIsOpen={setIsMobileMenuOpen} statusData={statusData} />
