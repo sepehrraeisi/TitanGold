@@ -162,13 +162,13 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     <Card>
                         <div className="text-center">
                             <p className="text-xs text-muted-foreground mb-1">{t('total_sources') || 'Total Sources'}</p>
-                            <p className="text-2xl font-bold text-foreground">{dataHub.totalSources}</p>
+                            <p className="text-2xl font-bold text-foreground">{dataHub?.totalSources ?? 0}</p>
                         </div>
                     </Card>
                     <Card>
                         <div className="text-center">
                             <p className="text-xs text-muted-foreground mb-1">{t('active_sources') || 'Active Sources'}</p>
-                            <p className="text-2xl font-bold text-green-400">{dataHub.activeSources}</p>
+                            <p className="text-2xl font-bold text-green-400">{dataHub?.activeSources ?? 0}</p>
                         </div>
                     </Card>
                     <Card>
