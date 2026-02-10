@@ -21,6 +21,7 @@ import {
 } from '../../../../../../hooks/useDataHubState.ts';
 import { useAsync } from '../../../../../../hooks/useAsync';
 import { createTelegramDataSource, isChannelLinked, type TelegramChannel } from '../utils/telegramIntegration';
+import { handleDataHubError, DataHubError, shouldNotifyUser } from '../utils/errorHandler';
 
 export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key: string) => string) => {
     // React Query Hooks
@@ -36,6 +37,9 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     // Local Selection & View State
     const [activeView, setActiveView] = useState<'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram'>('sources');
+
+    // Error State
+    const [currentError, setCurrentError] = useState<DataHubError | null>(null);
 
     // Modals & Selection State
     const [showCreateSourceModal, setShowCreateSourceModal] = useState(false);
@@ -62,66 +66,82 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const isLoadingAgents = isLoadingAgentsQuery;
     const dataHubError = dataHubErrorObj instanceof Error ? dataHubErrorObj.message : null;
 
+    // Error handler wrapper
+    const handleError = (error: any, context: string, retryFn?: () => void) => {
+        const parsedError = handleDataHubError(error, context, retryFn);
+        if (shouldNotifyUser(parsedError.type)) {
+            setCurrentError(parsedError);
+        }
+        return parsedError;
+    };
+
     // Handlers
     const handleCheckHealth = async () => {
         try {
+            setCurrentError(null);
             await healthAsync.execute();
         } catch (error) {
-            console.error('Failed to check health:', error);
+            handleError(error, 'Health Check', handleCheckHealth);
         }
     };
 
     const handleCreateSource = async (source: Omit<DataSource, 'id' | 'createdAt' | 'lastUpdate'>) => {
         try {
+            setCurrentError(null);
             await createSourceMutation.mutateAsync(source);
             setShowCreateSourceModal(false);
         } catch (error) {
-            console.error('Failed to create source:', error);
+            handleError(error, 'Create Source', () => handleCreateSource(source));
         }
     };
 
     const handleUpdateSource = async (id: string, updates: Partial<DataSource>) => {
         try {
+            setCurrentError(null);
             await updateSourceMutation.mutateAsync({ id, updates });
             setEditingSource(null);
         } catch (error) {
-            console.error('Failed to update source:', error);
+            handleError(error, 'Update Source', () => handleUpdateSource(id, updates));
         }
     };
 
     const handleDeleteSource = async (id: string) => {
         if (!window.confirm(t('confirm_delete_source') || 'Are you sure you want to delete this source?')) return;
         try {
+            setCurrentError(null);
             await deleteSourceMutation.mutateAsync(id);
         } catch (error) {
-            console.error('Failed to delete source:', error);
+            handleError(error, 'Delete Source', () => handleDeleteSource(id));
         }
     };
 
     const handleCreateCategory = async (category: Omit<DataCategory, 'id' | 'createdAt'>) => {
         try {
+            setCurrentError(null);
             await createCategoryMutation.mutateAsync(category);
             setShowCreateCategoryModal(false);
         } catch (error) {
-            console.error('Failed to create category:', error);
+            handleError(error, 'Create Category', () => handleCreateCategory(category));
         }
     };
 
     const handleUpdateCategory = async (id: string, updates: Partial<DataCategory>) => {
         try {
+            setCurrentError(null);
             await updateCategoryMutation.mutateAsync({ id, updates });
             setEditingCategory(null);
         } catch (error) {
-            console.error('Failed to update category:', error);
+            handleError(error, 'Update Category', () => handleUpdateCategory(id, updates));
         }
     };
 
     const handleDeleteCategory = async (id: string) => {
         if (!window.confirm(t('confirm_delete_category') || 'Are you sure you want to delete this category?')) return;
         try {
+            setCurrentError(null);
             await deleteCategoryMutation.mutateAsync(id);
         } catch (error) {
-            console.error('Failed to delete category:', error);
+            handleError(error, 'Delete Category', () => handleDeleteCategory(id));
         }
     };
 
@@ -414,6 +434,8 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         dataHub,
         isLoading,
         dataHubError,
+        currentError,
+        clearError: () => setCurrentError(null),
         activeView,
         setActiveView,
         showCreateSourceModal,
