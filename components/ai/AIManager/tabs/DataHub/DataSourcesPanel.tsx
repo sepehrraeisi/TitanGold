@@ -123,11 +123,21 @@ const DataSourcesPanel: React.FC<DataSourcesPanelProps> = ({
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs">
                                     <div>
                                         <p className="text-muted-foreground">{t('success_rate') || 'Success Rate'}</p>
-                                        <p className="font-semibold text-foreground">{source.successRate.toFixed(1)}%</p>
+                                        <p className="font-semibold text-foreground">
+                                            {typeof source.successRate === 'number'
+                                                ? source.successRate.toFixed(1)
+                                                : '0.0'
+                                            }%
+                                        </p>
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground">{t('reliability') || 'Reliability'}</p>
-                                        <p className="font-semibold text-foreground">{source.reliabilityScore.toFixed(0)}</p>
+                                        <p className="font-semibold text-foreground">
+                                            {typeof source.reliabilityScore === 'number'
+                                                ? source.reliabilityScore.toFixed(0)
+                                                : '0'
+                                            }
+                                        </p>
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground">{t('response_time') || 'Response Time'}</p>

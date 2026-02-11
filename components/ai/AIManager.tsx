@@ -349,7 +349,12 @@ const ArtemisOverview: React.FC<{ data: AIManagerOverview; artemis: ArtemisState
                                 </div>
                                 <div className="bg-secondary/40 rounded p-2 text-center">
                                     <p className="text-muted-foreground text-xs">{t('cache_hit_rate') || 'Cache Hit'}</p>
-                                    <p className="text-lg font-semibold text-purple-400">{dataHub?.cache?.hitRate?.toFixed(1) || '0.0'}%</p>
+                                    <p className="text-lg font-semibold text-purple-400">
+                                        {typeof dataHub?.cache?.hitRate === 'number'
+                                            ? dataHub.cache.hitRate.toFixed(1)
+                                            : '0.0'
+                                        }%
+                                    </p>
                                 </div>
                                 <div className="bg-secondary/40 rounded p-2 text-center">
                                     <p className="text-muted-foreground text-xs">{t('health_status') || 'Health'}</p>

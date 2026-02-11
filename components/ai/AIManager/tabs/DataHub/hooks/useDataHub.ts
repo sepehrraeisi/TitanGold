@@ -149,11 +149,10 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setIsLoadingCollector(true);
         setCollectorError(null);
         try {
-            const response = await fetch(`${telegramCollectorUrl}/health`);
-            const data = await response.json();
+            const data = await api.getTelegramCollectorHealth();
             setCollectorMessage(`Collector Status: ${data.status}`);
-        } catch (error) {
-            setCollectorError('Failed to connect to Telegram Collector');
+        } catch (error: any) {
+            setCollectorError(error?.message || 'Failed to connect to Telegram Collector');
         } finally {
             setIsLoadingCollector(false);
         }
@@ -164,62 +163,64 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     };
 
     const handleStartCollectorLogin = async () => {
-        if (!collectorForm.phone) {
+        if (!collectorForm.phoneNumber.trim()) {
             setCollectorError('Phone number is required');
             return;
         }
 
         setIsLoadingCollector(true);
         setCollectorError(null);
+        setCollectorMessage(null);
         try {
-            const response = await fetch(`${telegramCollectorUrl}/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: collectorForm.phone })
-            });
-            const data = await response.json();
-            if (data.success) {
-                setCollectorAuthId(data.authId);
-                setCollectorMessage('Verification code sent');
-            } else {
-                setCollectorError(data.error || 'Failed to start login');
+            const payload: any = {
+                phoneNumber: collectorForm.phoneNumber.trim(),
+            };
+            if (collectorForm.apiId) {
+                payload.apiId = Number(collectorForm.apiId);
             }
-        } catch (error) {
-            setCollectorError('Connection error');
+            if (collectorForm.apiHash) {
+                payload.apiHash = collectorForm.apiHash.trim();
+            }
+
+            const response = await api.startTelegramCollectorLogin(payload);
+            setCollectorAuthId(response.authId);
+            setCollectorMessage('Verification code sent');
+        } catch (error: any) {
+            setCollectorError(error?.message || 'Failed to start login');
         } finally {
             setIsLoadingCollector(false);
         }
     };
 
     const handleConfirmCollectorLogin = async () => {
-        if (!collectorForm.code) {
+        if (!collectorAuthId) {
+            setCollectorError('No active login request.');
+            return;
+        }
+        if (!collectorForm.code.trim()) {
             setCollectorError('Verification code is required');
             return;
         }
 
         setIsLoadingCollector(true);
         setCollectorError(null);
+        setCollectorMessage(null);
         try {
-            const response = await fetch(`${telegramCollectorUrl}/auth/verify`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    authId: collectorAuthId,
-                    code: collectorForm.code,
-                    password: collectorForm.password
-                })
+            await api.confirmTelegramCollectorLogin({
+                authId: collectorAuthId,
+                code: collectorForm.code.trim(),
+                password: collectorForm.password.trim() || undefined,
             });
-            const data = await response.json();
-            if (data.success) {
-                setCollectorMessage('Login successful');
-                setCollectorAuthId(null);
-                setCollectorForm({ phone: '', code: '', password: '' });
-                loadDataHub();
-            } else {
-                setCollectorError(data.error || 'Verification failed');
-            }
-        } catch (error) {
-            setCollectorError('Connection error');
+            setCollectorMessage('Login successful');
+            setCollectorAuthId(null);
+            setCollectorForm(prev => ({
+                ...prev,
+                code: '',
+                password: '',
+            }));
+            await loadDataHub();
+        } catch (error: any) {
+            setCollectorError(error?.message || 'Verification failed');
         } finally {
             setIsLoadingCollector(false);
         }
@@ -229,17 +230,18 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setIsLoadingCollector(true);
         try {
             if (collectorAuthId) {
-                await fetch(`${telegramCollectorUrl}/auth/cancel`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ authId: collectorAuthId })
-                });
+                await api.cancelTelegramCollectorLogin(collectorAuthId);
             }
             setCollectorAuthId(null);
-            setCollectorForm({ phone: '', code: '', password: '' });
+            setCollectorForm(prev => ({
+                ...prev,
+                code: '',
+                password: '',
+            }));
             setCollectorMessage('Login cancelled');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to cancel login:', error);
+            setCollectorError(error?.message || 'Failed to cancel login');
         } finally {
             setIsLoadingCollector(false);
         }
@@ -419,7 +421,9 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const [collectorError, setCollectorError] = useState<string | null>(null);
 
     const [collectorForm, setCollectorForm] = useState({
-        phone: '',
+        apiId: '',
+        apiHash: '',
+        phoneNumber: '',
         code: '',
         password: ''
     });
@@ -428,7 +432,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const [channelTestPreview, setChannelTestPreview] = useState<any[] | null>(null);
     const [isRefreshingChannels, setIsRefreshingChannels] = useState(false);
 
-    const telegramCollectorUrl = 'http://localhost:3005';
+    const telegramCollectorUrl = api.getTelegramCollectorBaseUrl();
 
     return {
         dataHub,

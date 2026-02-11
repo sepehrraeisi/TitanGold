@@ -175,7 +175,10 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                         <div className="text-center">
                             <p className="text-xs text-muted-foreground mb-1">{t('cache_hit_rate') || 'Cache Hit Rate'}</p>
                             <p className="text-2xl font-bold text-purple-400">
-                                {dataHub?.cache?.hitRate !== undefined ? dataHub.cache.hitRate.toFixed(1) : '0.0'}%
+                                {typeof dataHub?.cache?.hitRate === 'number'
+                                    ? dataHub.cache.hitRate.toFixed(1)
+                                    : '0.0'
+                                }%
                             </p>
                         </div>
                     </Card>
