@@ -515,6 +515,32 @@ sudo systemctl reload nginx
 
 ---
 
+### ✅ Git Commits
+
+تمام تغییرات در Git commit شده‌اند:
+
+**1. مستندسازی:**
+```bash
+# Commit 249b531
+docs: Add Telegram Collector troubleshooting guide
+```
+
+**2. رفع Sync Endpoint:**
+```bash
+# Commit 361507c
+fix(telegram): Use /api/v1/data-sources/telegram-sync for Sync Data Sources
+```
+
+**3. Deploy به Production:**
+```bash
+npm run build               # ✅ انجام شد (33.50s)
+sudo systemctl reload nginx # ✅ انجام شد
+```
+
+**وضعیت:** ✅ همه تغییرات commit، push و deploy شده‌اند
+
+---
+
 **آخرین به‌روزرسانی:** 2026-02-11  
 **نسخه:** 1.0.0  
 **وضعیت:** ✅ همه مشکلات برطرف شده
