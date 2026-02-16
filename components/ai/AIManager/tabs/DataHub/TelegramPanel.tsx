@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DataSource, TelegramCollectorState } from '../../../../../types.ts';
+import { buildCollectorUrl } from '../../../../../services/api.ts';
 
 type Props = {
     t: (key: string) => string;
@@ -65,26 +66,6 @@ type CollectorChannel = {
     accountId?: string | null;
     lastSyncedAt?: string | null;
     config?: any;
-};
-
-const resolveTelegramCollectorBaseUrl = (): string => {
-    const viteEnv = (typeof import.meta !== 'undefined' && (import.meta as any)?.env) || undefined;
-    const fromImportMeta = viteEnv?.VITE_TELEGRAM_COLLECTOR_URL as string | undefined;
-    const fromNode =
-        typeof process !== 'undefined' ? ((process as any)?.env?.VITE_TELEGRAM_COLLECTOR_URL as string | undefined) : undefined;
-    const value = fromImportMeta || fromNode;
-    if (!value) return '';
-    // Only accept full URLs (for local dev); otherwise use relative path so Nginx proxy works
-    if (/^https?:\/\//i.test(value)) {
-        return value.replace(/\/$/, '');
-    }
-    return '';
-};
-
-const buildCollectorUrl = (path: string) => {
-    const base = resolveTelegramCollectorBaseUrl();
-    if (!base) return path;
-    return `${base}${path}`;
 };
 
 const TelegramPanel: React.FC<Props> = (props) => {
@@ -162,7 +143,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
             setAccounts(Array.isArray(data.accounts) ? data.accounts : []);
         } catch (error: any) {
             console.error('Failed to load telegram accounts:', error);
-            setAccountsError(error?.message || 'Failed to load accounts');
+            setAccountsError(error?.message || t('failed_to_load_accounts') || 'Failed to load accounts');
         } finally {
             setIsLoadingAccounts(false);
         }
@@ -187,7 +168,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
             setCollectorChannels(Array.isArray(data.channels) ? data.channels : []);
         } catch (error: any) {
             console.error('Failed to load collector channels:', error);
-            setChannelsError(error?.message || 'Failed to load channels');
+            setChannelsError(error?.message || t('failed_to_load_channels') || 'Failed to load channels');
         } finally {
             setIsLoadingCollectorChannels(false);
         }
@@ -198,11 +179,24 @@ const TelegramPanel: React.FC<Props> = (props) => {
         setCollectorError(null);
         setCollectorMessage(null);
         try {
+            const token =
+                typeof localStorage !== 'undefined'
+                    ? localStorage.getItem('titan_token') ||
+                      sessionStorage.getItem('titan_token')
+                    : null;
+
+            const headers: HeadersInit = token
+                ? {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${token}`,
+                  }
+                : {
+                      'Content-Type': 'application/json',
+                  };
+
             const response = await fetch('/api/v1/data-sources/telegram-sync', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers,
                 credentials: 'include',
             });
 
@@ -248,7 +242,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
             setViewingMessagesChannelId(channelId);
         } catch (error: any) {
             console.error('Failed to load channel messages:', error);
-            setCollectorError(error?.message || 'Failed to load messages');
+            setCollectorError(error?.message || t('failed_to_load_messages') || 'Failed to load messages');
         } finally {
             setIsLoadingMessages(false);
         }
@@ -277,7 +271,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
             setSelectedForImport(new Set());
         } catch (error: any) {
             console.error('Failed to load telegram dialogs:', error);
-            setImportError(error?.message || 'Failed to load channels from Telegram');
+            setImportError(error?.message || t('failed_to_load_channels_from_telegram') || 'Failed to load channels from Telegram');
         } finally {
             setIsLoadingDialogs(false);
         }
@@ -322,7 +316,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
             setTelegramDialogs([]);
         } catch (error: any) {
             console.error('Failed to register channels:', error);
-            setImportError(error?.message || 'Failed to register selected channels');
+            setImportError(error?.message || t('failed_to_register_channels') || 'Failed to register selected channels');
         } finally {
             setIsRegisteringChannels(false);
         }
@@ -368,6 +362,35 @@ const TelegramPanel: React.FC<Props> = (props) => {
         }
     }, [channelsRefreshTrigger]);
 
+    // Fetch per-account messages_24h from backend for Account Summary (TASK-TC-009)
+    useEffect(() => {
+        if (accounts.length === 0) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const token = typeof localStorage !== 'undefined' ? localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token') : null;
+                const res = await fetch('/api/v1/data-sources/telegram-account-metrics', {
+                    credentials: 'include',
+                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                });
+                const data = await res.json();
+                if (cancelled || !data?.success || !data.metrics) return;
+                setAccountMetrics((prev) => {
+                    const next = { ...prev };
+                    for (const [id, m] of Object.entries(data.metrics)) {
+                        if (next[id]) next[id] = { ...next[id], messages24h: (m as { messages24h: number }).messages24h };
+                    }
+                    return next;
+                });
+            } catch {
+                // ignore
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [accounts.length, accountsRefreshTrigger, channelsRefreshTrigger]);
+
     // Reload channels when account/status filters change
     useEffect(() => {
         loadCollectorChannels().catch(() => undefined);
@@ -408,7 +431,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
             setAccounts((prev) => prev.map((a) => (a.id === id ? data.account : a)));
         } catch (error: any) {
             console.error('Failed to update account:', error);
-            setAccountsError(error?.message || 'Failed to update account');
+            setAccountsError(error?.message || t('failed_to_update_account') || 'Failed to update account');
         }
     };
 
@@ -424,7 +447,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
             setAccounts((prev) => prev.map((a) => (a.id === id ? data.account : a)));
         } catch (error: any) {
             console.error('Failed to logout account:', error);
-            setAccountsError(error?.message || 'Failed to logout account');
+            setAccountsError(error?.message || t('failed_to_logout_account') || 'Failed to logout account');
         }
     };
 
@@ -473,7 +496,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
             setCollectorChannels((prev) => prev.map((ch) => (ch.id === channel.id ? data.channel : ch)));
         } catch (error: any) {
             console.error('Failed to toggle channel:', error);
-            setChannelsError(error?.message || 'Failed to update channel');
+            setChannelsError(error?.message || t('failed_to_update_channel') || 'Failed to update channel');
         }
     };
 
@@ -494,7 +517,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
             setCollectorChannels((prev) => prev.map((ch) => (ch.id === channel.id ? data.channel : ch)));
         } catch (error: any) {
             console.error('Failed to assign channel account:', error);
-            setChannelsError(error?.message || 'Failed to assign account to channel');
+            setChannelsError(error?.message || t('failed_to_assign_channel_account') || 'Failed to assign account to channel');
         }
     };
 
@@ -1190,7 +1213,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
                                     className="text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white rounded px-3 py-1.5 disabled:opacity-50"
                                 >
                                     {isRegisteringChannels
-                                        ? (t('loading') || 'Registering...')
+                                        ? (t('registering') || 'Registering...')
                                         : (t('register_selected') || 'Register selected') + ` (${selectedForImport.size})`}
                                 </button>
                             </div>
