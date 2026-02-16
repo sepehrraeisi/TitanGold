@@ -4,7 +4,7 @@ import CategoriesPanel from './DataHub/CategoriesPanel';
 import HealthPanel from './DataHub/HealthPanel';
 import LogsPanel from './DataHub/LogsPanel';
 import PipelinePanel from './DataHub/PipelinePanel';
-import TelegramPanel from './DataHub/TelegramPanel';
+import TelegramDataPanel from './DataHub/TelegramDataPanel';
 import DataSourcesPanel from './DataHub/DataSourcesPanel';
 import AdvancedFeatures from './DataHub/AdvancedFeatures';
 import DataHubModals from './DataHub/DataHubModals';
@@ -319,29 +319,12 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     )}
 
                     {activeView === 'telegram' && (
-                        <TelegramPanel
+                        <TelegramDataPanel
                             t={t}
-                            telegramCollectorUrl={telegramCollectorUrl}
-                            telegramCollectorState={dataHub.telegramCollector}
-                            telegramSources={dataHub.sources.filter(source => source.type === 'telegram')}
-                            handleCollectorHealth={handleCollectorHealth}
-                            isLoadingCollector={isLoadingCollector}
-                            collectorMessage={collectorMessage}
-                            collectorError={collectorError}
-                            handleStartCollectorLogin={handleStartCollectorLogin}
-                            handleConfirmCollectorLogin={handleConfirmCollectorLogin}
-                            handleCancelCollectorLogin={handleCancelCollectorLogin}
-                            handleRefreshCollectorChannels={handleRefreshCollectorChannels}
-                            handleLinkChannelToSource={handleLinkChannelToSource}
-                            handleTestCollectorChannel={handleTestCollectorChannel}
-                            formatTimeAgo={formatTimeAgo}
-                            collectorForm={collectorForm}
-                            handleCollectorInputChange={handleCollectorInputChange}
-                            collectorAuthId={collectorAuthId}
-                            testingChannelId={testingChannelId}
-                            channelTestPreview={channelTestPreview}
-                            isRefreshingChannels={isRefreshingChannels}
-                            combinedCollectorHealth={combinedCollectorHealth}
+                            Card={Card}
+                            onRefresh={onRefresh}
+                        />
+                    )}
                             setCollectorError={setCollectorError}
                             setCollectorMessage={setCollectorMessage}
                             Card={Card}
