@@ -5,6 +5,7 @@ import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
 import { runDataFetchJob } from '../jobs/dataFetchScheduler.js';
 import { maintenanceService } from '../services/maintenance.js';
+import { transferTelegramMessagesToPipeline } from '../services/telegramPipeline.js';
 
 class SchedulerService {
     constructor() {
@@ -42,6 +43,10 @@ class SchedulerService {
                 enabled: true,
                 interval: 24 * 60 * 60 * 1000, // 24 hours
                 autoRun: true
+            },
+            telegramPipeline: {
+                enabled: true,
+                interval: parseInt(process.env.TELEGRAM_PIPELINE_INTERVAL_MS) || 5 * 60 * 1000 // 5 minutes default (TASK-TC-003)
             }
         };
     }
@@ -62,6 +67,7 @@ class SchedulerService {
             // Start all scheduled jobs
             this.startAgentScheduler();
             this.startDataHubScheduler();
+            this.startTelegramPipelineScheduler();
             this.startTrainingScheduler();
             this.startAnalyticsScheduler();
             this.startArtemisScheduler();
@@ -222,6 +228,30 @@ class SchedulerService {
 
         this.intervals.set('dataHub', intervalId);
         logger.info(`✅ Data Hub Scheduler started (interval: ${this.config.dataHub.interval / 1000}s)`);
+    }
+
+    // Telegram Pipeline Scheduler - Transfer telegram_messages → collected_data (TASK-TC-003)
+    startTelegramPipelineScheduler() {
+        if (!this.config.telegramPipeline?.enabled) {
+            logger.info('⏸️ Telegram Pipeline Scheduler is disabled');
+            return;
+        }
+
+        const intervalId = setInterval(async () => {
+            if (!this.isRunning || !this.config.telegramPipeline?.enabled) return;
+
+            try {
+                const summary = await transferTelegramMessagesToPipeline(50);
+                if (summary.transferred > 0) {
+                    logger.info(`📨 Telegram pipeline: transferred ${summary.transferred} messages to collected_data`);
+                }
+            } catch (error) {
+                logger.error('❌ Telegram pipeline scheduler error:', error);
+            }
+        }, this.config.telegramPipeline.interval);
+
+        this.intervals.set('telegramPipeline', intervalId);
+        logger.info(`✅ Telegram Pipeline Scheduler started (interval: ${this.config.telegramPipeline.interval / 1000}s)`);
     }
 
     // Training Scheduler - Auto-schedule training sessions
@@ -390,6 +420,7 @@ class SchedulerService {
                 else if (section === 'analytics') this.startAnalyticsScheduler();
                 else if (section === 'artemis') this.startArtemisScheduler();
                 else if (section === 'maintenance') this.startMaintenanceScheduler();
+                else if (section === 'telegramPipeline') this.startTelegramPipelineScheduler();
             }
         }
     }

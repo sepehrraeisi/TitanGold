@@ -60,6 +60,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         telegramCollectorUrl,
         handleCheckHealth,
         handleCollectorHealth,
+        handleDiagnoseCollector,
         handleCollectorInputChange,
         handleStartCollectorLogin,
         handleConfirmCollectorLogin,
@@ -87,6 +88,11 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         isLoadingLogs,
         currentError,
         clearError,
+        showLoginWizard,
+        setShowLoginWizard,
+        accountsRefreshTrigger,
+        channelsRefreshTrigger,
+        collectorCooldownSeconds,
     } = useDataHub(artemis, onRefresh, t);
 
     if (isLoading && !dataHub) {
@@ -233,6 +239,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             setViewingSourceData={setViewingSourceData}
                             handleTestSource={handleTestSource}
                             dataHub={dataHub}
+                            setActiveView={setActiveView}
                         />
                     )}
 
@@ -250,6 +257,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             isLoading={isLoading}
                             error={categoriesError}
                             setError={setCategoriesError}
+                            dataHub={dataHub}
                         />
                     )}
 
@@ -262,6 +270,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             error={healthError}
                             setError={setHealthError}
                             Card={Card}
+                            telegramCollector={dataHub.telegramCollector}
+                            dataHub={dataHub}
                         />
                     )}
 
@@ -335,6 +345,12 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             setCollectorError={setCollectorError}
                             setCollectorMessage={setCollectorMessage}
                             Card={Card}
+                            collectorCooldownSeconds={collectorCooldownSeconds}
+                            handleDiagnoseCollector={handleDiagnoseCollector}
+                            showLoginWizard={showLoginWizard}
+                            setShowLoginWizard={setShowLoginWizard}
+                            accountsRefreshTrigger={accountsRefreshTrigger}
+                            channelsRefreshTrigger={channelsRefreshTrigger}
                         />
                     )}
                 </div>
@@ -354,6 +370,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     setEditingCategory={setEditingCategory}
                     viewingSourceData={viewingSourceData}
                     setViewingSourceData={setViewingSourceData}
+                    setActiveView={setActiveView}
                 />
             </div>
         </ApiWrapper>

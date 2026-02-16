@@ -157,9 +157,16 @@ const AutomationTopicModal: React.FC<{
                                 className="w-full px-3 py-2 bg-secondary border border-border rounded min-h-[120px]"
                             >
                                 {dataTypes.map(type => (
-                                    <option key={type} value={type}>{type}</option>
+                                    <option key={type} value={type}>
+                                        {type === 'telegram' ? `📱 ${type}` : type}
+                                    </option>
                                 ))}
                             </select>
+                            {dataTypeSelection.includes('telegram') && (
+                                <p className="text-[10px] text-sky-300/80 mt-1">
+                                    {t('telegram_automation_hint') || 'This rule will trigger on Telegram messages from configured channels.'}
+                                </p>
+                            )}
                         </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">

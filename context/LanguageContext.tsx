@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
-import enTranslations from '../locales/en.json';
-import faTranslations from '../locales/fa.json';
+import enTranslations from '../deploy/blue/locales/en.json';
+import faTranslations from '../deploy/blue/locales/fa.json';
 
 type Language = 'en' | 'fa';
 type Translations = { [key: string]: string };

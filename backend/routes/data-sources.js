@@ -17,6 +17,8 @@ import {
 } from '../schemas/dataHubSchemas.js';
 
 import { telegramService } from '../services/telegram.js';
+import { syncTelegramChannelsToDataSources, syncChannelCategoryToDataSource } from '../services/telegramSync.js';
+import { transferTelegramMessagesToPipeline } from '../services/telegramPipeline.js';
 import { dataFetcherService } from '../services/dataFetcher.js';
 import { logger } from '../services/logger.js';
 import { encryptSecret, decryptSecret, isEncrypted } from '../utils/crypto.js';
@@ -37,6 +39,96 @@ router.post('/publish-telegram', authenticate, async (req, res) => {
     res.json({ success: true, message: 'Published to Telegram' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to publish to Telegram' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Telegram Collector ↔ Data Sources Sync (TASK-DHT-010)
+// ---------------------------------------------------------------------------
+
+router.post('/telegram-sync', authenticate, writeRateLimiter, async (req, res) => {
+  try {
+    const summary = await syncTelegramChannelsToDataSources();
+    res.json({
+      success: true,
+      ...summary,
+    });
+  } catch (error) {
+    logger.error('Failed to sync telegram channels with data sources:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to sync Telegram channels with data sources',
+    });
+  }
+});
+
+// Sync category for a specific telegram channel → data source (TASK-DHT-020)
+router.post('/telegram-sync-category', authenticate, writeRateLimiter, async (req, res) => {
+  try {
+    const { channelId, category } = req.body;
+    
+    if (!channelId || !category) {
+      return res.status(400).json({
+        success: false,
+        error: 'channelId and category are required',
+      });
+    }
+
+    const result = await syncChannelCategoryToDataSource(channelId, category);
+    res.json(result);
+  } catch (error) {
+    logger.error('Failed to sync channel category to data source:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to sync channel category',
+    });
+  }
+});
+
+// Transfer telegram messages to pipeline (TASK-DHT-030)
+router.post('/telegram-transfer-messages', authenticate, writeRateLimiter, async (req, res) => {
+  try {
+    const { batchSize } = req.body;
+    const size = batchSize && batchSize > 0 && batchSize <= 500 ? batchSize : 50;
+    
+    const summary = await transferTelegramMessagesToPipeline(size);
+    res.json({
+      success: true,
+      ...summary,
+    });
+  } catch (error) {
+    logger.error('Failed to transfer telegram messages to pipeline:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to transfer telegram messages',
+    });
+  }
+});
+
+// Per-account telegram metrics for Account Summary (TASK-TC-009)
+router.get('/telegram-account-metrics', authenticate, readRateLimiter, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT tc.account_id, COUNT(*)::int AS messages_24h
+       FROM telegram_messages tm
+       JOIN telegram_channels tc ON tm.channel_id = tc.id
+       WHERE tm.created_at >= NOW() - INTERVAL '24 hours'
+         AND tc.account_id IS NOT NULL
+       GROUP BY tc.account_id`
+    );
+    const metrics = {};
+    for (const row of result.rows) {
+      if (row.account_id) {
+        metrics[row.account_id] = { messages24h: row.messages_24h };
+      }
+    }
+    res.json({ success: true, metrics });
+  } catch (error) {
+    logger.error('Failed to fetch telegram account metrics:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch telegram account metrics',
+    });
   }
 });
 

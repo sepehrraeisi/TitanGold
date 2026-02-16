@@ -24,6 +24,7 @@ interface ModalsProps {
     setEditingCategory: (category: DataCategory | null) => void;
     viewingSourceData: DataSource | null;
     setViewingSourceData: (source: DataSource | null) => void;
+    setActiveView?: (view: 'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram') => void;
 }
 
 const DataHubModals: React.FC<ModalsProps> = ({
@@ -41,6 +42,7 @@ const DataHubModals: React.FC<ModalsProps> = ({
     setEditingCategory,
     viewingSourceData,
     setViewingSourceData,
+    setActiveView,
 }) => {
     if (!dataHub) return null;
 
@@ -72,6 +74,7 @@ const DataHubModals: React.FC<ModalsProps> = ({
                         }
                     }}
                     t={t}
+                    setActiveView={setActiveView}
                 />
             )}
 

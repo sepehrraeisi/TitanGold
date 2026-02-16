@@ -259,7 +259,7 @@ class SchedulerService {
 
     async refreshDataSource(sourceId) {
         try {
-            await fetch(`http://localhost:${process.env.PORT || 5001}/api/data-sources/${sourceId}/refresh`, {
+            await fetch(`http://localhost:${process.env.PORT || 5001}/api/v1/data-sources/${sourceId}/refresh`, {
                 method: 'POST'
             });
         } catch (error) {
@@ -269,7 +269,7 @@ class SchedulerService {
 
     async normalizeDataSource(sourceId) {
         try {
-            await fetch(`http://localhost:${process.env.PORT || 5001}/api/data-sources/${sourceId}/normalize`, {
+            await fetch(`http://localhost:${process.env.PORT || 5001}/api/v1/data-sources/${sourceId}/normalize`, {
                 method: 'POST'
             });
         } catch (error) {

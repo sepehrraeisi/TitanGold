@@ -3,6 +3,10 @@
 MTProto-based collector dedicated to Telegram sources in the Titan Data Hub.  
 Provides a REST endpoint that the main app can call instead of scraping the public web view.
 
+## Source vs dist (TASK-TC-001)
+
+**Entry point:** `src/index.ts` compiles to `dist/index.js` and loads the full app from `dist/index.legacy.js` (and `dist/utils/`, `dist/services/`). Run with `npm run start` or `node dist/index.js`; `npm run build` compiles the TypeScript entry. See `TELEGRAM_COLLECTOR_ANALYSIS.md` and `BUILD_AND_DEPLOY.md` §2.2.
+
 ## Features
 
 - Uses `gramjs` (MTProto) to fetch channel messages without Bot API limits.
@@ -25,10 +29,11 @@ Provides a REST endpoint that the main app can call instead of scraping the publ
    npm run auth
    ```
    Paste the output `TELEGRAM_SESSION_STRING=...` back into `.env`.
-4. Start the collector:
+4. Start the collector (use dist; src may be missing):
    ```bash
-   npm run dev
+   npm run start
    ```
+   or `node dist/index.js`. For full setup see root `BUILD_AND_DEPLOY.md` §2.2.
 
 ## API
 

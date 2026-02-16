@@ -1,24 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import * as api from '../../../../../services/api';
-import { DataSource, DataHubState } from '../../../../../types';
-import Pagination from '../../../../common/Pagination';
-import SkeletonLoader from '../../../../common/SkeletonLoader';
-import ApiWrapper from '../../../../common/ApiWrapper';
+import React from 'react';
+import { DataHubState, DataSource } from '../../../../../types';
 
-interface DataSourcesPanelProps {
+type Props = {
     t: (key: string) => string;
     formatTimeAgo: (date: string | Date) => string;
     onRefresh: () => void;
-    Card: React.FC<{ children: React.ReactNode; className?: string }>;
-    downloadCSV: (data: any[], filename: string) => void;
+    Card: React.ComponentType<any>;
+    downloadCSV: (filename: string, rows: any[]) => void;
     setEditingSource: (source: DataSource | null) => void;
     setShowCreateSourceModal: (show: boolean) => void;
     setViewingSourceData: (source: DataSource | null) => void;
-    handleTestSource: (id: string) => void;
-    dataHub: DataHubState | null;
-}
+    handleTestSource: (sourceId: string) => void | Promise<void>;
+    dataHub: DataHubState;
+    setActiveView?: (view: 'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram') => void;
+};
 
-const DataSourcesPanel: React.FC<DataSourcesPanelProps> = ({
+const DataSourcesPanel: React.FC<Props> = ({
     t,
     formatTimeAgo,
     onRefresh,
@@ -27,227 +24,297 @@ const DataSourcesPanel: React.FC<DataSourcesPanelProps> = ({
     setEditingSource,
     setShowCreateSourceModal,
     setViewingSourceData,
-    handleTestSource
+    handleTestSource,
+    dataHub,
+    setActiveView,
 }) => {
-    const [sources, setSources] = useState<DataSource[]>([]);
-    const [pagination, setPagination] = useState({
-        page: 1,
-        total: 0,
-        totalPages: 0,
-        limit: 20
-    });
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const sources = dataHub.sources || [];
 
-    const loadSources = async (page: number) => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const response = await api.fetchDataSources(page, pagination.limit);
-            setSources(response.data);
-            setPagination({
-                ...pagination,
-                page: response.pagination.page,
-                total: response.pagination.total,
-                totalPages: response.pagination.totalPages
-            });
-        } catch (err: any) {
-            console.error('Failed to load data sources:', err);
-            setError(err.message || 'Failed to load data sources');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        loadSources(pagination.page);
-    }, [pagination.page]);
-
-    const handlePageChange = (newPage: number) => {
-        setPagination(prev => ({ ...prev, page: newPage }));
+    const handleExport = () => {
+        if (!sources.length) return;
+        downloadCSV('data-sources', sources);
     };
 
     return (
-        <ApiWrapper
-            error={error}
-            setError={setError}
-            isLoading={isLoading && sources.length === 0}
-        >
-            <Card>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-foreground">{t('data_sources') || 'Data Sources'}</h3>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => downloadCSV(sources, 'data-sources')}
-                            className="bg-secondary hover:bg-accent text-secondary-foreground font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
-                        >
-                            {t('export_csv') || 'Export CSV'}
-                        </button>
-                        <button
-                            onClick={() => {
-                                setEditingSource(null);
-                                setShowCreateSourceModal(true);
-                            }}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
-                        >
-                            {t('add_source') || '+ Add Source'}
-                        </button>
-                    </div>
+        <div className="space-y-4">
+            {/* Header + actions */}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 className="font-semibold text-foreground">
+                        {t('data_sources') || 'Data Sources'}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                        {t('data_sources_desc') ||
+                            'Manage and monitor all upstream sources your AI agents rely on (Telegram, RSS, APIs, web).'}
+                    </p>
                 </div>
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        onClick={onRefresh}
+                        className="text-[11px] px-3 py-1.5 rounded-full border border-slate-600/70 bg-slate-900/70 text-foreground hover:border-purple-400 hover:text-purple-200 transition"
+                    >
+                        {t('refresh') || 'Refresh'}
+                    </button>
+                    <button
+                        onClick={handleExport}
+                        disabled={!sources.length}
+                        className="text-[11px] px-3 py-1.5 rounded-full border border-slate-600/70 bg-slate-900/70 text-foreground hover:border-emerald-400 hover:text-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                        {t('export_csv') || 'Export CSV'}
+                    </button>
+                    <button
+                        onClick={() => {
+                            setEditingSource(null);
+                            setShowCreateSourceModal(true);
+                        }}
+                        className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600/90 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/40"
+                    >
+                        {t('add_source') || '+ Add Source'}
+                    </button>
+                </div>
+            </div>
 
-                <div className="space-y-3 min-h-[400px]">
-                    {sources.length > 0 ? (
-                        sources.map(source => (
-                            <div key={source.id} className="border border-border rounded-lg p-4 hover:bg-secondary/50 transition-colors">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div>
-                                        <h4 className="font-semibold text-foreground">{source.name}</h4>
-                                        <p className="text-xs text-muted-foreground">{source.type} • {source.category}</p>
+            {/* Sources list */}
+            <Card className="bg-slate-950/70 border border-white/5 shadow-[0_18px_60px_rgba(15,23,42,0.9)]">
+                {sources.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">
+                        {t('no_data_sources') || 'No data sources configured yet.'}
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {sources.map((source) => {
+                            const isTelegram = source.type === 'telegram';
+                            return (
+                                <div
+                                    key={source.id}
+                                    className="rounded-xl border border-slate-800/80 bg-gradient-to-r from-slate-900/90 via-slate-950/90 to-slate-900/80 px-4 py-3 hover:border-purple-500/60 hover:shadow-[0_0_25px_rgba(168,85,247,0.25)] transition-colors"
+                                >
+                                    {/* Top row: name + badges */}
+                                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                                        <div className="space-y-0.5">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="text-sm font-semibold text-foreground">
+                                                    {source.name}
+                                                </h4>
+                                                {isTelegram && (
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/40 flex items-center gap-1">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                                                        {t('telegram') || 'Telegram'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground">
+                                                {source.type} • {source.category}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5 justify-end">
+                                            <span
+                                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                                    source.status === 'active'
+                                                        ? 'bg-emerald-500/15 text-emerald-300'
+                                                        : source.status === 'error'
+                                                        ? 'bg-red-500/15 text-red-300'
+                                                        : source.status === 'testing'
+                                                        ? 'bg-amber-500/15 text-amber-300'
+                                                        : 'bg-slate-500/20 text-slate-300'
+                                                }`}
+                                            >
+                                                {t(source.status) || source.status}
+                                            </span>
+                                            <span
+                                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                                    source.priority === 'critical'
+                                                        ? 'bg-red-500/15 text-red-300'
+                                                        : source.priority === 'high'
+                                                        ? 'bg-orange-500/15 text-orange-300'
+                                                        : source.priority === 'medium'
+                                                        ? 'bg-yellow-500/15 text-yellow-300'
+                                                        : 'bg-slate-500/20 text-slate-300'
+                                                }`}
+                                            >
+                                                {t(source.priority) || source.priority}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${source.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                                            source.status === 'error' ? 'bg-red-500/20 text-red-400' :
-                                                'bg-yellow-500/20 text-yellow-400'
-                                            }`}>
-                                            {t(source.status) || source.status}
-                                        </span>
-                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${source.priority === 'critical' ? 'bg-red-500/20 text-red-400' :
-                                            source.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                                                source.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                    'bg-gray-500/20 text-gray-400'
-                                            }`}>
-                                            {t(source.priority) || source.priority}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs">
-                                    <div>
-                                        <p className="text-muted-foreground">{t('success_rate') || 'Success Rate'}</p>
-                                        <p className="font-semibold text-foreground">
-                                            {typeof source.successRate === 'number'
-                                                ? source.successRate.toFixed(1)
-                                                : '0.0'
-                                            }%
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground">{t('reliability') || 'Reliability'}</p>
-                                        <p className="font-semibold text-foreground">
-                                            {typeof source.reliabilityScore === 'number'
-                                                ? source.reliabilityScore.toFixed(0)
-                                                : '0'
-                                            }
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground">{t('response_time') || 'Response Time'}</p>
-                                        <p className="font-semibold text-foreground">{source.responseTime || 0}ms</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground">{t('update_interval') || 'Update Interval'}</p>
-                                        <p className="font-semibold text-foreground">{t(source.updateInterval) || source.updateInterval}</p>
-                                    </div>
-                                </div>
 
-                                {/* Connection Status */}
-                                <div className="mt-3 pt-3 border-t border-border">
-                                    <div className="flex items-center justify-between text-xs">
+                                    {/* Telegram-specific channel settings summary */}
+                                    {isTelegram && source.config && (
+                                        <div className="mt-3 pt-3 border-t border-slate-800/60">
+                                            <p className="text-[10px] text-muted-foreground mb-2">
+                                                {t('telegram_channel_settings') || 'Channel Settings'}
+                                            </p>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                                                {source.config.channelUsername && (
+                                                    <div>
+                                                        <p className="text-muted-foreground">
+                                                            {t('username') || 'Username'}
+                                                        </p>
+                                                        <p className="font-mono text-sky-300">
+                                                            @{source.config.channelUsername}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                {source.config.fetchLimit !== undefined && (
+                                                    <div>
+                                                        <p className="text-muted-foreground">
+                                                            {t('fetch_limit') || 'Fetch Limit'}
+                                                        </p>
+                                                        <p className="font-semibold text-foreground">
+                                                            {source.config.fetchLimit}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <p className="text-muted-foreground">
+                                                        {t('include_media') || 'Include Media'}
+                                                    </p>
+                                                    <p className="font-semibold text-foreground">
+                                                        {source.config.includeMedia !== false
+                                                            ? t('yes') || 'Yes'
+                                                            : t('no') || 'No'}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-muted-foreground">
+                                                        {t('parse_urls') || 'Parse URLs'}
+                                                    </p>
+                                                    <p className="font-semibold text-foreground">
+                                                        {source.config.parseUrls !== false
+                                                            ? t('yes') || 'Yes'
+                                                            : t('no') || 'No'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Metrics row */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-[11px]">
+                                        <div>
+                                            <p className="text-muted-foreground">
+                                                {t('success_rate') || 'Success Rate'}
+                                            </p>
+                                            <p className="font-semibold text-foreground">
+                                                {source.successRate.toFixed(1)}%
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-muted-foreground">
+                                                {t('reliability') || 'Reliability'}
+                                            </p>
+                                            <p className="font-semibold text-foreground">
+                                                {source.reliabilityScore.toFixed(0)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-muted-foreground">
+                                                {t('response_time') || 'Response Time'}
+                                            </p>
+                                            <p className="font-semibold text-foreground">
+                                                {(source.responseTime || 0) + 'ms'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-muted-foreground">
+                                                {t('update_interval') || 'Update Interval'}
+                                            </p>
+                                            <p className="font-semibold text-foreground">
+                                                {t(source.updateInterval) || source.updateInterval}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Connection + last update */}
+                                    <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px]">
                                         <div className="flex items-center gap-2">
-                                            <div className={`w-2 h-2 rounded-full ${source.status === 'active' ? 'bg-green-500 animate-pulse' :
-                                                source.status === 'error' ? 'bg-red-500' :
-                                                    source.status === 'testing' ? 'bg-yellow-500 animate-pulse' :
-                                                        'bg-gray-500'
-                                                }`}></div>
+                                            <span
+                                                className={`w-2 h-2 rounded-full ${
+                                                    source.status === 'active'
+                                                        ? 'bg-emerald-400 animate-pulse'
+                                                        : source.status === 'error'
+                                                        ? 'bg-red-500'
+                                                        : source.status === 'testing'
+                                                        ? 'bg-amber-400 animate-pulse'
+                                                        : 'bg-slate-500'
+                                                }`}
+                                            />
                                             <span className="text-muted-foreground">
-                                                {source.status === 'active' ? (t('connected') || 'Connected') :
-                                                    source.status === 'error' ? (t('error') || 'Error') :
-                                                        source.status === 'testing' ? (t('testing') || 'Testing...') :
-                                                            (t('inactive') || 'Inactive')}
+                                                {source.status === 'active'
+                                                    ? t('connected') || 'Connected'
+                                                    : source.status === 'error'
+                                                    ? t('error') || 'Error'
+                                                    : source.status === 'testing'
+                                                    ? t('testing') || 'Testing...'
+                                                    : t('inactive') || 'Inactive'}
                                             </span>
                                         </div>
                                         <div className="text-muted-foreground">
                                             {source.lastSuccess ? (
-                                                <span className="text-green-400">
-                                                    {t('last_success') || 'Last success'}: {formatTimeAgo(source.lastSuccess)}
+                                                <span className="text-emerald-300">
+                                                    {t('last_success') || 'Last success'}:{' '}
+                                                    {formatTimeAgo(source.lastSuccess)}
                                                 </span>
                                             ) : source.lastUpdate ? (
                                                 <span>
-                                                    {t('last_update') || 'Last update'}: {formatTimeAgo(source.lastUpdate)}
+                                                    {t('last_update') || 'Last update'}:{' '}
+                                                    {formatTimeAgo(source.lastUpdate)}
                                                 </span>
                                             ) : (
                                                 <span>{t('never_updated') || 'Never updated'}</span>
                                             )}
                                         </div>
                                     </div>
+
                                     {source.lastError && (
-                                        <div className="mt-2 text-xs text-red-400">
+                                        <div className="mt-2 text-[11px] text-red-300">
                                             {t('last_error') || 'Last error'}: {source.lastError}
                                         </div>
                                     )}
-                                </div>
 
-                                <div className="flex gap-2 mt-3">
-                                    <button
-                                        onClick={() => {
-                                            setViewingSourceData(source);
-                                        }}
-                                        className="text-xs px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded"
-                                    >
-                                        {t('view_data') || 'View Data'}
-                                    </button>
-                                    <button
-                                        onClick={() => handleTestSource(source.id)}
-                                        disabled={source.status === 'testing'}
-                                        className="text-xs px-3 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded"
-                                    >
-                                        {source.status === 'testing' ? (t('testing') || 'Testing...') : (t('test_connection') || 'Test Connection')}
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setEditingSource(source);
-                                            setShowCreateSourceModal(true);
-                                        }}
-                                        className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
-                                    >
-                                        {t('edit') || 'Edit'}
-                                    </button>
-                                    <button
-                                        onClick={async () => {
-                                            const confirmed = window.confirm(t('confirm_delete') || 'Are you sure?');
-                                            if (confirmed) {
-                                                try {
-                                                    await api.deleteDataSource(source.id);
-                                                    loadSources(pagination.page);
-                                                    onRefresh();
-                                                } catch (e) {
-                                                    alert(t('delete_failed') || 'Failed');
-                                                }
-                                            }
-                                        }}
-                                        className="text-xs px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
-                                    >
-                                        {t('delete') || 'Delete'}
-                                    </button>
+                                    {/* Actions */}
+                                    <div className="flex flex-wrap gap-2 mt-3">
+                                        {isTelegram && setActiveView && (
+                                            <button
+                                                onClick={() => setActiveView('telegram')}
+                                                className="text-[11px] px-3 py-1 rounded-full border border-sky-500/70 text-sky-200 hover:bg-sky-500/10 transition flex items-center gap-1"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                                </svg>
+                                                {t('open_in_telegram_collector') || 'Open in Telegram Collector'}
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => setViewingSourceData(source)}
+                                            className="text-[11px] px-3 py-1 rounded-full border border-purple-500/70 text-purple-200 hover:bg-purple-500/10 transition"
+                                        >
+                                            {t('view_data') || 'View Data'}
+                                        </button>
+                                        <button
+                                            onClick={() => handleTestSource(source.id)}
+                                            className="text-[11px] px-3 py-1 rounded-full border border-emerald-500/70 text-emerald-200 hover:bg-emerald-500/10 transition"
+                                        >
+                                            {t('test_connection') || 'Test Connection'}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setEditingSource(source);
+                                                setShowCreateSourceModal(true);
+                                            }}
+                                            className="text-[11px] px-3 py-1 rounded-full border border-slate-600 text-slate-100 hover:bg-slate-600/30 transition"
+                                        >
+                                            {t('edit') || 'Edit'}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))
-                    ) : (
-                        <div className="text-center p-12 text-muted-foreground border border-dashed border-border rounded-lg">
-                            {t('no_sources_found') || 'No data sources found.'}
-                        </div>
-                    )}
-                </div>
-
-                <Pagination
-                    currentPage={pagination.page}
-                    totalPages={pagination.totalPages}
-                    totalCount={pagination.total}
-                    limit={pagination.limit}
-                    onPageChange={handlePageChange}
-                />
+                            );
+                        })}
+                    </div>
+                )}
             </Card>
-        </ApiWrapper>
+        </div>
     );
 };
 
 export default DataSourcesPanel;
+

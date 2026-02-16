@@ -72,14 +72,16 @@ const AdvancedFeatures: React.FC<{
                 </button>
                 <button
                     onClick={() => setActiveFeature('telegram')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'telegram' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-1.5 ${activeFeature === 'telegram' ? 'bg-sky-500/15 text-sky-300 border-b-2 border-sky-500' : 'text-muted-foreground hover:text-foreground'}`}
                 >
+                    <span>📱</span>
                     {t('telegram_publisher') || 'Telegram Publisher'}
                 </button>
                 <button
                     onClick={() => setActiveFeature('automation')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'automation' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-1.5 ${activeFeature === 'automation' ? 'bg-purple-500/15 text-purple-300 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
                 >
+                    <span>🤖</span>
                     {t('automation_routing') || 'Automation'}
                 </button>
                 <button
@@ -89,6 +91,27 @@ const AdvancedFeatures: React.FC<{
                     {t('archiving') || 'Archiving'}
                 </button>
             </div>
+
+            {/* Telegram-specific hints (TASK-DHT-065) */}
+            {(activeFeature === 'telegram' || activeFeature === 'automation') && (
+                <div className="bg-gradient-to-r from-sky-950/40 via-slate-900/40 to-sky-950/40 border border-sky-500/30 rounded-lg p-3 backdrop-blur-sm">
+                    <div className="flex items-start gap-2">
+                        <span className="text-sky-400 text-lg">💡</span>
+                        <div className="flex-1">
+                            <p className="text-xs font-semibold text-sky-200 mb-1">
+                                {activeFeature === 'telegram' 
+                                    ? t('telegram_publisher_hint_title') || 'Telegram Publisher - Input vs Output Channels'
+                                    : t('telegram_automation_hint_title') || 'Telegram Automation - How It Works'}
+                            </p>
+                            <p className="text-[11px] text-sky-300/80 leading-relaxed">
+                                {activeFeature === 'telegram' 
+                                    ? t('telegram_publisher_hint') || 'Input channels collect data from Telegram (configured in Telegram Collector tab). Output channels (publishers) broadcast AI-analyzed signals back to Telegram. Use Automation Rules to connect input channels to output publishers.'
+                                    : t('telegram_automation_hint') || 'Create automation rules with dataType="telegram" to trigger actions when Telegram messages match your criteria (categories, tags, keywords). These rules can route signals to Telegram publishers for automated broadcasting.'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Conditionally rendered feature sections */}
             {activeFeature === 'crawlers' && (

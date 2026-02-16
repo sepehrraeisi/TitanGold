@@ -16,6 +16,7 @@ interface CategoriesPanelProps {
     isLoading?: boolean;
     error?: string | null;
     setError?: (err: string | null) => void;
+    dataHub?: DataHubState | null;
 }
 
 const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
@@ -30,7 +31,8 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
     Card,
     isLoading = false,
     error = null,
-    setError = () => { }
+    setError = () => { },
+    dataHub
 }) => {
     const [categoryFilter, setCategoryFilter] = useState('');
     const [categoryTagFilter, setCategoryTagFilter] = useState('');
@@ -47,6 +49,19 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
             return matchesName && matchesTags;
         });
     }, [categories, categoryFilter, categoryTagFilter]);
+
+    // Count Telegram sources per category (TASK-DHT-021, TASK-DHT-025)
+    const telegramSourceCountByCategory = useMemo(() => {
+        if (!dataHub?.sources) return {};
+        const counts: Record<string, number> = {};
+        dataHub.sources
+            .filter(source => source.type === 'telegram')
+            .forEach(source => {
+                const catName = source.category || 'uncategorized';
+                counts[catName] = (counts[catName] || 0) + 1;
+            });
+        return counts;
+    }, [dataHub?.sources]);
 
     return (
         <ApiWrapper
@@ -108,14 +123,27 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
                             return (
                                 <div key={category.id} className="border border-border rounded-lg p-4 space-y-3">
                                     <div className="flex justify-between gap-4">
-                                        <div>
-                                            <h4 className="font-semibold text-foreground">{category.name}</h4>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-semibold text-foreground">{category.name}</h4>
+                                                {telegramSourceCountByCategory[category.name] > 0 && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/40 flex items-center gap-1">
+                                                        <span className="w-1 h-1 rounded-full bg-sky-400" />
+                                                        {telegramSourceCountByCategory[category.name]} {t('telegram') || 'Telegram'}
+                                                    </span>
+                                                )}
+                                            </div>
                                             {category.description && (
                                                 <p className="text-xs text-muted-foreground mt-1">{category.description}</p>
                                             )}
                                         </div>
                                         <div className="text-right text-xs text-muted-foreground">
                                             <div>{t('sources') || 'Sources'}: <span className="text-foreground font-semibold">{category.sourceCount}</span></div>
+                                            {telegramSourceCountByCategory[category.name] > 0 && (
+                                                <div className="text-sky-300">
+                                                    {t('telegram_sources') || 'Telegram'}: <span className="font-semibold">{telegramSourceCountByCategory[category.name]}</span>
+                                                </div>
+                                            )}
                                             <div>{t('data_types') || 'Data Types'}: <span className="text-foreground font-semibold">{category.dataTypes.length}</span></div>
                                         </div>
                                     </div>

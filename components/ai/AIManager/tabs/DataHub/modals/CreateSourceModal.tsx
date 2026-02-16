@@ -11,9 +11,10 @@ type Props = {
     onClose: () => void;
     onSave: (source: Omit<DataSource, 'id' | 'createdAt' | 'updatedAt' | 'errorCount' | 'successRate' | 'reliabilityScore'>) => Promise<void>;
     t: (key: string) => string;
+    setActiveView?: (view: 'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram') => void;
 };
 
-const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSave, t }) => {
+const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSave, t, setActiveView }) => {
     const [name, setName] = useState(source?.name || '');
     const [type, setType] = useState<DataSource['type']>(source?.type || 'api');
     const [url, setUrl] = useState(source?.url || '');
@@ -522,8 +523,59 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                     </div>
                 )}
                 {isExistingTelegram && (
-                    <div className="mb-4 text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
-                        {t('telegram_source_edit_hint') || 'This Telegram source is read-only. Manage details through the Telegram Collector tab.'}
+                    <div className="mb-4 space-y-2">
+                        <div className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
+                            {t('telegram_source_edit_hint') || 'This Telegram source is read-only. Manage details through the Telegram Collector tab.'}
+                        </div>
+                        {source?.config && (
+                            <div className="text-[11px] bg-slate-900/60 border border-slate-700/50 rounded p-3">
+                                <p className="text-muted-foreground mb-2">
+                                    {t('telegram_channel_settings') || 'Channel Settings'}
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {source.config.channelUsername && (
+                                        <div>
+                                            <p className="text-muted-foreground">
+                                                {t('username') || 'Username'}
+                                            </p>
+                                            <p className="font-mono text-sky-300">
+                                                @{source.config.channelUsername}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {source.config.fetchLimit !== undefined && (
+                                        <div>
+                                            <p className="text-muted-foreground">
+                                                {t('fetch_limit') || 'Fetch Limit'}
+                                            </p>
+                                            <p className="text-foreground">
+                                                {source.config.fetchLimit}
+                                            </p>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <p className="text-muted-foreground">
+                                            {t('include_media') || 'Include Media'}
+                                        </p>
+                                        <p className="text-foreground">
+                                            {source.config.includeMedia !== false
+                                                ? t('yes') || 'Yes'
+                                                : t('no') || 'No'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground">
+                                            {t('parse_urls') || 'Parse URLs'}
+                                        </p>
+                                        <p className="text-foreground">
+                                            {source.config.parseUrls !== false
+                                                ? t('yes') || 'Yes'
+                                                : t('no') || 'No'}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -991,21 +1043,37 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                     </div>
                 </div>
 
-                <div className="flex justify-end gap-2 mt-6">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 bg-secondary hover:bg-accent text-secondary-foreground rounded-lg text-sm"
-                        disabled={isSaving}
-                    >
-                        {t('cancel') || 'Cancel'}
-                    </button>
-                    <button
-                        onClick={handleSubmit}
-                        disabled={isSaving}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm"
-                    >
-                        {isSaving ? t('saving') || 'Saving...' : t('save') || 'Save'}
-                    </button>
+                <div className="flex justify-between items-center gap-2 mt-6">
+                    {isExistingTelegram && setActiveView && (
+                        <button
+                            onClick={() => {
+                                onClose();
+                                setActiveView('telegram');
+                            }}
+                            className="px-4 py-2 border border-sky-500/70 text-sky-200 hover:bg-sky-500/10 rounded-lg text-sm flex items-center gap-2"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                            {t('open_in_telegram_collector') || 'Open in Telegram Collector'}
+                        </button>
+                    )}
+                    <div className="flex gap-2 ml-auto">
+                        <button
+                            onClick={onClose}
+                            className="px-4 py-2 bg-secondary hover:bg-accent text-secondary-foreground rounded-lg text-sm"
+                            disabled={isSaving}
+                        >
+                            {t('cancel') || 'Cancel'}
+                        </button>
+                        <button
+                            onClick={handleSubmit}
+                            disabled={isSaving || isExistingTelegram}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm"
+                        >
+                            {isSaving ? t('saving') || 'Saving...' : t('save') || 'Save'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

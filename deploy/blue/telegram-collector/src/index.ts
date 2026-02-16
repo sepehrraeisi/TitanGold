@@ -1,12 +1,22 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { Pool } from 'pg';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { Api } from 'telegram/tl';
 import input from 'input';
 
 dotenv.config();
+
+const pool = new Pool({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5433'),
+    database: process.env.DB_NAME || 'titangold_db',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || '',
+});
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -16,7 +26,7 @@ app.use(cors());
 app.use(express.json());
 
 // Store active auth sessions
-const authSessions = new Map<string, { client: TelegramClient; phoneCodeHash: string }>();
+const authSessions = new Map<string, { client: TelegramClient; phoneCodeHash: string; phoneNumber: string }>();
 
 // Helper to get or create Telegram client
 async function getTelegramClient(sessionString?: string): Promise<TelegramClient> {
@@ -95,7 +105,8 @@ app.post('/api/telegram-collector/login/start', async (req, res) => {
         // Store session for confirmation
         authSessions.set(authId, {
             client,
-            phoneCodeHash: result.phoneCodeHash
+            phoneCodeHash: result.phoneCodeHash,
+            phoneNumber,
         });
 
         console.log('✅ Verification code sent to:', phoneNumber);
@@ -138,8 +149,13 @@ app.post('/api/telegram-collector/login/confirm', async (req, res) => {
             });
         }
 
-        const { client, phoneCodeHash } = authSession;
-        const phoneNumber = process.env.TELEGRAM_PHONE_NUMBER || '';
+        const { client, phoneCodeHash, phoneNumber } = authSession;
+        if (!phoneNumber) {
+            return res.status(500).json({
+                error: 'Missing phone number on auth session',
+                message: 'Please restart the login process',
+            });
+        }
 
         // Sign in with code
         await client.start({
@@ -152,29 +168,18 @@ app.post('/api/telegram-collector/login/confirm', async (req, res) => {
         // Get session string
         const sessionString = client.session.save() as unknown as string;
 
-        // Save session to .env file
+        // Persist per-account session in telegram_accounts (multi-account support)
         try {
-            const fs = require('fs');
-            const path = require('path');
-            const envPath = path.join(__dirname, '../.env');
-            let envContent = fs.readFileSync(envPath, 'utf8');
-            
-            // Update or add TELEGRAM_SESSION_STRING (handle commented lines too)
-            if (envContent.includes('TELEGRAM_SESSION_STRING=')) {
-                envContent = envContent.replace(
-                    /^#?\s*TELEGRAM_SESSION_STRING=.*/m,
-                    `TELEGRAM_SESSION_STRING=${sessionString}`
-                );
-            } else {
-                envContent += `\nTELEGRAM_SESSION_STRING=${sessionString}\n`;
-            }
-            
-            fs.writeFileSync(envPath, envContent);
-            process.env.TELEGRAM_SESSION_STRING = sessionString;
-            console.log('💾 Session saved to .env file');
-        } catch (error) {
-            console.error('⚠️  Failed to save session to .env:', error);
+            const accountManagerPath = path.join(__dirname, '../../../../telegram-collector/dist/utils/accountManager.js');
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { upsertAccountSession } = require(accountManagerPath);
+            const account = await upsertAccountSession(phoneNumber, sessionString, {});
+            console.log('✅ Account session saved to telegram_accounts:', account?.id);
+        } catch (dbError: any) {
+            console.error('⚠️  Failed to save account session in telegram_accounts:', dbError?.message || dbError);
         }
+
+        // Session is stored only in telegram_accounts (DB); no .env write for security and single source of truth.
 
         // Clean up auth session
         authSessions.delete(authId);
@@ -192,6 +197,29 @@ app.post('/api/telegram-collector/login/confirm', async (req, res) => {
         res.status(500).json({ 
             error: 'Failed to confirm login',
             message: error.message || 'Unknown error occurred'
+        });
+    }
+});
+
+// List all Telegram MTProto accounts
+app.get('/api/telegram-collector/accounts', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, phone, label, status, last_login_at, last_used_at, last_flood_until, is_primary, created_at, updated_at
+             FROM telegram_accounts
+             ORDER BY created_at DESC`
+        );
+        res.json({
+            success: true,
+            count: result.rows.length,
+            accounts: result.rows,
+        });
+    } catch (error: any) {
+        console.error('❌ Failed to list telegram accounts:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to list accounts',
+            message: error?.message || 'Unknown error',
         });
     }
 });

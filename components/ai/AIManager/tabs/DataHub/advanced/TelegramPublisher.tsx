@@ -105,38 +105,100 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({
 
                 {/* Content Area */}
                 {activeTab === 'channels' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {publishers.length > 0 ? (
-                            publishers.map(pub => (
-                                <div key={pub.id} className="border border-border rounded-lg p-4 bg-secondary/5">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div>
-                                            <h5 className="font-bold text-foreground">{pub.name}</h5>
-                                            <p className="text-[10px] text-muted-foreground font-mono">{pub.chatId}</p>
-                                        </div>
-                                        <StatusBadge status={pub.enabled ? 'success' : 'neutral'} label={pub.enabled ? 'Active' : 'Paused'} size="sm" />
-                                    </div>
-                                    <div className="space-y-1 mb-4">
-                                        <div className="flex justify-between text-[11px]">
-                                            <span className="text-muted-foreground">Attached Agent:</span>
-                                            <span className="text-purple-300">{pub.agentId ? agentMap[pub.agentId]?.name : 'None'}</span>
-                                        </div>
-                                        <div className="flex justify-between text-[11px]">
-                                            <span className="text-muted-foreground">Security:</span>
-                                            <span className="text-foreground">{pub.isPrivate ? 'Private' : 'Public'}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <ActionButton variant="ghost" size="sm">Edit</ActionButton>
-                                        <ActionButton variant="secondary" size="sm">Test</ActionButton>
-                                    </div>
+                    <div className="space-y-4">
+                        {/* Input/Output Channel Mapping Section (TASK-DHT-061) */}
+                        {dataHub.sources && dataHub.sources.filter(s => s.type === 'telegram').length > 0 && (
+                            <div className="bg-gradient-to-br from-slate-900/90 via-slate-950/90 to-slate-900/80 border border-slate-800/60 rounded-lg p-4">
+                                <h5 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                                    <span className="text-sky-400">🔗</span>
+                                    {t('telegram_channel_mapping') || 'Input/Output Channel Mapping'}
+                                </h5>
+                                <p className="text-[11px] text-muted-foreground mb-3">
+                                    {t('telegram_mapping_desc') || 'Telegram channels collecting data (input) can be mapped to publisher channels (output) for automated signal broadcasting.'}
+                                </p>
+                                <div className="space-y-2">
+                                    {dataHub.sources
+                                        .filter(s => s.type === 'telegram')
+                                        .slice(0, 5)
+                                        .map(source => {
+                                            const linkedPublishers = publishers.filter(p => 
+                                                p.sourceIds?.includes(source.id) || 
+                                                (p.agentId && dataHub.automation?.agentTopics.some(t => 
+                                                    t.agentId === p.agentId && 
+                                                    t.dataTypes.includes('telegram') &&
+                                                    t.publisherTargets.includes(p.id)
+                                                ))
+                                            );
+                                            return (
+                                                <div key={source.id} className="flex items-center justify-between p-2 bg-slate-950/50 rounded border border-slate-800/40">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[11px] font-semibold text-foreground truncate">
+                                                            📥 {source.name || source.id}
+                                                        </p>
+                                                        <p className="text-[10px] text-muted-foreground font-mono truncate">
+                                                            {source.url || source.id}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 ml-3">
+                                                        <span className="text-[10px] text-muted-foreground">→</span>
+                                                        {linkedPublishers.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {linkedPublishers.map(pub => (
+                                                                    <span 
+                                                                        key={pub.id}
+                                                                        className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/40"
+                                                                    >
+                                                                        📤 {pub.name}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[10px] text-muted-foreground italic">
+                                                                {t('no_output_mapping') || 'No output'}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                 </div>
-                            ))
-                        ) : (
-                            <div className="md:col-span-2">
-                                <EmptyState title="No channels configured" description="Register a Telegram bot and add chat IDs to start publishing signals." icon={<span className="text-4xl">🤖</span>} />
                             </div>
                         )}
+                        
+                        {/* Publisher Channels List */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {publishers.length > 0 ? (
+                                publishers.map(pub => (
+                                    <div key={pub.id} className="border border-border rounded-lg p-4 bg-secondary/5">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div>
+                                                <h5 className="font-bold text-foreground">{pub.name}</h5>
+                                                <p className="text-[10px] text-muted-foreground font-mono">{pub.chatId}</p>
+                                            </div>
+                                            <StatusBadge status={pub.enabled ? 'success' : 'neutral'} label={pub.enabled ? 'Active' : 'Paused'} size="sm" />
+                                        </div>
+                                        <div className="space-y-1 mb-4">
+                                            <div className="flex justify-between text-[11px]">
+                                                <span className="text-muted-foreground">Attached Agent:</span>
+                                                <span className="text-purple-300">{pub.agentId ? agentMap[pub.agentId]?.name : 'None'}</span>
+                                            </div>
+                                            <div className="flex justify-between text-[11px]">
+                                                <span className="text-muted-foreground">Security:</span>
+                                                <span className="text-foreground">{pub.isPrivate ? 'Private' : 'Public'}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <ActionButton variant="ghost" size="sm">Edit</ActionButton>
+                                            <ActionButton variant="secondary" size="sm">Test</ActionButton>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="md:col-span-2">
+                                    <EmptyState title="No channels configured" description="Register a Telegram bot and add chat IDs to start publishing signals." icon={<span className="text-4xl">🤖</span>} />
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
