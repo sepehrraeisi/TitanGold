@@ -126,6 +126,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [accountMetrics, setAccountMetrics] = useState<Record<string, { channels: number; messages24h: number; lastFloodWait?: string }>>({});
     const [syncingChannelId, setSyncingChannelId] = useState<string | null>(null);
+    const [viewingErrorChannel, setViewingErrorChannel] = useState<CollectorChannel | null>(null);
 
     const [showImportModal, setShowImportModal] = useState(false);
     const [telegramDialogs, setTelegramDialogs] = useState<{ id: number; title: string; username?: string }[]>([]);
@@ -456,7 +457,11 @@ const TelegramPanel: React.FC<Props> = (props) => {
             ? 'bg-red-500/20 text-red-200 border border-red-500/50' 
             : 'bg-amber-500/20 text-amber-200 border border-amber-500/50';
         return (
-            <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] ${color}`} title={ch.lastError || undefined}>
+            <div 
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] cursor-pointer hover:opacity-80 ${color}`} 
+                title={ch.lastError || undefined}
+                onClick={() => setViewingErrorChannel(ch)}
+            >
                 <span>⚠</span>
                 <span>{ch.errorCount} {t('errors') || 'errors'}</span>
             </div>
@@ -605,26 +610,50 @@ const TelegramPanel: React.FC<Props> = (props) => {
 
     const renderCollectorHealthSummary = () => {
         if (!telegramCollectorState) return null;
-        const status = combinedCollectorHealth || telegramCollectorState.status || 'unknown';
+        
         const channels = telegramCollectorState.channels || [];
-        const errorChannels = channels.filter((ch: any) => ch.lastError).length;
+        const errorChannels = channels.filter((ch: any) => ch.lastError || ch.errorCount > 0).length;
         const avgLatency = telegramCollectorState.healthSummary?.avgLatencyMs;
+        
+        // Calculate degraded status (Phase 4.2)
+        const totalChannels = collectorChannels.length;
+        const channelsWithErrors = collectorChannels.filter(ch => (ch.errorCount || 0) > 0).length;
+        const criticalErrorChannels = collectorChannels.filter(ch => (ch.errorCount || 0) >= 3).length;
+        const syncedChannels = collectorChannels.filter(ch => ch.lastSyncedAt).length;
+        const syncRate = totalChannels > 0 ? (syncedChannels / totalChannels) * 100 : 0;
+        
+        let collectorStatus = 'healthy';
+        let statusColor = 'emerald';
+        let statusIcon = '✓';
+        
+        if (criticalErrorChannels > 0 || syncRate < 30) {
+            collectorStatus = 'critical';
+            statusColor = 'red';
+            statusIcon = '✗';
+        } else if (channelsWithErrors > 0 || syncRate < 70) {
+            collectorStatus = 'degraded';
+            statusColor = 'amber';
+            statusIcon = '⚠';
+        }
 
         return (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
-                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-3 backdrop-blur-sm">
-                    <p className="text-[11px] text-emerald-300/80 mb-1">
+                <div className={`rounded-xl border border-white/5 bg-gradient-to-br from-${statusColor}-500/10 via-${statusColor}-500/5 to-transparent p-3 backdrop-blur-sm`}>
+                    <p className={`text-[11px] text-${statusColor}-300/80 mb-1`}>
                         {t('collector_status') || 'Collector Status'}
                     </p>
-                    <p className="text-sm font-semibold text-emerald-100 capitalize">
-                        {typeof status === 'string' ? status : JSON.stringify(status)}
+                    <p className={`text-sm font-semibold text-${statusColor}-100 capitalize flex items-center gap-1`}>
+                        <span>{statusIcon}</span>
+                        <span>{collectorStatus}</span>
                     </p>
                 </div>
                 <div className="rounded-xl border border-white/5 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent p-3 backdrop-blur-sm">
                     <p className="text-[11px] text-blue-300/80 mb-1">
-                        {t('tracked_channels') || 'Tracked Channels'}
+                        {t('sync_rate') || 'Sync Rate'}
                     </p>
-                    <p className="text-sm font-semibold text-blue-100">{channels.length}</p>
+                    <p className="text-sm font-semibold text-blue-100">
+                        {syncRate.toFixed(0)}% ({syncedChannels}/{totalChannels})
+                    </p>
                 </div>
                 <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent p-3 backdrop-blur-sm">
                     <p className="text-[11px] text-purple-300/80 mb-1">
@@ -638,7 +667,9 @@ const TelegramPanel: React.FC<Props> = (props) => {
                     <p className="text-[11px] text-red-300/80 mb-1">
                         {t('collector_channels_with_errors') || 'Channels with errors'}
                     </p>
-                    <p className="text-sm font-semibold text-red-100">{errorChannels}</p>
+                    <p className="text-sm font-semibold text-red-100">
+                        {channelsWithErrors} {criticalErrorChannels > 0 && `(${criticalErrorChannels} critical)`}
+                    </p>
                 </div>
             </div>
         );
@@ -1483,6 +1514,177 @@ const TelegramPanel: React.FC<Props> = (props) => {
                                           'No active login request yet. Start by sending the code.'}
                                 </p>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Error Details Modal (Phase 4.1) */}
+            {viewingErrorChannel && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    onClick={() => setViewingErrorChannel(null)}
+                >
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                    <div
+                        className="relative bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-white/10">
+                            <div className="flex-1">
+                                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                    <span className="text-red-400">⚠</span>
+                                    {t('channel_error_details') || 'Channel Error Details'}
+                                </h3>
+                                <p className="text-[11px] text-muted-foreground mt-1">
+                                    {viewingErrorChannel.title || viewingErrorChannel.username || viewingErrorChannel.channelId}
+                                    {viewingErrorChannel.username && (
+                                        <span className="ml-2 text-[10px] font-mono">@{viewingErrorChannel.username}</span>
+                                    )}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setViewingErrorChannel(null)}
+                                className="text-muted-foreground hover:text-foreground text-xl"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {/* Error Statistics */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
+                                    <p className="text-[10px] text-muted-foreground mb-1">
+                                        {t('error_count') || 'Error Count'}
+                                    </p>
+                                    <p className={`text-lg font-semibold ${
+                                        (viewingErrorChannel.errorCount || 0) >= 3 
+                                            ? 'text-red-300' 
+                                            : 'text-amber-300'
+                                    }`}>
+                                        {viewingErrorChannel.errorCount || 0}
+                                    </p>
+                                </div>
+                                <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
+                                    <p className="text-[10px] text-muted-foreground mb-1">
+                                        {t('consecutive_successes') || 'Consecutive Successes'}
+                                    </p>
+                                    <p className="text-lg font-semibold text-emerald-300">
+                                        {viewingErrorChannel.consecutiveSuccessCount || 0}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Priority & Status */}
+                            <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
+                                <p className="text-[10px] text-muted-foreground mb-2">
+                                    {t('channel_info') || 'Channel Information'}
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-medium ${
+                                        viewingErrorChannel.priority === 'high'
+                                            ? 'bg-red-500/20 text-red-200 border border-red-400/50'
+                                            : 'bg-slate-700 text-slate-200 border border-slate-600'
+                                    }`}>
+                                        {viewingErrorChannel.priority?.toUpperCase() || 'NORMAL'}
+                                    </span>
+                                    <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-medium ${
+                                        viewingErrorChannel.isActive
+                                            ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40'
+                                            : 'bg-slate-700 text-slate-200 border border-slate-600'
+                                    }`}>
+                                        {viewingErrorChannel.isActive ? t('active') || 'Active' : t('disabled') || 'Disabled'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Last Error Details */}
+                            {viewingErrorChannel.lastError && (
+                                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+                                    <div className="flex items-start justify-between mb-2">
+                                        <p className="text-[10px] font-semibold text-red-300">
+                                            {t('last_error') || 'Last Error'}
+                                        </p>
+                                        {viewingErrorChannel.lastErrorAt && (
+                                            <p className="text-[10px] text-red-400">
+                                                {formatTimeAgo(viewingErrorChannel.lastErrorAt)}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-red-200 font-mono bg-red-950/50 rounded px-2 py-1 break-words">
+                                        {viewingErrorChannel.lastError}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* No Error Message */}
+                            {!viewingErrorChannel.lastError && (
+                                <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-4 text-center">
+                                    <p className="text-xs text-muted-foreground">
+                                        {t('no_error_details') || 'No error details available for this channel.'}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Recommendations */}
+                            {viewingErrorChannel.errorCount && viewingErrorChannel.errorCount > 0 && (
+                                <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
+                                    <p className="text-[10px] font-semibold text-blue-300 mb-2">
+                                        💡 {t('recommendations') || 'Recommendations'}
+                                    </p>
+                                    <ul className="text-[11px] text-blue-200 space-y-1">
+                                        {viewingErrorChannel.errorCount >= 3 && (
+                                            <li className="flex items-start gap-2">
+                                                <span>•</span>
+                                                <span>{t('error_rec_critical') || 'Critical: Multiple consecutive errors detected. Check channel authentication and access.'}</span>
+                                            </li>
+                                        )}
+                                        {viewingErrorChannel.priority === 'high' && (
+                                            <li className="flex items-start gap-2">
+                                                <span>•</span>
+                                                <span>{t('error_rec_priority') || 'This is a high-priority channel. Consider manual intervention.'}</span>
+                                            </li>
+                                        )}
+                                        <li className="flex items-start gap-2">
+                                            <span>•</span>
+                                            <span>{t('error_rec_retry') || 'Try using the "Sync Now" button to manually retry synchronization.'}</span>
+                                        </li>
+                                        {!viewingErrorChannel.isActive && (
+                                            <li className="flex items-start gap-2">
+                                                <span>•</span>
+                                                <span>{t('error_rec_disabled') || 'Channel is currently disabled. Enable it to resume polling.'}</span>
+                                            </li>
+                                        )}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="flex items-center justify-between gap-2 p-4 border-t border-white/10">
+                            <button
+                                onClick={() => setViewingErrorChannel(null)}
+                                className="text-xs px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg"
+                            >
+                                {t('close') || 'Close'}
+                            </button>
+                            {viewingErrorChannel.priority === 'high' && (
+                                <button
+                                    onClick={() => {
+                                        setViewingErrorChannel(null);
+                                        handleForceSync(viewingErrorChannel);
+                                    }}
+                                    disabled={syncingChannelId === viewingErrorChannel.id}
+                                    className="text-xs px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg"
+                                >
+                                    {syncingChannelId === viewingErrorChannel.id
+                                        ? `⟳ ${t('syncing') || 'Syncing...'}`
+                                        : `⚡ ${t('sync_now') || 'Sync Now'}`}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
