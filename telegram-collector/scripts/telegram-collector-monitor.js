@@ -272,6 +272,93 @@ function checkOverallHealth(channels) {
 }
 
 // =====================================================================
+// Phase 2: Priority & Error Tracking
+// =====================================================================
+
+function checkPersistentErrors(channels) {
+  const alerts = [];
+  const minErrorCount = 3; // Alert after 3 consecutive errors
+  
+  for (const channel of channels) {
+    const errorCount = channel.errorCount || 0;
+    
+    if (errorCount >= minErrorCount) {
+      const priority = channel.priority || 'normal';
+      const severity = priority === 'high' ? 'critical' : 'error';
+      
+      const alertKey = `persistent_error_${channel.id}`;
+      if (shouldSendAlert(alertKey)) {
+        alerts.push({
+          severity,
+          message: `Channel "${channel.title || channel.username}" has ${errorCount} consecutive errors (${priority} priority)`,
+          details: {
+            channelId: channel.id,
+            channelHandle: channel.username,
+            priority,
+            errorCount,
+            lastError: channel.lastError,
+            lastErrorAt: channel.lastErrorAt,
+          },
+        });
+        markAlertSent(alertKey);
+      }
+    }
+  }
+  
+  return alerts;
+}
+
+function checkHighPriorityChannels(channels) {
+  const alerts = [];
+  const now = Date.now();
+  const highPriorityThreshold = 10 * 60 * 1000; // 10 minutes for high priority
+  
+  const highPriorityChannels = channels.filter(ch => ch.priority === 'high');
+  
+  for (const channel of highPriorityChannels) {
+    if (!channel.lastSyncedAt) {
+      const alertKey = `high_priority_never_synced_${channel.id}`;
+      if (shouldSendAlert(alertKey)) {
+        alerts.push({
+          severity: 'critical',
+          message: `HIGH PRIORITY channel "${channel.title || channel.username}" has never synced`,
+          details: {
+            channelId: channel.id,
+            channelHandle: channel.username,
+            priority: 'high',
+          },
+        });
+        markAlertSent(alertKey);
+      }
+    } else {
+      const lastSync = new Date(channel.lastSyncedAt).getTime();
+      const minutesSinceSync = Math.floor((now - lastSync) / (60 * 1000));
+      
+      if (now - lastSync > highPriorityThreshold) {
+        const alertKey = `high_priority_stale_${channel.id}`;
+        if (shouldSendAlert(alertKey)) {
+          alerts.push({
+            severity: 'critical',
+            message: `HIGH PRIORITY channel "${channel.title || channel.username}" hasn't synced for ${minutesSinceSync} minutes`,
+            details: {
+              channelId: channel.id,
+              channelHandle: channel.username,
+              priority: 'high',
+              lastSyncedAt: channel.lastSyncedAt,
+              minutesSinceSync,
+              threshold: 10,
+            },
+          });
+          markAlertSent(alertKey);
+        }
+      }
+    }
+  }
+  
+  return alerts;
+}
+
+// =====================================================================
 // Main Health Check
 // =====================================================================
 
@@ -320,6 +407,14 @@ async function performHealthCheck() {
     // Check 3: Overall health
     const overallAlerts = checkOverallHealth(channels);
     allAlerts.push(...overallAlerts);
+    
+    // Check 4: Phase 2 - Persistent errors
+    const persistentErrorAlerts = checkPersistentErrors(channels);
+    allAlerts.push(...persistentErrorAlerts);
+    
+    // Check 5: Phase 2 - High priority channels
+    const highPriorityAlerts = checkHighPriorityChannels(channels);
+    allAlerts.push(...highPriorityAlerts);
 
     // Log alerts
     if (allAlerts.length === 0) {
@@ -335,10 +430,19 @@ async function performHealthCheck() {
     const syncedCount = channels.filter(ch => ch.lastSyncedAt).length;
     const syncRate = Math.round((syncedCount / channels.length) * 100);
     
+    // Phase 2: Priority & Error stats
+    const highPriorityCount = channels.filter(ch => ch.priority === 'high').length;
+    const normalPriorityCount = channels.filter(ch => ch.priority === 'normal').length;
+    const lowPriorityCount = channels.filter(ch => ch.priority === 'low').length;
+    const channelsWithErrors = channels.filter(ch => (ch.errorCount || 0) > 0).length;
+    const persistentErrors = channels.filter(ch => (ch.errorCount || 0) >= 3).length;
+    
     console.log(`\n📈 Summary:`);
     console.log(`  Total channels: ${channels.length}`);
     console.log(`  Synced: ${syncedCount} (${syncRate}%)`);
     console.log(`  Never synced: ${channels.length - syncedCount}`);
+    console.log(`  Priority: high=${highPriorityCount}, normal=${normalPriorityCount}, low=${lowPriorityCount}`);
+    console.log(`  Errors: ${channelsWithErrors} channels (${persistentErrors} with 3+ errors)`);
     console.log(`  Alerts: ${allAlerts.length}`);
 
     const duration = Date.now() - startTime;
