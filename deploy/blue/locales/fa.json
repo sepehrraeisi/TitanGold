@@ -3507,5 +3507,8 @@
   "publisher_tab_templates": "قالب‌ها",
   "no_output_mapping": "بدون نگاشت خروجی",
   "telegram_automation_hint_title": "اتوماسیون تلگرام",
-  "telegram_automation_hint": "راهنمای اتوماسیون تلگرام."
+  "telegram_automation_hint": "راهنمای اتوماسیون تلگرام.",
+  "parse_urls": "تجزیه URLها",
+  "include_media": "شامل رسانه",
+  "fetch_limit": "حداکثر تعداد دریافت"
 }
