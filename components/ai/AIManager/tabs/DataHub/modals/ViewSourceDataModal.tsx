@@ -77,44 +77,54 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="p-4 border-b border-border flex justify-between items-center bg-secondary/10">
-                    <div>
-                        <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                            {t('source_data_history') || 'Source Data History'}
-                            <span className="text-xs font-normal text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded">
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-sm md:text-base font-semibold text-foreground">
+                                {t('source_data_history') || 'Source Data History'}
+                            </h3>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900/60 border border-white/10 text-muted-foreground font-mono max-w-[220px] truncate">
                                 {source.name}
                             </span>
-                        </h3>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                            {t('select_record_to_view') || 'Browse collected records and inspect raw vs normalized data.'}
+                        </p>
                     </div>
-                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <button
+                        onClick={onClose}
+                        className="text-muted-foreground hover:text-foreground text-xl leading-none"
+                        aria-label={t('close') || 'Close'}
+                    >
+                        ×
                     </button>
                 </div>
 
                 {/* Filters */}
-                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4 border-b border-border bg-card">
+                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4 border-b border-white/10 bg-slate-950/80">
                     <div>
-                        <label className="text-xs text-muted-foreground mb-1 block">{t('search') || 'Search'}</label>
+                        <label className="text-[11px] text-muted-foreground mb-1 block">{t('search') || 'Search'}</label>
                         <input
                             type="text"
                             value={filters.search}
                             onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                             placeholder={t('search_placeholder') || 'Search data...'}
-                            className="w-full bg-background border border-border rounded px-3 py-1.5 text-sm"
+                            className="w-full px-3 py-1.5 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
                         />
                     </div>
                     <div>
-                        <label className="text-xs text-muted-foreground mb-1 block">{t('status') || 'Status'}</label>
+                        <label className="text-[11px] text-muted-foreground mb-1 block">{t('status') || 'Status'}</label>
                         <select
                             value={filters.status}
                             onChange={(e) => {
                                 setFilters(prev => ({ ...prev, status: e.target.value }));
                                 setPagination(prev => ({ ...prev, offset: 0 }));
                             }}
-                            className="w-full bg-background border border-border rounded px-3 py-1.5 text-sm"
+                            className="w-full px-3 py-1.5 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
                         >
                             <option value="all">{t('all') || 'All'}</option>
                             <option value="processed">{t('processed') || 'Processed'}</option>
@@ -123,7 +133,7 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                         </select>
                     </div>
                     <div>
-                        <label className="text-xs text-muted-foreground mb-1 block">{t('start_date') || 'Start Date'}</label>
+                        <label className="text-[11px] text-muted-foreground mb-1 block">{t('start_date') || 'Start Date'}</label>
                         <input
                             type="date"
                             value={filters.startDate}
@@ -131,11 +141,11 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                                 setFilters(prev => ({ ...prev, startDate: e.target.value }));
                                 setPagination(prev => ({ ...prev, offset: 0 }));
                             }}
-                            className="w-full bg-background border border-border rounded px-3 py-1.5 text-sm"
+                            className="w-full px-3 py-1.5 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
                         />
                     </div>
                     <div>
-                        <label className="text-xs text-muted-foreground mb-1 block">{t('end_date') || 'End Date'}</label>
+                        <label className="text-[11px] text-muted-foreground mb-1 block">{t('end_date') || 'End Date'}</label>
                         <input
                             type="date"
                             value={filters.endDate}
@@ -143,46 +153,55 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                                 setFilters(prev => ({ ...prev, endDate: e.target.value }));
                                 setPagination(prev => ({ ...prev, offset: 0 }));
                             }}
-                            className="w-full bg-background border border-border rounded px-3 py-1.5 text-sm"
+                            className="w-full px-3 py-1.5 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
                         />
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-hidden flex">
+                <div className="flex-1 overflow-hidden flex bg-slate-950/70">
                     {/* List */}
-                    <div className={`${selectedRecord ? 'w-1/3 hidden md:block' : 'w-full'} border-r border-border overflow-y-auto`}>
+                    <div className={`${selectedRecord ? 'w-1/3 hidden md:block' : 'w-full'} border-r border-slate-800/60 overflow-y-auto`}>
                         {isLoading ? (
                             <div className="flex justify-center items-center h-40">
-                                <div className="animate-spin text-2xl text-primary">⚙️</div>
+                                <div className="animate-spin text-2xl text-sky-400">⚙️</div>
                             </div>
                         ) : displayedData.length === 0 ? (
-                            <div className="p-8 text-center text-muted-foreground">
+                            <div className="p-8 text-center text-[11px] text-muted-foreground">
                                 {t('no_records_found') || 'No records found'}
                             </div>
                         ) : (
-                            <div className="divide-y divide-border">
+                            <div className="divide-y divide-slate-800/60">
                                 {displayedData.map((record) => (
                                     <div
                                         key={record.id}
                                         onClick={() => setSelectedRecord(record)}
-                                        className={`p-3 cursor-pointer hover:bg-accent/50 transition-colors ${selectedRecord?.id === record.id ? 'bg-accent text-accent-foreground' : ''}`}
+                                        className={`p-3 cursor-pointer transition-colors border-l-2 ${
+                                            selectedRecord?.id === record.id
+                                                ? 'bg-slate-900/80 border-l-sky-400'
+                                                : 'hover:bg-slate-900/40 border-l-transparent'
+                                        }`}
                                     >
                                         <div className="flex justify-between items-start mb-1">
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${record.status === 'processed' ? 'bg-green-500/20 text-green-400' :
-                                                    record.status === 'error' ? 'bg-red-500/20 text-red-400' :
-                                                        'bg-yellow-500/20 text-yellow-400'
-                                                }`}>
+                                            <span
+                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium uppercase ${
+                                                    record.status === 'processed'
+                                                        ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/40'
+                                                        : record.status === 'error'
+                                                        ? 'bg-red-500/10 text-red-300 border border-red-500/40'
+                                                        : 'bg-amber-500/10 text-amber-300 border border-amber-500/40'
+                                                }`}
+                                            >
                                                 {record.status}
                                             </span>
-                                            <span className="text-xs text-muted-foreground">
+                                            <span className="text-[11px] text-muted-foreground">
                                                 {new Date(record.collected_at).toLocaleDateString()}
                                             </span>
                                         </div>
-                                        <div className="text-xs text-muted-foreground truncate">
+                                        <div className="text-[11px] text-muted-foreground truncate">
                                             {new Date(record.collected_at).toLocaleTimeString()}
                                         </div>
-                                        <div className="text-xs mt-1 truncate font-mono opacity-70">
+                                        <div className="text-[11px] mt-1 truncate font-mono opacity-70 text-muted-foreground">
                                             ID: {record.id.substring(0, 8)}...
                                         </div>
                                     </div>
@@ -191,21 +210,21 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                         )}
 
                         {/* Pagination */}
-                        <div className="p-2 border-t border-border flex justify-between items-center text-xs">
+                        <div className="p-2 border-t border-slate-800/60 flex justify-between items-center text-[11px] text-muted-foreground">
                             <button
                                 onClick={() => setPagination(prev => ({ ...prev, offset: Math.max(0, prev.offset - prev.limit) }))}
                                 disabled={pagination.offset === 0 || isLoading}
-                                className="px-2 py-1 bg-secondary rounded disabled:opacity-50"
+                                className="px-2 py-1 rounded-full text-[11px] bg-slate-900/70 border border-slate-700 text-foreground disabled:opacity-40"
                             >
                                 {t('prev') || 'Prev'}
                             </button>
-                            <span className="text-muted-foreground">
+                            <span>
                                 {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, pagination.total)} / {pagination.total}
                             </span>
                             <button
                                 onClick={() => setPagination(prev => ({ ...prev, offset: prev.offset + prev.limit }))}
                                 disabled={pagination.offset + pagination.limit >= pagination.total || isLoading}
-                                className="px-2 py-1 bg-secondary rounded disabled:opacity-50"
+                                className="px-2 py-1 rounded-full text-[11px] bg-slate-900/70 border border-slate-700 text-foreground disabled:opacity-40"
                             >
                                 {t('next') || 'Next'}
                             </button>
@@ -214,49 +233,67 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
 
                     {/* Details */}
                     {selectedRecord ? (
-                        <div className="flex-1 overflow-y-auto p-4 bg-secondary/5">
+                        <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-br from-slate-950/80 via-slate-950/70 to-slate-900/80">
                             <div className="flex justify-between items-center mb-4">
-                                <h4 className="font-semibold">{t('record_details') || 'Record Details'}</h4>
+                                <h4 className="text-sm font-semibold text-foreground">
+                                    {t('record_details') || 'Record Details'}
+                                </h4>
                                 <button
                                     onClick={() => setSelectedRecord(null)}
-                                    className="md:hidden text-sm text-blue-400"
+                                    className="md:hidden text-[11px] text-sky-300 hover:text-sky-200"
                                 >
                                     {t('back_to_list') || 'Back to List'}
                                 </button>
                             </div>
 
                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div className="p-3 bg-secondary/20 rounded">
-                                        <div className="text-xs text-muted-foreground mb-1">{t('id') || 'ID'}</div>
-                                        <div className="font-mono">{selectedRecord.id}</div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                                    <div className="rounded-xl border border-white/5 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent p-3 backdrop-blur-sm">
+                                        <div className="text-[11px] text-blue-300/80 mb-1">
+                                            {t('id') || 'ID'}
+                                        </div>
+                                        <div className="font-mono text-foreground break-all">
+                                            {selectedRecord.id}
+                                        </div>
                                     </div>
-                                    <div className="p-3 bg-secondary/20 rounded">
-                                        <div className="text-xs text-muted-foreground mb-1">{t('collected_at') || 'Collected At'}</div>
-                                        <div>{new Date(selectedRecord.collected_at).toLocaleString()}</div>
+                                    <div className="rounded-xl border border-white/5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-3 backdrop-blur-sm">
+                                        <div className="text-[11px] text-emerald-300/80 mb-1">
+                                            {t('collected_at') || 'Collected At'}
+                                        </div>
+                                        <div className="text-foreground">
+                                            {new Date(selectedRecord.collected_at).toLocaleString()}
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div>
-                                    <div className="text-xs text-muted-foreground mb-2 font-bold uppercase">{t('raw_data') || 'Raw Data'}</div>
-                                    <pre className="bg-black/20 p-4 rounded text-xs font-mono overflow-x-auto border border-border/50">
+                                    <div className="text-[11px] text-muted-foreground mb-2 font-bold uppercase">
+                                        {t('raw_data') || 'Raw Data'}
+                                    </div>
+                                    <pre className="bg-slate-950/80 p-4 rounded-lg text-[11px] font-mono overflow-x-auto border border-slate-800">
                                         {formatData(selectedRecord.raw_data)}
                                     </pre>
                                 </div>
 
                                 {selectedRecord.normalized_data && (
                                     <div>
-                                        <div className="text-xs text-muted-foreground mb-2 font-bold uppercase">{t('normalized_data') || 'Normalized Data'}</div>
-                                        <pre className="bg-black/20 p-4 rounded text-xs font-mono overflow-x-auto border border-border/50 text-green-400/80">
+                                        <div className="text-[11px] text-muted-foreground mb-2 font-bold uppercase">
+                                            {t('normalized_data') || 'Normalized Data'}
+                                        </div>
+                                        <pre className="bg-slate-950/80 p-4 rounded-lg text-[11px] font-mono overflow-x-auto border border-emerald-500/40 text-emerald-300/90">
                                             {formatData(selectedRecord.normalized_data)}
                                         </pre>
                                     </div>
                                 )}
 
                                 {selectedRecord.error_message && (
-                                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded">
-                                        <div className="text-xs text-red-400 mb-1 font-bold uppercase">{t('error') || 'Error'}</div>
-                                        <div className="text-sm text-red-300">{selectedRecord.error_message}</div>
+                                    <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                                        <div className="text-[11px] text-red-400 mb-1 font-bold uppercase">
+                                            {t('error') || 'Error'}
+                                        </div>
+                                        <div className="text-xs text-red-200">
+                                            {selectedRecord.error_message}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -264,7 +301,9 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                     ) : (
                         <div className="hidden md:flex flex-1 items-center justify-center text-muted-foreground flex-col gap-2">
                             <div className="text-4xl opacity-20">📋</div>
-                            <p>{t('select_record_to_view') || 'Select a record to view details'}</p>
+                            <p className="text-[11px]">
+                                {t('select_record_to_view') || 'Select a record to view details'}
+                            </p>
                         </div>
                     )}
                 </div>
