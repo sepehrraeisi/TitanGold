@@ -125,6 +125,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
     const [channelMessages, setChannelMessages] = useState<any[]>([]);
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [accountMetrics, setAccountMetrics] = useState<Record<string, { channels: number; messages24h: number; lastFloodWait?: string }>>({});
+    const [syncingChannelId, setSyncingChannelId] = useState<string | null>(null);
 
     const [showImportModal, setShowImportModal] = useState(false);
     const [telegramDialogs, setTelegramDialogs] = useState<{ id: number; title: string; username?: string }[]>([]);
@@ -229,6 +230,40 @@ const TelegramPanel: React.FC<Props> = (props) => {
             );
         } finally {
             setIsSyncingDataSources(false);
+        }
+    };
+
+    // Force sync a channel (on-demand polling)
+    const handleForceSync = async (channel: CollectorChannel) => {
+        setSyncingChannelId(channel.id);
+        setCollectorError(null);
+        setCollectorMessage(null);
+        try {
+            const response = await fetch(
+                buildCollectorUrl(`/api/telegram-collector/channels/${channel.id}/force-sync`),
+                {
+                    method: 'POST',
+                    credentials: 'include',
+                }
+            );
+            const data = await response.json();
+            if (!response.ok || data?.success === false) {
+                throw new Error(data?.error || data?.message || `Failed to sync channel (${response.status})`);
+            }
+            setCollectorMessage(
+                `✅ ${t('force_sync_success') || 'Force-sync completed'}: ${data.messagesFetched || 0} ${t('messages_fetched') || 'messages fetched'}, ${data.messagesSaved || 0} ${t('saved') || 'saved'} (${data.latency}ms)`
+            );
+            // Refresh channels list to update last_synced_at
+            await loadCollectorChannels();
+        } catch (error: any) {
+            console.error('Failed to force-sync channel:', error);
+            setCollectorError(
+                error?.message ||
+                    t('force_sync_failed') ||
+                    'Failed to force-sync channel',
+            );
+        } finally {
+            setSyncingChannelId(null);
         }
     };
 
@@ -1049,6 +1084,18 @@ const TelegramPanel: React.FC<Props> = (props) => {
                                                         >
                                                             {t('test_fetch') || 'Test Fetch'}
                                                         </button>
+                                                        {ch.priority === 'high' && (
+                                                            <button
+                                                                onClick={() => handleForceSync(ch)}
+                                                                disabled={!hasUsableAccount || syncingChannelId === ch.id}
+                                                                className="text-[10px] px-2 py-0.5 rounded-full border border-purple-500/60 text-purple-200 hover:bg-purple-500/10 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+                                                                title={t('force_sync_tooltip') || 'Immediately sync this channel'}
+                                                            >
+                                                                {syncingChannelId === ch.id
+                                                                    ? `⟳ ${t('syncing') || 'Syncing...'}`
+                                                                    : `⚡ ${t('sync_now') || 'Sync Now'}`}
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() =>
                                                                 handleLinkChannelToSource(ch.channelId, undefined, {
