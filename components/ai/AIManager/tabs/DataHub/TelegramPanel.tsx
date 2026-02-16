@@ -593,6 +593,29 @@ const TelegramPanel: React.FC<Props> = (props) => {
         }
     };
 
+    const updateChannelPriority = async (channel: CollectorChannel, priority: 'high' | 'normal' | 'low') => {
+        try {
+            const response = await fetch(
+                buildCollectorUrl(`/api/telegram-collector/collector-channels/${channel.id}`),
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ priority }),
+                },
+            );
+            const data = await response.json();
+            if (!response.ok || data?.success === false) {
+                throw new Error(data?.error || `Failed to update channel priority (${response.status})`);
+            }
+            setCollectorChannels((prev) => prev.map((ch) => (ch.id === channel.id ? data.channel : ch)));
+            setCollectorMessage(`Priority updated to ${priority.toUpperCase()} for ${channel.title || channel.channelId}`);
+            setTimeout(() => setCollectorMessage(null), 3000);
+        } catch (error: any) {
+            console.error('Failed to update channel priority:', error);
+            setChannelsError(error?.message || t('failed_to_update_priority') || 'Failed to update priority');
+        }
+    };
+
     // ------------------------------------------------------------------------
     // Render helpers
     // ------------------------------------------------------------------------
@@ -1008,6 +1031,9 @@ const TelegramPanel: React.FC<Props> = (props) => {
                                             {t('channel') || 'Channel'}
                                         </th>
                                         <th className="px-3 py-2 text-left hidden md:table-cell">
+                                            {t('priority') || 'Priority'}
+                                        </th>
+                                        <th className="px-3 py-2 text-left hidden md:table-cell">
                                             {t('account') || 'Account'}
                                         </th>
                                         <th className="px-3 py-2 text-left hidden md:table-cell">
@@ -1050,6 +1076,28 @@ const TelegramPanel: React.FC<Props> = (props) => {
                                                         {renderErrorIndicator(ch)}
                                                     </div>
                                             </td>
+                                                <td className="px-3 py-2 align-top hidden md:table-cell">
+                                                    <select
+                                                        value={ch.priority || 'normal'}
+                                                        onChange={(e) =>
+                                                            updateChannelPriority(
+                                                                ch,
+                                                                e.target.value as 'high' | 'normal' | 'low',
+                                                            )
+                                                        }
+                                                        className="text-[11px] bg-slate-900 border border-slate-700 rounded px-2 py-1 text-foreground w-full"
+                                                    >
+                                                        <option value="high">
+                                                            🔴 {t('priority_high') || 'High'}
+                                                        </option>
+                                                        <option value="normal">
+                                                            {t('priority_normal') || 'Normal'}
+                                                        </option>
+                                                        <option value="low">
+                                                            {t('priority_low') || 'Low'}
+                                                        </option>
+                                                    </select>
+                                                </td>
                                                 <td className="px-3 py-2 align-top hidden md:table-cell">
                                                         <select
                                                         value={ch.accountId || ''}

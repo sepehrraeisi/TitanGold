@@ -1316,7 +1316,7 @@ app.get('/api/telegram-collector/collector-channels', rateLimitHybrid_1.rateLimi
 app.patch('/api/telegram-collector/collector-channels/:id', rateLimitHybrid_1.rateLimiters.moderate, async (req, res) => {
     try {
         const { id } = req.params;
-        const { is_active, account_id } = req.body || {};
+        const { is_active, account_id, priority } = req.body || {};
         const pg = await Promise.resolve().then(() => __importStar(require('pg')));
         const pool = new pg.Pool({
             host: process.env.DB_HOST || 'localhost',
@@ -1341,6 +1341,10 @@ app.patch('/api/telegram-collector/collector-channels/:id', rateLimitHybrid_1.ra
                 params.push(account_id);
             }
         }
+        if (priority !== undefined && ['high', 'normal', 'low'].includes(priority)) {
+            fields.push(`priority = $${idx++}`);
+            params.push(priority);
+        }
         if (fields.length === 0) {
             await pool.end();
             return res.status(400).json({
@@ -1354,7 +1358,7 @@ app.patch('/api/telegram-collector/collector-channels/:id', rateLimitHybrid_1.ra
             UPDATE telegram_channels
             SET ${fields.join(', ')}
             WHERE id = $${idx}
-            RETURNING id, channel_id, username, title, description, category, is_active, account_id, last_synced_at, config
+            RETURNING id, channel_id, username, title, description, category, is_active, account_id, last_synced_at, config, priority, error_count, last_error, last_error_at, consecutive_success_count
         `;
         const result = await pool.query(updateQuery, params);
         await pool.end();
@@ -1375,7 +1379,12 @@ app.patch('/api/telegram-collector/collector-channels/:id', rateLimitHybrid_1.ra
             isActive: row.is_active,
             accountId: row.account_id,
             lastSyncedAt: row.last_synced_at,
-            config: row.config || {}
+            config: row.config || {},
+            priority: row.priority || 'normal',
+            errorCount: row.error_count || 0,
+            lastError: row.last_error,
+            lastErrorAt: row.last_error_at,
+            consecutiveSuccessCount: row.consecutive_success_count || 0
         };
         res.json({
             success: true,
