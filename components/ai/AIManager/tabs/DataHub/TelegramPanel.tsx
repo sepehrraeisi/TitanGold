@@ -541,7 +541,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
         const status = combinedCollectorHealth || telegramCollectorState.status || 'unknown';
         const channels = telegramCollectorState.channels || [];
         const errorChannels = channels.filter((ch: any) => ch.lastError).length;
-        const avgLatency = telegramCollectorState.metrics?.avgLatencyMs;
+        const avgLatency = telegramCollectorState.healthSummary?.avgLatencyMs;
 
         return (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
