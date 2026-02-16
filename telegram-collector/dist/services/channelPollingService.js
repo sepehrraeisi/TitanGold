@@ -168,12 +168,28 @@ class ChannelPollingService {
                 .filter(r => r.validation.valid && r.normalized)
                 .map((r, index) => {
                 const msg = formattedMessages[index];
+                // Validate and convert timestamp safely
+                let messageDate;
+                try {
+                    // Check if msg.date is a valid Unix timestamp (in seconds)
+                    if (typeof msg.date === 'number' && msg.date > 0 && msg.date < 2147483647) {
+                        messageDate = new Date(msg.date * 1000);
+                    } else {
+                        // Fallback to current time if invalid
+                        console.warn(`⚠️ Invalid timestamp for message ${msg.id}: ${msg.date}, using current time`);
+                        messageDate = new Date();
+                    }
+                } catch (e) {
+                    console.error(`❌ Error converting timestamp for message ${msg.id}:`, e);
+                    messageDate = new Date();
+                }
+                
                 return {
                     message_id: BigInt(msg.id),
                     message_text: msg.text,
                     message_type: msg.media ? 'media' : 'text',
                     has_media: !!msg.media,
-                    telegram_created_at: msg.date,
+                    telegram_created_at: messageDate,
                     sender_id: null, // Telegram channels don't have sender info
                     sender_username: null,
                     normalized: (0, dataValidator_1.enrichMessage)(r.normalized)
