@@ -75,6 +75,60 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         return parsedError;
     };
 
+    // -------------------------------------------------------------------------
+    // Real-time-ish Telegram Collector auto-refresh
+    // -------------------------------------------------------------------------
+    //
+    // برای اینکه کارت‌های Telegram Collector (status, tracked channels, latency, errors)
+    // همیشه تا حد ممکن نزدیک به وضعیت واقعی باشند، به جای تکیه صرف روی snapshot
+    // ذخیره‌شده در IndexedDB، در زمان باز بودن تب DataHub به‌صورت دوره‌ای:
+    //   1) از سرویس telegram-collector، لیست کانال‌ها و health را می‌گیریم
+    //   2) state محلی DataHub را با refreshTelegramCollectorChannels به‌روزرسانی می‌کنیم
+    //   3) React Query را با loadDataHub() ریفرش می‌کنیم تا UI به‌روز شود
+    //
+    // این کار فقط وقتی DataHub mount است انجام می‌شود و در cleanup متوقف می‌شود.
+    // همچنین اگر tab مخفی شود (visibility: hidden)، interval متوقف و با بازگشت دوباره شروع می‌شود.
+    useEffect(() => {
+        let cancelled = false;
+        let timer: number | undefined;
+
+        const intervalMs = 30_000; // هر ۳۰ ثانیه یک‌بار
+
+        const tick = async () => {
+            if (cancelled) return;
+            // اگر tab مخفی است، refresh نکن (بهینه‌سازی)
+            if (typeof document !== 'undefined' && document.hidden) {
+                if (!cancelled) {
+                    timer = window.setTimeout(tick, intervalMs);
+                }
+                return;
+            }
+            try {
+                // این تابع از telegram-collector می‌خواند و DataHubState محلی را به‌روزرسانی می‌کند
+                await api.refreshTelegramCollectorChannels();
+                // React Query cache → دوباره از IndexedDB بخواند و telegramCollectorState را به‌روز کند
+                await loadDataHub();
+            } catch {
+                // در صورت خطا (مثلاً collector down است) بی‌سروصدا رد می‌شویم
+            } finally {
+                if (!cancelled) {
+                    timer = window.setTimeout(tick, intervalMs);
+                }
+            }
+        };
+
+        // اولین اجرا را با کمی تأخیر آغاز می‌کنیم تا initial load تمام شود
+        timer = window.setTimeout(tick, intervalMs);
+
+        return () => {
+            cancelled = true;
+            if (timer) {
+                window.clearTimeout(timer);
+            }
+        };
+        // فقط به loadDataHub وابسته است تا refetch همیشه تابع فعلی را استفاده کند
+    }, [loadDataHub]);
+
     // Handlers
     const handleCheckHealth = async () => {
         try {
@@ -152,7 +206,61 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
             const data = await api.getTelegramCollectorHealth();
             setCollectorMessage(`Collector Status: ${data.status}`);
         } catch (error: any) {
-            setCollectorError(error?.message || 'Failed to connect to Telegram Collector');
+            setCollectorError(error?.message || (t('collector_connect_failed') || 'Failed to connect to Telegram Collector'));
+        } finally {
+            setIsLoadingCollector(false);
+        }
+    };
+
+    const handleDiagnoseCollector = async () => {
+        setIsLoadingCollector(true);
+        setCollectorError(null);
+        try {
+            const result = await api.diagnoseTelegramCollector();
+            const parts: string[] = [];
+            const translateKey = (key: string) => {
+                switch (key) {
+                    case 'health':
+                        return t('collector_health') || 'Health';
+                    case 'loginStart':
+                        return t('collector_login_start') || 'Login /start';
+                    case 'loginConfirm':
+                        return t('collector_login_confirm') || 'Login /confirm';
+                    default:
+                        return key;
+                }
+            };
+
+            for (const check of result.checks) {
+                const label = translateKey(check.key);
+                if (check.ok) {
+                    parts.push(`${label}: OK (${check.status ?? 200})`);
+                } else {
+                    const failMsg = t('collector_diag_check_failed') || 'Endpoint issue';
+                    parts.push(
+                        `${label}: ${failMsg} (status=${check.status ?? 'n/a'}${check.error ? `, ${check.error}` : ''})`,
+                    );
+                }
+            }
+
+            if (result.ok) {
+                setCollectorMessage(
+                    `${t('collector_diag_all_good') || 'تمام مسیرهای اصلی Telegram Collector در دسترس هستند.'} ` +
+                        parts.join(' | '),
+                );
+            } else {
+                setCollectorError(
+                    `${t('collector_diag_has_issues') || 'برخی از مسیرهای Telegram Collector به درستی در دسترس نیستند.'} ` +
+                        parts.join(' | '),
+                );
+            }
+        } catch (e: any) {
+            console.error('Failed to diagnose collector:', e);
+            setCollectorError(
+                e?.message ||
+                    t('collector_diag_failed') ||
+                    'تشخیص وضعیت Telegram Collector با خطا مواجه شد.',
+            );
         } finally {
             setIsLoadingCollector(false);
         }
@@ -162,9 +270,25 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setCollectorForm(prev => ({ ...prev, [field]: value }));
     };
 
+    const [collectorCooldownUntil, setCollectorCooldownUntil] = useState<number | null>(null);
+
+    const collectorCooldownSeconds = useMemo(() => {
+        if (!collectorCooldownUntil) return 0;
+        const diff = collectorCooldownUntil - Date.now();
+        return diff > 0 ? Math.ceil(diff / 1000) : 0;
+    }, [collectorCooldownUntil]);
+
     const handleStartCollectorLogin = async () => {
+        if (collectorCooldownUntil && Date.now() < collectorCooldownUntil) {
+            const seconds = Math.ceil((collectorCooldownUntil - Date.now()) / 1000);
+            setCollectorError(
+                t('telegram_cooldown_wait') ||
+                    `Please wait ${seconds} seconds before requesting a new code.`,
+            );
+            return;
+        }
         if (!collectorForm.phoneNumber.trim()) {
-            setCollectorError('Phone number is required');
+            setCollectorError(t('phone_number_required') || 'Phone number is required');
             return;
         }
 
@@ -184,9 +308,39 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
             const response = await api.startTelegramCollectorLogin(payload);
             setCollectorAuthId(response.authId);
-            setCollectorMessage('Verification code sent');
+            setCollectorMessage(t('verification_code_sent') || 'Verification code sent');
+
+            // اگر بک‌اند FloodWait بدهد و پیغام شامل تعداد ثانیه باشد، از همان استفاده می‌کنیم
+            if (typeof response.retry_after_seconds === 'number' && response.retry_after_seconds > 0) {
+                setCollectorCooldownUntil(Date.now() + response.retry_after_seconds * 1000);
+            } else {
+                // Simple client-side cooldown to reduce flood risk (15 minutes)
+                setCollectorCooldownUntil(Date.now() + 15 * 60 * 1000);
+            }
         } catch (error: any) {
-            setCollectorError(error?.message || 'Failed to start login');
+            const message = error?.message || '';
+            // نگاشت خطاهای رایج تلگرام به پیام‌های کاربرپسند
+            if (message.includes('FLOOD') || message.includes('Flood') || message.includes('FLOOD_WAIT')) {
+                setCollectorError(
+                    t('telegram_error_flood_wait') ||
+                        'Telegram has restricted login attempts for this account. Please try again later.',
+                );
+                // تلاش برای استخراج مدت انتظار تقریبی از متن خطا
+                const match = message.match(/(\d+)\s*seconds?/i);
+                if (match) {
+                    const seconds = Number(match[1]);
+                    if (!Number.isNaN(seconds) && seconds > 0) {
+                        setCollectorCooldownUntil(Date.now() + seconds * 1000);
+                    }
+                }
+            } else if (message.includes('PHONE_NUMBER_INVALID')) {
+                setCollectorError(
+                    t('telegram_error_phone_invalid') ||
+                        'The phone number is not valid. Please double-check and try again.',
+                );
+            } else {
+                setCollectorError(message || (t('telegram_login_start_failed') || 'Failed to start login'));
+            }
         } finally {
             setIsLoadingCollector(false);
         }
@@ -194,11 +348,13 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const handleConfirmCollectorLogin = async () => {
         if (!collectorAuthId) {
-            setCollectorError('No active login request.');
+            setCollectorError(t('telegram_error_no_active_login') || 'No active login request.');
             return;
         }
         if (!collectorForm.code.trim()) {
-            setCollectorError('Verification code is required');
+            setCollectorError(
+                t('telegram_error_code_required') || 'Verification code is required',
+            );
             return;
         }
 
@@ -211,16 +367,43 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
                 code: collectorForm.code.trim(),
                 password: collectorForm.password.trim() || undefined,
             });
-            setCollectorMessage('Login successful');
+            setCollectorMessage(t('telegram_login_success') || 'Login successful');
             setCollectorAuthId(null);
             setCollectorForm(prev => ({
                 ...prev,
                 code: '',
                 password: '',
             }));
+            // بعد از لاگین موفق، وضعیت Data Hub (از جمله لیست اکانت‌ها) را رفرش می‌کنیم
             await loadDataHub();
+            setAccountsRefreshTrigger((prev) => prev + 1);
         } catch (error: any) {
-            setCollectorError(error?.message || 'Verification failed');
+            const message = error?.message || '';
+            if (message.includes('PHONE_CODE_INVALID')) {
+                setCollectorError(
+                    t('telegram_error_code_invalid') ||
+                        'The verification code is invalid. Please check and try again.',
+                );
+            } else if (message.includes('PHONE_CODE_EXPIRED')) {
+                setCollectorError(
+                    t('telegram_error_code_expired') ||
+                        'The verification code has expired. Please request a new code.',
+                );
+            } else if (message.includes('SESSION_PASSWORD_NEEDED')) {
+                setCollectorError(
+                    t('telegram_error_password_required') ||
+                        'Two-factor password is required for this account.',
+                );
+            } else if (message.includes('FLOOD') || message.includes('FLOOD_WAIT')) {
+                setCollectorError(
+                    t('telegram_error_flood_wait') ||
+                        'Telegram has restricted login attempts for this account. Please try again later.',
+                );
+            } else {
+                setCollectorError(
+                    message || (t('telegram_login_confirm_failed') || 'Verification failed'),
+                );
+            }
         } finally {
             setIsLoadingCollector(false);
         }
@@ -238,10 +421,10 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
                 code: '',
                 password: '',
             }));
-            setCollectorMessage('Login cancelled');
+            setCollectorMessage(t('login_cancelled') || 'Login cancelled');
         } catch (error: any) {
             console.error('Failed to cancel login:', error);
-            setCollectorError(error?.message || 'Failed to cancel login');
+            setCollectorError(error?.message || (t('login_cancel_failed') || 'Failed to cancel login'));
         } finally {
             setIsLoadingCollector(false);
         }
@@ -250,49 +433,56 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const handleRefreshCollectorChannels = async () => {
         setIsRefreshingChannels(true);
         try {
-            const response = await fetch(`${telegramCollectorUrl}/channels/refresh`, { method: 'POST' });
+            const url = api.buildCollectorUrl('/api/telegram-collector/channels/refresh');
+            const response = await fetch(url, { method: 'POST', credentials: 'include' });
             const data = await response.json();
             if (data.success) {
-                setCollectorMessage('Channels refreshed');
+                setCollectorMessage(t('channels_refreshed') || 'Channels refreshed');
+                setChannelsRefreshTrigger((n) => n + 1);
+                await loadDataHub();
             } else {
-                setCollectorError(data.error || 'Failed to refresh channels');
+                setCollectorError(data.error || (t('channels_refresh_failed') || 'Failed to refresh channels'));
             }
         } catch (error) {
-            setCollectorError('Connection error');
+            setCollectorError(t('connection_error') || 'Connection error');
         } finally {
             setIsRefreshingChannels(false);
         }
     };
 
-    const handleLinkChannelToSource = async (channelId: string, sourceId?: string) => {
+    const handleLinkChannelToSource = async (channelId: string, sourceId?: string, channelInfo?: { id: string; title?: string | null; username?: string | null }) => {
         try {
             setCollectorMessage(null);
             setCollectorError(null);
 
-            // Find the channel info from telegramCollectorState
-            const channel = telegramCollectorState?.channels?.find(ch => ch.id === channelId);
-            
+            // Prefer channelInfo from collector table; fallback to telegramCollectorState
+            const channel = channelInfo
+                ? { id: channelInfo.id, title: channelInfo.title ?? '', username: channelInfo.username }
+                : telegramCollectorState?.channels?.find(ch => ch.id === channelId);
+
             if (!channel) {
-                setCollectorError('Channel not found');
+                setCollectorError(t('channel_not_found') || 'Channel not found');
                 return;
             }
+
+            const displayTitle = channel.title || channel.username || channelId;
 
             // Check if already linked
             const existingSources = dataHub?.sources || [];
             if (isChannelLinked(channelId, existingSources)) {
-                setCollectorMessage(`Channel "${channel.title}" is already linked as a data source`);
+                setCollectorMessage((t('channel_already_linked') || 'Channel is already linked as a data source').replace('{title}', displayTitle));
                 return;
             }
 
             // Create the Telegram channel object
             const telegramChannel: TelegramChannel = {
                 id: channel.id,
-                title: channel.title,
+                title: channel.title || channelId,
                 username: channel.username
             };
 
             // Create data source
-            setCollectorMessage('Creating data source...');
+            setCollectorMessage(t('creating_data_source') || 'Creating data source...');
             const createdSource = await createTelegramDataSource({
                 channel: telegramChannel,
                 refreshInterval: 5, // 5 minutes
@@ -301,11 +491,11 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
                     fetchLimit: 50,
                     includeMedia: true,
                     parseUrls: true,
-                    tags: ['telegram', 'news', channel.title.toLowerCase().replace(/\s+/g, '-')]
+                    tags: ['telegram', 'news', (channel.title || '').toLowerCase().replace(/\s+/g, '-')]
                 }
             });
 
-            setCollectorMessage(`✅ Successfully linked channel "${channel.title}" as data source!`);
+            setCollectorMessage((t('successfully_linked_channel') || 'Successfully linked channel as data source!').replace('{title}', displayTitle));
             
             // Refresh data hub to show new source
             await loadDataHub();
@@ -313,7 +503,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
             console.log('✅ Telegram channel linked:', createdSource);
         } catch (error) {
             console.error('❌ Failed to link channel:', error);
-            setCollectorError(error instanceof Error ? error.message : 'Failed to link channel to data source');
+            setCollectorError(error instanceof Error ? error.message : (t('failed_to_link_channel') || 'Failed to link channel to data source'));
         }
     };
 
@@ -321,15 +511,24 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setTestingChannelId(channelId);
         setChannelTestPreview(null);
         try {
-            const response = await fetch(`${telegramCollectorUrl}/channels/test/${channelId}`);
+            const url = api.buildCollectorUrl(`/api/telegram-collector/channels/${channelId}/test`);
+            const response = await fetch(url, { method: 'POST', credentials: 'include' });
             const data = await response.json();
+            if (!response.ok) {
+                setCollectorError(data?.error || data?.message || (t('channel_test_failed') || 'Channel test failed'));
+                return;
+            }
             if (data.success) {
-                setChannelTestPreview(data.messages);
+                // Backend returns { success, channelId, channelHandle, latency, messages (count), accessible }
+                const preview = Array.isArray(data.messages) ? data.messages : [{
+                    text: `Latency: ${data.latency ?? '-'} ms | Accessible: ${data.accessible ? 'Yes' : 'No'} | Messages: ${data.messages ?? 0}`,
+                }];
+                setChannelTestPreview(preview);
             } else {
-                setCollectorError(data.error || 'Channel test failed');
+                setCollectorError(data?.error || (t('channel_test_failed') || 'Channel test failed'));
             }
         } catch (error) {
-            setCollectorError('Connection error');
+            setCollectorError(t('connection_error') || 'Connection error');
         } finally {
             setTestingChannelId(null);
         }
@@ -431,6 +630,9 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const [testingChannelId, setTestingChannelId] = useState<string | null>(null);
     const [channelTestPreview, setChannelTestPreview] = useState<any[] | null>(null);
     const [isRefreshingChannels, setIsRefreshingChannels] = useState(false);
+    const [showLoginWizard, setShowLoginWizard] = useState(false);
+    const [accountsRefreshTrigger, setAccountsRefreshTrigger] = useState(0);
+    const [channelsRefreshTrigger, setChannelsRefreshTrigger] = useState(0);
 
     const telegramCollectorUrl = api.getTelegramCollectorBaseUrl();
 
@@ -478,6 +680,11 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         channelTestPreview,
         isRefreshingChannels,
         telegramCollectorUrl,
+        showLoginWizard,
+        setShowLoginWizard,
+        accountsRefreshTrigger,
+        channelsRefreshTrigger,
+        collectorCooldownSeconds,
         handleCheckHealth: async () => {
             setIsLoadingHealth(true);
             setHealthError(null);
@@ -491,6 +698,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
             }
         },
         handleCollectorHealth,
+        handleDiagnoseCollector,
         handleCollectorInputChange,
         handleStartCollectorLogin,
         handleConfirmCollectorLogin,
