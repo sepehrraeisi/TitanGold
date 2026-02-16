@@ -66,6 +66,11 @@ type CollectorChannel = {
     accountId?: string | null;
     lastSyncedAt?: string | null;
     config?: any;
+    priority?: 'high' | 'normal' | 'low';
+    errorCount?: number;
+    lastError?: string | null;
+    lastErrorAt?: string | null;
+    consecutiveSuccessCount?: number;
 };
 
 const TelegramPanel: React.FC<Props> = (props) => {
@@ -113,6 +118,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
 
     const [accountFilter, setAccountFilter] = useState<'all' | 'unassigned' | string>('all');
     const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+    const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'normal' | 'low'>('all');
     const [channelSearch, setChannelSearch] = useState('');
     const [isSyncingDataSources, setIsSyncingDataSources] = useState(false);
     const [viewingMessagesChannelId, setViewingMessagesChannelId] = useState<string | null>(null);
@@ -397,6 +403,31 @@ const TelegramPanel: React.FC<Props> = (props) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [accountFilter, statusFilter]);
 
+    // Helper to render priority badge
+    const renderPriorityBadge = (priority?: 'high' | 'normal' | 'low') => {
+        if (!priority || priority === 'normal') return null;
+        const base = 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide';
+        const color = priority === 'high' 
+            ? 'bg-red-500/20 text-red-200 border border-red-400/50' 
+            : 'bg-blue-500/20 text-blue-200 border border-blue-400/50';
+        return <span className={`${base} ${color}`}>{priority}</span>;
+    };
+
+    // Helper to render error indicator
+    const renderErrorIndicator = (ch: CollectorChannel) => {
+        if (!ch.errorCount || ch.errorCount === 0) return null;
+        const critical = ch.errorCount >= 3;
+        const color = critical 
+            ? 'bg-red-500/20 text-red-200 border border-red-500/50' 
+            : 'bg-amber-500/20 text-amber-200 border border-amber-500/50';
+        return (
+            <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] ${color}`} title={ch.lastError || undefined}>
+                <span>⚠</span>
+                <span>{ch.errorCount} {t('errors') || 'errors'}</span>
+            </div>
+        );
+    };
+
     const primaryAccount = useMemo(
         () => accounts.find((a) => a.is_primary) || null,
         [accounts],
@@ -409,9 +440,10 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 ch.title?.toLowerCase().includes(channelSearch.toLowerCase()) ||
                 ch.username?.toLowerCase().includes(channelSearch.toLowerCase()) ||
                 ch.channelId.toLowerCase().includes(channelSearch.toLowerCase());
-            return matchesSearch;
+            const matchesPriority = priorityFilter === 'all' || ch.priority === priorityFilter;
+            return matchesSearch && matchesPriority;
         });
-    }, [collectorChannels, channelSearch]);
+    }, [collectorChannels, channelSearch, priorityFilter]);
 
     // ------------------------------------------------------------------------
     // Account actions
@@ -853,6 +885,26 @@ const TelegramPanel: React.FC<Props> = (props) => {
                                     {t('disabled') || 'Disabled'}
                                 </option>
                             </select>
+                            <select
+                                value={priorityFilter}
+                                onChange={(e) =>
+                                    setPriorityFilter(e.target.value as 'all' | 'high' | 'normal' | 'low')
+                                }
+                                className="text-[11px] bg-slate-900 border border-slate-700 rounded px-2 py-1 text-foreground"
+                            >
+                                <option value="all">
+                                    {t('all_priorities') || 'All Priorities'}
+                                </option>
+                                <option value="high">
+                                    🔴 {t('priority_high') || 'High'}
+                                </option>
+                                <option value="normal">
+                                    {t('priority_normal') || 'Normal'}
+                                </option>
+                                <option value="low">
+                                    {t('priority_low') || 'Low'}
+                                </option>
+                            </select>
                             <input
                                 type="text"
                                 value={channelSearch}
@@ -918,15 +970,19 @@ const TelegramPanel: React.FC<Props> = (props) => {
                                             >
                                                 <td className="px-3 py-2 align-top">
                                                     <div className="flex flex-col gap-0.5">
-                                                        <span className="text-xs font-medium">
-                                                            {ch.title || ch.username || ch.channelId}
-                                                </span>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-xs font-medium">
+                                                                {ch.title || ch.username || ch.channelId}
+                                                            </span>
+                                                            {renderPriorityBadge(ch.priority)}
+                                                        </div>
                                                         <span className="text-[11px] text-muted-foreground">
                                                             {ch.username
                                                                 ? `@${ch.username}`
                                                                 : ch.channelId}
                                                         </span>
-                                                </div>
+                                                        {renderErrorIndicator(ch)}
+                                                    </div>
                                             </td>
                                                 <td className="px-3 py-2 align-top hidden md:table-cell">
                                                         <select
