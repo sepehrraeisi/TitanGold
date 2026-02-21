@@ -28,7 +28,8 @@ class ChannelPollingService {
         this.intervalId = null;
         this.isRunning = false;
         this.config = {
-            enabled: process.env.TELEGRAM_POLLING_ENABLED === 'true',
+            // Default: enabled. Set TELEGRAM_POLLING_ENABLED=false to disable.
+            enabled: process.env.TELEGRAM_POLLING_ENABLED !== 'false',
             intervalMinutes: parseInt(process.env.TELEGRAM_POLLING_INTERVAL_MINUTES || '1'), // Changed to 1 minute base interval
             batchSize: parseInt(process.env.TELEGRAM_POLLING_BATCH_SIZE || '10'), // Increased for faster polling
             maxMessagesPerChannel: parseInt(process.env.TELEGRAM_POLLING_MAX_MESSAGES || '50'),
@@ -143,13 +144,34 @@ class ChannelPollingService {
         return client;
     }
     /**
-     * Fetch new messages from a channel
+     * Get the highest message_id we already have for this channel (so we only fetch newer)
      */
-    async fetchChannelMessages(client, channelId, channelUsername, limit) {
+    async getLastMessageIdForChannel(channelDbId) {
+        try {
+            const result = await pool.query(
+                'SELECT MAX(message_id) AS max_id FROM telegram_messages WHERE channel_id = $1',
+                [channelDbId]
+            );
+            const maxId = result.rows[0]?.max_id;
+            return maxId != null ? Number(maxId) : 0;
+        }
+        catch (error) {
+            console.error('❌ Error getting last message id for channel:', error.message);
+            return 0;
+        }
+    }
+    /**
+     * Fetch new messages from a channel (only messages with id > minId when minId > 0)
+     */
+    async fetchChannelMessages(client, channelId, channelUsername, limit, minId = 0) {
         try {
             // Use channel_id (numeric) or username
             const channelIdentifier = channelUsername || channelId.toString();
-            const messages = await client.getMessages(channelIdentifier, { limit });
+            const opts = { limit };
+            if (minId > 0) {
+                opts.minId = minId;
+            }
+            const messages = await client.getMessages(channelIdentifier, opts);
             // Process and normalize messages
             const formattedMessages = messages.map((msg) => ({
                 id: msg.id,
@@ -252,8 +274,9 @@ class ChannelPollingService {
             console.log(`📡 Polling channel: ${channel.title} (${channel.username || channel.channel_id})`);
             client = await this.getTelegramClient(channel.account_id);
             await client.connect();
-            // Fetch messages
-            const messages = await this.fetchChannelMessages(client, channel.channel_id, channel.username, this.config.maxMessagesPerChannel);
+            // Only fetch messages newer than last we have (so new posts are not missed)
+            const lastId = await this.getLastMessageIdForChannel(channel.id);
+            const messages = await this.fetchChannelMessages(client, channel.channel_id, channel.username, this.config.maxMessagesPerChannel, lastId);
             if (messages.length === 0) {
                 console.log(`   ℹ️  No new messages found`);
                 await this.updateChannelSyncTime(channel.id);

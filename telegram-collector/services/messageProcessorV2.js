@@ -21,8 +21,8 @@ class EnhancedMessageProcessor {
     constructor() {
         this.config = {
             enabled: process.env.TELEGRAM_PROCESSOR_ENABLED !== 'false',
-            batchSize: parseInt(process.env.TELEGRAM_PROCESSOR_BATCH_SIZE || '50'),
-            intervalSeconds: parseInt(process.env.TELEGRAM_PROCESSOR_INTERVAL_SECONDS || '30'),
+            batchSize: parseInt(process.env.TELEGRAM_PROCESSOR_BATCH_SIZE || '150'),
+            intervalSeconds: parseInt(process.env.TELEGRAM_PROCESSOR_INTERVAL_SECONDS || '15'),
             
             // Assets
             assets: ['BTC', 'ETH', 'USDT', 'GOLD', 'DOLLAR', 'EURO', 'DIRHAM', 'BITCOIN', 'ETHEREUM', 'OIL', 'SILVER'],
@@ -86,7 +86,7 @@ class EnhancedMessageProcessor {
             )
             AND m.message_text IS NOT NULL
             AND LENGTH(m.message_text) > 10
-            ORDER BY m.created_at DESC
+            ORDER BY m.created_at ASC
             LIMIT $1
         `;
         
@@ -115,6 +115,7 @@ class EnhancedMessageProcessor {
             const mentioned_currencies = this.core.extractCurrencies(text);
             const extracted_prices = this.core.extractPrices(text);
             const countries = this.enhanced.extractCountries(text);
+            const regions = this.enhanced.mapCountriesToRegions(countries);
             
             // === PHASE 3: Enhanced Categorization ===
             const event_category = this.enhanced.detectEventCategory(text);
@@ -162,6 +163,7 @@ class EnhancedMessageProcessor {
                 mentioned_assets,
                 mentioned_currencies,
                 countries,
+                regions,
                 sentiment: sentimentResult.sentiment,
                 sentiment_score: sentimentResult.score,
                 importance_level,
@@ -245,13 +247,13 @@ class EnhancedMessageProcessor {
                     await client.query(`
                         INSERT INTO telegram_news_events (
                             processed_message_id, primary_category, event_type,
-                            countries, affected_markets, affected_assets,
+                            countries, regions, affected_markets, affected_assets,
                             market_impact_level, is_breaking, is_developing,
                             event_urgency, source_reliability
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                     `, [
                         processedId, event_category, news_type,
-                        countries, ['forex', 'crypto', 'gold'], mentioned_assets,
+                        countries, regions, ['forex', 'crypto', 'gold'], mentioned_assets,
                         market_impact_level, is_breaking, false,
                         processedData.event_urgency, 0.8
                     ]);

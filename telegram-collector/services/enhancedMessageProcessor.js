@@ -490,6 +490,7 @@ class EnhancedMessageProcessor {
             const mentioned_currencies = this.extractCurrencies(text);
             const extracted_prices = this.extractPrices(text);
             const countries = this.extractCountries(text);
+            const regions = this.mapCountriesToRegions(countries);
             
             // === PHASE 3: Categorization (Enhanced) ===
             const event_category = this.detectEventCategory(text);
@@ -508,6 +509,7 @@ class EnhancedMessageProcessor {
                 sentimentResult,
                 mentioned_assets,
                 countries,
+                regions,
                 geopolitical_relevance
             );
             
@@ -620,13 +622,13 @@ class EnhancedMessageProcessor {
                     await client.query(`
                         INSERT INTO telegram_news_events (
                             processed_message_id, primary_category, event_type,
-                            countries, affected_markets, affected_assets,
+                            countries, regions, affected_markets, affected_assets,
                             market_impact_level, is_breaking, is_developing,
                             event_urgency, source_reliability
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                     `, [
                         processedId, event_category, news_type,
-                        countries, ['forex', 'crypto', 'gold'], mentioned_assets,
+                        countries, regions, ['forex', 'crypto', 'gold'], mentioned_assets,
                         market_impact_level, is_breaking, false,
                         processedData.event_urgency, 0.8
                     ]);

@@ -1424,10 +1424,10 @@ app.get('/api/telegram-collector/polling/status', rateLimitHybrid_1.rateLimiters
     }
 });
 /**
- * POST /api/telegram-collector/polling/trigger
- * Manually trigger a polling cycle
+ * POST or GET /api/telegram-collector/polling/trigger
+ * Manually trigger a polling cycle (GET allowed so browser/link works)
  */
-app.post('/api/telegram-collector/polling/trigger', rateLimitHybrid_1.rateLimiters.strict, async (req, res) => {
+const handlePollingTrigger = async (req, res) => {
     try {
         console.log('🔄 Manual polling cycle triggered via API');
         await channelPollingService_1.default.runPollingCycle();
@@ -1443,7 +1443,9 @@ app.post('/api/telegram-collector/polling/trigger', rateLimitHybrid_1.rateLimite
             message: error.message
         });
     }
-});
+};
+app.get('/api/telegram-collector/polling/trigger', rateLimitHybrid_1.rateLimiters.strict, handlePollingTrigger);
+app.post('/api/telegram-collector/polling/trigger', rateLimitHybrid_1.rateLimiters.strict, handlePollingTrigger);
 /**
  * POST /api/telegram-collector/polling/start
  * Start polling service

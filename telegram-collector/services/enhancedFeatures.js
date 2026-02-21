@@ -166,6 +166,34 @@ const EVENT_CATEGORIES = {
     }
 };
 
+// Map canonical country names to high-level region buckets used in analytics.
+// These region keys should stay aligned with the GeographicHeatMap REGION_COORDS.
+const COUNTRY_REGION_MAP = {
+    // Middle East
+    Iran: 'MIDDLE_EAST',
+    Iraq: 'MIDDLE_EAST',
+    Syria: 'MIDDLE_EAST',
+    Israel: 'MIDDLE_EAST',
+    Turkey: 'MIDDLE_EAST',
+    UAE: 'MIDDLE_EAST',
+
+    // Central Asia
+    Afghanistan: 'CENTRAL_ASIA',
+
+    // Europe
+    Europe: 'EUROPE',
+    UK: 'EUROPE',
+    Germany: 'EUROPE',
+    France: 'EUROPE',
+
+    // North America
+    USA: 'NORTH_AMERICA',
+
+    // Asia (broad bucket)
+    China: 'ASIA',
+    Russia: 'ASIA'
+};
+
 module.exports = class EnhancedFeatures {
     constructor(config) {
         this.config = config;
@@ -252,6 +280,23 @@ module.exports = class EnhancedFeatures {
         if (score >= 4) return 'high';
         if (score >= 2) return 'moderate';
         return 'low';
+    }
+
+    /**
+     * Map extracted country names to high-level regions.
+     * Returns an array of unique region keys matching GeographicHeatMap buckets.
+     */
+    mapCountriesToRegions(countries) {
+        const regions = new Set();
+
+        for (const country of countries || []) {
+            const region = COUNTRY_REGION_MAP[country];
+            if (region) {
+                regions.add(region);
+            }
+        }
+
+        return Array.from(regions);
     }
 
     /**

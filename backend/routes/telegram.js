@@ -22,7 +22,7 @@ router.get('/health', async (req, res) => {
         // Check database connection
         const dbCheck = await query('SELECT COUNT(*) as count FROM telegram_messages');
         
-        // Get pipeline stats
+        // Pipeline stats from view (same as before Geographic Map changes)
         const stats = await query('SELECT * FROM telegram_pipeline_stats');
         
         return res.json({
@@ -98,12 +98,8 @@ router.get('/agents/:agentKey/feed', authenticate, readRateLimiter, async (req, 
         let paramIndex = 3;
 
         // Filter by categories
-        if (categories) {
-            const categoryList = categories.split(',').map(c => c.trim());
-            whereConditions.push(`ai.event_category = ANY($${paramIndex})`);
-            params.push(categoryList);
-            paramIndex++;
-        }
+        // NOTE: schema differs across environments; agent impacts may not have event_category.
+        // We ignore this filter here to avoid column-not-found errors.
 
         // Filter by action requirement
         if (requiresAction !== undefined) {
@@ -115,37 +111,28 @@ router.get('/agents/:agentKey/feed', authenticate, readRateLimiter, async (req, 
         const sql = `
             SELECT 
                 pm.id,
-                pm.message_id,
-                pm.channel_id,
-                tc.username as channel_username,
-                tc.title as channel_title,
+                tm.message_id,
+                COALESCE(tc.title, tc.username, pm.channel_id::text) as channel_title,
                 pm.cleaned_text,
-                pm.original_text,
-                pm.detected_language,
                 pm.sentiment,
-                pm.news_type,
                 pm.importance_level,
-                pm.mentioned_assets,
-                pm.extracted_prices,
-                pm.extracted_dates,
-                pm.keywords,
-                pm.hashtags,
-                pm.telegram_created_at,
-                pm.created_at,
-                -- Agent Impact Data
+                COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
                 ai.impact_score,
-                ai.event_category,
-                ai.relevance_reasoning,
+                ai.impact_type,
+                ai.confidence as confidence,
+                ai.relevance_reasons,
                 ai.requires_action,
                 ai.action_type,
-                ai.confidence_score,
-                ai.processing_notes,
-                ai.created_at as impact_recorded_at
-            FROM processed_telegram_messages pm
-            INNER JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
-            INNER JOIN telegram_channels tc ON pm.channel_id = tc.channel_id
+                ai.priority_level,
+                ai.created_at as processed_at
+            FROM telegram_agent_impacts ai
+            INNER JOIN processed_telegram_messages pm ON pm.id::text = ai.processed_message_id::text
+            LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
+            LEFT JOIN telegram_channels tc 
+                ON pm.channel_id::text = tc.id::text
+                OR pm.channel_id::text = tc.channel_id::text
             WHERE ${whereConditions.join(' AND ')}
-            ORDER BY pm.telegram_created_at DESC, ai.impact_score DESC
+            ORDER BY COALESCE(tm.telegram_created_at, pm.created_at) DESC, ai.impact_score DESC
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;
 
@@ -156,8 +143,8 @@ router.get('/agents/:agentKey/feed', authenticate, readRateLimiter, async (req, 
         // Get total count for pagination
         const countSql = `
             SELECT COUNT(*) as total
-            FROM processed_telegram_messages pm
-            INNER JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
+            FROM telegram_agent_impacts ai
+            INNER JOIN processed_telegram_messages pm ON pm.id::text = ai.processed_message_id::text
             WHERE ${whereConditions.join(' AND ')}
         `;
         const countResult = await query(countSql, params.slice(0, -2));
@@ -174,7 +161,7 @@ router.get('/agents/:agentKey/feed', authenticate, readRateLimiter, async (req, 
             },
             filters: {
                 minImpact: parseFloat(minImpact),
-                categories: categories ? categories.split(',') : null,
+                categories: null,
                 timeRange: parseInt(timeRange),
                 requiresAction: requiresAction === 'true' ? true : requiresAction === 'false' ? false : null
             }
@@ -196,45 +183,47 @@ router.get('/agents/:agentKey/feed', authenticate, readRateLimiter, async (req, 
  */
 router.get('/agents/summary', readRateLimiter, async (req, res) => {
     try {
-        const { timeRange = 24 } = req.query;
+        const hours = Math.min(720, Math.max(1, parseInt(req.query.timeRange, 10) || 24));
 
-        const sql = `
+        // Agents list: use same time range as user selection (24h / 2d / 7d), not fixed 24h view
+        const agentsSql = `
             SELECT 
-                agent_key,
-                agent_name,
-                total_messages,
-                action_required_count,
-                critical_count,
-                avg_impact_score as average_impact,
-                last_message_at,
-                event_categories as top_event_categories,
-                news_categories as top_news_categories
-            FROM telegram_agent_feed
-            ORDER BY total_messages DESC
+                ai.agent_key,
+                ai.agent_name,
+                COUNT(*)::text AS total_messages,
+                COUNT(*) FILTER (WHERE ai.requires_action = true)::text AS action_required_count,
+                COUNT(*) FILTER (WHERE ai.priority_level = 'critical')::text AS critical_count,
+                COUNT(*) FILTER (WHERE ai.priority_level = 'high')::text AS high_count,
+                AVG(ai.impact_score) AS average_impact,
+                MAX(ai.created_at) AS last_message_at,
+                array_agg(DISTINCT pm.event_category) FILTER (WHERE pm.event_category IS NOT NULL) AS top_event_categories,
+                array_agg(DISTINCT pm.news_category) FILTER (WHERE pm.news_category IS NOT NULL) AS top_news_categories
+            FROM telegram_agent_impacts ai
+            JOIN processed_telegram_messages pm ON ai.processed_message_id = pm.id
+            WHERE ai.created_at >= NOW() - INTERVAL '1 hour' * $1
+            GROUP BY ai.agent_key, ai.agent_name
+            ORDER BY COUNT(*) DESC
         `;
+        const agentsResult = await query(agentsSql, [hours]);
 
-        const result = await query(sql);
-
-        // Calculate system-wide stats
         const statsSql = `
             SELECT 
-                COUNT(DISTINCT pm.id) as total_processed_messages,
-                COUNT(DISTINCT ai.id) as total_agent_impacts,
-                COUNT(DISTINCT pm.channel_id) as active_channels,
-                AVG(ai.impact_score) as avg_impact_score,
-                COUNT(CASE WHEN ai.requires_action THEN 1 END) as total_actions_required,
-                MAX(pm.created_at) as last_processed_at
+                COUNT(DISTINCT pm.id)::text AS total_processed_messages,
+                COUNT(DISTINCT ai.id)::text AS total_agent_impacts,
+                COUNT(DISTINCT pm.channel_id)::text AS active_channels,
+                AVG(ai.impact_score)::text AS avg_impact_score,
+                COUNT(CASE WHEN ai.requires_action THEN 1 END)::text AS total_actions_required,
+                MAX(pm.created_at) AS last_processed_at
             FROM processed_telegram_messages pm
             INNER JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
-            WHERE pm.created_at >= NOW() - INTERVAL '${parseInt(timeRange)} hours'
+            WHERE pm.created_at >= NOW() - INTERVAL '1 hour' * $1
         `;
-
-        const statsResult = await query(statsSql);
+        const statsResult = await query(statsSql, [hours]);
 
         return res.json({
             success: true,
-            timeRange: parseInt(timeRange),
-            agents: result.rows,
+            timeRange: hours,
+            agents: agentsResult.rows,
             systemStats: statsResult.rows[0]
         });
 
@@ -297,7 +286,7 @@ router.get('/breaking-news', authenticate, readRateLimiter, async (req, res) => 
         const sql = `
             SELECT 
                 pm.id,
-                pm.message_id,
+                tm.message_id,
                 pm.channel_id,
                 tc.username as channel_username,
                 tc.title as channel_title,
@@ -307,13 +296,15 @@ router.get('/breaking-news', authenticate, readRateLimiter, async (req, res) => 
                 pm.importance_level,
                 pm.mentioned_assets,
                 pm.extracted_prices,
-                pm.telegram_created_at,
+                COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
                 pm.created_at,
                 -- News Event Data
                 ne.primary_category,
                 ne.sub_category,
                 ne.regions,
-                ne.affected_entities,
+                COALESCE(ne.people_mentioned, ARRAY[]::TEXT[]) || COALESCE(ne.organizations, ARRAY[]::TEXT[]) as affected_entities,
+                ne.affected_markets,
+                ne.affected_assets,
                 ne.market_impact_level,
                 ne.event_urgency,
                 ne.source_reliability,
@@ -334,26 +325,15 @@ router.get('/breaking-news', authenticate, readRateLimiter, async (req, res) => 
                      WHERE processed_message_id = pm.id AND impact_score >= ${parseFloat(minImpact)}
                      LIMIT 5
                  ) sub) as top_affected_agents
-                -- Get top affected agents
-                (SELECT json_agg(json_build_object(
-                    'agent_key', agent_key,
-                    'impact_score', impact_score,
-                    'requires_action', requires_action
-                ) ORDER BY impact_score DESC)
-                 FROM (
-                     SELECT agent_key, impact_score, requires_action
-                     FROM telegram_agent_impacts
-                     WHERE message_id = pm.id AND impact_score >= ${parseFloat(minImpact)}
-                     LIMIT 5
-                 ) sub) as top_affected_agents
             FROM processed_telegram_messages pm
-            INNER JOIN telegram_news_events ne ON pm.id = ne.message_id
-            INNER JOIN telegram_channels tc ON pm.channel_id = tc.channel_id
+            INNER JOIN telegram_news_events ne ON pm.id = ne.processed_message_id
+            LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
+            INNER JOIN telegram_channels tc ON pm.channel_id = tc.id
             WHERE ${whereConditions.join(' AND ')}
             ORDER BY 
                 ne.event_urgency DESC,
                 pm.importance_level DESC,
-                pm.telegram_created_at DESC
+                COALESCE(tm.telegram_created_at, pm.created_at) DESC
             LIMIT $${paramIndex}
         `;
 
@@ -382,6 +362,29 @@ router.get('/breaking-news', authenticate, readRateLimiter, async (req, res) => 
     }
 });
 
+// Map country names (from DB) to region keys expected by Geographic Heat Map (REGION_COORDS)
+function countriesToRegions(countries) {
+    if (!Array.isArray(countries) || countries.length === 0) return [];
+    const regionSet = new Set();
+    const map = {
+        Iran: 'MIDDLE_EAST', USA: 'NORTH_AMERICA', Canada: 'NORTH_AMERICA', Mexico: 'NORTH_AMERICA',
+        Russia: 'EUROPE', China: 'EAST_ASIA', Japan: 'EAST_ASIA', India: 'ASIA',
+        'United Kingdom': 'EUROPE', UK: 'EUROPE', Germany: 'EUROPE', France: 'EUROPE',
+        Turkey: 'MIDDLE_EAST', UAE: 'MIDDLE_EAST', Israel: 'MIDDLE_EAST', Syria: 'MIDDLE_EAST', Iraq: 'MIDDLE_EAST',
+        Saudi: 'MIDDLE_EAST', Egypt: 'MIDDLE_EAST', Europe: 'EUROPE',
+        Australia: 'OCEANIA', Indonesia: 'SOUTHEAST_ASIA', Thailand: 'SOUTHEAST_ASIA', Vietnam: 'SOUTHEAST_ASIA',
+        Brazil: 'SOUTH_AMERICA', Argentina: 'SOUTH_AMERICA',
+        Kazakhstan: 'CENTRAL_ASIA', Uzbekistan: 'CENTRAL_ASIA',
+        'South Africa': 'AFRICA', Nigeria: 'AFRICA', Kenya: 'AFRICA'
+    };
+    for (const c of countries) {
+        const name = (c && typeof c === 'string' ? c.trim() : String(c)).replace(/\s+/g, ' ');
+        const key = map[name] || map[name.replace(/\s*\(.*\)$/, '')];
+        if (key) regionSet.add(key);
+    }
+    return Array.from(regionSet);
+}
+
 /**
  * GET /api/v1/telegram/events/recent
  * Get latest categorized events
@@ -408,33 +411,54 @@ router.get('/events/recent', authenticate, readRateLimiter, async (req, res) => 
                 ne.primary_category,
                 ne.sub_category,
                 ne.regions,
+                ne.countries,
                 ne.market_impact_level,
                 ne.event_urgency,
                 ne.event_type,
                 pm.cleaned_text,
                 pm.sentiment,
-                pm.telegram_created_at,
+                COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
                 tc.title as channel_title,
                 COUNT(ai.id) as affected_agents_count
             FROM telegram_news_events ne
             INNER JOIN processed_telegram_messages pm ON ne.processed_message_id = pm.id
-            INNER JOIN telegram_channels tc ON pm.channel_id = tc.channel_id
+            LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
+            INNER JOIN telegram_channels tc ON pm.channel_id = tc.id
             LEFT JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
             WHERE ${whereConditions.join(' AND ')}
-            GROUP BY ne.id, pm.id, tc.title
-            ORDER BY pm.telegram_created_at DESC
+            GROUP BY ne.id, pm.id, tm.telegram_created_at, tc.title
+            ORDER BY COALESCE(tm.telegram_created_at, pm.created_at) DESC
             LIMIT $${paramIndex}
         `;
 
-        params.push(Math.min(parseInt(limit), 100));
+        params.push(Math.min(parseInt(limit), 1000));
 
         const result = await query(sql, params);
 
+        // Ensure regions for Geographic Heat Map: use DB regions if set, else derive from countries, else category fallback
+        const categoryRegionFallback = {
+            GEOPOLITICAL: ['MIDDLE_EAST'],
+            PRECIOUS_METALS: ['MIDDLE_EAST'],
+            CRYPTO_BLOCKCHAIN: ['ASIA'],
+            FOREX_CURRENCY: ['EUROPE'],
+            MARKET_DATA: ['NORTH_AMERICA'],
+            GENERAL: ['EUROPE']
+        };
+        const data = result.rows.map(row => {
+            let regions = row.regions && Array.isArray(row.regions) && row.regions.length > 0
+                ? row.regions
+                : countriesToRegions(row.countries || []);
+            if (regions.length === 0 && row.primary_category) {
+                regions = categoryRegionFallback[row.primary_category] || [];
+            }
+            return { ...row, regions };
+        });
+
         return res.json({
             success: true,
-            count: result.rows.length,
+            count: data.length,
             timeRange: parseInt(timeRange),
-            data: result.rows
+            data
         });
 
     } catch (error) {
@@ -470,7 +494,7 @@ router.get('/categories/summary', readRateLimiter, async (req, res) => {
                 AVG(ne.source_reliability) as avg_reliability,
                 COUNT(DISTINCT pm.channel_id) as channel_count,
                 COUNT(DISTINCT ai.agent_key) as affected_agents_count,
-                MAX(pm.telegram_created_at) as latest_message_at
+                MAX(pm.created_at) as latest_message_at
             FROM telegram_news_events ne
             INNER JOIN processed_telegram_messages pm ON ne.processed_message_id = pm.id
             LEFT JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
@@ -530,7 +554,7 @@ router.get('/categories/:category/timeline', authenticate, readRateLimiter, asyn
 
         const sql = `
             SELECT 
-                date_trunc('${interval}', pm.telegram_created_at) as time_bucket,
+                date_trunc('${interval}', pm.created_at) as time_bucket,
                 COUNT(*) as message_count,
                 AVG(ne.event_urgency) as avg_urgency,
                 COUNT(CASE WHEN ne.market_impact_level = 'high' THEN 1 END) as high_impact_count,

@@ -1,10 +1,10 @@
 import React from 'react';
 import { ArtemisState } from '../../../../types';
 import CategoriesPanel from './DataHub/CategoriesPanel';
-import HealthPanel from './DataHub/HealthPanel';
 import LogsPanel from './DataHub/LogsPanel';
 import PipelinePanel from './DataHub/PipelinePanel';
 import TelegramDataPanel from './DataHub/TelegramDataPanel';
+import TelegramPanel from './DataHub/TelegramPanel';
 import DataSourcesPanel from './DataHub/DataSourcesPanel';
 import AdvancedFeatures from './DataHub/AdvancedFeatures';
 import DataHubModals from './DataHub/DataHubModals';
@@ -261,20 +261,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                         />
                     )}
 
-                    {activeView === 'health' && (
-                        <HealthPanel
-                            t={t}
-                            health={dataHub.health}
-                            handleCheckHealth={handleCheckHealth}
-                            isLoading={isLoadingHealth}
-                            error={healthError}
-                            setError={setHealthError}
-                            Card={Card}
-                            telegramCollector={dataHub.telegramCollector}
-                            dataHub={dataHub}
-                        />
-                    )}
-
                     {activeView === 'logs' && (
                         <LogsPanel
                             t={t}
@@ -319,22 +305,47 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     )}
 
                     {activeView === 'telegram' && (
-                        <TelegramDataPanel
-                            t={t}
-                            Card={Card}
-                            onRefresh={onRefresh}
-                        />
-                    )}
-                            setCollectorError={setCollectorError}
-                            setCollectorMessage={setCollectorMessage}
-                            Card={Card}
-                            collectorCooldownSeconds={collectorCooldownSeconds}
-                            handleDiagnoseCollector={handleDiagnoseCollector}
-                            showLoginWizard={showLoginWizard}
-                            setShowLoginWizard={setShowLoginWizard}
-                            accountsRefreshTrigger={accountsRefreshTrigger}
-                            channelsRefreshTrigger={channelsRefreshTrigger}
-                        />
+                        <div className="space-y-6">
+                            <TelegramPanel
+                                t={t}
+                                telegramCollectorUrl={telegramCollectorUrl}
+                                telegramCollectorState={dataHub.telegramCollector || null}
+                                telegramSources={dataHub.sources.filter((s) => s.type === 'telegram')}
+                                handleCollectorHealth={handleCollectorHealth}
+                                isLoadingCollector={isLoadingCollector}
+                                collectorMessage={collectorMessage}
+                                collectorError={collectorError}
+                                handleStartCollectorLogin={handleStartCollectorLogin}
+                                handleConfirmCollectorLogin={handleConfirmCollectorLogin}
+                                handleCancelCollectorLogin={handleCancelCollectorLogin}
+                                handleRefreshCollectorChannels={handleRefreshCollectorChannels}
+                                handleLinkChannelToSource={handleLinkChannelToSource}
+                                handleTestCollectorChannel={handleTestCollectorChannel}
+                                formatTimeAgo={formatTimeAgo}
+                                collectorForm={collectorForm}
+                                handleCollectorInputChange={handleCollectorInputChange}
+                                collectorAuthId={collectorAuthId}
+                                testingChannelId={testingChannelId}
+                                channelTestPreview={channelTestPreview}
+                                isRefreshingChannels={isRefreshingChannels}
+                                combinedCollectorHealth={combinedCollectorHealth}
+                                setCollectorError={setCollectorError}
+                                setCollectorMessage={setCollectorMessage}
+                                Card={Card}
+                                collectorCooldownSeconds={collectorCooldownSeconds}
+                                handleDiagnoseCollector={handleDiagnoseCollector}
+                                showLoginWizard={showLoginWizard}
+                                setShowLoginWizard={setShowLoginWizard}
+                                accountsRefreshTrigger={accountsRefreshTrigger}
+                                channelsRefreshTrigger={channelsRefreshTrigger}
+                            />
+
+                            <TelegramDataPanel
+                                t={t}
+                                Card={Card}
+                                onRefresh={onRefresh}
+                            />
+                        </div>
                     )}
                 </div>
 

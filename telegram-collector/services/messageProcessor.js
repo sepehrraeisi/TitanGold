@@ -4,25 +4,30 @@
  * Processes messages for 15 AI agents + 15 news categories
  */
 
+// Load env from telegram-collector/.env so we use same DB as collector (PM2 cwd may be repo root)
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 const { Pool } = require('pg');
 const ProcessorCore = require('./messageProcessorCore');
 const EnhancedFeatures = require('./enhancedFeatures');
 
-// Database connection
+// Database connection (same as collector via telegram-collector/.env)
 const pool = new Pool({
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5433'),
     database: process.env.DB_NAME || 'titangold_db',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || ''
+    password: process.env.DB_PASSWORD || '',
+    connectionTimeoutMillis: 10000
 });
 
 class EnhancedMessageProcessor {
     constructor() {
         this.config = {
             enabled: process.env.TELEGRAM_PROCESSOR_ENABLED !== 'false',
-            batchSize: parseInt(process.env.TELEGRAM_PROCESSOR_BATCH_SIZE || '50'),
-            intervalSeconds: parseInt(process.env.TELEGRAM_PROCESSOR_INTERVAL_SECONDS || '30'),
+            batchSize: parseInt(process.env.TELEGRAM_PROCESSOR_BATCH_SIZE || '150'),
+            intervalSeconds: parseInt(process.env.TELEGRAM_PROCESSOR_INTERVAL_SECONDS || '15'),
             
             // Assets
             assets: ['BTC', 'ETH', 'USDT', 'GOLD', 'DOLLAR', 'EURO', 'DIRHAM', 'BITCOIN', 'ETHEREUM', 'OIL', 'SILVER'],
@@ -70,6 +75,7 @@ class EnhancedMessageProcessor {
      * Get unprocessed messages
      */
     async getUnprocessedMessages() {
+        // Use NOT EXISTS instead of NOT IN for better performance and to avoid hang on large processed set
         const query = `
             SELECT 
                 m.id,
@@ -81,12 +87,12 @@ class EnhancedMessageProcessor {
                 c.priority
             FROM telegram_messages m
             JOIN telegram_channels c ON m.channel_id = c.id
-            WHERE m.id NOT IN (
-                SELECT raw_message_id FROM processed_telegram_messages
+            WHERE NOT EXISTS (
+                SELECT 1 FROM processed_telegram_messages p WHERE p.raw_message_id = m.id
             )
             AND m.message_text IS NOT NULL
-            AND LENGTH(m.message_text) > 10
-            ORDER BY m.created_at DESC
+            AND LENGTH(TRIM(m.message_text)) > 10
+            ORDER BY m.created_at ASC
             LIMIT $1
         `;
         

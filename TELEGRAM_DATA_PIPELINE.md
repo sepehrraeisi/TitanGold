@@ -209,9 +209,11 @@ SELECT * FROM telegram_pipeline_stats;
 
 ### Processing Configuration
 
-- **Batch Size:** 50 messages per cycle
-- **Interval:** 30 seconds
-- **Concurrency:** Parallel processing
+- **Batch Size:** 150 messages per cycle (configurable via `TELEGRAM_PROCESSOR_BATCH_SIZE`)
+- **Interval:** 15 seconds (configurable via `TELEGRAM_PROCESSOR_INTERVAL_SECONDS`)
+- **Order:** Oldest unprocessed first (FIFO), so no message is left behind when bursts occur
+- **No message loss:** If more than one batch arrives between cycles, the next cycle(s) process the rest; nothing is dropped
+- **Concurrency:** Parallel processing within each batch
 - **Error Handling:** Automatic retry & logging
 
 ## API & Queries
@@ -322,14 +324,17 @@ node services/messageProcessor.js
 Environment variables (optional):
 
 ```bash
+# Collector: channel polling (default: enabled; set to false to disable)
+TELEGRAM_POLLING_ENABLED=true
+
 # Enable/disable processor
 TELEGRAM_PROCESSOR_ENABLED=true
 
-# Batch size per cycle
-TELEGRAM_PROCESSOR_BATCH_SIZE=50
+# Batch size per cycle (default 150; more = fewer cycles for bursts)
+TELEGRAM_PROCESSOR_BATCH_SIZE=150
 
-# Processing interval (seconds)
-TELEGRAM_PROCESSOR_INTERVAL_SECONDS=30
+# Processing interval in seconds (default 15; smaller = nearer realtime)
+TELEGRAM_PROCESSOR_INTERVAL_SECONDS=15
 
 # Database config (inherited from collector)
 DB_HOST=localhost
@@ -380,6 +385,32 @@ ORDER BY hour DESC;
 - No messages processed in > 15 minutes
 
 ## Troubleshooting
+
+### Issue: No new data after [date] (Overview / AI Inbox empty)
+
+Data flow: **Collector** → `telegram_messages` (raw) → **Processor** → `processed_telegram_messages` + `telegram_agent_impacts`. If the last record in DB is old, the break is either in collection or in processing.
+
+**1. Check if raw messages are still being collected**
+```sql
+SELECT MAX(created_at) AS last_raw, MAX(telegram_created_at) AS last_telegram
+FROM telegram_messages;
+SELECT COUNT(*) FROM telegram_messages WHERE created_at > NOW() - INTERVAL '24 hours';
+```
+- If `last_raw` is old and 24h count is 0 → **Collector** is not writing new rows. Go to step 2.
+- If raw messages are recent but `telegram_agent_impacts` / `processed_telegram_messages` are old → **Processor** is not running or failing. Go to step 3.
+
+**2. Collector not saving new messages**
+- Polling must be **enabled**. As of the latest change, it is **on by default**; set `TELEGRAM_POLLING_ENABLED=false` only to disable.
+- Ensure collector process is running: `pm2 status telegram-collector` (or whatever name you use).
+- Check polling status: `curl -s http://127.0.0.1:3002/api/telegram-collector/polling/status` → `polling.enabled` should be true.
+- Trigger one cycle manually: `curl -X POST http://127.0.0.1:3002/api/telegram-collector/polling/trigger`.
+- Check that active channels exist and are due for sync: `SELECT id, username, last_synced_at, is_active FROM telegram_channels WHERE is_active = true;`
+- Check collector logs for Telegram/session/API errors: `pm2 logs telegram-collector --lines 100`.
+
+**3. Processor not processing**
+- Ensure processor is running: `pm2 status telegram-processor` (or `node telegram-collector/services/messageProcessorV2.js`).
+- Check logs: `pm2 logs telegram-processor --lines 50`.
+- Restart: `pm2 restart telegram-processor`.
 
 ### Issue: No Messages Being Processed
 

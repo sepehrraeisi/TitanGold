@@ -134,6 +134,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
     const [isLoadingDialogs, setIsLoadingDialogs] = useState(false);
     const [isRegisteringChannels, setIsRegisteringChannels] = useState(false);
     const [importError, setImportError] = useState<string | null>(null);
+    const [showChannelsSection, setShowChannelsSection] = useState(false);
 
     // ------------------------------------------------------------------------
     // Data loading helpers
@@ -928,14 +929,30 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 {/* Channels + test preview column */}
                 <Card className="lg:col-span-2 bg-slate-950/70 border border-white/5">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
-                        <div className="space-y-1">
-                            <h4 className="text-sm font-semibold text-foreground">
-                                {t('telegram_channels') || 'Telegram Channels'}
-                            </h4>
-                            <p className="text-[11px] text-muted-foreground">
-                                {t('telegram_channels_hint') ||
-                                    'Use the power toggle to enable/disable polling, and assign each channel to a specific account.'}
-                            </p>
+                        <div className="flex items-start gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowChannelsSection((prev) => !prev)}
+                                className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-700 bg-slate-900/70 text-xs text-slate-200 hover:border-purple-400 hover:text-purple-300 transition-colors"
+                                aria-label={showChannelsSection ? 'Collapse channels list' : 'Expand channels list'}
+                            >
+                                <span
+                                    className={`transform transition-transform ${
+                                        showChannelsSection ? 'rotate-90' : ''
+                                    }`}
+                                >
+                                    ▸
+                                </span>
+                            </button>
+                            <div className="space-y-1">
+                                <h4 className="text-sm font-semibold text-foreground">
+                                    {t('telegram_channels') || 'Telegram Channels'}
+                                </h4>
+                                <p className="text-[11px] text-muted-foreground">
+                                    {t('telegram_channels_hint') ||
+                                        'Use the power toggle to enable/disable polling, and assign each channel to a specific account.'}
+                                </p>
+                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <select
@@ -1012,209 +1029,213 @@ const TelegramPanel: React.FC<Props> = (props) => {
                         </div>
                     </div>
 
-                    {isLoadingCollectorChannels ? (
-                        <p className="text-xs text-muted-foreground">
-                            {t('loading') || 'Loading...'}
-                        </p>
-                    ) : channelsError ? (
-                        <p className="text-xs text-red-400">{channelsError}</p>
-                    ) : filteredChannels.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                            {t('no_collector_channels') || 'No channels registered in the collector yet.'}
-                        </p>
-                    ) : (
-                        <div className="overflow-x-auto -mx-3 mt-2">
-                            <table className="min-w-full text-xs text-foreground/90">
-                                <thead>
-                                    <tr className="border-b border-slate-800 text-[11px] text-muted-foreground">
-                                        <th className="px-3 py-2 text-left">
-                                            {t('channel') || 'Channel'}
-                                        </th>
-                                        <th className="px-3 py-2 text-left hidden md:table-cell">
-                                            {t('priority') || 'Priority'}
-                                        </th>
-                                        <th className="px-3 py-2 text-left hidden md:table-cell">
-                                            {t('account') || 'Account'}
-                                        </th>
-                                        <th className="px-3 py-2 text-left hidden md:table-cell">
-                                            {t('last_synced') || 'Last synced'}
-                                        </th>
-                                        <th className="px-3 py-2 text-center">
-                                            {t('enabled') || 'Enabled'}
-                                        </th>
-                                        <th className="px-3 py-2 text-right">
-                                            {t('actions') || 'Actions'}
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredChannels.map((ch) => {
-                                        const account =
-                                            ch.accountId &&
-                                            accounts.find((a) => a.id === ch.accountId);
-                                        const hasUsableAccount = accounts.some(
-                                            (a) => a.status === 'active',
-                                        );
-                                        return (
-                                            <tr
-                                                key={ch.id}
-                                                className="border-b border-slate-900/60 last:border-0"
-                                            >
-                                                <td className="px-3 py-2 align-top">
-                                                    <div className="flex flex-col gap-0.5">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="text-xs font-medium">
-                                                                {ch.title || ch.username || ch.channelId}
-                                                            </span>
-                                                            {renderPriorityBadge(ch.priority)}
-                                                        </div>
-                                                        <span className="text-[11px] text-muted-foreground">
-                                                            {ch.username
-                                                                ? `@${ch.username}`
-                                                                : ch.channelId}
-                                                        </span>
-                                                        {renderErrorIndicator(ch)}
-                                                    </div>
-                                            </td>
-                                                <td className="px-3 py-2 align-top hidden md:table-cell">
-                                                    <select
-                                                        value={ch.priority || 'normal'}
-                                                        onChange={(e) =>
-                                                            updateChannelPriority(
-                                                                ch,
-                                                                e.target.value as 'high' | 'normal' | 'low',
-                                                            )
-                                                        }
-                                                        className="text-[11px] bg-slate-900 border border-slate-700 rounded px-2 py-1 text-foreground w-full"
+                    {showChannelsSection && (
+                        <>
+                            {isLoadingCollectorChannels ? (
+                                <p className="text-xs text-muted-foreground">
+                                    {t('loading') || 'Loading...'}
+                                </p>
+                            ) : channelsError ? (
+                                <p className="text-xs text-red-400">{channelsError}</p>
+                            ) : filteredChannels.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                    {t('no_collector_channels') || 'No channels registered in the collector yet.'}
+                                </p>
+                            ) : (
+                                <div className="overflow-x-auto -mx-3 mt-2">
+                                    <table className="min-w-full text-xs text-foreground/90">
+                                        <thead>
+                                            <tr className="border-b border-slate-800 text-[11px] text-muted-foreground">
+                                                <th className="px-3 py-2 text-left">
+                                                    {t('channel') || 'Channel'}
+                                                </th>
+                                                <th className="px-3 py-2 text-left hidden md:table-cell">
+                                                    {t('priority') || 'Priority'}
+                                                </th>
+                                                <th className="px-3 py-2 text-left hidden md:table-cell">
+                                                    {t('account') || 'Account'}
+                                                </th>
+                                                <th className="px-3 py-2 text-left hidden md:table-cell">
+                                                    {t('last_synced') || 'Last synced'}
+                                                </th>
+                                                <th className="px-3 py-2 text-center">
+                                                    {t('enabled') || 'Enabled'}
+                                                </th>
+                                                <th className="px-3 py-2 text-right">
+                                                    {t('actions') || 'Actions'}
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredChannels.map((ch) => {
+                                                const account =
+                                                    ch.accountId &&
+                                                    accounts.find((a) => a.id === ch.accountId);
+                                                const hasUsableAccount = accounts.some(
+                                                    (a) => a.status === 'active',
+                                                );
+                                                return (
+                                                    <tr
+                                                        key={ch.id}
+                                                        className="border-b border-slate-900/60 last:border-0"
                                                     >
-                                                        <option value="high">
-                                                            🔴 {t('priority_high') || 'High'}
-                                                        </option>
-                                                        <option value="normal">
-                                                            {t('priority_normal') || 'Normal'}
-                                                        </option>
-                                                        <option value="low">
-                                                            {t('priority_low') || 'Low'}
-                                                        </option>
-                                                    </select>
-                                                </td>
-                                                <td className="px-3 py-2 align-top hidden md:table-cell">
-                                                        <select
-                                                        value={ch.accountId || ''}
-                                                        onChange={(e) =>
-                                                            assignChannelToAccount(
-                                                                ch,
-                                                                e.target.value || null,
-                                                            )
-                                                        }
-                                                        className="text-[11px] bg-slate-900 border border-slate-700 rounded px-2 py-1 text-foreground w-full"
-                                                        >
-                                                            <option value="">
-                                                            {t('unassigned') || 'Unassigned'}
-                                                        </option>
-                                                        {accounts.map((acc) => (
-                                                            <option key={acc.id} value={acc.id}>
-                                                                {formatPhoneLabel(acc)}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                </td>
-                                                <td className="px-3 py-2 align-top hidden md:table-cell text-[11px] text-muted-foreground">
-                                                    {ch.lastSyncedAt
-                                                        ? formatTimeAgo(ch.lastSyncedAt)
-                                                        : t('never') || 'never'}
-                                            </td>
-                                                <td className="px-3 py-2 align-top text-center">
-                                                    <button
-                                                        onClick={() => toggleChannelActive(ch)}
-                                                        className={`inline-flex items-center justify-center w-8 h-4 rounded-full transition-colors ${
-                                                            ch.isActive
-                                                                ? 'bg-emerald-500/80'
-                                                                : 'bg-slate-700'
-                                                        }`}
-                                                    >
-                                                        <span
-                                                            className={`w-3 h-3 rounded-full bg-white shadow transform transition-transform ${
-                                                                ch.isActive
-                                                                    ? 'translate-x-2'
-                                                                    : '-translate-x-2'
-                                                            }`}
-                                                        />
-                                                    </button>
-                                                </td>
-                                                <td className="px-3 py-2 align-top text-right">
-                                                    <div className="flex flex-wrap gap-1 justify-end">
-                                                        <button
-                                                            onClick={() => loadChannelMessages(ch.channelId)}
-                                                            disabled={!hasUsableAccount}
-                                                            className="text-[10px] px-2 py-0.5 rounded-full border border-sky-500/60 text-sky-200 hover:bg-sky-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                                                        >
-                                                            {t('view_messages') || 'View Messages'}
-                                                        </button>
-                                                        <button
-                                                            onClick={() =>
-                                                                handleTestCollectorChannel(
-                                                                    ch.username ||
-                                                                        ch.channelId,
-                                                                )
-                                                            }
-                                                            disabled={!hasUsableAccount}
-                                                            className="text-[10px] px-2 py-0.5 rounded-full border border-blue-500/60 text-blue-200 hover:bg-blue-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                                                        >
-                                                            {t('test_fetch') || 'Test Fetch'}
-                                                        </button>
-                                                        {ch.priority === 'high' && (
-                                                            <button
-                                                                onClick={() => handleForceSync(ch)}
-                                                                disabled={!hasUsableAccount || syncingChannelId === ch.id}
-                                                                className="text-[10px] px-2 py-0.5 rounded-full border border-purple-500/60 text-purple-200 hover:bg-purple-500/10 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
-                                                                title={t('force_sync_tooltip') || 'Immediately sync this channel'}
+                                                        <td className="px-3 py-2 align-top">
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="text-xs font-medium">
+                                                                        {ch.title || ch.username || ch.channelId}
+                                                                    </span>
+                                                                    {renderPriorityBadge(ch.priority)}
+                                                                </div>
+                                                                <span className="text-[11px] text-muted-foreground">
+                                                                    {ch.username
+                                                                        ? `@${ch.username}`
+                                                                        : ch.channelId}
+                                                                </span>
+                                                                {renderErrorIndicator(ch)}
+                                                            </div>
+                                                    </td>
+                                                        <td className="px-3 py-2 align-top hidden md:table-cell">
+                                                            <select
+                                                                value={ch.priority || 'normal'}
+                                                                onChange={(e) =>
+                                                                    updateChannelPriority(
+                                                                        ch,
+                                                                        e.target.value as 'high' | 'normal' | 'low',
+                                                                    )
+                                                                }
+                                                                className="text-[11px] bg-slate-900 border border-slate-700 rounded px-2 py-1 text-foreground w-full"
                                                             >
-                                                                {syncingChannelId === ch.id
-                                                                    ? `⟳ ${t('syncing') || 'Syncing...'}`
-                                                                    : `⚡ ${t('sync_now') || 'Sync Now'}`}
+                                                                <option value="high">
+                                                                    🔴 {t('priority_high') || 'High'}
+                                                                </option>
+                                                                <option value="normal">
+                                                                    {t('priority_normal') || 'Normal'}
+                                                                </option>
+                                                                <option value="low">
+                                                                    {t('priority_low') || 'Low'}
+                                                                </option>
+                                                            </select>
+                                                        </td>
+                                                        <td className="px-3 py-2 align-top hidden md:table-cell">
+                                                                <select
+                                                                value={ch.accountId || ''}
+                                                                onChange={(e) =>
+                                                                    assignChannelToAccount(
+                                                                        ch,
+                                                                        e.target.value || null,
+                                                                    )
+                                                                }
+                                                                className="text-[11px] bg-slate-900 border border-slate-700 rounded px-2 py-1 text-foreground w-full"
+                                                                >
+                                                                    <option value="">
+                                                                    {t('unassigned') || 'Unassigned'}
+                                                                </option>
+                                                                {accounts.map((acc) => (
+                                                                    <option key={acc.id} value={acc.id}>
+                                                                        {formatPhoneLabel(acc)}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                        </td>
+                                                        <td className="px-3 py-2 align-top hidden md:table-cell text-[11px] text-muted-foreground">
+                                                            {ch.lastSyncedAt
+                                                                ? formatTimeAgo(ch.lastSyncedAt)
+                                                                : t('never') || 'never'}
+                                                    </td>
+                                                        <td className="px-3 py-2 align-top text-center">
+                                                            <button
+                                                                onClick={() => toggleChannelActive(ch)}
+                                                                className={`inline-flex items-center justify-center w-8 h-4 rounded-full transition-colors ${
+                                                                    ch.isActive
+                                                                        ? 'bg-emerald-500/80'
+                                                                        : 'bg-slate-700'
+                                                                }`}
+                                                            >
+                                                                <span
+                                                                    className={`w-3 h-3 rounded-full bg-white shadow transform transition-transform ${
+                                                                        ch.isActive
+                                                                            ? 'translate-x-2'
+                                                                            : '-translate-x-2'
+                                                                    }`}
+                                                                />
                                                             </button>
-                                                        )}
-                                                        <button
-                                                            onClick={() =>
-                                                                handleLinkChannelToSource(ch.channelId, undefined, {
-                                                                    id: ch.channelId,
-                                                                    title: ch.title ?? null,
-                                                                    username: ch.username ?? null,
-                                                                })
-                                                            }
-                                                            disabled={!hasUsableAccount}
-                                                            className="text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/60 text-emerald-200 hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                                                        >
-                                                            {t('link_to_source') || 'Link to Source'}
-                                                        </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                                                        </td>
+                                                        <td className="px-3 py-2 align-top text-right">
+                                                            <div className="flex flex-wrap gap-1 justify-end">
+                                                                <button
+                                                                    onClick={() => loadChannelMessages(ch.channelId)}
+                                                                    disabled={!hasUsableAccount}
+                                                                    className="text-[10px] px-2 py-0.5 rounded-full border border-sky-500/60 text-sky-200 hover:bg-sky-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {t('view_messages') || 'View Messages'}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() =>
+                                                                        handleTestCollectorChannel(
+                                                                            ch.username ||
+                                                                                ch.channelId,
+                                                                        )
+                                                                    }
+                                                                    disabled={!hasUsableAccount}
+                                                                    className="text-[10px] px-2 py-0.5 rounded-full border border-blue-500/60 text-blue-200 hover:bg-blue-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {t('test_fetch') || 'Test Fetch'}
+                                                                </button>
+                                                                {ch.priority === 'high' && (
+                                                                    <button
+                                                                        onClick={() => handleForceSync(ch)}
+                                                                        disabled={!hasUsableAccount || syncingChannelId === ch.id}
+                                                                        className="text-[10px] px-2 py-0.5 rounded-full border border-purple-500/60 text-purple-200 hover:bg-purple-500/10 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+                                                                        title={t('force_sync_tooltip') || 'Immediately sync this channel'}
+                                                                    >
+                                                                        {syncingChannelId === ch.id
+                                                                            ? `⟳ ${t('syncing') || 'Syncing...'}`
+                                                                            : `⚡ ${t('sync_now') || 'Sync Now'}`}
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    onClick={() =>
+                                                                        handleLinkChannelToSource(ch.channelId, undefined, {
+                                                                            id: ch.channelId,
+                                                                            title: ch.title ?? null,
+                                                                            username: ch.username ?? null,
+                                                                        })
+                                                                    }
+                                                                    disabled={!hasUsableAccount}
+                                                                    className="text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/60 text-emerald-200 hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {t('link_to_source') || 'Link to Source'}
+                                                                </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
 
-                    {/* Test preview */}
-                    {channelTestPreview && channelTestPreview.length > 0 && (
-                        <div className="mt-4 border-t border-slate-800 pt-3">
-                            <p className="text-[11px] font-semibold mb-2 text-foreground">
-                                {t('test_fetch_preview') || 'Test fetch preview'}
-                            </p>
-                            <div className="max-h-48 overflow-y-auto space-y-1">
-                                {channelTestPreview.map((msg, idx) => (
-                                    <div
-                                        key={idx}
-                                        className="text-[11px] text-muted-foreground bg-slate-900/70 border border-slate-800 rounded px-2 py-1"
-                                    >
-                                        {msg.text || JSON.stringify(msg)}
+                            {/* Test preview */}
+                            {channelTestPreview && channelTestPreview.length > 0 && (
+                                <div className="mt-4 border-t border-slate-800 pt-3">
+                                    <p className="text-[11px] font-semibold mb-2 text-foreground">
+                                        {t('test_fetch_preview') || 'Test fetch preview'}
+                                    </p>
+                                    <div className="max-h-48 overflow-y-auto space-y-1">
+                                        {channelTestPreview.map((msg, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="text-[11px] text-muted-foreground bg-slate-900/70 border border-slate-800 rounded px-2 py-1"
+                                            >
+                                                {msg.text || JSON.stringify(msg)}
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
-                        </div>
+                                </div>
+                            )}
+                        </>
                     )}
                 </Card>
             </div>
