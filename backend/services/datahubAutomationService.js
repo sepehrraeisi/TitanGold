@@ -442,7 +442,7 @@ async function loadRecordPayload(recordId) {
             COALESCE(dc.name, ds.category, 'uncategorized') AS category_name
      FROM collected_data cd
      LEFT JOIN data_sources ds ON ds.id = cd.source_id
-     LEFT JOIN data_categories dc ON dc.id = ds.category_id
+     LEFT JOIN data_categories dc ON dc.name = ds.category
      WHERE cd.id = $1`,
     [recordId],
   );

@@ -71,12 +71,11 @@ export async function buildDataPipelineView() {
           ds.name,
           ds.type,
           ds.category,
-          ds.category_id,
           ds.is_active,
           ds.last_fetch_at,
           dc.name AS category_name
         FROM data_sources ds
-        LEFT JOIN data_categories dc ON dc.id = ds.category_id OR ds.category = dc.name
+        LEFT JOIN data_categories dc ON dc.name = ds.category
         LEFT JOIN LATERAL (
           SELECT status, collected_at, normalized_data, metadata
           FROM collected_data
@@ -96,7 +95,7 @@ export async function buildDataPipelineView() {
               AND cd.normalized_data IS NOT NULL
           )::int AS passed_count
         FROM data_categories dc
-        LEFT JOIN data_sources ds ON ds.category_id = dc.id OR ds.category = dc.name
+        LEFT JOIN data_sources ds ON ds.category = dc.name
         LEFT JOIN collected_data cd ON cd.source_id = ds.id
         GROUP BY dc.id, dc.name
         ORDER BY dc.name
@@ -132,7 +131,7 @@ export async function buildDataPipelineView() {
           COALESCE(ds.category, dc.name, 'uncategorized') AS category_name
         FROM collected_data cd
         LEFT JOIN data_sources ds ON ds.id = cd.source_id
-        LEFT JOIN data_categories dc ON dc.id = ds.category_id
+        LEFT JOIN data_categories dc ON dc.name = ds.category
         WHERE cd.normalized_data IS NOT NULL
         ORDER BY cd.processed_at DESC NULLS LAST, cd.collected_at DESC
         LIMIT 6

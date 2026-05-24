@@ -95,6 +95,38 @@ Source: `backend/package.json`, `backend/database/migrate.js`, `backend/migratio
 3. **نکته**:
    - بعضی migrationها (مثلاً `add_2fa_backup_codes`) به جداول core مثل `users` وابسته‌اند؛ chain کامل node-pg-migrate روی یک DB خالی باید روی همـان اسکیما‌ی اپلیکیشن استاندارد اجرا شود (یعنی همان جایی که `users` و بقیه جداول اصلی ساخته می‌شوند)، نه روی یک DB که فقط `000_init_ai_schema.sql` به‌تنهایی اجرا شده باشد.
 
+### Migration verification — DataHub automation (2026-05-24)
+
+**علت fail قبلی:** `012_add_ab_testing.sql` — `REFERENCES ai_decisions(id)` بعد از `006_partition_ai_decisions.sql` نامعتبر است (PK پارتیشن‌شده = `(id, created_at)`).
+
+**Fix:** `decision_id UUID` بدون FK در `experiment_metrics`؛ ایندکس/کامنت soft-reference.
+
+**Fix جانبی:** `query_performance_optimization.sql` — ایندکس/ANALYZE روی `request_logs`/`error_logs` فقط اگر جدول وجود داشته باشد (greenfield با `database/schema.sql`).
+
+**نتیجه روی dev DB (`titangold_db`):**
+
+```bash
+cd backend && npm run migrate
+# → Migrations complete! (شامل 012_add_ab_testing, 025, 026, 027)
+```
+
+جداول automation:
+
+```sql
+\dt datahub_automation*
+-- datahub_automation_topics, _queue, _schedule, _executions
+```
+
+**Demo واقعی (DB + service layer):**
+
+```bash
+cd backend && node scripts/verify_automation_demo.js
+```
+
+خروجی تأیید‌شده: create topic → queue refresh (added≥1) → fail item → retry → dry-run dispatch → execution history.
+
+**Greenfield کامل (`schema.sql` + migrate):** هنوز migrationهای legacy قدیمی‌تر (مثلاً `004_add_autopilot_system`) ممکن است به ستون‌هایی وابسته باشند که در `database/schema.sql` نیستند؛ مسیر رسمی verify برای automation: **migrate روی DB dev موجود** + اسکریپت demo بالا.
+
 
 ### Required ENV keys (Names only)
 

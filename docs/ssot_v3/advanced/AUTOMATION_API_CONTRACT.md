@@ -1,4 +1,4 @@
-# DataHub Advanced — Automation API Contract (implemented)
+# DataHub Advanced — Automation API Contract (implemented — migration verified 2026-05-24)
 
 > Subtab: `dataHub.advanced.automation` · UI: `AutomationTopics.tsx`  
 > Base: `/api/v1/data-hub/automation`
@@ -94,3 +94,4 @@ Dispatch uses `runPublisherPublish` → `/api/v1/data-hub/telegram-publishers` (
 - [x] GAP-018 Closed, GAP-019 Closed
 - [x] GAP-020 Open (cron worker v3.1, non-blocker)
 - [x] `npm run build` passes
+- [x] `npm run migrate` on dev DB + `node scripts/verify_automation_demo.js` (2026-05-24)

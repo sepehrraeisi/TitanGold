@@ -117,3 +117,21 @@
 | **Schedule persist** | `PUT .../automation/schedule` | **200** | Schedule panel (no auto-cron v3.0) |
 
 **پیش‌نیاز:** migrations `026`, `027`؛ telegram publishers (GAP-016) برای publish targets.
+
+#### Migration + DB demo verified (2026-05-24)
+
+```bash
+cd backend && npm run migrate   # titangold_db — PASS (025, 026, 027 applied)
+node scripts/verify_automation_demo.js
+```
+
+| Step | Result |
+|------|--------|
+| Tables `datahub_automation_*` | 4 tables present |
+| Create topic | OK |
+| Queue refresh | `added: 3`, `pending: 5` |
+| Fail queue item + execution row | OK |
+| Retry failed execution | OK |
+| Manual dispatch dry-run | `processed: 1`, history `dry_run` |
+
+Root-cause fix: `012_add_ab_testing` FK removed (partitioned `ai_decisions`). Details: `docs/ssot_v3/audit/ENVIRONMENT.md` § Migration verification.

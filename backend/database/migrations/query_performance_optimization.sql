@@ -46,38 +46,22 @@ CREATE INDEX IF NOT EXISTS idx_ai_decisions_type
 ON ai_decisions(decision_type, created_at DESC);
 
 -- ============================================================================
--- Request Logs Table Indexes
+-- Request Logs / Error Logs (optional — table may not exist on greenfield)
 -- ============================================================================
 
--- Index for request analysis by time
-CREATE INDEX IF NOT EXISTS idx_request_logs_created 
-ON request_logs(created_at DESC);
-
--- Index for slow request identification
-CREATE INDEX IF NOT EXISTS idx_request_logs_duration 
-ON request_logs(duration_ms DESC) 
-WHERE duration_ms > 100;
-
--- Index for error tracking
-CREATE INDEX IF NOT EXISTS idx_request_logs_status 
-ON request_logs(status, created_at DESC) 
-WHERE status >= 400;
-
--- Composite index for path analysis
-CREATE INDEX IF NOT EXISTS idx_request_logs_path_created 
-ON request_logs(path, created_at DESC);
-
--- ============================================================================
--- Error Logs Table Indexes
--- ============================================================================
-
--- Index for recent errors
-CREATE INDEX IF NOT EXISTS idx_error_logs_created 
-ON error_logs(created_at DESC);
-
--- Index for errors by context
-CREATE INDEX IF NOT EXISTS idx_error_logs_context 
-ON error_logs(context, created_at DESC);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'request_logs') THEN
+    CREATE INDEX IF NOT EXISTS idx_request_logs_created ON request_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_request_logs_duration ON request_logs(duration_ms DESC) WHERE duration_ms > 100;
+    CREATE INDEX IF NOT EXISTS idx_request_logs_status ON request_logs(status, created_at DESC) WHERE status >= 400;
+    CREATE INDEX IF NOT EXISTS idx_request_logs_path_created ON request_logs(path, created_at DESC);
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'error_logs') THEN
+    CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_error_logs_context ON error_logs(context, created_at DESC);
+  END IF;
+END $$;
 
 -- ============================================================================
 -- User Table Indexes
@@ -131,15 +115,21 @@ ON artemis_state(created_at DESC);
 -- Analyze tables for query planner
 -- ============================================================================
 
--- Update statistics for query planner optimization
-ANALYZE ai_agents;
-ANALYZE ai_decisions;
-ANALYZE request_logs;
-ANALYZE error_logs;
-ANALYZE users;
-ANALYZE portfolios;
-ANALYZE trades;
-ANALYZE artemis_state;
+-- Update statistics for query planner optimization (skip missing tables)
+DO $$
+DECLARE
+  tbl text;
+BEGIN
+  FOREACH tbl IN ARRAY ARRAY[
+    'ai_agents', 'ai_decisions', 'request_logs', 'error_logs',
+    'users', 'portfolios', 'trades', 'artemis_state'
+  ]
+  LOOP
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = tbl) THEN
+      EXECUTE format('ANALYZE %I', tbl);
+    END IF;
+  END LOOP;
+END $$;
 
 -- ============================================================================
 -- Create function to monitor index usage
