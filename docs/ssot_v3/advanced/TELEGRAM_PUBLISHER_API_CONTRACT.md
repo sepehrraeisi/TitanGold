@@ -87,7 +87,7 @@ Body: `name`, `chatId`, `botToken`, `enabled`, `filters`, `template`, …
 
 **DB:** `telegram_publishers`, `publisher_delivery_history` (migration `025_create_telegram_publishers.sql`).
 
-**Security:** `authenticate` only → RBAC write در **GAP-017** (جدا از wiring).
+**Security:** Read → `authenticate`. Write/publish → `authenticate` + `authorize('admin','trader')`. RBAC read GET → **GAP-017** (فقط نقش؛ wiring انجام شده).
 
 ---
 

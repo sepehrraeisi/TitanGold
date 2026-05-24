@@ -156,7 +156,14 @@ grep -rn "data-hub/telegram-publishers\|useTelegramPublishers" \
 # → useTelegramPublishersQuery + /api/v1/data-hub/telegram-publishers (via service)
 ```
 
-Legacy `createTelegramPublisher` در `services/api.ts` برای automation dispatch باقی است — خارج از scope این subtab.
+**Legacy IndexedDB publisher APIs (`services/api.ts`) — فقط automation:**
+
+| Function | Used by `TelegramPublisher.tsx`? | Used by `AutomationTopics` / dispatch? |
+|----------|-----------------------------------|----------------------------------------|
+| `createTelegramPublisher` / `updateTelegramPublisher` / `deleteTelegramPublisher` | **No** | Indirect (publisher list در state) |
+| `publishToTelegram` | **No** | **Yes** — `dispatchAutomationQueue` / queue processor (GAP-019) |
+
+`TelegramPublisher.tsx` فقط `services/telegramPublishersApi.ts` + `hooks/useTelegramPublishers.ts` را صدا می‌زند. مسیر legacy تا بسته شدن **GAP-019** برای subtab **advanced.automation** باقی است.
 
 ### ۱۱. Migrations / Greenfield Bootstrap
 

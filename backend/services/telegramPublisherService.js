@@ -267,7 +267,24 @@ export async function runPublisherPublish(
     content,
   });
 
-  const dryRun = isPublisherDryRunForced() || !publisher.bot_token_encrypted;
+  const hasToken = Boolean(publisher.bot_token_encrypted);
+  const forceDryRun = isPublisherDryRunForced();
+
+  if (confirm_publish && !hasToken && !forceDryRun) {
+    const history = await recordPublisherHistory({
+      publisherId,
+      contentType: content_type,
+      contentSummary: text.slice(0, 500),
+      status: 'failed',
+      errorMessage: 'Bot token required for live publish',
+      metadata: { mode: 'publish', user_id: userId, confirm_publish },
+    });
+    const err = new Error('Bot token required for live publish');
+    err.status = 401;
+    throw err;
+  }
+
+  const dryRun = forceDryRun || (confirm_publish && !hasToken);
 
   if (dryRun) {
     const history = await recordPublisherHistory({

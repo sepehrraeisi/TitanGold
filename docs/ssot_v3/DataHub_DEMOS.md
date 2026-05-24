@@ -84,11 +84,21 @@
 |--------|----------|----------------|-----|
 | **Success — create** | `POST /api/v1/data-hub/telegram-publishers` | **201** | فرم New Channel → لیست با `GET` refetch |
 | **Success — test** | `POST .../telegram-publishers/:id/test` | **200** + `dry_run` یا `test` | دکمه Test؛ رکورد در history |
-| **Success — publish** | `POST .../:id/publish` + `confirm_publish: true` | **200** `sent` یا `dry_run` | `window.confirm` قبل از live؛ dev بدون token → dry-run |
+| **Success — publish (dry-run)** | `POST .../:id/publish` + `confirm_publish: true` در dev/test یا بدون bot token | **200** + `status: dry_run` | history ثبت می‌شود؛ پیام dry-run در UI |
+| **Success — publish (live)** | `POST .../:id/publish` + `confirm_publish: true` + token + prod | **200** + `status: sent` | فقط بعد از `window.confirm` |
 | **Success — history** | `GET .../:id/history` | **200** + `data[]` | تب History + انتخاب channel |
 | **Empty** | `GET .../telegram-publishers` | **200** + `publishers: []` | Empty state «No channels configured» |
-| **Failure — invalid token/channel** | `POST .../test` یا `.../publish` | **200** با `status: failed` + `error` در body | پیام خطا در UI؛ ردیف failed در history |
+| **Failure — invalid Telegram channel/token** | `POST .../test` یا `.../publish` | **200** body `status: failed` | خطا در UI + ردیف failed در history |
 | **Failure — backend down** | هر endpoint | **500** / network | `ApiWrapper` + refetch |
-| **Auth — write without role** | `POST/PUT/DELETE/publish` | **403** | کاربر بدون admin/trader |
 
-**پیش‌نیاز:** migration `025_create_telegram_publishers.sql`؛ `MASTER_KEY` برای encrypt bot token (اختیاری dev).
+#### Publish — Security sanity (GAP-016)
+
+| سناریو | Request | Expected | UI / history |
+|--------|---------|----------|----------------|
+| **No JWT** | `POST .../publish` بدون `Authorization` | **401** | بنر authenticate |
+| **Wrong role** | JWT با نقش `viewer` (نه admin/trader) | **403** | Insufficient permissions |
+| **Live blocked — no confirm** | admin/trader + `confirm_publish: false` | **400** `confirm_publish must be true` | هیچ ارسال live |
+| **Live blocked — no bot token (prod)** | `confirm_publish: true`، بدون `bot_token`، `NODE_ENV=production`، `TELEGRAM_PUBLISHER_DRY_RUN` unset/false | **401** `Bot token required for live publish` | failed در history |
+| **Dry-run (dev/test)** | همان publish با token خالی در dev | **200** + `dry_run: true` | history با `status: dry_run` |
+
+**پیش‌نیاز:** migration `025_create_telegram_publishers.sql`؛ `MASTER_KEY` برای encrypt bot token (live در prod).
