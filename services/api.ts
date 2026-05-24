@@ -21808,6 +21808,9 @@ export {
 } from './dataPipelineApi';
 export type { DataPipelineView } from './dataPipelineApi';
 
+export { fetchDataAccessLogs } from './dataAccessLogsApi';
+export type { AccessLogsListResult, AccessLogsStatusCounts } from './dataAccessLogsApi';
+
 // ==================== Advanced Data Hub Features ====================
 
 const createAutomationTopicStats = (): AgentTopicRouteStats => ({

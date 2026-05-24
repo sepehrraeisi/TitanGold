@@ -65,3 +65,13 @@
 | **Failure** — backend / DB down | `GET /api/v1/data-sources/pipeline` | **500** یا network error | `ApiWrapper` بنر خطا + **Retry** (`usePipelineQuery` refetch). Sources/Categories همچنان از API خودشان کار می‌کنند. |
 
 **پیش‌نیاز success:** Postgres + migrations؛ چند رکورد `collected_data` (با/بدون `normalized_data`) seed شده باشد.
+
+### dataHub.logs – Access Logs (GAP-013 closed – UI backend-first)
+
+| سناریو | Endpoint | Status / شرط | UI |
+|--------|----------|----------------|-----|
+| **Success** — لیست لاگ + شمارش | `GET /api/v1/data-sources/access-logs?limit=100&offset=0` | **200** + `{ data, pagination, statusCounts }` | DevTools: فقط این URL برای لاگ‌های تب Logs (نه `fetchDataHubState`). badgeهای success/error/warning از `statusCounts`. فیلترها client-side روی `data[]`. |
+| **Empty state** — جدول خالی | `GET .../access-logs` | **200** + `data: []` | «No access logs yet»؛ بدون crash. |
+| **Failure** — backend down | `GET .../access-logs` | **500** / network error | `ApiWrapper` بنر خطا + Retry (`useAccessLogsQuery` refetch). |
+
+**پیش‌نیاز success:** رکوردهای `data_hub_logs` (مثلاً پس از create/update source در backend).

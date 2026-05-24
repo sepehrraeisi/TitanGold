@@ -113,7 +113,18 @@ grep -rn "dataHub\.pipelineSnapshot\|mergedDataHub\.pipeline" \
 
 `buildPipelineSnapshot` / `dataHub.pipelineSnapshot` در `services/api.ts` و advanced/automation باقی است — خارج از scope تب Pipeline.
 
-### ۹. Migrations / Greenfield Bootstrap
+### ۹. DataHub Access Logs (GAP-013 Closed)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Logs tab از API backend | `services/dataAccessLogsApi.ts` | `GET /api/v1/data-sources/access-logs` |
+| React Query | `hooks/useDataHubState.ts` | `useAccessLogsQuery` |
+| UI wiring | `DataHubTab.tsx`, `useDataHub.ts` | `accessLogs` از query — نه `dataHub.accessLogs` |
+| Backend | `backend/services/dataHubAccessLogs.js` | نگاشت `data_hub_logs` → `DataAccessLog` |
+
+**Grep — مسیر Logs (دادهٔ اصلی):** `dataHub.accessLogs` / `fetchDataHubState` در `LogsPanel` و props تب logs در `DataHubTab` — **۰ match** پس از wiring.
+
+### ۱۰. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |
 |---|---|---|---|

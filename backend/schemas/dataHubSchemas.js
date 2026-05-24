@@ -409,6 +409,40 @@ export const dataPipelineSnapshotSchema = z.object({
     }))
 });
 
+export const accessLogsQuerySchema = z.object({
+    limit: z.string().regex(/^\d+$/).transform(val => Math.min(parseInt(val, 10), 500)).optional().default('100'),
+    offset: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).optional().default('0'),
+    source_id: z.string().uuid().optional(),
+    status: z.enum(['success', 'cached', 'failed', 'timeout']).optional()
+});
+
+export const dataAccessLogSchema = z.object({
+    id: z.string().uuid(),
+    timestamp: z.string(),
+    agentId: z.string(),
+    sourceId: z.string(),
+    dataType: z.string(),
+    status: z.enum(['success', 'failed', 'cached', 'timeout']),
+    responseTime: z.number().optional(),
+    error: z.string().optional(),
+    dataSize: z.number().optional()
+});
+
+export const accessLogsListResponseSchema = z.object({
+    data: z.array(dataAccessLogSchema),
+    pagination: z.object({
+        total: z.number().int().nonnegative(),
+        limit: z.number().int().positive(),
+        offset: z.number().int().nonnegative(),
+        hasMore: z.boolean()
+    }),
+    statusCounts: z.object({
+        success: z.number().int().nonnegative(),
+        error: z.number().int().nonnegative(),
+        warning: z.number().int().nonnegative()
+    })
+});
+
 export const dataPipelineViewResponseSchema = z.object({
     snapshot: dataPipelineSnapshotSchema,
     history: z.array(z.object({

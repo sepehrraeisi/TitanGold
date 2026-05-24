@@ -22,6 +22,7 @@ import {
     useCreateCategoryMutation,
     useDeleteCategoryMutation,
     usePipelineQuery,
+    useAccessLogsQuery,
 } from '../../../../../../hooks/useDataHubState.ts';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi.ts';
 import { useAsync } from '../../../../../../hooks/useAsync';
@@ -83,12 +84,15 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         isFetching: isFetchingPipeline,
     } = usePipelineQuery({ enabled: pipelineEnabled });
     const healthAsync = useAsync(api.checkDataHubHealth);
-    const logsAsync = useAsync(async () => {
-        // Mocking log refresh for now as there's no direct API in the snippet,
-        // but we keep the structure for standardization.
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return api.fetchDataHubState();
-    });
+
+    const logsEnabled = activeView === 'logs';
+    const {
+        data: accessLogsResult,
+        isLoading: isLoadingLogs,
+        error: accessLogsErrorObj,
+        refetch: refetchAccessLogs,
+        isFetching: isFetchingAccessLogs,
+    } = useAccessLogsQuery({ enabled: logsEnabled });
 
     const mergedDataHub = useMemo((): DataHubState | null => {
         if (!dataHub) return null;
@@ -689,16 +693,25 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         return metrics;
     }, [pipelineSnapshot]);
 
-    const logStatusCounts = useMemo(() => {
-        if (!mergedDataHub) return { success: 0, error: 0, warning: 0 };
-        return mergedDataHub.accessLogs.reduce((acc, log) => {
-            const status = log.status.toLowerCase();
-            if (status.includes('success') || status === 'ok' || status === '200') acc.success++;
-            else if (status.includes('error') || status.includes('fail') || status === '500') acc.error++;
-            else acc.warning++;
-            return acc;
-        }, { success: 0, error: 0, warning: 0 });
-    }, [mergedDataHub]);
+    const accessLogs = accessLogsResult?.data ?? [];
+    const logStatusCounts = accessLogsResult?.statusCounts ?? {
+        success: 0,
+        error: 0,
+        warning: 0,
+    };
+
+    const accessLogsApiError =
+        accessLogsErrorObj instanceof DataHubApiError
+            ? accessLogsErrorObj
+            : accessLogsErrorObj instanceof Error
+              ? accessLogsErrorObj
+              : null;
+    const logsError = accessLogsApiError?.message ?? null;
+    const setLogsError = (_err: string | null) => {
+        if (_err === null) {
+            void refetchAccessLogs();
+        }
+    };
 
     const combinedCollectorHealth = useMemo(() => {
         if (!mergedDataHub || !mergedDataHub.telegramCollector) return 'unknown';
@@ -783,10 +796,14 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setCategoriesError: () => { },
         healthError: healthAsync.error,
         setHealthError: healthAsync.setError,
-        logsError: logsAsync.error,
-        setLogsError: logsAsync.setError,
+        accessLogs,
+        refetchAccessLogs,
+        logsError,
+        setLogsError,
+        accessLogsApiError,
         isLoadingHealth: healthAsync.isLoading,
-        isLoadingLogs: logsAsync.isLoading,
+        isLoadingLogs: isLoadingLogs || isFetchingAccessLogs,
+        logStatusCounts,
         collectorForm,
         collectorAuthId,
         testingChannelId,
@@ -824,7 +841,6 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         formatTimeAgo,
         downloadCSV,
         categoryMetricsById,
-        logStatusCounts,
         combinedCollectorHealth,
         onRefresh,
         handleCreateSource,

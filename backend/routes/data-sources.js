@@ -14,9 +14,12 @@ import {
   collectedDataListResponseSchema,
   dataHubStatsSchema,
   dataHubStateSchema,
-  dataPipelineViewResponseSchema
+  dataPipelineViewResponseSchema,
+  accessLogsQuerySchema,
+  accessLogsListResponseSchema
 } from '../schemas/dataHubSchemas.js';
 import { buildDataPipelineView } from '../services/dataPipelineSnapshot.js';
+import { listDataHubAccessLogs } from '../services/dataHubAccessLogs.js';
 
 import { telegramService } from '../services/telegram.js';
 import { syncTelegramChannelsToDataSources, syncChannelCategoryToDataSource } from '../services/telegramSync.js';
@@ -471,6 +474,18 @@ router.get('/health', authenticate, async (req, res) => {
       database: 'disconnected',
       error: error.message,
     });
+  }
+});
+
+// Access logs for DataHub Logs tab (GAP-013)
+router.get('/access-logs', authenticate, readRateLimiter, validateQuery(accessLogsQuerySchema), validateResponse(accessLogsListResponseSchema), async (req, res) => {
+  try {
+    const { limit, offset, source_id, status } = req.validatedQuery;
+    const result = await listDataHubAccessLogs({ limit, offset, source_id, status });
+    res.json(result);
+  } catch (error) {
+    logger.error('Failed to fetch DataHub access logs:', error);
+    res.status(500).json({ error: 'Failed to fetch access logs' });
   }
 });
 

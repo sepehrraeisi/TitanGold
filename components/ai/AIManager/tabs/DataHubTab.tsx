@@ -94,6 +94,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         formatTimeAgo,
         downloadCSV,
         categoryMetricsById,
+        accessLogs,
         logStatusCounts,
         combinedCollectorHealth,
         setCollectorError,
@@ -297,11 +298,11 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     {activeView === 'logs' && (
                         <LogsPanel
                             t={t}
-                            accessLogs={dataHub.accessLogs}
+                            accessLogs={accessLogs}
                             logStatusCounts={logStatusCounts}
                             downloadCSV={downloadCSV}
                             Card={Card}
-                            isLoading={isLoading}
+                            isLoading={isLoadingLogs}
                             error={logsError}
                             setError={setLogsError}
                         />
