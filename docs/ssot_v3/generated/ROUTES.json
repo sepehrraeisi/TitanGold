@@ -1,0 +1,1991 @@
+{
+  "generatedAt": "2026-02-23T20:16:29.138Z",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/metrics",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/liquidity-agent.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agents/liquidity/run",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/liquidity-agent.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/runs",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/liquidity-agent.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/runs/latest",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/liquidity-agent.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/settings",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/liquidity-agent.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agents/liquidity/settings",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/liquidity-agent.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/status",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/liquidity-agent.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-agents/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-agents/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai-agents/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-agents/:id/command",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai-agents/:id/config",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-agents/:id/details",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-agents/:id/run",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-agents/:id/run-v2",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-agents/chat",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-agents/manager-overview",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/ai-agents.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/analytics/overview",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/analytics.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/artemis/config",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/artemis/config/decision-engine",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artemis/decision",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/health",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/learning",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artemis/learning/event",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/artemis/learning/mistake/:id/mark-learned",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/artemis/logs",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/logs",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/orchestration",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/scenarios",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/state",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/artemis/state",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/artemis.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/login",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/auth.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/auth.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/me",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/auth.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/refresh",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/auth.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/auth.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/disable",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/autopilot.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/enable",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/autopilot.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/run-once",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/autopilot.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/autopilot/status",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/autopilot.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/autopilot/suggestions",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/autopilot.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/suggestions/:id/approve",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/autopilot.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/suggestions/:id/reject",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/autopilot.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/suggestions/:id/rollback",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/autopilot.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/backtest/results",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/backtest.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/backtest/results/:id",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/backtest.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/backtest/results/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/backtest.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backtest/run",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/backtest.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/backtest/stats",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/backtest.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/collected-data/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/collected-data/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/collected-data/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/collected-data/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/collected-data/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/collected-data/batch",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/collected-data/deduplication/find",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/collected-data/deduplication/merge/:contentHash",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/collected-data/deduplication/remove",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/collected-data/deduplication/stats",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/collected-data.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/config/artemis",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/config/artemis",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/config/integrations",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/config/integrations",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/config/integrations/:id",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/config/integrations/:id/disable",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/config/integrations/:id/reset-runtime",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/config/integrations/:id/test",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/config/security",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/config/security",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/config.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/connections/exchanges/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/connections.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/connections/exchanges/:exchange",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/connections.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/connections/exchanges/:exchange",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/connections.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/connections/exchanges/:exchange",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/connections.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/connections/exchanges/:exchange/test",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/connections.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/connections/exchanges/health/status",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/connections.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/connections/mexc",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/connections.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/connections/mexc",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/connections.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/connections/mexc/test",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/connections.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-categories/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-categories.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/data-categories/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-categories.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/data-categories/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-categories.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-categories/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-categories.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/data-categories/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-categories.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/data-hub/access-control/:sourceId",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/access-control.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-hub/access-control/:sourceId",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/access-control.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/data-hub/access-control/:sourceId",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/access-control.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-sources/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/data-sources/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/data-sources/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/data-sources/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/data-sources/:id/restore",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-sources/collected",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-sources/collected/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-sources/health",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/data-sources/publish-telegram",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-sources/state",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-sources/stats",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-sources/telegram-account-metrics",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/data-sources/telegram-sync",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/data-sources/telegram-sync-category",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/data-sources/telegram-transfer-messages",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/data-sources/test-connection",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/data-sources.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/email/send",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/email.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/email/test",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/email.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/exports/decisions",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/exports.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/exports/manual-trades",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/exports.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/exports/trades",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/exports.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/favorite-alerts/:favoriteId/alerts",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/v1/index.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/favorite-alerts/:favoriteId/alerts",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/v1/index.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/favorite-alerts/alerts/:alertId",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/v1/index.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/favorite-alerts/alerts/:alertId",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/v1/index.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/favorite-alerts/alerts/:alertId/test",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/v1/index.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/favorite-alerts/alerts/:alertId/trigger",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/v1/index.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/favorite-alerts/alerts/active",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/v1/index.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/favorite-alerts/monitor/stats",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/v1/index.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/favorites/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/favorites.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/favorites/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/favorites.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/favorites/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/favorites.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/favorites/:id/view",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/favorites.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/favorites/analytics",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/favorites.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/favorites/by-asset/:assetId",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/favorites.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/favorites/check/:assetId",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/favorites.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/favorites/stats",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/favorites.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/favorites/sync",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/favorites.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/health.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/ready",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/health.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/status",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/health.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/manual-trades/balance",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/manual-trades/execute",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/manual-trades/order/advanced",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/manual-trades/orderbook/:pair",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/manual-trades/orders/:orderId",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/manual-trades/orders/open",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/manual-trades/page-data",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/manual-trades/price/:pair",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/manual-trades/recent",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/manual-trades/strategies/:strategyId/toggle",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/manual-trades.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/market/mexc/depth",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/market-proxy.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/market/mexc/exchangeInfo",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/market-proxy.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/market/mexc/ticker/24hr",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/market-proxy.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/market/mexc/ticker24hr",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/market-proxy.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/monitoring/clear-slow-queries",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/monitoring.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/db-pool",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/monitoring.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/errors",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/monitoring.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/health",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/monitoring.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/requests",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/monitoring.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/slow-queries",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/monitoring.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/slow-query-stats",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/monitoring.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/summary",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/monitoring.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/notifications/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/notifications.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/notifications/broadcast",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/notifications.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/notifications/history",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/notifications.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/notifications/history/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/notifications.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/notifications/history/:id/read",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/notifications.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/notifications/settings",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/notifications.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/notifications/settings",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/notifications.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/notifications/test",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/notifications.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/portfolios/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/portfolios.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/portfolios/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/portfolios.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/profile/avatar",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/profile.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/profile/change-password",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/profile.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/profile/communications",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/profile.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/profile/details",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/profile.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/profile/details",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/profile.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ready/",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/health.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ready/ready",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/health.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ready/status",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/health.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scenarios/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/scenarios.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scenarios/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/scenarios.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/scenarios/:id",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/scenarios.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scenarios/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/scenarios.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/scenarios/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/scenarios.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scenarios/:id/backtest",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/scenarios.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scenarios/generate",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/scenarios.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scheduler/config",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/scheduler.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/scheduler/config/:section",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/scheduler.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scheduler/start",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/scheduler.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scheduler/status",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/scheduler.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scheduler/stop",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/scheduler.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/security/2fa/backup-codes/generate",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/security.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/security/2fa/backup-codes/remaining",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/security.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/security/2fa/backup-codes/verify",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/security.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/security/2fa/disable",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/security.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/security/2fa/setup",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/security.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/security/2fa/verify",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/security.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/security/2fa/verify-token",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/security.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/settings/",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/settings.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/settings/:key",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/settings.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/settings/:key",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/settings.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/settings/:key",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/settings.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/settings/bulk",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/settings.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/settings/trading-mode",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/settings.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/settings/trading-mode",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/settings.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/strategies/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/strategies/",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/strategies/:strategyId",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/strategies/:strategyId/copy",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/strategies/:strategyId/toggle",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/strategies/ai-generate",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/strategies/allocate-portfolio",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/strategies/export/all",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/strategies/group-backtest",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/strategies/optimize-all",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/strategies.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/telegram/agents/:agentKey/feed",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/telegram.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/telegram/agents/:agentKey/mark-processed",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/telegram.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/telegram/agents/summary",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/telegram.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/telegram/breaking-news",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/telegram.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/telegram/categories/:category/timeline",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/telegram.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/telegram/categories/summary",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/telegram.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/telegram/events/recent",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/telegram.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/telegram/health",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/telegram.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/telegram/stats/real-time",
+      "authRequired": false,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/telegram.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/topic-routing/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/topic-routing.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/topic-routing/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/topic-routing.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/topic-routing/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/topic-routing.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/topic-routing/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/topic-routing.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/topic-routing/logs",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/topic-routing.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trades/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/trades.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/trades/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/trades.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trading-engine/config",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/trading-engine.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/trading-engine/config",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/trading-engine.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/trading-engine/emergency-stop",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/trading-engine.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trading-engine/opportunities",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/trading-engine.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/trading-engine/start",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/trading-engine.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trading-engine/status",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/trading-engine.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/trading-engine/stop",
+      "authRequired": true,
+      "requiredRole": [
+        "admin",
+        "trader"
+      ],
+      "sourceFile": "backend/routes/trading-engine.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trading-engine/trades/active",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/trading-engine.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/training/overview",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/training.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/training/sessions",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/training.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/training/sessions",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/training.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/training/sessions/:id/complete",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/training.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/training/sessions/:id/start",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/training.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/user-preferences/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user-preferences/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/user-preferences/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/user-preferences/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/user-preferences/bulk",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user-preferences/categories",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/user-preferences/category/:category",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user-preferences/category/:category",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/user-preferences/category/:category",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user-preferences/history",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/user-preferences/sync",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user-preferences/telegram",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/user-preferences/telegram",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/user-preferences/telegram/test",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/userPreferences.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/users.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/users/:id",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/users.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/users.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/users/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/users.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/:id/activity",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/users.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/users/:id/change-password",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/users.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/users/:id/role",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/users.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/users/:id/status",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/users.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/stats/overview",
+      "authRequired": true,
+      "requiredRole": [
+        "admin"
+      ],
+      "sourceFile": "backend/routes/users.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/wallet/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/wallet.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/wallet/add-funds",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/wallet.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/wallet/data",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/wallet.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/wallet/preferences",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/wallet.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/wallet/refresh-connector/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/wallet.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/wallet/reset",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/wallet.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/wallet/security-controls/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/wallet.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/webhooks/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/webhooks.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/webhooks/",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/webhooks.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/webhooks/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/webhooks.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/webhooks/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/webhooks.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/webhooks/:id",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/webhooks.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/webhooks/:id/deliveries",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/webhooks.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/webhooks/:id/test",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/webhooks.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/webhooks/events",
+      "authRequired": true,
+      "requiredRole": null,
+      "sourceFile": "backend/routes/webhooks.js"
+    }
+  ]
+}

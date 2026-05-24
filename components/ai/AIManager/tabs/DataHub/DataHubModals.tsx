@@ -1,5 +1,4 @@
 import React from 'react';
-import * as api from '../../../../../services/api';
 import {
     DataSource,
     DataCategory,
@@ -12,8 +11,6 @@ import ViewSourceDataModal from './modals/ViewSourceDataModal';
 interface ModalsProps {
     t: (key: string) => string;
     dataHub: DataHubState | null;
-    setDataHub: (data: DataHubState | null) => void;
-    onRefresh: () => void;
     showCreateSourceModal: boolean;
     setShowCreateSourceModal: (show: boolean) => void;
     editingSource: DataSource | null;
@@ -25,13 +22,15 @@ interface ModalsProps {
     viewingSourceData: DataSource | null;
     setViewingSourceData: (source: DataSource | null) => void;
     setActiveView?: (view: 'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram') => void;
+    handleCreateSource: (source: Omit<DataSource, 'id' | 'createdAt' | 'lastUpdate'>) => Promise<void>;
+    handleUpdateSource: (id: string, updates: Partial<DataSource>) => Promise<void>;
+    onSaveCategory: (categoryData: Omit<DataCategory, 'id' | 'createdAt'>) => Promise<void>;
+    onUpdateCategory: (id: string, updates: Partial<DataCategory>) => Promise<void>;
 }
 
 const DataHubModals: React.FC<ModalsProps> = ({
     t,
     dataHub,
-    setDataHub,
-    onRefresh,
     showCreateSourceModal,
     setShowCreateSourceModal,
     editingSource,
@@ -43,12 +42,15 @@ const DataHubModals: React.FC<ModalsProps> = ({
     viewingSourceData,
     setViewingSourceData,
     setActiveView,
+    handleCreateSource,
+    handleUpdateSource,
+    onSaveCategory,
+    onUpdateCategory,
 }) => {
     if (!dataHub) return null;
 
     return (
         <>
-            {/* Create/Edit Source Modal */}
             {showCreateSourceModal && (
                 <CreateSourceModal
                     source={editingSource}
@@ -58,27 +60,19 @@ const DataHubModals: React.FC<ModalsProps> = ({
                         setEditingSource(null);
                     }}
                     onSave={async (sourceData) => {
-                        try {
-                            if (editingSource) {
-                                await api.updateDataHubSource(editingSource.id, sourceData);
-                            } else {
-                                await api.createDataSource(sourceData);
-                            }
-                            const updated = await api.fetchDataHubState();
-                            setDataHub(updated);
-                            onRefresh();
-                            setShowCreateSourceModal(false);
-                            setEditingSource(null);
-                        } catch (e) {
-                            alert(t('save_failed') || 'Failed to save source');
+                        if (editingSource) {
+                            await handleUpdateSource(editingSource.id, sourceData);
+                        } else {
+                            await handleCreateSource(sourceData);
                         }
+                        setShowCreateSourceModal(false);
+                        setEditingSource(null);
                     }}
                     t={t}
                     setActiveView={setActiveView}
                 />
             )}
 
-            {/* Create Category Modal */}
             {showCreateCategoryModal && (
                 <CreateCategoryModal
                     category={editingCategory}
@@ -87,20 +81,13 @@ const DataHubModals: React.FC<ModalsProps> = ({
                         setEditingCategory(null);
                     }}
                     onSave={async (categoryData) => {
-                        try {
-                            if (editingCategory) {
-                                await api.updateDataCategory(editingCategory.id, categoryData);
-                            } else {
-                                await api.createDataCategory(categoryData);
-                            }
-                            const updated = await api.fetchDataHubState();
-                            setDataHub(updated);
-                            onRefresh();
-                            setShowCreateCategoryModal(false);
-                            setEditingCategory(null);
-                        } catch (e) {
-                            alert(t('save_failed') || 'Failed to save category');
+                        if (editingCategory) {
+                            await onUpdateCategory(editingCategory.id, categoryData);
+                        } else {
+                            await onSaveCategory(categoryData);
                         }
+                        setShowCreateCategoryModal(false);
+                        setEditingCategory(null);
                     }}
                     t={t}
                 />
@@ -109,9 +96,7 @@ const DataHubModals: React.FC<ModalsProps> = ({
             {viewingSourceData && (
                 <ViewSourceDataModal
                     source={viewingSourceData}
-                    onClose={() => {
-                        setViewingSourceData(null);
-                    }}
+                    onClose={() => setViewingSourceData(null)}
                     t={t}
                 />
             )}

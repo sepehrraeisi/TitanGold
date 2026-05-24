@@ -1,5 +1,7 @@
 import React from 'react';
 import { DataHubState, DataSource } from '../../../../../types';
+import { DataHubApiError } from '../../../../../services/dataSourcesApi';
+import type { DataSourcesPagination } from '../../../../../services/dataSourcesApi';
 
 type Props = {
     t: (key: string) => string;
@@ -11,8 +13,15 @@ type Props = {
     setShowCreateSourceModal: (show: boolean) => void;
     setViewingSourceData: (source: DataSource | null) => void;
     handleTestSource: (sourceId: string) => void | Promise<void>;
+    handleDeleteSource: (sourceId: string, hard?: boolean) => void | Promise<void>;
+    handleRestoreSource: (sourceId: string) => void | Promise<void>;
     dataHub: DataHubState;
     setActiveView?: (view: 'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram') => void;
+    pagination?: DataSourcesPagination;
+    page: number;
+    onPageChange: (page: number) => void;
+    isLoading?: boolean;
+    apiError?: DataHubApiError | Error | null;
 };
 
 const DataSourcesPanel: React.FC<Props> = ({
@@ -25,8 +34,15 @@ const DataSourcesPanel: React.FC<Props> = ({
     setShowCreateSourceModal,
     setViewingSourceData,
     handleTestSource,
+    handleDeleteSource,
+    handleRestoreSource,
     dataHub,
     setActiveView,
+    pagination,
+    page,
+    onPageChange,
+    isLoading,
+    apiError,
 }) => {
     const sources = dataHub.sources || [];
 
@@ -35,9 +51,13 @@ const DataSourcesPanel: React.FC<Props> = ({
         downloadCSV('data-sources', sources);
     };
 
+    const conflictMessage =
+        apiError instanceof DataHubApiError && apiError.status === 409 ? apiError.message : null;
+    const serverError =
+        apiError instanceof DataHubApiError && apiError.status >= 500 ? apiError.message : null;
+
     return (
         <div className="space-y-4">
-            {/* Header + actions */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                     <h3 className="font-semibold text-foreground">
@@ -47,13 +67,20 @@ const DataSourcesPanel: React.FC<Props> = ({
                         {t('data_sources_desc') ||
                             'Manage and monitor all upstream sources your AI agents rely on (Telegram, RSS, APIs, web).'}
                     </p>
+                    {pagination && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                            {t('sources_pagination_summary') ||
+                                `Page ${pagination.page} · ${sources.length} of ${pagination.total} sources`}
+                        </p>
+                    )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <button
                         onClick={onRefresh}
-                        className="text-[11px] px-3 py-1.5 rounded-full border border-slate-600/70 bg-slate-900/70 text-foreground hover:border-purple-400 hover:text-purple-200 transition"
+                        disabled={isLoading}
+                        className="text-[11px] px-3 py-1.5 rounded-full border border-slate-600/70 bg-slate-900/70 text-foreground hover:border-purple-400 hover:text-purple-200 transition disabled:opacity-50"
                     >
-                        {t('refresh') || 'Refresh'}
+                        {isLoading ? (t('refreshing') || 'Refreshing…') : (t('refresh') || 'Refresh')}
                     </button>
                     <button
                         onClick={handleExport}
@@ -74,9 +101,27 @@ const DataSourcesPanel: React.FC<Props> = ({
                 </div>
             </div>
 
-            {/* Sources list */}
+            {conflictMessage && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                    {conflictMessage}
+                </div>
+            )}
+
+            {serverError && (
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <span className="text-sm text-red-200">{serverError}</span>
+                    <button
+                        type="button"
+                        onClick={onRefresh}
+                        className="text-[11px] px-3 py-1 rounded-full border border-red-400/60 text-red-200 hover:bg-red-500/10"
+                    >
+                        {t('retry') || 'Retry'}
+                    </button>
+                </div>
+            )}
+
             <Card className="bg-slate-950/70 border border-white/5 shadow-[0_18px_60px_rgba(15,23,42,0.9)]">
-                {sources.length === 0 ? (
+                {sources.length === 0 && !isLoading ? (
                     <div className="py-10 text-center text-sm text-muted-foreground">
                         {t('no_data_sources') || 'No data sources configured yet.'}
                     </div>
@@ -89,7 +134,6 @@ const DataSourcesPanel: React.FC<Props> = ({
                                     key={source.id}
                                     className="rounded-xl border border-slate-800/80 bg-gradient-to-r from-slate-900/90 via-slate-950/90 to-slate-900/80 px-4 py-3 hover:border-purple-500/60 hover:shadow-[0_0_25px_rgba(168,85,247,0.25)] transition-colors"
                                 >
-                                    {/* Top row: name + badges */}
                                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                                         <div className="space-y-0.5">
                                             <div className="flex items-center gap-2">
@@ -137,7 +181,6 @@ const DataSourcesPanel: React.FC<Props> = ({
                                         </div>
                                     </div>
 
-                                    {/* Telegram-specific channel settings summary */}
                                     {isTelegram && source.config && (
                                         <div className="mt-3 pt-3 border-t border-slate-800/60">
                                             <p className="text-[10px] text-muted-foreground mb-2">
@@ -154,41 +197,10 @@ const DataSourcesPanel: React.FC<Props> = ({
                                                         </p>
                                                     </div>
                                                 )}
-                                                {source.config.fetchLimit !== undefined && (
-                                                    <div>
-                                                        <p className="text-muted-foreground">
-                                                            {t('fetch_limit') || 'Fetch Limit'}
-                                                        </p>
-                                                        <p className="font-semibold text-foreground">
-                                                            {source.config.fetchLimit}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                                <div>
-                                                    <p className="text-muted-foreground">
-                                                        {t('include_media') || 'Include Media'}
-                                                    </p>
-                                                    <p className="font-semibold text-foreground">
-                                                        {source.config.includeMedia !== false
-                                                            ? t('yes') || 'Yes'
-                                                            : t('no') || 'No'}
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-muted-foreground">
-                                                        {t('parse_urls') || 'Parse URLs'}
-                                                    </p>
-                                                    <p className="font-semibold text-foreground">
-                                                        {source.config.parseUrls !== false
-                                                            ? t('yes') || 'Yes'
-                                                            : t('no') || 'No'}
-                                                    </p>
-                                                </div>
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* Metrics row */}
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-[11px]">
                                         <div>
                                             <p className="text-muted-foreground">
@@ -224,7 +236,6 @@ const DataSourcesPanel: React.FC<Props> = ({
                                         </div>
                                     </div>
 
-                                    {/* Connection + last update */}
                                     <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px]">
                                         <div className="flex items-center gap-2">
                                             <span
@@ -271,16 +282,12 @@ const DataSourcesPanel: React.FC<Props> = ({
                                         </div>
                                     )}
 
-                                    {/* Actions */}
                                     <div className="flex flex-wrap gap-2 mt-3">
                                         {isTelegram && setActiveView && (
                                             <button
                                                 onClick={() => setActiveView('telegram')}
                                                 className="text-[11px] px-3 py-1 rounded-full border border-sky-500/70 text-sky-200 hover:bg-sky-500/10 transition flex items-center gap-1"
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                                </svg>
                                                 {t('open_in_telegram_collector') || 'Open in Telegram Collector'}
                                             </button>
                                         )}
@@ -305,6 +312,27 @@ const DataSourcesPanel: React.FC<Props> = ({
                                         >
                                             {t('edit') || 'Edit'}
                                         </button>
+                                        {source.status === 'inactive' ? (
+                                            <button
+                                                onClick={() => handleRestoreSource(source.id)}
+                                                className="text-[11px] px-3 py-1 rounded-full border border-blue-500/70 text-blue-200 hover:bg-blue-500/10 transition"
+                                            >
+                                                {t('restore') || 'Restore'}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleDeleteSource(source.id, false)}
+                                                className="text-[11px] px-3 py-1 rounded-full border border-amber-500/70 text-amber-200 hover:bg-amber-500/10 transition"
+                                            >
+                                                {t('soft_delete') || 'Soft Delete'}
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => handleDeleteSource(source.id, true)}
+                                            className="text-[11px] px-3 py-1 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 transition"
+                                        >
+                                            {t('hard_delete') || 'Hard Delete'}
+                                        </button>
                                     </div>
                                 </div>
                             );
@@ -312,9 +340,32 @@ const DataSourcesPanel: React.FC<Props> = ({
                     </div>
                 )}
             </Card>
+
+            {pagination && pagination.totalPages > 1 && (
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <button
+                        type="button"
+                        disabled={!pagination.hasPrevPage || isLoading}
+                        onClick={() => onPageChange(page - 1)}
+                        className="px-3 py-1.5 rounded-full border border-slate-600/70 disabled:opacity-40"
+                    >
+                        {t('previous') || 'Previous'}
+                    </button>
+                    <span className="text-muted-foreground">
+                        {t('page_of') || 'Page'} {pagination.page} / {pagination.totalPages}
+                    </span>
+                    <button
+                        type="button"
+                        disabled={!pagination.hasNextPage || isLoading}
+                        onClick={() => onPageChange(page + 1)}
+                        className="px-3 py-1.5 rounded-full border border-slate-600/70 disabled:opacity-40"
+                    >
+                        {t('next') || 'Next'}
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
 
 export default DataSourcesPanel;
-

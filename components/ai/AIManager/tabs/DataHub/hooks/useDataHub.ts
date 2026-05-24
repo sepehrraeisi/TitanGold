@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { DATA_HUB_KEYS } from '../../../../../../hooks/useDataHubState.ts';
 import * as api from '../../../../../../services/api.ts';
 import {
     ArtemisState,
@@ -11,24 +13,46 @@ import {
 } from '../../../../../../types.ts';
 import {
     useDataHubQuery,
+    useDataSourcesQuery,
+    useDataCategoriesQuery,
     useAgentsQuery,
     useUpdateSourceMutation,
     useCreateSourceMutation,
     useDeleteSourceMutation,
+    useRestoreSourceMutation,
     useUpdateCategoryMutation,
     useCreateCategoryMutation,
-    useDeleteCategoryMutation
+    useDeleteCategoryMutation,
 } from '../../../../../../hooks/useDataHubState.ts';
+import { DataHubApiError } from '../../../../../../services/dataSourcesApi.ts';
 import { useAsync } from '../../../../../../hooks/useAsync';
 import { createTelegramDataSource, isChannelLinked, type TelegramChannel } from '../utils/telegramIntegration';
 import { handleDataHubError, DataHubError, shouldNotifyUser } from '../utils/errorHandler';
 
 export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key: string) => string) => {
+    const queryClient = useQueryClient();
     // React Query Hooks
     const { data: dataHub, isLoading: isLoadingDataHub, error: dataHubErrorObj, refetch: loadDataHub } = useDataHubQuery();
+    const [sourcesPage, setSourcesPage] = useState(1);
+    const sourcesLimit = 20;
+    const {
+        data: sourcesResult,
+        isLoading: isLoadingSources,
+        error: sourcesErrorObj,
+        refetch: refetchSources,
+        isFetching: isFetchingSources,
+    } = useDataSourcesQuery({ page: sourcesPage, limit: sourcesLimit });
+    const {
+        data: categoriesResult,
+        isLoading: isLoadingCategories,
+        error: categoriesErrorObj,
+        refetch: refetchCategories,
+        isFetching: isFetchingCategories,
+    } = useDataCategoriesQuery();
     const { data: agentsData, isLoading: isLoadingAgentsQuery } = useAgentsQuery();
 
     const updateSourceMutation = useUpdateSourceMutation();
+    const restoreSourceMutation = useRestoreSourceMutation();
     const createSourceMutation = useCreateSourceMutation();
     const deleteSourceMutation = useDeleteSourceMutation();
     const updateCategoryMutation = useUpdateCategoryMutation();
@@ -60,9 +84,36 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         return api.fetchDataHubState();
     });
 
+    const mergedDataHub = useMemo((): DataHubState | null => {
+        if (!dataHub) return null;
+        const sources = sourcesResult?.data ?? dataHub.sources;
+        const categoriesBase = categoriesResult ?? dataHub.categories;
+        const categories = api.enrichCategoriesWithSourceCounts(categoriesBase, sources);
+        return {
+            ...dataHub,
+            sources,
+            categories,
+            totalSources: sourcesResult?.pagination.total ?? dataHub.totalSources,
+            activeSources: sources.filter(s => s.status === 'active').length,
+        };
+    }, [dataHub, sourcesResult, categoriesResult]);
+
+    const sourcesPagination = sourcesResult?.pagination;
+    const sourcesApiError = sourcesErrorObj instanceof DataHubApiError
+        ? sourcesErrorObj
+        : sourcesErrorObj instanceof Error
+          ? sourcesErrorObj
+          : null;
+
+    const categoriesApiError = categoriesErrorObj instanceof DataHubApiError
+        ? categoriesErrorObj
+        : categoriesErrorObj instanceof Error
+          ? categoriesErrorObj
+          : null;
+
     // Derived State from Query
     const agents = agentsData || [];
-    const isLoading = isLoadingDataHub;
+    const isLoading = isLoadingDataHub || isLoadingSources || isLoadingCategories;
     const isLoadingAgents = isLoadingAgentsQuery;
     const dataHubError = dataHubErrorObj instanceof Error ? dataHubErrorObj.message : null;
 
@@ -159,13 +210,22 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         }
     };
 
-    const handleDeleteSource = async (id: string) => {
+    const handleDeleteSource = async (id: string, hard = false) => {
         if (!window.confirm(t('confirm_delete_source') || 'Are you sure you want to delete this source?')) return;
         try {
             setCurrentError(null);
-            await deleteSourceMutation.mutateAsync(id);
+            await deleteSourceMutation.mutateAsync({ id, hard });
         } catch (error) {
-            handleError(error, 'Delete Source', () => handleDeleteSource(id));
+            handleError(error, 'Delete Source', () => handleDeleteSource(id, hard));
+        }
+    };
+
+    const handleRestoreSource = async (id: string) => {
+        try {
+            setCurrentError(null);
+            await restoreSourceMutation.mutateAsync(id);
+        } catch (error) {
+            handleError(error, 'Restore Source', () => handleRestoreSource(id));
         }
     };
 
@@ -535,15 +595,21 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     };
 
     const handleTestSource = async (sourceId: string) => {
+        const source = mergedDataHub?.sources.find(s => s.id === sourceId);
+        if (!source) {
+            alert(t('source_not_found') || 'Data source not found');
+            return;
+        }
         try {
-            const result = await api.testDataSourceConnection(sourceId);
+            const result = await api.testDataSourceConnection(source);
             if (result.success) {
                 alert(t('connection_test_success') || 'Connection test successful!');
             } else {
                 alert(`${t('connection_test_failed') || 'Connection test failed:'} ${result.message}`);
             }
-        } catch (e) {
-            alert(t('connection_test_error') || 'An error occurred during connection test');
+        } catch (e: any) {
+            const parsed = handleError(e, 'Test Connection');
+            alert(parsed.userMessage);
         }
     };
 
@@ -588,32 +654,32 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     };
 
     const categoryMetricsById = useMemo(() => {
-        if (!dataHub || !dataHub.pipelineSnapshot) return {};
+        if (!mergedDataHub || !mergedDataHub.pipelineSnapshot) return {};
         const metrics: Record<string, { inflow: number; passRate: number }> = {};
-        dataHub.pipelineSnapshot.categories.forEach(cat => {
+        mergedDataHub.pipelineSnapshot.categories.forEach(cat => {
             metrics[cat.categoryId] = {
                 inflow: cat.inflow,
                 passRate: cat.passRate
             };
         });
         return metrics;
-    }, [dataHub]);
+    }, [mergedDataHub]);
 
     const logStatusCounts = useMemo(() => {
-        if (!dataHub) return { success: 0, error: 0, warning: 0 };
-        return dataHub.accessLogs.reduce((acc, log) => {
+        if (!mergedDataHub) return { success: 0, error: 0, warning: 0 };
+        return mergedDataHub.accessLogs.reduce((acc, log) => {
             const status = log.status.toLowerCase();
             if (status.includes('success') || status === 'ok' || status === '200') acc.success++;
             else if (status.includes('error') || status.includes('fail') || status === '500') acc.error++;
             else acc.warning++;
             return acc;
         }, { success: 0, error: 0, warning: 0 });
-    }, [dataHub]);
+    }, [mergedDataHub]);
 
     const combinedCollectorHealth = useMemo(() => {
-        if (!dataHub || !dataHub.telegramCollector) return 'unknown';
-        return dataHub.telegramCollector.status === 'online' ? 'healthy' : 'degraded';
-    }, [dataHub]);
+        if (!mergedDataHub || !mergedDataHub.telegramCollector) return 'unknown';
+        return mergedDataHub.telegramCollector.status === 'online' ? 'healthy' : 'degraded';
+    }, [mergedDataHub]);
 
     const [isLoadingCollector, setIsLoadingCollector] = useState(false);
     const [collectorMessage, setCollectorMessage] = useState<string | null>(null);
@@ -636,8 +702,24 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const telegramCollectorUrl = api.getTelegramCollectorBaseUrl();
 
+    const setDataHub = (hub: DataHubState | null) => {
+        if (hub) {
+            queryClient.setQueryData(DATA_HUB_KEYS.state(), hub);
+        }
+    };
+
     return {
-        dataHub,
+        dataHub: mergedDataHub,
+        setDataHub,
+        sourcesPagination,
+        sourcesPage,
+        setSourcesPage,
+        refetchSources,
+        isFetchingSources,
+        sourcesApiError,
+        refetchCategories,
+        isFetchingCategories,
+        categoriesApiError,
         isLoading,
         dataHubError,
         currentError,
@@ -666,7 +748,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setCollectorError,
         collectorMessage,
         setCollectorMessage,
-        categoriesError: null, // Categories use mutation error usually
+        categoriesError: categoriesApiError instanceof Error ? categoriesApiError.message : null,
         setCategoriesError: () => { },
         healthError: healthAsync.error,
         setHealthError: healthAsync.setError,
@@ -717,6 +799,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         handleCreateSource,
         handleUpdateSource,
         handleDeleteSource,
+        handleRestoreSource,
         handleCreateCategory,
         handleUpdateCategory,
         handleDeleteCategory,

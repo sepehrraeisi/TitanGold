@@ -377,7 +377,7 @@ const AutomationSettings: React.FC = () => {
                     onSave={async (source) => {
                         try {
                             if (editingItem) {
-                                await api.updateDataSource(editingItem.id, source);
+                                await api.updateAutomationDataSource(editingItem.id, source);
                             } else {
                                 await api.addDataSource(source);
                             }

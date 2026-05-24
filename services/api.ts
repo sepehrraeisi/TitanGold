@@ -5920,132 +5920,271 @@ export const fetchAIAgents = async (): Promise<AIAgent[]> => {
     return defaultAgents;
 };
 
-// Fetch Training Data - REAL IMPLEMENTATION with IndexedDB
+// Fetch Training Data – prefers backend `/api/v1/training/overview`, falls back to IndexedDB
 export const fetchTrainingData = async (): Promise<AITrainingStats> => {
-    try {
-        // Load training sessions from database
-        const allSessions = await database.getAll<AITrainingSession>('aiTrainingSessions');
+    // Local helper: original IndexedDB-based logic (kept as offline / fallback path)
+    const loadFromIndexedDB = async (): Promise<AITrainingStats> => {
+        try {
+            // Load training sessions from database
+            const allSessions = await database.getAll<AITrainingSession>('aiTrainingSessions');
 
-        if (allSessions && allSessions.length > 0) {
-            const runningSessions = allSessions.filter(s => s.status === 'running');
-            const queuedSessions = allSessions.filter(s => s.status === 'scheduled');
-            const completedSessions = allSessions.filter(s => s.status === 'completed').slice(0, 12);
+            if (allSessions && allSessions.length > 0) {
+                const runningSessions = allSessions.filter(s => s.status === 'running');
+                const queuedSessions = allSessions.filter(s => s.status === 'scheduled');
+                const completedSessions = allSessions
+                    .filter(s => s.status === 'completed')
+                    .slice(0, 12);
 
-            // Calculate active training agents
-            const agentIds = new Set<string>();
-            runningSessions.forEach(session => {
-                session.agentIds.forEach(id => agentIds.add(id));
-            });
+                // Calculate active training agents
+                const agentIds = new Set<string>();
+                runningSessions.forEach(session => {
+                    session.agentIds.forEach(id => agentIds.add(id));
+                });
 
-            // Calculate average accuracy from agents, not from sessions
-            // Get agents to calculate real average accuracy
+                // Calculate average accuracy from agents, not from sessions
+                const allAgents = await fetchAIAgents();
+                const avgAccuracy = allAgents.length > 0
+                    ? allAgents.reduce((sum, a) => sum + (a.accuracy || 0), 0) / allAgents.length
+                    : 0;
+
+                const config = await fetchTrainingConfig();
+                const stats: AITrainingStats = {
+                    sessions: allSessions.length,
+                    avgAccuracy: Math.min(100, Math.max(0, avgAccuracy)), // Ensure between 0-100%
+                    activeTrainingAgents: agentIds.size,
+                    runningSessions,
+                    queue: queuedSessions,
+                    recentHistory: completedSessions,
+                    lastUpdated: new Date().toISOString(),
+                    config,
+                };
+
+                return stats;
+            }
+        } catch (e) {
+            console.warn('Failed to load training data from IndexedDB:', e);
+        }
+
+        // Initialize with default data - calculate from actual agents (no mock defaults)
+        let defaultAvgAccuracy = 0;
+        try {
             const allAgents = await fetchAIAgents();
-            const avgAccuracy = allAgents.length > 0
-                ? allAgents.reduce((sum, a) => sum + (a.accuracy || 0), 0) / allAgents.length
-                : 89.7;
-
-            const config = await fetchTrainingConfig();
-            const stats: AITrainingStats = {
-                sessions: allSessions.length,
-                avgAccuracy: Math.min(100, Math.max(0, avgAccuracy)), // Ensure between 0-100%
-                activeTrainingAgents: agentIds.size,
-                runningSessions,
-                queue: queuedSessions,
-                recentHistory: completedSessions,
-                lastUpdated: new Date().toISOString(),
-                config,
-            };
-
-            return stats;
+            if (allAgents.length > 0) {
+                defaultAvgAccuracy = allAgents.reduce((sum, a) => sum + (a.accuracy || 0), 0) / allAgents.length;
+            }
+        } catch (e) {
+            console.warn('Failed to calculate default avgAccuracy from agents:', e);
         }
-    } catch (e) {
-        console.warn('Failed to load training data from database:', e);
-    }
 
-    // Initialize with default data - calculate from actual agents (no mock defaults)
-    let defaultAvgAccuracy = 0;
-    try {
-        const allAgents = await fetchAIAgents();
-        if (allAgents.length > 0) {
-            defaultAvgAccuracy = allAgents.reduce((sum, a) => sum + (a.accuracy || 0), 0) / allAgents.length;
-        }
-    } catch (e) {
-        console.warn('Failed to calculate default avgAccuracy from agents:', e);
-    }
-
-    const config = await fetchTrainingConfig();
-    return {
-        sessions: 0,
-        avgAccuracy: Math.min(100, Math.max(0, defaultAvgAccuracy)), // Ensure between 0-100%
-        activeTrainingAgents: 0,
-        runningSessions: [],
-        queue: [],
-        recentHistory: [],
-        lastUpdated: new Date().toISOString(),
-        config,
+        const config = await fetchTrainingConfig();
+        return {
+            sessions: 0,
+            avgAccuracy: Math.min(100, Math.max(0, defaultAvgAccuracy)), // Ensure between 0-100%
+            activeTrainingAgents: 0,
+            runningSessions: [],
+            queue: [],
+            recentHistory: [],
+            lastUpdated: new Date().toISOString(),
+            config,
+        };
     };
+
+    // Try backend first (real Training overview)
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+
+        // If no auth token, fall back to IndexedDB behaviour
+        if (!token) {
+            console.warn('No authentication token found for training overview, falling back to IndexedDB');
+            return await loadFromIndexedDB();
+        }
+
+        const response = await fetch('/api/v1/training/overview', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Backend error while fetching training overview:', response.status, errorText);
+
+            // In development, if auth fails, keep UI usable via IndexedDB
+            if (import.meta.env.DEV && (response.status === 401 || response.status === 403)) {
+                console.warn('Development mode: auth failed for training overview, falling back to IndexedDB');
+                return await loadFromIndexedDB();
+            }
+
+            // For other HTTP errors, also fall back to IndexedDB to avoid breaking UI
+            return await loadFromIndexedDB();
+        }
+
+        const data: any = await response.json();
+
+        // Adapter: map backend rows → AITrainingSession[]
+        const adaptSession = (row: any): AITrainingSession => {
+            const fallbackDate = new Date().toISOString();
+            return {
+                id: String(row.id ?? row.session_id ?? `session-${fallbackDate}`),
+                title: row.session_name || row.title || 'Training Session',
+                mode: (row.mode as any) || 'individual',
+                agentIds: row.agent_id ? [String(row.agent_id)] : [],
+                status: ((): 'scheduled' | 'running' | 'completed' => {
+                    const raw = String(row.status || '').toLowerCase();
+                    if (raw === 'running') return 'running';
+                    if (raw === 'completed') return 'completed';
+                    return 'scheduled';
+                })(),
+                startedAt: row.started_at || row.created_at || fallbackDate,
+                expectedCompletionMinutes:
+                    row.config?.expectedCompletionMinutes ??
+                    row.expected_completion_minutes ??
+                    30,
+                completedAt: row.completed_at || undefined,
+                accuracyGain: row.results?.accuracyGain ?? row.accuracy_gain ?? undefined,
+            };
+        };
+
+        const runningSessions: AITrainingSession[] = Array.isArray(data.runningSessions)
+            ? data.runningSessions.map(adaptSession)
+            : [];
+        const queue: AITrainingSession[] = Array.isArray(data.queue)
+            ? data.queue.map(adaptSession)
+            : [];
+        const recentHistory: AITrainingSession[] = Array.isArray(data.recentHistory)
+            ? data.recentHistory.map(adaptSession)
+            : [];
+
+        const stats: AITrainingStats = {
+            sessions: typeof data.sessions === 'number'
+                ? data.sessions
+                : runningSessions.length + queue.length + recentHistory.length,
+            avgAccuracy: typeof data.avgAccuracy === 'number'
+                ? Math.min(100, Math.max(0, data.avgAccuracy))
+                : 0,
+            activeTrainingAgents: typeof data.activeTrainingAgents === 'number'
+                ? data.activeTrainingAgents
+                : new Set(runningSessions.flatMap(s => s.agentIds)).size,
+            runningSessions,
+            queue,
+            recentHistory,
+            lastUpdated: data.lastUpdated || new Date().toISOString(),
+            // Config is still managed via existing config endpoints / IndexedDB
+            config: await fetchTrainingConfig(),
+        };
+
+        return stats;
+    } catch (error: any) {
+        console.error('Error fetching training overview from backend, falling back to IndexedDB:', error);
+        return await loadFromIndexedDB();
+    }
 };
 
-// Fetch Analytics Data - REAL IMPLEMENTATION with IndexedDB
+// Fetch Analytics Data – prefers backend `/api/v1/analytics/overview`, falls back to IndexedDB
 export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
-    try {
-        const saved = await database.get<{ key: string; value: AIAnalyticsMetrics }>('settings', 'ai_analytics');
-        if (saved && saved.value) {
-            return saved.value;
+    const loadFromIndexedDB = async (): Promise<AIAnalyticsMetrics> => {
+        try {
+            const saved = await database.get<{ key: string; value: AIAnalyticsMetrics }>('settings', 'ai_analytics');
+            if (saved && saved.value) {
+                return saved.value;
+            }
+        } catch (e) {
+            console.warn('Failed to load AI analytics from database:', e);
         }
-    } catch (e) {
-        console.warn('Failed to load AI analytics from database:', e);
-    }
 
-    // Calculate analytics from real data
-    try {
-        const agents = await database.getAll<AIAgent>('aiAgents');
-        const allSessions = await database.getAll<AITrainingSession>('aiTrainingSessions');
+        try {
+            const agents = await database.getAll<AIAgent>('aiAgents');
+            const allSessions = await database.getAll<AITrainingSession>('aiTrainingSessions');
 
-        const activeAgents = agents.filter(a => a.status === 'active').length;
-        const trainingAgents = agents.filter(a => a.status === 'training').length;
-        const offlineAgents = agents.filter(a => a.status === 'inactive').length;
+            const activeAgents = agents.filter(a => a.status === 'active').length;
+            const trainingAgents = agents.filter(a => a.status === 'training').length;
+            const offlineAgents = agents.filter(a => a.status === 'inactive').length;
 
-        const totalDecisions = agents.reduce((sum, a) => sum + (a.decisions || 0), 0);
-        const totalLearningHours = agents.reduce((sum, a) => sum + (a.learningTime || 0), 0);
-        const avgAccuracy = agents.length > 0 ? agents.reduce((sum, a) => sum + (a.accuracy || 0), 0) / agents.length : 0;
+            const totalDecisions = agents.reduce((sum, a) => sum + (a.decisions || 0), 0);
+            const totalLearningHours = agents.reduce((sum, a) => sum + (a.learningTime || 0), 0);
+            const avgAccuracy = agents.length > 0
+                ? agents.reduce((sum, a) => sum + (a.accuracy || 0), 0) / agents.length
+                : 0;
 
-        // Calculate decision rate (decisions per minute) based on available data (no magic defaults)
-        const decisionRate = totalDecisions > 0 && totalLearningHours > 0
-            ? totalDecisions / (totalLearningHours * 60)
-            : 0;
+            const decisionRate = totalDecisions > 0 && totalLearningHours > 0
+                ? totalDecisions / (totalLearningHours * 60)
+                : 0;
 
-        // Calculate success rate from agent accuracy
-        const successRate = avgAccuracy;
+            const successRate = avgAccuracy;
 
-        // Calculate monthly improvement from recent training sessions
-        const recentCompleted = allSessions
-            .filter(s => s.status === 'completed' && s.completedAt)
-            .filter(s => {
-                const completed = new Date(s.completedAt!);
-                const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-                return completed > monthAgo;
-            });
-        const monthlyImprovement = recentCompleted.length > 0
-            ? recentCompleted.reduce((sum, s) => sum + (s.accuracyGain || 0), 0) / recentCompleted.length
-            : 0;
+            const recentCompleted = allSessions
+                .filter(s => s.status === 'completed' && s.completedAt)
+                .filter(s => {
+                    const completed = new Date(s.completedAt!);
+                    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                    return completed > monthAgo;
+                });
+            const monthlyImprovement = recentCompleted.length > 0
+                ? recentCompleted.reduce((sum, s) => sum + (s.accuracyGain || 0), 0) / recentCompleted.length
+                : 0;
 
-        const analytics: AIAnalyticsMetrics = {
-            realtime: {
-                decisionRate: Math.round(decisionRate * 10) / 10,
-                successRate: Math.round(successRate * 10) / 10,
-                systemUptime: 0,
-                agentDistribution: {
-                    active: activeAgents,
-                    training: trainingAgents,
-                    offline: offlineAgents,
+            const analytics: AIAnalyticsMetrics = {
+                realtime: {
+                    decisionRate: Math.round(decisionRate * 10) / 10,
+                    successRate: Math.round(successRate * 10) / 10,
+                    systemUptime: 0,
+                    agentDistribution: {
+                        active: activeAgents,
+                        training: trainingAgents,
+                        offline: offlineAgents,
+                    },
                 },
+                performance: {
+                    totalDecisions,
+                    totalLearningHours,
+                    avgAccuracy: Math.round(avgAccuracy * 10) / 10,
+                    monthlyImprovement: Math.round(monthlyImprovement * 10) / 10,
+                },
+                resourceUsage: {
+                    cpu: 0,
+                    gpu: 0,
+                    memory: 0,
+                    precision: [],
+                    recall: [],
+                },
+                agentMatrix: agents.slice(0, 12).map(a => ({
+                    id: a.id,
+                    name: a.role.substring(0, 15) + (a.role.length > 15 ? '...' : ''),
+                    accuracy: Math.round((a.accuracy || 0) * 10) / 10,
+                    successRate: Math.round((a.accuracy || 0) * 10) / 10,
+                    progress: Math.round((a.trainingProgress || 0) * 10) / 10,
+                    status: a.status as 'active' | 'training' | 'error',
+                })),
+                lastUpdated: new Date().toISOString(),
+            };
+
+            try {
+                await database.save('settings', {
+                    key: 'ai_analytics',
+                    value: analytics,
+                });
+            } catch (e) {
+                console.warn('Failed to save analytics:', e);
+            }
+
+            return analytics;
+        } catch (e) {
+            console.warn('Failed to calculate analytics:', e);
+        }
+
+        return {
+            realtime: {
+                decisionRate: 0,
+                successRate: 0,
+                systemUptime: 0,
+                agentDistribution: { active: 0, training: 0, offline: 0 },
             },
             performance: {
-                totalDecisions,
-                totalLearningHours,
-                avgAccuracy: Math.round(avgAccuracy * 10) / 10,
-                monthlyImprovement: Math.round(monthlyImprovement * 10) / 10,
+                totalDecisions: 0,
+                totalLearningHours: 0,
+                avgAccuracy: 0,
+                monthlyImprovement: 0,
             },
             resourceUsage: {
                 cpu: 0,
@@ -6054,58 +6193,44 @@ export const fetchAnalyticsData = async (): Promise<AIAnalyticsMetrics> => {
                 precision: [],
                 recall: [],
             },
-            agentMatrix: agents.slice(0, 12).map(a => ({
-                id: a.id,
-                name: a.role.substring(0, 15) + (a.role.length > 15 ? '...' : ''),
-                accuracy: Math.round((a.accuracy || 0) * 10) / 10,
-                successRate: Math.round((a.accuracy || 0) * 10) / 10,
-                progress: Math.round((a.trainingProgress || 0) * 10) / 10,
-                status: a.status as 'active' | 'training' | 'error',
-            })),
+            agentMatrix: [],
             lastUpdated: new Date().toISOString(),
         };
-
-        // Save analytics
-        try {
-            await database.save('settings', {
-                key: 'ai_analytics',
-                value: analytics,
-            });
-        } catch (e) {
-            console.warn('Failed to save analytics:', e);
-        }
-
-        return analytics;
-    } catch (e) {
-        console.warn('Failed to calculate analytics:', e);
-    }
-
-    // Default analytics (no mock numbers, neutral zero/empty values)
-    const defaultAnalytics: AIAnalyticsMetrics = {
-        realtime: {
-            decisionRate: 0,
-            successRate: 0,
-            systemUptime: 0,
-            agentDistribution: { active: 0, training: 0, offline: 0 },
-        },
-        performance: {
-            totalDecisions: 0,
-            totalLearningHours: 0,
-            avgAccuracy: 0,
-            monthlyImprovement: 0,
-        },
-        resourceUsage: {
-            cpu: 0,
-            gpu: 0,
-            memory: 0,
-            precision: [],
-            recall: [],
-        },
-        agentMatrix: [],
-        lastUpdated: new Date().toISOString(),
     };
 
-    return defaultAnalytics;
+    try {
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+
+        if (!token) {
+            console.warn('No authentication token found for analytics overview, falling back to IndexedDB');
+            return await loadFromIndexedDB();
+        }
+
+        const response = await fetch('/api/v1/analytics/overview', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Backend error while fetching analytics overview:', response.status, errorText);
+
+            if (import.meta.env.DEV && (response.status === 401 || response.status === 403)) {
+                console.warn('Development mode: auth failed for analytics overview, falling back to IndexedDB');
+                return await loadFromIndexedDB();
+            }
+
+            return await loadFromIndexedDB();
+        }
+
+        const data: AIAnalyticsMetrics = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error fetching analytics overview from backend, falling back to IndexedDB:', error);
+        return await loadFromIndexedDB();
+    }
 };
 
 // Fetch API Config Data - REAL IMPLEMENTATION with IndexedDB
@@ -12617,8 +12742,47 @@ export const scheduleAITrainingSession = async (
     },
 ): Promise<AITrainingStats> => {
     try {
-        // Create new session
-        const session: AITrainingSession = {
+        // Prefer backend when available
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        if (token) {
+            try {
+                const response = await fetch('/api/v1/training/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        title: input.title,
+                        mode: input.mode,
+                        agent_ids: input.agentIds,
+                        config: {
+                            expectedCompletionMinutes: input.expectedCompletionMinutes,
+                            startInMinutes: input.startInMinutes ?? 5,
+                        },
+                    }),
+                });
+
+                if (response.ok) {
+                    // Re-fetch stats via real backend overview (fetchTrainingData prefers backend)
+                    return await fetchTrainingData();
+                }
+
+                const errorText = await response.text();
+                console.error('Backend error while scheduling training session:', response.status, errorText);
+
+                if (import.meta.env.DEV && (response.status === 401 || response.status === 403)) {
+                    console.warn('Development mode: auth failed for scheduling training session, falling back to IndexedDB');
+                } else {
+                    console.warn('Falling back to IndexedDB schedule due to backend error');
+                }
+            } catch (e) {
+                console.warn('Failed to schedule training session via backend, falling back to IndexedDB:', e);
+            }
+        }
+
+        // Offline / fallback: create and persist in IndexedDB
+        const session: AITrainingSession & { createdAt?: string } = {
             id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             title: input.title,
             mode: input.mode,
@@ -12629,18 +12793,15 @@ export const scheduleAITrainingSession = async (
             createdAt: new Date().toISOString(),
         };
 
-        // Save to IndexedDB
-        await database.save('aiTrainingSessions', session);
+        await database.save('aiTrainingSessions', session as any);
 
-        // Update training stats
         const stats = await fetchTrainingData();
         const updatedStats: AITrainingStats = {
             ...stats,
             sessions: stats.sessions + 1,
-            queue: [...stats.queue, session],
+            queue: [...stats.queue, session as any],
         };
 
-        // Save updated stats
         await database.save('settings', {
             key: 'training_stats',
             value: updatedStats,
@@ -12985,13 +13146,44 @@ export const completeAITrainingSession = async (
     accuracyGain: number,
 ): Promise<AITrainingStats> => {
     try {
-        // Get session from database
+        // Prefer backend when this is a backend session UUID
+        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+        const looksLikeUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId);
+
+        if (token && looksLikeUUID) {
+            try {
+                const response = await fetch(`/api/v1/training/sessions/${sessionId}/complete`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ accuracyGain }),
+                });
+
+                if (response.ok) {
+                    return await fetchTrainingData();
+                }
+
+                const errorText = await response.text();
+                console.error('Backend error while completing training session:', response.status, errorText);
+
+                if (import.meta.env.DEV && (response.status === 401 || response.status === 403)) {
+                    console.warn('Development mode: auth failed for completing training session, falling back to IndexedDB');
+                } else {
+                    console.warn('Falling back to IndexedDB completion due to backend error');
+                }
+            } catch (e) {
+                console.warn('Failed to complete training session via backend, falling back to IndexedDB:', e);
+            }
+        }
+
+        // Offline / fallback: legacy IndexedDB completion flow
         const session = await database.get<AITrainingSession>('aiTrainingSessions', sessionId);
         if (!session || session.status !== 'running') {
             throw new Error('Training session is not running');
         }
 
-        // Update session to completed
         const completed: AITrainingSession = {
             ...session,
             status: 'completed',
@@ -12999,22 +13191,20 @@ export const completeAITrainingSession = async (
             accuracyGain,
         };
 
-        // Save completed session
         await database.save('aiTrainingSessions', completed);
 
-        // Update agents
+        // Update agents locally (offline approximation)
         const perAgentGain = accuracyGain / Math.max(1, completed.agentIds.length);
         for (const agentId of completed.agentIds) {
             const agent = await database.get<AIAgent>('aiAgents', agentId);
             if (agent) {
-                agent.accuracy = Number(Math.min(100, agent.accuracy + perAgentGain).toFixed(1));
-                agent.trainingProgress = Math.min(100, Number((agent.trainingProgress + 5).toFixed(1)));
+                agent.accuracy = Number(Math.min(100, (agent.accuracy || 0) + perAgentGain).toFixed(1));
+                agent.trainingProgress = Math.min(100, Number(((agent.trainingProgress || 0) + 5).toFixed(1)));
                 agent.lastUpdate = new Date().toISOString();
                 await database.save('aiAgents', agent);
             }
         }
 
-        // Get next session from queue and start it
         const stats = await fetchTrainingData();
         const queue = stats.queue.filter(s => s.id !== sessionId);
         const nextSession = queue.find(s => s.status === 'scheduled');
@@ -13025,7 +13215,6 @@ export const completeAITrainingSession = async (
             await database.save('aiTrainingSessions', nextSession);
         }
 
-        // Update training stats
         const runningSessions = await database.getAll<AITrainingSession>('aiTrainingSessions');
         const running = runningSessions.filter(s => s.status === 'running');
         const completedSessions = runningSessions.filter(s => s.status === 'completed').slice(0, 12);
@@ -16208,7 +16397,7 @@ export const addDataSource = async (source: Omit<DataSource, 'id' | 'status'>): 
     return newSource;
 };
 
-export const updateDataSource = async (id: string, updates: Partial<DataSource>): Promise<void> => {
+export const updateAutomationDataSource = async (id: string, updates: Partial<DataSource>): Promise<void> => {
     const settings = await fetchAutomationSettings();
     const index = settings.dataSources.findIndex(ds => ds.id === id);
     if (index >= 0) {
@@ -20759,115 +20948,18 @@ export const fetchDataHubState = async (): Promise<DataHubState> => {
     return defaultState;
 };
 
-// Create Data Source
-export const createDataSource = async (source: Omit<DataSource, 'id' | 'createdAt' | 'updatedAt' | 'errorCount' | 'successRate' | 'reliabilityScore'>): Promise<DataSource> => {
-    try {
-        const dataHub = await fetchDataHubState();
-
-        const newSource: DataSource = {
-            ...source,
-            id: `DS-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            errorCount: 0,
-            successRate: 100,
-            reliabilityScore: 50,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        };
-
-        dataHub.sources.push(newSource);
-        dataHub.totalSources = dataHub.sources.length;
-        dataHub.activeSources = dataHub.sources.filter(s => s.status === 'active').length;
-        ensureCategoryExists(dataHub, newSource.category);
-        recalcCategoryStats(dataHub);
-        dataHub.updatedAt = new Date().toISOString();
-
-        await database.save('settings', {
-            key: 'data_hub_state',
-            value: dataHub,
-        });
-
-        // Update Artemis state
-        const artemis = await fetchArtemisState();
-        artemis.dataHub = dataHub;
-        await database.save('settings', {
-            key: 'artemis_state',
-            value: artemis,
-        });
-
-        return newSource;
-    } catch (e) {
-        console.error('Failed to create data source:', e);
-        throw e;
-    }
-};
-
-// Update Data Hub Source
-export const updateDataHubSource = async (sourceId: string, updates: Partial<DataSource>): Promise<DataSource> => {
-    try {
-        const dataHub = await fetchDataHubState();
-        const sourceIndex = dataHub.sources.findIndex(s => s.id === sourceId);
-
-        if (sourceIndex === -1) {
-            throw new Error('Data source not found');
-        }
-
-        dataHub.sources[sourceIndex] = {
-            ...dataHub.sources[sourceIndex],
-            ...updates,
-            updatedAt: new Date().toISOString(),
-        };
-        ensureCategoryExists(dataHub, dataHub.sources[sourceIndex].category);
-        recalcCategoryStats(dataHub);
-        dataHub.activeSources = dataHub.sources.filter(s => s.status === 'active').length;
-        dataHub.updatedAt = new Date().toISOString();
-
-        await database.save('settings', {
-            key: 'data_hub_state',
-            value: dataHub,
-        });
-
-        // Update Artemis state
-        const artemis = await fetchArtemisState();
-        artemis.dataHub = dataHub;
-        await database.save('settings', {
-            key: 'artemis_state',
-            value: artemis,
-        });
-
-        return dataHub.sources[sourceIndex];
-    } catch (e) {
-        console.error('Failed to update data source:', e);
-        throw e;
-    }
-};
-
-// Delete Data Source
-export const deleteDataSource = async (sourceId: string): Promise<void> => {
-    try {
-        const dataHub = await fetchDataHubState();
-        dataHub.sources = dataHub.sources.filter(s => s.id !== sourceId);
-        dataHub.totalSources = dataHub.sources.length;
-        dataHub.activeSources = dataHub.sources.filter(s => s.status === 'active').length;
-        recalcCategoryStats(dataHub);
-        dataHub.updatedAt = new Date().toISOString();
-
-        await database.save('settings', {
-            key: 'data_hub_state',
-            value: dataHub,
-        });
-
-        // Update Artemis state
-        const artemis = await fetchArtemisState();
-        artemis.dataHub = dataHub;
-        await database.save('settings', {
-            key: 'artemis_state',
-            value: artemis,
-        });
-    } catch (e) {
-        console.error('Failed to delete data source:', e);
-        throw e;
-    }
-};
+// Data Hub sources — backend API (GAP-008)
+export {
+    fetchDataSources,
+    createDataSource,
+    updateDataSource,
+    updateDataHubSource,
+    deleteDataSource,
+    restoreDataSource,
+    testDataSourceConfiguration,
+    testDataSourceConnection,
+    DataHubApiError,
+} from './dataSourcesApi';
 
 // Request Data (for Agents)
 export const requestData = async (request: DataRequest): Promise<DataResponse> => {
@@ -21443,183 +21535,6 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
     }
 };
 
-// Test Data Source Connection
-export const testDataSourceConnection = async (sourceId: string): Promise<{ success: boolean; message: string; responseTime?: number }> => {
-    try {
-        const dataHub = await fetchDataHubState();
-        const source = dataHub.sources.find(s => s.id === sourceId);
-
-        if (!source) {
-            return { success: false, message: 'Data source not found' };
-        }
-
-        // Update source status to testing
-        const sourceIndex = dataHub.sources.findIndex(s => s.id === sourceId);
-        if (sourceIndex !== -1) {
-            dataHub.sources[sourceIndex].status = 'testing';
-            dataHub.sources[sourceIndex].lastUpdate = new Date().toISOString();
-            await database.save('settings', {
-                key: 'data_hub_state',
-                value: dataHub,
-            });
-        }
-
-        const startTime = Date.now();
-
-        // Real connection test based on source type
-        if (source.type === 'api' && source.url) {
-            // Make real API call
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-                const response = await fetch(source.url, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...(source.credentials?.apiKey ? { 'Authorization': `Bearer ${source.credentials.apiKey}` } : {}),
-                    },
-                    signal: controller.signal,
-                });
-
-                clearTimeout(timeoutId);
-                const responseTime = Date.now() - startTime;
-
-                if (response.ok) {
-                    if (sourceIndex !== -1) {
-                        dataHub.sources[sourceIndex].status = 'active';
-                        dataHub.sources[sourceIndex].lastSuccess = new Date().toISOString();
-                        dataHub.sources[sourceIndex].lastUpdate = new Date().toISOString();
-                        dataHub.sources[sourceIndex].responseTime = responseTime;
-                        dataHub.sources[sourceIndex].errorCount = 0;
-                        dataHub.sources[sourceIndex].successRate = Math.min(100, (dataHub.sources[sourceIndex].successRate || 0) + 1);
-                    }
-
-                    await database.save('settings', {
-                        key: 'data_hub_state',
-                        value: dataHub,
-                    });
-
-                    // Update Artemis state
-                    const artemis = await fetchArtemisState();
-                    artemis.dataHub = dataHub;
-                    await database.save('settings', {
-                        key: 'artemis_state',
-                        value: artemis,
-                    });
-
-                    return { success: true, message: 'Connection successful', responseTime };
-                } else {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-            } catch (fetchError: any) {
-                const responseTime = Date.now() - startTime;
-                const errorMessage = fetchError.name === 'AbortError'
-                    ? 'Connection timeout'
-                    : fetchError.message || 'API endpoint unreachable';
-
-                if (sourceIndex !== -1) {
-                    dataHub.sources[sourceIndex].status = 'error';
-                    dataHub.sources[sourceIndex].lastError = new Date().toISOString();
-                    dataHub.sources[sourceIndex].errorCount = (dataHub.sources[sourceIndex].errorCount || 0) + 1;
-                    dataHub.sources[sourceIndex].successRate = Math.max(0, (dataHub.sources[sourceIndex].successRate || 100) - 5);
-                }
-
-                await database.save('settings', {
-                    key: 'data_hub_state',
-                    value: dataHub,
-                });
-
-                return { success: false, message: `Connection failed: ${errorMessage}`, responseTime };
-            }
-        } else if (source.type === 'website' && source.url) {
-            // Real website check
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-
-                const response = await fetch(source.url, {
-                    method: 'HEAD', // Use HEAD to check if site is accessible
-                    signal: controller.signal,
-                    mode: 'no-cors', // Try no-cors first for CORS issues
-                });
-
-                clearTimeout(timeoutId);
-                const responseTime = Date.now() - startTime;
-                const success = response.ok || response.type === 'opaque'; // opaque means CORS but site exists
-
-                if (success) {
-                    if (sourceIndex !== -1) {
-                        dataHub.sources[sourceIndex].status = 'active';
-                        dataHub.sources[sourceIndex].lastSuccess = new Date().toISOString();
-                        dataHub.sources[sourceIndex].lastUpdate = new Date().toISOString();
-                        dataHub.sources[sourceIndex].responseTime = responseTime;
-                    }
-
-                    await database.save('settings', {
-                        key: 'data_hub_state',
-                        value: dataHub,
-                    });
-
-                    return { success: true, message: 'Website accessible', responseTime };
-                } else {
-                    if (sourceIndex !== -1) {
-                        dataHub.sources[sourceIndex].status = 'error';
-                        dataHub.sources[sourceIndex].lastError = new Date().toISOString();
-                    }
-
-                    await database.save('settings', {
-                        key: 'data_hub_state',
-                        value: dataHub,
-                    });
-
-                    return { success: false, message: 'Website unreachable or blocked', responseTime };
-                }
-            } catch (fetchError: any) {
-                const responseTime = Date.now() - startTime;
-                const errorMessage = fetchError.name === 'AbortError'
-                    ? 'Connection timeout'
-                    : 'Website unreachable or blocked';
-
-                if (sourceIndex !== -1) {
-                    dataHub.sources[sourceIndex].status = 'error';
-                    dataHub.sources[sourceIndex].lastError = new Date().toISOString();
-                }
-
-                await database.save('settings', {
-                    key: 'data_hub_state',
-                    value: dataHub,
-                });
-
-                return { success: false, message: errorMessage, responseTime };
-            }
-        } else {
-            // Generic test - just mark as active if no URL to test
-            const responseTime = Date.now() - startTime;
-
-            if (sourceIndex !== -1) {
-                dataHub.sources[sourceIndex].status = 'active';
-                dataHub.sources[sourceIndex].lastSuccess = new Date().toISOString();
-                dataHub.sources[sourceIndex].lastUpdate = new Date().toISOString();
-                dataHub.sources[sourceIndex].responseTime = responseTime;
-            }
-
-            await database.save('settings', {
-                key: 'data_hub_state',
-                value: dataHub,
-            });
-
-            return { success: true, message: 'Connection test completed', responseTime };
-        }
-    } catch (e) {
-        console.error('Failed to test data source connection:', e);
-        return {
-            success: false,
-            message: e instanceof Error ? e.message : 'Connection test failed'
-        };
-    }
-};
-
 export const getTelegramCollectorChannels = async (): Promise<TelegramCollectorState> => {
     const dataHub = await fetchDataHubState();
     return ensureTelegramCollectorState(dataHub);
@@ -21771,6 +21686,63 @@ export const checkDataHubHealth = async (): Promise<DataHubHealth> => {
     try {
         const dataHub = await fetchDataHubState();
 
+        // Prefer real backend health when possible (production-grade).
+        // Fallback to local/indexed state if backend is unreachable or user is offline.
+        try {
+            const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+            const headers: Record<string, string> = {
+                Accept: 'application/json',
+            };
+            if (token) headers.Authorization = `Bearer ${token}`;
+
+            const res = await fetch('/api/v1/data-sources/health', {
+                method: 'GET',
+                credentials: 'include',
+                headers,
+            });
+
+            if (res.ok) {
+                const backendHealth = await res.json();
+                const overall: DataHubHealth['overall'] =
+                    backendHealth.status === 'healthy'
+                        ? 'healthy'
+                        : backendHealth.status === 'degraded'
+                            ? 'degraded'
+                            : 'critical';
+
+                const health: DataHubHealth = {
+                    overall,
+                    activeConnections: Number(backendHealth.activeSources) || 0,
+                    failedConnections: 0,
+                    averageResponseTime: 0,
+                    cacheHitRate: dataHub?.cache?.hitRate ?? 0,
+                    errors: [],
+                    lastHealthCheck: backendHealth.timestamp || new Date().toISOString(),
+                };
+
+                dataHub.health = health;
+                dataHub.updatedAt = new Date().toISOString();
+
+                await database.save('settings', {
+                    key: 'data_hub_state',
+                    value: dataHub,
+                });
+
+                // Update Artemis state (local cache)
+                const artemis = await fetchArtemisState();
+                artemis.dataHub = dataHub;
+                await database.save('settings', {
+                    key: 'artemis_state',
+                    value: artemis,
+                });
+
+                return health;
+            }
+        } catch {
+            // Ignore and fallback to local health computation below
+        }
+
+        // Fallback: compute health from local DataHub state snapshot
         const activeSources = dataHub.sources.filter(s => s.status === 'active');
         const failedSources = dataHub.sources.filter(s => s.status === 'error');
 
@@ -21820,40 +21792,15 @@ export const checkDataHubHealth = async (): Promise<DataHubHealth> => {
     }
 };
 
-// Create Data Category
-export const createDataCategory = async (category: Omit<DataCategory, 'id' | 'createdAt' | 'sourceCount'>): Promise<DataCategory> => {
-    try {
-        const dataHub = await fetchDataHubState();
-
-        const newCategory: DataCategory = {
-            ...category,
-            id: `CAT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            sourceCount: 0,
-            createdAt: new Date().toISOString(),
-        };
-
-        dataHub.categories.push(newCategory);
-        dataHub.updatedAt = new Date().toISOString();
-
-        await database.save('settings', {
-            key: 'data_hub_state',
-            value: dataHub,
-        });
-
-        // Update Artemis state
-        const artemis = await fetchArtemisState();
-        artemis.dataHub = dataHub;
-        await database.save('settings', {
-            key: 'artemis_state',
-            value: artemis,
-        });
-
-        return newCategory;
-    } catch (e) {
-        console.error('Failed to create data category:', e);
-        throw e;
-    }
-};
+// Data Hub categories — backend API (GAP-010)
+export {
+    fetchDataCategories,
+    fetchDataCategory,
+    createDataCategory,
+    updateDataCategory,
+    deleteDataCategory,
+    enrichCategoriesWithSourceCounts,
+} from './dataCategoriesApi';
 
 // ==================== Advanced Data Hub Features ====================
 

@@ -3,6 +3,7 @@ import { ArtemisState } from '../../../../types';
 import CategoriesPanel from './DataHub/CategoriesPanel';
 import LogsPanel from './DataHub/LogsPanel';
 import PipelinePanel from './DataHub/PipelinePanel';
+import HealthPanel from './DataHub/HealthPanel';
 import TelegramDataPanel from './DataHub/TelegramDataPanel';
 import TelegramPanel from './DataHub/TelegramPanel';
 import DataSourcesPanel from './DataHub/DataSourcesPanel';
@@ -69,6 +70,22 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         handleLinkChannelToSource,
         handleTestCollectorChannel,
         handleTestSource,
+        handleDeleteSource,
+        handleRestoreSource,
+        handleCreateSource,
+        handleUpdateSource,
+        handleCreateCategory,
+        handleUpdateCategory,
+        sourcesPagination,
+        sourcesPage,
+        setSourcesPage,
+        refetchSources,
+        isFetchingSources,
+        sourcesApiError,
+        refetchCategories,
+        isFetchingCategories,
+        categoriesApiError,
+        handleDeleteCategory,
         handleRefreshPipelineSnapshot,
         formatTimeAgo,
         downloadCSV,
@@ -231,15 +248,25 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                         <DataSourcesPanel
                             t={t}
                             formatTimeAgo={formatTimeAgo}
-                            onRefresh={onRefresh}
+                            onRefresh={() => {
+                                void refetchSources();
+                                onRefresh();
+                            }}
                             Card={Card}
                             downloadCSV={downloadCSV}
                             setEditingSource={setEditingSource}
                             setShowCreateSourceModal={setShowCreateSourceModal}
                             setViewingSourceData={setViewingSourceData}
                             handleTestSource={handleTestSource}
+                            handleDeleteSource={handleDeleteSource}
+                            handleRestoreSource={handleRestoreSource}
                             dataHub={dataHub}
                             setActiveView={setActiveView}
+                            pagination={sourcesPagination}
+                            page={sourcesPage}
+                            onPageChange={setSourcesPage}
+                            isLoading={isFetchingSources}
+                            apiError={sourcesApiError}
                         />
                     )}
 
@@ -251,12 +278,14 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             downloadCSV={downloadCSV}
                             setEditingCategory={setEditingCategory}
                             setShowCreateCategoryModal={setShowCreateCategoryModal}
-                            onRefresh={onRefresh}
-                            setDataHub={setDataHub}
+                            onRefresh={() => {
+                                void refetchCategories();
+                                onRefresh();
+                            }}
+                            handleDeleteCategory={handleDeleteCategory}
                             Card={Card}
-                            isLoading={isLoading}
-                            error={categoriesError}
-                            setError={setCategoriesError}
+                            isLoading={isFetchingCategories}
+                            apiError={categoriesApiError}
                             dataHub={dataHub}
                         />
                     )}
@@ -289,6 +318,20 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             selectedSnapshotId={selectedSnapshotId}
                             setSelectedSnapshotId={setSelectedSnapshotId}
                             Card={Card}
+                        />
+                    )}
+
+                    {activeView === 'health' && (
+                        <HealthPanel
+                            t={t}
+                            health={dataHub.health}
+                            handleCheckHealth={handleCheckHealth}
+                            isLoading={isLoadingHealth}
+                            error={healthError}
+                            setError={setHealthError}
+                            Card={Card}
+                            telegramCollector={dataHub.telegramCollector || null}
+                            dataHub={dataHub}
                         />
                     )}
 
@@ -352,8 +395,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 <DataHubModals
                     t={t}
                     dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
                     showCreateSourceModal={showCreateSourceModal}
                     setShowCreateSourceModal={setShowCreateSourceModal}
                     editingSource={editingSource}
@@ -365,6 +406,10 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     viewingSourceData={viewingSourceData}
                     setViewingSourceData={setViewingSourceData}
                     setActiveView={setActiveView}
+                    handleCreateSource={handleCreateSource}
+                    handleUpdateSource={handleUpdateSource}
+                    onSaveCategory={handleCreateCategory}
+                    onUpdateCategory={handleUpdateCategory}
                 />
             </div>
         </ApiWrapper>

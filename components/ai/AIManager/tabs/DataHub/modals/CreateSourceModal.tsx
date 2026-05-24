@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import * as api from '../../../../../../services/api';
-import { useDataHubQuery } from '../../../../../../hooks/useDataHubState';
+import { useDataSourcesQuery } from '../../../../../../hooks/useDataHubState';
+import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import { DataSource, DataCategory, DetectedSourceType } from '../../../../../../types';
 import { dataSourceSchema } from '../../../../../../utils/validation';
 import { ZodError } from 'zod';
@@ -63,7 +64,8 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
     const [showApiSecret, setShowApiSecret] = useState(false);
 
     // Duplicate detection
-    const { data: dataHubState } = useDataHubQuery();
+    const { data: sourcesList } = useDataSourcesQuery({ page: 1, limit: 200 });
+    const listedSources = sourcesList?.data ?? [];
     const [duplicateWarning, setDuplicateWarning] = useState<{
         isOpen: boolean;
         message: string;
@@ -390,8 +392,8 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
         }
 
         // Check for duplicates
-        if (!duplicateWarning.isOpen && dataHubState?.sources) {
-            const isDuplicate = dataHubState.sources.some(s => {
+        if (!duplicateWarning.isOpen && listedSources.length > 0) {
+            const isDuplicate = listedSources.some(s => {
                 if (s.id === source?.id) return false; // Ignore self when editing
 
                 if (type === 'webhook' && s.type === 'webhook') {
@@ -463,6 +465,17 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
             });
         } catch (e) {
             console.error('Failed to save source:', e);
+            if (e instanceof DataHubApiError) {
+                if (e.status === 400) {
+                    setErrors({ form: e.message });
+                } else if (e.status === 409) {
+                    setDuplicateWarning({ isOpen: true, message: e.message });
+                } else {
+                    setErrors({ form: e.message });
+                }
+            } else if (e instanceof Error) {
+                setErrors({ form: e.message });
+            }
         } finally {
             setIsSaving(false);
         }

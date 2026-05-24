@@ -1,0 +1,249 @@
+{
+  "generatedAt": "2026-02-23",
+  "sourceOfTruth": [
+    "components/Dashboard.tsx",
+    "components/AICenter.tsx",
+    "components/ai/AIManager/index.tsx",
+    "components/ai/AIManager/tabs/DataHubTab.tsx",
+    "components/ai/AIManager/tabs/DataHub/AdvancedFeatures.tsx"
+  ],
+  "root": {
+    "id": "dashboard.ai",
+    "routeOrViewKey": "view=ai",
+    "componentPath": "components/AICenter.tsx"
+  },
+  "tabs": [
+    {
+      "id": "aiCenter.manager",
+      "parentId": "dashboard.ai",
+      "labelKey": "ai_manager",
+      "routeOrViewKey": "AICenter.activeTab=manager",
+      "componentPath": "components/ai/AIManager/index.tsx"
+    },
+    {
+      "id": "aiCenter.agents",
+      "parentId": "dashboard.ai",
+      "labelKey": "ai_agents",
+      "routeOrViewKey": "AICenter.activeTab=agents",
+      "componentPath": "components/ai/AIAgents.tsx"
+    },
+    {
+      "id": "aiCenter.training",
+      "parentId": "dashboard.ai",
+      "labelKey": "ai_training",
+      "routeOrViewKey": "AICenter.activeTab=training",
+      "componentPath": "components/ai/TrainingCenter.tsx"
+    },
+    {
+      "id": "aiCenter.analytics",
+      "parentId": "dashboard.ai",
+      "labelKey": "ai_analytics",
+      "routeOrViewKey": "AICenter.activeTab=analytics",
+      "componentPath": "components/ai/AnalyticsDashboard.tsx"
+    },
+    {
+      "id": "aiCenter.config",
+      "parentId": "dashboard.ai",
+      "labelKey": "ai_config",
+      "routeOrViewKey": "AICenter.activeTab=config",
+      "componentPath": "components/ai/APIConfig.tsx",
+      "notes": "این تب طبق UI به Settings/Integrations هم می‌تواند navigate کند."
+    },
+    {
+      "id": "aiCenter.topicRouting",
+      "parentId": "dashboard.ai",
+      "labelKey": null,
+      "routeOrViewKey": "AICenter.activeTab=topic_routing",
+      "componentPath": "components/ai/TopicRouting.tsx",
+      "notes": "Label در UI فعلاً hard-coded است."
+    },
+
+    {
+      "id": "aiManager.overview",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_overview",
+      "routeOrViewKey": "AIManager.activeTab=overview",
+      "componentPath": "components/ai/AIManager/tabs/OverviewTab.tsx"
+    },
+    {
+      "id": "aiManager.decisionEngine",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_decision_engine",
+      "routeOrViewKey": "AIManager.activeTab=decision_engine",
+      "componentPath": "components/ai/AIManager/tabs/DecisionEngineTab.tsx"
+    },
+    {
+      "id": "aiManager.orchestration",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_orchestration",
+      "routeOrViewKey": "AIManager.activeTab=orchestration",
+      "componentPath": "components/ai/AIManager/tabs/OrchestrationTab.tsx"
+    },
+    {
+      "id": "aiManager.learning",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_learning",
+      "routeOrViewKey": "AIManager.activeTab=learning",
+      "componentPath": "components/ai/AIManager/tabs/LearningTab.tsx"
+    },
+    {
+      "id": "aiManager.monitoring",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_monitoring",
+      "routeOrViewKey": "AIManager.activeTab=monitoring",
+      "componentPath": "components/ai/AIManager/tabs/MonitoringTab.tsx"
+    },
+    {
+      "id": "aiManager.scenarios",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_scenarios",
+      "routeOrViewKey": "AIManager.activeTab=scenarios",
+      "componentPath": "components/ai/AIManager/tabs/ScenariosTab.tsx"
+    },
+    {
+      "id": "aiManager.dataHub",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_data_hub",
+      "routeOrViewKey": "AIManager.activeTab=data_hub",
+      "componentPath": "components/ai/AIManager/tabs/DataHubTab.tsx"
+    },
+    {
+      "id": "aiManager.backtesting",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_backtesting",
+      "routeOrViewKey": "AIManager.activeTab=backtesting",
+      "componentPath": "components/ai/AIManager/tabs/BacktestingTab.tsx"
+    },
+    {
+      "id": "aiManager.logs",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_logs",
+      "routeOrViewKey": "AIManager.activeTab=logs",
+      "componentPath": "components/ai/AIManager/tabs/SystemLogsTab.tsx"
+    },
+    {
+      "id": "aiManager.settings",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_settings",
+      "routeOrViewKey": "AIManager.activeTab=settings",
+      "componentPath": "components/ai/AIManager/tabs/SettingsTab.tsx"
+    },
+    {
+      "id": "aiManager.autopilot",
+      "parentId": "aiCenter.manager",
+      "labelKey": "artemis_autopilot",
+      "routeOrViewKey": "AIManager.activeTab=autopilot",
+      "componentPath": "components/ai/AIManager/tabs/AutopilotTab.tsx"
+    },
+
+    {
+      "id": "dataHub.sources",
+      "parentId": "aiManager.dataHub",
+      "labelKey": "data_sources",
+      "routeOrViewKey": "DataHubTab.activeView=sources",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/DataSourcesPanel.tsx"
+    },
+    {
+      "id": "dataHub.categories",
+      "parentId": "aiManager.dataHub",
+      "labelKey": "categories",
+      "routeOrViewKey": "DataHubTab.activeView=categories",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/CategoriesPanel.tsx"
+    },
+    {
+      "id": "dataHub.pipeline",
+      "parentId": "aiManager.dataHub",
+      "labelKey": "data_pipeline",
+      "routeOrViewKey": "DataHubTab.activeView=pipeline",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx"
+    },
+    {
+      "id": "dataHub.health",
+      "parentId": "aiManager.dataHub",
+      "labelKey": "health_monitoring",
+      "routeOrViewKey": "DataHubTab.activeView=health",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/HealthPanel.tsx",
+      "notes": "در `DataHubTab.tsx` آیتم nav وجود دارد ولی render شرطی برای activeView='health' دیده نشد (نیاز به wiring در فاز ۲)."
+    },
+    {
+      "id": "dataHub.logs",
+      "parentId": "aiManager.dataHub",
+      "labelKey": "access_logs",
+      "routeOrViewKey": "DataHubTab.activeView=logs",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/LogsPanel.tsx"
+    },
+    {
+      "id": "dataHub.advanced",
+      "parentId": "aiManager.dataHub",
+      "labelKey": "advanced_features",
+      "routeOrViewKey": "DataHubTab.activeView=advanced",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/AdvancedFeatures.tsx"
+    },
+    {
+      "id": "dataHub.telegram",
+      "parentId": "aiManager.dataHub",
+      "labelKey": "telegram_collector",
+      "routeOrViewKey": "DataHubTab.activeView=telegram",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/TelegramPanel.tsx",
+      "notes": "TelegramDataPanel هم در همین view رندر می‌شود."
+    },
+
+    {
+      "id": "dataHub.advanced.crawlers",
+      "parentId": "dataHub.advanced",
+      "labelKey": "web_crawlers",
+      "routeOrViewKey": "AdvancedFeatures.activeFeature=crawlers",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/advanced/WebCrawlerConfig.tsx"
+    },
+    {
+      "id": "dataHub.advanced.discovery",
+      "parentId": "dataHub.advanced",
+      "labelKey": "auto_discovery",
+      "routeOrViewKey": "AdvancedFeatures.activeFeature=discovery",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/advanced/AutoDiscoveryConfig.tsx"
+    },
+    {
+      "id": "dataHub.advanced.prioritization",
+      "parentId": "dataHub.advanced",
+      "labelKey": "smart_prioritization",
+      "routeOrViewKey": "AdvancedFeatures.activeFeature=prioritization",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/advanced/SmartPrioritization.tsx"
+    },
+    {
+      "id": "dataHub.advanced.access",
+      "parentId": "dataHub.advanced",
+      "labelKey": "access_control",
+      "routeOrViewKey": "AdvancedFeatures.activeFeature=access",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/advanced/AccessControlPanel.tsx"
+    },
+    {
+      "id": "dataHub.advanced.blacklist",
+      "parentId": "dataHub.advanced",
+      "labelKey": "blacklist_whitelist",
+      "routeOrViewKey": "AdvancedFeatures.activeFeature=blacklist",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/advanced/BlacklistWhitelist.tsx"
+    },
+    {
+      "id": "dataHub.advanced.telegramPublisher",
+      "parentId": "dataHub.advanced",
+      "labelKey": "telegram_publisher",
+      "routeOrViewKey": "AdvancedFeatures.activeFeature=telegram",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/advanced/TelegramPublisher.tsx"
+    },
+    {
+      "id": "dataHub.advanced.automation",
+      "parentId": "dataHub.advanced",
+      "labelKey": "automation_routing",
+      "routeOrViewKey": "AdvancedFeatures.activeFeature=automation",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/advanced/AutomationTopics.tsx"
+    },
+    {
+      "id": "dataHub.advanced.archiving",
+      "parentId": "dataHub.advanced",
+      "labelKey": "archiving",
+      "routeOrViewKey": "AdvancedFeatures.activeFeature=archive",
+      "componentPath": "components/ai/AIManager/tabs/DataHub/advanced/Archiving.tsx"
+    }
+  ]
+}
+
