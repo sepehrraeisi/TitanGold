@@ -36,3 +36,17 @@
   2. **Validation (400)**: URL نامعتبر یا فیلد خالی ارسال کنید → `400` از zod؛ خطا inline در فرم Create/Edit (`errors.form` / فیلدها).  
   3. **FK conflict (409)**: `DELETE ...?hard=true` روی منبعی با `collected_data`/`data_queue` → `409` «Cannot delete data source: related data exists»؛ بنر conflict در تب Sources.  
   4. **Server (500)**: Postgres/backend down → `GET/POST` با `500`؛ UI بنر خطای سرور + دکمه **Retry** (refetch `useDataSourcesQuery`).
+
+### dataHub.categories – Data Categories (GAP-010 closed – UI backend-first)
+
+- **Success Scenario (UI: list → create → update → delete)**  
+  1. `AI Center → DataHub → Categories` → Network: `GET /api/v1/data-categories` (آرایه JSON، نه `fetchDataHubState`).  
+  2. **Create**: Add Category → Save → `POST /api/v1/data-categories` → `201`.  
+  3. **Update**: Edit → Save → `PUT /api/v1/data-categories/:id` → `200`.  
+  4. **Delete**: Delete روی دسته بدون source وابسته → `DELETE /api/v1/data-categories/:id` → `200` با پیام موفق.
+
+- **Failure Scenario (duplicate 409 + delete in use 400)**  
+  1. **Duplicate (409)**: همان `name` دوباره → `POST` یا `PUT` با `409`؛ بنر conflict در تب Categories.  
+  2. **In use (400)**: حذف دسته‌ای که `data_sources.category` به آن اشاره دارد → `400` با پیام تعداد sourceهای وابسته.  
+  3. **Validation (400)**: `name` خالی یا `color` نامعتبر → `400`؛ خطا inline در مودال.  
+  4. **Server (500)**: backend down → بنر + Retry (refetch `useDataCategoriesQuery`).

@@ -15,6 +15,9 @@
 | تب Sources از API واقعی لیست می‌گیرد (نه IndexedDB) | `services/dataSourcesApi.ts`, `hooks/useDataHubState.ts` | `fetchDataSources` → `GET /api/v1/data-sources`; `useDataSourcesQuery` با `queryKey` جدا از `useDataHubQuery` | Network tab در تب Sources باید `GET /api/v1/data-sources?page=&limit=` را نشان دهد. |
 | mutations Sources به backend POST/PUT/DELETE/PATCH می‌زنند | `services/dataSourcesApi.ts`, `hooks/useDataHubState.ts` | `createDataSource`, `updateDataSource`, `deleteDataSource`, `restoreDataSource`; invalidate `DATA_HUB_KEYS.sources` | Create/Edit/Delete در UI باید همان متدها را روی `/api/v1/data-sources` فراخوانی کند. |
 | pagination Sources در UI با پاسخ backend sync است | `components/ai/AIManager/tabs/DataHub/DataSourcesPanel.tsx`, `components/ai/AIManager/tabs/DataHub/hooks/useDataHub.ts` | props `pagination`, `page`, `onPageChange` از `sourcesResult.pagination` | Previous/Next و خلاصه «Page X · N of total» از `hasNextPage`/`hasPrevPage`/`total` پر می‌شود. |
+| تب Categories از API واقعی لیست می‌گیرد | `services/dataCategoriesApi.ts`, `hooks/useDataHubState.ts` | `fetchDataCategories` → `GET /api/v1/data-categories`; `useDataCategoriesQuery` | Network tab در تب Categories باید `GET /api/v1/data-categories` را نشان دهد. |
+| mutations Categories به backend POST/PUT/DELETE می‌زنند | `services/dataCategoriesApi.ts`, `components/ai/AIManager/tabs/DataHub/CategoriesPanel.tsx` | `createDataCategory`, `updateDataCategory`, `deleteDataCategory`; بدون `fetchDataHubState` در delete | Create/Edit/Delete از UI یا مودال باید همان endpointها را فراخوانی کند. |
+| Categories دیگر delete محلی ندارد | `components/ai/AIManager/tabs/DataHub/CategoriesPanel.tsx` | `handleDeleteCategory` prop از `useDataHub` → mutation | grep روی `CategoriesPanel.tsx` برای `fetchDataHubState` باید خالی باشد. |
 
 #### Production Validation – dataHub.telegram
 

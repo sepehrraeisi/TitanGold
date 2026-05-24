@@ -1,0 +1,685 @@
+{
+  "generatedAt": "2026-02-23T20:16:29.765Z",
+  "registrySource": "backend/services/agents/registry.js",
+  "registryAgents": [
+    {
+      "agent_key": "technical",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "risk",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "sentiment",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "pattern",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "price_prediction",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "arbitrage",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "portfolio",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "liquidity",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "trend",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "optimization",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "order",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "fundamental",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "market_intelligence",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "volume",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    },
+    {
+      "agent_key": "timing",
+      "source": "registry",
+      "sourceFile": "backend/services/agents/registry.js"
+    }
+  ],
+  "dbAgents": [
+    {
+      "id": "04b6ca95-5fd3-471d-a568-bd7f1c391d83",
+      "agent_key": "arbitrage",
+      "name": "Arbitrage Agent",
+      "type": "arbitrage",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "93.80",
+      "performance_score": "91.20",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.241Z",
+      "updated_at": "2026-02-23T13:23:08.856Z",
+      "last_active_at": "2026-02-23T13:23:08.856Z"
+    },
+    {
+      "id": "82f14c47-3a0f-412f-b8d3-09b32dcb6e8f",
+      "agent_key": "fundamental",
+      "name": "Fundamental Agent",
+      "type": "fundamental_analysis",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "82.40",
+      "performance_score": "79.20",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.263Z",
+      "updated_at": "2026-02-10T14:52:45.720Z",
+      "last_active_at": "2026-02-10T14:52:45.720Z"
+    },
+    {
+      "id": "d0431c64-0f21-4ec7-9950-47594cdb77e8",
+      "agent_key": "liquidity",
+      "name": "Liquidity Agent",
+      "type": "liquidity_analysis",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "86.70",
+      "performance_score": "84.10",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.249Z",
+      "updated_at": "2026-01-05T09:55:51.911Z",
+      "last_active_at": null
+    },
+    {
+      "id": "227c1f77-8de7-406d-9f97-bb90e09e8817",
+      "agent_key": "market_intelligence",
+      "name": "Market Intelligence Agent",
+      "type": "market_intelligence",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "88.70",
+      "performance_score": "86.90",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.266Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    },
+    {
+      "id": "6e8cf831-bb74-460e-97d1-d08318345b07",
+      "agent_key": "optimization",
+      "name": "Optimization Agent",
+      "type": "optimization",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "89.50",
+      "performance_score": "87.30",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.257Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    },
+    {
+      "id": "3a92e0d3-60a7-4dc7-a169-279b0d50e67c",
+      "agent_key": "order",
+      "name": "Order Management Agent",
+      "type": "order_management",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "95.20",
+      "performance_score": "93.80",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.261Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    },
+    {
+      "id": "ce9ac025-e2c3-49f3-bb0c-a0723700c7c5",
+      "agent_key": "pattern",
+      "name": "Pattern Recognition Agent",
+      "type": "pattern_recognition",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "85.30",
+      "performance_score": "83.70",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.231Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    },
+    {
+      "id": "a0f71966-eb71-403e-be16-9892ebc17f49",
+      "agent_key": "portfolio",
+      "name": "Portfolio Allocation Agent",
+      "type": "portfolio_management",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "90.20",
+      "performance_score": "88.60",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.245Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    },
+    {
+      "id": "e0516b87-45a4-4a56-b63e-c7623459660b",
+      "agent_key": "price_prediction",
+      "name": "Price Prediction Agent",
+      "type": "price_prediction",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "79.20",
+      "performance_score": "76.40",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.236Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    },
+    {
+      "id": "79bbdf0b-94a3-4cbc-adef-98c25f5ba1a7",
+      "agent_key": "risk",
+      "name": "Risk Management Agent",
+      "type": "risk_management",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "94.10",
+      "performance_score": "92.30",
+      "total_decisions": 9,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.217Z",
+      "updated_at": "2026-02-23T13:23:31.526Z",
+      "last_active_at": "2026-02-23T13:23:31.526Z"
+    },
+    {
+      "id": "21c3a3d4-75db-44a1-9249-fbf1c763759d",
+      "agent_key": "sentiment",
+      "name": "Sentiment Analysis Agent",
+      "type": "sentiment_analysis",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "81.50",
+      "performance_score": "78.90",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.221Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    },
+    {
+      "id": "f527c6f6-55ca-4193-a286-ccfed51261ee",
+      "agent_key": "technical",
+      "name": "Technical Analysis Agent",
+      "type": "technical_analysis",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "87.20",
+      "performance_score": "85.50",
+      "total_decisions": 16,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.211Z",
+      "updated_at": "2026-01-06T17:44:18.046Z",
+      "last_active_at": "2026-01-06T17:44:18.046Z"
+    },
+    {
+      "id": "a125ec43-a68d-425d-b4be-c002c4b2203e",
+      "agent_key": "timing",
+      "name": "Timing Agent",
+      "type": "timing",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "83.80",
+      "performance_score": "81.40",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.272Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    },
+    {
+      "id": "2cc30898-f73f-4842-9563-00d1617ac0a6",
+      "agent_key": "trend",
+      "name": "Trend Agent",
+      "type": "trend_detection",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "84.90",
+      "performance_score": "82.50",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.252Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    },
+    {
+      "id": "5ebbc70f-7034-4a86-bc24-e14307dc8862",
+      "agent_key": "volume",
+      "name": "Volume Agent",
+      "type": "volume_analysis",
+      "status": "active",
+      "is_enabled": true,
+      "accuracy": "87.90",
+      "performance_score": "85.70",
+      "total_decisions": 0,
+      "successful_decisions": 0,
+      "version": "1.0.0",
+      "created_at": "2025-12-29T12:20:49.268Z",
+      "updated_at": "2026-01-03T17:45:18.654Z",
+      "last_active_at": null
+    }
+  ],
+  "joined": [
+    {
+      "agent_key": "arbitrage",
+      "registry": {
+        "agent_key": "arbitrage",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "04b6ca95-5fd3-471d-a568-bd7f1c391d83",
+        "agent_key": "arbitrage",
+        "name": "Arbitrage Agent",
+        "type": "arbitrage",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "93.80",
+        "performance_score": "91.20",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.241Z",
+        "updated_at": "2026-02-23T13:23:08.856Z",
+        "last_active_at": "2026-02-23T13:23:08.856Z"
+      }
+    },
+    {
+      "agent_key": "fundamental",
+      "registry": {
+        "agent_key": "fundamental",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "82f14c47-3a0f-412f-b8d3-09b32dcb6e8f",
+        "agent_key": "fundamental",
+        "name": "Fundamental Agent",
+        "type": "fundamental_analysis",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "82.40",
+        "performance_score": "79.20",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.263Z",
+        "updated_at": "2026-02-10T14:52:45.720Z",
+        "last_active_at": "2026-02-10T14:52:45.720Z"
+      }
+    },
+    {
+      "agent_key": "liquidity",
+      "registry": {
+        "agent_key": "liquidity",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "d0431c64-0f21-4ec7-9950-47594cdb77e8",
+        "agent_key": "liquidity",
+        "name": "Liquidity Agent",
+        "type": "liquidity_analysis",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "86.70",
+        "performance_score": "84.10",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.249Z",
+        "updated_at": "2026-01-05T09:55:51.911Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "market_intelligence",
+      "registry": {
+        "agent_key": "market_intelligence",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "227c1f77-8de7-406d-9f97-bb90e09e8817",
+        "agent_key": "market_intelligence",
+        "name": "Market Intelligence Agent",
+        "type": "market_intelligence",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "88.70",
+        "performance_score": "86.90",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.266Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "optimization",
+      "registry": {
+        "agent_key": "optimization",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "6e8cf831-bb74-460e-97d1-d08318345b07",
+        "agent_key": "optimization",
+        "name": "Optimization Agent",
+        "type": "optimization",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "89.50",
+        "performance_score": "87.30",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.257Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "order",
+      "registry": {
+        "agent_key": "order",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "3a92e0d3-60a7-4dc7-a169-279b0d50e67c",
+        "agent_key": "order",
+        "name": "Order Management Agent",
+        "type": "order_management",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "95.20",
+        "performance_score": "93.80",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.261Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "pattern",
+      "registry": {
+        "agent_key": "pattern",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "ce9ac025-e2c3-49f3-bb0c-a0723700c7c5",
+        "agent_key": "pattern",
+        "name": "Pattern Recognition Agent",
+        "type": "pattern_recognition",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "85.30",
+        "performance_score": "83.70",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.231Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "portfolio",
+      "registry": {
+        "agent_key": "portfolio",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "a0f71966-eb71-403e-be16-9892ebc17f49",
+        "agent_key": "portfolio",
+        "name": "Portfolio Allocation Agent",
+        "type": "portfolio_management",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "90.20",
+        "performance_score": "88.60",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.245Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "price_prediction",
+      "registry": {
+        "agent_key": "price_prediction",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "e0516b87-45a4-4a56-b63e-c7623459660b",
+        "agent_key": "price_prediction",
+        "name": "Price Prediction Agent",
+        "type": "price_prediction",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "79.20",
+        "performance_score": "76.40",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.236Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "risk",
+      "registry": {
+        "agent_key": "risk",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "79bbdf0b-94a3-4cbc-adef-98c25f5ba1a7",
+        "agent_key": "risk",
+        "name": "Risk Management Agent",
+        "type": "risk_management",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "94.10",
+        "performance_score": "92.30",
+        "total_decisions": 9,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.217Z",
+        "updated_at": "2026-02-23T13:23:31.526Z",
+        "last_active_at": "2026-02-23T13:23:31.526Z"
+      }
+    },
+    {
+      "agent_key": "sentiment",
+      "registry": {
+        "agent_key": "sentiment",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "21c3a3d4-75db-44a1-9249-fbf1c763759d",
+        "agent_key": "sentiment",
+        "name": "Sentiment Analysis Agent",
+        "type": "sentiment_analysis",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "81.50",
+        "performance_score": "78.90",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.221Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "technical",
+      "registry": {
+        "agent_key": "technical",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "f527c6f6-55ca-4193-a286-ccfed51261ee",
+        "agent_key": "technical",
+        "name": "Technical Analysis Agent",
+        "type": "technical_analysis",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "87.20",
+        "performance_score": "85.50",
+        "total_decisions": 16,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.211Z",
+        "updated_at": "2026-01-06T17:44:18.046Z",
+        "last_active_at": "2026-01-06T17:44:18.046Z"
+      }
+    },
+    {
+      "agent_key": "timing",
+      "registry": {
+        "agent_key": "timing",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "a125ec43-a68d-425d-b4be-c002c4b2203e",
+        "agent_key": "timing",
+        "name": "Timing Agent",
+        "type": "timing",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "83.80",
+        "performance_score": "81.40",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.272Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "trend",
+      "registry": {
+        "agent_key": "trend",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "2cc30898-f73f-4842-9563-00d1617ac0a6",
+        "agent_key": "trend",
+        "name": "Trend Agent",
+        "type": "trend_detection",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "84.90",
+        "performance_score": "82.50",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.252Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    },
+    {
+      "agent_key": "volume",
+      "registry": {
+        "agent_key": "volume",
+        "source": "registry",
+        "sourceFile": "backend/services/agents/registry.js"
+      },
+      "db": {
+        "id": "5ebbc70f-7034-4a86-bc24-e14307dc8862",
+        "agent_key": "volume",
+        "name": "Volume Agent",
+        "type": "volume_analysis",
+        "status": "active",
+        "is_enabled": true,
+        "accuracy": "87.90",
+        "performance_score": "85.70",
+        "total_decisions": 0,
+        "successful_decisions": 0,
+        "version": "1.0.0",
+        "created_at": "2025-12-29T12:20:49.268Z",
+        "updated_at": "2026-01-03T17:45:18.654Z",
+        "last_active_at": null
+      }
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import {
 import {
     useDataHubQuery,
     useDataSourcesQuery,
+    useDataCategoriesQuery,
     useAgentsQuery,
     useUpdateSourceMutation,
     useCreateSourceMutation,
@@ -41,6 +42,13 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         refetch: refetchSources,
         isFetching: isFetchingSources,
     } = useDataSourcesQuery({ page: sourcesPage, limit: sourcesLimit });
+    const {
+        data: categoriesResult,
+        isLoading: isLoadingCategories,
+        error: categoriesErrorObj,
+        refetch: refetchCategories,
+        isFetching: isFetchingCategories,
+    } = useDataCategoriesQuery();
     const { data: agentsData, isLoading: isLoadingAgentsQuery } = useAgentsQuery();
 
     const updateSourceMutation = useUpdateSourceMutation();
@@ -78,14 +86,17 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const mergedDataHub = useMemo((): DataHubState | null => {
         if (!dataHub) return null;
-        if (!sourcesResult) return dataHub;
+        const sources = sourcesResult?.data ?? dataHub.sources;
+        const categoriesBase = categoriesResult ?? dataHub.categories;
+        const categories = api.enrichCategoriesWithSourceCounts(categoriesBase, sources);
         return {
             ...dataHub,
-            sources: sourcesResult.data,
-            totalSources: sourcesResult.pagination.total,
-            activeSources: sourcesResult.data.filter(s => s.status === 'active').length,
+            sources,
+            categories,
+            totalSources: sourcesResult?.pagination.total ?? dataHub.totalSources,
+            activeSources: sources.filter(s => s.status === 'active').length,
         };
-    }, [dataHub, sourcesResult]);
+    }, [dataHub, sourcesResult, categoriesResult]);
 
     const sourcesPagination = sourcesResult?.pagination;
     const sourcesApiError = sourcesErrorObj instanceof DataHubApiError
@@ -94,9 +105,15 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
           ? sourcesErrorObj
           : null;
 
+    const categoriesApiError = categoriesErrorObj instanceof DataHubApiError
+        ? categoriesErrorObj
+        : categoriesErrorObj instanceof Error
+          ? categoriesErrorObj
+          : null;
+
     // Derived State from Query
     const agents = agentsData || [];
-    const isLoading = isLoadingDataHub || isLoadingSources;
+    const isLoading = isLoadingDataHub || isLoadingSources || isLoadingCategories;
     const isLoadingAgents = isLoadingAgentsQuery;
     const dataHubError = dataHubErrorObj instanceof Error ? dataHubErrorObj.message : null;
 
@@ -700,6 +717,9 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         refetchSources,
         isFetchingSources,
         sourcesApiError,
+        refetchCategories,
+        isFetchingCategories,
+        categoriesApiError,
         isLoading,
         dataHubError,
         currentError,
@@ -728,7 +748,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setCollectorError,
         collectorMessage,
         setCollectorMessage,
-        categoriesError: null, // Categories use mutation error usually
+        categoriesError: categoriesApiError instanceof Error ? categoriesApiError.message : null,
         setCategoriesError: () => { },
         healthError: healthAsync.error,
         setHealthError: healthAsync.setError,

@@ -8,6 +8,7 @@ export const DATA_HUB_KEYS = {
     agents: () => [...DATA_HUB_KEYS.all, 'agents'] as const,
     sources: (page?: number, limit?: number) =>
         [...DATA_HUB_KEYS.all, 'sources', { page: page ?? 1, limit: limit ?? 20 }] as const,
+    categories: () => [...DATA_HUB_KEYS.all, 'categories'] as const,
 };
 
 export const useDataHubQuery = () => {
@@ -24,6 +25,14 @@ export const useDataSourcesQuery = (params?: { page?: number; limit?: number }) 
     return useQuery({
         queryKey: DATA_HUB_KEYS.sources(page, limit),
         queryFn: () => api.fetchDataSources({ page, limit }),
+        staleTime: 30 * 1000,
+    });
+};
+
+export const useDataCategoriesQuery = () => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.categories(),
+        queryFn: api.fetchDataCategories,
         staleTime: 30 * 1000,
     });
 };
@@ -59,6 +68,7 @@ export const useCreateSourceMutation = () => {
         mutationFn: api.createDataSource,
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.categories() });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });
@@ -71,6 +81,7 @@ export const useUpdateSourceMutation = () => {
             api.updateDataSource(id, updates),
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.categories() });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });
@@ -83,6 +94,7 @@ export const useDeleteSourceMutation = () => {
             api.deleteDataSource(id, { hard }),
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.categories() });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });
@@ -94,17 +106,18 @@ export const useRestoreSourceMutation = () => {
         mutationFn: api.restoreDataSource,
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.categories() });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });
 };
 
-// Mutations for Data Categories (still IndexedDB until categories GAP)
 export const useCreateCategoryMutation = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: api.createDataCategory,
         onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.categories() });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });
@@ -116,6 +129,7 @@ export const useUpdateCategoryMutation = () => {
         mutationFn: ({ id, updates }: { id: string; updates: Partial<DataCategory> }) =>
             api.updateDataCategory(id, updates),
         onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.categories() });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });
@@ -126,6 +140,7 @@ export const useDeleteCategoryMutation = () => {
     return useMutation({
         mutationFn: api.deleteDataCategory,
         onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.categories() });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });

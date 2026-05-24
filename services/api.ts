@@ -21792,40 +21792,15 @@ export const checkDataHubHealth = async (): Promise<DataHubHealth> => {
     }
 };
 
-// Create Data Category
-export const createDataCategory = async (category: Omit<DataCategory, 'id' | 'createdAt' | 'sourceCount'>): Promise<DataCategory> => {
-    try {
-        const dataHub = await fetchDataHubState();
-
-        const newCategory: DataCategory = {
-            ...category,
-            id: `CAT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            sourceCount: 0,
-            createdAt: new Date().toISOString(),
-        };
-
-        dataHub.categories.push(newCategory);
-        dataHub.updatedAt = new Date().toISOString();
-
-        await database.save('settings', {
-            key: 'data_hub_state',
-            value: dataHub,
-        });
-
-        // Update Artemis state
-        const artemis = await fetchArtemisState();
-        artemis.dataHub = dataHub;
-        await database.save('settings', {
-            key: 'artemis_state',
-            value: artemis,
-        });
-
-        return newCategory;
-    } catch (e) {
-        console.error('Failed to create data category:', e);
-        throw e;
-    }
-};
+// Data Hub categories — backend API (GAP-010)
+export {
+    fetchDataCategories,
+    fetchDataCategory,
+    createDataCategory,
+    updateDataCategory,
+    deleteDataCategory,
+    enrichCategoriesWithSourceCounts,
+} from './dataCategoriesApi';
 
 // ==================== Advanced Data Hub Features ====================
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DataCategory } from '../../../../../../types';
+import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 
 type Props = {
     category?: DataCategory | null;
@@ -16,6 +17,7 @@ const CreateCategoryModal: React.FC<Props> = ({ category, onClose, onSave, t }) 
     const [tags, setTags] = useState(category?.tags?.join(', ') || '');
     const [dataTypes, setDataTypes] = useState(category?.dataTypes?.join(', ') || '');
     const [isSaving, setIsSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
     const handleSubmit = async () => {
         if (!name) {
@@ -23,6 +25,7 @@ const CreateCategoryModal: React.FC<Props> = ({ category, onClose, onSave, t }) 
             return;
         }
 
+        setFormError(null);
         setIsSaving(true);
         try {
             await onSave({
@@ -35,6 +38,11 @@ const CreateCategoryModal: React.FC<Props> = ({ category, onClose, onSave, t }) 
             });
         } catch (e) {
             console.error('Failed to save category:', e);
+            if (e instanceof DataHubApiError) {
+                setFormError(e.message);
+            } else if (e instanceof Error) {
+                setFormError(e.message);
+            }
         } finally {
             setIsSaving(false);
         }
@@ -56,6 +64,11 @@ const CreateCategoryModal: React.FC<Props> = ({ category, onClose, onSave, t }) 
                 </h3>
 
                 <div className="space-y-5">
+                    {formError && (
+                        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                            {formError}
+                        </div>
+                    )}
                     <div>
                         <label className="block text-sm font-medium text-muted-foreground mb-2">{t('name') || 'Category Name'} *</label>
                         <input
