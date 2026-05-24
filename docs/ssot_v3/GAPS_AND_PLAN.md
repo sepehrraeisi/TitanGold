@@ -17,4 +17,6 @@
 | GAP-011 | RBAC نقش‌محور روی CRUD `/api/v1/data-categories` | Low | `dataHub.categories` | Open | v3.1 | فعلاً فقط `authenticate`؛ بدون `authorize()` روی write/delete. |
 | GAP-012 | اتصال تب Data Pipeline به API واقعی (حذف `buildPipelineSnapshot` / `fetchDataHubState` برای snapshot، history، normalization) | Medium | `dataHub.pipeline` | Closed | v3.0 | `GET /api/v1/data-sources/pipeline` + `services/dataPipelineApi.ts` + `usePipelineQuery`؛ تب Pipeline دیگر snapshot/history/normalization را از IndexedDB نمی‌گیرد. History ساعتی از `collected_data` (GAP-003 برای snapshot پایدار). |
 | GAP-013 | اتصال تب Access Logs به API واقعی `GET /api/v1/data-sources/access-logs` (حذف `dataHub.accessLogs` از IndexedDB) | Medium | `dataHub.logs` | Closed | v3.0 | `services/dataAccessLogsApi.ts` + `useAccessLogsQuery`؛ نگاشت `data_hub_logs` → `DataAccessLog`. |
+| GAP-014 | RBAC نقش‌محور روی `GET /api/v1/data-sources/access-logs` (مثلاً فقط `admin`/`analyst`) | Low | `dataHub.logs` | Open | v3.1 | فعلاً فقط `authenticate` + rate limit؛ بدون `authorize()` روی read. |
+| GAP-015 | مقیاس‌پذیری access-logs (cursor pagination، aggregate cache برای `statusCounts`، composite index `(source_id, created_at DESC)`) | Low | `dataHub.logs` | Open | v3.1 | برای ~50k ردیف با ایندکس فعلی کافی است؛ برای scale بسیار بالاتر. |
 

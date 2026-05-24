@@ -70,8 +70,10 @@
 
 | سناریو | Endpoint | Status / شرط | UI |
 |--------|----------|----------------|-----|
-| **Success** — لیست لاگ + شمارش | `GET /api/v1/data-sources/access-logs?limit=100&offset=0` | **200** + `{ data, pagination, statusCounts }` | DevTools: فقط این URL برای لاگ‌های تب Logs (نه `fetchDataHubState`). badgeهای success/error/warning از `statusCounts`. فیلترها client-side روی `data[]`. |
-| **Empty state** — جدول خالی | `GET .../access-logs` | **200** + `data: []` | «No access logs yet»؛ بدون crash. |
-| **Failure** — backend down | `GET .../access-logs` | **500** / network error | `ApiWrapper` بنر خطا + Retry (`useAccessLogsQuery` refetch). |
+| **Success** — list + status counts | `GET /api/v1/data-sources/access-logs?limit=100&offset=0` | **200** + `{ data[], pagination: { total, limit, offset, hasMore }, statusCounts: { success, error, warning } }` | Network: **فقط** این URL (نه `fetchDataHubState`). جدول لاگ از `data[]`؛ badgeها از `statusCounts`. صفحه بعد: `offset=100` (max `limit=500`). |
+| **Empty state** — بدون log | `GET .../access-logs` | **200** + `data: []`, `pagination.total: 0`, counts صفر | «No access logs yet»؛ `ApiWrapper` بدون crash. |
+| **Failure** — backend / DB error | `GET .../access-logs` | **500** `{ error: "Failed to fetch access logs" }` یا قطع شبکه | بنر خطا در `LogsPanel` + **Retry** → `refetch` در `useAccessLogsQuery`؛ تب‌های Sources/Categories/Pipeline unaffected. |
 
-**پیش‌نیاز success:** رکوردهای `data_hub_logs` (مثلاً پس از create/update source در backend).
+**پیش‌نیاز success:** حداقل یک رکورد در `data_hub_logs` (مثلاً بعد از `PUT /api/v1/data-sources/:id` که audit insert می‌زند).
+
+**Auth:** بدون `Authorization` → **401** (authenticate). RBAC نقش → GAP-014 (فعلاً هر authenticated user).

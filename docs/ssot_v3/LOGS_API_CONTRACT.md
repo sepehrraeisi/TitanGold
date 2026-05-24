@@ -26,15 +26,39 @@
 | `GET` | `/api/v1/artemis/logs` | خیر — system logs Artemis |
 | INSERT | `data_hub_logs` در CRUD sources | بله — منبع داده (ستون‌های `action`, `status`, …) |
 
-**وضعیت قبلی فرانت:** `dataHub.accessLogs` از IndexedDB / `fetchDataHubState`؛ `logsAsync` همان state را refresh می‌کرد.
+**وضعیت قبلی (قبل از GAP-013):** `dataHub.accessLogs` از IndexedDB / `fetchDataHubState` + `logsAsync`. **اکنون:** فقط `useAccessLogsQuery` → این endpoint.
 
 ---
 
-## ۳. Endpoint پیشنهادی
+## ۳. Endpoint — `GET /api/v1/data-sources/access-logs`
 
-### `GET /api/v1/data-sources/access-logs`
+### Pagination / volume
 
-**Query:** `limit` (default 100), `offset` (default 0), `source_id?` (uuid), `status?` (`success` \| `failed` \| `timeout` \| `cached` — فیلتر UI)
+| پارامتر | مقدار |
+|---------|--------|
+| `limit` | پیش‌فرض **100**؛ حداکثر **500** (cap در `accessLogsQuerySchema`) |
+| `offset` | پیش‌فرض **0** |
+| `source_id` | اختیاری — UUID |
+| `status` | اختیاری — `success` \| `cached` \| `failed` \| `timeout` |
+
+**حجم (~50k ردیف):** لیست با `ORDER BY created_at DESC LIMIT/OFFSET` + ایندکس `idx_data_hub_logs_created_at` سالم می‌ماند. `COUNT(*)` و `statusCounts` روی کل جدول (یا فیلتر `source_id`) برای 50k معمولاً قابل‌قبول است؛ برای میلیون‌ها → GAP-015 (pagination cursor / aggregate cache).
+
+**ایندکس‌های موجود (`database/schema.sql`):**
+
+- `idx_data_hub_logs_created_at` ON `created_at DESC`
+- `idx_data_hub_logs_source_id` ON `source_id`
+
+فیلتر ترکیبی `source_id` + `created_at` در scale بالا می‌تواند به composite index نیاز داشته باشد (همان GAP-015 اختیاری).
+
+### Security
+
+| لایه | وضعیت |
+|------|--------|
+| Auth | `authenticate` + `readRateLimiter` روی روت (`data-sources.js`) |
+| RBAC نقش | **ندارد** — هر کاربر authenticated می‌تواند بخواند |
+| GAP | **GAP-014** — RBAC read روی `GET /access-logs` (جدا از wiring GAP-013) |
+
+**Query (پیاده‌سازی):** `limit`, `offset`, `source_id?`, `status?`
 
 **Response `200`:**
 
@@ -50,7 +74,8 @@
 
 ---
 
-## ۴. Done (GAP-013)
+## ۴. Done (GAP-013) / Open (GAP-014)
+
 
 - [x] تب Logs: `useAccessLogsQuery` → `GET /access-logs` (نه `dataHub.accessLogs` از IndexedDB)
 - [x] Demo در `DataHub_DEMOS.md`

@@ -108,7 +108,7 @@ grep -rn "dataHub\.pipelineSnapshot\|mergedDataHub\.pipeline" \
 | Symbol | PipelinePanel | useDataHub (pipeline) | DataHubTab (pipeline props) | dataPipelineApi | useDataHubState |
 |--------|---------------|----------------------|----------------------------|-----------------|-----------------|
 | `buildPipelineSnapshot` | — | — | — | — | — |
-| `fetchDataHubState` | — | فقط `logsAsync` (تب Logs، خارج از Pipeline) | — | — | `useDataHubQuery` (state کلی Hub) |
+| `fetchDataHubState` | — | — | — | — | `useDataHubQuery` (state کلی Hub؛ نه دادهٔ Pipeline) |
 | `dataHub.pipelineSnapshot` | — | — | — | — | — |
 
 `buildPipelineSnapshot` / `dataHub.pipelineSnapshot` در `services/api.ts` و advanced/automation باقی است — خارج از scope تب Pipeline.
@@ -118,11 +118,20 @@ grep -rn "dataHub\.pipelineSnapshot\|mergedDataHub\.pipeline" \
 | Claim | File | توضیح |
 |---|---|---|
 | Logs tab از API backend | `services/dataAccessLogsApi.ts` | `GET /api/v1/data-sources/access-logs` |
-| React Query | `hooks/useDataHubState.ts` | `useAccessLogsQuery` |
-| UI wiring | `DataHubTab.tsx`, `useDataHub.ts` | `accessLogs` از query — نه `dataHub.accessLogs` |
+| React Query | `hooks/useDataHubState.ts` | `useAccessLogsQuery` (`enabled` وقتی `activeView === 'logs'`) |
+| UI wiring | `DataHubTab.tsx`, `useDataHub.ts` | `accessLogs` / `logStatusCounts` از query — **نه** `dataHub.accessLogs` |
 | Backend | `backend/services/dataHubAccessLogs.js` | نگاشت `data_hub_logs` → `DataAccessLog` |
 
-**Grep — مسیر Logs (دادهٔ اصلی):** `dataHub.accessLogs` / `fetchDataHubState` در `LogsPanel` و props تب logs در `DataHubTab` — **۰ match** پس از wiring.
+**پس از GAP-013:** تب Logs دیگر از `fetchDataHubState` / `logsAsync` برای دادهٔ اصلی استفاده نمی‌کند (`logsAsync` حذف شده). `useDataHubQuery` همچنان state کلی Hub (advanced/health cache) را از IndexedDB می‌گیرد — جدا از تب Logs.
+
+**Grep — مسیر Logs (دادهٔ اصلی، 2026-05-24):**
+
+```bash
+grep -rn "dataHub\.accessLogs\|fetchDataHubState" \
+  components/ai/AIManager/tabs/DataHub/LogsPanel.tsx \
+  components/ai/AIManager/tabs/DataHubTab.tsx
+# → 0 matches (DataHubTab: accessLogs={accessLogs} از useDataHub)
+```
 
 ### ۱۰. Migrations / Greenfield Bootstrap
 
