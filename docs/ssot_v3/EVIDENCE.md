@@ -80,7 +80,40 @@
 | Trading Engine برای تایید نهایی به Artemis متصل است | `backend/engine/tradingEngine.js` | L706–757 | متد `getArtemisApproval` درخواست `/api/artemis/decision` می‌سازد (opportunity + signals + context) و بر اساس پاسخ Artemis تصمیم به اجرا می‌گیرد، با fallback امن در صورت خطا. |
 | Emergency Stop در Trading Engine هم تریدها را می‌بندد و هم config را غیرفعال و نوتیفیکیشن ارسال می‌کند | `backend/engine/tradingEngine.js` | L1259–1275 | متد `emergencyStop` تمام تریدهای باز را می‌بندد، `config.enabled` را false می‌کند، آن را در DB ذخیره می‌کند و پیام Telegram می‌فرستد. |
 
-### ۸. Migrations / Greenfield Bootstrap
+### ۸. DataHub Pipeline (GAP-012 Closed)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| Pipeline tab از API تجمیعی backend داده می‌گیرد | `services/dataPipelineApi.ts` | L1–65 | `fetchDataPipelineView` → `GET /api/v1/data-sources/pipeline`. |
+| React Query برای Pipeline | `hooks/useDataHubState.ts` | `usePipelineQuery` | کلید `DATA_HUB_KEYS.pipeline()`. |
+| UI wiring بدون IndexedDB برای snapshot | `components/ai/AIManager/tabs/DataHubTab.tsx`, `hooks/useDataHub.ts` | Pipeline props از `usePipelineQuery` | `pipelineSnapshot` / `history` / `normalizationSummary` دیگر از `dataHub.pipelineSnapshot` محلی نیست. |
+| Backend aggregate | `backend/routes/data-sources.js`, `backend/services/dataPipelineSnapshot.js` | `GET /pipeline` | تجمیع از `collected_data`, `data_sources`, `data_categories`. |
+
+**Grep — مسیر Pipeline (دادهٔ اصلی، 2026-05-24):**
+
+```bash
+grep -rn "buildPipelineSnapshot\|fetchDataHubState" \
+  components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx \
+  components/ai/AIManager/tabs/DataHub/hooks/useDataHub.ts \
+  components/ai/AIManager/tabs/DataHubTab.tsx \
+  services/dataPipelineApi.ts \
+  hooks/useDataHubState.ts
+
+grep -rn "dataHub\.pipelineSnapshot\|mergedDataHub\.pipeline" \
+  components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx \
+  components/ai/AIManager/tabs/DataHub/hooks/useDataHub.ts \
+  components/ai/AIManager/tabs/DataHubTab.tsx
+```
+
+| Symbol | PipelinePanel | useDataHub (pipeline) | DataHubTab (pipeline props) | dataPipelineApi | useDataHubState |
+|--------|---------------|----------------------|----------------------------|-----------------|-----------------|
+| `buildPipelineSnapshot` | — | — | — | — | — |
+| `fetchDataHubState` | — | فقط `logsAsync` (تب Logs، خارج از Pipeline) | — | — | `useDataHubQuery` (state کلی Hub) |
+| `dataHub.pipelineSnapshot` | — | — | — | — | — |
+
+`buildPipelineSnapshot` / `dataHub.pipelineSnapshot` در `services/api.ts` و advanced/automation باقی است — خارج از scope تب Pipeline.
+
+### ۹. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |
 |---|---|---|---|

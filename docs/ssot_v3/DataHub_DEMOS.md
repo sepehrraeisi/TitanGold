@@ -55,3 +55,13 @@
   | DB / backend down | `GET` / `POST` / `PUT` / `DELETE` | **500** | بنر خطای سرور + **Retry** (`useDataCategoriesQuery` refetch) |
 
   **توجه:** برای categories، حذف در صورت وابستگی source با **400** برمی‌گردد (نه 409). duplicate فقط روی unique `name` است (**409**).
+
+### dataHub.pipeline – Data Pipeline (GAP-012 closed – UI backend-first)
+
+| سناریو | Endpoint | Status / شرط | UI |
+|--------|----------|----------------|-----|
+| **Success** — snapshot + history + normalization | `GET /api/v1/data-sources/pipeline` | **200** + `{ snapshot, history, normalizationSummary, normalizedData }` | DevTools: فقط این URL برای دادهٔ Pipeline (نه IndexedDB). کارت‌های **Total Records** / **Normalized %** از `snapshot.*`. اگر `history.length > 0`، **Snapshot History** پر می‌شود. **Refresh Pipeline** = refetch همان GET. |
+| **Empty state** — بدون `collected_data` | `GET /api/v1/data-sources/pipeline` | **200** + `snapshot.totalRecords === 0` | پیام «No snapshot available yet…»؛ بدون crash. |
+| **Failure** — backend / DB down | `GET /api/v1/data-sources/pipeline` | **500** یا network error | `ApiWrapper` بنر خطا + **Retry** (`usePipelineQuery` refetch). Sources/Categories همچنان از API خودشان کار می‌کنند. |
+
+**پیش‌نیاز success:** Postgres + migrations؛ چند رکورد `collected_data` (با/بدون `normalized_data`) seed شده باشد.

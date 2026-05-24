@@ -87,6 +87,10 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         categoriesApiError,
         handleDeleteCategory,
         handleRefreshPipelineSnapshot,
+        pipelineSnapshot,
+        pipelineHistory,
+        normalizationSummary,
+        normalizedData,
         formatTimeAgo,
         downloadCSV,
         categoryMetricsById,
@@ -306,10 +310,10 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     {activeView === 'pipeline' && (
                         <PipelinePanel
                             t={t}
-                            pipelineSnapshot={dataHub.pipelineSnapshot}
-                            pipelineHistory={dataHub.pipelineHistory || []}
-                            normalizationSummary={dataHub.normalizationSummary}
-                            normalizedData={dataHub.normalizedData || []}
+                            pipelineSnapshot={pipelineSnapshot}
+                            pipelineHistory={pipelineHistory}
+                            normalizationSummary={normalizationSummary}
+                            normalizedData={normalizedData}
                             handleRefreshPipelineSnapshot={handleRefreshPipelineSnapshot}
                             isLoadingPipeline={isLoadingPipeline}
                             pipelineError={pipelineError}

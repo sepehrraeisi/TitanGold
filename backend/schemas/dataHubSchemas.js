@@ -378,3 +378,62 @@ export const processMessageResponseSchema = z.object({
     normalized: normalizedMessageSchema.nullable(),
     content_hash: z.string()
 });
+
+// Pipeline snapshot (GAP-012)
+const pipelineAccessStatus = z.enum(['success', 'failed', 'cached', 'timeout']);
+const pipelineNormalizedStatus = z.enum(['ready', 'warning', 'rejected']);
+
+export const dataPipelineSnapshotSchema = z.object({
+    lastRefreshed: z.string(),
+    totalRequests24h: z.number().int().nonnegative(),
+    passed24h: z.number().int().nonnegative(),
+    failed24h: z.number().int().nonnegative(),
+    pending24h: z.number().int().nonnegative(),
+    totalRecords: z.number().int().nonnegative(),
+    normalizedPercent: z.number(),
+    sources: z.array(z.object({
+        sourceId: z.string().uuid(),
+        name: z.string(),
+        category: z.string(),
+        lastDataType: z.string(),
+        lastStatus: pipelineAccessStatus,
+        lastResponseTime: z.number().optional(),
+        lastChecked: z.string().optional(),
+        issues: z.array(z.string()).optional()
+    })),
+    categories: z.array(z.object({
+        categoryId: z.string().uuid(),
+        name: z.string(),
+        inflow: z.number().int().nonnegative(),
+        passRate: z.number()
+    }))
+});
+
+export const dataPipelineViewResponseSchema = z.object({
+    snapshot: dataPipelineSnapshotSchema,
+    history: z.array(z.object({
+        id: z.string(),
+        generatedAt: z.string(),
+        snapshot: dataPipelineSnapshotSchema
+    })),
+    normalizationSummary: z.object({
+        totalProcessed: z.number().int().nonnegative(),
+        passed: z.number().int().nonnegative(),
+        warnings: z.number().int().nonnegative(),
+        rejected: z.number().int().nonnegative(),
+        lastProcessedAt: z.string().optional()
+    }),
+    normalizedData: z.array(z.object({
+        id: z.string().uuid(),
+        sourceId: z.string().uuid(),
+        category: z.string(),
+        dataType: z.string(),
+        tags: z.array(z.string()),
+        payload: z.record(z.any()),
+        qualityScore: z.number(),
+        issues: z.array(z.string()),
+        status: pipelineNormalizedStatus,
+        receivedAt: z.string(),
+        normalizedAt: z.string()
+    }))
+});

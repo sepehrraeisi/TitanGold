@@ -21802,6 +21802,12 @@ export {
     enrichCategoriesWithSourceCounts,
 } from './dataCategoriesApi';
 
+export {
+    fetchDataPipelineView,
+    fetchDataPipelineSnapshot,
+} from './dataPipelineApi';
+export type { DataPipelineView } from './dataPipelineApi';
+
 // ==================== Advanced Data Hub Features ====================
 
 const createAutomationTopicStats = (): AgentTopicRouteStats => ({

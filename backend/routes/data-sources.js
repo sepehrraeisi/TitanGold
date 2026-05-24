@@ -13,8 +13,10 @@ import {
   collectedDataResponseSchema,
   collectedDataListResponseSchema,
   dataHubStatsSchema,
-  dataHubStateSchema
+  dataHubStateSchema,
+  dataPipelineViewResponseSchema
 } from '../schemas/dataHubSchemas.js';
+import { buildDataPipelineView } from '../services/dataPipelineSnapshot.js';
 
 import { telegramService } from '../services/telegram.js';
 import { syncTelegramChannelsToDataSources, syncChannelCategoryToDataSource } from '../services/telegramSync.js';
@@ -469,6 +471,17 @@ router.get('/health', authenticate, async (req, res) => {
       database: 'disconnected',
       error: error.message,
     });
+  }
+});
+
+// Pipeline view for DataHub Pipeline tab (GAP-012)
+router.get('/pipeline', authenticate, readRateLimiter, validateResponse(dataPipelineViewResponseSchema), async (req, res) => {
+  try {
+    const view = await buildDataPipelineView();
+    res.json(view);
+  } catch (error) {
+    logger.error('Failed to fetch DataHub pipeline view:', error);
+    res.status(500).json({ error: 'Failed to fetch pipeline snapshot' });
   }
 });
 
