@@ -19,4 +19,5 @@
 | GAP-013 | اتصال تب Access Logs به API واقعی `GET /api/v1/data-sources/access-logs` (حذف `dataHub.accessLogs` از IndexedDB) | Medium | `dataHub.logs` | Closed | v3.0 | `services/dataAccessLogsApi.ts` + `useAccessLogsQuery`؛ نگاشت `data_hub_logs` → `DataAccessLog`. |
 | GAP-014 | RBAC نقش‌محور روی `GET /api/v1/data-sources/access-logs` (مثلاً فقط `admin`/`analyst`) | Low | `dataHub.logs` | Open | v3.1 | فعلاً فقط `authenticate` + rate limit؛ بدون `authorize()` روی read. |
 | GAP-015 | مقیاس‌پذیری access-logs (cursor pagination، aggregate cache برای `statusCounts`، composite index `(source_id, created_at DESC)`) | Low | `dataHub.logs` | Open | v3.1 | برای ~50k ردیف با ایندکس فعلی کافی است؛ برای scale بسیار بالاتر. |
+| GAP-016 | Backend + UI wiring برای `dataHub.advanced.telegramPublisher` (`telegram_publishers` DB + `/api/v1/data-hub/telegram-publishers`) | Medium | `dataHub.advanced.telegramPublisher` | Open | v3.0 | قرارداد: `docs/ssot_v3/advanced/TELEGRAM_PUBLISHER_API_CONTRACT.md`. امروز UI از IndexedDB/`fetchDataHubState` است. |
 
