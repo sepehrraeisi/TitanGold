@@ -18,6 +18,7 @@ export enum ErrorType {
     RATE_LIMIT = 'rate_limit',
     SESSION_EXPIRED = 'session_expired',
     VALIDATION = 'validation',
+    CONFLICT = 'conflict',
     DATABASE = 'database',
     TELEGRAM_API = 'telegram_api',
     PERMISSION = 'permission',
@@ -86,6 +87,18 @@ export function parseDataHubError(error: any): DataHubError {
             retryable: false,
             userMessage: 'You don\'t have permission to perform this action.',
             technicalDetails: error.message
+        };
+    }
+
+    // Conflict (HTTP 409) — duplicate name, FK on hard delete
+    if (error.status === 409) {
+        return {
+            type: ErrorType.CONFLICT,
+            message: 'Conflict',
+            originalError: error,
+            retryable: false,
+            userMessage: error.message || 'This action conflicts with existing data. Check duplicates or related records.',
+            technicalDetails: error.message,
         };
     }
 
@@ -170,6 +183,7 @@ export function getErrorIcon(errorType: ErrorType): string {
         [ErrorType.RATE_LIMIT]: '⏱️',
         [ErrorType.SESSION_EXPIRED]: '⏰',
         [ErrorType.VALIDATION]: '⚠️',
+        [ErrorType.CONFLICT]: '⚡',
         [ErrorType.DATABASE]: '💾',
         [ErrorType.TELEGRAM_API]: '📱',
         [ErrorType.PERMISSION]: '🚫',
@@ -188,6 +202,7 @@ export function getErrorSeverity(errorType: ErrorType): 'error' | 'warning' | 'i
         [ErrorType.RATE_LIMIT]: 'warning' as const,
         [ErrorType.SESSION_EXPIRED]: 'error' as const,
         [ErrorType.VALIDATION]: 'warning' as const,
+        [ErrorType.CONFLICT]: 'warning' as const,
         [ErrorType.DATABASE]: 'error' as const,
         [ErrorType.TELEGRAM_API]: 'warning' as const,
         [ErrorType.PERMISSION]: 'error' as const,
@@ -222,6 +237,7 @@ export function getSuggestedAction(errorType: ErrorType): string {
         [ErrorType.RATE_LIMIT]: 'Wait a moment and try again.',
         [ErrorType.SESSION_EXPIRED]: 'Reconnect your Telegram account in Settings.',
         [ErrorType.VALIDATION]: 'Please review your input and try again.',
+        [ErrorType.CONFLICT]: 'Resolve the conflict (duplicate name or linked data) and try again.',
         [ErrorType.DATABASE]: 'Try again in a few moments. Contact support if the issue persists.',
         [ErrorType.TELEGRAM_API]: 'Wait a moment and try again. Telegram may be experiencing issues.',
         [ErrorType.PERMISSION]: 'Contact your administrator for access.',

@@ -6,13 +6,25 @@ export const DATA_HUB_KEYS = {
     all: ['dataHub'] as const,
     state: () => [...DATA_HUB_KEYS.all, 'state'] as const,
     agents: () => [...DATA_HUB_KEYS.all, 'agents'] as const,
+    sources: (page?: number, limit?: number) =>
+        [...DATA_HUB_KEYS.all, 'sources', { page: page ?? 1, limit: limit ?? 20 }] as const,
 };
 
 export const useDataHubQuery = () => {
     return useQuery({
         queryKey: DATA_HUB_KEYS.state(),
         queryFn: api.fetchDataHubState,
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: 5 * 60 * 1000,
+    });
+};
+
+export const useDataSourcesQuery = (params?: { page?: number; limit?: number }) => {
+    const page = params?.page ?? 1;
+    const limit = params?.limit ?? 20;
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.sources(page, limit),
+        queryFn: () => api.fetchDataSources({ page, limit }),
+        staleTime: 30 * 1000,
     });
 };
 
@@ -24,7 +36,7 @@ export const useAgentsQuery = () => {
             return agents.map(a => ({
                 id: a.id,
                 name: a.name,
-                symbol: a.id, // Fallback since AIAgent doesn't have symbol
+                symbol: a.id,
                 type: 'token' as const,
                 category: 'trading' as const,
                 status: a.status === 'active' ? ('active' as const) : ('inactive' as const),
@@ -33,36 +45,20 @@ export const useAgentsQuery = () => {
                     accuracy: a.accuracy || 0.85,
                     latency: 120,
                     throughput: 50,
-                    errorRate: 0.02
-                }
+                    errorRate: 0.02,
+                },
             }));
         },
-        staleTime: 10 * 60 * 1000, // 10 minutes
+        staleTime: 10 * 60 * 1000,
     });
 };
 
-// Mutations for Data Sources
 export const useCreateSourceMutation = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: api.createDataSource,
-        onMutate: async (newSource) => {
-            await queryClient.cancelQueries({ queryKey: DATA_HUB_KEYS.state() });
-            const previousState = queryClient.getQueryData<DataHubState>(DATA_HUB_KEYS.state());
-            if (previousState) {
-                queryClient.setQueryData<DataHubState>(DATA_HUB_KEYS.state(), {
-                    ...previousState,
-                    sources: [...previousState.sources, { ...newSource, id: 'temp-' + Date.now() } as DataSource]
-                });
-            }
-            return { previousState };
-        },
-        onError: (err, newSource, context) => {
-            if (context?.previousState) {
-                queryClient.setQueryData(DATA_HUB_KEYS.state(), context.previousState);
-            }
-        },
         onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });
@@ -71,24 +67,10 @@ export const useCreateSourceMutation = () => {
 export const useUpdateSourceMutation = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, updates }: { id: string; updates: Partial<DataSource> }) => api.updateDataSource(id, updates),
-        onMutate: async ({ id, updates }) => {
-            await queryClient.cancelQueries({ queryKey: DATA_HUB_KEYS.state() });
-            const previousState = queryClient.getQueryData<DataHubState>(DATA_HUB_KEYS.state());
-            if (previousState) {
-                queryClient.setQueryData<DataHubState>(DATA_HUB_KEYS.state(), {
-                    ...previousState,
-                    sources: previousState.sources.map(s => s.id === id ? { ...s, ...updates } : s)
-                });
-            }
-            return { previousState };
-        },
-        onError: (err, variables, context) => {
-            if (context?.previousState) {
-                queryClient.setQueryData(DATA_HUB_KEYS.state(), context.previousState);
-            }
-        },
+        mutationFn: ({ id, updates }: { id: string; updates: Partial<DataSource> }) =>
+            api.updateDataSource(id, updates),
         onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });
@@ -97,50 +79,31 @@ export const useUpdateSourceMutation = () => {
 export const useDeleteSourceMutation = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: api.deleteDataSource,
-        onMutate: async (id) => {
-            await queryClient.cancelQueries({ queryKey: DATA_HUB_KEYS.state() });
-            const previousState = queryClient.getQueryData<DataHubState>(DATA_HUB_KEYS.state());
-            if (previousState) {
-                queryClient.setQueryData<DataHubState>(DATA_HUB_KEYS.state(), {
-                    ...previousState,
-                    sources: previousState.sources.filter(s => s.id !== id)
-                });
-            }
-            return { previousState };
-        },
-        onError: (err, id, context) => {
-            if (context?.previousState) {
-                queryClient.setQueryData(DATA_HUB_KEYS.state(), context.previousState);
-            }
-        },
+        mutationFn: ({ id, hard }: { id: string; hard?: boolean }) =>
+            api.deleteDataSource(id, { hard }),
         onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
     });
 };
 
-// Mutations for Data Categories
+export const useRestoreSourceMutation = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: api.restoreDataSource,
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
+        },
+    });
+};
+
+// Mutations for Data Categories (still IndexedDB until categories GAP)
 export const useCreateCategoryMutation = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: api.createDataCategory,
-        onMutate: async (newCategory) => {
-            await queryClient.cancelQueries({ queryKey: DATA_HUB_KEYS.state() });
-            const previousState = queryClient.getQueryData<DataHubState>(DATA_HUB_KEYS.state());
-            if (previousState) {
-                queryClient.setQueryData<DataHubState>(DATA_HUB_KEYS.state(), {
-                    ...previousState,
-                    categories: [...previousState.categories, { ...newCategory, id: 'temp-' + Date.now() } as DataCategory]
-                });
-            }
-            return { previousState };
-        },
-        onError: (err, newCategory, context) => {
-            if (context?.previousState) {
-                queryClient.setQueryData(DATA_HUB_KEYS.state(), context.previousState);
-            }
-        },
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
@@ -150,23 +113,8 @@ export const useCreateCategoryMutation = () => {
 export const useUpdateCategoryMutation = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, updates }: { id: string; updates: Partial<DataCategory> }) => api.updateDataCategory(id, updates),
-        onMutate: async ({ id, updates }) => {
-            await queryClient.cancelQueries({ queryKey: DATA_HUB_KEYS.state() });
-            const previousState = queryClient.getQueryData<DataHubState>(DATA_HUB_KEYS.state());
-            if (previousState) {
-                queryClient.setQueryData<DataHubState>(DATA_HUB_KEYS.state(), {
-                    ...previousState,
-                    categories: previousState.categories.map(c => c.id === id ? { ...c, ...updates } : c)
-                });
-            }
-            return { previousState };
-        },
-        onError: (err, variables, context) => {
-            if (context?.previousState) {
-                queryClient.setQueryData(DATA_HUB_KEYS.state(), context.previousState);
-            }
-        },
+        mutationFn: ({ id, updates }: { id: string; updates: Partial<DataCategory> }) =>
+            api.updateDataCategory(id, updates),
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },
@@ -177,22 +125,6 @@ export const useDeleteCategoryMutation = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: api.deleteDataCategory,
-        onMutate: async (id) => {
-            await queryClient.cancelQueries({ queryKey: DATA_HUB_KEYS.state() });
-            const previousState = queryClient.getQueryData<DataHubState>(DATA_HUB_KEYS.state());
-            if (previousState) {
-                queryClient.setQueryData<DataHubState>(DATA_HUB_KEYS.state(), {
-                    ...previousState,
-                    categories: previousState.categories.filter(c => c.id !== id)
-                });
-            }
-            return { previousState };
-        },
-        onError: (err, id, context) => {
-            if (context?.previousState) {
-                queryClient.setQueryData(DATA_HUB_KEYS.state(), context.previousState);
-            }
-        },
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.state() });
         },

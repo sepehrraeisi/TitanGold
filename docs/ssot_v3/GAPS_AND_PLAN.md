@@ -1,0 +1,16 @@
+## SSOT v3.0 – Gaps & Plan
+
+> **Rule**: فقط Gapهایی که در کد/داک شناسایی شده‌اند اینجا می‌آیند؛ بدون حدس.
+
+| ID | Description | Impact | Module | Status | Planned Version | Notes / PR |
+|---|---|---|---|---|---|---|
+| GAP-001 | غنی‌سازی متریک‌های Analytics (پر کردن `resourceUsage.*`, `performance.totalLearningHours`, `agentMatrix.progress` با داده‌ی واقعی) | Medium | `aiCenter.analytics` | Open | v3.1 | فعلاً مقادیر placeholder هستند اما قرارداد API ثابت است؛ می‌توان بدون breaking change متریک‌ها را غنی‌تر کرد. |
+| GAP-002 | تکمیل متریک‌ها و UI پیشرفته برای Orchestration (history کامل taskها، drill-down per-agent) | Medium | `aiManager.orchestration` | Open | v3.1 | تب Orchestration الان summary کاربردی دارد ولی هنوز history عمیق و KPIs کامل نشده‌اند. |
+| GAP-003 | تعمیق Data Pipeline lineage و اتوماسیون snapshotها در UI Pipeline | Medium | `dataHub.pipeline` | Open | v3.1 | Snapshot و health پایه پیاده‌سازی شده، اما lineage کامل end-to-end و بعضی اتوماسیون‌های snapshot هنوز TODO هستند. |
+| GAP-004 | بهینه‌سازی Access Control و Blacklist/Whitelist برای DataHub (جدول‌های اختصاصی + UI کامل‌تر rules) | Low | `dataHub.advanced.access`, `dataHub.advanced.blacklist` | Open | v3.1 | الان کنترل دسترسی و فیلترینگ در سطح DataHub state و چند جدول پایه انجام می‌شود؛ می‌توان آن را به policyهای ریزتر و UI مدیریت rule محور گسترش داد. |
+| GAP-005 | توسعه‌ی متریک‌های مالی و ریسک در Backtesting (PnL breakdown, drawdown curves, per-scenario analytics) | Medium | `aiManager.backtesting`, `backtest_runs` | Open | v3.1 | بک‌تست فعلی summary مولد و نتایج پایه دارد، ولی dashboard کامل مالی/ریسک برای سناریوها برنامه‌ریزی شده است. |
+| GAP-006 | سفت‌کردن Security برای روت‌های read-only تلگرام (health, feeds, summary, breaking-news, events, categories, stats) | Medium | `dataHub.telegram` | Closed | v3.0 | روت‌های read-only تلگرام اکنون از middleware `telegramReadAuth` عبور می‌کنند که با متغیر `TELEGRAM_READ_MODE` سه حالت دارد: `auth-role` (پیش‌فرض امن در production؛ JWT + نقش مجاز), `internal` (شبکه داخلی با IP allowlist یا هدر داخلی + secret), و `dev-open` (فقط برای dev/test). روت write (`mark-processed`) همچنان پشت `authenticate` + `writeRateLimiter` است. |
+| GAP-007 | بهینه‌سازی حجم chunkهای فرانت‌اند (کاهش سایز bundleهای بالای ۵۰۰KB با code-splitting و dynamic import) | Low | `frontend.build` | Open | v3.1 | build فعلی Vite چند chunk بزرگ (۵۰۰KB+) تولید می‌کند که در لاگ build هشدار داده شده است؛ برای production SaaS نیاز است در نسخه‌ی بعدی با تقسیم ماژول‌های سنگین (به‌خصوص AI Center/DataHub) به chunkهای کوچک‌تر، TTFB و cacheability بهبود یابد. |
+| GAP-008 | اتصال کامل UI تب Data Sources به API واقعی `/api/v1/data-sources` (حذف اتکاء به DataHubState شبیه‌سازی‌شده و توابع local database) | Medium | `dataHub.sources` | Closed | v3.0 | `services/dataSourcesApi.ts` + `useDataSourcesQuery`؛ mutations روی `POST/PUT/DELETE/PATCH`؛ تب Sources دیگر CRUD را از IndexedDB/`fetchDataHubState` نمی‌گیرد. RBAC نقش‌محور روی روت‌ها → GAP-009 (جدا). |
+| GAP-009 | RBAC نقش‌محور روی CRUD `/api/v1/data-sources` (مثلاً فقط `admin` برای write) | Low | `dataHub.sources` | Open | v3.1 | فعلاً فقط `authenticate` + rate limit؛ بدون `authorize()` روی create/update/delete/restore. |
+
