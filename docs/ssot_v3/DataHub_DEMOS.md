@@ -39,14 +39,19 @@
 
 ### dataHub.categories – Data Categories (GAP-010 closed – UI backend-first)
 
-- **Success Scenario (UI: list → create → update → delete)**  
-  1. `AI Center → DataHub → Categories` → Network: `GET /api/v1/data-categories` (آرایه JSON، نه `fetchDataHubState`).  
-  2. **Create**: Add Category → Save → `POST /api/v1/data-categories` → `201`.  
-  3. **Update**: Edit → Save → `PUT /api/v1/data-categories/:id` → `200`.  
-  4. **Delete**: Delete روی دسته بدون source وابسته → `DELETE /api/v1/data-categories/:id` → `200` با پیام موفق.
+- **Success Scenario (create → update → delete)**  
+  1. `AI Center → DataHub → Categories` → Network: `GET /api/v1/data-categories` (آرایه JSON؛ **نه** `fetchDataHubState`/IndexedDB).  
+  2. **Create**: Add Category → نام یکتا → Save → `POST /api/v1/data-categories` → `201` + شیء category در پاسخ.  
+  3. **Update**: Edit همان دسته → تغییر `description` یا `color` → Save → `PUT /api/v1/data-categories/:id` → `200`.  
+  4. **Delete**: Delete روی دسته‌ای که هیچ `data_sources.category` به نام آن اشاره نمی‌کند → `DELETE /api/v1/data-categories/:id` → `200` + `{ message: 'Category deleted successfully' }`؛ لیست با refetch به‌روز می‌شود.
 
-- **Failure Scenario (duplicate 409 + delete in use 400)**  
-  1. **Duplicate (409)**: همان `name` دوباره → `POST` یا `PUT` با `409`؛ بنر conflict در تب Categories.  
-  2. **In use (400)**: حذف دسته‌ای که `data_sources.category` به آن اشاره دارد → `400` با پیام تعداد sourceهای وابسته.  
-  3. **Validation (400)**: `name` خالی یا `color` نامعتبر → `400`؛ خطا inline در مودال.  
-  4. **Server (500)**: backend down → بنر + Retry (refetch `useDataCategoriesQuery`).
+- **Failure Scenario (validation / conflict / dependency / server)**  
+
+  | سناریو | Endpoint | Status | UI |
+  |--------|----------|--------|-----|
+  | Invalid payload (نام خالی، `color` غیر hex) | `POST` یا `PUT` | **400** | خطا inline در `CreateCategoryModal` (`formError`) |
+  | Duplicate name | `POST` / `PUT` | **409** | `Category with this name already exists` — بنر conflict در تب Categories |
+  | Delete while sources still reference category name | `DELETE` | **400** | پیام «Cannot delete category … N data source(s)» — بنر/ApiWrapper |
+  | DB / backend down | `GET` / `POST` / `PUT` / `DELETE` | **500** | بنر خطای سرور + **Retry** (`useDataCategoriesQuery` refetch) |
+
+  **توجه:** برای categories، حذف در صورت وابستگی source با **400** برمی‌گردد (نه 409). duplicate فقط روی unique `name` است (**409**).
