@@ -127,6 +127,71 @@ cd backend && node scripts/verify_automation_demo.js
 
 **Greenfield کامل (`schema.sql` + migrate):** هنوز migrationهای legacy قدیمی‌تر (مثلاً `004_add_autopilot_system`) ممکن است به ستون‌هایی وابسته باشند که در `database/schema.sql` نیستند؛ مسیر رسمی verify برای automation: **migrate روی DB dev موجود** + اسکریپت demo بالا.
 
+### Environment Proof — `dataHub.advanced.automation` (2026-05-24)
+
+> **Scope:** dev DB on application server (`ubuntu` host) — **not production.**  
+> Repo path on server: `/home/ubuntu/webapp/TitanGold`.  
+> هیچ secret/token/password در این بخش ثبت نمی‌شود.
+
+#### Host / toolchain
+
+| Field | Value |
+|-------|--------|
+| `hostname` | `ubuntu` |
+| `pwd` (repo root) | `/home/ubuntu/webapp/TitanGold` |
+| `git` branch | `feat/gap-008-sources-backend-wiring` |
+| `git` commit (short) | `caeef9d` |
+| `node -v` | `v20.18.2` |
+| `npm -v` | `10.8.2` |
+| `NODE_ENV` (backend `.env`) | `development` |
+
+#### Database identity (no credentials)
+
+| Field | Value |
+|-------|--------|
+| Environment label | **dev** — `titangold_db` on local Postgres instance |
+| `current_database()` | `titangold_db` |
+| `current_user` | `postgres` |
+| `inet_server_addr()` | `127.0.0.1` |
+| `inet_server_port()` | `5433` |
+| Connection pattern | `localhost:5433` (trust auth on dev host; not a remote prod cluster) |
+
+```sql
+-- Captured via psql -h localhost -p 5433 -U postgres -d titangold_db
+SELECT current_database(), current_user, inet_server_addr(), inet_server_port();
+-- titangold_db | postgres | 127.0.0.1/32 | 5433
+```
+
+#### Migration status (automation-related)
+
+| Migration | Applied (`run_on`) |
+|-----------|-------------------|
+| `012_add_ab_testing` | 2026-05-24 15:27:01 UTC |
+| `025_create_telegram_publishers` | 2026-05-24 15:27:01 UTC |
+| `026_create_datahub_automation_topics` | 2026-05-24 15:27:01 UTC |
+| `027_create_datahub_automation_queue` | 2026-05-24 15:27:01 UTC |
+
+Latest migration in chain (reference): `20260216_add_priority_error_tracking` @ 2026-05-24 15:27:03 UTC.
+
+`npm run migrate` on this host/DB: **complete** (no pending 025–027).
+
+#### Demo script summary (`backend/scripts/verify_automation_demo.js`)
+
+Run: `cd /home/ubuntu/webapp/TitanGold/backend && node scripts/verify_automation_demo.js`
+
+| Step | Result |
+|------|--------|
+| Automation tables present | 4 (`topics`, `queue`, `schedule`, `executions`) |
+| Create topic | OK |
+| Queue refresh | `added: 5`, `pending: 6` |
+| Fail queue item | OK |
+| Retry failed execution | OK |
+| Manual dispatch (dry-run) | `processed: 1` |
+| Execution history | 7 rows; latest `sent` (dry-run) |
+| Cleanup | demo topic deleted |
+
+**SSOT:** با این proof، `dataHub.advanced.automation` = **Implemented** (final on dev server DB).
+
 
 ### Required ENV keys (Names only)
 
