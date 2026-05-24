@@ -102,3 +102,18 @@
 | **Dry-run (dev/test)** | همان publish با token خالی در dev | **200** + `dry_run: true` | history با `status: dry_run` |
 
 **پیش‌نیاز:** migration `025_create_telegram_publishers.sql`؛ `MASTER_KEY` برای encrypt bot token (live در prod).
+
+### dataHub.advanced.automation – Automation (GAP-018 + GAP-019 closed)
+
+| سناریو | Endpoint | Status / شرط | UI |
+|--------|----------|----------------|-----|
+| **Success — create topic** | `POST /api/v1/data-hub/automation/topics` | **201** | Add Topic → لیست refetch |
+| **Success — refresh queue** | `POST .../automation/queue/refresh` | **200** + `added` | Refresh queue |
+| **Success — manual dispatch** | `POST .../automation/queue/dispatch` | **200** + `processed` | Dispatch (dry-run toggle) |
+| **Success — test run** | `POST .../automation/test-run` | **200** dry-run default | Test run |
+| **Success — execution history** | `GET .../automation/overview` یا `/executions` | **200** | Execution History panel |
+| **Success — retry failed** | `POST .../executions/:id/retry` | **200** | Retry on failed row |
+| **Failure — dispatch no token (prod)** | dispatch → publisher publish | **401** در execution | failed + retry |
+| **Schedule persist** | `PUT .../automation/schedule` | **200** | Schedule panel (no auto-cron v3.0) |
+
+**پیش‌نیاز:** migrations `026`, `027`؛ telegram publishers (GAP-016) برای publish targets.

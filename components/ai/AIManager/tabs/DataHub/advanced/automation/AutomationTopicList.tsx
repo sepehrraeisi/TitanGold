@@ -31,14 +31,16 @@ const AutomationTopicList: React.FC<AutomationTopicListProps> = ({
                     <div key={topic.id} className="border border-border rounded-lg p-4 bg-secondary/5 hover:bg-secondary/10 transition-colors">
                         <div className="flex justify-between items-start mb-3">
                             <div>
-                                <h5 className="font-bold text-foreground">{topic.name}</h5>
+                                <h5 className="font-bold text-foreground">{topic.title || topic.name}</h5>
                                 <div className="flex gap-2 mt-1">
                                     <StatusBadge
                                         status={topic.enabled ? 'success' : 'neutral'}
                                         label={topic.enabled ? 'Enabled' : 'Disabled'}
                                         size="sm"
                                     />
-                                    <span className="text-[10px] text-muted-foreground uppercase">{topic.dataType}</span>
+                                    <span className="text-[10px] text-muted-foreground uppercase">
+                                        {topic.dataTypes?.[0] || topic.source_type || 'pipeline'}
+                                    </span>
                                 </div>
                             </div>
                             <div className="flex gap-1">

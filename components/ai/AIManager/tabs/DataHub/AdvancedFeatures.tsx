@@ -185,16 +185,15 @@ const AdvancedFeatures: React.FC<{
 
             {activeFeature === 'automation' && (
                 <AutomationTopics
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
+                    categories={dataHub.categories}
                     t={t}
                     formatTimeAgo={formatTimeAgo}
                     agents={agents}
                     isLoadingAgents={isLoadingAgents}
                     agentMap={agentMap}
-                    topicMap={topicMap}
-                    publisherMap={publisherMap}
+                    availableDataTypes={Array.from(
+                        new Set(dataHub.sources.map(s => s.type).filter(Boolean)),
+                    )}
                 />
             )}
 

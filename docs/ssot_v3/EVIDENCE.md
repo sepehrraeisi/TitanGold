@@ -163,9 +163,28 @@ grep -rn "data-hub/telegram-publishers\|useTelegramPublishers" \
 | `createTelegramPublisher` / `updateTelegramPublisher` / `deleteTelegramPublisher` | **No** | Indirect (publisher list در state) |
 | `publishToTelegram` | **No** | **Yes** — `dispatchAutomationQueue` / queue processor (GAP-019) |
 
-`TelegramPublisher.tsx` فقط `services/telegramPublishersApi.ts` + `hooks/useTelegramPublishers.ts` را صدا می‌زند. مسیر legacy تا بسته شدن **GAP-019** برای subtab **advanced.automation** باقی است.
+`TelegramPublisher.tsx` فقط `services/telegramPublishersApi.ts` + `hooks/useTelegramPublishers.ts` را صدا می‌زند. مسیر legacy `publishToTelegram` در `services/api.ts` دیگر توسط Automation dispatch استفاده نمی‌شود (GAP-019 Closed).
 
-### ۱۱. Migrations / Greenfield Bootstrap
+### ۱۱. DataHub Automation (GAP-018 + GAP-019 Closed)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Topics DB | `backend/database/migrations/026_create_datahub_automation_topics.sql` | `datahub_automation_topics` |
+| Queue DB | `backend/database/migrations/027_create_datahub_automation_queue.sql` | queue + schedule + executions |
+| Service | `backend/services/datahubAutomationService.js` | refresh از pipeline/collected_data؛ dispatch → `runPublisherPublish` |
+| Routes | `backend/routes/data-hub-automation.js` | `/api/v1/data-hub/automation` |
+| Frontend | `services/datahubAutomationApi.ts`, `hooks/useDatahubAutomation.ts` | React Query |
+| UI | `AutomationTopics.tsx` | بدون `fetchDataHubState` برای topics/queue/history |
+
+**Grep — Automation UI (no IndexedDB for main data):**
+
+```bash
+grep -rn "fetchDataHubState\|createAutomationTopic\|refreshAutomationQueue" \
+  components/ai/AIManager/tabs/DataHub/advanced/AutomationTopics.tsx
+# → 0 matches
+```
+
+### ۱۲. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |
 |---|---|---|---|

@@ -1,152 +1,96 @@
-# DataHub Advanced — Automation API Contract (pre-wiring)
+# DataHub Advanced — Automation API Contract (implemented)
 
 > Subtab: `dataHub.advanced.automation` · UI: `AutomationTopics.tsx`  
-> **وضعیت:** قرارداد برای تأیید — **بدون wiring** در این مرحله.
+> Base: `/api/v1/data-hub/automation`
 
-## چرا «Implemented» یکجا ممنوع است
+## Architecture (final)
 
-تب Automation سه لایه متفاوت دارد. تا وقتی **هر سه** backend-first نشوند، SSOT فقط **Partial** است:
+| Layer | Storage | API |
+|-------|---------|-----|
+| **Agent Topics** (GAP-018) | `datahub_automation_topics` | `GET/POST/PUT/DELETE /topics` |
+| **Queue / Schedule / Dispatch** (GAP-019) | `datahub_automation_queue`, `datahub_automation_schedule`, `datahub_automation_executions` | `/queue/*`, `/schedule`, `/executions`, `/test-run` |
+| **Topic Routing (global)** | `topic_routing_rules` | `/api/v1/topic-routing` — **separate**, AI Center |
 
-| لایه | محتوا | Backend امروز | GAP |
-|------|--------|---------------|-----|
-| **A** | Topic Routing (global، AI Center + router) | ✅ `/api/v1/topic-routing` | — (خارج از DataHub tab؛ مرجع) |
-| **B** | Agent Topic Routes (Automation UI) | ❌ IndexedDB `dataHub.automation.agentTopics` | **GAP-018** |
-| **C** | Queue + Schedule + Dispatch | ❌ IndexedDB `publisherQueue`, `automation.schedule` | **GAP-019** |
-
----
-
-## ۱. UI دقیقاً چه چیزی لازم دارد؟ (`AutomationTopics.tsx`)
-
-| نیاز UI | منبع فعلی | هدف backend-first |
-|---------|-----------|-------------------|
-| لیست agent topics (CRUD) | `dataHub.automation.agentTopics` via `fetchDataHubState` | API اختصاصی یا mapping به DB |
-| آمار topic (enabled, pass rate) | محاسبه client از topics | از API یا aggregate |
-| Publisher queue | `dataHub.advanced.publisherQueue` | جدول + API |
-| Schedule (enable, interval, max items) | `dataHub.automation.schedule` | جدول + API + worker |
-| Refresh queue | `refreshAutomationQueue()` → IndexedDB | `POST .../automation/queue/refresh` |
-| Dispatch queue | `dispatchAutomationQueue()` → `publishToTelegram` legacy | `POST .../automation/queue/dispatch` → `telegram-publishers` publish API |
-| Process queue item | `processQueueItem` | `PATCH` queue item status |
-| Publisher targets dropdown | `publisherMap` از `dataHub.advanced.telegramPublishers` | **`GET /api/v1/data-hub/telegram-publishers`** (GAP-016 ✅) |
-
-**باگ فعلی UI:** `AutomationTopics` صدا می‌زند `api.createAutomationTopic` / `deleteAutomationTopic` که در `services/api.ts` فعلی **export نمی‌شوند** (نام‌های واقعی: `createAgentTopicRoute`, `deleteAgentTopicRoute`).
+Agent topics are **not** merged into `topic_routing_rules`.
 
 ---
 
-## ۲. Topic Routing — API واقعی (جدا از DataHub Automation tab)
+## ۱. Agent Topics (`datahub_automation_topics`)
 
-> این API برای **keyword → agent_key** روی `collected_data` است (سرویس `topicRouter`). با **AgentTopicRoute** در Automation UI یک مدل نیست.
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID | PK |
+| `name` | VARCHAR | Display title |
+| `topic_key` | VARCHAR | Unique slug |
+| `source_type` | VARCHAR | Default `pipeline` |
+| `trigger_conditions` | JSONB | `agentId`, `categoryIds`, `dataTypes`, `tags`, thresholds, `includeStatuses` |
+| `publish_targets` | JSONB | `{ publisherIds: uuid[] }` |
+| `is_active` | BOOLEAN | UI `enabled` |
+| `priority` | SMALLINT | 1–4 → low/medium/high/critical |
+| `created_by` | UUID | |
+| `created_at` / `updated_at` | TIMESTAMPTZ | |
 
-### Base: `/api/v1/topic-routing`
-
-| Method | Path | Auth | Response |
-|--------|------|------|----------|
-| `GET` | `/` | `authenticate` | `{ rules: TopicRoutingRule[] }` |
-| `POST` | `/` | `authenticate` + write limiter | `{ rule }` — body: `name`, `keywords[]`, `agent_key`, `priority`, `is_active` |
-| `PUT` | `/:id` | `authenticate` | `{ rule }` |
-| `DELETE` | `/:id` | `authenticate` | `{ message }` |
-| `GET` | `/logs` | `authenticate` | `{ logs, total, limit, offset }` |
-
-### DB: `topic_routing_rules`, `topic_routing_logs`
-
-### UI که از این API استفاده می‌کند
-
-- `components/ai/TopicRouting.tsx` (AI Center)
-- **نه** `AutomationTopics.tsx` (DataHub Advanced)
-
-### Mapping conceptual (اگر بخواهیم یکپارچه کنیم — خارج از scope فوری)
-
-| AgentTopicRoute (UI) | TopicRoutingRule (API) |
-|----------------------|-------------------------|
-| `agentId` / agent | `agent_key` |
-| `categoryIds`, `dataTypes`, `tags` | `keywords` (نیاز به extension schema) |
-| `publisherTargets` | **ندارد** — GAP-018 |
-
-**نتیجه:** Topic Routing API را **جدا** نگه می‌داریم؛ Automation agent topics نیاز به **GAP-018** (جدول/API جدید یا extension) دارند.
+Migration: `026_create_datahub_automation_topics.sql`
 
 ---
 
-## ۳. Agent Topic Routes — پیشنهاد GAP-018 (IndexedDB امروز)
+## ۲. Queue / Schedule / Executions
 
-### وضعیت فعلی (`services/api.ts`)
+### Schedule (`datahub_automation_schedule`, singleton `id=default`)
 
-- `createAgentTopicRoute` / `updateAgentTopicRoute` / `deleteAgentTopicRoute`
-- همه → `fetchDataHubState` + `database.save('settings', 'data_hub_state')`
-- شکل: `AgentTopicRoute` در `types.ts` (`categoryIds`, `dataTypes`, `publisherTargets`, `stats`, …)
+- `enabled`, `interval_minutes`, `max_items_per_run`, `last_run_at`, `next_run_at`
+- **v3.0:** persistence + manual dispatch only — no backend cron worker
+- **GAP-020 (v3.1):** distributed / cron scheduler enhancement (non-blocker)
 
-### Endpoint پیشنهادی (v3.1)
+### Queue (`datahub_automation_queue`)
 
-`GET/POST/PUT/DELETE /api/v1/data-hub/automation/topics`
+- Status: `pending` | `processing` | `sent` | `failed` | `cancelled`
+- Unique pending: `(record_id, publisher_id)` partial index
 
-DB پیشنهادی: `datahub_automation_topics` (یا JSONB در `data_hub_automation_config`)
+### Executions (`datahub_automation_executions`)
 
----
+- Auditable history: `sent` | `failed` | `dry_run`
+- Links to `publisher_delivery_history` when applicable
 
-## ۴. Queue / Schedule / Dispatch — GAP-019 (IndexedDB امروز)
-
-### وضعیت فعلی
-
-| Function | کار |
-|----------|-----|
-| `refreshAutomationQueue` | پر کردن `advanced.publisherQueue` از `normalizedData` + pipeline |
-| `dispatchAutomationQueue` | `publishToTelegram` روی IndexedDB publishers |
-| `setAutomationScheduleEnabled` / `Interval` / `MaxItems` | schedule در state + `setInterval` client-side |
-| `processQueueItem` | به‌روزرسانی آیتم + history |
-
-همه وابسته `fetchDataHubState` / `persistDataHubState`.
-
-### Legacy coupling
-
-- `publishToTelegram` در `services/api.ts` — **فقط automation dispatch** (نه `TelegramPublisher.tsx`)
-- پس از GAP-016 باید dispatch به `POST /api/v1/data-hub/telegram-publishers/:id/publish` با `confirm_publish` مهاجرت کند
-
-### Endpoint پیشنهادی (v3.1)
-
-| Method | Path | نقش |
-|--------|------|-----|
-| `GET` | `/api/v1/data-hub/automation/queue` | لیست queue |
-| `POST` | `/api/v1/data-hub/automation/queue/refresh` | بازسازی queue از pipeline/collected_data |
-| `POST` | `/api/v1/data-hub/automation/queue/dispatch` | ارسال pending → telegram-publishers API |
-| `PATCH` | `/api/v1/data-hub/automation/queue/:id` | process sent/failed |
-| `GET` | `/api/v1/data-hub/automation/schedule` | |
-| `PUT` | `/api/v1/data-hub/automation/schedule` | |
-
-DB پیشنهادی: `automation_queue_items`, `automation_schedule_config`
-
-Worker: schedule باید از client `setInterval` به backend cron/worker منتقل شود (بخشی از GAP-019).
+Migration: `027_create_datahub_automation_queue.sql`
 
 ---
 
-## ۵. Security (پیشنهاد wiring)
+## ۳. Endpoints
 
-| Endpoint class | Auth |
-|----------------|------|
-| Read (topics, queue, schedule) | `authenticate` |
-| Write / dispatch / refresh | `authenticate` + `authorize('admin','trader')` |
-| Dispatch publish | همان قوانین GAP-016 (`confirm_publish`, dry-run) |
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/overview` | JWT | Topics + schedule + queue + executions + summary |
+| `GET/POST/PUT/DELETE` | `/topics` | read / write | CRUD |
+| `GET/PUT` | `/schedule` | read / write | Schedule config |
+| `GET` | `/queue` | JWT | List queue |
+| `POST` | `/queue/refresh` | admin/trader | Build queue from pipeline + `collected_data` |
+| `POST` | `/queue/dispatch` | admin/trader | Batch dispatch `{ limit, dry_run }` |
+| `POST` | `/queue/:id/dispatch` | admin/trader | Single item publish |
+| `PATCH` | `/queue/:id` | admin/trader | Mark failed |
+| `GET` | `/executions` | JWT | History |
+| `POST` | `/executions/:id/retry` | admin/trader | Re-queue + dispatch |
+| `POST` | `/test-run` | admin/trader | Refresh + dispatch one item (default dry-run) |
 
-RBAC read-only برای viewer → **GAP-020** (اختیاری، جدا از wiring).
-
----
-
-## ۶. SSOT / Done criteria (بعد از تأیید شما)
-
-**Implemented** فقط وقتی:
-
-- [ ] **B** — agent topics از API (نه IndexedDB)
-- [ ] **C** — queue + schedule + dispatch از API (نه IndexedDB)
-- [ ] Dispatch از `publishToTelegram` legacy جدا شده
-- [ ] `AutomationTopics.tsx` بدون `fetchDataHubState` برای دادهٔ اصلی
-- [ ] Demos در `DataHub_DEMOS.md`
-- [ ] GAP-018 و GAP-019 بسته
-
-**تا آن زمان:** `dataHub.advanced.automation` = **Partial**؛ Topic Routing global = مرجع جدا در AI Center.
+Dispatch uses `runPublisherPublish` → `/api/v1/data-hub/telegram-publishers` (not legacy `publishToTelegram`).
 
 ---
 
-## ۷. سوالات برای تأیید شما
+## ۴. Frontend
 
-1. **Agent topics:** جدول جدید `datahub_automation_topics` یا ادغام با `topic_routing_rules` (breaking shape)?
-2. **Queue refresh:** منبع داده `collected_data` / pipeline API (GAP-012) کافی است؟
-3. **Schedule:** آیا worker backend در v3.0 الزامی است یا فاز ۱ فقط API + manual trigger؟
+| File | Role |
+|------|------|
+| `services/datahubAutomationApi.ts` | HTTP client |
+| `hooks/useDatahubAutomation.ts` | React Query |
+| `AutomationTopics.tsx` | No IndexedDB for automation data |
+| `hooks/useTelegramPublishers.ts` | Publisher targets dropdown |
 
-**پس از تأیید این contract → wiring شروع می‌شود (ابتدا B یا C — ترتیب را شما تعیین کنید).**
+---
+
+## ۵. Done criteria ✅
+
+- [x] `AutomationTopics.tsx` — API only
+- [x] `dataHub.advanced.automation` = **Implemented**
+- [x] GAP-018 Closed, GAP-019 Closed
+- [x] GAP-020 Open (cron worker v3.1, non-blocker)
+- [x] `npm run build` passes

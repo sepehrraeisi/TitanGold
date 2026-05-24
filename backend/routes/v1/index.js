@@ -40,6 +40,7 @@ import accessControlRoutes from '../access-control.js';
 import topicRoutingRoutes from '../topic-routing.js';
 import telegramRoutes from '../telegram.js';
 import telegramPublishersRoutes from '../telegram-publishers.js';
+import dataHubAutomationRoutes from '../data-hub-automation.js';
 
 const router = express.Router();
 
@@ -82,6 +83,7 @@ router.use('/webhooks', webhookRoutes);
 router.use('/data-categories', dataCategoryRoutes);
 router.use('/data-hub/access-control', accessControlRoutes);
 router.use('/data-hub/telegram-publishers', telegramPublishersRoutes);
+router.use('/data-hub/automation', dataHubAutomationRoutes);
 router.use('/topic-routing', topicRoutingRoutes);
 router.use('/telegram', telegramRoutes);
 
