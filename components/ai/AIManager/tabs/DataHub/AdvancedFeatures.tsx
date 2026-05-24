@@ -150,16 +150,7 @@ const AdvancedFeatures: React.FC<{
             )}
 
             {activeFeature === 'access' && (
-                <AccessControlPanel
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    agents={agents}
-                    sourceQualityMap={sourceQualityMap}
-                    getStatusBadgeClass={getStatusBadgeClass}
-                />
+                <AccessControlPanel t={t} />
             )}
 
             {activeFeature === 'blacklist' && (

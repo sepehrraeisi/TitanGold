@@ -1,132 +1,174 @@
 import React, { useState } from 'react';
-import { DataSource } from '../../../../../../types';
+import type { SourceAccessControlUi } from '../../../../../../services/accessControlApi';
 
 const AccessControlModal: React.FC<{
     sourceId: string;
-    source?: DataSource;
-    accessControl?: any;
+    sourceName?: string;
+    accessControl?: SourceAccessControlUi;
     onClose: () => void;
-    onSave: (data: any) => Promise<void>;
+    onSave: (data: {
+        sourceId: string;
+        allowedAgents: string[];
+        blockedAgents: string[];
+        allowedDataTypes: string[];
+        requireAuth: boolean;
+        maxRequestsPerMinute?: number;
+    }) => Promise<void>;
+    isSaving?: boolean;
     t: (key: string) => string;
-}> = ({ sourceId, source, accessControl, onClose, onSave, t }) => {
-    const [allowedAgents, setAllowedAgents] = useState<string[]>(accessControl?.allowedAgents || []);
-    const [blockedAgents, setBlockedAgents] = useState<string[]>(accessControl?.blockedAgents || []);
-    const [allowedDataTypes, setAllowedDataTypes] = useState<string[]>(accessControl?.allowedDataTypes || []);
+}> = ({ sourceId, sourceName, accessControl, onClose, onSave, isSaving = false, t }) => {
+    const [allowedAgents, setAllowedAgents] = useState(
+        (accessControl?.allowedAgents || []).join(', '),
+    );
+    const [blockedAgents, setBlockedAgents] = useState(
+        (accessControl?.blockedAgents || []).join(', '),
+    );
+    const [allowedDataTypes, setAllowedDataTypes] = useState(
+        (accessControl?.allowedDataTypes || []).join(', '),
+    );
     const [requireAuth, setRequireAuth] = useState(accessControl?.requireAuth ?? false);
-    const [maxRequestsPerMinute, setMaxRequestsPerMinute] = useState(accessControl?.maxRequestsPerMinute || '');
-    const [isSaving, setIsSaving] = useState(false);
-    
+    const [maxRequestsPerMinute, setMaxRequestsPerMinute] = useState(
+        accessControl?.maxRequestsPerMinute ? String(accessControl.maxRequestsPerMinute) : '',
+    );
+
+    const splitList = (value: string) =>
+        value
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean);
+
     const handleSubmit = async () => {
-        setIsSaving(true);
-        try {
-            await onSave({
-                sourceId,
-                allowedAgents: allowedAgents.length > 0 ? allowedAgents : [],
-                blockedAgents,
-                allowedDataTypes: allowedDataTypes.length > 0 ? allowedDataTypes : [],
-                requireAuth,
-                maxRequestsPerMinute: maxRequestsPerMinute ? parseInt(maxRequestsPerMinute) : undefined,
-                rateLimitWindow: 60,
-            });
-        } catch (e) {
-            console.error('Failed to save access control:', e);
-        } finally {
-            setIsSaving(false);
-        }
+        await onSave({
+            sourceId,
+            allowedAgents: splitList(allowedAgents),
+            blockedAgents: splitList(blockedAgents),
+            allowedDataTypes: splitList(allowedDataTypes),
+            requireAuth,
+            maxRequestsPerMinute: maxRequestsPerMinute
+                ? parseInt(maxRequestsPerMinute, 10)
+                : undefined,
+        });
     };
-    
+
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {t('configure_access_control') || 'Configure Access Control'}
-                </h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                    {source?.name || sourceId}
-                </p>
-                
-                <div className="space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={onClose}
+                aria-hidden
+            />
+            <div className="relative bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
                     <div>
-                        <label className="block text-sm text-muted-foreground mb-2">
-                            {t('allowed_agents') || 'Allowed Agents'} ({t('empty_for_all') || 'Empty = All'})
+                        <h3 className="text-sm font-semibold text-foreground">
+                            {t('configure_access_control')}
+                        </h3>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {sourceName || sourceId}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-muted-foreground hover:text-foreground text-xl leading-none"
+                        aria-label={t('close')}
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div className="p-4 overflow-y-auto space-y-4 flex-1">
+                    <div>
+                        <label className="text-[11px] text-muted-foreground mb-1 block">
+                            {t('allowed_agents')} ({t('empty_for_all')})
                         </label>
                         <input
                             type="text"
-                            value={allowedAgents.join(', ')}
-                            onChange={(e) => setAllowedAgents(e.target.value.split(',').map(s => s.trim()).filter(s => s))}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                            placeholder="agent1, agent2, agent3"
+                            value={allowedAgents}
+                            onChange={e => setAllowedAgents(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
+                            placeholder="agent_key_1, agent_key_2"
                         />
                     </div>
-                    
+
                     <div>
-                        <label className="block text-sm text-muted-foreground mb-2">
-                            {t('blocked_agents') || 'Blocked Agents'}
+                        <label className="text-[11px] text-muted-foreground mb-1 block">
+                            {t('blocked_agents')}
                         </label>
                         <input
                             type="text"
-                            value={blockedAgents.join(', ')}
-                            onChange={(e) => setBlockedAgents(e.target.value.split(',').map(s => s.trim()).filter(s => s))}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                            placeholder="agent1, agent2"
+                            value={blockedAgents}
+                            onChange={e => setBlockedAgents(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
                         />
                     </div>
-                    
+
                     <div>
-                        <label className="block text-sm text-muted-foreground mb-2">
-                            {t('allowed_data_types') || 'Allowed Data Types'} ({t('empty_for_all') || 'Empty = All'})
+                        <label className="text-[11px] text-muted-foreground mb-1 block">
+                            {t('allowed_data_types')} ({t('empty_for_all')})
                         </label>
                         <input
                             type="text"
-                            value={allowedDataTypes.join(', ')}
-                            onChange={(e) => setAllowedDataTypes(e.target.value.split(',').map(s => s.trim()).filter(s => s))}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                            placeholder="price, news, analysis"
+                            value={allowedDataTypes}
+                            onChange={e => setAllowedDataTypes(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
+                            placeholder="ticker, article"
                         />
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm text-muted-foreground mb-1">
-                                {t('max_requests_per_minute') || 'Max Requests/Minute'}
+                            <label className="text-[11px] text-muted-foreground mb-1 block">
+                                {t('max_requests_per_minute')}
                             </label>
                             <input
                                 type="number"
+                                min={0}
                                 value={maxRequestsPerMinute}
-                                onChange={(e) => setMaxRequestsPerMinute(e.target.value)}
-                                className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                                placeholder="60"
+                                onChange={e => setMaxRequestsPerMinute(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
+                                placeholder="0"
                             />
                         </div>
-                        
-                        <div className="flex items-center pt-6">
-                            <label className="flex items-center gap-2 text-sm">
-                                <input
-                                    type="checkbox"
-                                    checked={requireAuth}
-                                    onChange={(e) => setRequireAuth(e.target.checked)}
-                                    className="rounded"
-                                />
-                                {t('require_auth') || 'Require Auth'}
+                        <div className="flex items-end pb-1">
+                            <label className="flex items-center gap-2 text-[11px] text-foreground cursor-pointer">
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={requireAuth}
+                                    onClick={() => setRequireAuth(!requireAuth)}
+                                    className={`inline-flex items-center justify-center w-8 h-4 rounded-full transition-colors ${
+                                        requireAuth ? 'bg-emerald-500/80' : 'bg-slate-700'
+                                    }`}
+                                >
+                                    <span
+                                        className={`w-3 h-3 rounded-full bg-white shadow transform transition-transform ${
+                                            requireAuth ? 'translate-x-2' : '-translate-x-2'
+                                        }`}
+                                    />
+                                </button>
+                                {t('require_auth')}
                             </label>
                         </div>
                     </div>
                 </div>
-                
-                <div className="flex justify-end gap-2 mt-6">
+
+                <div className="flex items-center justify-end gap-2 p-4 border-t border-white/10">
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="px-4 py-2 bg-secondary hover:bg-accent text-secondary-foreground rounded-lg text-sm"
                         disabled={isSaving}
+                        className="text-[11px] bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5 disabled:opacity-50"
                     >
-                        {t('cancel') || 'Cancel'}
+                        {t('cancel')}
                     </button>
                     <button
+                        type="button"
                         onClick={handleSubmit}
                         disabled={isSaving}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm"
+                        className="text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white rounded px-3 py-1.5 disabled:opacity-50"
                     >
-                        {isSaving ? t('saving') || 'Saving...' : t('save') || 'Save'}
+                        {isSaving ? t('saving') : t('save')}
                     </button>
                 </div>
             </div>
@@ -135,4 +177,3 @@ const AccessControlModal: React.FC<{
 };
 
 export default AccessControlModal;
-

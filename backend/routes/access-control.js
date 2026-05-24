@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
 import { validateBody, validateParams, validateResponse } from '../middleware/validation.js';
@@ -7,9 +7,87 @@ import { accessControlSchema, accessControlResponseSchema } from '../schemas/acc
 import { z } from 'zod';
 
 const router = express.Router();
+const writeAuth = [authenticate, authorize('admin', 'trader')];
 
 const sourceIdParamsSchema = z.object({
     sourceId: z.string().uuid()
+});
+
+const listItemSchema = z.object({
+    source_id: z.string().uuid(),
+    source_name: z.string().nullable().optional(),
+    source_category: z.string().nullable().optional(),
+    source_type: z.string().nullable().optional(),
+    id: z.string().uuid().nullable(),
+    allowed_agents: z.array(z.string()),
+    blocked_agents: z.array(z.string()),
+    allowed_data_types: z.array(z.string()),
+    blocked_data_types: z.array(z.string()),
+    require_auth: z.boolean(),
+    max_requests_per_minute: z.number().int(),
+    max_requests_per_day: z.number().int(),
+    created_at: z.string().nullable(),
+    updated_at: z.string().nullable(),
+    updated_by: z.string().uuid().nullable().optional(),
+    has_custom_rule: z.boolean(),
+});
+
+const listResponseSchema = z.object({
+    rules: z.array(listItemSchema),
+});
+
+/**
+ * GET all sources with optional ACL (for DataHub Access panel)
+ */
+router.get('/', authenticate, validateResponse(listResponseSchema), async (req, res) => {
+    try {
+        const result = await query(
+            `SELECT
+              ds.id AS source_id,
+              ds.name AS source_name,
+              ds.category AS source_category,
+              ds.type AS source_type,
+              sac.id,
+              sac.allowed_agents,
+              sac.blocked_agents,
+              sac.allowed_data_types,
+              sac.blocked_data_types,
+              sac.require_auth,
+              sac.max_requests_per_minute,
+              sac.max_requests_per_day,
+              sac.created_at,
+              sac.updated_at,
+              sac.updated_by
+            FROM data_sources ds
+            LEFT JOIN source_access_controls sac ON sac.source_id = ds.id
+            WHERE ds.is_active = true
+            ORDER BY ds.name ASC`,
+        );
+
+        const rules = result.rows.map(row => ({
+            source_id: row.source_id,
+            source_name: row.source_name,
+            source_category: row.source_category,
+            source_type: row.source_type,
+            id: row.id,
+            allowed_agents: row.allowed_agents || [],
+            blocked_agents: row.blocked_agents || [],
+            allowed_data_types: row.allowed_data_types || [],
+            blocked_data_types: row.blocked_data_types || [],
+            require_auth: row.require_auth ?? false,
+            max_requests_per_minute: row.max_requests_per_minute ?? 0,
+            max_requests_per_day: row.max_requests_per_day ?? 0,
+            created_at: row.created_at ? new Date(row.created_at).toISOString() : null,
+            updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+            updated_by: row.updated_by,
+            has_custom_rule: Boolean(row.id),
+        }));
+
+        res.json({ rules });
+    } catch (error) {
+        logger.error('Error listing ACL:', error);
+        res.status(500).json({ error: 'Failed to list access control rules' });
+    }
 });
 
 /**
@@ -52,7 +130,7 @@ router.get('/:sourceId', authenticate, validateParams(sourceIdParamsSchema), val
 /**
  * SET/UPDATE ACL for a source
  */
-router.post('/:sourceId', authenticate, validateParams(sourceIdParamsSchema), validateBody(accessControlSchema), validateResponse(accessControlResponseSchema), async (req, res) => {
+router.post('/:sourceId', ...writeAuth, validateParams(sourceIdParamsSchema), validateBody(accessControlSchema), validateResponse(accessControlResponseSchema), async (req, res) => {
     try {
         const { sourceId } = req.validatedParams;
         const {
@@ -103,7 +181,7 @@ router.post('/:sourceId', authenticate, validateParams(sourceIdParamsSchema), va
 /**
  * RESET/DELETE ACL for a source
  */
-router.delete('/:sourceId', authenticate, validateParams(sourceIdParamsSchema), async (req, res) => {
+router.delete('/:sourceId', ...writeAuth, validateParams(sourceIdParamsSchema), async (req, res) => {
     try {
         const { sourceId } = req.validatedParams;
 

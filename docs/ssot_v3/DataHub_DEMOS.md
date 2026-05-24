@@ -135,3 +135,14 @@ node scripts/verify_automation_demo.js
 | Manual dispatch dry-run | `processed: 1`, history `dry_run` |
 
 Root-cause fix: `012_add_ab_testing` FK removed (partitioned `ai_decisions`). Details: `docs/ssot_v3/audit/ENVIRONMENT.md` § Migration verification.
+
+### dataHub.advanced.access – Access Control (GAP-022 closed)
+
+| سناریو | Endpoint | Expected | UI |
+|--------|----------|----------|-----|
+| **List rules** | `GET /api/v1/data-hub/access-control` | **200** + `rules[]` per active source | Permissions list (slate cards) |
+| **Upsert** | `POST /api/v1/data-hub/access-control/:sourceId` | **200** | Configure modal → Save |
+| **Reset** | `DELETE .../:sourceId` | **200** | Reset → default access |
+| **Auth write** | POST/DELETE without admin/trader | **403** | — |
+
+Design: full pass per `DESIGN_SYSTEM_DATAHUB.md` (modal §10, metrics §2.4, badges §7).
