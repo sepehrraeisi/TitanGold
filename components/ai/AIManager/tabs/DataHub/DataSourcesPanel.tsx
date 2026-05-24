@@ -13,6 +13,8 @@ type Props = {
     setShowCreateSourceModal: (show: boolean) => void;
     setViewingSourceData: (source: DataSource | null) => void;
     handleTestSource: (sourceId: string) => void | Promise<void>;
+    handleDeleteSource: (sourceId: string, hard?: boolean) => void | Promise<void>;
+    handleRestoreSource: (sourceId: string) => void | Promise<void>;
     dataHub: DataHubState;
     setActiveView?: (view: 'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram') => void;
     pagination?: DataSourcesPagination;
@@ -32,6 +34,8 @@ const DataSourcesPanel: React.FC<Props> = ({
     setShowCreateSourceModal,
     setViewingSourceData,
     handleTestSource,
+    handleDeleteSource,
+    handleRestoreSource,
     dataHub,
     setActiveView,
     pagination,
@@ -307,6 +311,27 @@ const DataSourcesPanel: React.FC<Props> = ({
                                             className="text-[11px] px-3 py-1 rounded-full border border-slate-600 text-slate-100 hover:bg-slate-600/30 transition"
                                         >
                                             {t('edit') || 'Edit'}
+                                        </button>
+                                        {source.status === 'inactive' ? (
+                                            <button
+                                                onClick={() => handleRestoreSource(source.id)}
+                                                className="text-[11px] px-3 py-1 rounded-full border border-blue-500/70 text-blue-200 hover:bg-blue-500/10 transition"
+                                            >
+                                                {t('restore') || 'Restore'}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleDeleteSource(source.id, false)}
+                                                className="text-[11px] px-3 py-1 rounded-full border border-amber-500/70 text-amber-200 hover:bg-amber-500/10 transition"
+                                            >
+                                                {t('soft_delete') || 'Soft Delete'}
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => handleDeleteSource(source.id, true)}
+                                            className="text-[11px] px-3 py-1 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 transition"
+                                        >
+                                            {t('hard_delete') || 'Hard Delete'}
                                         </button>
                                     </div>
                                 </div>

@@ -70,6 +70,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         handleLinkChannelToSource,
         handleTestCollectorChannel,
         handleTestSource,
+        handleDeleteSource,
+        handleRestoreSource,
         handleCreateSource,
         handleUpdateSource,
         handleCreateCategory,
@@ -252,6 +254,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             setShowCreateSourceModal={setShowCreateSourceModal}
                             setViewingSourceData={setViewingSourceData}
                             handleTestSource={handleTestSource}
+                            handleDeleteSource={handleDeleteSource}
+                            handleRestoreSource={handleRestoreSource}
                             dataHub={dataHub}
                             setActiveView={setActiveView}
                             pagination={sourcesPagination}
