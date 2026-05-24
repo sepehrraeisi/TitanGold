@@ -21811,6 +21811,20 @@ export type { DataPipelineView } from './dataPipelineApi';
 export { fetchDataAccessLogs } from './dataAccessLogsApi';
 export type { AccessLogsListResult, AccessLogsStatusCounts } from './dataAccessLogsApi';
 
+export {
+    fetchTelegramPublishers,
+    fetchPublisherHistory,
+    disableTelegramPublisher,
+    testTelegramPublisher,
+    mapHistoryToUiItem,
+} from './telegramPublishersApi';
+export type {
+    TelegramPublisherRecord,
+    TelegramPublishersListResult,
+    PublisherMetrics,
+    PublishActionResult,
+} from './telegramPublishersApi';
+
 // ==================== Advanced Data Hub Features ====================
 
 const createAutomationTopicStats = (): AgentTopicRouteStats => ({

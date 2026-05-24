@@ -77,3 +77,18 @@
 **پیش‌نیاز success:** حداقل یک رکورد در `data_hub_logs` (مثلاً بعد از `PUT /api/v1/data-sources/:id` که audit insert می‌زند).
 
 **Auth:** بدون `Authorization` → **401** (authenticate). RBAC نقش → GAP-014 (فعلاً هر authenticated user).
+
+### dataHub.advanced.telegramPublisher – Telegram Publisher (GAP-016 closed)
+
+| سناریو | Endpoint | Status / شرط | UI |
+|--------|----------|----------------|-----|
+| **Success — create** | `POST /api/v1/data-hub/telegram-publishers` | **201** | فرم New Channel → لیست با `GET` refetch |
+| **Success — test** | `POST .../telegram-publishers/:id/test` | **200** + `dry_run` یا `test` | دکمه Test؛ رکورد در history |
+| **Success — publish** | `POST .../:id/publish` + `confirm_publish: true` | **200** `sent` یا `dry_run` | `window.confirm` قبل از live؛ dev بدون token → dry-run |
+| **Success — history** | `GET .../:id/history` | **200** + `data[]` | تب History + انتخاب channel |
+| **Empty** | `GET .../telegram-publishers` | **200** + `publishers: []` | Empty state «No channels configured» |
+| **Failure — invalid token/channel** | `POST .../test` یا `.../publish` | **200** با `status: failed` + `error` در body | پیام خطا در UI؛ ردیف failed در history |
+| **Failure — backend down** | هر endpoint | **500** / network | `ApiWrapper` + refetch |
+| **Auth — write without role** | `POST/PUT/DELETE/publish` | **403** | کاربر بدون admin/trader |
+
+**پیش‌نیاز:** migration `025_create_telegram_publishers.sql`؛ `MASTER_KEY` برای encrypt bot token (اختیاری dev).

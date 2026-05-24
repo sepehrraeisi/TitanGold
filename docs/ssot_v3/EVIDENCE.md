@@ -133,7 +133,32 @@ grep -rn "dataHub\.accessLogs\|fetchDataHubState" \
 # → 0 matches (DataHubTab: accessLogs={accessLogs} از useDataHub)
 ```
 
-### ۱۰. Migrations / Greenfield Bootstrap
+### ۱۰. DataHub Telegram Publisher (GAP-016 Closed)
+
+| Claim | File | توضیح |
+|---|---|---|
+| DB tables | `backend/database/migrations/025_create_telegram_publishers.sql` | `telegram_publishers`, `publisher_delivery_history` |
+| API routes | `backend/routes/telegram-publishers.js` | Mount: `/api/v1/data-hub/telegram-publishers` |
+| Publish safety | `backend/services/telegramPublisherService.js` | `confirm_publish`, `isPublisherDryRunForced()`, history on error |
+| Frontend API | `services/telegramPublishersApi.ts` | CRUD + test + publish + history |
+| React Query | `hooks/useTelegramPublishers.ts` | `useTelegramPublishersQuery` + mutations |
+| UI | `TelegramPublisher.tsx` | Props: `telegramSources` only (sources از API) |
+
+**Grep — Publisher UI (no IndexedDB for main data):**
+
+```bash
+grep -rn "dataHub\.advanced\|fetchDataHubState" \
+  components/ai/AIManager/tabs/DataHub/advanced/TelegramPublisher.tsx
+# → 0 matches
+
+grep -rn "data-hub/telegram-publishers\|useTelegramPublishers" \
+  components/ai/AIManager/tabs/DataHub/advanced/TelegramPublisher.tsx
+# → useTelegramPublishersQuery + /api/v1/data-hub/telegram-publishers (via service)
+```
+
+Legacy `createTelegramPublisher` در `services/api.ts` برای automation dispatch باقی است — خارج از scope این subtab.
+
+### ۱۱. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |
 |---|---|---|---|

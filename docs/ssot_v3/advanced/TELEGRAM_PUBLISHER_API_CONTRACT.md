@@ -91,8 +91,11 @@ Body: `name`, `chatId`, `botToken`, `enabled`, `filters`, `template`, …
 
 ---
 
-## ۴. Done criteria
+## ۴. Done (GAP-016)
 
-- [ ] UI Publisher: `useTelegramPublishersQuery` — نه `dataHub.advanced.telegramPublishers` برای دادهٔ اصلی
-- [ ] Demo در `DataHub_DEMOS.md`
-- [ ] SSOT: `dataHub.advanced.telegramPublisher` → **Implemented** یا **Partial** + GAP-016 Closed
+- [x] Migration `025_create_telegram_publishers.sql`
+- [x] `GET/POST/PUT/DELETE` + `POST /:id/test` + `POST /:id/publish` + `GET /:id/history`
+- [x] `TelegramPublisher.tsx` → `useTelegramPublishersQuery` (نه IndexedDB)
+- [x] Publish: `confirm_publish` + dry-run when `NODE_ENV !== 'production'` or `TELEGRAM_PUBLISHER_DRY_RUN=true` or missing token
+- [x] Write/publish: `authorize('admin', 'trader')`
+- [x] Demo + SSOT Implemented
