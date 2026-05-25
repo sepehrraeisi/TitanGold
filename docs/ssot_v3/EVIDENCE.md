@@ -210,6 +210,16 @@ grep -rn "fetchDataHubState\|createAutomationTopic\|refreshAutomationQueue" \
 | render_js gate | `datahubCrawlersService.js` | `CRAWLER_RENDER_JS_ENABLED` |
 | UI | `WebCrawlerConfig.tsx`, `dataHubCrawlersApi.ts` | no IndexedDB crawler list |
 
+#### Crawler runtime safety
+
+| Claim | File | Behavior |
+|---|---|---|
+| `render_js` default false | `029_create_datahub_crawlers.sql`, `createCrawlerSchema` | DB + API default `false` |
+| render_js without env | `datahubCrawlersService.js` `assertRenderJsAllowed` | **400** unless `CRAWLER_RENDER_JS_ENABLED=true` |
+| max_depth cap 5 | `datahubCrawlersSchemas.js`, `webCrawler.js` | zod max 5; crawl uses `Math.min(depth, 5)` |
+| max pages per run | `webCrawler.js` `config.maxPages` | loop stops when `results.length >= maxPages` |
+| robots.txt | `webCrawler.js` | enforced unless `config.skipRobots` (only when `respect_robots=false`) |
+
 ### ۱۴. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |

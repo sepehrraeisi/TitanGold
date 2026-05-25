@@ -254,3 +254,16 @@ cd backend && npm run migrate   # 029_create_datahub_crawlers.sql
 ```
 
 Design: slate shell, `WebCrawlerModal` §10, no IndexedDB crawler CRUD.
+
+#### Crawler runtime safety (enforced in code)
+
+| Control | Default / rule | Failure |
+|---------|----------------|---------|
+| `render_js` | **false** | — |
+| `render_js=true` without `CRAWLER_RENDER_JS_ENABLED=true` | server env | **400** `RENDER_JS_DISABLED` |
+| `max_depth` | capped at **5** (schema + service) | **400** if RSS with depth > 0 |
+| `max_pages_per_run` | default 50, max **500** | loop stops at cap |
+| `respect_robots` | default **true** | `skipRobots` only when `respect_robots=false` (explicit override) |
+| `timeout_ms` | wall-clock per run | run **failed** with timeout message |
+
+Evidence: `docs/ssot_v3/EVIDENCE.md` § Crawler runtime safety.

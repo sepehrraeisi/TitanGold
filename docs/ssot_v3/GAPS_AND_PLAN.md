@@ -30,5 +30,6 @@
 | GAP-024 | Blacklist/Whitelist backend-first (`datahub_filter_rules` + `/api/v1/data-hub/filter-rules`) | Medium | `dataHub.advanced.blacklist` | **Closed** | v3.0 | Migration `028`, ingestion enforce on `collected-data` + telegram pipeline; UI backend-first + Design Done. |
 | GAP-025 | Enforce filter rules on publishing path (automation dispatch + telegram publish) | Low | `dataHub.advanced.automation`, `dataHub.advanced.telegramPublisher` | Open | v3.1 | v3.0 stores rules + `POST /evaluate` only; publisher worker hook in v3.1. |
 | GAP-026 | Web Crawlers backend-first (`datahub_crawlers` + runs + manual/schedule) | Medium | `dataHub.advanced.crawlers` | **Closed** | v3.0 | Migration `029`, website+RSS, pre-crawl+ingestion filter, `POST /:id/run`, dry-run. |
-| GAP-027 | Crawler scheduler daemon (`next_run_at` worker) + prod Playwright enablement | Low | `dataHub.advanced.crawlers` | Open | v3.1 | `CRAWLER_RENDER_JS_ENABLED`; cron refresh-queue worker. |
+| GAP-027 | Crawler scheduler daemon (`next_run_at` worker) + prod Playwright enablement | Low | `dataHub.advanced.crawlers` | **Open** | v3.1 | `CRAWLER_RENDER_JS_ENABLED`; cron refresh-queue worker only — **not** v3.0 scope. |
+| GAP-028 | Auto Discovery backend-first (suggestions + admin approval) | Medium | `dataHub.advanced.discovery` | Open | v3.0 | Contract: `advanced/DISCOVERY_API_CONTRACT.md` — **awaiting approval**. v3.0: suggestion-only, no auto-create. |
 
