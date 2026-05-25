@@ -116,16 +116,7 @@ const AdvancedFeatures: React.FC<{
             {/* Conditionally rendered feature sections */}
             {activeFeature === 'crawlers' && <WebCrawlerConfig t={t} />}
 
-            {activeFeature === 'discovery' && (
-                <AutoDiscoveryConfig
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    findCategorySignal={findCategorySignal}
-                />
-            )}
+            {activeFeature === 'discovery' && <AutoDiscoveryConfig t={t} />}
 
             {activeFeature === 'prioritization' && (
                 <SmartPrioritization

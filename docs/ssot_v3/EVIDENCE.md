@@ -220,7 +220,20 @@ grep -rn "fetchDataHubState\|createAutomationTopic\|refreshAutomationQueue" \
 | max pages per run | `webCrawler.js` `config.maxPages` | loop stops when `results.length >= maxPages` |
 | robots.txt | `webCrawler.js` | enforced unless `config.skipRobots` (only when `respect_robots=false`) |
 
-### ۱۴. Migrations / Greenfield Bootstrap
+### ۱۴. DataHub discovery (GAP-028)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Tables | `030_create_datahub_discovery.sql` | suggestions, rules, scans, settings |
+| API | `backend/routes/data-hub-discovery.js` | scan, approve, reject, stats, history |
+| 3-layer dedupe | `backend/utils/discoveryDedupe.js` | host, path, title similarity |
+| Scoring | `backend/utils/discoveryScoring.js` | weighted 0–100 |
+| SSRF | `backend/utils/discoverySafety.js` | explicit block list |
+| No auto-create on scan | `datahubDiscoveryService.js` | only `approveSuggestion` inserts `data_sources` |
+| Audit fields | migration `030` | `approved_by`, `rejected_by`, `review_note`, `reviewed_at` |
+| UI | `AutoDiscoveryConfig.tsx` | backend-first |
+
+### ۱۵. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |
 |---|---|---|---|

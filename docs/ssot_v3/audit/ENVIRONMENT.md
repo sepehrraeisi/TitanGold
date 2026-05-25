@@ -158,6 +158,15 @@ Runtime demos: `docs/ssot_v3/DataHub_DEMOS.md` § `dataHub.advanced.blacklist` (
 
 Optional env: `CRAWLER_RENDER_JS_ENABLED=true` to allow Playwright `render_js` crawls (default off in production).
 
+### Migration verification — DataHub discovery (GAP-028 · 2026-05-25)
+
+| Field | Value |
+|-------|--------|
+| Migration | `030_create_datahub_discovery.sql` |
+| Tables | `datahub_discovery_settings`, `datahub_discovery_rules`, `datahub_discovery_scans`, `datahub_discovery_suggestions` |
+| DB | dev `titangold_db` @ `127.0.0.1:5433` |
+| Command | `cd backend && npm run migrate` → **PASS** |
+
 ### Environment Proof — `dataHub.advanced.automation` (2026-05-24)
 
 > **Scope:** dev DB on application server (`ubuntu` host) — **not production.**  

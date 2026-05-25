@@ -255,6 +255,36 @@ cd backend && npm run migrate   # 029_create_datahub_crawlers.sql
 
 Design: slate shell, `WebCrawlerModal` §10, no IndexedDB crawler CRUD.
 
+### dataHub.advanced.discovery – Auto Discovery (GAP-028 closed)
+
+| سناریو | Endpoint | Expected |
+|--------|----------|----------|
+| Create website/RSS via scan inputs | `POST /scan` | `added` / `duplicates` / `blocked` counts |
+| List suggestions | `GET /suggestions?status=pending` | scored 0–100 |
+| Approve | `POST /suggestions/:id/approve` | `data_sources` row + `approved_by` |
+| Reject | `POST /suggestions/:id/reject` | `rejected_by` + `review_note` |
+| Stats / history | `GET /stats`, `GET /history` | aggregates + scan rows |
+
+**Failures (required):**
+
+| Case | Expected |
+|------|----------|
+| Duplicate (3-layer) | `status=duplicate`, `duplicate_of_*`, no new pending |
+| Blacklist blocked | scan `blocked++`, no pending |
+| SSRF (`localhost`, private IP, `file://`) | skipped / `SSRF_BLOCKED` |
+| Invalid URL | `400` |
+| Unauthorized approve | `403` |
+| Rejected | `rejected_by`, `reviewed_at` |
+| DB down | `500` |
+
+**v3.0:** scan does **not** auto-create sources — only approve path mutates `data_sources`.
+
+```bash
+cd backend && npm run migrate   # 030_create_datahub_discovery.sql
+```
+
+Design: `AutoDiscoveryConfig.tsx` slate shell · strict i18n · no IndexedDB discovery state.
+
 #### Crawler runtime safety (enforced in code)
 
 | Control | Default / rule | Failure |

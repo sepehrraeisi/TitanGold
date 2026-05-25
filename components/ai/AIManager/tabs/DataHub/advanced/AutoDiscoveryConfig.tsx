@@ -1,213 +1,299 @@
-
-import React, { useState, useMemo } from 'react';
-import * as api from '../../../../../../services/api';
-import { DataHubState, DataPipelineCategorySnapshot } from '../../../../../../types';
-import { SummaryCard } from '../../../../../ui/summary-card';
-import { EmptyState } from '../../../../../ui/empty-state';
-import { ActionButton } from '../../../../../ui/action-button';
-import { StatusBadge } from '../../../../../ui/status-badge';
-import ApiWrapper from '../../../../../common/ApiWrapper';
-import { useAsync } from '../../../../../../hooks/useAsync';
+import React, { useMemo, useState } from 'react';
+import DiscoveryRuleModal from '../modals/DiscoveryRuleModal';
+import {
+    useDiscoveryStatsQuery,
+    useDiscoverySuggestionsQuery,
+    useDiscoveryRulesQuery,
+    useUpdateDiscoverySettingsMutation,
+    useRunDiscoveryScanMutation,
+    useApproveSuggestionMutation,
+    useRejectSuggestionMutation,
+    useCreateDiscoveryRuleMutation,
+    useDeleteDiscoveryRuleMutation,
+} from '../../../../../../hooks/useDataHubDiscovery';
+import type { DiscoverySuggestion } from '../../../../../../services/dataHubDiscoveryApi';
+import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 
 interface AutoDiscoveryConfigProps {
-    dataHub: DataHubState;
-    setDataHub: (hub: DataHubState) => void;
-    onRefresh: () => void;
     t: (key: string) => string;
-    formatTimeAgo: (timestamp?: string) => string;
-    findCategorySignal: (categoryKey: string) => DataPipelineCategorySnapshot | undefined;
 }
 
-const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({
-    dataHub,
-    setDataHub,
-    onRefresh,
-    t,
-    formatTimeAgo,
-    findCategorySignal
-}) => {
-    const toggleAsync = useAsync(api.setAutoDiscoveryEnabled);
-    const discoveryAsync = useAsync(api.runAutoDiscovery);
+const SHELL =
+    'bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg rounded-xl p-4 md:p-5';
 
-    const [activeTab, setActiveTab] = useState<'discovered' | 'rules' | 'patterns'>('discovered');
+function statusPill(status: string, t: (k: string) => string) {
+    const map: Record<string, string> = {
+        pending: 'bg-amber-500/20 text-amber-300',
+        approved: 'bg-emerald-500/20 text-emerald-300',
+        rejected: 'bg-slate-600/40 text-slate-400',
+        duplicate: 'bg-red-500/15 text-red-300',
+    };
+    return (
+        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${map[status] || ''}`}>
+            {t(`discovery_status_${status}`)}
+        </span>
+    );
+}
 
-    const advanced = dataHub.advanced || { autoDiscovery: { enabled: false, rules: [], discoveredSources: [] } };
-    const discovery = advanced.autoDiscovery;
+const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
+    const { data: stats, isLoading: statsLoading, refetch } = useDiscoveryStatsQuery();
+    const { data: pending = [], isLoading: sugLoading } = useDiscoverySuggestionsQuery('pending');
+    const { data: rules = [] } = useDiscoveryRulesQuery();
 
-    const metrics = useMemo(() => ({
-        totalRules: discovery.rules.length,
-        discoveredCount: discovery.discoveredSources.length,
-        pendingApproval: discovery.discoveredSources.filter(s => !s.approved).length,
-        lastScan: discovery.lastScan,
-    }), [discovery]);
+    const settingsMut = useUpdateDiscoverySettingsMutation();
+    const scanMut = useRunDiscoveryScanMutation();
+    const approveMut = useApproveSuggestionMutation();
+    const rejectMut = useRejectSuggestionMutation();
+    const createRuleMut = useCreateDiscoveryRuleMutation();
+    const deleteRuleMut = useDeleteDiscoveryRuleMutation();
 
-    const handleToggleAutoDiscovery = async (enabled: boolean) => {
-        try {
-            const updated = await toggleAsync.execute(enabled);
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to toggle auto discovery:', e);
-        }
+    const [activeTab, setActiveTab] = useState<'discovered' | 'rules' | 'history'>('discovered');
+    const [showRuleModal, setShowRuleModal] = useState(false);
+    const [rejectingId, setRejectingId] = useState<string | null>(null);
+    const [rejectNote, setRejectNote] = useState('');
+
+    const apiError =
+        [scanMut.error, approveMut.error, rejectMut.error].find(e => e instanceof DataHubApiError) as
+            | DataHubApiError
+            | undefined;
+
+    const isLoading = statsLoading || sugLoading;
+
+    const handleApprove = async (s: DiscoverySuggestion) => {
+        await approveMut.mutateAsync({ id: s.id, name: s.suggested_name });
     };
 
-    const handleRunDiscovery = async () => {
-        try {
-            await discoveryAsync.execute();
-            onRefresh();
-        } catch (e: any) {
-            console.error('Discovery failed:', e);
-        }
+    const handleReject = async (id: string) => {
+        await rejectMut.mutateAsync({ id, review_note: rejectNote || undefined });
+        setRejectingId(null);
+        setRejectNote('');
     };
+
+    const sortedPending = useMemo(
+        () => [...pending].sort((a, b) => b.priority_score - a.priority_score),
+        [pending],
+    );
 
     return (
-        <ApiWrapper
-            error={toggleAsync.error || discoveryAsync.error}
-            setError={() => { toggleAsync.setError(null); discoveryAsync.setError(null); }}
-            isLoading={toggleAsync.isLoading || discoveryAsync.isLoading}
-        >
-            <div className="bg-card border border-border rounded-lg p-4">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                    <div>
-                        <h3 className="font-semibold text-foreground flex items-center gap-2">
-                            🔍 {t('auto_discovery') || 'Auto Discovery'}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {t('auto_discovery_desc') || 'Automatically find and suggest new data sources based on existing patterns.'}
-                        </p>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                        <label className="flex items-center gap-2 text-sm">
-                            <input
-                                type="checkbox"
-                                checked={discovery.enabled}
-                                onChange={(e) => handleToggleAutoDiscovery(e.target.checked)}
-                                disabled={toggleAsync.isLoading}
-                                className="rounded"
-                            />
-                            <span className="text-foreground">{t('enable') || 'Enable'}</span>
-                        </label>
-                        <ActionButton
-                            variant="primary"
-                            size="sm"
-                            loading={discoveryAsync.isLoading}
-                            onClick={handleRunDiscovery}
-                            disabled={!discovery.enabled}
-                        >
-                            {t('run_discovery_btn') || 'Scan for Sources'}
-                        </ActionButton>
-                    </div>
+        <div className={SHELL}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <div>
+                    <h3 className="text-sm md:text-base font-semibold text-foreground">
+                        {t('auto_discovery')}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
+                        {t('auto_discovery_desc')}
+                    </p>
                 </div>
-
-                {/* Metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    <SummaryCard
-                        label={t('discovery_rules') || 'Active Rules'}
-                        value={metrics.totalRules}
-                        icon={<span className="text-2xl">📋</span>}
-                    />
-                    <SummaryCard
-                        label={t('discovered_total') || 'Total Found'}
-                        value={metrics.discoveredCount}
-                        icon={<span className="text-2xl">✨</span>}
-                    />
-                    <SummaryCard
-                        label={t('pending_approval') || 'Pending'}
-                        value={metrics.pendingApproval}
-                        variant={metrics.pendingApproval > 0 ? 'warning' : 'default'}
-                        icon={<span className="text-2xl">⏳</span>}
-                    />
-                    <SummaryCard
-                        label={t('last_scan') || 'Last Scan'}
-                        value={metrics.lastScan ? formatTimeAgo(metrics.lastScan) : 'Never'}
-                        icon={<span className="text-2xl">📅</span>}
-                    />
-                </div>
-
-                {/* Tabs */}
-                <div className="flex gap-4 border-b border-border mb-4">
-                    {(['discovered', 'rules', 'patterns'] as const).map(tab => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`pb-2 text-xs font-semibold transition-colors relative ${activeTab === tab ? 'text-purple-400' : 'text-muted-foreground hover:text-foreground'
-                                }`}
-                        >
-                            {t(`discovery_tab_${tab}`) || tab.toUpperCase()}
-                            {activeTab === tab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 rounded-full" />}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Content Area */}
-                {activeTab === 'discovered' && (
-                    <div className="space-y-3">
-                        {discovery.discoveredSources.length > 0 ? (
-                            discovery.discoveredSources.map(source => (
-                                <div key={source.id} className="border border-border rounded-lg p-3 flex justify-between items-center group">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <h4 className="font-semibold text-sm">{source.name}</h4>
-                                            <StatusBadge status={source.approved ? 'success' : 'warning'} label={source.approved ? 'Approved' : 'New'} size="sm" />
-                                        </div>
-                                        <p className="text-[11px] text-muted-foreground break-all">{source.url}</p>
-                                        <div className="flex gap-2 mt-1">
-                                            <span className="text-[10px] bg-secondary/30 px-1.5 rounded text-muted-foreground">{source.category}</span>
-                                            <span className="text-[10px] text-purple-300">Confidence: {source.confidence || 85}%</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <ActionButton variant="ghost" size="sm" className="text-red-400">Ignore</ActionButton>
-                                        <ActionButton variant="success" size="sm">Approve</ActionButton>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <EmptyState
-                                title="No sources discovered yet"
-                                description="Run a network scan to automatically find potential data sources based on your configured rules."
-                                icon={<span className="text-4xl">🔎</span>}
-                            />
-                        )}
-                    </div>
-                )}
-
-                {activeTab === 'rules' && (
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h4 className="text-sm font-semibold">Scanning Rules</h4>
-                            <ActionButton variant="secondary" size="sm">+ Add Rule</ActionButton>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {discovery.rules.map(rule => (
-                                <div key={rule.id} className="border border-border rounded-lg p-3 bg-secondary/10">
-                                    <div className="flex justify-between mb-2">
-                                        <span className="font-bold text-sm">{rule.name}</span>
-                                        <StatusBadge status="info" label={rule.priority} size="sm" />
-                                    </div>
-                                    <code className="text-[10px] bg-background p-1 block rounded mb-2 font-mono truncate">{rule.pattern}</code>
-                                    <div className="flex justify-between text-[10px] text-muted-foreground">
-                                        <span>Found: {rule.discoveredCount}</span>
-                                        <span>Last checked: {rule.lastCheck ? formatTimeAgo(rule.lastCheck) : 'Never'}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'patterns' && (
-                    <div className="py-8">
-                        <EmptyState
-                            title="Discovery Patterns visualization"
-                            description="This view will show clusters of discovered data and how they relate to existing categories."
-                            icon={<span className="text-4xl">🕸️</span>}
+                <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <input
+                            type="checkbox"
+                            checked={stats?.settings?.enabled ?? false}
+                            disabled={settingsMut.isPending}
+                            onChange={e => settingsMut.mutate(e.target.checked)}
+                            className="rounded"
                         />
-                    </div>
-                )}
+                        {t('discovery_enabled')}
+                    </label>
+                    <button
+                        type="button"
+                        onClick={() => scanMut.mutate()}
+                        disabled={scanMut.isPending || !stats?.settings?.enabled}
+                        className="text-[11px] px-4 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+                    >
+                        {scanMut.isPending ? t('loading') : t('run_discovery_btn')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => refetch()}
+                        className="text-[11px] px-3 py-1.5 rounded-full border border-white/10"
+                    >
+                        {t('refresh')}
+                    </button>
+                </div>
             </div>
-        </ApiWrapper>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-6">
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-purple-300/80 mb-1">{t('discovery_rules')}</p>
+                    <p className="text-sm font-semibold text-purple-100">{rules.length}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-amber-300/80 mb-1">{t('pending_approval')}</p>
+                    <p className="text-sm font-semibold text-amber-100">{stats?.pending ?? 0}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-emerald-300/80 mb-1">{t('discovery_approved')}</p>
+                    <p className="text-sm font-semibold text-emerald-100">{stats?.approved ?? 0}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-500/10 via-slate-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-slate-300/80 mb-1">{t('last_scan')}</p>
+                    <p className="text-[11px] font-semibold text-slate-100 truncate">
+                        {stats?.settings?.last_scan_at
+                            ? new Date(stats.settings.last_scan_at).toLocaleString()
+                            : t('discovery_never')}
+                    </p>
+                </div>
+            </div>
+
+            {apiError ? (
+                <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                    {apiError.message}
+                </div>
+            ) : null}
+
+            {scanMut.data ? (
+                <div className="mb-4 text-[11px] text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                    {t('discovery_scan_result')}: +{scanMut.data.added} · {t('discovery_dup')}{' '}
+                    {scanMut.data.duplicates} · {t('discovery_blocked')} {scanMut.data.blocked}
+                </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-4 border-b border-white/10 mb-4">
+                {(['discovered', 'rules', 'history'] as const).map(tab => (
+                    <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setActiveTab(tab)}
+                        className={`pb-2 text-[11px] font-bold ${
+                            activeTab === tab ? 'text-purple-400' : 'text-muted-foreground'
+                        }`}
+                    >
+                        {t(`discovery_tab_${tab}`)}
+                    </button>
+                ))}
+            </div>
+
+            {activeTab === 'discovered' && (
+                <div className="space-y-2">
+                    {isLoading ? (
+                        <p className="text-[11px] text-muted-foreground py-8 text-center">{t('loading')}</p>
+                    ) : sortedPending.length === 0 ? (
+                        <div className="text-center py-10 text-muted-foreground">
+                            <p className="text-sm font-medium">{t('discovery_empty_title')}</p>
+                            <p className="text-[11px] mt-1">{t('discovery_empty_hint')}</p>
+                        </div>
+                    ) : (
+                        sortedPending.map(s => (
+                            <div
+                                key={s.id}
+                                className="rounded-xl border border-white/5 bg-slate-900/50 p-3 flex flex-col sm:flex-row sm:items-center gap-3"
+                            >
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-semibold">{s.suggested_name}</span>
+                                        {statusPill(s.status, t)}
+                                        <span className="text-[10px] text-purple-300">
+                                            {t('discovery_score')}: {s.priority_score}
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] font-mono text-muted-foreground truncate mt-0.5">
+                                        {s.suggested_url}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                                        {s.discovery_source} · {s.category}
+                                    </p>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleApprove(s)}
+                                        disabled={approveMut.isPending}
+                                        className="text-[11px] px-3 py-1 rounded-full bg-emerald-600/90 text-white"
+                                    >
+                                        {t('discovery_approve')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRejectingId(s.id)}
+                                        className="text-[11px] px-3 py-1 rounded-full border border-red-500/40 text-red-300"
+                                    >
+                                        {t('discovery_reject')}
+                                    </button>
+                                </div>
+                                {rejectingId === s.id ? (
+                                    <div className="w-full flex gap-2 mt-2">
+                                        <input
+                                            value={rejectNote}
+                                            onChange={e => setRejectNote(e.target.value)}
+                                            placeholder={t('discovery_review_note')}
+                                            className="flex-1 text-[11px] rounded-lg border border-white/10 bg-slate-950 px-2 py-1"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleReject(s.id)}
+                                            className="text-[11px] px-2 py-1 rounded-full bg-red-600/80 text-white"
+                                        >
+                                            {t('confirm')}
+                                        </button>
+                                    </div>
+                                ) : null}
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'rules' && (
+                <div>
+                    <div className="flex justify-between mb-3">
+                        <p className="text-[11px] text-muted-foreground">{t('discovery_rules_desc')}</p>
+                        <button
+                            type="button"
+                            onClick={() => setShowRuleModal(true)}
+                            className="text-[11px] px-3 py-1 rounded-full bg-purple-600 text-white"
+                        >
+                            {t('discovery_rule_add')}
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {rules.map(rule => (
+                            <div
+                                key={rule.id}
+                                className="rounded-xl border border-white/5 p-3 bg-slate-900/40"
+                            >
+                                <div className="flex justify-between">
+                                    <span className="text-sm font-semibold">{rule.name}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (window.confirm(t('discovery_rule_delete_confirm'))) {
+                                                deleteRuleMut.mutate(rule.id);
+                                            }
+                                        }}
+                                        className="text-[10px] text-red-300"
+                                    >
+                                        {t('delete')}
+                                    </button>
+                                </div>
+                                <code className="text-[10px] font-mono text-muted-foreground block mt-1 truncate">
+                                    {rule.pattern}
+                                </code>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'history' && (
+                <p className="text-[11px] text-muted-foreground py-6 text-center">
+                    {t('discovery_history_hint')}
+                </p>
+            )}
+
+            {showRuleModal ? (
+                <DiscoveryRuleModal
+                    onClose={() => setShowRuleModal(false)}
+                    onSave={async payload => {
+                        await createRuleMut.mutateAsync(payload);
+                        setShowRuleModal(false);
+                    }}
+                    isSaving={createRuleMut.isPending}
+                    t={t}
+                />
+            ) : null}
+        </div>
     );
 };
 

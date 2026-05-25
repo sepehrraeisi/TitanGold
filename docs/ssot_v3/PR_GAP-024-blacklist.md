@@ -8,12 +8,11 @@
 |--------|---------|--------|-----|
 | **Blacklist / Whitelist** | `/api/v1/data-hub/filter-rules` + migration `028` | Done | **GAP-024 Closed** |
 | **Web Crawlers** | `/api/v1/data-hub/crawlers` + migration `029` | Done | **GAP-026 Closed** |
+| **Auto Discovery** | `/api/v1/data-hub/discovery` + migration `030` | Done | **GAP-028 Closed** |
 
-**Pending advanced:** discovery, prioritization, archiving (IndexedDB / mock today).
+**Pending advanced:** prioritization, archiving.
 
-**Open v3.1:** GAP-025 (publishing filter hook), GAP-027 (crawler scheduler + Playwright prod only).
-
-**Next contract:** GAP-028 Auto Discovery (`DISCOVERY_API_CONTRACT.md`) — awaiting approval.
+**Open v3.1:** GAP-025 · GAP-027 · GAP-029.
 
 Contract: `docs/ssot_v3/advanced/BLACKLIST_WHITELIST_API_CONTRACT.md`  
 Demos + ingestion proof: `docs/ssot_v3/DataHub_DEMOS.md` § `dataHub.advanced.blacklist`  

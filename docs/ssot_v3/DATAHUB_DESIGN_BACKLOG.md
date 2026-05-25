@@ -84,7 +84,7 @@
 |--------|---------|--------|-------|
 | blacklist | **Implemented · Design: Done** | GAP-024 closed | Backend-first `datahub_filter_rules` |
 | crawlers | **Implemented · Design: Done** | GAP-026 closed | Backend-first + run history |
-| discovery | Partial | GAP-028 contract draft | `DISCOVERY_API_CONTRACT.md` — suggestion-only |
+| discovery | **Implemented · Design: Done** | GAP-028 closed | Suggestion-only + approval audit |
 | prioritization | Partial | Not started | Post Design-3 |
 | archiving | Partial | Not started | Post Design-3 |
 
@@ -97,11 +97,12 @@
 | GAP-007 | Frontend chunk size >500KB (DataHubTab bundle) | **Open** v3.1 — build passes; not a Design blocker |
 | GAP-021 | Core tabs design pass | **Closed** (Design-1/2) |
 | GAP-022 | Access Control + design | **Closed** |
-| GAP-023 | Advanced subtabs design | **Partial** — **Done:** publisher, automation, access, blacklist, crawlers · **Pending:** discovery, prioritization, archiving |
-| GAP-024 | Blacklist backend-first + design | **Closed** — see `BLACKLIST_WHITELIST_API_CONTRACT.md` |
-| GAP-026 | Crawlers backend-first + design | **Closed** — `CRAWLERS_API_CONTRACT.md` |
+| GAP-023 | Advanced subtabs design | **Partial** — **Done:** publisher, automation, access, blacklist, crawlers, discovery · **Pending:** prioritization, archiving |
+| GAP-024 | Blacklist backend-first + design | **Closed** |
+| GAP-026 | Crawlers backend-first + design | **Closed** |
 | GAP-027 | Crawler scheduler + prod Playwright | **Open** v3.1 only |
-| GAP-028 | Auto Discovery backend-first | **Open** — `DISCOVERY_API_CONTRACT.md` awaiting approval |
+| GAP-028 | Auto Discovery backend-first | **Closed** |
+| GAP-029 | Discovery scheduler | **Open** v3.1 |
 
 ---
 
