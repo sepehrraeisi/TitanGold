@@ -127,6 +127,25 @@ cd backend && node scripts/verify_automation_demo.js
 
 **Greenfield کامل (`schema.sql` + migrate):** هنوز migrationهای legacy قدیمی‌تر (مثلاً `004_add_autopilot_system`) ممکن است به ستون‌هایی وابسته باشند که در `database/schema.sql` نیستند؛ مسیر رسمی verify برای automation: **migrate روی DB dev موجود** + اسکریپت demo بالا.
 
+### Migration verification — DataHub filter rules (GAP-024 · 2026-05-25)
+
+| Field | Value |
+|-------|--------|
+| Migration file | `backend/database/migrations/028_create_datahub_filter_rules.sql` |
+| Table | `datahub_filter_rules` |
+| Environment | **dev** — `titangold_db` on `127.0.0.1:5433` (same host as automation proof) |
+| Command | `cd backend && npm run migrate` |
+| Result | **PASS** — log includes `MIGRATION 028_create_datahub_filter_rules (UP)` and `Migrations complete!` |
+
+Verify table:
+
+```sql
+\dt datahub_filter_rules
+SELECT COUNT(*) FROM datahub_filter_rules WHERE deleted_at IS NULL;
+```
+
+Runtime demos: `docs/ssot_v3/DataHub_DEMOS.md` § `dataHub.advanced.blacklist` (ingestion 403, batch `blocked`, evaluate-only publishing).
+
 ### Environment Proof — `dataHub.advanced.automation` (2026-05-24)
 
 > **Scope:** dev DB on application server (`ubuntu` host) — **not production.**  

@@ -202,9 +202,9 @@ Same workflow as Design-3: slate shell, metric cards, pills (`list_type`, `scope
 
 | GAP | Title | Status after v3.0 |
 |-----|-------|-------------------|
-| **GAP-024** | Blacklist/Whitelist backend-first + UI | **Target: Closed** |
+| **GAP-024** | Blacklist/Whitelist backend-first + UI | **Closed** |
 | GAP-004 | Richer policy UI + history table | Open v3.1 |
-| GAP-025 | Publishing-path enforcement in automation/publisher workers | Open v3.1 |
+| GAP-025 | Publishing-path enforcement in automation/publisher workers | **Open v3.1** |
 
 ---
 
@@ -222,18 +222,15 @@ Same workflow as Design-3: slate shell, metric cards, pills (`list_type`, `scope
 
 ---
 
-## Implementation checklist
+## Implementation status (GAP-024)
 
-- [ ] Migration `028_create_datahub_filter_rules.sql`
-- [ ] `backend/services/datahubFilterRulesService.js`
-- [ ] `backend/routes/data-hub-filter-rules.js` mounted in `server.js`
-- [ ] Frontend API + hooks + panel rewrite
-- [ ] Ingestion hook (minimal): call evaluate in `collected_data` insert path OR document as GAP-024b if too large
-- [ ] i18n keys
-- [ ] Demos + SSOT + `GAPS_AND_PLAN.md` GAP-024 Closed
-- [ ] `npm run build`
-- [ ] commit/push on feature branch
+- [x] Migration `028_create_datahub_filter_rules.sql` — applied on dev `titangold_db`
+- [x] `datahubFilterRulesService.js` + `data-hub-filter-rules.js` mounted in `v1/index.js`
+- [x] Frontend API + hooks + `BlacklistWhitelist.tsx` + `FilterRuleModal.tsx`
+- [x] Ingestion: `collected-data` POST/batch + `telegramPipeline` before INSERT
+- [x] Publishing: evaluate API only (worker hook → GAP-025)
+- [x] i18n, demos, SSOT, `npm run build`, commit `092a191`
 
 ---
 
-*Contract version: v3.0 · 2026-05-24 · Awaiting implementation (GAP-024).*
+*Contract version: v3.0 · 2026-05-25 · **Implemented** (GAP-024 Closed).*

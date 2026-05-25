@@ -184,7 +184,20 @@ grep -rn "fetchDataHubState\|createAutomationTopic\|refreshAutomationQueue" \
 # → 0 matches
 ```
 
-### ۱۲. Migrations / Greenfield Bootstrap
+### ۱۲. DataHub filter rules (GAP-024)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| جدول قوانین فیلتر | `backend/database/migrations/028_create_datahub_filter_rules.sql` | L1–55 | `datahub_filter_rules` با `rule_type`, `scope`, `pattern`, `match_type`, `apply_target`, `action`, `priority`, soft delete |
+| CRUD + evaluate API | `backend/routes/data-hub-filter-rules.js` | router | `GET/POST/PUT/DELETE /api/v1/data-hub/filter-rules`, `POST /evaluate` |
+| ارزیابی و enforce ingestion | `backend/services/datahubFilterRulesService.js` | `evaluateFilterRules`, `enforceIngestionFilter` | اولویت + whitelist بر blacklist در تساوی |
+| **collected-data POST → 403** | `backend/routes/collected-data.js` | `router.post('/')` | `await enforceIngestionFilter(...)` قبل از INSERT؛ `catch` → `403` + `code: FILTER_BLOCKED` |
+| **batch → blocked count** | `backend/routes/collected-data.js` | `router.post('/batch')` | `results.blocked++` و `continue` روی `FILTER_BLOCKED` |
+| **telegramPipeline قبل از INSERT** | `backend/services/telegramPipeline.js` | قبل از `INSERT INTO collected_data` | `enforceIngestionFilter`؛ skip با `action: filter_blocked` |
+| Publishing worker hook | — | — | **v3.0 ندارد** — فقط `POST /evaluate`؛ **GAP-025** |
+| UI backend-first | `services/dataHubFilterRulesApi.ts`, `hooks/useDataHubFilterRules.ts`, `advanced/BlacklistWhitelist.tsx` | — | بدون `fetchDataHubState` / IndexedDB برای لیست قوانین |
+
+### ۱۳. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |
 |---|---|---|---|

@@ -203,13 +203,30 @@ Design: full pass per `DESIGN_SYSTEM_DATAHUB.md` (modal §10, metrics §2.4, bad
 | **Soft delete** | `DELETE /:id` | **200** `deleted_at` set | Delete → confirm |
 | **Invalid regex** | `POST` with `match_type: regex`, `pattern: [` | **400** | Modal / API error message |
 | **Duplicate rule** | Same `rule_type+scope+pattern+match_type` active row | **409** | Conflict message |
-| **Ingestion enforce** | `POST /api/v1/collected-data` while blacklisted | **403** `FILTER_BLOCKED` | — |
+| **Ingestion enforce (single)** | `POST /api/v1/collected-data` with active blacklist rule | **403** `{ code: "FILTER_BLOCKED", details }` | — |
+| **Ingestion enforce (batch)** | `POST /api/v1/collected-data/batch` with same payload | **200** body includes `blocked` incremented (row skipped, not inserted) | — |
+| **Telegram pipeline** | `transferTelegramMessagesToPipeline()` before INSERT | blocked messages → `summary.skipped++`, `action: filter_blocked` | — |
+| **Publishing path** | automation dispatch / publisher worker | **No silent drop in v3.0** — use `POST /filter-rules/evaluate` only | GAP-025 v3.1 |
 | **Auth write** | POST/PUT/DELETE without admin/trader | **403** | — |
 
 **Priority / conflict:** higher `priority` wins; tie at same priority → **whitelist** beats **blacklist**.
 
-```bash
-cd backend && npm run migrate   # applies 028_create_datahub_filter_rules.sql
-```
+#### Ingestion enforcement proof (code + runtime)
+
+| Path | File | Behavior |
+|------|------|----------|
+| Single insert | `backend/routes/collected-data.js` | `enforceIngestionFilter()` before duplicate check / INSERT → **403** on block |
+| Batch insert | `backend/routes/collected-data.js` | per-message `enforceIngestionFilter()` → catch `FILTER_BLOCKED` → `results.blocked++`, `continue` |
+| Telegram → collected_data | `backend/services/telegramPipeline.js` | `enforceIngestionFilter()` before INSERT; skip row on block |
+| Publishing workers | — | **Not hooked in v3.0**; evaluate API only until **GAP-025** |
+
+**Manual proof (dev DB `titangold_db`):**
+
+1. Create blacklist domain rule (`apply_target: ingestion`).
+2. `POST /api/v1/collected-data` with `metadata.url` or text matching pattern → expect **403**.
+3. `POST /api/v1/collected-data/batch` with N messages, one blocked → response `blocked >= 1`, `inserted` excludes blocked rows.
+4. `POST /api/v1/data-hub/filter-rules/evaluate` with `apply_target: publishing` → **200** (policy check only; no worker side-effect).
+
+Migration: see `docs/ssot_v3/audit/ENVIRONMENT.md` § Migration 028 · Evidence lines: `docs/ssot_v3/EVIDENCE.md` § Filter rules.
 
 Design: slate shell, metric cards, `FilterRuleModal`, no IndexedDB / `services/api.ts` blacklist helpers in panel.

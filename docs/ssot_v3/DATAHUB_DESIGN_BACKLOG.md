@@ -97,8 +97,9 @@
 | GAP-007 | Frontend chunk size >500KB (DataHubTab bundle) | **Open** v3.1 — build passes; not a Design blocker |
 | GAP-021 | Core tabs design pass | **Closed** (Design-1/2) |
 | GAP-022 | Access Control + design | **Closed** |
-| GAP-023 | Advanced subtabs design | **Partial** — Done: publisher, automation, access, blacklist · Pending: crawlers, discovery, prioritization, archiving |
+| GAP-023 | Advanced subtabs design | **Partial** — **Done:** publisher, automation, access, blacklist · **Pending:** crawlers, discovery, prioritization, archiving |
 | GAP-024 | Blacklist backend-first + design | **Closed** — see `BLACKLIST_WHITELIST_API_CONTRACT.md` |
+| GAP-026 | Crawlers backend-first + design | **Open** — draft `CRAWLERS_API_CONTRACT.md` (awaiting approval) |
 
 ---
 
