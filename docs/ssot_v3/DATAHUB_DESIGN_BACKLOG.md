@@ -3,123 +3,104 @@
 > Backend status از SSOT v3.0؛ Design status از مقایسه با `DESIGN_SYSTEM_DATAHUB.md`.  
 > Severity: **High** = کاربر واضح «قدیمی» می‌بیند · **Medium** = ناسازگاری جزئی · **Low** = polish
 
-## Phases
+## Phases (status)
 
-| Phase | Scope | Target |
+| Phase | Scope | Status |
 |-------|--------|--------|
-| **Design-0** | Shared primitives | `DataHubModal`, `DataHubMetricGrid`, `DataHubStatusPill`, `DataHubToggle`, section shell |
-| **Design-1** | Core tabs + modals | sources, categories, create/edit modals |
-| **Design-2** | Pipeline + logs | pipeline metrics/history table, logs table/filters |
-| **Design-3** | Advanced (per subtab) | هر subtab با همان workflow subsection |
-| **Design-4** | i18n sweep | en/fa keys برای تمام DataHub |
+| **Design-0** | Shared `dataHubUi.tsx` | **Done** |
+| **Design-1** | sources, categories, modals | **Done** |
+| **Design-2** | pipeline, logs | **Done** |
+| **Design-3** | advanced.telegramPublisher, advanced.automation | **Done** |
+| **Design-4** | i18n sweep (remaining advanced subtabs) | Open |
 
 ---
 
-## `dataHub.sources` — Backend: Implemented
+## Core tabs — Design: Done
 
-| # | Mismatch | Severity | Phase |
-|---|----------|----------|-------|
-| S1 | Modals (`CreateSourceModal`) هنوز `bg-card` / `bg-secondary` inputs | High | Design-1 |
-| S2 | Error banners `text-sm` — spec `text-[11px]` §11 | Low | Design-1 |
-| S3 | Outer wrapper از `Card` parent در DataHubTab — verify slate shell | Medium | Design-1 |
-| S4 | i18n: برخی دکمه‌ها فقط fallback EN | Medium | Design-4 |
+| Tab | Backend | Design | Notes |
+|-----|---------|--------|-------|
+| `dataHub.sources` | Implemented | **Done** | Design-1 + **Sources i18n fallback cleanup** (`CreateSourceModal` — no `t() \|\| '…'`) |
+| `dataHub.categories` | Implemented | **Done** | Design-1 |
+| `dataHub.pipeline` | Implemented | **Done** | Design-2 — no stale Open rows |
+| `dataHub.logs` | Implemented | **Done** | Design-2 — no stale Open rows |
 
-**Note:** لیست source rows و دکمه‌های `rounded-full purple` نسبتاً هم‌راستا — **Partial design pass**.
+### `dataHub.sources` — item checklist (all Done)
 
----
+| # | Item | Status |
+|---|------|--------|
+| S1–S4 | Shell, modal §10, alerts, i18n panels | **Done** |
+| — | CreateSourceModal i18n cleanup | **Done** |
 
-## `dataHub.categories` — Backend: Implemented
+### `dataHub.categories` — item checklist (all Done)
 
-| # | Mismatch | Severity | Phase |
-|---|----------|----------|-------|
-| C1 | Shell `Card` + `border-border` not slate glass | High | Design-1 |
-| C2 | فیلتر inputs `bg-background border-border` | High | Design-1 |
-| C3 | `CreateCategoryModal` modal pattern قدیمی | High | Design-1 |
-| C4 | Category cards/list not `bg-slate-900/60 border-white/5` | Medium | Design-1 |
-| C5 | ApiWrapper loading overlay | Medium | Design-1 |
+| # | Item | Status |
+|---|------|--------|
+| C1–C5 | Shell, filters, modal, cards, inline loading | **Done** |
 
----
+### `dataHub.pipeline` — item checklist (all Done)
 
-## `dataHub.pipeline` — Backend: Implemented
+| # | Item | Status |
+|---|------|--------|
+| P1–P4 | Metrics, snapshot select, tables, `DATAHUB_SHELL` | **Done** |
 
-| # | Mismatch | Severity | Phase |
-|---|----------|----------|-------|
-| P1 | Metric blocks not gradient mini-cards §2.4 | High | Design-2 |
-| P2 | History/snapshot selector generic styling | Medium | Design-2 |
-| P3 | Normalized data table not §9 slate borders | High | Design-2 |
-| P4 | `Card` wrapper dependency | Medium | Design-2 |
+### `dataHub.logs` — item checklist (all Done)
 
----
-
-## `dataHub.logs` — Backend: Implemented
-
-| # | Mismatch | Severity | Phase |
-|---|----------|----------|-------|
-| L1 | Table thead `border-border` | High | Design-2 |
-| L2 | Filters/selects not `bg-slate-900 border-slate-700` | High | Design-2 |
-| L3 | Status cells not semantic pills §7 | Medium | Design-2 |
-| L4 | Telegram error UX — OK logic; visual not spec | Low | Design-2 |
+| # | Item | Status |
+|---|------|--------|
+| L1–L4 | Slate table, filters, pills, telegram UX | **Done** |
 
 ---
 
 ## `dataHub.advanced.*`
 
-### `advanced.telegramPublisher` — Backend: Implemented
+### `advanced.telegramPublisher` — Backend: Implemented · **Design: Done** (Design-3)
 
-| # | Mismatch | Severity | Phase |
-|---|----------|----------|-------|
-| TP1 | Root `bg-card border-border` | High | Design-3 |
-| TP2 | `SummaryCard` / `ActionButton` / `StatusBadge` vs spec | High | Design-3 |
-| TP3 | Inline create form not modal shell §10 | Medium | Design-3 |
-| TP4 | History list not slate item blocks §13 | Medium | Design-3 |
+| # | Mismatch | Phase | Status |
+|---|----------|-------|--------|
+| TP1 | Root slate shell | Design-3 | **Done** |
+| TP2 | Metrics/actions vs spec | Design-3 | **Done** |
+| TP3 | Create channel → `DataHubModal` §10 | Design-3 | **Done** |
+| TP4 | History slate blocks §13 | Design-3 | **Done** |
 
-### `advanced.automation` — Backend: Implemented
+### `advanced.automation` — Backend: Implemented · **Design: Done** (Design-3)
 
-| # | Mismatch | Severity | Phase |
-|---|----------|----------|-------|
-| A1 | Root `bg-card` shell | High | Design-3 |
-| A2 | `AutomationTopicList` uses `bg-secondary/5`, `topic.name` layout | Medium | Design-3 |
-| A3 | `AutomationTopicModal` / `QueuePreviewModal` old modal | High | Design-3 |
-| A4 | Schedule panel toggle not §12 | Medium | Design-3 |
-| A5 | Queue manager `ActionButton` stack | Medium | Design-3 |
+| # | Mismatch | Phase | Status |
+|---|----------|-------|--------|
+| A1 | Root slate shell | Design-3 | **Done** |
+| A2 | Topic list slate cards | Design-3 | **Done** |
+| A3 | Topic/queue modals §10 | Design-3 | **Done** |
+| A4 | Schedule `DataHubToggle` §12 | Design-3 | **Done** |
+| A5 | Queue table + outline actions | Design-3 | **Done** |
 
-### `advanced.access` — Backend: Partial → **next workflow**
+### `advanced.access` — **Design: Done** (GAP-022)
 
-| # | Mismatch | Severity | Phase |
-|---|----------|----------|-------|
-| AC1 | IndexedDB + placeholder tabs (roles/keys/ip) | High | **GAP-022 wiring** |
-| AC2 | `bg-card`, fake metrics (API keys=12) | High | **this PR + design** |
-| AC3 | Bug: `filteredSources` typo `query =>` | High | fix in wiring |
-| AC4 | Table/modals not spec | High | design in same PR |
-| AC5 | No `GET` list-all ACL API | Medium | **GAP-022** |
+| # | Status |
+|---|--------|
+| AC1–AC5 | **Done** — `AccessControlPanel.tsx` + API |
 
 ### `advanced.blacklist` · `crawlers` · `discovery` · `prioritization` · `archiving`
 
-| Subtab | Backend | Design debt | Phase |
-|--------|---------|-------------|-------|
-| blacklist | Partial / IndexedDB | High — `bg-card`, lists | Design-3 |
-| crawlers | Partial | High | Design-3 |
-| discovery | Partial | High | Design-3 |
-| prioritization | Partial | High | Design-3 |
-| archiving | Partial | High | Design-3 |
+| Subtab | Backend | Design | Phase |
+|--------|---------|--------|-------|
+| blacklist | Partial | Not started | Post Design-3 |
+| crawlers | Partial | Not started | Post Design-3 |
+| discovery | Partial | Not started | Post Design-3 |
+| prioritization | Partial | Not started | Post Design-3 |
+| archiving | Partial | Not started | Post Design-3 |
 
 ---
 
 ## GAP cross-reference (design)
 
-| GAP | Title | Phase |
-|-----|-------|-------|
-| GAP-021 | DataHub Design Pass — core tabs (sources→logs) | Design-1–2 |
-| GAP-022 | Access Control backend-first + UI (permissions scope) | **Now** |
-| GAP-023 | DataHub Design Pass — advanced subtabs (post access) | Design-3 |
+| GAP | Title | Status |
+|-----|-------|--------|
+| GAP-007 | Frontend chunk size >500KB (DataHubTab bundle) | **Open** v3.1 — build passes; not a Design blocker |
+| GAP-021 | Core tabs design pass | **Closed** (Design-1/2) |
+| GAP-022 | Access Control + design | **Closed** |
+| GAP-023 | Advanced subtabs design | **Partial** — publisher + automation Done; blacklist/crawlers pending |
 
 ---
 
 ## SSOT rule (enforced)
 
-تا Design column = **Done** برای یک tab:
-
-- SSOT Status ≤ **Implemented (backend)** یا **Partial**
-- پس از Design Done → **Implemented** نهایی
-
-`dataHub.advanced.automation` = Implemented (backend) · Design = **Not started** (see backlog A1–A5).
+- **Implemented · Design: Done** = backend wired + full UI pass per `DESIGN_SYSTEM_DATAHUB.md` + i18n + `DataHub_DEMOS.md` visual steps + `npm run build` pass.

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { DataHubModal, INPUT_CLASS, SELECT_CLASS, BTN_PRIMARY, BTN_SECONDARY, DataHubToggle } from '../dataHubUi';
 import { AIAgent, DataCategory, TelegramPublisher, AgentTopicRoute, AgentTopicFormValues, NormalizedDataStatus } from '../../../../../../types';
 
 const AutomationTopicModal: React.FC<{
@@ -44,11 +45,11 @@ const AutomationTopicModal: React.FC<{
 
     const handleSubmit = () => {
         if (!title.trim()) {
-            alert(t('fill_required_fields') || 'Please fill all required fields');
+            alert(t('fill_required_fields'));
             return;
         }
         if (!agentId) {
-            alert(t('automation_topic_agent_required') || 'Select an agent for this route.');
+            alert(t('automation_topic_agent_required'));
             return;
         }
         const parsedPassRate = minPassRate.trim() !== '' ? Number(minPassRate) : undefined;
@@ -73,43 +74,55 @@ const AutomationTopicModal: React.FC<{
         });
     };
 
+    const modalTitle = topic ? t('automation_topic_modal_title_edit') : t('automation_topic_modal_title_create');
+
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-card border border-border rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {topic ? t('automation_topic_modal_title_edit') || 'Edit Routing' : t('automation_topic_modal_title_create') || 'Create Routing'}
-                </h3>
-                <div className="space-y-4 text-sm">
+        <DataHubModal
+            title={modalTitle}
+            onClose={onClose}
+            maxWidth="max-w-3xl"
+            footer={
+                <>
+                    <button type="button" onClick={onClose} disabled={isSaving} className={BTN_SECONDARY}>
+                        {t('cancel')}
+                    </button>
+                    <button type="button" onClick={handleSubmit} disabled={isSaving} className={BTN_PRIMARY}>
+                        {isSaving ? t('saving') : t('save')}
+                    </button>
+                </>
+            }
+        >
+                <div className="space-y-4 text-[11px]">
                     <div>
-                        <label className="block text-muted-foreground mb-1">{t('title') || 'Title'} *</label>
+                        <label className="block text-muted-foreground mb-1">{t('title')} *</label>
                         <input
                             value={title}
                             onChange={e => setTitle(e.target.value)}
-                            className="w-full px-3 py-2 bg-secondary border border-border rounded"
+                            className={INPUT_CLASS}
                             placeholder="Signals for Crypto VIP"
                         />
                     </div>
                     <div>
-                        <label className="block text-muted-foreground mb-1">{t('description') || 'Description'}</label>
+                        <label className="block text-muted-foreground mb-1">{t('description')}</label>
                         <textarea
                             value={description}
                             onChange={e => setDescription(e.target.value)}
-                            className="w-full px-3 py-2 bg-secondary border border-border rounded"
+                            className={INPUT_CLASS}
                             rows={3}
-                            placeholder={t('automation_topic_description_placeholder') || 'Explain what this route does'}
+                            placeholder={t('automation_topic_description_placeholder')}
                         />
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-muted-foreground mb-1">{t('automation_topic_agent') || 'Agent'} *</label>
+                            <label className="block text-muted-foreground mb-1">{t('automation_topic_agent')} *</label>
                             <select
                                 value={agentId}
                                 onChange={e => setAgentId(e.target.value)}
-                                className="w-full px-3 py-2 bg-secondary border border-border rounded"
+                                className={SELECT_CLASS}
                                 disabled={isLoadingAgents || agents.length === 0}
                             >
                                 {agents.length === 0 ? (
-                                    <option value="">{t('automation_no_agents_available') || 'No agents available'}</option>
+                                    <option value="">{t('automation_no_agents_available')}</option>
                                 ) : (
                                     agents.map(agent => (
                                         <option key={agent.id} value={agent.id}>
@@ -120,11 +133,11 @@ const AutomationTopicModal: React.FC<{
                             </select>
                         </div>
                         <div>
-                            <label className="block text-muted-foreground mb-1">{t('priority') || 'Priority'}</label>
+                            <label className="block text-muted-foreground mb-1">{t('priority')}</label>
                             <select
                                 value={priority}
                                 onChange={e => setPriority(e.target.value as AgentTopicFormValues['priority'])}
-                                className="w-full px-3 py-2 bg-secondary border border-border rounded"
+                                className={SELECT_CLASS}
                             >
                                 {['low', 'medium', 'high', 'critical'].map(level => (
                                     <option key={level} value={level}>
@@ -136,12 +149,12 @@ const AutomationTopicModal: React.FC<{
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-muted-foreground mb-1">{t('automation_topic_categories') || 'Categories'}</label>
+                            <label className="block text-muted-foreground mb-1">{t('automation_topic_categories')}</label>
                             <select
                                 multiple
                                 value={categoryIds}
                                 onChange={e => handleMultiSelectChange(e, setCategoryIds)}
-                                className="w-full px-3 py-2 bg-secondary border border-border rounded min-h-[120px]"
+                                className={`${INPUT_CLASS} min-h-[120px]`}
                             >
                                 {categories.map(category => (
                                     <option key={category.id} value={category.id}>{category.name}</option>
@@ -149,12 +162,12 @@ const AutomationTopicModal: React.FC<{
                             </select>
                         </div>
                         <div>
-                            <label className="block text-muted-foreground mb-1">{t('automation_topic_datatypes') || 'Data types'}</label>
+                            <label className="block text-muted-foreground mb-1">{t('automation_topic_datatypes')}</label>
                             <select
                                 multiple
                                 value={dataTypeSelection}
                                 onChange={e => handleMultiSelectChange(e, setDataTypeSelection)}
-                                className="w-full px-3 py-2 bg-secondary border border-border rounded min-h-[120px]"
+                                className={`${INPUT_CLASS} min-h-[120px]`}
                             >
                                 {dataTypes.map(type => (
                                     <option key={type} value={type}>
@@ -164,35 +177,35 @@ const AutomationTopicModal: React.FC<{
                             </select>
                             {dataTypeSelection.includes('telegram') && (
                                 <p className="text-[10px] text-sky-300/80 mt-1">
-                                    {t('telegram_automation_hint') || 'This rule will trigger on Telegram messages from configured channels.'}
+                                    {t('telegram_automation_hint')}
                                 </p>
                             )}
                         </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-muted-foreground mb-1">{t('automation_topic_min_pass_rate') || 'Min pass rate (%)'}</label>
+                            <label className="block text-muted-foreground mb-1">{t('automation_topic_min_pass_rate')}</label>
                             <input
                                 type="number"
                                 value={minPassRate}
                                 onChange={e => setMinPassRate(e.target.value)}
-                                className="w-full px-3 py-2 bg-secondary border border-border rounded"
+                                className={INPUT_CLASS}
                                 placeholder="e.g. 70"
                             />
                         </div>
                         <div>
-                            <label className="block text-muted-foreground mb-1">{t('automation_topic_min_quality') || 'Min quality score'}</label>
+                            <label className="block text-muted-foreground mb-1">{t('automation_topic_min_quality')}</label>
                             <input
                                 type="number"
                                 value={minQualityScore}
                                 onChange={e => setMinQualityScore(e.target.value)}
-                                className="w-full px-3 py-2 bg-secondary border border-border rounded"
+                                className={INPUT_CLASS}
                                 placeholder="e.g. 75"
                             />
                         </div>
                     </div>
                     <div>
-                        <label className="block text-muted-foreground mb-1">{t('automation_topic_statuses') || 'Allowed statuses'}</label>
+                        <label className="block text-muted-foreground mb-1">{t('automation_topic_statuses')}</label>
                         <div className="flex flex-wrap gap-3 text-xs">
                             {statusOptions.map(status => (
                                 <label key={status} className="flex items-center gap-1">
@@ -209,57 +222,39 @@ const AutomationTopicModal: React.FC<{
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-muted-foreground mb-1">{t('automation_topic_publishers') || 'Publishers'}</label>
+                            <label className="block text-muted-foreground mb-1">{t('automation_topic_publishers')}</label>
                             <select
                                 multiple
                                 value={publisherTargets}
                                 onChange={e => handleMultiSelectChange(e, setPublisherTargets)}
-                                className="w-full px-3 py-2 bg-secondary border border-border rounded min-h-[100px]"
+                                className={`${INPUT_CLASS} min-h-[100px]`}
                             >
-                                {publishers.length === 0 && <option value="">{t('automation_topic_publishers_none') || 'No Telegram publishers configured'}</option>}
+                                {publishers.length === 0 && <option value="">{t('automation_topic_publishers_none')}</option>}
                                 {publishers.map(publisher => (
                                     <option key={publisher.id} value={publisher.id}>{publisher.name}</option>
                                 ))}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-muted-foreground mb-1">{t('automation_topic_tags') || 'Tags (comma separated)'}</label>
+                            <label className="block text-muted-foreground mb-1">{t('automation_topic_tags')}</label>
                             <input
                                 value={tagsInput}
                                 onChange={e => setTagsInput(e.target.value)}
-                                className="w-full px-3 py-2 bg-secondary border border-border rounded"
+                                className={INPUT_CLASS}
                                 placeholder="signal, persian, vip"
                             />
-                            <label className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
-                                <input
-                                    type="checkbox"
+                            <div className="mt-3">
+                                <DataHubToggle
+                                    id="automation-topic-enabled"
                                     checked={enabled}
-                                    onChange={e => setEnabled(e.target.checked)}
-                                    className="rounded"
+                                    onChange={setEnabled}
+                                    label={t('automation_topic_enabled')}
                                 />
-                                {t('automation_topic_enabled') || 'Route enabled'}
-                            </label>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div className="flex justify-end gap-2 mt-6">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 bg-secondary hover:bg-accent text-secondary-foreground rounded-lg text-sm"
-                        disabled={isSaving}
-                    >
-                        {t('cancel') || 'Cancel'}
-                    </button>
-                    <button
-                        onClick={handleSubmit}
-                        disabled={isSaving}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm"
-                    >
-                        {isSaving ? t('saving') || 'Saving...' : (t('save') || 'Save')}
-                    </button>
-                </div>
-            </div>
-        </div>
+        </DataHubModal>
     );
 };
 

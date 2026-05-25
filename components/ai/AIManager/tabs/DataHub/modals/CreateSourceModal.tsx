@@ -5,6 +5,14 @@ import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import { DataSource, DataCategory, DetectedSourceType } from '../../../../../../types';
 import { dataSourceSchema } from '../../../../../../utils/validation';
 import { ZodError } from 'zod';
+import {
+    DataHubModal,
+    INPUT_CLASS,
+    SELECT_CLASS,
+    BTN_PRIMARY,
+    BTN_SECONDARY,
+    DataHubToggle,
+} from '../dataHubUi';
 
 type Props = {
     source?: DataSource | null;
@@ -104,7 +112,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
             }
         } catch (err: any) {
             setAutoDetection(null);
-            setDetectionError(err?.message || 'Failed to detect type');
+            setDetectionError(err?.message || t('source_type_detect_failed'));
         } finally {
             setIsDetectingType(false);
         }
@@ -200,7 +208,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
     const autoBadge = (field: string) => (
         autoFields[field]
             ? <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded border border-purple-500/40 bg-purple-500/15 text-purple-200">
-                {t('auto') || 'Auto'}
+                {t('auto')}
             </span>
             : null
     );
@@ -346,7 +354,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
         } catch (err: any) {
             setTestResult({
                 success: false,
-                message: err.message || 'Connection test failed'
+                message: err.message || t('connection_test_failed')
             });
         } finally {
             setIsTesting(false);
@@ -387,7 +395,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
         }
 
         if (type === 'telegram') {
-            alert(t('telegram_source_manage_in_collector') || 'Telegram sources are managed via Telegram Collector.');
+            alert(t('telegram_source_manage_in_collector'));
             return;
         }
 
@@ -413,7 +421,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
             if (isDuplicate) {
                 setDuplicateWarning({
                     isOpen: true,
-                    message: t('duplicate_source_warning') || 'A data source with this URL or configuration already exists. Do you want to create a duplicate?'
+                    message: t('duplicate_source_warning')
                 });
                 return;
             }
@@ -489,13 +497,41 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
             : ['api', 'webhook', 'rss', 'web', 'website', 'aggregator', 'third_party'])
         : ['api', 'webhook', 'rss', 'web', 'website', 'aggregator', 'third_party'];
 
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {source ? t('edit_source') || 'Edit Source' : t('create_source') || 'Create Data Source'}
-                </h3>
+    const modalTitle = source ? t('edit_source') : t('create_source');
 
+    return (
+        <DataHubModal
+            title={modalTitle}
+            onClose={onClose}
+            maxWidth="max-w-2xl"
+            footer={
+                <>
+                    {isExistingTelegram && setActiveView && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onClose();
+                                setActiveView('telegram');
+                            }}
+                            className="text-[11px] px-3 py-1.5 rounded-full border border-sky-500/60 text-sky-200 hover:bg-sky-500/10 mr-auto"
+                        >
+                            {t('open_in_telegram_collector')}
+                        </button>
+                    )}
+                    <button type="button" onClick={onClose} disabled={isSaving} className={BTN_SECONDARY}>
+                        {t('cancel')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleSubmit}
+                        disabled={isSaving || isExistingTelegram}
+                        className={BTN_PRIMARY}
+                    >
+                        {isSaving ? t('saving') : t('save')}
+                    </button>
+                </>
+            }
+        >
                 {duplicateWarning.isOpen && (
                     <div className="mb-4 bg-yellow-500/10 border border-yellow-500/30 rounded p-4">
                         <div className="flex items-start gap-3">
@@ -504,7 +540,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                             </svg>
                             <div className="flex-1">
                                 <h4 className="text-sm font-medium text-yellow-400 mb-1">
-                                    {t('possible_duplicate') || 'Possible Duplicate Detected'}
+                                    {t('possible_duplicate')}
                                 </h4>
                                 <p className="text-xs text-muted-foreground mb-3">
                                     {duplicateWarning.message}
@@ -515,14 +551,14 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                         onClick={() => setDuplicateWarning({ isOpen: false, message: '' })}
                                         className="px-3 py-1.5 text-xs font-medium text-foreground bg-secondary hover:bg-secondary/80 rounded transition-colors"
                                     >
-                                        {t('cancel') || 'Cancel'}
+                                        {t('cancel')}
                                     </button>
                                     <button
                                         type="button"
                                         onClick={handleSubmit}
                                         className="px-3 py-1.5 text-xs font-medium text-white bg-yellow-600 hover:bg-yellow-700 rounded transition-colors"
                                     >
-                                        {t('confirm_duplicate') || 'Create Anyway'}
+                                        {t('confirm_duplicate')}
                                     </button>
                                 </div>
                             </div>
@@ -532,24 +568,24 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
 
                 {canCreateTelegram && (
                     <div className="mb-4 text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
-                        {t('telegram_source_hint') || 'Telegram channels are managed via Telegram Collector. Use that tab to add or edit Telegram data sources.'}
+                        {t('telegram_source_hint')}
                     </div>
                 )}
                 {isExistingTelegram && (
                     <div className="mb-4 space-y-2">
                         <div className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
-                            {t('telegram_source_edit_hint') || 'This Telegram source is read-only. Manage details through the Telegram Collector tab.'}
+                            {t('telegram_source_edit_hint')}
                         </div>
                         {source?.config && (
                             <div className="text-[11px] bg-slate-900/60 border border-slate-700/50 rounded p-3">
                                 <p className="text-muted-foreground mb-2">
-                                    {t('telegram_channel_settings') || 'Channel Settings'}
+                                    {t('telegram_channel_settings')}
                                 </p>
                                 <div className="grid grid-cols-2 gap-2">
                                     {source.config.channelUsername && (
                                         <div>
                                             <p className="text-muted-foreground">
-                                                {t('username') || 'Username'}
+                                                {t('username')}
                                             </p>
                                             <p className="font-mono text-sky-300">
                                                 @{source.config.channelUsername}
@@ -559,7 +595,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                     {source.config.fetchLimit !== undefined && (
                                         <div>
                                             <p className="text-muted-foreground">
-                                                {t('fetch_limit') || 'Fetch Limit'}
+                                                {t('fetch_limit')}
                                             </p>
                                             <p className="text-foreground">
                                                 {source.config.fetchLimit}
@@ -568,22 +604,22 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                     )}
                                     <div>
                                         <p className="text-muted-foreground">
-                                            {t('include_media') || 'Include Media'}
+                                            {t('include_media')}
                                         </p>
                                         <p className="text-foreground">
                                             {source.config.includeMedia !== false
-                                                ? t('yes') || 'Yes'
-                                                : t('no') || 'No'}
+                                                ? t('yes')
+                                                : t('no')}
                                         </p>
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground">
-                                            {t('parse_urls') || 'Parse URLs'}
+                                            {t('parse_urls')}
                                         </p>
                                         <p className="text-foreground">
                                             {source.config.parseUrls !== false
-                                                ? t('yes') || 'Yes'
-                                                : t('no') || 'No'}
+                                                ? t('yes')
+                                                : t('no')}
                                         </p>
                                     </div>
                                 </div>
@@ -594,7 +630,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
 
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm text-muted-foreground mb-1">{t('name') || 'Name'} *</label>
+                        <label className="block text-sm text-muted-foreground mb-1">{t('name')} *</label>
                         <input
                             type="text"
                             value={name}
@@ -602,8 +638,8 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                 setName(e.target.value);
                                 if (errors.name) setErrors(prev => { const n = { ...prev }; delete n.name; return n; });
                             }}
-                            className={`w-full p-2 bg-secondary border rounded text-foreground ${errors.name ? 'border-red-500' : 'border-border'}`}
-                            placeholder={t('enter_source_name') || 'Enter source name'}
+                            className={`${INPUT_CLASS} ${errors.name ? 'border-red-500' : ''}`}
+                            placeholder={t('enter_source_name')}
                         />
                         {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
                     </div>
@@ -611,12 +647,12 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
-                                {t('type') || 'Type'} * {autoBadge('type')}
+                                {t('type')} * {autoBadge('type')}
                             </label>
                             <select
                                 value={type}
                                 onChange={(e) => setType(e.target.value as DataSource['type'])}
-                                className="w-full p-2 bg-secondary border border-border rounded text-foreground"
+                                className={INPUT_CLASS}
                                 disabled={isExistingTelegram}
                             >
                                 {availableTypes.map(opt => (
@@ -629,7 +665,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
 
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
-                                {t('category') || 'Category'} * {autoBadge('category')}
+                                {t('category')} * {autoBadge('category')}
                             </label>
                             <select
                                 value={category}
@@ -637,9 +673,9 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                     setCategory(e.target.value);
                                     if (errors.category) setErrors(prev => { const n = { ...prev }; delete n.category; return n; });
                                 }}
-                                className={`w-full p-2 bg-secondary border rounded text-foreground ${errors.category ? 'border-red-500' : 'border-border'}`}
+                                className={`${INPUT_CLASS} ${errors.category ? 'border-red-500' : ''}`}
                             >
-                                <option value="">{t('select_category') || 'Select category'}</option>
+                                <option value="">{t('select_category')}</option>
                                 {categories.map(cat => (
                                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                                 ))}
@@ -653,7 +689,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                         <>
                             <div>
                                 <label className="block text-sm text-muted-foreground mb-1">
-                                    {t('telegram_channel_username') || 'Telegram Channel Username'} * {autoBadge('telegramUsername')}
+                                    {t('telegram_channel_username')} * {autoBadge('telegramUsername')}
                                 </label>
                                 <div className="flex items-center gap-2">
                                     <span className="text-muted-foreground">@</span>
@@ -661,25 +697,25 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                         type="text"
                                         value={telegramUsername.replace('@', '')}
                                         onChange={(e) => setTelegramUsername(e.target.value)}
-                                        className="flex-1 p-2 bg-secondary border border-border rounded text-foreground"
-                                        placeholder="channel_username"
+                                        className={`flex-1 ${INPUT_CLASS}`}
+                                        placeholder={t('source_placeholder_channel_username')}
                                     />
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    {t('telegram_username_hint') || 'Enter channel username without @'}
+                                    {t('telegram_username_hint')}
                                 </p>
                             </div>
                             <div>
                                 <label className="block text-sm text-muted-foreground mb-1">
-                                    {t('telegram_bot_token') || 'Telegram Bot Token'} (Optional)
+                                    {t('telegram_bot_token')} {' '}({t('optional')})
                                 </label>
                                 <div className="relative">
                                     <input
                                         type={showTelegramToken ? 'text' : 'password'}
                                         value={telegramToken}
                                         onChange={(e) => setTelegramToken(e.target.value)}
-                                        className="w-full p-2 pr-10 bg-secondary border border-border rounded text-foreground"
-                                        placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+                                        className={`w-full pr-10 ${INPUT_CLASS}`}
+                                        placeholder={t('source_placeholder_telegram_token')}
                                     />
                                     <button
                                         type="button"
@@ -700,7 +736,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                     </button>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    {t('telegram_token_hint') || 'Required if you want to read messages from private channels'}
+                                    {t('telegram_token_hint')}
                                 </p>
                             </div>
                         </>
@@ -709,17 +745,17 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                     {type === 'webhook' && (
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
-                                {t('webhook_url') || 'Webhook URL'} *
+                                {t('webhook_url')} *
                             </label>
                             <input
                                 type="url"
                                 value={webhookUrl}
                                 onChange={(e) => setWebhookUrl(e.target.value)}
-                                className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                                placeholder="https://your-domain.com/webhook"
+                                className={INPUT_CLASS}
+                                placeholder={t('source_placeholder_webhook')}
                             />
                             <p className="text-xs text-muted-foreground mt-1">
-                                {t('webhook_url_hint') || 'URL where data will be sent via POST request'}
+                                {t('webhook_url_hint')}
                             </p>
                         </div>
                     )}
@@ -728,20 +764,22 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                         <>
                             <div>
                                 <label className="block text-sm text-muted-foreground mb-1">
-                                    {t('url') || 'URL'} {type === 'api' || type === 'rss' || type === 'website' ? '*' : ''} {autoBadge('url')}
+                                    {t('url')} {type === 'api' || type === 'rss' || type === 'website' ? '*' : ''} {autoBadge('url')}
                                 </label>
                                 <div className="flex gap-2">
                                     <input
                                         type="url"
                                         value={url}
                                         onChange={(e) => setUrl(e.target.value)}
-                                        className="flex-1 p-2 bg-secondary border border-border rounded text-foreground"
+                                        className={`flex-1 ${INPUT_CLASS}`}
                                         placeholder={
-                                            type === 'api' ? 'https://api.example.com' :
-                                                type === 'rss' ? 'https://example.com/feed.xml' :
-                                                    type === 'web' ? 'https://example.com' :
-                                                        type === 'website' ? 'https://example.com' :
-                                                            'https://example.com'
+                                            type === 'api'
+                                                ? t('source_placeholder_url_api')
+                                                : type === 'rss'
+                                                  ? t('source_placeholder_url_rss')
+                                                  : type === 'web' || type === 'website'
+                                                    ? t('source_placeholder_url_web')
+                                                    : t('source_placeholder_url_default')
                                         }
                                     />
                                     <button
@@ -750,7 +788,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                         disabled={isDetectingType || !url}
                                         className="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded"
                                     >
-                                        {isDetectingType ? (t('detecting') || 'Detecting...') : t('auto_detect') || 'Auto Detect'}
+                                        {isDetectingType ? (t('detecting')) : t('auto_detect')}
                                     </button>
                                 </div>
                                 {autoDetection && (
@@ -758,10 +796,10 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                         <div className="flex justify-between items-center">
                                             <div>
                                                 <p className="font-semibold">
-                                                    {t('suggested_type') || 'Suggested type'}: <span className="text-purple-300">{autoDetection.type}</span>
+                                                    {t('suggested_type')}: <span className="text-purple-300">{autoDetection.type}</span>
                                                 </p>
                                                 <p className="text-muted-foreground">
-                                                    {(t('confidence') || 'Confidence')}: {(autoDetection.confidence * 100).toFixed(0)}% • {autoDetection.reason}
+                                                    {(t('confidence'))}: {(autoDetection.confidence * 100).toFixed(0)}% • {autoDetection.reason}
                                                 </p>
                                             </div>
                                             <button
@@ -769,12 +807,12 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                                 onClick={() => applyDetectionSuggestion(autoDetection)}
                                                 className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded"
                                             >
-                                                {t('apply') || 'Apply'}
+                                                {t('apply')}
                                             </button>
                                         </div>
                                         {autoDetection.meta?.contentType && (
                                             <p className="text-muted-foreground mt-1">
-                                                {t('content_type') || 'Content'}: {autoDetection.meta.contentType}
+                                                {t('content_type')}: {autoDetection.meta.contentType}
                                             </p>
                                         )}
                                     </div>
@@ -798,14 +836,14 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                                 </svg>
-                                                {t('testing') || 'Testing...'}
+                                                {t('testing')}
                                             </>
                                         ) : (
                                             <>
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                                 </svg>
-                                                {t('test_connection') || 'Test Connection'}
+                                                {t('test_connection')}
                                             </>
                                         )}
                                     </button>
@@ -827,7 +865,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                             onClick={() => setShowSampleData(!showSampleData)}
                                             className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium bg-secondary/40 hover:bg-secondary/60 transition-colors"
                                         >
-                                            <span>📊 {t('sample_data') || 'Sample Data Preview'}</span>
+                                            <span>📊 {t('sample_data')}</span>
                                             <svg xmlns="http://www.w3.org/2000/svg" className={`h-3.5 w-3.5 transition-transform ${showSampleData ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                             </svg>
@@ -847,31 +885,31 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                 <>
                                     <div>
                                         <label className="block text-sm text-muted-foreground mb-1">
-                                            {t('endpoint') || 'Endpoint'} (Optional)
+                                            {t('endpoint')} {' '}({t('optional')})
                                         </label>
                                         <input
                                             type="text"
                                             value={endpoint}
                                             onChange={(e) => setEndpoint(e.target.value)}
-                                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                                            placeholder="/api/v1/data"
+                                            className={INPUT_CLASS}
+                                            placeholder={t('source_placeholder_endpoint')}
                                         />
                                         <p className="text-xs text-muted-foreground mt-1">
-                                            {t('endpoint_hint') || 'API endpoint path (will be appended to base URL)'}
+                                            {t('endpoint_hint')}
                                         </p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm text-muted-foreground mb-1">
-                                                {t('api_key') || 'API Key'} (Optional)
+                                                {t('api_key')} {' '}({t('optional')})
                                             </label>
                                             <div className="relative">
                                                 <input
                                                     type={showApiKey ? 'text' : 'password'}
                                                     value={apiKey}
                                                     onChange={(e) => setApiKey(e.target.value)}
-                                                    className="w-full p-2 pr-10 bg-secondary border border-border rounded text-foreground"
-                                                    placeholder="Your API Key"
+                                                    className={`w-full pr-10 ${INPUT_CLASS}`}
+                                                    placeholder={t('source_placeholder_api_key')}
                                                 />
                                                 <button
                                                     type="button"
@@ -894,15 +932,15 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                         </div>
                                         <div>
                                             <label className="block text-sm text-muted-foreground mb-1">
-                                                {t('api_secret') || 'API Secret'} (Optional)
+                                                {t('api_secret')} {' '}({t('optional')})
                                             </label>
                                             <div className="relative">
                                                 <input
                                                     type={showApiSecret ? 'text' : 'password'}
                                                     value={apiSecret}
                                                     onChange={(e) => setApiSecret(e.target.value)}
-                                                    className="w-full p-2 pr-10 bg-secondary border border-border rounded text-foreground"
-                                                    placeholder="Your API Secret"
+                                                    className={`w-full pr-10 ${INPUT_CLASS}`}
+                                                    placeholder={t('source_placeholder_api_secret')}
                                                 />
                                                 <button
                                                     type="button"
@@ -929,12 +967,14 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
 
                             {/* Web Crawler Config (TASK-FE-020) */}
                             {type === 'web' && (
-                                <div className="border border-border rounded-lg p-4 space-y-4 bg-secondary/30">
-                                    <h4 className="text-sm font-semibold text-foreground mb-2">🕷️ Web Crawler Settings</h4>
+                                <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 space-y-4">
+                                    <h4 className="text-[11px] font-semibold text-foreground">
+                                        {t('web_crawler_settings')}
+                                    </h4>
 
                                     <div>
-                                        <label className="block text-sm text-muted-foreground mb-1">
-                                            Max Depth: {webMaxDepth}
+                                        <label className="block text-[11px] text-muted-foreground mb-1">
+                                            {t('web_crawler_max_depth')}: {webMaxDepth}
                                         </label>
                                         <input
                                             type="range"
@@ -944,30 +984,30 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                             onChange={(e) => setWebMaxDepth(parseInt(e.target.value))}
                                             className="w-full"
                                         />
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            How many link levels to follow (0 = only starting page)
+                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                            {t('web_crawler_max_depth_hint')}
                                         </p>
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm text-muted-foreground mb-1">
-                                            CSS Selector (Optional)
+                                        <label className="block text-[11px] text-muted-foreground mb-1">
+                                            {t('web_crawler_css_selector')}
                                         </label>
                                         <input
                                             type="text"
                                             value={webSelector}
                                             onChange={(e) => setWebSelector(e.target.value)}
-                                            className="w-full p-2 bg-background border border-border rounded text-foreground font-mono text-sm"
-                                            placeholder="article, .content, #main"
+                                            className={`${INPUT_CLASS} font-mono`}
+                                            placeholder={t('web_crawler_css_placeholder')}
                                         />
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            Extract specific content using CSS selector
+                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                            {t('web_crawler_css_selector_hint')}
                                         </p>
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm text-muted-foreground mb-1">
-                                            Crawl Delay: {webDelay}ms
+                                        <label className="block text-[11px] text-muted-foreground mb-1">
+                                            {t('web_crawler_delay')}: {webDelay}ms
                                         </label>
                                         <input
                                             type="range"
@@ -978,28 +1018,20 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                             onChange={(e) => setWebDelay(parseInt(e.target.value))}
                                             className="w-full"
                                         />
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            Rate limiting delay between requests (100-5000ms)
+                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                            {t('web_crawler_delay_hint')}
                                         </p>
                                     </div>
 
-                                    <div className="flex items-center gap-3 p-2 bg-background/40 rounded border border-border/50">
-                                        <input
-                                            type="checkbox"
-                                            id="renderJS"
-                                            checked={webRenderJS}
-                                            onChange={(e) => setWebRenderJS(e.target.checked)}
-                                            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                        />
-                                        <div>
-                                            <label htmlFor="renderJS" className="text-sm font-medium text-foreground cursor-pointer">
-                                                Render JavaScript
-                                            </label>
-                                            <p className="text-[10px] text-muted-foreground">
-                                                Enable for sites that require JS (e.g. React, Vue, dynamic content). Slower but more thorough.
-                                            </p>
-                                        </div>
-                                    </div>
+                                    <DataHubToggle
+                                        id="renderJS"
+                                        checked={webRenderJS}
+                                        onChange={setWebRenderJS}
+                                        label={t('web_crawler_render_js')}
+                                    />
+                                    <p className="text-[10px] text-muted-foreground -mt-2">
+                                        {t('web_crawler_render_js_hint')}
+                                    </p>
                                 </div>
                             )}
                         </>
@@ -1007,89 +1039,55 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
 
                     <div>
                         <label className="block text-sm text-muted-foreground mb-1">
-                            {t('tags') || 'Tags'} (comma-separated) {autoBadge('tags')}
+                            {t('tags')} (comma-separated) {autoBadge('tags')}
                         </label>
                         <input
                             type="text"
                             value={tags}
                             onChange={(e) => setTags(e.target.value)}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                            placeholder="price, real-time, market"
+                            className={INPUT_CLASS}
+                            placeholder={t('source_tags_placeholder')}
                         />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
-                                {t('priority') || 'Priority'} {autoBadge('priority')}
+                                {t('priority')} {autoBadge('priority')}
                             </label>
                             <select
                                 value={priority}
                                 onChange={(e) => setPriority(e.target.value as DataSource['priority'])}
-                                className="w-full p-2 bg-secondary border border-border rounded text-foreground"
+                                className={INPUT_CLASS}
                             >
-                                <option value="low">{t('low') || 'Low'}</option>
-                                <option value="medium">{t('medium') || 'Medium'}</option>
-                                <option value="high">{t('high') || 'High'}</option>
-                                <option value="critical">{t('critical') || 'Critical'}</option>
+                                <option value="low">{t('low')}</option>
+                                <option value="medium">{t('medium')}</option>
+                                <option value="high">{t('high')}</option>
+                                <option value="critical">{t('critical')}</option>
                             </select>
                         </div>
 
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1">
-                                {t('update_interval') || 'Update Interval'} {autoBadge('updateInterval')}
+                                {t('update_interval')} {autoBadge('updateInterval')}
                             </label>
                             <select
                                 value={updateInterval}
                                 onChange={(e) => setUpdateInterval(e.target.value as DataSource['updateInterval'])}
-                                className="w-full p-2 bg-secondary border border-border rounded text-foreground"
+                                className={INPUT_CLASS}
                             >
-                                <option value="realtime">{t('realtime') || 'Real-time'}</option>
-                                <option value="1min">{t('1min') || '1 Minute'}</option>
-                                <option value="5min">{t('5min') || '5 Minutes'}</option>
-                                <option value="15min">{t('15min') || '15 Minutes'}</option>
-                                <option value="30min">{t('30min') || '30 Minutes'}</option>
-                                <option value="1hour">{t('1hour') || '1 Hour'}</option>
-                                <option value="daily">{t('daily') || 'Daily'}</option>
+                                <option value="realtime">{t('realtime')}</option>
+                                <option value="1min">{t('1min')}</option>
+                                <option value="5min">{t('5min')}</option>
+                                <option value="15min">{t('15min')}</option>
+                                <option value="30min">{t('30min')}</option>
+                                <option value="1hour">{t('1hour')}</option>
+                                <option value="daily">{t('daily')}</option>
                             </select>
                         </div>
                     </div>
                 </div>
-
-                <div className="flex justify-between items-center gap-2 mt-6">
-                    {isExistingTelegram && setActiveView && (
-                        <button
-                            onClick={() => {
-                                onClose();
-                                setActiveView('telegram');
-                            }}
-                            className="px-4 py-2 border border-sky-500/70 text-sky-200 hover:bg-sky-500/10 rounded-lg text-sm flex items-center gap-2"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                            </svg>
-                            {t('open_in_telegram_collector') || 'Open in Telegram Collector'}
-                        </button>
-                    )}
-                    <div className="flex gap-2 ml-auto">
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 bg-secondary hover:bg-accent text-secondary-foreground rounded-lg text-sm"
-                            disabled={isSaving}
-                        >
-                            {t('cancel') || 'Cancel'}
-                        </button>
-                        <button
-                            onClick={handleSubmit}
-                            disabled={isSaving || isExistingTelegram}
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm"
-                        >
-                            {isSaving ? t('saving') || 'Saving...' : t('save') || 'Save'}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        </DataHubModal>
     );
 };
 

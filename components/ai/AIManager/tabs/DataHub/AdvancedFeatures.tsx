@@ -168,8 +168,6 @@ const AdvancedFeatures: React.FC<{
             {activeFeature === 'telegram' && (
                 <TelegramPublisher
                     t={t}
-                    agents={agents}
-                    agentMap={agentMap}
                     telegramSources={dataHub.sources.filter(s => s.type === 'telegram')}
                 />
             )}

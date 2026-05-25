@@ -257,7 +257,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                                 void refetchSources();
                                 onRefresh();
                             }}
-                            Card={Card}
                             downloadCSV={downloadCSV}
                             setEditingSource={setEditingSource}
                             setShowCreateSourceModal={setShowCreateSourceModal}
@@ -288,7 +287,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                                 onRefresh();
                             }}
                             handleDeleteCategory={handleDeleteCategory}
-                            Card={Card}
                             isLoading={isFetchingCategories}
                             apiError={categoriesApiError}
                             dataHub={dataHub}
@@ -301,10 +299,13 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             accessLogs={accessLogs}
                             logStatusCounts={logStatusCounts}
                             downloadCSV={downloadCSV}
-                            Card={Card}
                             isLoading={isLoadingLogs}
                             error={logsError}
                             setError={setLogsError}
+                            onRetry={() => {
+                                setLogsError(null);
+                                onRefresh();
+                            }}
                         />
                     )}
 
@@ -322,7 +323,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             formatTimeAgo={formatTimeAgo}
                             selectedSnapshotId={selectedSnapshotId}
                             setSelectedSnapshotId={setSelectedSnapshotId}
-                            Card={Card}
                         />
                     )}
 

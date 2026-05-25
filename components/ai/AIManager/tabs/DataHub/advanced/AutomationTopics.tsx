@@ -3,11 +3,6 @@ import React, { useMemo, useState } from 'react';
 import { DataCategory, AIAgent, AgentTopicRoute, AgentTopicFormValues, TelegramPublisher } from '../../../../../../types';
 import AutomationTopicModal from '../modals/AutomationTopicModal';
 import QueuePreviewModal from '../modals/QueuePreviewModal';
-import { SummaryCard } from '../../../../../ui/summary-card';
-import { ActionButton } from '../../../../../ui/action-button';
-import { StatusBadge } from '../../../../../ui/status-badge';
-import { EmptyState } from '../../../../../ui/empty-state';
-import ApiWrapper from '../../../../../common/ApiWrapper';
 import AutomationTopicList from './automation/AutomationTopicList';
 import AutomationQueueManager from './automation/AutomationQueueManager';
 import AutomationSchedulePanel from './automation/AutomationSchedulePanel';
@@ -26,6 +21,18 @@ import {
 } from '../../../../../../hooks/useDatahubAutomation';
 import { useTelegramPublishersQuery } from '../../../../../../hooks/useTelegramPublishers';
 import type { AutomationExecutionRecord } from '../../../../../../services/datahubAutomationApi';
+import {
+    DATAHUB_SHELL,
+    DATAHUB_INNER_LIST,
+    BTN_PRIMARY,
+    BTN_SECONDARY,
+    BTN_OUTLINE_SLATE,
+    DataHubAlert,
+    DataHubEmpty,
+    DataHubToggle,
+    MetricCard,
+    StatusPill,
+} from '../dataHubUi';
 
 interface AutomationTopicsProps {
     categories: DataCategory[];
@@ -118,18 +125,6 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
         [executions],
     );
 
-    const isMutating =
-        createTopic.isPending ||
-        updateTopic.isPending ||
-        deleteTopic.isPending ||
-        updateSchedule.isPending ||
-        refreshQueue.isPending ||
-        dispatchQueue.isPending ||
-        dispatchItem.isPending ||
-        failItem.isPending ||
-        retryExecution.isPending ||
-        testRun.isPending;
-
     const handleRefreshAutomation = async () => {
         await refreshQueue.mutateAsync();
     };
@@ -172,8 +167,7 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
     };
 
     const handleDeleteTopic = async (topicId: string) => {
-        const confirmed = window.confirm(t('confirm_delete') || 'Are you sure?');
-        if (confirmed) {
+        if (window.confirm(t('confirm_delete'))) {
             await deleteTopic.mutateAsync(topicId);
         }
     };
@@ -190,262 +184,265 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
         (error as Error | null)?.message ||
         createTopic.error?.message ||
         updateTopic.error?.message ||
-        deleteTopic.error?.message ||
-        refreshQueue.error?.message ||
         dispatchQueue.error?.message ||
         null;
 
+    const isBusy =
+        createTopic.isPending ||
+        updateTopic.isPending ||
+        deleteTopic.isPending ||
+        updateSchedule.isPending ||
+        refreshQueue.isPending ||
+        dispatchQueue.isPending ||
+        dispatchItem.isPending ||
+        failItem.isPending ||
+        retryExecution.isPending ||
+        testRun.isPending;
+
     return (
-        <ApiWrapper
-            error={combinedError}
-            setError={() => {}}
-            isLoading={isLoading || isMutating}
-        >
-            <div className="bg-card border border-border rounded-lg p-4">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-                    <div>
-                        <h3 className="font-semibold text-foreground flex items-center gap-2">
-                            🤖 {t('automation_routing') || 'Automation & Routing'}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {t('automation_desc') ||
-                                'Backend-first automation topics, queue, and manual dispatch.'}
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 items-center">
-                        <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <input
-                                type="checkbox"
-                                checked={dispatchDryRun}
-                                onChange={e => setDispatchDryRun(e.target.checked)}
-                            />
-                            {t('dry_run') || 'Dry-run'}
-                        </label>
-                        <ActionButton
-                            variant="secondary"
-                            size="sm"
-                            loading={testRun.isPending}
-                            onClick={handleTestRun}
-                        >
-                            🧪 {t('test_run') || 'Test run'}
-                        </ActionButton>
-                        <ActionButton
-                            variant="secondary"
-                            size="sm"
-                            loading={refreshQueue.isPending}
-                            onClick={handleRefreshAutomation}
-                        >
-                            🔄 {t('refresh') || 'Refresh queue'}
-                        </ActionButton>
-                        <ActionButton
-                            variant="primary"
-                            size="sm"
-                            onClick={() => {
-                                setEditingTopic(null);
-                                setShowAutomationModal(true);
-                            }}
-                        >
-                            + {t('add_topic') || 'Add Topic'}
-                        </ActionButton>
-                    </div>
+        <div className={DATAHUB_SHELL}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+                <div>
+                    <h3 className="text-sm md:text-base font-semibold text-foreground">
+                        {t('automation_routing')}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">{t('automation_desc')}</p>
                 </div>
-
-                {summary && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                        <SummaryCard
-                            label={t('automation_topics') || 'Topics'}
-                            value={summary.totalTopics}
-                            icon={<span className="text-2xl">📚</span>}
-                        />
-                        <SummaryCard
-                            label={t('active_routing') || 'Active'}
-                            value={summary.enabledTopics}
-                            variant="success"
-                            icon={<span className="text-2xl">⚡</span>}
-                        />
-                        <SummaryCard
-                            label={t('queue_size') || 'In Queue'}
-                            value={summary.queueSize}
-                            variant={summary.queueSize > 50 ? 'warning' : 'default'}
-                            icon={<span className="text-2xl">📥</span>}
-                        />
-                        <SummaryCard
-                            label={t('avg_pass_rate') || 'Avg Pass Rate'}
-                            value={`${summary.avgPassRate}%`}
-                            variant={summary.avgPassRate < 80 ? 'warning' : 'success'}
-                            icon={<span className="text-2xl">📊</span>}
-                        />
-                    </div>
-                )}
-
-                {schedule && (
-                    <AutomationSchedulePanel
-                        schedule={{
-                            enabled: schedule.enabled,
-                            interval: schedule.intervalMinutes,
-                            lastRun: schedule.lastRun ? formatTimeAgo(schedule.lastRun) : undefined,
-                            nextRun: schedule.nextRun ? formatTimeAgo(schedule.nextRun) : undefined,
-                        }}
-                        isUpdating={updateSchedule.isPending}
-                        onToggle={handleToggleSchedule}
-                        onUpdateInterval={handleUpdateScheduleInterval}
-                        t={t}
+                <div className="flex flex-wrap gap-2 items-center">
+                    <DataHubToggle
+                        id="automation-dry-run"
+                        checked={dispatchDryRun}
+                        onChange={setDispatchDryRun}
+                        label={t('dry_run')}
                     />
-                )}
+                    <button
+                        type="button"
+                        disabled={testRun.isPending}
+                        onClick={handleTestRun}
+                        className={BTN_SECONDARY}
+                    >
+                        {t('test_run')}
+                    </button>
+                    <button
+                        type="button"
+                        disabled={refreshQueue.isPending}
+                        onClick={handleRefreshAutomation}
+                        className={BTN_SECONDARY}
+                    >
+                        {t('refresh')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setEditingTopic(null);
+                            setShowAutomationModal(true);
+                        }}
+                        className={BTN_PRIMARY}
+                    >
+                        {t('add_topic')}
+                    </button>
+                </div>
+            </div>
 
-                <div className="mb-8">
-                    {topics.length > 0 ? (
-                        <AutomationTopicList
-                            topics={topics}
-                            agentMap={agentMap}
-                            publisherMap={publisherMap}
-                            t={t}
-                            onEdit={topic => {
-                                setEditingTopic(topic);
-                                setShowAutomationModal(true);
+            {combinedError && (
+                <DataHubAlert
+                    variant="error"
+                    message={combinedError}
+                    onRetry={() => refetch()}
+                    retryLabel={t('retry')}
+                />
+            )}
+
+            {isLoading && !overview ? (
+                <div className="py-12 text-center text-xs text-muted-foreground">{t('automation_loading')}</div>
+            ) : (
+                <>
+                    {summary && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                            <MetricCard label={t('automation_topics')} value={summary.totalTopics} color="blue" />
+                            <MetricCard
+                                label={t('active_routing')}
+                                value={summary.enabledTopics}
+                                color="emerald"
+                            />
+                            <MetricCard
+                                label={t('queue_size')}
+                                value={summary.queueSize}
+                                color={summary.queueSize > 50 ? 'amber' : 'purple'}
+                            />
+                            <MetricCard
+                                label={t('avg_pass_rate')}
+                                value={`${summary.avgPassRate}%`}
+                                color={summary.avgPassRate < 80 ? 'amber' : 'emerald'}
+                            />
+                        </div>
+                    )}
+
+                    {schedule && (
+                        <AutomationSchedulePanel
+                            schedule={{
+                                enabled: schedule.enabled,
+                                interval: schedule.intervalMinutes,
+                                lastRun: schedule.lastRun ? formatTimeAgo(schedule.lastRun) : undefined,
+                                nextRun: schedule.nextRun ? formatTimeAgo(schedule.nextRun) : undefined,
                             }}
-                            onDelete={handleDeleteTopic}
-                            deletingTopicId={deleteTopic.isPending ? deleteTopic.variables : null}
-                        />
-                    ) : (
-                        <EmptyState
-                            title={t('automation_no_topics') || 'No routing rules defined'}
-                            description={
-                                t('automation_no_topics_desc') ||
-                                'Define your first automation topic to start publishing.'
-                            }
-                            icon={<span className="text-3xl">🧭</span>}
-                            className="py-10"
+                            isUpdating={updateSchedule.isPending}
+                            onToggle={handleToggleSchedule}
+                            onUpdateInterval={handleUpdateScheduleInterval}
+                            t={t}
                         />
                     )}
-                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
-                    <AutomationQueueManager
-                        queue={automationQueue.map(item => ({
-                            ...item,
-                            topicId: topicMap.get(item.topicId)?.title || item.topicId,
-                        }))}
-                        isDispatching={dispatchQueue.isPending}
-                        onDispatch={handleDispatchAutomation}
-                        onPreview={setPreviewQueueItem}
-                        onProcess={handleProcessQueueItem}
-                        processingId={
-                            dispatchItem.isPending || failItem.isPending
-                                ? dispatchItem.variables?.id || failItem.variables
-                                : null
-                        }
-                        formatTimeAgo={formatTimeAgo}
-                        t={t}
-                    />
-
-                    <div className="border border-border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-semibold text-foreground text-sm flex items-center gap-2">
-                                🕒 {t('automation_history_heading') || 'Execution History'}
-                            </h4>
-                            <span className="text-xs text-muted-foreground">{historyForUi.length} items</span>
-                        </div>
-                        {historyForUi.length > 0 ? (
-                            <div className="space-y-3">
-                                {historyForUi.slice(0, 8).map(entry => {
-                                    const topic = topicMap.get(entry.topicId);
-                                    const publisher = publisherMap[entry.publisherId];
-                                    const isFailed = entry.status === 'failed';
-                                    return (
-                                        <div
-                                            key={entry.id}
-                                            className="border border-border rounded-lg p-3 bg-secondary/5"
-                                        >
-                                            <div className="flex justify-between items-start mb-1 gap-2">
-                                                <p className="font-semibold text-foreground text-xs line-clamp-1 flex-1">
-                                                    {entry.payloadPreview}
-                                                </p>
-                                                <StatusBadge
-                                                    status={isFailed ? 'error' : 'success'}
-                                                    label={
-                                                        entry.dryRun
-                                                            ? 'Dry-run'
-                                                            : isFailed
-                                                              ? 'Failed'
-                                                              : 'Sent'
-                                                    }
-                                                    size="sm"
-                                                />
-                                            </div>
-                                            <div className="flex justify-between items-center text-[10px] text-muted-foreground">
-                                                <span>
-                                                    {topic?.title || entry.topicId} →{' '}
-                                                    {publisher?.name || entry.publisherId}
-                                                </span>
-                                                <span>{formatTimeAgo(entry.sentAt)}</span>
-                                            </div>
-                                            {isFailed && (
-                                                <ActionButton
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="mt-2 text-xs"
-                                                    loading={retryExecution.isPending}
-                                                    onClick={() => handleRetry(entry.id)}
-                                                >
-                                                    {t('retry') || 'Retry'}
-                                                </ActionButton>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <EmptyState
-                                title={t('no_history') || 'No history yet'}
-                                description={
-                                    t('no_history_desc') ||
-                                    'Dispatch or test-run to record execution history.'
-                                }
-                                icon={<span className="text-2xl">⏳</span>}
-                                className="py-10"
+                    <div className="mb-6">
+                        {topics.length > 0 ? (
+                            <AutomationTopicList
+                                topics={topics}
+                                agentMap={agentMap}
+                                publisherMap={publisherMap}
+                                t={t}
+                                onEdit={topic => {
+                                    setEditingTopic(topic);
+                                    setShowAutomationModal(true);
+                                }}
+                                onDelete={handleDeleteTopic}
+                                deletingTopicId={deleteTopic.isPending ? deleteTopic.variables : null}
                             />
+                        ) : (
+                            <DataHubEmpty message={t('automation_no_topics')} />
                         )}
                     </div>
-                </div>
 
-                {showAutomationModal && (
-                    <AutomationTopicModal
-                        topic={editingTopic}
-                        agents={agents}
-                        isLoadingAgents={isLoadingAgents}
-                        categories={categories}
-                        dataTypes={availableDataTypes}
-                        publishers={publishersForModal}
-                        isSaving={createTopic.isPending || updateTopic.isPending}
-                        onClose={() => {
-                            setShowAutomationModal(false);
-                            setEditingTopic(null);
-                        }}
-                        onSave={handleSaveTopic}
-                        t={t}
-                    />
-                )}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <AutomationQueueManager
+                            queue={automationQueue.map(item => ({
+                                ...item,
+                                topicId: topicMap.get(item.topicId)?.title || item.topicId,
+                            }))}
+                            isDispatching={dispatchQueue.isPending}
+                            onDispatch={handleDispatchAutomation}
+                            onPreview={setPreviewQueueItem}
+                            onProcess={handleProcessQueueItem}
+                            processingId={
+                                dispatchItem.isPending || failItem.isPending
+                                    ? dispatchItem.variables?.id || failItem.variables
+                                    : null
+                            }
+                            formatTimeAgo={formatTimeAgo}
+                            t={t}
+                        />
 
-                {previewQueueItem && (
-                    <QueuePreviewModal
-                        item={previewQueueItem}
-                        topic={topicMap.get(previewQueueItem.topicId) || null}
-                        publisherName={publisherMap[previewQueueItem.publisherId]?.name}
-                        record={null}
-                        agent={agentMap[previewQueueItem.agentId]}
-                        onClose={() => setPreviewQueueItem(null)}
-                        onPublish={() => handleProcessQueueItem(previewQueueItem.id, 'sent')}
-                        t={t}
-                        processingId={
-                            dispatchItem.isPending && dispatchItem.variables?.id === previewQueueItem.id
-                                ? previewQueueItem.id + 'sent'
-                                : null
-                        }
-                    />
-                )}
-            </div>
-        </ApiWrapper>
+                        <div className={DATAHUB_INNER_LIST}>
+                            <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-[11px] font-semibold text-foreground">
+                                    {t('automation_history_heading')}
+                                </h4>
+                                <span className="text-[10px] text-muted-foreground">
+                                    {historyForUi.length} {t('items')}
+                                </span>
+                            </div>
+                            {historyForUi.length > 0 ? (
+                                <div className="space-y-2 max-h-80 overflow-y-auto">
+                                    {historyForUi.slice(0, 8).map(entry => {
+                                        const topic = topicMap.get(entry.topicId);
+                                        const publisher = publisherMap[entry.publisherId];
+                                        const isFailed = entry.status === 'failed';
+                                        return (
+                                            <div
+                                                key={entry.id}
+                                                className="rounded-lg border border-white/5 bg-slate-950/70 p-3"
+                                            >
+                                                <div className="flex justify-between items-start mb-1 gap-2">
+                                                    <p className="font-semibold text-foreground text-[11px] line-clamp-1 flex-1">
+                                                        {entry.payloadPreview}
+                                                    </p>
+                                                    <StatusPill
+                                                        label={
+                                                            entry.dryRun
+                                                                ? t('dry_run')
+                                                                : isFailed
+                                                                  ? t('failed')
+                                                                  : t('sent')
+                                                        }
+                                                        variant={
+                                                            entry.dryRun
+                                                                ? 'info'
+                                                                : isFailed
+                                                                  ? 'error'
+                                                                  : 'success'
+                                                        }
+                                                    />
+                                                </div>
+                                                <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                                                    <span className="truncate">
+                                                        {topic?.title || entry.topicId} →{' '}
+                                                        {publisher?.name || entry.publisherId}
+                                                    </span>
+                                                    <span className="shrink-0 ml-2">
+                                                        {formatTimeAgo(entry.sentAt)}
+                                                    </span>
+                                                </div>
+                                                {isFailed && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={retryExecution.isPending}
+                                                        onClick={() => handleRetry(entry.id)}
+                                                        className={`${BTN_OUTLINE_SLATE} mt-2`}
+                                                    >
+                                                        {t('retry')}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <DataHubEmpty message={t('no_history')} />
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {isBusy && overview && (
+                <p className="text-[10px] text-muted-foreground mt-4 text-center">{t('processing')}</p>
+            )}
+
+            {showAutomationModal && (
+                <AutomationTopicModal
+                    topic={editingTopic}
+                    agents={agents}
+                    isLoadingAgents={isLoadingAgents}
+                    categories={categories}
+                    dataTypes={availableDataTypes}
+                    publishers={publishersForModal}
+                    isSaving={createTopic.isPending || updateTopic.isPending}
+                    onClose={() => {
+                        setShowAutomationModal(false);
+                        setEditingTopic(null);
+                    }}
+                    onSave={handleSaveTopic}
+                    t={t}
+                />
+            )}
+
+            {previewQueueItem && (
+                <QueuePreviewModal
+                    item={previewQueueItem}
+                    topic={topicMap.get(previewQueueItem.topicId) || null}
+                    publisherName={publisherMap[previewQueueItem.publisherId]?.name}
+                    record={null}
+                    agent={agentMap[previewQueueItem.agentId]}
+                    onClose={() => setPreviewQueueItem(null)}
+                    onPublish={() => handleProcessQueueItem(previewQueueItem.id, 'sent')}
+                    t={t}
+                    processingId={
+                        dispatchItem.isPending && dispatchItem.variables?.id === previewQueueItem.id
+                            ? previewQueueItem.id + 'sent'
+                            : null
+                    }
+                />
+            )}
+        </div>
     );
 };
 

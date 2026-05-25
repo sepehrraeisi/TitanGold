@@ -21,7 +21,14 @@
   2. با توکن کاربری که نقش او در بین `['admin','trader','analyst','viewer']` نیست، همان درخواست را ارسال کنید → باید `403 Insufficient permissions` برگردد و UI بنر خطا را بدون crash نشان دهد.  
   3. با کاربر لاگین‌شده دارای نقش مجاز (مثلاً `admin` یا `trader`) وارد UI شوید و به `AI Center → DataHub → Telegram` بروید؛ تمام روت‌های read-only تلگرام (health, summary, feed, breaking-news, events, categories, stats) باید `200` بدهند و تب تلگرام طبق سناریوی موفق بالا کار کند.
   
-### dataHub.sources – Data Sources (GAP-008 closed – UI backend-first)
+### dataHub.sources – Data Sources (GAP-008 · Design-1 Done)
+
+- **Visual / design check (Design-1)**  
+  1. `AI Center → DataHub → Sources`: outer section = slate gradient shell (`border-white/5`), four metric mini-cards (Total / Active / Errors / Telegram).  
+  2. Source rows: `bg-slate-900/60` cards, status + priority pills (emerald/red/amber), action buttons `rounded-full` outline (purple/emerald/sky).  
+  3. **Add Source** / **Edit**: modal overlay `bg-black/60 backdrop-blur-sm`, panel gradient §10; inputs `bg-slate-950/80 border-slate-700`; type `web` shows crawler block + **Render JavaScript** toggle (not raw checkbox).  
+  4. Empty: centered muted message in inner list; loading: `sources_loading` text; 409/500: amber/red `text-[11px]` alert + Retry on 500.  
+  5. Switch locale en/fa: titles, metrics, buttons without English fallback strings in panel chrome.
 
 - **Success Scenario (UI: create → update → soft delete → restore → hard delete)**  
   1. با کاربر دارای `titan_token` وارد شوید → `AI Center → DataHub → Sources`. در DevTools → Network باید `GET /api/v1/data-sources?page=1&limit=20` با پاسخ `{ data, pagination }` دیده شود (نه `fetchDataHubState`/IndexedDB).  
@@ -37,7 +44,14 @@
   3. **FK conflict (409)**: `DELETE ...?hard=true` روی منبعی با `collected_data`/`data_queue` → `409` «Cannot delete data source: related data exists»؛ بنر conflict در تب Sources.  
   4. **Server (500)**: Postgres/backend down → `GET/POST` با `500`؛ UI بنر خطای سرور + دکمه **Retry** (refetch `useDataSourcesQuery`).
 
-### dataHub.categories – Data Categories (GAP-010 closed – UI backend-first)
+### dataHub.categories – Data Categories (GAP-010 · Design-1 Done)
+
+- **Visual / design check (Design-1)**  
+  1. `AI Center → DataHub → Categories`: same slate shell + four metric cards (Total / Filtered / Telegram-linked / Tracked).  
+  2. Filters: slate inputs + purple Refresh / Add Category; category cards `border-white/5`, inflow/pass-rate sub-blocks, tag pills.  
+  3. **Add Category** / **Edit**: `DataHubModal` with color swatches, icon select, tags/data-types placeholders i18n.  
+  4. Empty filters vs empty API: `no_categories_match` vs `no_categories_yet`; 409/400/500 alerts match Sources pattern.  
+  5. en/fa: `data_categories_desc`, filter placeholders, metric labels.
 
 - **Success Scenario (create → update → delete)**  
   1. `AI Center → DataHub → Categories` → Network: `GET /api/v1/data-categories` (آرایه JSON؛ **نه** `fetchDataHubState`/IndexedDB).  
@@ -56,7 +70,15 @@
 
   **توجه:** برای categories، حذف در صورت وابستگی source با **400** برمی‌گردد (نه 409). duplicate فقط روی unique `name` است (**409**).
 
-### dataHub.pipeline – Data Pipeline (GAP-012 closed – UI backend-first)
+### dataHub.pipeline – Data Pipeline (GAP-012 · Design-2 Done)
+
+- **Visual / design check (Design-2)**  
+  1. `AI Center → DataHub → Pipeline`: slate gradient shell + six metric mini-cards (records, normalized %, requests/passed/failed/pending 24h).  
+  2. Snapshot History select + purple **Refresh Pipeline**; last refreshed line under title.  
+  3. Category Screening + Source Quality Board tables: `border-slate-800` thead, row hover; status pills on sources.  
+  4. Normalization Summary (four metrics) + Normalized data preview table when API returns rows.  
+  5. Empty: `pipeline_empty_state`; loading: `pipeline_loading`; error: red alert + Retry.  
+  6. en/fa: `data_preparation`, `refresh_pipeline`, filter placeholders.
 
 | سناریو | Endpoint | Status / شرط | UI |
 |--------|----------|----------------|-----|
@@ -66,7 +88,14 @@
 
 **پیش‌نیاز success:** Postgres + migrations؛ چند رکورد `collected_data` (با/بدون `normalized_data`) seed شده باشد.
 
-### dataHub.logs – Access Logs (GAP-013 closed – UI backend-first)
+### dataHub.logs – Access Logs (GAP-013 · Design-2 Done)
+
+- **Visual / design check (Design-2)**  
+  1. `AI Center → DataHub → Logs`: slate shell; four status metric cards (success/cached/failed/timeout).  
+  2. Filters: slate inputs, status select, **Telegram Only** pill toggle, Reset + Export CSV.  
+  3. Table: sticky slate thead; status pills; telegram rows with sky tint + badge; error row expands below with translated telegram errors.  
+  4. Empty: `no_logs`; loading: `logs_loading`; 500: alert + Retry (refetch via parent refresh).  
+  5. Load more uses `load_more` when filtered list exceeds visible window.
 
 | سناریو | Endpoint | Status / شرط | UI |
 |--------|----------|----------------|-----|
@@ -78,7 +107,14 @@
 
 **Auth:** بدون `Authorization` → **401** (authenticate). RBAC نقش → GAP-014 (فعلاً هر authenticated user).
 
-### dataHub.advanced.telegramPublisher – Telegram Publisher (GAP-016 closed)
+### dataHub.advanced.telegramPublisher – Telegram Publisher (GAP-016 · Design-3 Done)
+
+- **Visual / design check (Design-3)**  
+  1. `DataHub → Advanced → Telegram Publisher`: `DATAHUB_SHELL` + four metric cards (channels, delivered, failed, success rate).  
+  2. Tabs Channels / History / Templates with purple underline; channel cards `border-white/5` + outline actions (Test/Publish/Disable).  
+  3. **New Channel** opens `DataHubModal` §10 (slate inputs).  
+  4. History tab: slate list rows + status pills (`publisher_status_sent` / `failed`).  
+  5. en/fa: no `t() ||` fallbacks in panel chrome.
 
 | سناریو | Endpoint | Status / شرط | UI |
 |--------|----------|----------------|-----|
@@ -103,7 +139,14 @@
 
 **پیش‌نیاز:** migration `025_create_telegram_publishers.sql`؛ `MASTER_KEY` برای encrypt bot token (live در prod).
 
-### dataHub.advanced.automation – Automation (GAP-018 + GAP-019 closed)
+### dataHub.advanced.automation – Automation (GAP-018/019 · Design-3 Done)
+
+- **Visual / design check (Design-3)**  
+  1. `DataHub → Advanced → Automation`: slate shell + summary metrics + **Dry-run** `DataHubToggle`.  
+  2. Schedule panel: purple border + toggle §12; queue table slate thead + pills.  
+  3. Topic cards slate; **Add Topic** / queue **View** use `DataHubModal`.  
+  4. Execution history: inline slate blocks + status pills (sent/failed/dry-run).  
+  5. en/fa keys for loading, dispatching, queue empty.
 
 | سناریو | Endpoint | Status / شرط | UI |
 |--------|----------|----------------|-----|

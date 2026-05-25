@@ -129,13 +129,13 @@
 | Tab | Backend | Design | Notes |
 |-----|---------|--------|-------|
 | `dataHub.telegram` | Implemented | **Reference** | TelegramPanel |
-| `dataHub.sources` | Implemented | **Partial** | List/cards OK; modals debt |
-| `dataHub.categories` | Implemented | **Not started** | |
-| `dataHub.pipeline` | Implemented | **Not started** | |
-| `dataHub.logs` | Implemented | **Not started** | |
-| `dataHub.advanced.telegramPublisher` | Implemented | **Not started** | |
-| `dataHub.advanced.automation` | Implemented | **Not started** | |
-| `dataHub.advanced.access` | Implemented (backend) | **Done (GAP-022)** | Permissions scope; slate UI |
+| `dataHub.sources` | Implemented | **Done (Design-1)** | `dataHubUi` + `DataSourcesPanel` + `CreateSourceModal` |
+| `dataHub.categories` | Implemented | **Done (Design-1)** | `CategoriesPanel` + `CreateCategoryModal` |
+| `dataHub.pipeline` | Implemented | **Done (Design-2)** | `PipelinePanel.tsx` |
+| `dataHub.logs` | Implemented | **Done (Design-2)** | `LogsPanel.tsx` |
+| `dataHub.advanced.telegramPublisher` | Implemented | **Done (Design-3)** | `TelegramPublisher.tsx` |
+| `dataHub.advanced.automation` | Implemented | **Done (Design-3)** | `AutomationTopics.tsx` + modals |
+| `dataHub.advanced.access` | Implemented | **Done (GAP-022)** | `AccessControlPanel.tsx` |
 
 ---
 
