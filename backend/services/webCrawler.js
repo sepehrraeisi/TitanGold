@@ -206,22 +206,26 @@ export class WebCrawlerService {
      */
     async crawl(sourceConfig) {
         const startUrl = sourceConfig.url;
-        const maxDepth = sourceConfig.config?.depth ?? 0;
+        const maxDepth = Math.min(sourceConfig.config?.depth ?? 0, 5);
+        const maxPages = sourceConfig.config?.maxPages ?? 500;
         const selectors = sourceConfig.config?.selectors || {};
 
-        logger.info(`Starting web crawl: ${startUrl} (depth: ${maxDepth})`);
+        const skipRobots = sourceConfig.config?.skipRobots === true;
+        logger.info(`Starting web crawl: ${startUrl} (depth: ${maxDepth}, maxPages: ${maxPages})`);
 
-        // Check robots.txt
-        const robots = await this.fetchRobotsTxt(startUrl);
-        if (!robots.isAllowed(startUrl, 'TitanGold-Bot')) {
-            throw new Error(`Crawling ${startUrl} is disallowed by robots.txt`);
+        let robots = null;
+        if (!skipRobots) {
+            robots = await this.fetchRobotsTxt(startUrl);
+            if (!robots.isAllowed(startUrl, 'TitanGold-Bot')) {
+                throw new Error(`Crawling ${startUrl} is disallowed by robots.txt`);
+            }
         }
 
         const visited = new Set();
         const queue = [{ url: startUrl, depth: 0 }];
         const results = [];
 
-        while (queue.length > 0) {
+        while (queue.length > 0 && results.length < maxPages) {
             const { url, depth } = queue.shift();
 
             // Skip if already visited
@@ -229,8 +233,7 @@ export class WebCrawlerService {
                 continue;
             }
 
-            // Check robots.txt permission
-            if (!robots.isAllowed(url, 'TitanGold-Bot')) {
+            if (robots && !robots.isAllowed(url, 'TitanGold-Bot')) {
                 logger.info(`Skipping ${url} (disallowed by robots.txt)`);
                 continue;
             }
@@ -244,6 +247,9 @@ export class WebCrawlerService {
                 // Extract data
                 const data = this.extractData(html, selectors, url);
                 results.push(data);
+                if (results.length >= maxPages) {
+                    break;
+                }
 
                 // Find links for next depth level
                 if (depth < maxDepth) {

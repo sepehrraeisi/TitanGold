@@ -114,17 +114,7 @@ const AdvancedFeatures: React.FC<{
             )}
 
             {/* Conditionally rendered feature sections */}
-            {activeFeature === 'crawlers' && (
-                <WebCrawlerConfig
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    sourceQualityMap={sourceQualityMap}
-                    getStatusBadgeClass={getStatusBadgeClass}
-                />
-            )}
+            {activeFeature === 'crawlers' && <WebCrawlerConfig t={t} />}
 
             {activeFeature === 'discovery' && (
                 <AutoDiscoveryConfig

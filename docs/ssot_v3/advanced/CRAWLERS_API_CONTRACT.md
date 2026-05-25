@@ -4,7 +4,7 @@
 > Replaces: IndexedDB `data_hub_state.advanced.webCrawlers` + `services/api.ts` `createWebCrawler` / `updateWebCrawler` / `deleteWebCrawler`  
 > Existing engine: `backend/services/webCrawler.js` (`WebCrawlerService`), `backend/services/fetchers/webCrawlerFetcher.js`
 
-**Status:** Draft — **awaiting product approval before implementation (proposed GAP-026).**
+**Status:** **Approved & implemented (GAP-026 Closed · 2026-05-25).** Scheduler daemon → GAP-027 v3.1.
 
 ---
 
@@ -156,8 +156,9 @@ i18n: `web_crawlers_*`, `crawler_*` keys in 4 locale files (strict, no `\|\|` fa
 
 | GAP | Title | Status |
 |-----|-------|--------|
-| **GAP-026** (proposed) | Crawlers backend-first + run history | Open until approved |
-| GAP-023 | Design pass | Move `crawlers` from Pending → Done |
+| **GAP-026** | Crawlers backend-first + run history | **Closed** |
+| **GAP-027** | Scheduler daemon + prod Playwright | **Open v3.1** |
+| GAP-023 | Design pass | `crawlers` → Done |
 | SSOT | `dataHub.advanced.crawlers` | **Implemented · Design: Done** |
 
 ---
@@ -181,4 +182,4 @@ i18n: `web_crawlers_*`, `crawler_*` keys in 4 locale files (strict, no `\|\|` fa
 
 ---
 
-*Contract version: v3.0-draft · 2026-05-25 · **Awaiting approval** — do not implement until confirmed.*
+*Contract version: v3.0 · 2026-05-25 · **Implemented (GAP-026).***

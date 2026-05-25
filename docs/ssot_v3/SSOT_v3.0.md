@@ -76,7 +76,7 @@
 
 | Module ID | Module | UI | API | DB | Worker | Status | Evidence |
 |---|---|---|---|---|---|---|---|
-| `dataHub.advanced.crawlers` | Web Crawlers | `WebCrawlerConfig.tsx` | عملیات CRUD روی crawlers از طریق `api` (DataHub state) | crawler config در DataHub state (و در آینده جداول اختصاصی) | crawler workers | Partial | UI: `WebCrawlerConfig.tsx` – API لایه `services/api.ts` برای DataHub |
+| `dataHub.advanced.crawlers` | Web Crawlers | `WebCrawlerConfig.tsx` | CRUD + run `/api/v1/data-hub/crawlers`; website/RSS → `collected_data` | `datahub_crawlers`, `datahub_crawler_runs` (029) | GAP-026 | **Implemented · Design: Done** | Pre-crawl + ingestion filter; render_js gated by env (GAP-027 scheduler) |
 | `dataHub.advanced.discovery` | Auto Discovery | `AutoDiscoveryConfig.tsx` | toggle و اجرای discovery از طریق API DataHub | discovery state در DataHub (sources, rules) | discovery workers | Partial | UI: `AutoDiscoveryConfig.tsx` – API: توابع discovery در `services/api.ts` |
 | `dataHub.advanced.prioritization` | Smart Prioritization | `SmartPrioritization.tsx` | محاسبه و ذخیره اولویت‌ها از طریق API DataHub | داده‌های کیفیت/اولویت در DataHub و جداول مرتبط | prioritization jobs | Partial | UI: `SmartPrioritization.tsx` – API: توابع smart prioritization در `services/api.ts` |
 | `dataHub.advanced.access` | Access Control | `AccessControlPanel.tsx` | `GET/POST/DELETE /api/v1/data-hub/access-control` | `source_access_controls` | -- | **Implemented · Design: Done** | GAP-022. |

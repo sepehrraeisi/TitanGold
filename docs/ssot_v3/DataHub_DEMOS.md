@@ -230,3 +230,27 @@ Design: full pass per `DESIGN_SYSTEM_DATAHUB.md` (modal §10, metrics §2.4, bad
 Migration: see `docs/ssot_v3/audit/ENVIRONMENT.md` § Migration 028 · Evidence lines: `docs/ssot_v3/EVIDENCE.md` § Filter rules.
 
 Design: slate shell, metric cards, `FilterRuleModal`, no IndexedDB / `services/api.ts` blacklist helpers in panel.
+
+### dataHub.advanced.crawlers – Web/RSS crawlers (GAP-026 closed)
+
+| سناریو | Endpoint | Expected | UI |
+|--------|----------|----------|-----|
+| **List** | `GET /api/v1/data-hub/crawlers` | **200** `{ crawlers, summary }` | Crawlers panel |
+| **Create website** | `POST` `target_type: website`, `source_id` or `source{}`, selectors | **201** | Add crawler → website |
+| **Create RSS** | `POST` `target_type: rss`, `max_depth: 0` | **201** | Add crawler → RSS |
+| **Manual dry-run** | `POST /:id/run` `{ dry_run: true }` | **200** run `success`, no new `collected_data` rows | Dry run button |
+| **Manual real run** | `POST /:id/run` `{ dry_run: false }` | **200** `items_ingested` ≥ 0 | Run now |
+| **Pre-crawl blacklist** | Active domain blacklist on `start_url` | **403** `FILTER_BLOCKED_PRE_CRAWL` | Run fails before crawl |
+| **Ingestion block** | Item URL matches blacklist mid-run | `items_blocked` incremented | Run history row |
+| **Run history** | `GET /:id/runs` | **200** `runs[]` | History expand |
+| **Timeout** | `timeout_ms` very low + slow URL | run `failed`, `error_message` timeout | — |
+| **Invalid URL** | bad `start_url` on create | **400** | Modal validation |
+| **render_js blocked** | `render_js: true`, env without `CRAWLER_RENDER_JS_ENABLED=true` | **400** `RENDER_JS_DISABLED` | Warning in UI |
+
+**Double safety:** `preCrawlFilterCheck` before run + `enforceIngestionFilter` per item before insert.
+
+```bash
+cd backend && npm run migrate   # 029_create_datahub_crawlers.sql
+```
+
+Design: slate shell, `WebCrawlerModal` §10, no IndexedDB crawler CRUD.

@@ -146,6 +146,18 @@ SELECT COUNT(*) FROM datahub_filter_rules WHERE deleted_at IS NULL;
 
 Runtime demos: `docs/ssot_v3/DataHub_DEMOS.md` § `dataHub.advanced.blacklist` (ingestion 403, batch `blocked`, evaluate-only publishing).
 
+### Migration verification — DataHub crawlers (GAP-026 · 2026-05-25)
+
+| Field | Value |
+|-------|--------|
+| Migration file | `backend/database/migrations/029_create_datahub_crawlers.sql` |
+| Tables | `datahub_crawlers`, `datahub_crawler_runs` |
+| Environment | **dev** — `titangold_db` @ `127.0.0.1:5433` |
+| Command | `cd backend && npm run migrate` |
+| Result | **PASS** — `029_create_datahub_crawlers (UP)` |
+
+Optional env: `CRAWLER_RENDER_JS_ENABLED=true` to allow Playwright `render_js` crawls (default off in production).
+
 ### Environment Proof — `dataHub.advanced.automation` (2026-05-24)
 
 > **Scope:** dev DB on application server (`ubuntu` host) — **not production.**  

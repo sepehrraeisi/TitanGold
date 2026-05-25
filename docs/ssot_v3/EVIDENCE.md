@@ -197,7 +197,20 @@ grep -rn "fetchDataHubState\|createAutomationTopic\|refreshAutomationQueue" \
 | Publishing worker hook | — | — | **v3.0 ندارد** — فقط `POST /evaluate`؛ **GAP-025** |
 | UI backend-first | `services/dataHubFilterRulesApi.ts`, `hooks/useDataHubFilterRules.ts`, `advanced/BlacklistWhitelist.tsx` | — | بدون `fetchDataHubState` / IndexedDB برای لیست قوانین |
 
-### ۱۳. Migrations / Greenfield Bootstrap
+### ۱۳. DataHub crawlers (GAP-026)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Tables | `backend/database/migrations/029_create_datahub_crawlers.sql` | `datahub_crawlers`, `datahub_crawler_runs` |
+| API | `backend/routes/data-hub-crawlers.js` | CRUD + `POST /:id/run` + `GET /:id/runs` |
+| Pre-crawl filter | `backend/services/datahubCrawlersService.js` | `preCrawlFilterCheck` → 403 before run |
+| Ingestion filter | same | `enforceIngestionFilter` per item in `ingestItem` |
+| Website engine | `backend/services/webCrawler.js` | depth cap, maxPages, skipRobots |
+| RSS | `backend/services/rssFetcher.js` | cheerio XML parse |
+| render_js gate | `datahubCrawlersService.js` | `CRAWLER_RENDER_JS_ENABLED` |
+| UI | `WebCrawlerConfig.tsx`, `dataHubCrawlersApi.ts` | no IndexedDB crawler list |
+
+### ۱۴. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |
 |---|---|---|---|
