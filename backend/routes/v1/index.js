@@ -7,6 +7,7 @@ import portfolioRoutes from '../portfolios.js';
 import tradeRoutes from '../trades.js';
 import aiAgentRoutes from '../ai-agents.js';
 import trainingRoutes from '../training.js';
+import analyticsRoutes from '../analytics.js';
 import artemisRoutes from '../artemis.js';
 import configRoutes from '../config.js';
 import autopilotRoutes from '../autopilot.js';
@@ -38,6 +39,8 @@ import dataCategoryRoutes from '../data-categories.js';
 import accessControlRoutes from '../access-control.js';
 import topicRoutingRoutes from '../topic-routing.js';
 import telegramRoutes from '../telegram.js';
+import telegramPublishersRoutes from '../telegram-publishers.js';
+import dataHubAutomationRoutes from '../data-hub-automation.js';
 
 const router = express.Router();
 
@@ -53,6 +56,7 @@ router.use('/ai-agents', aiAgentRoutes);
 router.use('/agents/liquidity', liquidityAgentRoutes);
 router.use('/market', marketProxyRoutes);
 router.use('/training', trainingRoutes);
+router.use('/analytics', analyticsRoutes);
 router.use('/artemis', artemisRoutes);
 router.use('/config', configRoutes);
 router.use('/autopilot', autopilotRoutes);
@@ -78,6 +82,8 @@ router.use('/scenarios', scenariosRoutes);
 router.use('/webhooks', webhookRoutes);
 router.use('/data-categories', dataCategoryRoutes);
 router.use('/data-hub/access-control', accessControlRoutes);
+router.use('/data-hub/telegram-publishers', telegramPublishersRoutes);
+router.use('/data-hub/automation', dataHubAutomationRoutes);
 router.use('/topic-routing', topicRoutingRoutes);
 router.use('/telegram', telegramRoutes);
 

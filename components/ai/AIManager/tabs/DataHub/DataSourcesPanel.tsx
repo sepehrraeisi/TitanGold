@@ -1,13 +1,30 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { DataHubState, DataSource } from '../../../../../types';
 import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 import type { DataSourcesPagination } from '../../../../../services/dataSourcesApi';
+import {
+    DATAHUB_SHELL,
+    DATAHUB_INNER_LIST,
+    BTN_PRIMARY,
+    BTN_SECONDARY,
+    BTN_OUTLINE_EMERALD,
+    BTN_OUTLINE_SKY,
+    BTN_OUTLINE_AMBER,
+    BTN_OUTLINE_RED,
+    BTN_OUTLINE_SLATE,
+    BTN_OUTLINE_PURPLE,
+    DataHubAlert,
+    DataHubEmpty,
+    MetricCard,
+    StatusPill,
+    sourceStatusVariant,
+    priorityVariant,
+} from './dataHubUi';
 
 type Props = {
     t: (key: string) => string;
     formatTimeAgo: (date: string | Date) => string;
     onRefresh: () => void;
-    Card: React.ComponentType<any>;
     downloadCSV: (filename: string, rows: any[]) => void;
     setEditingSource: (source: DataSource | null) => void;
     setShowCreateSourceModal: (show: boolean) => void;
@@ -28,7 +45,6 @@ const DataSourcesPanel: React.FC<Props> = ({
     t,
     formatTimeAgo,
     onRefresh,
-    Card,
     downloadCSV,
     setEditingSource,
     setShowCreateSourceModal,
@@ -46,6 +62,18 @@ const DataSourcesPanel: React.FC<Props> = ({
 }) => {
     const sources = dataHub.sources || [];
 
+    const metrics = useMemo(() => {
+        const active = sources.filter(s => s.status === 'active').length;
+        const errors = sources.filter(s => s.status === 'error').length;
+        const telegram = sources.filter(s => s.type === 'telegram').length;
+        return {
+            total: pagination?.total ?? sources.length,
+            active,
+            errors,
+            telegram,
+        };
+    }, [sources, pagination?.total]);
+
     const handleExport = () => {
         if (!sources.length) return;
         downloadCSV('data-sources', sources);
@@ -56,95 +84,86 @@ const DataSourcesPanel: React.FC<Props> = ({
     const serverError =
         apiError instanceof DataHubApiError && apiError.status >= 500 ? apiError.message : null;
 
+    const paginationSummary =
+        pagination &&
+        t('sources_pagination_summary')
+            .replace('{{page}}', String(pagination.page))
+            .replace('{{shown}}', String(sources.length))
+            .replace('{{total}}', String(pagination.total));
+
     return (
-        <div className="space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className={DATAHUB_SHELL}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
                 <div>
-                    <h3 className="font-semibold text-foreground">
-                        {t('data_sources') || 'Data Sources'}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                        {t('data_sources_desc') ||
-                            'Manage and monitor all upstream sources your AI agents rely on (Telegram, RSS, APIs, web).'}
-                    </p>
-                    {pagination && (
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                            {t('sources_pagination_summary') ||
-                                `Page ${pagination.page} · ${sources.length} of ${pagination.total} sources`}
-                        </p>
+                    <h3 className="text-sm md:text-base font-semibold text-foreground">{t('data_sources')}</h3>
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">{t('data_sources_desc')}</p>
+                    {paginationSummary && (
+                        <p className="text-[10px] text-muted-foreground mt-1">{paginationSummary}</p>
                     )}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <button
-                        onClick={onRefresh}
-                        disabled={isLoading}
-                        className="text-[11px] px-3 py-1.5 rounded-full border border-slate-600/70 bg-slate-900/70 text-foreground hover:border-purple-400 hover:text-purple-200 transition disabled:opacity-50"
-                    >
-                        {isLoading ? (t('refreshing') || 'Refreshing…') : (t('refresh') || 'Refresh')}
+                    <button type="button" onClick={onRefresh} disabled={isLoading} className={BTN_SECONDARY}>
+                        {isLoading ? t('refreshing') : t('refresh')}
                     </button>
                     <button
+                        type="button"
                         onClick={handleExport}
                         disabled={!sources.length}
-                        className="text-[11px] px-3 py-1.5 rounded-full border border-slate-600/70 bg-slate-900/70 text-foreground hover:border-emerald-400 hover:text-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                        className={BTN_SECONDARY}
                     >
-                        {t('export_csv') || 'Export CSV'}
+                        {t('export_csv')}
                     </button>
                     <button
+                        type="button"
                         onClick={() => {
                             setEditingSource(null);
                             setShowCreateSourceModal(true);
                         }}
-                        className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600/90 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/40"
+                        className={BTN_PRIMARY}
                     >
-                        {t('add_source') || '+ Add Source'}
+                        {t('add_source')}
                     </button>
                 </div>
             </div>
 
-            {conflictMessage && (
-                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                    {conflictMessage}
-                </div>
-            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                <MetricCard label={t('sources_metric_total')} value={metrics.total} color="blue" />
+                <MetricCard label={t('sources_metric_active')} value={metrics.active} color="emerald" />
+                <MetricCard label={t('sources_metric_errors')} value={metrics.errors} color="red" />
+                <MetricCard label={t('sources_metric_telegram')} value={metrics.telegram} color="purple" />
+            </div>
+
+            {conflictMessage && <DataHubAlert variant="warning" message={conflictMessage} />}
 
             {serverError && (
-                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <span className="text-sm text-red-200">{serverError}</span>
-                    <button
-                        type="button"
-                        onClick={onRefresh}
-                        className="text-[11px] px-3 py-1 rounded-full border border-red-400/60 text-red-200 hover:bg-red-500/10"
-                    >
-                        {t('retry') || 'Retry'}
-                    </button>
-                </div>
+                <DataHubAlert
+                    variant="error"
+                    message={serverError}
+                    onRetry={onRefresh}
+                    retryLabel={t('retry')}
+                />
             )}
 
-            <Card className="bg-slate-950/70 border border-white/5 shadow-[0_18px_60px_rgba(15,23,42,0.9)]">
-                {sources.length === 0 && !isLoading ? (
-                    <div className="py-10 text-center text-sm text-muted-foreground">
-                        {t('no_data_sources') || 'No data sources configured yet.'}
-                    </div>
+            <div className={DATAHUB_INNER_LIST}>
+                {isLoading && sources.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-muted-foreground">{t('sources_loading')}</div>
+                ) : sources.length === 0 ? (
+                    <DataHubEmpty message={t('no_data_sources')} />
                 ) : (
                     <div className="space-y-3">
-                        {sources.map((source) => {
+                        {sources.map(source => {
                             const isTelegram = source.type === 'telegram';
                             return (
                                 <div
                                     key={source.id}
-                                    className="rounded-xl border border-slate-800/80 bg-gradient-to-r from-slate-900/90 via-slate-950/90 to-slate-900/80 px-4 py-3 hover:border-purple-500/60 hover:shadow-[0_0_25px_rgba(168,85,247,0.25)] transition-colors"
+                                    className="rounded-xl border border-white/5 bg-slate-900/60 px-4 py-3 hover:border-purple-500/50 transition-colors"
                                 >
                                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                                         <div className="space-y-0.5">
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="text-sm font-semibold text-foreground">
-                                                    {source.name}
-                                                </h4>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h4 className="text-sm font-semibold text-foreground">{source.name}</h4>
                                                 {isTelegram && (
-                                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/40 flex items-center gap-1">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-                                                        {t('telegram') || 'Telegram'}
-                                                    </span>
+                                                    <StatusPill label={t('telegram')} variant="info" />
                                                 )}
                                             </div>
                                             <p className="text-[11px] text-muted-foreground">
@@ -152,46 +171,26 @@ const DataSourcesPanel: React.FC<Props> = ({
                                             </p>
                                         </div>
                                         <div className="flex flex-wrap gap-1.5 justify-end">
-                                            <span
-                                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                                    source.status === 'active'
-                                                        ? 'bg-emerald-500/15 text-emerald-300'
-                                                        : source.status === 'error'
-                                                        ? 'bg-red-500/15 text-red-300'
-                                                        : source.status === 'testing'
-                                                        ? 'bg-amber-500/15 text-amber-300'
-                                                        : 'bg-slate-500/20 text-slate-300'
-                                                }`}
-                                            >
-                                                {t(source.status) || source.status}
-                                            </span>
-                                            <span
-                                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                                    source.priority === 'critical'
-                                                        ? 'bg-red-500/15 text-red-300'
-                                                        : source.priority === 'high'
-                                                        ? 'bg-orange-500/15 text-orange-300'
-                                                        : source.priority === 'medium'
-                                                        ? 'bg-yellow-500/15 text-yellow-300'
-                                                        : 'bg-slate-500/20 text-slate-300'
-                                                }`}
-                                            >
-                                                {t(source.priority) || source.priority}
-                                            </span>
+                                            <StatusPill
+                                                label={t(source.status)}
+                                                variant={sourceStatusVariant(source.status)}
+                                            />
+                                            <StatusPill
+                                                label={t(source.priority)}
+                                                variant={priorityVariant(source.priority)}
+                                            />
                                         </div>
                                     </div>
 
                                     {isTelegram && source.config && (
                                         <div className="mt-3 pt-3 border-t border-slate-800/60">
                                             <p className="text-[10px] text-muted-foreground mb-2">
-                                                {t('telegram_channel_settings') || 'Channel Settings'}
+                                                {t('telegram_channel_settings')}
                                             </p>
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
                                                 {source.config.channelUsername && (
                                                     <div>
-                                                        <p className="text-muted-foreground">
-                                                            {t('username') || 'Username'}
-                                                        </p>
+                                                        <p className="text-muted-foreground">{t('username')}</p>
                                                         <p className="font-mono text-sky-300">
                                                             @{source.config.channelUsername}
                                                         </p>
@@ -203,35 +202,27 @@ const DataSourcesPanel: React.FC<Props> = ({
 
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-[11px]">
                                         <div>
-                                            <p className="text-muted-foreground">
-                                                {t('success_rate') || 'Success Rate'}
-                                            </p>
+                                            <p className="text-muted-foreground">{t('success_rate')}</p>
                                             <p className="font-semibold text-foreground">
                                                 {source.successRate.toFixed(1)}%
                                             </p>
                                         </div>
                                         <div>
-                                            <p className="text-muted-foreground">
-                                                {t('reliability') || 'Reliability'}
-                                            </p>
+                                            <p className="text-muted-foreground">{t('reliability')}</p>
                                             <p className="font-semibold text-foreground">
                                                 {source.reliabilityScore.toFixed(0)}
                                             </p>
                                         </div>
                                         <div>
-                                            <p className="text-muted-foreground">
-                                                {t('response_time') || 'Response Time'}
-                                            </p>
+                                            <p className="text-muted-foreground">{t('response_time')}</p>
                                             <p className="font-semibold text-foreground">
                                                 {(source.responseTime || 0) + 'ms'}
                                             </p>
                                         </div>
                                         <div>
-                                            <p className="text-muted-foreground">
-                                                {t('update_interval') || 'Update Interval'}
-                                            </p>
+                                            <p className="text-muted-foreground">{t('update_interval')}</p>
                                             <p className="font-semibold text-foreground">
-                                                {t(source.updateInterval) || source.updateInterval}
+                                                {t(source.updateInterval)}
                                             </p>
                                         </div>
                                     </div>
@@ -243,95 +234,100 @@ const DataSourcesPanel: React.FC<Props> = ({
                                                     source.status === 'active'
                                                         ? 'bg-emerald-400 animate-pulse'
                                                         : source.status === 'error'
-                                                        ? 'bg-red-500'
-                                                        : source.status === 'testing'
-                                                        ? 'bg-amber-400 animate-pulse'
-                                                        : 'bg-slate-500'
+                                                          ? 'bg-red-500'
+                                                          : source.status === 'testing'
+                                                            ? 'bg-amber-400 animate-pulse'
+                                                            : 'bg-slate-500'
                                                 }`}
                                             />
                                             <span className="text-muted-foreground">
                                                 {source.status === 'active'
-                                                    ? t('connected') || 'Connected'
+                                                    ? t('connected')
                                                     : source.status === 'error'
-                                                    ? t('error') || 'Error'
-                                                    : source.status === 'testing'
-                                                    ? t('testing') || 'Testing...'
-                                                    : t('inactive') || 'Inactive'}
+                                                      ? t('error')
+                                                      : source.status === 'testing'
+                                                        ? t('testing')
+                                                        : t('inactive')}
                                             </span>
                                         </div>
                                         <div className="text-muted-foreground">
                                             {source.lastSuccess ? (
                                                 <span className="text-emerald-300">
-                                                    {t('last_success') || 'Last success'}:{' '}
-                                                    {formatTimeAgo(source.lastSuccess)}
+                                                    {t('last_success')}: {formatTimeAgo(source.lastSuccess)}
                                                 </span>
                                             ) : source.lastUpdate ? (
                                                 <span>
-                                                    {t('last_update') || 'Last update'}:{' '}
-                                                    {formatTimeAgo(source.lastUpdate)}
+                                                    {t('last_update')}: {formatTimeAgo(source.lastUpdate)}
                                                 </span>
                                             ) : (
-                                                <span>{t('never_updated') || 'Never updated'}</span>
+                                                <span>{t('never_updated')}</span>
                                             )}
                                         </div>
                                     </div>
 
                                     {source.lastError && (
                                         <div className="mt-2 text-[11px] text-red-300">
-                                            {t('last_error') || 'Last error'}: {source.lastError}
+                                            {t('last_error')}: {source.lastError}
                                         </div>
                                     )}
 
                                     <div className="flex flex-wrap gap-2 mt-3">
                                         {isTelegram && setActiveView && (
                                             <button
+                                                type="button"
                                                 onClick={() => setActiveView('telegram')}
-                                                className="text-[11px] px-3 py-1 rounded-full border border-sky-500/70 text-sky-200 hover:bg-sky-500/10 transition flex items-center gap-1"
+                                                className={BTN_OUTLINE_SKY}
                                             >
-                                                {t('open_in_telegram_collector') || 'Open in Telegram Collector'}
+                                                {t('open_in_telegram_collector')}
                                             </button>
                                         )}
                                         <button
+                                            type="button"
                                             onClick={() => setViewingSourceData(source)}
-                                            className="text-[11px] px-3 py-1 rounded-full border border-purple-500/70 text-purple-200 hover:bg-purple-500/10 transition"
+                                            className={BTN_OUTLINE_PURPLE}
                                         >
-                                            {t('view_data') || 'View Data'}
+                                            {t('view_data')}
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={() => handleTestSource(source.id)}
-                                            className="text-[11px] px-3 py-1 rounded-full border border-emerald-500/70 text-emerald-200 hover:bg-emerald-500/10 transition"
+                                            className={BTN_OUTLINE_EMERALD}
                                         >
-                                            {t('test_connection') || 'Test Connection'}
+                                            {t('test_connection')}
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={() => {
                                                 setEditingSource(source);
                                                 setShowCreateSourceModal(true);
                                             }}
-                                            className="text-[11px] px-3 py-1 rounded-full border border-slate-600 text-slate-100 hover:bg-slate-600/30 transition"
+                                            className={BTN_OUTLINE_SLATE}
                                         >
-                                            {t('edit') || 'Edit'}
+                                            {t('edit')}
                                         </button>
                                         {source.status === 'inactive' ? (
                                             <button
+                                                type="button"
                                                 onClick={() => handleRestoreSource(source.id)}
-                                                className="text-[11px] px-3 py-1 rounded-full border border-blue-500/70 text-blue-200 hover:bg-blue-500/10 transition"
+                                                className={BTN_OUTLINE_SKY}
                                             >
-                                                {t('restore') || 'Restore'}
+                                                {t('restore')}
                                             </button>
                                         ) : (
                                             <button
+                                                type="button"
                                                 onClick={() => handleDeleteSource(source.id, false)}
-                                                className="text-[11px] px-3 py-1 rounded-full border border-amber-500/70 text-amber-200 hover:bg-amber-500/10 transition"
+                                                className={BTN_OUTLINE_AMBER}
                                             >
-                                                {t('soft_delete') || 'Soft Delete'}
+                                                {t('soft_delete')}
                                             </button>
                                         )}
                                         <button
+                                            type="button"
                                             onClick={() => handleDeleteSource(source.id, true)}
-                                            className="text-[11px] px-3 py-1 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 transition"
+                                            className={BTN_OUTLINE_RED}
                                         >
-                                            {t('hard_delete') || 'Hard Delete'}
+                                            {t('hard_delete')}
                                         </button>
                                     </div>
                                 </div>
@@ -339,28 +335,28 @@ const DataSourcesPanel: React.FC<Props> = ({
                         })}
                     </div>
                 )}
-            </Card>
+            </div>
 
             {pagination && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between gap-2 text-[11px]">
+                <div className="flex items-center justify-between gap-2 text-[11px] mt-4">
                     <button
                         type="button"
                         disabled={!pagination.hasPrevPage || isLoading}
                         onClick={() => onPageChange(page - 1)}
-                        className="px-3 py-1.5 rounded-full border border-slate-600/70 disabled:opacity-40"
+                        className={BTN_SECONDARY}
                     >
-                        {t('previous') || 'Previous'}
+                        {t('previous')}
                     </button>
                     <span className="text-muted-foreground">
-                        {t('page_of') || 'Page'} {pagination.page} / {pagination.totalPages}
+                        {t('page_of')} {pagination.page} / {pagination.totalPages}
                     </span>
                     <button
                         type="button"
                         disabled={!pagination.hasNextPage || isLoading}
                         onClick={() => onPageChange(page + 1)}
-                        className="px-3 py-1.5 rounded-full border border-slate-600/70 disabled:opacity-40"
+                        className={BTN_SECONDARY}
                     >
-                        {t('next') || 'Next'}
+                        {t('next')}
                     </button>
                 </div>
             )}

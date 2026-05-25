@@ -95,6 +95,103 @@ Source: `backend/package.json`, `backend/database/migrate.js`, `backend/migratio
 3. **نکته**:
    - بعضی migrationها (مثلاً `add_2fa_backup_codes`) به جداول core مثل `users` وابسته‌اند؛ chain کامل node-pg-migrate روی یک DB خالی باید روی همـان اسکیما‌ی اپلیکیشن استاندارد اجرا شود (یعنی همان جایی که `users` و بقیه جداول اصلی ساخته می‌شوند)، نه روی یک DB که فقط `000_init_ai_schema.sql` به‌تنهایی اجرا شده باشد.
 
+### Migration verification — DataHub automation (2026-05-24)
+
+**علت fail قبلی:** `012_add_ab_testing.sql` — `REFERENCES ai_decisions(id)` بعد از `006_partition_ai_decisions.sql` نامعتبر است (PK پارتیشن‌شده = `(id, created_at)`).
+
+**Fix:** `decision_id UUID` بدون FK در `experiment_metrics`؛ ایندکس/کامنت soft-reference.
+
+**Fix جانبی:** `query_performance_optimization.sql` — ایندکس/ANALYZE روی `request_logs`/`error_logs` فقط اگر جدول وجود داشته باشد (greenfield با `database/schema.sql`).
+
+**نتیجه روی dev DB (`titangold_db`):**
+
+```bash
+cd backend && npm run migrate
+# → Migrations complete! (شامل 012_add_ab_testing, 025, 026, 027)
+```
+
+جداول automation:
+
+```sql
+\dt datahub_automation*
+-- datahub_automation_topics, _queue, _schedule, _executions
+```
+
+**Demo واقعی (DB + service layer):**
+
+```bash
+cd backend && node scripts/verify_automation_demo.js
+```
+
+خروجی تأیید‌شده: create topic → queue refresh (added≥1) → fail item → retry → dry-run dispatch → execution history.
+
+**Greenfield کامل (`schema.sql` + migrate):** هنوز migrationهای legacy قدیمی‌تر (مثلاً `004_add_autopilot_system`) ممکن است به ستون‌هایی وابسته باشند که در `database/schema.sql` نیستند؛ مسیر رسمی verify برای automation: **migrate روی DB dev موجود** + اسکریپت demo بالا.
+
+### Environment Proof — `dataHub.advanced.automation` (2026-05-24)
+
+> **Scope:** dev DB on application server (`ubuntu` host) — **not production.**  
+> Repo path on server: `/home/ubuntu/webapp/TitanGold`.  
+> هیچ secret/token/password در این بخش ثبت نمی‌شود.
+
+#### Host / toolchain
+
+| Field | Value |
+|-------|--------|
+| `hostname` | `ubuntu` |
+| `pwd` (repo root) | `/home/ubuntu/webapp/TitanGold` |
+| `git` branch | `feat/gap-008-sources-backend-wiring` |
+| `git` commit (short) | `caeef9d` |
+| `node -v` | `v20.18.2` |
+| `npm -v` | `10.8.2` |
+| `NODE_ENV` (backend `.env`) | `development` |
+
+#### Database identity (no credentials)
+
+| Field | Value |
+|-------|--------|
+| Environment label | **dev** — `titangold_db` on local Postgres instance |
+| `current_database()` | `titangold_db` |
+| `current_user` | `postgres` |
+| `inet_server_addr()` | `127.0.0.1` |
+| `inet_server_port()` | `5433` |
+| Connection pattern | `localhost:5433` (trust auth on dev host; not a remote prod cluster) |
+
+```sql
+-- Captured via psql -h localhost -p 5433 -U postgres -d titangold_db
+SELECT current_database(), current_user, inet_server_addr(), inet_server_port();
+-- titangold_db | postgres | 127.0.0.1/32 | 5433
+```
+
+#### Migration status (automation-related)
+
+| Migration | Applied (`run_on`) |
+|-----------|-------------------|
+| `012_add_ab_testing` | 2026-05-24 15:27:01 UTC |
+| `025_create_telegram_publishers` | 2026-05-24 15:27:01 UTC |
+| `026_create_datahub_automation_topics` | 2026-05-24 15:27:01 UTC |
+| `027_create_datahub_automation_queue` | 2026-05-24 15:27:01 UTC |
+
+Latest migration in chain (reference): `20260216_add_priority_error_tracking` @ 2026-05-24 15:27:03 UTC.
+
+`npm run migrate` on this host/DB: **complete** (no pending 025–027).
+
+#### Demo script summary (`backend/scripts/verify_automation_demo.js`)
+
+Run: `cd /home/ubuntu/webapp/TitanGold/backend && node scripts/verify_automation_demo.js`
+
+| Step | Result |
+|------|--------|
+| Automation tables present | 4 (`topics`, `queue`, `schedule`, `executions`) |
+| Create topic | OK |
+| Queue refresh | `added: 5`, `pending: 6` |
+| Fail queue item | OK |
+| Retry failed execution | OK |
+| Manual dispatch (dry-run) | `processed: 1` |
+| Execution history | 7 rows; latest `sent` (dry-run) |
+| Cleanup | demo topic deleted |
+
+**SSOT:** با این proof، `dataHub.advanced.automation` = **Implemented** (final on dev server DB).
+
 
 ### Required ENV keys (Names only)
 

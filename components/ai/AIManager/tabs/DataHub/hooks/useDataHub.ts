@@ -7,8 +7,6 @@ import {
     DataHubState,
     DataSource,
     DataCategory,
-    DataPipelineSnapshot,
-    DataNormalizationSummary,
     AIAgent,
 } from '../../../../../../types.ts';
 import {
@@ -23,6 +21,8 @@ import {
     useUpdateCategoryMutation,
     useCreateCategoryMutation,
     useDeleteCategoryMutation,
+    usePipelineQuery,
+    useAccessLogsQuery,
 } from '../../../../../../hooks/useDataHubState.ts';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi.ts';
 import { useAsync } from '../../../../../../hooks/useAsync';
@@ -73,16 +73,26 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const [viewingSourceData, setViewingSourceData] = useState<DataSource | null>(null);
 
     // Pipeline State
-    const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
+    const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>('latest');
 
-    const pipelineAsync = useAsync(api.fetchDataPipelineSnapshot);
+    const pipelineEnabled = activeView === 'pipeline';
+    const {
+        data: pipelineView,
+        isLoading: isLoadingPipeline,
+        error: pipelineErrorObj,
+        refetch: refetchPipeline,
+        isFetching: isFetchingPipeline,
+    } = usePipelineQuery({ enabled: pipelineEnabled });
     const healthAsync = useAsync(api.checkDataHubHealth);
-    const logsAsync = useAsync(async () => {
-        // Mocking log refresh for now as there's no direct API in the snippet,
-        // but we keep the structure for standardization.
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return api.fetchDataHubState();
-    });
+
+    const logsEnabled = activeView === 'logs';
+    const {
+        data: accessLogsResult,
+        isLoading: isLoadingLogs,
+        error: accessLogsErrorObj,
+        refetch: refetchAccessLogs,
+        isFetching: isFetchingAccessLogs,
+    } = useAccessLogsQuery({ enabled: logsEnabled });
 
     const mergedDataHub = useMemo((): DataHubState | null => {
         if (!dataHub) return null;
@@ -615,9 +625,27 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const handleRefreshPipelineSnapshot = async () => {
         try {
-            await pipelineAsync.execute();
+            await refetchPipeline();
         } catch (error) {
             console.error('Failed to refresh pipeline:', error);
+        }
+    };
+
+    const pipelineSnapshot = pipelineView?.snapshot;
+    const pipelineHistory = pipelineView?.history ?? [];
+    const normalizationSummary = pipelineView?.normalizationSummary;
+    const normalizedData = pipelineView?.normalizedData ?? [];
+
+    const pipelineApiError =
+        pipelineErrorObj instanceof DataHubApiError
+            ? pipelineErrorObj
+            : pipelineErrorObj instanceof Error
+              ? pipelineErrorObj
+              : null;
+    const pipelineError = pipelineApiError?.message ?? null;
+    const setPipelineError = (_err: string | null) => {
+        if (_err === null) {
+            void refetchPipeline();
         }
     };
 
@@ -654,27 +682,36 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     };
 
     const categoryMetricsById = useMemo(() => {
-        if (!mergedDataHub || !mergedDataHub.pipelineSnapshot) return {};
+        if (!pipelineSnapshot?.categories?.length) return {};
         const metrics: Record<string, { inflow: number; passRate: number }> = {};
-        mergedDataHub.pipelineSnapshot.categories.forEach(cat => {
+        pipelineSnapshot.categories.forEach(cat => {
             metrics[cat.categoryId] = {
                 inflow: cat.inflow,
-                passRate: cat.passRate
+                passRate: cat.passRate,
             };
         });
         return metrics;
-    }, [mergedDataHub]);
+    }, [pipelineSnapshot]);
 
-    const logStatusCounts = useMemo(() => {
-        if (!mergedDataHub) return { success: 0, error: 0, warning: 0 };
-        return mergedDataHub.accessLogs.reduce((acc, log) => {
-            const status = log.status.toLowerCase();
-            if (status.includes('success') || status === 'ok' || status === '200') acc.success++;
-            else if (status.includes('error') || status.includes('fail') || status === '500') acc.error++;
-            else acc.warning++;
-            return acc;
-        }, { success: 0, error: 0, warning: 0 });
-    }, [mergedDataHub]);
+    const accessLogs = accessLogsResult?.data ?? [];
+    const logStatusCounts = accessLogsResult?.statusCounts ?? {
+        success: 0,
+        error: 0,
+        warning: 0,
+    };
+
+    const accessLogsApiError =
+        accessLogsErrorObj instanceof DataHubApiError
+            ? accessLogsErrorObj
+            : accessLogsErrorObj instanceof Error
+              ? accessLogsErrorObj
+              : null;
+    const logsError = accessLogsApiError?.message ?? null;
+    const setLogsError = (_err: string | null) => {
+        if (_err === null) {
+            void refetchAccessLogs();
+        }
+    };
 
     const combinedCollectorHealth = useMemo(() => {
         if (!mergedDataHub || !mergedDataHub.telegramCollector) return 'unknown';
@@ -738,9 +775,16 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setViewingSourceData,
         selectedSnapshotId,
         setSelectedSnapshotId,
-        isLoadingPipeline: pipelineAsync.isLoading,
-        pipelineError: pipelineAsync.error,
-        setPipelineError: pipelineAsync.setError,
+        pipelineSnapshot,
+        pipelineHistory,
+        normalizationSummary,
+        normalizedData,
+        refetchPipeline,
+        isFetchingPipeline,
+        isLoadingPipeline: isLoadingPipeline || isFetchingPipeline,
+        pipelineError,
+        setPipelineError,
+        pipelineApiError,
         agents,
         isLoadingAgents,
         isLoadingCollector,
@@ -752,10 +796,14 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setCategoriesError: () => { },
         healthError: healthAsync.error,
         setHealthError: healthAsync.setError,
-        logsError: logsAsync.error,
-        setLogsError: logsAsync.setError,
+        accessLogs,
+        refetchAccessLogs,
+        logsError,
+        setLogsError,
+        accessLogsApiError,
         isLoadingHealth: healthAsync.isLoading,
-        isLoadingLogs: logsAsync.isLoading,
+        isLoadingLogs: isLoadingLogs || isFetchingAccessLogs,
+        logStatusCounts,
         collectorForm,
         collectorAuthId,
         testingChannelId,
@@ -793,7 +841,6 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         formatTimeAgo,
         downloadCSV,
         categoryMetricsById,
-        logStatusCounts,
         combinedCollectorHealth,
         onRefresh,
         handleCreateSource,

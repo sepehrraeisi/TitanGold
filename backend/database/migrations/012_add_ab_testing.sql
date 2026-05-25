@@ -110,7 +110,8 @@ CREATE TABLE IF NOT EXISTS experiment_metrics (
   -- Agent execution reference (optional)
   agent_id VARCHAR(50),
   user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  decision_id UUID REFERENCES ai_decisions(id) ON DELETE SET NULL,
+  -- Soft reference only: ai_decisions is RANGE-partitioned with PK (id, created_at) after 006_partition_ai_decisions.sql
+  decision_id UUID,
   
   -- Metrics
   execution_time_ms INTEGER NOT NULL,

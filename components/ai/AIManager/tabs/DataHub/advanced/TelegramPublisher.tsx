@@ -1,249 +1,486 @@
-
-import React, { useState, useMemo } from 'react';
-import * as api from '../../../../../../services/api';
-import { DataHubState, AIAgent } from '../../../../../../types';
-import { SummaryCard } from '../../../../../ui/summary-card';
-import { EmptyState } from '../../../../../ui/empty-state';
-import { ActionButton } from '../../../../../ui/action-button';
-import { StatusBadge } from '../../../../../ui/status-badge';
-import ApiWrapper from '../../../../../common/ApiWrapper';
-import { useAsync } from '../../../../../../hooks/useAsync';
+import React, { useEffect, useMemo, useState } from 'react';
+import { DataSource, PublisherHistoryItem } from '../../../../../../types';
+import {
+    useTelegramPublishersQuery,
+    usePublisherHistoryQuery,
+    useCreateTelegramPublisherMutation,
+    useDisableTelegramPublisherMutation,
+    useTestTelegramPublisherMutation,
+    usePublishTelegramPublisherMutation,
+} from '../../../../../../hooks/useTelegramPublishers';
+import {
+    mapHistoryToUiItem,
+    TelegramPublisherRecord,
+} from '../../../../../../services/telegramPublishersApi';
+import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
+import {
+    DATAHUB_SHELL,
+    DATAHUB_INNER_LIST,
+    INPUT_CLASS,
+    SELECT_CLASS,
+    BTN_PRIMARY,
+    BTN_SECONDARY,
+    BTN_OUTLINE_EMERALD,
+    BTN_OUTLINE_PURPLE,
+    BTN_OUTLINE_RED,
+    BTN_OUTLINE_SLATE,
+    DataHubAlert,
+    DataHubEmpty,
+    DataHubModal,
+    MetricCard,
+    StatusPill,
+} from '../dataHubUi';
 
 interface TelegramPublisherProps {
-    dataHub: DataHubState;
-    setDataHub: (hub: DataHubState) => void;
-    onRefresh: () => void;
     t: (key: string) => string;
-    agents: AIAgent[];
-    agentMap: Record<string, AIAgent>;
+    telegramSources: DataSource[];
 }
 
-const TelegramPublisher: React.FC<TelegramPublisherProps> = ({
-    dataHub,
-    setDataHub,
-    onRefresh,
-    t,
-    agents,
-    agentMap
-}) => {
+const defaultTemplate = `📢 **Signal**
+{message}
+
+_Source: Titan DataHub_`;
+
+const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSources }) => {
     const [activeTab, setActiveTab] = useState<'channels' | 'history' | 'templates'>('channels');
-    const publisherAsync = useAsync(async () => {
-        // Placeholder for future refresh
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return dataHub;
+    const [selectedPublisherId, setSelectedPublisherId] = useState<string | null>(null);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [actionMessage, setActionMessage] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
+
+    const [form, setForm] = useState({
+        name: '',
+        channel_id: '',
+        channel_username: '',
+        channel_title: '',
+        bot_token: '',
+        language: 'en',
+        template: defaultTemplate,
     });
 
-    const advanced = dataHub.advanced || { telegramPublishers: [], publisherHistory: [] };
-    const publishers = advanced.telegramPublishers;
-    const history = advanced.publisherHistory;
+    const { data: listData, isLoading, error: listError, refetch, isFetching } =
+        useTelegramPublishersQuery({ enabled: true });
 
-    const metrics = useMemo(() => ({
-        totalChannels: publishers.length,
-        delivered24h: history.filter(h => h.status === 'sent').length,
-        failed24h: history.filter(h => h.status === 'failed').length,
-        successRate: history.length > 0
-            ? Math.round((history.filter(h => h.status === 'sent').length / history.length) * 100)
-            : 100
-    }), [publishers, history]);
+    const publishers = listData?.publishers ?? [];
+    const metrics = listData?.metrics ?? {
+        totalChannels: 0,
+        delivered24h: 0,
+        failed24h: 0,
+        successRate: 100,
+    };
+
+    useEffect(() => {
+        if (publishers.length > 0 && !selectedPublisherId) {
+            setSelectedPublisherId(publishers[0].id);
+        }
+    }, [publishers, selectedPublisherId]);
+
+    const { data: historyData, isLoading: isLoadingHistory } = usePublisherHistoryQuery(
+        selectedPublisherId,
+        { enabled: activeTab === 'history' && Boolean(selectedPublisherId) },
+    );
+
+    const createMutation = useCreateTelegramPublisherMutation();
+    const disableMutation = useDisableTelegramPublisherMutation();
+    const testMutation = useTestTelegramPublisherMutation();
+    const publishMutation = usePublishTelegramPublisherMutation();
+
+    const historyItems: PublisherHistoryItem[] = useMemo(
+        () => (historyData?.data ?? []).map(mapHistoryToUiItem),
+        [historyData],
+    );
+
+    const apiError =
+        listError instanceof DataHubApiError
+            ? listError.message
+            : listError instanceof Error
+              ? listError.message
+              : null;
+
+    const selectedPublisher = publishers.find(p => p.id === selectedPublisherId);
+
+    const handleCreate = async () => {
+        setActionError(null);
+        try {
+            await createMutation.mutateAsync({
+                name: form.name.trim(),
+                channel_id: form.channel_id.trim(),
+                channel_username: form.channel_username.trim() || undefined,
+                channel_title: form.channel_title.trim() || undefined,
+                bot_token: form.bot_token.trim() || undefined,
+                template: form.template,
+                language: form.language,
+            });
+            setShowCreateModal(false);
+            setForm({
+                name: '',
+                channel_id: '',
+                channel_username: '',
+                channel_title: '',
+                bot_token: '',
+                language: 'en',
+                template: defaultTemplate,
+            });
+            setActionMessage(t('publisher_created'));
+            await refetch();
+        } catch (e: unknown) {
+            setActionError(e instanceof Error ? e.message : t('publisher_create_failed'));
+        }
+    };
+
+    const handleTest = async (pub: TelegramPublisherRecord) => {
+        setActionError(null);
+        try {
+            const result = await testMutation.mutateAsync({
+                id: pub.id,
+                message: t('publisher_test_message_default'),
+            });
+            const label = result.dry_run
+                ? t('publisher_test_dry_run')
+                : result.success
+                  ? t('publisher_test_ok')
+                  : t('publisher_test_failed');
+            setActionMessage(`${label}${result.error ? `: ${result.error}` : ''}`);
+            setSelectedPublisherId(pub.id);
+            await refetch();
+        } catch (e: unknown) {
+            setActionError(e instanceof Error ? e.message : t('publisher_test_failed'));
+        }
+    };
+
+    const handlePublish = async (pub: TelegramPublisherRecord) => {
+        const message = window.prompt(t('publisher_publish_prompt'), t('publisher_publish_sample'));
+        if (!message?.trim()) return;
+        if (!window.confirm(t('publisher_publish_confirm'))) return;
+
+        setActionError(null);
+        try {
+            const result = await publishMutation.mutateAsync({
+                id: pub.id,
+                message: message.trim(),
+                confirm_publish: true,
+                content_type: 'manual',
+            });
+            const label = result.dry_run
+                ? t('publisher_publish_dry_run')
+                : result.success
+                  ? t('publisher_publish_ok')
+                  : t('publisher_publish_failed');
+            setActionMessage(`${label}${result.error ? `: ${result.error}` : ''}`);
+            setSelectedPublisherId(pub.id);
+            await refetch();
+        } catch (e: unknown) {
+            setActionError(e instanceof Error ? e.message : t('publisher_publish_failed'));
+        }
+    };
+
+    const handleDisable = async (pub: TelegramPublisherRecord) => {
+        if (!window.confirm(t('publisher_disable_confirm'))) return;
+        try {
+            await disableMutation.mutateAsync(pub.id);
+            setActionMessage(t('publisher_disabled'));
+            if (selectedPublisherId === pub.id) setSelectedPublisherId(null);
+            await refetch();
+        } catch (e: unknown) {
+            setActionError(e instanceof Error ? e.message : t('publisher_disable_failed'));
+        }
+    };
+
+    const tabClass = (tab: typeof activeTab) =>
+        `pb-2 text-[11px] font-semibold transition-all border-b-2 ${
+            activeTab === tab
+                ? 'border-purple-500 text-purple-300'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+        }`;
 
     return (
-        <ApiWrapper error={publisherAsync.error} setError={publisherAsync.setError} isLoading={publisherAsync.isLoading}>
-            <div className="bg-card border border-border rounded-lg p-4">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-                    <div>
-                        <h3 className="font-semibold text-foreground flex items-center gap-2">
-                            📱 {t('telegram_publisher') || 'Telegram Publisher'}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {t('telegram_publisher_desc') || 'Broadcast analyzed signals to dedicated Telegram channels and groups.'}
-                        </p>
-                    </div>
-                    <ActionButton variant="primary" size="sm">+ New Channel</ActionButton>
+        <div className={DATAHUB_SHELL}>
+            {actionMessage && (
+                <div className="mb-3 p-2 rounded border border-emerald-500/30 bg-emerald-500/10 text-[11px] text-emerald-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <span>{actionMessage}</span>
+                    <button type="button" className={BTN_OUTLINE_SLATE} onClick={() => setActionMessage(null)}>
+                        {t('dismiss')}
+                    </button>
                 </div>
+            )}
+            {actionError && <DataHubAlert variant="error" message={actionError} />}
 
-                {/* Metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    <SummaryCard
-                        label={t('active_channels') || 'Channels'}
-                        value={metrics.totalChannels}
-                        icon={<span className="text-2xl">📡</span>}
-                    />
-                    <SummaryCard
-                        label={t('delivered_24h') || 'Delivered'}
-                        value={metrics.delivered24h}
-                        variant="success"
-                        icon={<span className="text-2xl">📤</span>}
-                    />
-                    <SummaryCard
-                        label={t('failed_24h') || 'Failed'}
-                        value={metrics.failed24h}
-                        variant={metrics.failed24h > 0 ? 'error' : 'default'}
-                        icon={<span className="text-2xl">❌</span>}
-                    />
-                    <SummaryCard
-                        label={t('success_rate') || 'Success Rate'}
-                        value={`${metrics.successRate}%`}
-                        variant={metrics.successRate < 90 ? 'warning' : 'success'}
-                        icon={<span className="text-2xl">📊</span>}
-                    />
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+                <div>
+                    <h3 className="text-sm md:text-base font-semibold text-foreground">
+                        {t('telegram_publisher')}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
+                        {t('telegram_publisher_desc')}
+                    </p>
                 </div>
+                <button type="button" onClick={() => setShowCreateModal(true)} className={BTN_PRIMARY}>
+                    {t('new_publisher_channel')}
+                </button>
+            </div>
 
-                {/* Tabs */}
-                <div className="flex gap-4 border-b border-border mb-6">
-                    {(['channels', 'history', 'templates'] as const).map(tab => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`pb-2 text-xs font-bold transition-all border-b-2 ${activeTab === tab ? 'border-purple-500 text-purple-400' : 'border-transparent text-muted-foreground hover:text-foreground'
-                                }`}
-                        >
-                            {t(`publisher_tab_${tab}`) || tab.toUpperCase()}
-                        </button>
-                    ))}
-                </div>
+            {apiError && (
+                <DataHubAlert variant="error" message={apiError} onRetry={() => refetch()} retryLabel={t('retry')} />
+            )}
 
-                {/* Content Area */}
-                {activeTab === 'channels' && (
-                    <div className="space-y-4">
-                        {/* Input/Output Channel Mapping Section (TASK-DHT-061) */}
-                        {dataHub.sources && dataHub.sources.filter(s => s.type === 'telegram').length > 0 && (
-                            <div className="bg-gradient-to-br from-slate-900/90 via-slate-950/90 to-slate-900/80 border border-slate-800/60 rounded-lg p-4">
-                                <h5 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                                    <span className="text-sky-400">🔗</span>
-                                    {t('telegram_channel_mapping') || 'Input/Output Channel Mapping'}
-                                </h5>
-                                <p className="text-[11px] text-muted-foreground mb-3">
-                                    {t('telegram_mapping_desc') || 'Telegram channels collecting data (input) can be mapped to publisher channels (output) for automated signal broadcasting.'}
-                                </p>
-                                <div className="space-y-2">
-                                    {dataHub.sources
-                                        .filter(s => s.type === 'telegram')
-                                        .slice(0, 5)
-                                        .map(source => {
-                                            const linkedPublishers = publishers.filter(p => 
-                                                p.sourceIds?.includes(source.id) || 
-                                                (p.agentId && dataHub.automation?.agentTopics.some(t => 
-                                                    t.agentId === p.agentId && 
-                                                    t.dataTypes.includes('telegram') &&
-                                                    t.publisherTargets.includes(p.id)
-                                                ))
-                                            );
-                                            return (
-                                                <div key={source.id} className="flex items-center justify-between p-2 bg-slate-950/50 rounded border border-slate-800/40">
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-[11px] font-semibold text-foreground truncate">
-                                                            📥 {source.name || source.id}
-                                                        </p>
-                                                        <p className="text-[10px] text-muted-foreground font-mono truncate">
-                                                            {source.url || source.id}
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 ml-3">
-                                                        <span className="text-[10px] text-muted-foreground">→</span>
-                                                        {linkedPublishers.length > 0 ? (
-                                                            <div className="flex flex-wrap gap-1">
-                                                                {linkedPublishers.map(pub => (
-                                                                    <span 
-                                                                        key={pub.id}
-                                                                        className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/40"
-                                                                    >
-                                                                        📤 {pub.name}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-[10px] text-muted-foreground italic">
-                                                                {t('no_output_mapping') || 'No output'}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Publisher Channels List */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {publishers.length > 0 ? (
-                                publishers.map(pub => (
-                                    <div key={pub.id} className="border border-border rounded-lg p-4 bg-secondary/5">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                                <h5 className="font-bold text-foreground">{pub.name}</h5>
-                                                <p className="text-[10px] text-muted-foreground font-mono">{pub.chatId}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                <MetricCard label={t('active_channels')} value={metrics.totalChannels} color="blue" />
+                <MetricCard label={t('delivered_24h')} value={metrics.delivered24h} color="emerald" />
+                <MetricCard
+                    label={t('failed_24h')}
+                    value={metrics.failed24h}
+                    color={metrics.failed24h > 0 ? 'red' : 'emerald'}
+                />
+                <MetricCard
+                    label={t('success_rate')}
+                    value={`${metrics.successRate}%`}
+                    color={metrics.successRate < 90 ? 'amber' : 'emerald'}
+                />
+            </div>
+
+            <div className="flex gap-4 border-b border-slate-800/60 mb-5">
+                {(['channels', 'history', 'templates'] as const).map(tab => (
+                    <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={tabClass(tab)}>
+                        {t(`publisher_tab_${tab}`)}
+                    </button>
+                ))}
+            </div>
+
+            {isLoading && publishers.length === 0 ? (
+                <div className="py-12 text-center text-xs text-muted-foreground">{t('publisher_loading')}</div>
+            ) : (
+                <>
+                    {activeTab === 'channels' && (
+                        <div className="space-y-4">
+                            {telegramSources.length > 0 && (
+                                <div className={DATAHUB_INNER_LIST}>
+                                    <h4 className="text-[11px] font-semibold text-foreground mb-3">
+                                        {t('telegram_channel_mapping')}
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {telegramSources.slice(0, 5).map(source => (
+                                            <div
+                                                key={source.id}
+                                                className="flex items-center justify-between p-2 rounded-lg border border-white/5 bg-slate-900/60 text-[11px]"
+                                            >
+                                                <span className="truncate">{source.name}</span>
+                                                <StatusPill label={t('telegram')} variant="info" />
                                             </div>
-                                            <StatusBadge status={pub.enabled ? 'success' : 'neutral'} label={pub.enabled ? 'Active' : 'Paused'} size="sm" />
-                                        </div>
-                                        <div className="space-y-1 mb-4">
-                                            <div className="flex justify-between text-[11px]">
-                                                <span className="text-muted-foreground">Attached Agent:</span>
-                                                <span className="text-purple-300">{pub.agentId ? agentMap[pub.agentId]?.name : 'None'}</span>
-                                            </div>
-                                            <div className="flex justify-between text-[11px]">
-                                                <span className="text-muted-foreground">Security:</span>
-                                                <span className="text-foreground">{pub.isPrivate ? 'Private' : 'Public'}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <ActionButton variant="ghost" size="sm">Edit</ActionButton>
-                                            <ActionButton variant="secondary" size="sm">Test</ActionButton>
-                                        </div>
+                                        ))}
                                     </div>
-                                ))
-                            ) : (
-                                <div className="md:col-span-2">
-                                    <EmptyState title="No channels configured" description="Register a Telegram bot and add chat IDs to start publishing signals." icon={<span className="text-4xl">🤖</span>} />
                                 </div>
                             )}
-                        </div>
-                    </div>
-                )}
 
-                {activeTab === 'history' && (
-                    <div className="space-y-3">
-                        {history.length > 0 ? (
-                            history.slice(0, 10).map(item => (
-                                <div key={item.id} className="border border-border rounded-lg p-3 flex justify-between items-center text-xs">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <StatusBadge status={item.status === 'sent' ? 'success' : 'error'} label={item.status} size="sm" />
-                                            <span className="font-semibold truncate">{item.payloadPreview}</span>
-                                        </div>
-                                        <p className="text-[10px] text-muted-foreground">
-                                            To: {publishers.find(p => p.id === item.publisherId)?.name || item.publisherId} • {new Date(item.sentAt).toLocaleString()}
-                                        </p>
-                                    </div>
-                                    <ActionButton variant="ghost" size="sm">Details</ActionButton>
+                            {publishers.filter(p => p.is_active).length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {publishers
+                                        .filter(p => p.is_active)
+                                        .map(pub => (
+                                            <div
+                                                key={pub.id}
+                                                className={`rounded-xl border p-4 bg-slate-900/60 transition-colors ${
+                                                    selectedPublisherId === pub.id
+                                                        ? 'border-purple-500/60'
+                                                        : 'border-white/5 hover:border-purple-500/40'
+                                                }`}
+                                            >
+                                                <div className="flex justify-between items-start mb-3 gap-2">
+                                                    <div className="min-w-0">
+                                                        <h5 className="text-sm font-semibold text-foreground truncate">
+                                                            {pub.name}
+                                                        </h5>
+                                                        <p className="text-[10px] text-muted-foreground font-mono truncate">
+                                                            {pub.channel_id}
+                                                            {pub.channel_username
+                                                                ? ` · @${pub.channel_username}`
+                                                                : ''}
+                                                        </p>
+                                                    </div>
+                                                    <StatusPill
+                                                        label={
+                                                            pub.is_active ? t('active') : t('inactive')
+                                                        }
+                                                        variant={pub.is_active ? 'success' : 'neutral'}
+                                                    />
+                                                </div>
+                                                <p className="text-[11px] text-muted-foreground mb-3">
+                                                    {pub.has_bot_token
+                                                        ? t('bot_token_configured')
+                                                        : t('bot_token_missing_dry_run')}
+                                                </p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSelectedPublisherId(pub.id)}
+                                                        className={BTN_OUTLINE_SLATE}
+                                                    >
+                                                        {t('select')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={testMutation.isPending}
+                                                        onClick={() => handleTest(pub)}
+                                                        className={BTN_OUTLINE_EMERALD}
+                                                    >
+                                                        {t('test')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={publishMutation.isPending}
+                                                        onClick={() => handlePublish(pub)}
+                                                        className={BTN_OUTLINE_PURPLE}
+                                                    >
+                                                        {t('publish')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={disableMutation.isPending}
+                                                        onClick={() => handleDisable(pub)}
+                                                        className={BTN_OUTLINE_RED}
+                                                    >
+                                                        {t('disable')}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
                                 </div>
-                            ))
-                        ) : (
-                            <EmptyState title="History is empty" description="Successfully delivered messages will appear here." icon={<span className="text-3xl">🏜️</span>} />
-                        )}
-                    </div>
-                )}
-
-                {activeTab === 'templates' && (
-                    <div className="space-y-4">
-                        <div className="bg-secondary/20 p-4 rounded-lg border border-border">
-                            <h5 className="text-sm font-bold mb-2">Default Signal Template</h5>
-                            <code className="block bg-background p-3 rounded border border-border text-[10px] mb-3 whitespace-pre">
-                                {`📢 **{{signal_type}} Alert**
-Asset: {{asset}}
-Price: {{price}} {{currency}}
-Priority: {{priority}}
-Confidence: {{confidence}}%
-
-{{description}}`}
-                            </code>
-                            <ActionButton variant="secondary" size="sm">Edit Template</ActionButton>
+                            ) : (
+                                <DataHubEmpty message={t('no_publishers')} />
+                            )}
                         </div>
+                    )}
+
+                    {activeTab === 'history' && (
+                        <div className={DATAHUB_INNER_LIST}>
+                            {publishers.length > 0 && (
+                                <select
+                                    value={selectedPublisherId || ''}
+                                    onChange={e => setSelectedPublisherId(e.target.value)}
+                                    className={`${SELECT_CLASS} mb-4 max-w-xs`}
+                                >
+                                    {publishers.map(p => (
+                                        <option key={p.id} value={p.id}>
+                                            {p.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            {isLoadingHistory ? (
+                                <p className="text-[11px] text-muted-foreground text-center py-8">
+                                    {t('publisher_history_loading')}
+                                </p>
+                            ) : historyItems.length > 0 ? (
+                                <div className="space-y-2">
+                                    {historyItems.slice(0, 20).map(item => (
+                                        <div
+                                            key={item.id}
+                                            className="rounded-lg border border-white/5 bg-slate-950/70 p-3 flex justify-between items-center gap-3 text-[11px]"
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                    <StatusPill
+                                                        label={t(`publisher_status_${item.status}`)}
+                                                        variant={
+                                                            item.status === 'sent' ? 'success' : 'error'
+                                                        }
+                                                    />
+                                                    <span className="font-semibold truncate">
+                                                        {item.payloadPreview}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    {publishers.find(p => p.id === item.publisherId)?.name ||
+                                                        item.publisherId}{' '}
+                                                    · {new Date(item.sentAt).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <DataHubEmpty message={t('history_empty')} />
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'templates' && (
+                        <div className={DATAHUB_INNER_LIST}>
+                            <p className="text-[11px] text-muted-foreground mb-3">
+                                {selectedPublisher
+                                    ? `${t('template_for')}: ${selectedPublisher.name}`
+                                    : t('select_publisher_for_template')}
+                            </p>
+                            <pre className="block bg-slate-950/80 border border-slate-700 rounded-lg p-3 text-[10px] whitespace-pre-wrap text-foreground font-mono">
+                                {selectedPublisher?.template || defaultTemplate}
+                            </pre>
+                        </div>
+                    )}
+                </>
+            )}
+
+            {isFetching && (
+                <p className="text-[10px] text-muted-foreground mt-4 text-center">{t('refreshing')}</p>
+            )}
+
+            {showCreateModal && (
+                <DataHubModal
+                    title={t('create_publisher')}
+                    subtitle={t('create_publisher_desc')}
+                    onClose={() => setShowCreateModal(false)}
+                    maxWidth="max-w-md"
+                    footer={
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => setShowCreateModal(false)}
+                                className={BTN_SECONDARY}
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                disabled={
+                                    createMutation.isPending || !form.name || !form.channel_id
+                                }
+                                onClick={handleCreate}
+                                className={BTN_PRIMARY}
+                            >
+                                {createMutation.isPending ? t('saving') : t('create')}
+                            </button>
+                        </>
+                    }
+                >
+                    <div className="space-y-3">
+                        <input
+                            placeholder={t('name')}
+                            value={form.name}
+                            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                            className={INPUT_CLASS}
+                        />
+                        <input
+                            placeholder={t('channel_id')}
+                            value={form.channel_id}
+                            onChange={e => setForm(f => ({ ...f, channel_id: e.target.value }))}
+                            className={INPUT_CLASS}
+                        />
+                        <input
+                            placeholder={t('bot_token')}
+                            type="password"
+                            value={form.bot_token}
+                            onChange={e => setForm(f => ({ ...f, bot_token: e.target.value }))}
+                            className={INPUT_CLASS}
+                        />
+                        <textarea
+                            placeholder={t('template')}
+                            value={form.template}
+                            onChange={e => setForm(f => ({ ...f, template: e.target.value }))}
+                            rows={5}
+                            className={`${INPUT_CLASS} font-mono resize-none`}
+                        />
                     </div>
-                )}
-            </div>
-        </ApiWrapper>
+                </DataHubModal>
+            )}
+        </div>
     );
 };
 

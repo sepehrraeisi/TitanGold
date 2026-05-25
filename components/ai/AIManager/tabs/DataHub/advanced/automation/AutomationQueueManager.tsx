@@ -1,15 +1,20 @@
-
 import React from 'react';
-import { ActionButton } from '../../../../../../ui/action-button';
-import { StatusBadge } from '../../../../../../ui/status-badge';
-import { EmptyState } from '../../../../../../ui/empty-state';
+import {
+    DATAHUB_INNER_LIST,
+    BTN_PRIMARY,
+    BTN_OUTLINE_EMERALD,
+    BTN_OUTLINE_RED,
+    BTN_OUTLINE_SLATE,
+    DataHubEmpty,
+    StatusPill,
+} from '../../dataHubUi';
 
 interface AutomationQueueManagerProps {
     queue: any[];
     isDispatching: boolean;
     onDispatch: () => void;
     onPreview: (item: any) => void;
-    onProcess: (itemId: string, action: 'approve' | 'reject') => void;
+    onProcess: (itemId: string, action: 'sent' | 'failed') => void;
     processingId: string | null;
     formatTimeAgo: (timestamp?: string) => string;
     t: (key: string) => string;
@@ -23,76 +28,90 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
     onProcess,
     processingId,
     formatTimeAgo,
-    t
+    t,
 }) => {
     return (
-        <div className="bg-secondary/10 border border-border rounded-lg p-4">
+        <div className={DATAHUB_INNER_LIST}>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                 <div>
-                    <h4 className="font-semibold text-foreground text-sm flex items-center gap-2">
-                        📥 {t('automation_queue') || 'Automation Queue'}
-                        <StatusBadge status={queue.length > 0 ? 'warning' : 'neutral'} label={`${queue.length} items`} size="sm" />
+                    <h4 className="text-[11px] font-semibold text-foreground flex items-center gap-2">
+                        {t('automation_queue')}
+                        <StatusPill
+                            label={String(queue.length)}
+                            variant={queue.length > 0 ? 'warning' : 'neutral'}
+                        />
                     </h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {t('automation_queue_desc') || 'Data items waiting for processing and publication.'}
-                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{t('automation_queue_desc')}</p>
                 </div>
-                <ActionButton
-                    variant="success"
-                    size="sm"
-                    disabled={queue.length === 0}
-                    loading={isDispatching}
+                <button
+                    type="button"
+                    disabled={queue.length === 0 || isDispatching}
                     onClick={onDispatch}
+                    className={BTN_PRIMARY}
                 >
-                    🚀 {t('dispatch_queue') || 'Dispatch All'}
-                </ActionButton>
+                    {isDispatching ? t('dispatching') : t('dispatch_queue')}
+                </button>
             </div>
 
             {queue.length > 0 ? (
                 <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left border-collapse">
-                        <thead className="text-muted-foreground border-b border-border/50">
-                            <tr>
-                                <th className="py-2 px-1">{t('time') || 'Time'}</th>
-                                <th className="py-2 px-1">{t('topic') || 'Topic'}</th>
-                                <th className="py-2 px-1">{t('data_preview') || 'Preview'}</th>
-                                <th className="py-2 px-1">{t('priority') || 'Priority'}</th>
-                                <th className="py-2 px-1 text-right">{t('actions') || 'Actions'}</th>
+                    <table className="w-full text-[11px] text-left">
+                        <thead>
+                            <tr className="border-b border-slate-800 text-muted-foreground">
+                                <th className="py-2 pr-2">{t('time')}</th>
+                                <th className="py-2 pr-2">{t('topic')}</th>
+                                <th className="py-2 pr-2">{t('data_preview')}</th>
+                                <th className="py-2 pr-2">{t('priority')}</th>
+                                <th className="py-2 text-right">{t('actions')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {queue.map(item => (
-                                <tr key={item.id} className="border-b border-border/30 hover:bg-secondary/10">
-                                    <td className="py-2 px-1 text-muted-foreground">{formatTimeAgo(item.createdAt)}</td>
-                                    <td className="py-2 px-1 font-medium">{item.topicId}</td>
-                                    <td className="py-2 px-1 truncate max-w-[150px]">{item.payloadPreview}</td>
-                                    <td className="py-2 px-1">
-                                        <StatusBadge
-                                            status={item.priority > 7 ? 'error' : item.priority > 4 ? 'warning' : 'success'}
+                                <tr
+                                    key={item.id}
+                                    className="border-b border-slate-900/60 hover:bg-slate-900/40"
+                                >
+                                    <td className="py-2 pr-2 text-muted-foreground">
+                                        {formatTimeAgo(item.createdAt)}
+                                    </td>
+                                    <td className="py-2 pr-2 font-medium">{item.topicId}</td>
+                                    <td className="py-2 pr-2 truncate max-w-[150px]">{item.payloadPreview}</td>
+                                    <td className="py-2 pr-2">
+                                        <StatusPill
                                             label={`${item.priority}/10`}
-                                            size="sm"
+                                            variant={
+                                                item.priority > 7
+                                                    ? 'error'
+                                                    : item.priority > 4
+                                                      ? 'warning'
+                                                      : 'success'
+                                            }
                                         />
                                     </td>
-                                    <td className="py-2 px-1 text-right">
-                                        <div className="flex justify-end gap-1">
-                                            <ActionButton variant="ghost" size="xs" onClick={() => onPreview(item)}>
-                                                {t('view') || 'View'}
-                                            </ActionButton>
-                                            <ActionButton
-                                                variant="success"
-                                                size="xs"
-                                                loading={processingId === item.id}
-                                                onClick={() => onProcess(item.id, 'approve')}
+                                    <td className="py-2 text-right">
+                                        <div className="flex justify-end gap-1 flex-wrap">
+                                            <button
+                                                type="button"
+                                                onClick={() => onPreview(item)}
+                                                className={BTN_OUTLINE_SLATE}
                                             >
-                                                {t('approve') || 'Approve'}
-                                            </ActionButton>
-                                            <ActionButton
-                                                variant="danger"
-                                                size="xs"
-                                                onClick={() => onProcess(item.id, 'reject')}
+                                                {t('view')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={processingId === item.id}
+                                                onClick={() => onProcess(item.id, 'sent')}
+                                                className={BTN_OUTLINE_EMERALD}
                                             >
-                                                {t('reject') || 'Reject'}
-                                            </ActionButton>
+                                                {t('approve')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onProcess(item.id, 'failed')}
+                                                className={BTN_OUTLINE_RED}
+                                            >
+                                                {t('reject')}
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -101,12 +120,7 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                     </table>
                 </div>
             ) : (
-                <EmptyState
-                    title={t('queue_empty') || 'Queue is empty'}
-                    description={t('queue_empty_desc') || 'New data items will appear here for review before publishing.'}
-                    icon={<span className="text-3xl">🏜️</span>}
-                    className="py-6"
-                />
+                <DataHubEmpty message={t('queue_empty')} />
             )}
         </div>
     );

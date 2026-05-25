@@ -80,7 +80,111 @@
 | Trading Engine برای تایید نهایی به Artemis متصل است | `backend/engine/tradingEngine.js` | L706–757 | متد `getArtemisApproval` درخواست `/api/artemis/decision` می‌سازد (opportunity + signals + context) و بر اساس پاسخ Artemis تصمیم به اجرا می‌گیرد، با fallback امن در صورت خطا. |
 | Emergency Stop در Trading Engine هم تریدها را می‌بندد و هم config را غیرفعال و نوتیفیکیشن ارسال می‌کند | `backend/engine/tradingEngine.js` | L1259–1275 | متد `emergencyStop` تمام تریدهای باز را می‌بندد، `config.enabled` را false می‌کند، آن را در DB ذخیره می‌کند و پیام Telegram می‌فرستد. |
 
-### ۸. Migrations / Greenfield Bootstrap
+### ۸. DataHub Pipeline (GAP-012 Closed)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| Pipeline tab از API تجمیعی backend داده می‌گیرد | `services/dataPipelineApi.ts` | L1–65 | `fetchDataPipelineView` → `GET /api/v1/data-sources/pipeline`. |
+| React Query برای Pipeline | `hooks/useDataHubState.ts` | `usePipelineQuery` | کلید `DATA_HUB_KEYS.pipeline()`. |
+| UI wiring بدون IndexedDB برای snapshot | `components/ai/AIManager/tabs/DataHubTab.tsx`, `hooks/useDataHub.ts` | Pipeline props از `usePipelineQuery` | `pipelineSnapshot` / `history` / `normalizationSummary` دیگر از `dataHub.pipelineSnapshot` محلی نیست. |
+| Backend aggregate | `backend/routes/data-sources.js`, `backend/services/dataPipelineSnapshot.js` | `GET /pipeline` | تجمیع از `collected_data`, `data_sources`, `data_categories`. |
+
+**Grep — مسیر Pipeline (دادهٔ اصلی، 2026-05-24):**
+
+```bash
+grep -rn "buildPipelineSnapshot\|fetchDataHubState" \
+  components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx \
+  components/ai/AIManager/tabs/DataHub/hooks/useDataHub.ts \
+  components/ai/AIManager/tabs/DataHubTab.tsx \
+  services/dataPipelineApi.ts \
+  hooks/useDataHubState.ts
+
+grep -rn "dataHub\.pipelineSnapshot\|mergedDataHub\.pipeline" \
+  components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx \
+  components/ai/AIManager/tabs/DataHub/hooks/useDataHub.ts \
+  components/ai/AIManager/tabs/DataHubTab.tsx
+```
+
+| Symbol | PipelinePanel | useDataHub (pipeline) | DataHubTab (pipeline props) | dataPipelineApi | useDataHubState |
+|--------|---------------|----------------------|----------------------------|-----------------|-----------------|
+| `buildPipelineSnapshot` | — | — | — | — | — |
+| `fetchDataHubState` | — | — | — | — | `useDataHubQuery` (state کلی Hub؛ نه دادهٔ Pipeline) |
+| `dataHub.pipelineSnapshot` | — | — | — | — | — |
+
+`buildPipelineSnapshot` / `dataHub.pipelineSnapshot` در `services/api.ts` و advanced/automation باقی است — خارج از scope تب Pipeline.
+
+### ۹. DataHub Access Logs (GAP-013 Closed)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Logs tab از API backend | `services/dataAccessLogsApi.ts` | `GET /api/v1/data-sources/access-logs` |
+| React Query | `hooks/useDataHubState.ts` | `useAccessLogsQuery` (`enabled` وقتی `activeView === 'logs'`) |
+| UI wiring | `DataHubTab.tsx`, `useDataHub.ts` | `accessLogs` / `logStatusCounts` از query — **نه** `dataHub.accessLogs` |
+| Backend | `backend/services/dataHubAccessLogs.js` | نگاشت `data_hub_logs` → `DataAccessLog` |
+
+**پس از GAP-013:** تب Logs دیگر از `fetchDataHubState` / `logsAsync` برای دادهٔ اصلی استفاده نمی‌کند (`logsAsync` حذف شده). `useDataHubQuery` همچنان state کلی Hub (advanced/health cache) را از IndexedDB می‌گیرد — جدا از تب Logs.
+
+**Grep — مسیر Logs (دادهٔ اصلی، 2026-05-24):**
+
+```bash
+grep -rn "dataHub\.accessLogs\|fetchDataHubState" \
+  components/ai/AIManager/tabs/DataHub/LogsPanel.tsx \
+  components/ai/AIManager/tabs/DataHubTab.tsx
+# → 0 matches (DataHubTab: accessLogs={accessLogs} از useDataHub)
+```
+
+### ۱۰. DataHub Telegram Publisher (GAP-016 Closed)
+
+| Claim | File | توضیح |
+|---|---|---|
+| DB tables | `backend/database/migrations/025_create_telegram_publishers.sql` | `telegram_publishers`, `publisher_delivery_history` |
+| API routes | `backend/routes/telegram-publishers.js` | Mount: `/api/v1/data-hub/telegram-publishers` |
+| Publish safety | `backend/services/telegramPublisherService.js` | `confirm_publish`, `isPublisherDryRunForced()`, history on error |
+| Frontend API | `services/telegramPublishersApi.ts` | CRUD + test + publish + history |
+| React Query | `hooks/useTelegramPublishers.ts` | `useTelegramPublishersQuery` + mutations |
+| UI | `TelegramPublisher.tsx` | Props: `telegramSources` only (sources از API) |
+
+**Grep — Publisher UI (no IndexedDB for main data):**
+
+```bash
+grep -rn "dataHub\.advanced\|fetchDataHubState" \
+  components/ai/AIManager/tabs/DataHub/advanced/TelegramPublisher.tsx
+# → 0 matches
+
+grep -rn "data-hub/telegram-publishers\|useTelegramPublishers" \
+  components/ai/AIManager/tabs/DataHub/advanced/TelegramPublisher.tsx
+# → useTelegramPublishersQuery + /api/v1/data-hub/telegram-publishers (via service)
+```
+
+**Legacy IndexedDB publisher APIs (`services/api.ts`) — فقط automation:**
+
+| Function | Used by `TelegramPublisher.tsx`? | Used by `AutomationTopics` / dispatch? |
+|----------|-----------------------------------|----------------------------------------|
+| `createTelegramPublisher` / `updateTelegramPublisher` / `deleteTelegramPublisher` | **No** | Indirect (publisher list در state) |
+| `publishToTelegram` | **No** | **Yes** — `dispatchAutomationQueue` / queue processor (GAP-019) |
+
+`TelegramPublisher.tsx` فقط `services/telegramPublishersApi.ts` + `hooks/useTelegramPublishers.ts` را صدا می‌زند. مسیر legacy `publishToTelegram` در `services/api.ts` دیگر توسط Automation dispatch استفاده نمی‌شود (GAP-019 Closed).
+
+### ۱۱. DataHub Automation (GAP-018 + GAP-019 Closed)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Topics DB | `backend/database/migrations/026_create_datahub_automation_topics.sql` | `datahub_automation_topics` |
+| Queue DB | `backend/database/migrations/027_create_datahub_automation_queue.sql` | queue + schedule + executions |
+| Service | `backend/services/datahubAutomationService.js` | refresh از pipeline/collected_data؛ dispatch → `runPublisherPublish` |
+| Routes | `backend/routes/data-hub-automation.js` | `/api/v1/data-hub/automation` |
+| Frontend | `services/datahubAutomationApi.ts`, `hooks/useDatahubAutomation.ts` | React Query |
+| UI | `AutomationTopics.tsx` | بدون `fetchDataHubState` برای topics/queue/history |
+
+**Grep — Automation UI (no IndexedDB for main data):**
+
+```bash
+grep -rn "fetchDataHubState\|createAutomationTopic\|refreshAutomationQueue" \
+  components/ai/AIManager/tabs/DataHub/advanced/AutomationTopics.tsx
+# → 0 matches
+```
+
+### ۱۲. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |
 |---|---|---|---|

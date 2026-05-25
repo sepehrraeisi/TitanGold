@@ -9,6 +9,9 @@ export const DATA_HUB_KEYS = {
     sources: (page?: number, limit?: number) =>
         [...DATA_HUB_KEYS.all, 'sources', { page: page ?? 1, limit: limit ?? 20 }] as const,
     categories: () => [...DATA_HUB_KEYS.all, 'categories'] as const,
+    pipeline: () => [...DATA_HUB_KEYS.all, 'pipeline'] as const,
+    accessLogs: (params?: { limit?: number; offset?: number }) =>
+        [...DATA_HUB_KEYS.all, 'accessLogs', params ?? { limit: 100, offset: 0 }] as const,
 };
 
 export const useDataHubQuery = () => {
@@ -34,6 +37,26 @@ export const useDataCategoriesQuery = () => {
         queryKey: DATA_HUB_KEYS.categories(),
         queryFn: api.fetchDataCategories,
         staleTime: 30 * 1000,
+    });
+};
+
+export const usePipelineQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.pipeline(),
+        queryFn: api.fetchDataPipelineView,
+        staleTime: 30 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const useAccessLogsQuery = (options?: { enabled?: boolean; limit?: number; offset?: number }) => {
+    const limit = options?.limit ?? 100;
+    const offset = options?.offset ?? 0;
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.accessLogs({ limit, offset }),
+        queryFn: () => api.fetchDataAccessLogs({ limit, offset }),
+        staleTime: 30 * 1000,
+        enabled: options?.enabled ?? true,
     });
 };
 

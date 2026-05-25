@@ -1,401 +1,448 @@
 
-import React, { useState, useMemo } from 'react';
-import * as api from '../../../../../../services/api';
-import { DataHubState, AIAgent } from '../../../../../../types';
+import React, { useMemo, useState } from 'react';
+import { DataCategory, AIAgent, AgentTopicRoute, AgentTopicFormValues, TelegramPublisher } from '../../../../../../types';
 import AutomationTopicModal from '../modals/AutomationTopicModal';
 import QueuePreviewModal from '../modals/QueuePreviewModal';
-import { SummaryCard } from '../../../../../ui/summary-card';
-import { ActionButton } from '../../../../../ui/action-button';
-import { StatusBadge } from '../../../../../ui/status-badge';
-import { EmptyState } from '../../../../../ui/empty-state';
-import ApiWrapper from '../../../../../common/ApiWrapper';
-import { useAsync } from '../../../../../../hooks/useAsync';
-
-// Sub-components
 import AutomationTopicList from './automation/AutomationTopicList';
 import AutomationQueueManager from './automation/AutomationQueueManager';
 import AutomationSchedulePanel from './automation/AutomationSchedulePanel';
+import {
+    useAutomationOverviewQuery,
+    useCreateAutomationTopicMutation,
+    useUpdateAutomationTopicMutation,
+    useDeleteAutomationTopicMutation,
+    useUpdateAutomationScheduleMutation,
+    useRefreshAutomationQueueMutation,
+    useDispatchAutomationQueueMutation,
+    useDispatchQueueItemMutation,
+    useFailQueueItemMutation,
+    useRetryAutomationExecutionMutation,
+    useAutomationTestRunMutation,
+} from '../../../../../../hooks/useDatahubAutomation';
+import { useTelegramPublishersQuery } from '../../../../../../hooks/useTelegramPublishers';
+import type { AutomationExecutionRecord } from '../../../../../../services/datahubAutomationApi';
+import {
+    DATAHUB_SHELL,
+    DATAHUB_INNER_LIST,
+    BTN_PRIMARY,
+    BTN_SECONDARY,
+    BTN_OUTLINE_SLATE,
+    DataHubAlert,
+    DataHubEmpty,
+    DataHubToggle,
+    MetricCard,
+    StatusPill,
+} from '../dataHubUi';
 
 interface AutomationTopicsProps {
-    dataHub: DataHubState;
-    setDataHub: (hub: DataHubState) => void;
-    onRefresh: () => void;
+    categories: DataCategory[];
     t: (key: string) => string;
     formatTimeAgo: (timestamp?: string) => string;
     agents: AIAgent[];
     isLoadingAgents: boolean;
     agentMap: Record<string, AIAgent>;
-    topicMap: Map<string, any>;
-    publisherMap: Record<string, any>;
+    availableDataTypes: string[];
 }
 
 const AutomationTopics: React.FC<AutomationTopicsProps> = ({
-    dataHub,
-    setDataHub,
-    onRefresh,
+    categories,
     t,
     formatTimeAgo,
     agents,
     isLoadingAgents,
     agentMap,
-    topicMap,
-    publisherMap
+    availableDataTypes,
 }) => {
-    const refreshAsync = useAsync(api.refreshAutomationQueue);
-    const dispatchAsync = useAsync(api.dispatchAutomationQueue);
-    const scheduleAsync = useAsync(api.updateAutomationSchedule);
-    const processAsync = useAsync(api.processQueueItem);
-    const saveTopicAsync = useAsync(async (topicData: any) => {
-        if (editingTopic) {
-            return api.updateAutomationTopic(editingTopic.id, topicData);
-        } else {
-            return api.createAutomationTopic(topicData);
-        }
-    });
-    const deleteTopicAsync = useAsync(api.deleteAutomationTopic);
+    const { data: overview, isLoading, error, refetch } = useAutomationOverviewQuery();
+    const { data: publishersData } = useTelegramPublishersQuery();
+
+    const createTopic = useCreateAutomationTopicMutation();
+    const updateTopic = useUpdateAutomationTopicMutation();
+    const deleteTopic = useDeleteAutomationTopicMutation();
+    const updateSchedule = useUpdateAutomationScheduleMutation();
+    const refreshQueue = useRefreshAutomationQueueMutation();
+    const dispatchQueue = useDispatchAutomationQueueMutation();
+    const dispatchItem = useDispatchQueueItemMutation();
+    const failItem = useFailQueueItemMutation();
+    const retryExecution = useRetryAutomationExecutionMutation();
+    const testRun = useAutomationTestRunMutation();
 
     const [showAutomationModal, setShowAutomationModal] = useState(false);
-    const [editingTopic, setEditingTopic] = useState<any>(null);
+    const [editingTopic, setEditingTopic] = useState<AgentTopicRoute | null>(null);
     const [previewQueueItem, setPreviewQueueItem] = useState<any>(null);
+    const [dispatchDryRun, setDispatchDryRun] = useState(false);
 
-    const advanced = dataHub.advanced || { telegramPublishers: [] };
-    const automation = dataHub.automation;
+    const topics = overview?.topics ?? [];
+    const schedule = overview?.schedule;
+    const automationQueue = overview?.queue ?? [];
+    const executions = overview?.executions ?? [];
+    const summary = overview?.summary;
 
-    const availableDataTypes = useMemo(() => {
-        const types = new Set<string>();
-        dataHub.sources.forEach(s => types.add(s.type));
-        return Array.from(types);
-    }, [dataHub.sources]);
+    const publisherMap = useMemo(() => {
+        const map: Record<string, { id: string; name: string }> = {};
+        for (const p of publishersData?.publishers ?? []) {
+            map[p.id] = { id: p.id, name: p.name };
+        }
+        return map;
+    }, [publishersData]);
 
-    const automationSummary = useMemo(() => {
-        if (!automation) return null;
-        return {
-            totalTopics: automation.agentTopics.length,
-            enabledTopics: automation.agentTopics.filter(t => t.enabled).length,
-            linkedPublishers: automation.agentTopics.reduce((acc, t) => acc + t.publisherTargets.length, 0),
-            avgPassRate: automation.agentTopics.length > 0
-                ? Math.round(automation.agentTopics.reduce((acc, t) => acc + (t.stats?.last24h?.passRate || 0), 0) / automation.agentTopics.length)
-                : 0
-        };
-    }, [automation]);
+    const publishersForModal: TelegramPublisher[] = useMemo(
+        () =>
+            (publishersData?.publishers ?? []).map(p => ({
+                id: p.id,
+                name: p.name,
+                botToken: p.has_bot_token ? 'configured' : '',
+                chatId: p.channel_id,
+                enabled: p.is_active,
+                filters: {},
+                template: p.template || '',
+                sentCount: p.sent_count,
+            })),
+        [publishersData],
+    );
 
-    const automationQueue = automation?.queue || [];
-    const automationHistory = advanced.publisherHistory || [];
+    const topicMap = useMemo(() => {
+        const map = new Map<string, AgentTopicRoute>();
+        topics.forEach(topic => map.set(topic.id, topic));
+        return map;
+    }, [topics]);
 
-    const normalizedRecordMap = new Map<string, any>();
+    const historyForUi = useMemo(
+        () =>
+            executions.map((entry: AutomationExecutionRecord) => ({
+                id: entry.id,
+                queueId: entry.queueId || '',
+                recordId: entry.recordId || '',
+                topicId: entry.topicId || '',
+                publisherId: entry.publisherId || '',
+                agentId: entry.agentId || '',
+                status: entry.status,
+                sentAt: entry.sentAt,
+                latencyMs: entry.latencyMs,
+                payloadPreview: entry.payloadPreview || entry.errorMessage || '',
+                dryRun: entry.dryRun,
+            })),
+        [executions],
+    );
 
     const handleRefreshAutomation = async () => {
-        try {
-            const updated = await refreshAsync.execute();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to refresh automation:', e);
-        }
+        await refreshQueue.mutateAsync();
     };
 
     const handleDispatchAutomation = async () => {
-        try {
-            await dispatchAsync.execute();
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to dispatch automation:', e);
-        }
+        const limit = schedule?.maxItemsPerRun ?? 5;
+        await dispatchQueue.mutateAsync({ limit, dry_run: dispatchDryRun });
     };
 
     const handleToggleSchedule = async (enabled: boolean) => {
-        if (!automation?.schedule) return;
-        try {
-            await scheduleAsync.execute({ ...automation.schedule, enabled });
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to update schedule:', e);
-        }
+        if (!schedule) return;
+        await updateSchedule.mutateAsync({ ...schedule, enabled });
     };
 
     const handleUpdateScheduleInterval = async (minutes: number) => {
-        if (!automation?.schedule) return;
-        try {
-            await scheduleAsync.execute({ ...automation.schedule, intervalMinutes: minutes });
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to update schedule interval:', e);
-        }
+        if (!schedule) return;
+        await updateSchedule.mutateAsync({ ...schedule, intervalMinutes: minutes });
     };
 
     const handleProcessQueueItem = async (itemId: string, action: 'sent' | 'failed') => {
-        try {
-            await processAsync.execute(itemId, action);
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            if (previewQueueItem?.id === itemId) {
-                setPreviewQueueItem(null);
-            }
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to process item:', e);
+        if (action === 'sent') {
+            await dispatchItem.mutateAsync({ id: itemId, dry_run: dispatchDryRun });
+        } else {
+            await failItem.mutateAsync(itemId);
+        }
+        if (previewQueueItem?.id === itemId) {
+            setPreviewQueueItem(null);
         }
     };
 
-    const handleSaveTopic = async (topicData: any) => {
-        try {
-            await saveTopicAsync.execute(topicData);
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-            setShowAutomationModal(false);
-            setEditingTopic(null);
-        } catch (e: any) {
-            console.error('Failed to save topic:', e);
+    const handleSaveTopic = async (topicData: AgentTopicFormValues) => {
+        const agentName = agentMap[topicData.agentId]?.name;
+        if (editingTopic) {
+            await updateTopic.mutateAsync({ id: editingTopic.id, values: { ...topicData, agentName } });
+        } else {
+            await createTopic.mutateAsync({ ...topicData, agentName });
         }
+        setShowAutomationModal(false);
+        setEditingTopic(null);
     };
 
     const handleDeleteTopic = async (topicId: string) => {
-        const confirmed = window.confirm(t('confirm_delete') || 'Are you sure?');
-        if (confirmed) {
-            try {
-                await deleteTopicAsync.execute(topicId);
-                const updated = await api.fetchDataHubState();
-                setDataHub(updated);
-                onRefresh();
-            } catch (e: any) {
-                console.error('Failed to delete topic:', e);
-            }
+        if (window.confirm(t('confirm_delete'))) {
+            await deleteTopic.mutateAsync(topicId);
         }
     };
 
-    const isLoading = refreshAsync.isLoading || dispatchAsync.isLoading || scheduleAsync.isLoading || saveTopicAsync.isLoading || deleteTopicAsync.isLoading || processAsync.isLoading;
+    const handleTestRun = async () => {
+        await testRun.mutateAsync({ dry_run: true });
+    };
+
+    const handleRetry = async (executionId: string) => {
+        await retryExecution.mutateAsync(executionId);
+    };
+
+    const combinedError =
+        (error as Error | null)?.message ||
+        createTopic.error?.message ||
+        updateTopic.error?.message ||
+        dispatchQueue.error?.message ||
+        null;
+
+    const isBusy =
+        createTopic.isPending ||
+        updateTopic.isPending ||
+        deleteTopic.isPending ||
+        updateSchedule.isPending ||
+        refreshQueue.isPending ||
+        dispatchQueue.isPending ||
+        dispatchItem.isPending ||
+        failItem.isPending ||
+        retryExecution.isPending ||
+        testRun.isPending;
 
     return (
-        <ApiWrapper
-            error={refreshAsync.error || dispatchAsync.error || scheduleAsync.error || saveTopicAsync.error || deleteTopicAsync.error || processAsync.error}
-            setError={() => {
-                refreshAsync.setError(null);
-                dispatchAsync.setError(null);
-                scheduleAsync.setError(null);
-                saveTopicAsync.setError(null);
-                deleteTopicAsync.setError(null);
-                processAsync.setError(null);
-            }}
-            isLoading={isLoading}
-        >
-            <div className="bg-card border border-border rounded-lg p-4">
-                {!automation ? (
-                    <div className="py-10">
-                        <h3 className="font-semibold text-foreground mb-4">{t('automation_routing') || 'Automation Routing'}</h3>
-                        <p className="text-sm text-muted-foreground">{t('automation_missing_config') || 'Automation module not configured yet.'}</p>
-                    </div>
-                ) : (
-                    <>
-                        {/* Header */}
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-                            <div>
-                                <h3 className="font-semibold text-foreground flex items-center gap-2">
-                                    🤖 {t('automation_routing') || 'Automation & Routing'}
-                                </h3>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {t('automation_desc') || 'Define how data flows through agents and publishers based on topics and rules.'}
-                                </p>
-                            </div>
-                            <div className="flex gap-2">
-                                <ActionButton
-                                    variant="secondary"
-                                    size="sm"
-                                    loading={refreshAsync.isLoading}
-                                    onClick={handleRefreshAutomation}
-                                >
-                                    🔄 {t('refresh') || 'Refresh'}
-                                </ActionButton>
-                                <ActionButton
-                                    variant="primary"
-                                    size="sm"
-                                    onClick={() => {
-                                        setEditingTopic(null);
-                                        setShowAutomationModal(true);
-                                    }}
-                                >
-                                    + {t('add_topic') || 'Add Topic'}
-                                </ActionButton>
-                            </div>
-                        </div>
+        <div className={DATAHUB_SHELL}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+                <div>
+                    <h3 className="text-sm md:text-base font-semibold text-foreground">
+                        {t('automation_routing')}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">{t('automation_desc')}</p>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                    <DataHubToggle
+                        id="automation-dry-run"
+                        checked={dispatchDryRun}
+                        onChange={setDispatchDryRun}
+                        label={t('dry_run')}
+                    />
+                    <button
+                        type="button"
+                        disabled={testRun.isPending}
+                        onClick={handleTestRun}
+                        className={BTN_SECONDARY}
+                    >
+                        {t('test_run')}
+                    </button>
+                    <button
+                        type="button"
+                        disabled={refreshQueue.isPending}
+                        onClick={handleRefreshAutomation}
+                        className={BTN_SECONDARY}
+                    >
+                        {t('refresh')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setEditingTopic(null);
+                            setShowAutomationModal(true);
+                        }}
+                        className={BTN_PRIMARY}
+                    >
+                        {t('add_topic')}
+                    </button>
+                </div>
+            </div>
 
-                        {/* Metrics */}
-                        {automationSummary && (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                                <SummaryCard
-                                    label={t('automation_topics') || 'Topics'}
-                                    value={automationSummary.totalTopics}
-                                    icon={<span className="text-2xl">📚</span>}
-                                />
-                                <SummaryCard
-                                    label={t('active_routing') || 'Active'}
-                                    value={automationSummary.enabledTopics}
-                                    variant="success"
-                                    icon={<span className="text-2xl">⚡</span>}
-                                />
-                                <SummaryCard
-                                    label={t('queue_size') || 'In Queue'}
-                                    value={automationQueue.length}
-                                    variant={automationQueue.length > 50 ? 'warning' : 'default'}
-                                    icon={<span className="text-2xl">📥</span>}
-                                />
-                                <SummaryCard
-                                    label={t('avg_pass_rate') || 'Avg Pass Rate'}
-                                    value={`${automationSummary.avgPassRate}%`}
-                                    variant={automationSummary.avgPassRate < 80 ? 'warning' : 'success'}
-                                    icon={<span className="text-2xl">📊</span>}
-                                />
-                            </div>
-                        )}
+            {combinedError && (
+                <DataHubAlert
+                    variant="error"
+                    message={combinedError}
+                    onRetry={() => refetch()}
+                    retryLabel={t('retry')}
+                />
+            )}
 
-                        {/* Schedule Configuration */}
-                        {automation.schedule && (
-                            <AutomationSchedulePanel
-                                schedule={{
-                                    enabled: automation.schedule.enabled,
-                                    interval: automation.schedule.intervalMinutes,
-                                    lastRun: automation.schedule.lastRun ? formatTimeAgo(automation.schedule.lastRun) : undefined,
-                                    nextRun: automation.schedule.nextRun ? formatTimeAgo(automation.schedule.nextRun) : undefined,
-                                }}
-                                isUpdating={scheduleAsync.isLoading}
-                                onToggle={handleToggleSchedule}
-                                onUpdateInterval={handleUpdateScheduleInterval}
-                                t={t}
+            {isLoading && !overview ? (
+                <div className="py-12 text-center text-xs text-muted-foreground">{t('automation_loading')}</div>
+            ) : (
+                <>
+                    {summary && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                            <MetricCard label={t('automation_topics')} value={summary.totalTopics} color="blue" />
+                            <MetricCard
+                                label={t('active_routing')}
+                                value={summary.enabledTopics}
+                                color="emerald"
                             />
-                        )}
+                            <MetricCard
+                                label={t('queue_size')}
+                                value={summary.queueSize}
+                                color={summary.queueSize > 50 ? 'amber' : 'purple'}
+                            />
+                            <MetricCard
+                                label={t('avg_pass_rate')}
+                                value={`${summary.avgPassRate}%`}
+                                color={summary.avgPassRate < 80 ? 'amber' : 'emerald'}
+                            />
+                        </div>
+                    )}
 
-                        {/* Topics Routing Rules */}
-                        <div className="mb-8">
-                            {automation.agentTopics.length > 0 ? (
-                                <AutomationTopicList
-                                    topics={automation.agentTopics}
-                                    agentMap={agentMap}
-                                    publisherMap={publisherMap}
-                                    t={t}
-                                    onEdit={(topic) => {
-                                        setEditingTopic(topic);
-                                        setShowAutomationModal(true);
-                                    }}
-                                    onDelete={handleDeleteTopic}
-                                    deletingTopicId={deleteTopicAsync.isLoading ? (deleteTopicAsync as any).args?.[0] : null}
-                                />
+                    {schedule && (
+                        <AutomationSchedulePanel
+                            schedule={{
+                                enabled: schedule.enabled,
+                                interval: schedule.intervalMinutes,
+                                lastRun: schedule.lastRun ? formatTimeAgo(schedule.lastRun) : undefined,
+                                nextRun: schedule.nextRun ? formatTimeAgo(schedule.nextRun) : undefined,
+                            }}
+                            isUpdating={updateSchedule.isPending}
+                            onToggle={handleToggleSchedule}
+                            onUpdateInterval={handleUpdateScheduleInterval}
+                            t={t}
+                        />
+                    )}
+
+                    <div className="mb-6">
+                        {topics.length > 0 ? (
+                            <AutomationTopicList
+                                topics={topics}
+                                agentMap={agentMap}
+                                publisherMap={publisherMap}
+                                t={t}
+                                onEdit={topic => {
+                                    setEditingTopic(topic);
+                                    setShowAutomationModal(true);
+                                }}
+                                onDelete={handleDeleteTopic}
+                                deletingTopicId={deleteTopic.isPending ? deleteTopic.variables : null}
+                            />
+                        ) : (
+                            <DataHubEmpty message={t('automation_no_topics')} />
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <AutomationQueueManager
+                            queue={automationQueue.map(item => ({
+                                ...item,
+                                topicId: topicMap.get(item.topicId)?.title || item.topicId,
+                            }))}
+                            isDispatching={dispatchQueue.isPending}
+                            onDispatch={handleDispatchAutomation}
+                            onPreview={setPreviewQueueItem}
+                            onProcess={handleProcessQueueItem}
+                            processingId={
+                                dispatchItem.isPending || failItem.isPending
+                                    ? dispatchItem.variables?.id || failItem.variables
+                                    : null
+                            }
+                            formatTimeAgo={formatTimeAgo}
+                            t={t}
+                        />
+
+                        <div className={DATAHUB_INNER_LIST}>
+                            <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-[11px] font-semibold text-foreground">
+                                    {t('automation_history_heading')}
+                                </h4>
+                                <span className="text-[10px] text-muted-foreground">
+                                    {historyForUi.length} {t('items')}
+                                </span>
+                            </div>
+                            {historyForUi.length > 0 ? (
+                                <div className="space-y-2 max-h-80 overflow-y-auto">
+                                    {historyForUi.slice(0, 8).map(entry => {
+                                        const topic = topicMap.get(entry.topicId);
+                                        const publisher = publisherMap[entry.publisherId];
+                                        const isFailed = entry.status === 'failed';
+                                        return (
+                                            <div
+                                                key={entry.id}
+                                                className="rounded-lg border border-white/5 bg-slate-950/70 p-3"
+                                            >
+                                                <div className="flex justify-between items-start mb-1 gap-2">
+                                                    <p className="font-semibold text-foreground text-[11px] line-clamp-1 flex-1">
+                                                        {entry.payloadPreview}
+                                                    </p>
+                                                    <StatusPill
+                                                        label={
+                                                            entry.dryRun
+                                                                ? t('dry_run')
+                                                                : isFailed
+                                                                  ? t('failed')
+                                                                  : t('sent')
+                                                        }
+                                                        variant={
+                                                            entry.dryRun
+                                                                ? 'info'
+                                                                : isFailed
+                                                                  ? 'error'
+                                                                  : 'success'
+                                                        }
+                                                    />
+                                                </div>
+                                                <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                                                    <span className="truncate">
+                                                        {topic?.title || entry.topicId} →{' '}
+                                                        {publisher?.name || entry.publisherId}
+                                                    </span>
+                                                    <span className="shrink-0 ml-2">
+                                                        {formatTimeAgo(entry.sentAt)}
+                                                    </span>
+                                                </div>
+                                                {isFailed && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={retryExecution.isPending}
+                                                        onClick={() => handleRetry(entry.id)}
+                                                        className={`${BTN_OUTLINE_SLATE} mt-2`}
+                                                    >
+                                                        {t('retry')}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             ) : (
-                                <EmptyState
-                                    title={t('automation_no_topics') || 'No routing rules defined'}
-                                    description={t('automation_no_topics_desc') || 'Define your first routing topic to start automating your data pipeline.'}
-                                    icon={<span className="text-3xl">🧭</span>}
-                                    className="py-10"
-                                />
+                                <DataHubEmpty message={t('no_history')} />
                             )}
                         </div>
+                    </div>
+                </>
+            )}
 
-                        {/* Queue & History Section */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
-                            <AutomationQueueManager
-                                queue={automationQueue.map(item => ({
-                                    ...item,
-                                    payloadPreview: item.payloadPreview,
-                                    topicId: topicMap.get(item.topicId)?.title || item.topicId
-                                }))}
-                                isDispatching={isDispatchingAutomation}
-                                onDispatch={handleDispatchAutomation}
-                                onPreview={setPreviewQueueItem}
-                                onProcess={handleProcessQueueItem}
-                                processingId={processAsync.isLoading ? (processAsync as any).args?.[0] + (processAsync as any).args?.[1] : null}
-                                formatTimeAgo={formatTimeAgo}
-                                t={t}
-                            />
+            {isBusy && overview && (
+                <p className="text-[10px] text-muted-foreground mt-4 text-center">{t('processing')}</p>
+            )}
 
-                            <div className="border border-border rounded-lg p-4">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h4 className="font-semibold text-foreground text-sm flex items-center gap-2">
-                                        🕒 {t('automation_history_heading') || 'Delivery History'}
-                                    </h4>
-                                    <span className="text-xs text-muted-foreground">{(advanced.publisherHistory || []).length} items</span>
-                                </div>
-                                {automationHistory.length > 0 ? (
-                                    <div className="space-y-3">
-                                        {automationHistory.slice(0, 5).map(entry => {
-                                            const topic = topicMap.get(entry.topicId);
-                                            const publisher = publisherMap[entry.publisherId];
-                                            return (
-                                                <div key={entry.id} className="border border-border rounded-lg p-3 bg-secondary/5">
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <p className="font-semibold text-foreground text-xs line-clamp-1 flex-1">{entry.payloadPreview}</p>
-                                                        <StatusBadge
-                                                            status={entry.status === 'sent' ? 'success' : 'error'}
-                                                            label={entry.status === 'sent' ? 'Sent' : 'Failed'}
-                                                            size="sm"
-                                                        />
-                                                    </div>
-                                                    <div className="flex justify-between items-center text-[10px] text-muted-foreground">
-                                                        <span>
-                                                            {topic?.title || entry.topicId} → {publisher?.name || entry.publisherId}
-                                                        </span>
-                                                        <span>{formatTimeAgo(entry.sentAt)}</span>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                        {automationHistory.length > 5 && (
-                                            <ActionButton variant="ghost" size="sm" className="w-full text-xs">
-                                                {t('view_full_history') || 'View Full History'}
-                                            </ActionButton>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <EmptyState
-                                        title={t('no_history') || 'No history yet'}
-                                        description={t('no_history_desc') || 'Successful deliveries will appear here.'}
-                                        icon={<span className="text-2xl">⏳</span>}
-                                        className="py-10"
-                                    />
-                                )}
-                            </div>
-                        </div>
+            {showAutomationModal && (
+                <AutomationTopicModal
+                    topic={editingTopic}
+                    agents={agents}
+                    isLoadingAgents={isLoadingAgents}
+                    categories={categories}
+                    dataTypes={availableDataTypes}
+                    publishers={publishersForModal}
+                    isSaving={createTopic.isPending || updateTopic.isPending}
+                    onClose={() => {
+                        setShowAutomationModal(false);
+                        setEditingTopic(null);
+                    }}
+                    onSave={handleSaveTopic}
+                    t={t}
+                />
+            )}
 
-                        {/* Modals */}
-                        {showAutomationModal && automation && (
-                            <AutomationTopicModal
-                                topic={editingTopic}
-                                agents={agents}
-                                isLoadingAgents={isLoadingAgents}
-                                categories={dataHub.categories}
-                                dataTypes={availableDataTypes}
-                                publishers={advanced.telegramPublishers}
-                                isSaving={saveTopicAsync.isLoading}
-                                onClose={() => {
-                                    setShowAutomationModal(false);
-                                    setEditingTopic(null);
-                                }}
-                                onSave={handleSaveTopic}
-                                t={t}
-                            />
-                        )}
-
-                        {previewQueueItem && (
-                            <QueuePreviewModal
-                                item={previewQueueItem}
-                                topic={topicMap.get(previewQueueItem.topicId) || null}
-                                publisherName={publisherMap[previewQueueItem.publisherId]?.name}
-                                record={normalizedRecordMap.get(previewQueueItem.recordId) || null}
-                                agent={agentMap[previewQueueItem.agentId]}
-                                onClose={() => setPreviewQueueItem(null)}
-                                onPublish={() => handleProcessQueueItem(previewQueueItem.id, 'sent')}
-                                t={t}
-                                processingId={processAsync.isLoading ? (processAsync as any).args?.[0] : null}
-                            />
-                        )}
-                    </>
-                )}
-            </div>
-        </ApiWrapper>
+            {previewQueueItem && (
+                <QueuePreviewModal
+                    item={previewQueueItem}
+                    topic={topicMap.get(previewQueueItem.topicId) || null}
+                    publisherName={publisherMap[previewQueueItem.publisherId]?.name}
+                    record={null}
+                    agent={agentMap[previewQueueItem.agentId]}
+                    onClose={() => setPreviewQueueItem(null)}
+                    onPublish={() => handleProcessQueueItem(previewQueueItem.id, 'sent')}
+                    t={t}
+                    processingId={
+                        dispatchItem.isPending && dispatchItem.variables?.id === previewQueueItem.id
+                            ? previewQueueItem.id + 'sent'
+                            : null
+                    }
+                />
+            )}
+        </div>
     );
 };
 

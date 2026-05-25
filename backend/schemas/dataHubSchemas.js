@@ -378,3 +378,96 @@ export const processMessageResponseSchema = z.object({
     normalized: normalizedMessageSchema.nullable(),
     content_hash: z.string()
 });
+
+// Pipeline snapshot (GAP-012)
+const pipelineAccessStatus = z.enum(['success', 'failed', 'cached', 'timeout']);
+const pipelineNormalizedStatus = z.enum(['ready', 'warning', 'rejected']);
+
+export const dataPipelineSnapshotSchema = z.object({
+    lastRefreshed: z.string(),
+    totalRequests24h: z.number().int().nonnegative(),
+    passed24h: z.number().int().nonnegative(),
+    failed24h: z.number().int().nonnegative(),
+    pending24h: z.number().int().nonnegative(),
+    totalRecords: z.number().int().nonnegative(),
+    normalizedPercent: z.number(),
+    sources: z.array(z.object({
+        sourceId: z.string().uuid(),
+        name: z.string(),
+        category: z.string(),
+        lastDataType: z.string(),
+        lastStatus: pipelineAccessStatus,
+        lastResponseTime: z.number().optional(),
+        lastChecked: z.string().optional(),
+        issues: z.array(z.string()).optional()
+    })),
+    categories: z.array(z.object({
+        categoryId: z.string().uuid(),
+        name: z.string(),
+        inflow: z.number().int().nonnegative(),
+        passRate: z.number()
+    }))
+});
+
+export const accessLogsQuerySchema = z.object({
+    limit: z.string().regex(/^\d+$/).transform(val => Math.min(parseInt(val, 10), 500)).optional().default('100'),
+    offset: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).optional().default('0'),
+    source_id: z.string().uuid().optional(),
+    status: z.enum(['success', 'cached', 'failed', 'timeout']).optional()
+});
+
+export const dataAccessLogSchema = z.object({
+    id: z.string().uuid(),
+    timestamp: z.string(),
+    agentId: z.string(),
+    sourceId: z.string(),
+    dataType: z.string(),
+    status: z.enum(['success', 'failed', 'cached', 'timeout']),
+    responseTime: z.number().optional(),
+    error: z.string().optional(),
+    dataSize: z.number().optional()
+});
+
+export const accessLogsListResponseSchema = z.object({
+    data: z.array(dataAccessLogSchema),
+    pagination: z.object({
+        total: z.number().int().nonnegative(),
+        limit: z.number().int().positive(),
+        offset: z.number().int().nonnegative(),
+        hasMore: z.boolean()
+    }),
+    statusCounts: z.object({
+        success: z.number().int().nonnegative(),
+        error: z.number().int().nonnegative(),
+        warning: z.number().int().nonnegative()
+    })
+});
+
+export const dataPipelineViewResponseSchema = z.object({
+    snapshot: dataPipelineSnapshotSchema,
+    history: z.array(z.object({
+        id: z.string(),
+        generatedAt: z.string(),
+        snapshot: dataPipelineSnapshotSchema
+    })),
+    normalizationSummary: z.object({
+        totalProcessed: z.number().int().nonnegative(),
+        passed: z.number().int().nonnegative(),
+        warnings: z.number().int().nonnegative(),
+        rejected: z.number().int().nonnegative(),
+        lastProcessedAt: z.string().optional()
+    }),
+    normalizedData: z.array(z.object({
+        id: z.string().uuid(),
+        sourceId: z.string().uuid(),
+        category: z.string(),
+        dataType: z.string(),
+        tags: z.array(z.string()),
+        payload: z.record(z.any()),
+        qualityScore: z.number(),
+        issues: z.array(z.string()),
+        status: pipelineNormalizedStatus,
+        receivedAt: z.string(),
+        normalizedAt: z.string()
+    }))
+});

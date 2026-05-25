@@ -87,9 +87,14 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         categoriesApiError,
         handleDeleteCategory,
         handleRefreshPipelineSnapshot,
+        pipelineSnapshot,
+        pipelineHistory,
+        normalizationSummary,
+        normalizedData,
         formatTimeAgo,
         downloadCSV,
         categoryMetricsById,
+        accessLogs,
         logStatusCounts,
         combinedCollectorHealth,
         setCollectorError,
@@ -252,7 +257,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                                 void refetchSources();
                                 onRefresh();
                             }}
-                            Card={Card}
                             downloadCSV={downloadCSV}
                             setEditingSource={setEditingSource}
                             setShowCreateSourceModal={setShowCreateSourceModal}
@@ -283,7 +287,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                                 onRefresh();
                             }}
                             handleDeleteCategory={handleDeleteCategory}
-                            Card={Card}
                             isLoading={isFetchingCategories}
                             apiError={categoriesApiError}
                             dataHub={dataHub}
@@ -293,23 +296,26 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     {activeView === 'logs' && (
                         <LogsPanel
                             t={t}
-                            accessLogs={dataHub.accessLogs}
+                            accessLogs={accessLogs}
                             logStatusCounts={logStatusCounts}
                             downloadCSV={downloadCSV}
-                            Card={Card}
-                            isLoading={isLoading}
+                            isLoading={isLoadingLogs}
                             error={logsError}
                             setError={setLogsError}
+                            onRetry={() => {
+                                setLogsError(null);
+                                onRefresh();
+                            }}
                         />
                     )}
 
                     {activeView === 'pipeline' && (
                         <PipelinePanel
                             t={t}
-                            pipelineSnapshot={dataHub.pipelineSnapshot}
-                            pipelineHistory={dataHub.pipelineHistory || []}
-                            normalizationSummary={dataHub.normalizationSummary}
-                            normalizedData={dataHub.normalizedData || []}
+                            pipelineSnapshot={pipelineSnapshot}
+                            pipelineHistory={pipelineHistory}
+                            normalizationSummary={normalizationSummary}
+                            normalizedData={normalizedData}
                             handleRefreshPipelineSnapshot={handleRefreshPipelineSnapshot}
                             isLoadingPipeline={isLoadingPipeline}
                             pipelineError={pipelineError}
@@ -317,7 +323,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             formatTimeAgo={formatTimeAgo}
                             selectedSnapshotId={selectedSnapshotId}
                             setSelectedSnapshotId={setSelectedSnapshotId}
-                            Card={Card}
                         />
                     )}
 

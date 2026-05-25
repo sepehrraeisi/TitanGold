@@ -150,16 +150,7 @@ const AdvancedFeatures: React.FC<{
             )}
 
             {activeFeature === 'access' && (
-                <AccessControlPanel
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    agents={agents}
-                    sourceQualityMap={sourceQualityMap}
-                    getStatusBadgeClass={getStatusBadgeClass}
-                />
+                <AccessControlPanel t={t} />
             )}
 
             {activeFeature === 'blacklist' && (
@@ -176,27 +167,22 @@ const AdvancedFeatures: React.FC<{
 
             {activeFeature === 'telegram' && (
                 <TelegramPublisher
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
                     t={t}
-                    agents={agents}
-                    agentMap={agentMap}
+                    telegramSources={dataHub.sources.filter(s => s.type === 'telegram')}
                 />
             )}
 
             {activeFeature === 'automation' && (
                 <AutomationTopics
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
+                    categories={dataHub.categories}
                     t={t}
                     formatTimeAgo={formatTimeAgo}
                     agents={agents}
                     isLoadingAgents={isLoadingAgents}
                     agentMap={agentMap}
-                    topicMap={topicMap}
-                    publisherMap={publisherMap}
+                    availableDataTypes={Array.from(
+                        new Set(dataHub.sources.map(s => s.type).filter(Boolean)),
+                    )}
                 />
             )}
 
