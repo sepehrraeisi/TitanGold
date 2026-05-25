@@ -189,3 +189,27 @@ Root-cause fix: `012_add_ab_testing` FK removed (partitioned `ai_decisions`). De
 | **Auth write** | POST/DELETE without admin/trader | **403** | — |
 
 Design: full pass per `DESIGN_SYSTEM_DATAHUB.md` (modal §10, metrics §2.4, badges §7).
+
+### dataHub.advanced.blacklist – Filter rules (GAP-024 closed)
+
+| سناریو | Endpoint | Expected | UI |
+|--------|----------|----------|-----|
+| **List rules** | `GET /api/v1/data-hub/filter-rules` | **200** + `rules[]` | Blacklist / Whitelist / All Rules tabs |
+| **Create blacklist domain** | `POST` `{ rule_type: blacklist, scope: domain, pattern: evil.com, match_type: contains, apply_target: ingestion }` | **201** | Add rule → Save |
+| **Create whitelist source** | `POST` `{ rule_type: whitelist, scope: source, pattern: <uuid>, match_type: exact }` | **201** | Whitelist tab |
+| **Create keyword regex** | `POST` `{ scope: keyword, match_type: regex, pattern: spam\|scam }` | **201** | All Rules tab |
+| **Evaluate blocked** | `POST /evaluate` `{ url, text, apply_target: ingestion }` with matching blacklist | **200** `allowed: false` | Evaluate tab → Blocked |
+| **Evaluate allowed** | `POST /evaluate` with whitelist match or no rules | **200** `allowed: true` | Evaluate tab → Allowed |
+| **Soft delete** | `DELETE /:id` | **200** `deleted_at` set | Delete → confirm |
+| **Invalid regex** | `POST` with `match_type: regex`, `pattern: [` | **400** | Modal / API error message |
+| **Duplicate rule** | Same `rule_type+scope+pattern+match_type` active row | **409** | Conflict message |
+| **Ingestion enforce** | `POST /api/v1/collected-data` while blacklisted | **403** `FILTER_BLOCKED` | — |
+| **Auth write** | POST/PUT/DELETE without admin/trader | **403** | — |
+
+**Priority / conflict:** higher `priority` wins; tie at same priority → **whitelist** beats **blacklist**.
+
+```bash
+cd backend && npm run migrate   # applies 028_create_datahub_filter_rules.sql
+```
+
+Design: slate shell, metric cards, `FilterRuleModal`, no IndexedDB / `services/api.ts` blacklist helpers in panel.

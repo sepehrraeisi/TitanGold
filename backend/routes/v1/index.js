@@ -41,6 +41,7 @@ import topicRoutingRoutes from '../topic-routing.js';
 import telegramRoutes from '../telegram.js';
 import telegramPublishersRoutes from '../telegram-publishers.js';
 import dataHubAutomationRoutes from '../data-hub-automation.js';
+import dataHubFilterRulesRoutes from '../data-hub-filter-rules.js';
 
 const router = express.Router();
 
@@ -84,6 +85,7 @@ router.use('/data-categories', dataCategoryRoutes);
 router.use('/data-hub/access-control', accessControlRoutes);
 router.use('/data-hub/telegram-publishers', telegramPublishersRoutes);
 router.use('/data-hub/automation', dataHubAutomationRoutes);
+router.use('/data-hub/filter-rules', dataHubFilterRulesRoutes);
 router.use('/topic-routing', topicRoutingRoutes);
 router.use('/telegram', telegramRoutes);
 

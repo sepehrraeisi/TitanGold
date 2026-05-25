@@ -1,179 +1,353 @@
-
-import React, { useState, useMemo } from 'react';
-import * as api from '../../../../../../services/api';
-import { DataHubState } from '../../../../../../types';
-import { SummaryCard } from '../../../../../ui/summary-card';
-import { EmptyState } from '../../../../../ui/empty-state';
-import { ActionButton } from '../../../../../ui/action-button';
-import { StatusBadge } from '../../../../../ui/status-badge';
-import ApiWrapper from '../../../../../common/ApiWrapper';
-import { useAsync } from '../../../../../../hooks/useAsync';
+import React, { useMemo, useState } from 'react';
+import FilterRuleModal from '../modals/FilterRuleModal';
+import {
+    useDataHubFilterRulesQuery,
+    useCreateFilterRuleMutation,
+    useUpdateFilterRuleMutation,
+    useDeleteFilterRuleMutation,
+    useEvaluateFilterRulesMutation,
+} from '../../../../../../hooks/useDataHubFilterRules';
+import type {
+    CreateFilterRulePayload,
+    DataHubFilterRule,
+} from '../../../../../../services/dataHubFilterRulesApi';
+import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 
 interface BlacklistWhitelistProps {
-    dataHub: DataHubState;
-    setDataHub: (hub: DataHubState) => void;
-    onRefresh: () => void;
     t: (key: string) => string;
-    formatTimeAgo: (timestamp?: string) => string;
-    sourceQualityMap: Record<string, any>;
-    prioritizationSummary: { lastUpdate?: string };
 }
 
-const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({
-    dataHub,
-    setDataHub,
-    onRefresh,
-    t,
-    formatTimeAgo,
-    sourceQualityMap,
-    prioritizationSummary
-}) => {
-    const [activeTab, setActiveTab] = useState<'blacklist' | 'whitelist' | 'rules'>('blacklist');
-    const [searchTerm, setSearchTerm] = useState('');
-    const listAsync = useAsync(async () => {
-        // Placeholder for future refresh
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return dataHub;
+const SHELL =
+    'bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg rounded-xl p-4 md:p-5';
+
+const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
+    const { data: rules = [], isLoading, error, refetch } = useDataHubFilterRulesQuery({
+        active_only: true,
     });
+    const createMut = useCreateFilterRuleMutation();
+    const updateMut = useUpdateFilterRuleMutation();
+    const deleteMut = useDeleteFilterRuleMutation();
+    const evaluateMut = useEvaluateFilterRulesMutation();
 
-    const advanced = dataHub.advanced || { blacklist: { sources: [], reasons: {} }, whitelist: { sources: [] } };
-    const blacklist = advanced.blacklist;
-    const whitelist = advanced.whitelist;
+    const [activeTab, setActiveTab] = useState<'blacklist' | 'whitelist' | 'rules' | 'evaluate'>(
+        'blacklist',
+    );
+    const [searchTerm, setSearchTerm] = useState('');
+    const [modalRule, setModalRule] = useState<DataHubFilterRule | null | undefined>(undefined);
+    const [evalUrl, setEvalUrl] = useState('');
+    const [evalText, setEvalText] = useState('');
+    const [evalTarget, setEvalTarget] = useState<'ingestion' | 'publishing'>('ingestion');
 
-    const metrics = useMemo(() => ({
-        blockedCount: blacklist.sources.length,
-        trustedCount: whitelist.sources.length,
-        activeRules: 5, // Placeholder
-        lastSync: new Date().toISOString()
-    }), [blacklist, whitelist]);
+    const blacklistRules = useMemo(
+        () => rules.filter(r => r.rule_type === 'blacklist'),
+        [rules],
+    );
+    const whitelistRules = useMemo(
+        () => rules.filter(r => r.rule_type === 'whitelist'),
+        [rules],
+    );
+
+    const metrics = useMemo(
+        () => ({
+            blockedCount: blacklistRules.length,
+            trustedCount: whitelistRules.length,
+            activeRules: rules.filter(r => r.is_active).length,
+            keywordRules: rules.filter(r => r.scope === 'keyword').length,
+        }),
+        [rules, blacklistRules, whitelistRules],
+    );
+
+    const tabRules = useMemo(() => {
+        if (activeTab === 'blacklist') return blacklistRules;
+        if (activeTab === 'whitelist') return whitelistRules;
+        if (activeTab === 'rules') return rules;
+        return [];
+    }, [activeTab, blacklistRules, whitelistRules, rules]);
+
+    const filtered = useMemo(() => {
+        const q = searchTerm.trim().toLowerCase();
+        if (!q) return tabRules;
+        return tabRules.filter(
+            r =>
+                r.pattern.toLowerCase().includes(q) ||
+                (r.reason || '').toLowerCase().includes(q) ||
+                r.scope.includes(q),
+        );
+    }, [tabRules, searchTerm]);
+
+    const apiError =
+        error instanceof DataHubApiError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : null;
+
+    const handleSave = async (
+        payload: CreateFilterRulePayload & { is_active: boolean },
+    ) => {
+        if (modalRule && modalRule.id) {
+            await updateMut.mutateAsync({ id: modalRule.id, payload });
+        } else {
+            await createMut.mutateAsync(payload);
+        }
+        setModalRule(undefined);
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!window.confirm(t('filter_rule_delete_confirm'))) return;
+        await deleteMut.mutateAsync(id);
+    };
+
+    const renderRuleRow = (rule: DataHubFilterRule) => (
+        <div
+            key={rule.id}
+            className={`rounded-xl border border-white/5 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 ${
+                rule.rule_type === 'blacklist'
+                    ? 'bg-gradient-to-r from-red-500/5 to-transparent'
+                    : 'bg-gradient-to-r from-emerald-500/5 to-transparent'
+            }`}
+        >
+            <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                    <span
+                        className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                            rule.rule_type === 'blacklist'
+                                ? 'bg-red-500/20 text-red-300'
+                                : 'bg-emerald-500/20 text-emerald-300'
+                        }`}
+                    >
+                        {t(rule.rule_type)}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground uppercase">
+                        {t(`filter_scope_${rule.scope}`)}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                        {rule.match_type} · {rule.apply_target} · P{rule.priority}
+                    </span>
+                </div>
+                <p className="font-mono text-sm text-foreground mt-1 truncate">{rule.pattern}</p>
+                {rule.reason ? (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{rule.reason}</p>
+                ) : null}
+            </div>
+            <div className="flex gap-2 shrink-0">
+                <button
+                    type="button"
+                    onClick={() => setModalRule(rule)}
+                    className="text-[11px] px-2 py-1 rounded-full border border-white/10 hover:border-purple-500/50"
+                >
+                    {t('edit')}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleDelete(rule.id)}
+                    disabled={deleteMut.isPending}
+                    className="text-[11px] px-2 py-1 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10"
+                >
+                    {t('delete')}
+                </button>
+            </div>
+        </div>
+    );
 
     return (
-        <ApiWrapper error={listAsync.error} setError={listAsync.setError} isLoading={listAsync.isLoading}>
-            <div className="bg-card border border-border rounded-lg p-4">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-                    <div>
-                        <h3 className="font-semibold text-foreground flex items-center gap-2">
-                            🛡️ {t('safety_filtering') || 'Safety & Filtering'}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {t('safety_filtering_desc') || 'Manage blocked domains, trusted sources, and automatic filtering rules.'}
-                        </p>
-                    </div>
+        <div className={SHELL}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <div>
+                    <h3 className="text-sm md:text-base font-semibold text-foreground flex items-center gap-2">
+                        {t('safety_filtering')}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
+                        {t('safety_filtering_desc')}
+                    </p>
                 </div>
-
-                {/* Metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    <SummaryCard
-                        label={t('blocked_sources') || 'Blacklisted'}
-                        value={metrics.blockedCount}
-                        variant="error"
-                        icon={<span className="text-2xl">🚫</span>}
-                    />
-                    <SummaryCard
-                        label={t('trusted_sources') || 'Whitelisted'}
-                        value={metrics.trustedCount}
-                        variant="success"
-                        icon={<span className="text-2xl">✅</span>}
-                    />
-                    <SummaryCard
-                        label={t('filtering_rules') || 'Active Rules'}
-                        value={metrics.activeRules}
-                        icon={<span className="text-2xl">📖</span>}
-                    />
-                    <SummaryCard
-                        label={t('last_filter_sync') || 'Last Sync'}
-                        value="Just now"
-                        icon={<span className="text-2xl">🔄</span>}
-                    />
-                </div>
-
-                {/* Tabs */}
-                <div className="flex gap-6 border-b border-border mb-6">
-                    {(['blacklist', 'whitelist', 'rules'] as const).map(tab => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`pb-3 text-xs font-bold transition-all relative ${activeTab === tab ? 'text-purple-400' : 'text-muted-foreground hover:text-foreground'
-                                }`}
-                        >
-                            {t(`safety_tab_${tab}`) || tab.toUpperCase()}
-                            {activeTab === tab && <div className="absolute bottom-0 left-0 right-0 h-1 bg-purple-400 rounded-full" />}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Filters */}
-                <div className="flex gap-2 mb-4">
-                    <input
-                        type="text"
-                        placeholder={`Search ${activeTab}...`}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm"
-                    />
-                    <ActionButton variant="primary" size="sm">+ Add Entry</ActionButton>
-                </div>
-
-                {/* List Content */}
-                {activeTab === 'blacklist' && (
-                    <div className="space-y-2">
-                        {blacklist.sources.length > 0 ? (
-                            blacklist.sources.map(source => (
-                                <div key={source} className="border border-border rounded-lg p-3 flex justify-between items-center bg-red-500/5">
-                                    <div>
-                                        <p className="font-mono text-sm text-red-400">{source}</p>
-                                        <p className="text-[10px] text-muted-foreground mt-1">
-                                            Reason: {blacklist.reasons[source] || 'Low quality / Suspicious behavior'}
-                                        </p>
-                                    </div>
-                                    <ActionButton variant="ghost" size="sm" className="text-muted-foreground hover:text-green-400">Unblock</ActionButton>
-                                </div>
-                            ))
-                        ) : (
-                            <EmptyState title="Blacklist is empty" description="No domains or sources are currently blocked." icon={<span className="text-3xl">🛡️</span>} />
-                        )}
-                    </div>
-                )}
-
-                {activeTab === 'whitelist' && (
-                    <div className="space-y-2">
-                        {whitelist.sources.length > 0 ? (
-                            whitelist.sources.map(source => (
-                                <div key={source} className="border border-border rounded-lg p-3 flex justify-between items-center bg-green-500/5">
-                                    <div>
-                                        <p className="font-mono text-sm text-green-400">{source}</p>
-                                        <p className="text-[10px] text-muted-foreground mt-1">Trusted since: Oct 12, 2023</p>
-                                    </div>
-                                    <ActionButton variant="ghost" size="sm" className="text-muted-foreground hover:text-red-400">Remove</ActionButton>
-                                </div>
-                            ))
-                        ) : (
-                            <EmptyState title="Whitelist is empty" description="No sources are marked as permanently trusted." icon={<span className="text-3xl">💎</span>} />
-                        )}
-                    </div>
-                )}
-
-                {activeTab === 'rules' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {[
-                            { name: 'Auto-Block Failed Connections', desc: 'Block sources that fail 3 consecutive attempts.', enabled: true },
-                            { name: 'Spam Pattern Detection', desc: 'Auto-blacklist sources matching known spam regex.', enabled: true },
-                            { name: 'VIP Priority Whitelist', desc: 'Never block official API endpoints.', enabled: true },
-                            { name: 'Temporary TTL Blocks', desc: 'Block rate-limited sources for 1 hour.', enabled: false },
-                        ].map(rule => (
-                            <div key={rule.name} className="border border-border rounded-lg p-4 bg-secondary/5">
-                                <div className="flex justify-between mb-2">
-                                    <h5 className="font-bold text-sm">{rule.name}</h5>
-                                    <input type="checkbox" checked={rule.enabled} className="rounded" readOnly />
-                                </div>
-                                <p className="text-xs text-muted-foreground">{rule.desc}</p>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                <button
+                    type="button"
+                    onClick={() => refetch()}
+                    disabled={isLoading}
+                    className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white shadow-sm disabled:opacity-50"
+                >
+                    {isLoading ? t('refreshing') : t('refresh')}
+                </button>
             </div>
-        </ApiWrapper>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-6">
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-red-300/80 mb-1">{t('blocked_sources')}</p>
+                    <p className="text-sm font-semibold text-red-100">{metrics.blockedCount}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-emerald-300/80 mb-1">{t('trusted_sources')}</p>
+                    <p className="text-sm font-semibold text-emerald-100">{metrics.trustedCount}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-purple-300/80 mb-1">{t('filtering_rules')}</p>
+                    <p className="text-sm font-semibold text-purple-100">{metrics.activeRules}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-amber-300/80 mb-1">{t('filter_metric_keywords')}</p>
+                    <p className="text-sm font-semibold text-amber-100">{metrics.keywordRules}</p>
+                </div>
+            </div>
+
+            {apiError ? (
+                <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                    {apiError}
+                </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-4 border-b border-white/10 mb-4">
+                {(['blacklist', 'whitelist', 'rules', 'evaluate'] as const).map(tab => (
+                    <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setActiveTab(tab)}
+                        className={`pb-2 text-[11px] font-bold transition-all relative ${
+                            activeTab === tab
+                                ? 'text-purple-400'
+                                : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                    >
+                        {t(`safety_tab_${tab}`)}
+                        {activeTab === tab ? (
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 rounded-full" />
+                        ) : null}
+                    </button>
+                ))}
+            </div>
+
+            {activeTab !== 'evaluate' ? (
+                <>
+                    <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                        <input
+                            type="text"
+                            placeholder={t('blacklist_search_placeholder')}
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-slate-900/60 text-sm text-foreground"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setModalRule(null)}
+                            className="text-[11px] px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white whitespace-nowrap"
+                        >
+                            {t('filter_rule_add')}
+                        </button>
+                    </div>
+
+                    {isLoading ? (
+                        <p className="text-[11px] text-muted-foreground py-8 text-center">
+                            {t('loading')}
+                        </p>
+                    ) : filtered.length > 0 ? (
+                        <div className="space-y-2">{filtered.map(renderRuleRow)}</div>
+                    ) : (
+                        <div className="text-center py-10 text-muted-foreground">
+                            <p className="text-sm font-medium">
+                                {activeTab === 'blacklist'
+                                    ? t('filter_empty_blacklist')
+                                    : activeTab === 'whitelist'
+                                      ? t('filter_empty_whitelist')
+                                      : t('filter_empty_rules')}
+                            </p>
+                            <p className="text-[11px] mt-1">{t('filter_empty_hint')}</p>
+                        </div>
+                    )}
+                </>
+            ) : (
+                <div className="space-y-3 max-w-xl">
+                    <p className="text-[11px] text-muted-foreground">{t('filter_evaluate_desc')}</p>
+                    <label className="block text-[11px] text-muted-foreground">
+                        {t('filter_evaluate_url')}
+                        <input
+                            value={evalUrl}
+                            onChange={e => setEvalUrl(e.target.value)}
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm font-mono"
+                            placeholder="https://example.com/article"
+                        />
+                    </label>
+                    <label className="block text-[11px] text-muted-foreground">
+                        {t('filter_evaluate_text')}
+                        <textarea
+                            value={evalText}
+                            onChange={e => setEvalText(e.target.value)}
+                            rows={3}
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm resize-none"
+                        />
+                    </label>
+                    <label className="block text-[11px] text-muted-foreground">
+                        {t('filter_apply_target')}
+                        <select
+                            value={evalTarget}
+                            onChange={e =>
+                                setEvalTarget(e.target.value as 'ingestion' | 'publishing')
+                            }
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm"
+                        >
+                            <option value="ingestion">{t('filter_target_ingestion')}</option>
+                            <option value="publishing">{t('filter_target_publishing')}</option>
+                        </select>
+                    </label>
+                    <button
+                        type="button"
+                        disabled={evaluateMut.isPending}
+                        onClick={() =>
+                            evaluateMut.mutate({
+                                url: evalUrl || undefined,
+                                text: evalText || undefined,
+                                apply_target: evalTarget,
+                            })
+                        }
+                        className="text-[11px] px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+                    >
+                        {evaluateMut.isPending ? t('loading') : t('filter_evaluate_run')}
+                    </button>
+                    {evaluateMut.data ? (
+                        <div
+                            className={`rounded-lg border px-3 py-2 text-[11px] ${
+                                evaluateMut.data.allowed
+                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                    : 'border-red-500/30 bg-red-500/10 text-red-200'
+                            }`}
+                        >
+                            <p className="font-semibold">
+                                {evaluateMut.data.allowed
+                                    ? t('filter_eval_allowed')
+                                    : t('filter_eval_blocked')}
+                            </p>
+                            <p className="mt-1 opacity-80">
+                                {evaluateMut.data.reason} · {evaluateMut.data.decision}
+                            </p>
+                            {evaluateMut.data.matched_rules?.length ? (
+                                <p className="mt-1 font-mono opacity-70">
+                                    {evaluateMut.data.matched_rules[0]?.pattern}
+                                </p>
+                            ) : null}
+                        </div>
+                    ) : null}
+                    {evaluateMut.error instanceof DataHubApiError ? (
+                        <p className="text-[11px] text-red-300">{evaluateMut.error.message}</p>
+                    ) : null}
+                </div>
+            )}
+
+            {modalRule !== undefined ? (
+                <FilterRuleModal
+                    rule={modalRule || undefined}
+                    defaultRuleType={
+                        activeTab === 'whitelist'
+                            ? 'whitelist'
+                            : activeTab === 'blacklist'
+                              ? 'blacklist'
+                              : 'blacklist'
+                    }
+                    onClose={() => setModalRule(undefined)}
+                    onSave={handleSave}
+                    isSaving={createMut.isPending || updateMut.isPending}
+                    t={t}
+                />
+            ) : null}
+        </div>
     );
 };
 

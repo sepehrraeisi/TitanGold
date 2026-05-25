@@ -153,17 +153,7 @@ const AdvancedFeatures: React.FC<{
                 <AccessControlPanel t={t} />
             )}
 
-            {activeFeature === 'blacklist' && (
-                <BlacklistWhitelist
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    sourceQualityMap={sourceQualityMap}
-                    prioritizationSummary={{ lastUpdate: advanced.smartPrioritization.lastUpdate }}
-                />
-            )}
+            {activeFeature === 'blacklist' && <BlacklistWhitelist t={t} />}
 
             {activeFeature === 'telegram' && (
                 <TelegramPublisher

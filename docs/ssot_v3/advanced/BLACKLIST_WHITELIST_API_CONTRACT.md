@@ -81,11 +81,14 @@ Table: `datahub_filter_rules`
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | UUID PK | |
-| `list_type` | `blacklist` \| `whitelist` | |
+| `rule_type` | `blacklist` \| `whitelist` | |
 | `scope` | `domain` \| `source` \| `keyword` | |
-| `match_value` | TEXT | domain host, source_id UUID string, or keyword pattern |
-| `match_kind` | `exact` \| `contains` \| `prefix` \| `regex` | default `contains` for keyword, `exact` for source |
+| `pattern` | TEXT | domain host, source_id UUID, or keyword |
+| `match_type` | `exact` \| `contains` \| `regex` | default `contains` |
 | `apply_target` | `ingestion` \| `publishing` \| `both` | default `ingestion` |
+| `action` | `block` \| `allow` | must match `rule_type` |
+| `priority` | INT default 100 | higher wins; whitelist beats blacklist on tie |
+| `metadata` | JSONB | |
 | `reason` | TEXT nullable | |
 | `is_active` | BOOLEAN default true | |
 | `deleted_at` | TIMESTAMPTZ nullable | soft delete |

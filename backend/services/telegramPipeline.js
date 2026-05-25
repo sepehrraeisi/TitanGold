@@ -1,5 +1,6 @@
 import { query } from '../database/db.js';
 import { logger } from './logger.js';
+import { enforceIngestionFilter } from './datahubFilterRulesService.js';
 
 /**
  * Transfer unprocessed Telegram messages from telegram_messages to collected_data (TASK-DHT-030)
@@ -130,7 +131,29 @@ export async function transferTelegramMessagesToPipeline(batchSize = 50) {
                     },
                 };
 
-                // 6. Insert into collected_data
+                // 6. Ingestion filter (GAP-024)
+                try {
+                    await enforceIngestionFilter({
+                        source_id: dataSource.id,
+                        url: message.media_url || null,
+                        text: normalizedData.content || message.text || message.caption,
+                        metadata: { source_type: 'telegram', channel_id: channelIdStr },
+                    });
+                } catch (filterErr) {
+                    if (filterErr.code === 'FILTER_BLOCKED') {
+                        summary.skipped += 1;
+                        summary.details.push({
+                            messageId: message.id,
+                            channelId: channelIdStr,
+                            action: 'filter_blocked',
+                            reason: filterErr.details?.reason,
+                        });
+                        continue;
+                    }
+                    throw filterErr;
+                }
+
+                // 7. Insert into collected_data
                 const collectedDataResult = await query(
                     `INSERT INTO collected_data
                         (source_id, raw_data, normalized_data, collected_at, status, metadata)
