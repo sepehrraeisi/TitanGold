@@ -26,5 +26,7 @@
 | GAP-020 | Backend cron / distributed scheduler برای automation schedule (جایگزین client `setInterval`) | Low | `dataHub.advanced.automation` | Open | v3.1 | **Enhancement non-blocker** — v3.0 با manual dispatch + schedule persistence کافی است. |
 | GAP-021 | DataHub Design Pass — core tabs (sources, categories, pipeline, logs) | Medium | `dataHub.*` | Open | v3.1 | `DATAHUB_DESIGN_BACKLOG.md` Design-1/2. تا Done، SSOT = Implemented (backend) only. |
 | GAP-022 | Access Control backend-first + Design Pass (permissions per source) | Medium | `dataHub.advanced.access` | Closed | v3.0 | List API + React Query + slate UI per `DESIGN_SYSTEM_DATAHUB.md`; fake roles/keys tabs removed. |
-| GAP-023 | DataHub Design Pass — advanced subtabs (publisher, automation, blacklist, …) | Medium | `dataHub.advanced.*` | Open | v3.1 | Design-3 پس از GAP-022. |
+| GAP-023 | DataHub Design Pass — advanced subtabs | Medium | `dataHub.advanced.*` | **Partial** | v3.0 | **Done:** `telegramPublisher`, `automation`, `access` (Design-3 + GAP-022). **Pending design:** `blacklist`, `crawlers`, `discovery`, `prioritization`, `archiving`. |
+| GAP-024 | Blacklist/Whitelist backend-first (`datahub_filter_rules` + `/api/v1/data-hub/filter-rules`) | Medium | `dataHub.advanced.blacklist` | Open | v3.0 | Contract: `advanced/BLACKLIST_WHITELIST_API_CONTRACT.md`. Replaces IndexedDB `addToBlacklist` / fake rules tab. |
+| GAP-025 | Enforce filter rules on publishing path (automation dispatch + telegram publish) | Low | `dataHub.advanced.automation`, `dataHub.advanced.telegramPublisher` | Open | v3.1 | v3.0 stores rules + `POST /evaluate`; workers hook later. |
 
