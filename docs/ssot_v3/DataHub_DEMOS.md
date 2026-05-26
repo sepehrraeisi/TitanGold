@@ -1,5 +1,25 @@
 ## DataHub Runtime Demos
 
+### Demo index (v3.0 release checkpoint)
+
+| Area | Section in this file | GAP / status |
+|------|----------------------|--------------|
+| **Sources** | `dataHub.sources` | GAP-008 · Design Done |
+| **Categories** | `dataHub.categories` | GAP-010 · Design Done |
+| **Pipeline** | `dataHub.pipeline` | GAP-012 · Design Done |
+| **Logs** | `dataHub.logs` | GAP-013 · Design Done |
+| **Telegram** | `dataHub.telegram` | GAP-006 security · Implemented |
+| **Access Control** | `dataHub.advanced.access` | GAP-022 · Design Done |
+| **Telegram Publisher** | `dataHub.advanced.telegramPublisher` | GAP-016 · Design Done |
+| **Automation** | `dataHub.advanced.automation` | GAP-018/019 · Design Done |
+| **Blacklist/Whitelist** | `dataHub.advanced.blacklist` | GAP-024 · Design Done |
+| **Crawlers** | `dataHub.advanced.crawlers` | GAP-026 · Design Done |
+| **Discovery** | `dataHub.advanced.discovery` | GAP-028 · Design Done |
+| **Prioritization** | `dataHub.advanced.prioritization` | GAP-030 · Design Done |
+| **Archiving** | `dataHub.advanced.archiving` | GAP-032 · Design Done |
+
+---
+
 ### dataHub.telegram – Telegram Panel / Agents / Breaking News
 
 - **Success Scenario (healthy pipeline)**  
