@@ -5,6 +5,13 @@
 > **Scope:** DataHub core tabs + all Advanced subtabs backend-first · Design Done  
 > **Out of scope (stash):** Telegram/Agents changes — see [Stash note](#stash-note-out-of-scope)
 
+**Pre-merge blocker (resolved):**
+
+- Blocker UI — **Pipeline Health Overview** (Advanced) رفع شد (`f42d8f2`).
+- **Undefined** / **NaN ms** دیگر در UI نمایش داده نمی‌شود.
+- Avg latency فعلاً **N/A** + tooltip تا API تجمیعی آماده شود.
+- **GAP-034** (aggregate pipeline latency API) برای **v3.1** باز است.
+
 ---
 
 ## 1) Git clean proof
@@ -14,6 +21,7 @@ $ git status --short
 # (empty — working tree clean)
 
 $ git log --oneline -8
+c7f38de docs(datahub): note Pipeline Health Overview blocker fix in final PR summary
 f42d8f2 fix(datahub): guard pipeline health overview metrics
 1eda662 docs(datahub): final release checkpoint for advanced v3.0 PR
 43b6368 feat(datahub): GAP-032 archiving backend-first (manual archive/restore)
@@ -225,6 +233,6 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 | Pipeline Health Overview blocker | **Resolved** (`f42d8f2`) |
 | Undefined / NaN ms in Advanced health strip | **None** |
 | Latency metric | **N/A** (GAP-034 → v3.1) |
-| Branch pushed to `origin` | After `git push origin feat/gap-008-sources-backend-wiring` |
+| Branch pushed to `origin` | **Yes** — `git push origin feat/gap-008-sources-backend-wiring` (includes `f42d8f2`, `c7f38de`) |
 
-*Checkpoint updated 2026-05-26 · **ready for final PR merge** after push + clean `git status`.*
+*Checkpoint updated 2026-05-26 · **ready for final PR merge** — working tree clean, branch synced with `origin`.*
