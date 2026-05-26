@@ -1,5 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '../services/api.ts';
+import {
+    fetchDataHubSourcesHealth,
+    fetchDataHubSourcesStats,
+} from '../services/dataSourcesApi.ts';
 import { DataHubState, DataSource, DataCategory, AIAgent } from '../types.ts';
 
 export const DATA_HUB_KEYS = {
@@ -10,6 +14,8 @@ export const DATA_HUB_KEYS = {
         [...DATA_HUB_KEYS.all, 'sources', { page: page ?? 1, limit: limit ?? 20 }] as const,
     categories: () => [...DATA_HUB_KEYS.all, 'categories'] as const,
     pipeline: () => [...DATA_HUB_KEYS.all, 'pipeline'] as const,
+    sourcesHealth: () => [...DATA_HUB_KEYS.all, 'sourcesHealth'] as const,
+    sourcesStats: () => [...DATA_HUB_KEYS.all, 'sourcesStats'] as const,
     accessLogs: (params?: { limit?: number; offset?: number }) =>
         [...DATA_HUB_KEYS.all, 'accessLogs', params ?? { limit: 100, offset: 0 }] as const,
 };
@@ -44,6 +50,24 @@ export const usePipelineQuery = (options?: { enabled?: boolean }) => {
     return useQuery({
         queryKey: DATA_HUB_KEYS.pipeline(),
         queryFn: api.fetchDataPipelineView,
+        staleTime: 30 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const useDataHubSourcesHealthQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.sourcesHealth(),
+        queryFn: fetchDataHubSourcesHealth,
+        staleTime: 30 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const useDataHubSourcesStatsQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.sourcesStats(),
+        queryFn: fetchDataHubSourcesStats,
         staleTime: 30 * 1000,
         enabled: options?.enabled ?? true,
     });

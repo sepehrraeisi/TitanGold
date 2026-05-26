@@ -17,6 +17,7 @@
 | **Discovery** | `dataHub.advanced.discovery` | GAP-028 · Design Done |
 | **Prioritization** | `dataHub.advanced.prioritization` | GAP-030 · Design Done |
 | **Archiving** | `dataHub.advanced.archiving` | GAP-032 · Design Done |
+| **Pipeline Health Overview** | `dataHub.advanced.pipelineHealth` | GAP-034 (latency API) · v3.0 safe metrics |
 
 ---
 
@@ -361,3 +362,22 @@ Evidence: `docs/ssot_v3/EVIDENCE.md` § Crawler runtime safety.
 | Restore without confirm | `400` `CONFIRM_RESTORE_REQUIRED` |
 | Unauthorized mutate | `403` |
 | DB/API error | `500` + UI retry |
+
+### dataHub.advanced.pipelineHealth – Pipeline Health Overview (v3.0 safe metrics · GAP-034 latency API)
+
+**UI:** `AI Center → DataHub → Advanced` — بخش پایین صفحه **Pipeline Health Overview** (`PipelineHealthOverview.tsx`).
+
+| سناریو | Network | Expected UI |
+|--------|---------|-------------|
+| **Normal** | `GET /api/v1/data-sources/health` → `200` `{ status: healthy\|degraded, activeSources }`; `GET /api/v1/data-sources/stats` → `200` `{ active_sources, total_sources }` | System Status = ترجمه‌شده (Healthy/Degraded/…); Active Sources = `N / M` با اعداد معتبر؛ Avg Latency = **N/A** + tooltip «Latency metric not available yet» |
+| **Empty stats** | `stats` → `{ active_sources: 0, total_sources: 0 }` | `0 / 0` — نه `/` یا `undefined` |
+| **Missing latency metric** | (بدون endpoint latency در v3.0) | همیشه **N/A** + tooltip؛ هرگز `NaN ms` |
+| **API failure** | health یا stats → `500` / network error | بنر خطا + Retry؛ skeleton در حین load؛ System Status fallback **Unknown** اگر health ناموفق و stats هم ناموفق |
+
+**grep proof (no stale snapshot fields):**
+
+```bash
+rg "overallStatus|avgLatency|activeSources.*totalSources" components/ai/AIManager/tabs/DataHub/AdvancedFeatures.tsx
+# → no matches
+rg "PipelineHealthOverview|fetchDataHubSourcesHealth" components/ai/AIManager/tabs/DataHub/
+```

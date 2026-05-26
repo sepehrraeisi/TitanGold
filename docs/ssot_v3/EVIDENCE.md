@@ -334,6 +334,16 @@ rg -n "fetchDataHubState|createManualArchive|restoreFromArchive" \
 
 ---
 
+### ۱۸. Pipeline Health Overview (Advanced · v3.0 blocker fix)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| Overview از `/health` + `/stats` می‌خواند (نه `dataHub.pipelineSnapshot` mock) | `PipelineHealthOverview.tsx`, `services/dataSourcesApi.ts` | `useDataHubSourcesHealthQuery`, `useDataHubSourcesStatsQuery`; `fetchDataHubSourcesHealth`, `fetchDataHubSourcesStats` | UI دیگر `overallStatus` / `avgLatency` روی snapshot قدیمی ندارد. |
+| فرمت امن بدون `undefined`/`NaN` | `pipelineHealthFormat.ts` | `formatSystemStatus`, `formatActiveSourcesLabel`, `formatAvgLatency` | Unknown / `0 / 0` / N/A |
+| Latency API در v3.1 | `docs/ssot_v3/GAPS_AND_PLAN.md` | GAP-034 | v3.0: N/A + tooltip `pipeline_latency_not_available` |
+
+---
+
 ### ۱۵. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |

@@ -37,4 +37,5 @@
 | GAP-031 | Prioritization scheduler / auto-apply daemon | Low | `dataHub.advanced.prioritization` | **Open** | v3.1 | Optional background cron/worker for scheduled previews/apply policies; not blocker for v3.0. |
 | GAP-032 | DataHub Archiving backend-first (manual archive/restore) | Medium | `dataHub.advanced.archiving` | **Closed** | v3.0 | Migration `033`; `/api/v1/data-hub/archiving`; dry-run + confirm; read archive; no purge apply. |
 | GAP-033 | Archiving scheduler daemon (monthly archive cron) | Low | `dataHub.advanced.archiving` | **Open** | v3.1 | Shell/cron exists (`archive-old-decisions.sh`); not wired to UI in v3.0. |
+| GAP-034 | Aggregate pipeline avg latency API (`GET /api/v1/data-sources/pipeline` or `/stats` rolling `avg_latency_ms` from `data_hub_logs.execution_time_ms`) | Low | `dataHub.advanced` (Pipeline Health Overview) | **Open** | v3.1 | v3.0: Advanced **Pipeline Health Overview** uses `/health` + `/stats`; latency shows **N/A** + tooltip (no `NaN`/`undefined`). |
 

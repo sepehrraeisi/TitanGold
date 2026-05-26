@@ -9,6 +9,7 @@ import BlacklistWhitelist from './advanced/BlacklistWhitelist';
 import TelegramPublisher from './advanced/TelegramPublisher';
 import AutomationTopics from './advanced/AutomationTopics';
 import Archiving from './advanced/Archiving';
+import PipelineHealthOverview from './PipelineHealthOverview';
 
 // Custom Hook
 import { useAdvancedFeatures } from '../../../../../hooks/useAdvancedFeatures';
@@ -26,12 +27,10 @@ const AdvancedFeatures: React.FC<{
         activeFeature,
         setActiveFeature,
         advanced,
-        pipelineSnapshot,
         agentMap,
         publisherMap,
         topicMap,
         findCategorySignal,
-        getStatusBadgeClass
     } = useAdvancedFeatures({ dataHub, agents });
 
 
@@ -154,28 +153,7 @@ const AdvancedFeatures: React.FC<{
                 <Archiving t={t} />
             )}
 
-            {/* Pipeline Quality Snapshot - Keep high-level view if needed or move to Dashboard */}
-            {pipelineSnapshot && (
-                <div className="mt-8 border-t border-border pt-6">
-                    <h3 className="text-lg font-semibold mb-4 text-foreground">{t('pipeline_health_overview') || 'Pipeline Health Overview'}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-secondary/20 border border-border rounded p-4">
-                            <p className="text-xs text-muted-foreground uppercase">{t('system_status') || 'System Status'}</p>
-                            <p className={`text-xl font-bold mt-1 ${getStatusBadgeClass(pipelineSnapshot.overallStatus).replace('bg-', 'text-').replace('/20', '')}`}>
-                                {t(`log_status_${pipelineSnapshot.overallStatus}` as any) || pipelineSnapshot.overallStatus}
-                            </p>
-                        </div>
-                        <div className="bg-secondary/20 border border-border rounded p-4">
-                            <p className="text-xs text-muted-foreground uppercase">{t('active_sources') || 'Active Sources'}</p>
-                            <p className="text-xl font-bold mt-1">{pipelineSnapshot.activeSources} / {pipelineSnapshot.totalSources}</p>
-                        </div>
-                        <div className="bg-secondary/20 border border-border rounded p-4">
-                            <p className="text-xs text-muted-foreground uppercase">{t('avg_latency') || 'Avg Latency'}</p>
-                            <p className="text-xl font-bold mt-1">{Math.round(pipelineSnapshot.avgLatency)} ms</p>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <PipelineHealthOverview t={t} />
         </div>
     );
 };
