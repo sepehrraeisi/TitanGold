@@ -18,6 +18,12 @@
 - دیگر `0ms` ساختگی، `NaN`، یا `health.averageResponseTime.toFixed` از IndexedDB نمایش داده نمی‌شود.
 - Avg response time و cache hit rate = **N/A** (GAP-035 → v3.1).
 
+**Pre-merge blocker (resolved) — Header summary KPIs:**
+
+- کارت‌های بالای DataHub (`DataHubSummaryCards`) فقط از `GET /stats` + `GET /health`.
+- حذف mock: `cache.hitRate: 75`, `totalSources` از IndexedDB/pagination, `t(health.overall)` محلی.
+- خطاهای خام HTTP مثل «Not Found» در advanced panels → i18n (`formatApiErrorForUi`).
+
 ---
 
 ## 1) Git clean proof
@@ -230,6 +236,7 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 - [ ] Filter rule: POST collected-data blocked when rule matches
 - [ ] Advanced → Pipeline Health Overview: status from `/health`, sources `N/M` from `/stats`, latency **N/A** (no Undefined/NaN)
 - [ ] Health tab: overall from `/health`, active/total from `/stats`, errors from access-logs `statusCounts`, last check from `timestamp`, avg response/cache **N/A**
+- [ ] Header KPI row: total/active from `/stats`, status from `/health`, cache **N/A** (not 75% mock)
 
 ---
 
@@ -239,6 +246,7 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 |-------|--------|
 | Pipeline Health Overview blocker | **Resolved** (`f42d8f2`) |
 | Health Monitoring tab blocker | **Resolved** (backend-first `HealthPanel`) |
+| Header summary KPI blocker | **Resolved** (`DataHubSummaryCards` + `/stats` `/health`) |
 | Undefined / NaN ms in health UI | **None** |
 | Latency metric (Advanced overview) | **N/A** (GAP-034 → v3.1) |
 | Avg response / cache (Health tab) | **N/A** (GAP-035 → v3.1) |

@@ -10,6 +10,7 @@ import {
     useExecuteRestoreMutation,
     usePreviewPurgeMutation,
 } from '../../../../../../hooks/useDataHubArchiving';
+import { formatApiErrorForUi } from '../dataHubI18n';
 
 interface ArchivingProps {
     t: (key: string) => string;
@@ -113,7 +114,7 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
 
             {apiError ? (
                 <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                    <span>{apiError.message}</span>
+                    <span>{formatApiErrorForUi(t, apiError.message)}</span>
                     <button type="button" onClick={() => void refetch()} className="px-2 py-1 rounded bg-red-500/20">
                         {t('retry')}
                     </button>

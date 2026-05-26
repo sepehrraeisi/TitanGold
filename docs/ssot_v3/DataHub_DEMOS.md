@@ -19,6 +19,7 @@
 | **Archiving** | `dataHub.advanced.archiving` | GAP-032 · Design Done |
 | **Pipeline Health Overview** | `dataHub.advanced.pipelineHealth` | GAP-034 (latency API) · v3.0 safe metrics |
 | **Health Monitoring** | `dataHub.health` | GAP-035 (avg response/cache API) · Design Done |
+| **Header summary KPIs** | `dataHub.summary` | GAP-035 (cache) · backend `/stats` + `/health` |
 
 ---
 
@@ -381,6 +382,25 @@ Evidence: `docs/ssot_v3/EVIDENCE.md` § Crawler runtime safety.
 rg "overallStatus|avgLatency|activeSources.*totalSources" components/ai/AIManager/tabs/DataHub/AdvancedFeatures.tsx
 # → no matches
 rg "PipelineHealthOverview|fetchDataHubSourcesHealth" components/ai/AIManager/tabs/DataHub/
+```
+
+### dataHub.summary – Header KPI cards (v3.0 backend-first)
+
+**UI:** `AI Center → DataHub` — ردیف بالای تب‌ها (`DataHubSummaryCards.tsx`).
+
+| سناریو | Network | Expected UI |
+|--------|---------|-------------|
+| **Success** | `GET /stats` + `GET /health` | Total/Active از `stats`؛ Health status از `health.status` (ترجمه‌شده)؛ Cache hit = **N/A** + tooltip |
+| **Empty DB** | stats zeros | `0` / `0` / N/A / Degraded یا Healthy — بدون `45`/`75%` ساختگی |
+| **API failure** | 500/404 | بنر `datahub_summary_load_error` + Retry؛ skeleton در load |
+
+**Forbidden:** `dataHub.totalSources`, `dataHub.cache.hitRate`, `hitRate: 75` mock در `services/api.ts` برای این کارت‌ها.
+
+```bash
+rg "dataHub\\.cache\\.hitRate|dataHub\\.totalSources|dataHub\\.health\\.overall" components/ai/AIManager/tabs/DataHubTab.tsx
+# → no matches (summary uses DataHubSummaryCards only)
+rg "75\\.0%|hitRate\\.toFixed" components/ai/AIManager/tabs/DataHub/
+# → no matches in summary path
 ```
 
 ### dataHub.health – Health Monitoring (v3.0 backend-first · GAP-035 avg response/cache API)

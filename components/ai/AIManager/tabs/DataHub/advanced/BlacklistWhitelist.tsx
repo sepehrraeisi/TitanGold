@@ -12,6 +12,7 @@ import type {
     DataHubFilterRule,
 } from '../../../../../../services/dataHubFilterRulesApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
+import { formatApiErrorForUi, safeDynamicT } from '../dataHubI18n';
 
 interface BlacklistWhitelistProps {
     t: (key: string) => string;
@@ -77,9 +78,9 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
 
     const apiError =
         error instanceof DataHubApiError
-            ? error.message
+            ? formatApiErrorForUi(t, error.message)
             : error instanceof Error
-              ? error.message
+              ? formatApiErrorForUi(t, error.message)
               : null;
 
     const handleSave = async (
@@ -119,7 +120,7 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                         {t(rule.rule_type)}
                     </span>
                     <span className="text-[10px] text-muted-foreground uppercase">
-                        {t(`filter_scope_${rule.scope}`)}
+                        {safeDynamicT(t, 'filter_scope_', rule.scope)}
                     </span>
                     <span className="text-[10px] text-muted-foreground">
                         {rule.match_type} · {rule.apply_target} · P{rule.priority}
@@ -208,7 +209,7 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                                 : 'text-muted-foreground hover:text-foreground'
                         }`}
                     >
-                        {t(`safety_tab_${tab}`)}
+                        {safeDynamicT(t, 'safety_tab_', tab)}
                         {activeTab === tab ? (
                             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 rounded-full" />
                         ) : null}
@@ -326,7 +327,9 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                         </div>
                     ) : null}
                     {evaluateMut.error instanceof DataHubApiError ? (
-                        <p className="text-[11px] text-red-300">{evaluateMut.error.message}</p>
+                        <p className="text-[11px] text-red-300">
+                            {formatApiErrorForUi(t, evaluateMut.error.message)}
+                        </p>
                     ) : null}
                 </div>
             )}

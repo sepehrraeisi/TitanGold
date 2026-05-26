@@ -13,6 +13,7 @@ import {
 } from '../../../../../../hooks/useDataHubDiscovery';
 import type { DiscoverySuggestion } from '../../../../../../services/dataHubDiscoveryApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
+import { formatApiErrorForUi, safeDynamicT } from '../dataHubI18n';
 
 interface AutoDiscoveryConfigProps {
     t: (key: string) => string;
@@ -30,7 +31,7 @@ function statusPill(status: string, t: (k: string) => string) {
     };
     return (
         <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${map[status] || ''}`}>
-            {t(`discovery_status_${status}`)}
+            {safeDynamicT(t, 'discovery_status_', status)}
         </span>
     );
 }
@@ -139,7 +140,7 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
 
             {apiError ? (
                 <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                    {apiError.message}
+                    {formatApiErrorForUi(t, apiError.message)}
                 </div>
             ) : null}
 
@@ -160,7 +161,7 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                             activeTab === tab ? 'text-purple-400' : 'text-muted-foreground'
                         }`}
                     >
-                        {t(`discovery_tab_${tab}`)}
+                        {safeDynamicT(t, 'discovery_tab_', tab)}
                     </button>
                 ))}
             </div>

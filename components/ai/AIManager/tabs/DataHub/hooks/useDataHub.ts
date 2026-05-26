@@ -101,8 +101,6 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
             ...dataHub,
             sources,
             categories,
-            totalSources: sourcesResult?.pagination.total ?? dataHub.totalSources,
-            activeSources: sources.filter(s => s.status === 'active').length,
         };
     }, [dataHub, sourcesResult, categoriesResult]);
 

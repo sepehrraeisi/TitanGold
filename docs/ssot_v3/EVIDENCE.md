@@ -334,6 +334,16 @@ rg -n "fetchDataHubState|createManualArchive|restoreFromArchive" \
 
 ---
 
+### ۲۰. DataHub header summary KPIs (`dataHub.summary` · v3.0 blocker fix)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| Summary cards از `/stats` + `/health` | `DataHubSummaryCards.tsx`, `hooks/useDataHubSummary.ts` | `useDataHubSummaryMetrics` | نه `dataHub.totalSources` / `cache.hitRate` IndexedDB. |
+| Cache hit not faked | `useDataHubSummary.ts` | `cacheHitDisplay: 'N/A'` | تا GAP-035؛ بدون `75%`. |
+| Raw HTTP "Not Found" sanitized | `dataHubI18n.ts`, advanced `*Panel.tsx` | `formatApiErrorForUi`, `safeDynamicT` | خطای 404 به i18n تبدیل می‌شود. |
+
+---
+
 ### ۱۹. Health Monitoring tab (`dataHub.health` · v3.0 blocker fix)
 
 | Claim | File | Lines | توضیح |

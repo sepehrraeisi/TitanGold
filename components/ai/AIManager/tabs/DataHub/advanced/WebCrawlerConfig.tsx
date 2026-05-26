@@ -12,6 +12,7 @@ import { useDataSourcesQuery } from '../../../../../../hooks/useDataHubState';
 import type { DataHubCrawler } from '../../../../../../services/dataHubCrawlersApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import type { CreateCrawlerPayload } from '../../../../../../services/dataHubCrawlersApi';
+import { formatApiErrorForUi } from '../dataHubI18n';
 
 interface WebCrawlerConfigProps {
     t: (key: string) => string;
@@ -52,9 +53,9 @@ const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({ t }) => {
 
     const apiError =
         error instanceof DataHubApiError
-            ? error.message
+            ? formatApiErrorForUi(t, error.message)
             : error instanceof Error
-              ? error.message
+              ? formatApiErrorForUi(t, error.message)
               : null;
 
     const handleSave = async (payload: CreateCrawlerPayload) => {
@@ -120,7 +121,7 @@ const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({ t }) => {
 
             {runMut.error instanceof DataHubApiError ? (
                 <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                    {runMut.error.message}
+                    {formatApiErrorForUi(t, runMut.error.message)}
                     {runMut.error.status === 400 &&
                     String(runMut.error.message).includes('RENDER_JS') ? (
                         <p className="mt-1 opacity-80">{t('crawler_render_js_disabled_hint')}</p>

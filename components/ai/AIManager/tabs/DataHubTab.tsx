@@ -4,6 +4,7 @@ import CategoriesPanel from './DataHub/CategoriesPanel';
 import LogsPanel from './DataHub/LogsPanel';
 import PipelinePanel from './DataHub/PipelinePanel';
 import HealthPanel from './DataHub/HealthPanel';
+import DataHubSummaryCards from './DataHub/DataHubSummaryCards';
 import TelegramDataPanel from './DataHub/TelegramDataPanel';
 import TelegramPanel from './DataHub/TelegramPanel';
 import DataSourcesPanel from './DataHub/DataSourcesPanel';
@@ -181,54 +182,21 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     />
                 )}
 
-                {/* Overview Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card>
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground mb-1">{t('total_sources') || 'Total Sources'}</p>
-                            <p className="text-2xl font-bold text-foreground">{dataHub?.totalSources ?? 0}</p>
-                        </div>
-                    </Card>
-                    <Card>
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground mb-1">{t('active_sources') || 'Active Sources'}</p>
-                            <p className="text-2xl font-bold text-green-400">{dataHub?.activeSources ?? 0}</p>
-                        </div>
-                    </Card>
-                    <Card>
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground mb-1">{t('cache_hit_rate') || 'Cache Hit Rate'}</p>
-                            <p className="text-2xl font-bold text-purple-400">
-                                {typeof dataHub?.cache?.hitRate === 'number'
-                                    ? dataHub.cache.hitRate.toFixed(1)
-                                    : '0.0'
-                                }%
-                            </p>
-                        </div>
-                    </Card>
-                    <Card>
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground mb-1">{t('health_status') || 'Health Status'}</p>
-                            <p className={`text-2xl font-bold ${
-                                dataHub?.health?.overall === 'healthy' ? 'text-green-400' :
-                                dataHub?.health?.overall === 'degraded' ? 'text-yellow-400' : 'text-red-400'
-                                }`}>
-                                {dataHub?.health?.overall ? (t(dataHub.health.overall) || dataHub.health.overall) : 'Unknown'}
-                            </p>
-                        </div>
-                    </Card>
-                </div>
+                {/* Overview Stats — backend: GET /stats + GET /health (not IndexedDB / mock cache) */}
+                <Card>
+                    <DataHubSummaryCards t={t} />
+                </Card>
 
                 {/* Navigation Tabs */}
                 <div className="flex gap-2 border-b border-border overflow-x-auto no-scrollbar">
                     {[
-                        { id: 'sources', label: t('data_sources') || 'Sources' },
-                        { id: 'categories', label: t('categories') || 'Categories' },
-                        { id: 'pipeline', label: t('data_pipeline') || 'Pipeline' },
-                        { id: 'health', label: t('health_monitoring') || 'Health' },
-                        { id: 'logs', label: t('access_logs') || 'Logs' },
-                        { id: 'advanced', label: t('advanced_features') || 'Advanced' },
-                        { id: 'telegram', label: t('telegram_collector') || 'Telegram' }
+                        { id: 'sources', label: t('data_sources') },
+                        { id: 'categories', label: t('categories') },
+                        { id: 'pipeline', label: t('data_pipeline') },
+                        { id: 'health', label: t('health_monitoring') },
+                        { id: 'logs', label: t('access_logs') },
+                        { id: 'advanced', label: t('advanced_features') },
+                        { id: 'telegram', label: t('telegram_collector') }
                     ].map(view => (
                         <button
                             key={view.id}

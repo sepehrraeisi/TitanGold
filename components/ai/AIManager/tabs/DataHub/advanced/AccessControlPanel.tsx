@@ -8,6 +8,7 @@ import {
 } from '../../../../../../hooks/useAccessControl';
 import type { SourceAccessControlUi } from '../../../../../../services/accessControlApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
+import { formatApiErrorForUi } from '../dataHubI18n';
 
 interface AccessControlPanelProps {
     t: (key: string) => string;
@@ -49,9 +50,9 @@ const AccessControlPanel: React.FC<AccessControlPanelProps> = ({ t }) => {
 
     const apiError =
         error instanceof DataHubApiError
-            ? error.message
+            ? formatApiErrorForUi(t, error.message)
             : error instanceof Error
-              ? error.message
+              ? formatApiErrorForUi(t, error.message)
               : null;
 
     const handleSave = async (data: {
