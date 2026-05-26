@@ -10,7 +10,7 @@
 | **Web Crawlers** | `/api/v1/data-hub/crawlers` + migration `029` | Done | **GAP-026 Closed** |
 | **Auto Discovery** | `/api/v1/data-hub/discovery` + migration `030` | Done | **GAP-028 Closed** |
 
-**Pending advanced:** archiving.
+**Pending advanced:** none (v3.0 advanced complete).
 
 **Open v3.1:** GAP-025 (publishing filter hook) · GAP-027 (crawler scheduler / Playwright prod) · GAP-029 (discovery scheduler).
 

@@ -26,7 +26,7 @@
 | GAP-020 | Backend cron / distributed scheduler برای automation schedule (جایگزین client `setInterval`) | Low | `dataHub.advanced.automation` | Open | v3.1 | **Enhancement non-blocker** — v3.0 با manual dispatch + schedule persistence کافی است. |
 | GAP-021 | DataHub Design Pass — core tabs (sources, categories, pipeline, logs) | Medium | `dataHub.*` | Open | v3.1 | `DATAHUB_DESIGN_BACKLOG.md` Design-1/2. تا Done، SSOT = Implemented (backend) only. |
 | GAP-022 | Access Control backend-first + Design Pass (permissions per source) | Medium | `dataHub.advanced.access` | Closed | v3.0 | List API + React Query + slate UI per `DESIGN_SYSTEM_DATAHUB.md`; fake roles/keys tabs removed. |
-| GAP-023 | DataHub Design Pass — advanced subtabs | Medium | `dataHub.advanced.*` | **Partial** | v3.0 | **Done:** `publisher`, `automation`, `access`, `blacklist`, `crawlers`, `discovery`, `prioritization`. **Pending:** `archiving`. |
+| GAP-023 | DataHub Design Pass — advanced subtabs | Medium | `dataHub.advanced.*` | **Closed** | v3.0 | All advanced subtabs Design Done (through GAP-032 archiving). |
 | GAP-024 | Blacklist/Whitelist backend-first (`datahub_filter_rules` + `/api/v1/data-hub/filter-rules`) | Medium | `dataHub.advanced.blacklist` | **Closed** | v3.0 | Migration `028`, ingestion enforce on `collected-data` + telegram pipeline; UI backend-first + Design Done. |
 | GAP-025 | Enforce filter rules on publishing path (automation dispatch + telegram publish) | Low | `dataHub.advanced.automation`, `dataHub.advanced.telegramPublisher` | Open | v3.1 | v3.0 stores rules + `POST /evaluate` only; publisher worker hook in v3.1. |
 | GAP-026 | Web Crawlers backend-first (`datahub_crawlers` + runs + manual/schedule) | Medium | `dataHub.advanced.crawlers` | **Closed** | v3.0 | Migration `029`, website+RSS, pre-crawl+ingestion filter, `POST /:id/run`, dry-run. |
@@ -35,4 +35,6 @@
 | GAP-029 | Discovery scheduler daemon (auto-scan on interval) | Low | `dataHub.advanced.discovery` | **Open** | v3.1 | v3.0: manual `POST /scan` only. |
 | GAP-030 | Smart Prioritization backend-first (preview + manual apply) | Medium | `dataHub.advanced.prioritization` | **Closed** | v3.0 | Migration `031`; `/api/v1/data-hub/prioritization`; confirm-only apply; override audit fields; no auto-apply. |
 | GAP-031 | Prioritization scheduler / auto-apply daemon | Low | `dataHub.advanced.prioritization` | **Open** | v3.1 | Optional background cron/worker for scheduled previews/apply policies; not blocker for v3.0. |
+| GAP-032 | DataHub Archiving backend-first (manual archive/restore) | Medium | `dataHub.advanced.archiving` | **Closed** | v3.0 | Migration `033`; `/api/v1/data-hub/archiving`; dry-run + confirm; read archive; no purge apply. |
+| GAP-033 | Archiving scheduler daemon (monthly archive cron) | Low | `dataHub.advanced.archiving` | **Open** | v3.1 | Shell/cron exists (`archive-old-decisions.sh`); not wired to UI in v3.0. |
 

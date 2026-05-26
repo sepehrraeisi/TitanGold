@@ -319,3 +319,25 @@ Evidence: `docs/ssot_v3/EVIDENCE.md` § Crawler runtime safety.
 | Invalid weights (sum != 100) | `400` `INVALID_WEIGHTS` |
 | Disabled prioritization + preview/apply | `400` `PRIORITIZATION_DISABLED` |
 | DB/API error | `500` + error banner + retry در UI |
+
+### dataHub.advanced.archiving – Cold storage (GAP-032 Closed)
+
+**Success path (v3.0):**
+
+| سناریو | Endpoint | Expected |
+|--------|----------|----------|
+| Health | `GET /api/v1/data-hub/archiving/health` | `check_archive_health()` JSON |
+| Archive dry-run | `POST /api/v1/data-hub/archiving/archive/preview` | `pending_count`; **no** row move |
+| Archive apply | `POST /api/v1/data-hub/archiving/archive` (`confirm_archive=true`) | `archive_old_decisions`; stats in `ai_decisions_archive_stats` |
+| Restore dry-run / apply | `POST .../restore/preview` / `POST .../restore` (`confirm_restore=true`) | preview count / `records_restored` |
+| Purge preview | `POST /api/v1/data-hub/archiving/purge/preview` | `would_purge_count` only — **no delete** |
+| Read archive | `GET /api/v1/data-hub/archiving/records` | paginated `ai_decisions_archive` rows |
+
+**Failures (required):**
+
+| Case | Expected |
+|------|----------|
+| Archive without confirm | `400` `CONFIRM_ARCHIVE_REQUIRED` |
+| Restore without confirm | `400` `CONFIRM_RESTORE_REQUIRED` |
+| Unauthorized mutate | `403` |
+| DB/API error | `500` + UI retry |

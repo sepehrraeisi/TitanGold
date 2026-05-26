@@ -1,324 +1,388 @@
 
-import React, { useState, useMemo } from 'react';
-import * as api from '../../../../../../services/api';
-import { DataHubState } from '../../../../../../types';
-import { SummaryCard } from '../../../../../ui/summary-card';
-import { EmptyState } from '../../../../../ui/empty-state';
-import { ActionButton } from '../../../../../ui/action-button';
-import { StatusBadge } from '../../../../../ui/status-badge';
-import ApiWrapper from '../../../../../common/ApiWrapper';
-import { useAsync } from '../../../../../../hooks/useAsync';
+import React, { useMemo, useState } from 'react';
+import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
+import {
+    useArchiveStatsQuery,
+    useArchivedRecordsQuery,
+    usePreviewArchiveMutation,
+    useExecuteArchiveMutation,
+    usePreviewRestoreMutation,
+    useExecuteRestoreMutation,
+    usePreviewPurgeMutation,
+} from '../../../../../../hooks/useDataHubArchiving';
 
 interface ArchivingProps {
-    dataHub: DataHubState;
-    setDataHub: (hub: DataHubState) => void;
-    onRefresh: () => void;
     t: (key: string) => string;
-    formatTimeAgo: (timestamp?: string) => string;
 }
 
-const Archiving: React.FC<ArchivingProps> = ({
-    dataHub,
-    setDataHub,
-    onRefresh,
-    t,
-    formatTimeAgo
-}) => {
-    const createAsync = useAsync(api.createManualArchive);
-    const restoreAsync = useAsync(api.restoreFromArchive);
-    const deleteAsync = useAsync(api.deleteArchive);
-    const toggleBacktestAsync = useAsync(api.updateArchive);
+const SHELL =
+    'bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg rounded-xl p-4 md:p-5';
 
-    const [showRuleModal, setShowRuleModal] = useState(false);
-    const [editingRule, setEditingRule] = useState<any>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterCategory, setFilterCategory] = useState<string>('all');
+function healthBadge(status: string) {
+    const s = String(status || '').toLowerCase();
+    if (s === 'ok') return 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/40';
+    if (s.includes('error')) return 'bg-red-500/10 text-red-300 border border-red-500/40';
+    return 'bg-amber-500/10 text-amber-300 border border-amber-500/40';
+}
 
-    const advanced = dataHub.advanced || { archives: [] };
-    const archives = advanced.archives || [];
+const Archiving: React.FC<ArchivingProps> = ({ t }) => {
+    const { data: dashboard, isLoading, refetch } = useArchiveStatsQuery();
+    const { data: recordsPage } = useArchivedRecordsQuery(0, 50);
 
-    // Calculate summary metrics
-    const summary = useMemo(() => {
-        const totalSize = archives.reduce((sum, a) => sum + (a.sizeBytes || 0), 0);
-        const backtestCount = archives.filter(a => a.usedForBacktest).length;
-        const last30Days = archives.filter(a => {
-            const date = new Date(a.archivedAt);
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            return date >= thirtyDaysAgo;
-        }).length;
+    const previewArchiveMut = usePreviewArchiveMutation();
+    const executeArchiveMut = useExecuteArchiveMutation();
+    const previewRestoreMut = usePreviewRestoreMutation();
+    const executeRestoreMut = useExecuteRestoreMutation();
+    const previewPurgeMut = usePreviewPurgeMutation();
 
-        return {
-            total: archives.length,
-            totalSize: (totalSize / (1024 * 1024)).toFixed(2), // MB
-            backtestCount,
-            last30Days
-        };
-    }, [archives]);
+    const [daysOld, setDaysOld] = useState(90);
+    const [archivePreview, setArchivePreview] = useState<Record<string, unknown> | null>(null);
+    const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
-    // Filter archives
-    const filteredArchives = useMemo(() => {
-        return archives.filter(archive => {
-            const matchesSearch = !searchTerm ||
-                archive.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                archive.sourceId?.toLowerCase().includes(searchTerm.toLowerCase());
+    const [restoreStart, setRestoreStart] = useState('');
+    const [restoreEnd, setRestoreEnd] = useState('');
+    const [restorePreview, setRestorePreview] = useState<Record<string, unknown> | null>(null);
+    const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
 
-            const matchesCategory = filterCategory === 'all' || archive.category === filterCategory;
+    const [purgePreview, setPurgePreview] = useState<Record<string, unknown> | null>(null);
 
-            return matchesSearch && matchesCategory;
-        });
-    }, [archives, searchTerm, filterCategory]);
+    const health = dashboard?.health;
+    const partitions = dashboard?.partitions || [];
+    const operations = dashboard?.recent_operations || [];
+    const records = recordsPage?.records || [];
 
-    // Get unique categories
-    const categories = useMemo(() => {
-        const cats = new Set(archives.map(a => a.category).filter(Boolean));
-        return Array.from(cats);
-    }, [archives]);
+    const apiError = [
+        previewArchiveMut.error,
+        executeArchiveMut.error,
+        previewRestoreMut.error,
+        executeRestoreMut.error,
+        previewPurgeMut.error,
+    ].find(e => e instanceof DataHubApiError) as DataHubApiError | undefined;
 
-    const handleCreateArchive = async () => {
-        try {
-            await createAsync.execute();
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to create archive:', e);
-        }
-    };
+    const summary = useMemo(
+        () => ({
+            active: Number(health?.active_records || 0),
+            archived: Number(health?.archived_records || 0),
+            pending: Number(health?.records_pending_archive || 0),
+            status: health?.status || '—',
+        }),
+        [health],
+    );
 
-    const handleRestoreArchive = async (archiveId: string) => {
-        try {
-            await restoreAsync.execute(archiveId);
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to restore archive:', e);
-        }
-    };
-
-    const handleDeleteArchive = async (archiveId: string) => {
-        const confirmed = window.confirm(t('confirm_delete_archive') || 'Are you sure you want to delete this archive? This cannot be undone.');
-        if (!confirmed) return;
-
-        try {
-            await deleteAsync.execute(archiveId);
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to delete archive:', e);
-        }
-    };
-
-    const handleToggleBacktest = async (archiveId: string, usedForBacktest: boolean) => {
-        try {
-            await toggleBacktestAsync.execute(archiveId, { usedForBacktest: !usedForBacktest });
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to update archive:', e);
-        }
-    };
+    const busy =
+        isLoading ||
+        previewArchiveMut.isPending ||
+        executeArchiveMut.isPending ||
+        previewRestoreMut.isPending ||
+        executeRestoreMut.isPending;
 
     return (
-        <ApiWrapper
-            error={createAsync.error || restoreAsync.error || deleteAsync.error || toggleBacktestAsync.error}
-            setError={() => {
-                createAsync.setError(null);
-                restoreAsync.setError(null);
-                deleteAsync.setError(null);
-                toggleBacktestAsync.setError(null);
-            }}
-            isLoading={createAsync.isLoading || restoreAsync.isLoading || deleteAsync.isLoading || toggleBacktestAsync.isLoading}
-        >
-            <div className="bg-card border border-border rounded-lg p-4">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                    <div>
-                        <h3 className="font-semibold text-foreground flex items-center gap-2">
-                            📦 {t('data_archiving') || 'Data Archiving'}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {t('archiving_desc') || 'Archive old data for storage optimization and historical analysis'}
-                        </p>
-                    </div>
-                    <div className="flex gap-2">
-                        <ActionButton
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setShowRuleModal(true)}
-                        >
-                            {t('manage_rules') || 'Manage Rules'}
-                        </ActionButton>
-                        <ActionButton
-                            variant="primary"
-                            size="sm"
-                            loading={isLoadingArchives}
-                            onClick={handleCreateArchive}
-                        >
-                            {t('create_archive') || '+ Create Archive'}
-                        </ActionButton>
-                    </div>
-                </div>
+        <div className={SHELL}>
+            <div className="sticky top-0 z-10 bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 backdrop-blur-sm border-b border-white/10 -mx-4 px-4 py-4 mb-6">
+                <h3 className="text-sm md:text-base font-semibold text-foreground">
+                    {t('data_archiving') || 'Data Archiving'}
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-1 max-w-2xl">
+                    {t('archiving_desc_v3') ||
+                        'Manual cold storage for ai_decisions. No cron, no auto-delete in v3.0.'}
+                </p>
+            </div>
 
-                {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    <SummaryCard
-                        label={t('total_archives') || 'Total Archives'}
-                        value={summary.total}
-                        icon={<span className="text-2xl">📦</span>}
-                    />
-                    <SummaryCard
-                        label={t('total_size') || 'Total Size'}
-                        value={`${summary.totalSize} MB`}
-                        icon={<span className="text-2xl">💾</span>}
-                    />
-                    <SummaryCard
-                        label={t('backtest_ready') || 'Backtest Ready'}
-                        value={summary.backtestCount}
-                        variant="success"
-                        icon={<span className="text-2xl">🧪</span>}
-                    />
-                    <SummaryCard
-                        label={t('last_30_days') || 'Last 30 Days'}
-                        value={summary.last30Days}
-                        icon={<span className="text-2xl">📅</span>}
-                    />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-5">
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent p-3 backdrop-blur-sm">
+                    <p className="text-[11px] text-blue-300/80 mb-1">{t('archiving_active_records')}</p>
+                    <p className="text-sm font-semibold text-blue-100">{summary.active}</p>
                 </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent p-3 backdrop-blur-sm">
+                    <p className="text-[11px] text-purple-300/80 mb-1">{t('archiving_archived_records')}</p>
+                    <p className="text-sm font-semibold text-purple-100">{summary.archived}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-3 backdrop-blur-sm">
+                    <p className="text-[11px] text-amber-300/80 mb-1">{t('archiving_pending')}</p>
+                    <p className="text-sm font-semibold text-amber-100">{summary.pending}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-slate-900/60 p-3">
+                    <p className="text-[11px] text-muted-foreground mb-1">{t('status')}</p>
+                    <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${healthBadge(summary.status)}`}
+                    >
+                        {summary.status}
+                    </span>
+                </div>
+            </div>
 
-                {/* Filters */}
-                {archives.length > 0 && (
-                    <div className="flex flex-col md:flex-row gap-3 mb-4">
+            {apiError ? (
+                <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                    <span>{apiError.message}</span>
+                    <button type="button" onClick={() => void refetch()} className="px-2 py-1 rounded bg-red-500/20">
+                        {t('retry')}
+                    </button>
+                </div>
+            ) : null}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 space-y-3">
+                    <h4 className="text-sm font-semibold">{t('archiving_run_archive')}</h4>
+                    <label className="text-[11px] text-muted-foreground block">
+                        {t('archiving_days_old')}: {daysOld}
                         <input
-                            type="text"
-                            placeholder={t('search_archives') || 'Search archives...'}
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground"
+                            type="range"
+                            min={30}
+                            max={365}
+                            value={daysOld}
+                            onChange={e => setDaysOld(Number(e.target.value))}
+                            className="w-full mt-1"
                         />
-                        <select
-                            value={filterCategory}
-                            onChange={(e) => setFilterCategory(e.target.value)}
-                            className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground"
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={async () => {
+                                const r = await previewArchiveMut.mutateAsync(daysOld);
+                                setArchivePreview(r as Record<string, unknown>);
+                            }}
+                            className="text-[11px] px-3 py-1.5 rounded-full border border-sky-400/70 text-sky-200 hover:bg-sky-500/10 disabled:opacity-50"
                         >
-                            <option value="all">{t('all_categories') || 'All Categories'}</option>
-                            {categories.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                        </select>
+                            {t('archiving_dry_run')}
+                        </button>
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setShowArchiveConfirm(true)}
+                            className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+                        >
+                            {t('archiving_apply')}
+                        </button>
                     </div>
-                )}
+                    {archivePreview ? (
+                        <p className="text-[11px] text-muted-foreground">
+                            {t('archiving_preview_result')}: {String(archivePreview.pending_count ?? 0)}{' '}
+                            {t('records')}
+                        </p>
+                    ) : null}
+                </div>
 
-                {/* Archives List */}
-                {filteredArchives.length > 0 ? (
-                    <div className="space-y-3">
-                        {filteredArchives.map(archive => (
-                            <div key={archive.id} className="border border-border rounded-lg p-4">
-                                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <h4 className="font-semibold text-foreground">
-                                                {archive.name || archive.sourceId}
-                                            </h4>
-                                            {archive.usedForBacktest && (
-                                                <StatusBadge status="info" label="Backtest" size="sm" />
-                                            )}
-                                        </div>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground">
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-wide">Category</p>
-                                                <p className="text-foreground font-medium">{archive.category || '—'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-wide">Records</p>
-                                                <p className="text-foreground font-medium">{archive.recordCount || 0}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-wide">Size</p>
-                                                <p className="text-foreground font-medium">
-                                                    {((archive.sizeBytes || 0) / 1024).toFixed(1)} KB
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-wide">Archived</p>
-                                                <p className="text-foreground font-medium">
-                                                    {formatTimeAgo(archive.archivedAt)}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        <ActionButton
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleToggleBacktest(archive.id, archive.usedForBacktest)}
-                                        >
-                                            {archive.usedForBacktest ? '🧪 Remove from Backtest' : '🧪 Mark for Backtest'}
-                                        </ActionButton>
-                                        <ActionButton
-                                            variant="secondary"
-                                            size="sm"
-                                            loading={isRestoring === archive.id}
-                                            onClick={() => handleRestoreArchive(archive.id)}
-                                        >
-                                            {t('restore') || 'Restore'}
-                                        </ActionButton>
-                                        <ActionButton
-                                            variant="danger"
-                                            size="sm"
-                                            loading={isDeletingRule === archive.id}
-                                            onClick={() => handleDeleteArchive(archive.id)}
-                                        >
-                                            {t('delete') || 'Delete'}
-                                        </ActionButton>
-                                    </div>
-                                </div>
+                <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 space-y-3">
+                    <h4 className="text-sm font-semibold">{t('archiving_restore')}</h4>
+                    <input
+                        type="datetime-local"
+                        value={restoreStart}
+                        onChange={e => setRestoreStart(e.target.value)}
+                        className="w-full text-[11px] bg-slate-950/80 border border-slate-700 rounded-lg px-2 py-1.5"
+                    />
+                    <input
+                        type="datetime-local"
+                        value={restoreEnd}
+                        onChange={e => setRestoreEnd(e.target.value)}
+                        className="w-full text-[11px] bg-slate-950/80 border border-slate-700 rounded-lg px-2 py-1.5"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            disabled={busy || !restoreStart || !restoreEnd}
+                            onClick={async () => {
+                                const r = await previewRestoreMut.mutateAsync({
+                                    start_date: new Date(restoreStart).toISOString(),
+                                    end_date: new Date(restoreEnd).toISOString(),
+                                });
+                                setRestorePreview(r as Record<string, unknown>);
+                            }}
+                            className="text-[11px] px-3 py-1.5 rounded-full border border-sky-400/70 text-sky-200 hover:bg-sky-500/10 disabled:opacity-50"
+                        >
+                            {t('archiving_dry_run')}
+                        </button>
+                        <button
+                            type="button"
+                            disabled={busy || !restoreStart || !restoreEnd}
+                            onClick={() => setShowRestoreConfirm(true)}
+                            className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                        >
+                            {t('restore')}
+                        </button>
+                    </div>
+                    {restorePreview ? (
+                        <p className="text-[11px] text-muted-foreground">
+                            {t('archiving_preview_result')}: {String(restorePreview.pending_count ?? 0)}
+                        </p>
+                    ) : null}
+                </div>
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 mb-6">
+                <h4 className="text-sm font-semibold mb-2">{t('archiving_purge_preview')}</h4>
+                <p className="text-[11px] text-muted-foreground mb-2">{t('archiving_purge_hint')}</p>
+                <button
+                    type="button"
+                    disabled={previewPurgeMut.isPending}
+                    onClick={async () => {
+                        const r = await previewPurgeMut.mutateAsync({});
+                        setPurgePreview(r as Record<string, unknown>);
+                    }}
+                    className="text-[11px] px-3 py-1.5 rounded-full border border-amber-500/60 text-amber-200 hover:bg-amber-500/10"
+                >
+                    {t('archiving_purge_count')}
+                </button>
+                {purgePreview ? (
+                    <p className="text-[11px] text-amber-200 mt-2">
+                        {String(purgePreview.would_purge_count ?? 0)} — {String(purgePreview.message || '')}
+                    </p>
+                ) : null}
+            </div>
+
+            <div className="overflow-x-auto -mx-3 mt-2 mb-6">
+                <p className="text-[11px] text-muted-foreground px-3 mb-2">{t('archiving_partitions')}</p>
+                <table className="min-w-full text-xs text-foreground/90">
+                    <thead className="border-b border-slate-800 text-[11px] text-muted-foreground">
+                        <tr>
+                            <th className="px-3 py-2 text-left">Partition</th>
+                            <th className="px-3 py-2 text-left">Rows</th>
+                            <th className="px-3 py-2 text-left">Size</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {partitions.length === 0 ? (
+                            <tr>
+                                <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">
+                                    {busy ? t('loading') : t('archiving_no_partitions')}
+                                </td>
+                            </tr>
+                        ) : (
+                            partitions.map(p => (
+                                <tr key={p.partition_name} className="border-b border-slate-900/60">
+                                    <td className="px-3 py-2 font-mono text-[11px]">{p.partition_name}</td>
+                                    <td className="px-3 py-2">{p.row_count}</td>
+                                    <td className="px-3 py-2">{p.size}</td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="overflow-x-auto -mx-3 mt-2 mb-4">
+                <p className="text-[11px] text-muted-foreground px-3 mb-2">{t('archiving_recent_records')}</p>
+                <table className="min-w-full text-xs text-foreground/90">
+                    <thead className="border-b border-slate-800 text-[11px] text-muted-foreground">
+                        <tr>
+                            <th className="px-3 py-2 text-left">ID</th>
+                            <th className="px-3 py-2 text-left">Agent</th>
+                            <th className="px-3 py-2 text-left">Created</th>
+                            <th className="px-3 py-2 text-left">Archived</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {records.length === 0 ? (
+                            <tr>
+                                <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                                    {t('archiving_empty_records')}
+                                </td>
+                            </tr>
+                        ) : (
+                            records.slice(0, 20).map(r => (
+                                <tr key={`${r.id}-${r.created_at}`} className="border-b border-slate-900/60">
+                                    <td className="px-3 py-2 font-mono text-[10px]">{r.id.slice(0, 8)}…</td>
+                                    <td className="px-3 py-2 text-[11px]">{r.agent_id?.slice(0, 8) || '—'}</td>
+                                    <td className="px-3 py-2 text-[11px]">
+                                        {new Date(r.created_at).toLocaleString()}
+                                    </td>
+                                    <td className="px-3 py-2 text-[11px]">
+                                        {r.archived_at ? new Date(r.archived_at).toLocaleString() : '—'}
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="border-t border-white/10 pt-3">
+                <p className="text-[11px] text-muted-foreground mb-2">{t('archiving_recent_ops')}</p>
+                {operations.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground">{t('no_history')}</p>
+                ) : (
+                    <div className="space-y-1">
+                        {operations.slice(0, 8).map(op => (
+                            <div
+                                key={op.id}
+                                className="text-[10px] text-muted-foreground flex justify-between gap-2"
+                            >
+                                <span>
+                                    {op.operation_type}
+                                    {op.dry_run ? ' (dry)' : ''} · {op.status}
+                                </span>
+                                <span>{new Date(op.started_at).toLocaleString()}</span>
                             </div>
                         ))}
                     </div>
-                ) : archives.length > 0 ? (
-                    <EmptyState
-                        icon={<span className="text-4xl">🔍</span>}
-                        title={t('no_matching_archives') || 'No matching archives'}
-                        description={t('try_different_filters') || 'Try adjusting your search or filters'}
-                    />
-                ) : (
-                    <EmptyState
-                        icon={<span className="text-4xl">📦</span>}
-                        title={t('no_archives') || 'No archives yet'}
-                        description={t('archives_desc') || 'Archives help you save storage and keep historical data for backtesting'}
-                        action={
-                            <ActionButton
-                                variant="primary"
-                                onClick={handleCreateArchive}
-                                loading={isLoadingArchives}
-                            >
-                                {t('create_first_archive') || 'Create Your First Archive'}
-                            </ActionButton>
-                        }
-                    />
                 )}
-
-                {/* Archive Rules Info */}
-                <div className="mt-6 bg-secondary/20 border border-border rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-foreground mb-2">
-                        {t('auto_archiving_rules') || 'Auto-Archiving Rules'}
-                    </h4>
-                    <p className="text-xs text-muted-foreground mb-3">
-                        {t('auto_archiving_desc') || 'Set up rules to automatically archive old data based on age, size, or quality'}
-                    </p>
-                    <ActionButton
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setShowRuleModal(true)}
-                    >
-                        {t('configure_rules') || 'Configure Rules'}
-                    </ActionButton>
-                </div>
             </div>
-        </ApiWrapper>
+
+            {showArchiveConfirm ? (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl p-4">
+                        <h4 className="text-sm font-semibold mb-2">{t('archiving_confirm_title')}</h4>
+                        <p className="text-[11px] text-muted-foreground mb-4">{t('archiving_confirm_archive_desc')}</p>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowArchiveConfirm(false)}
+                                className="text-[11px] bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5"
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    await executeArchiveMut.mutateAsync({
+                                        days_old: daysOld,
+                                        confirm_archive: true,
+                                    });
+                                    setShowArchiveConfirm(false);
+                                    setArchivePreview(null);
+                                }}
+                                className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 text-white"
+                            >
+                                {t('confirm')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {showRestoreConfirm ? (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl p-4">
+                        <h4 className="text-sm font-semibold mb-2">{t('archiving_restore_confirm_title')}</h4>
+                        <p className="text-[11px] text-muted-foreground mb-4">{t('archiving_confirm_restore_desc')}</p>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowRestoreConfirm(false)}
+                                className="text-[11px] bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5"
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    await executeRestoreMut.mutateAsync({
+                                        start_date: new Date(restoreStart).toISOString(),
+                                        end_date: new Date(restoreEnd).toISOString(),
+                                        confirm_restore: true,
+                                    });
+                                    setShowRestoreConfirm(false);
+                                    setRestorePreview(null);
+                                }}
+                                className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-600 text-white"
+                            >
+                                {t('confirm')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+        </div>
     );
 };
 

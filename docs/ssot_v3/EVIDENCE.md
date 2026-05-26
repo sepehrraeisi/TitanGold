@@ -310,6 +310,30 @@ rg -n "services/api" components/ai/AIManager/tabs/DataHub/advanced/SmartPrioriti
   پر می‌کنند.  
   Evidence: `backend/services/datahubPrioritizationService.js` `L410–469` (preview+complete) و `L411–477` (apply+complete/fail)
 
+### ۱۷. DataHub Archiving (GAP-032 Closed)
+
+#### No Mock Verification
+
+```bash
+rg -n "fetchDataHubState|createManualArchive|restoreFromArchive" \
+  components/ai/AIManager/tabs/DataHub/advanced/Archiving.tsx \
+  hooks/useDataHubArchiving.ts services/dataHubArchivingApi.ts
+# → 0 matches
+```
+
+`Archiving.tsx` uses `useDataHubArchiving` + `/api/v1/data-hub/archiving` only.
+
+#### Safety (v3.0)
+
+| Control | Evidence |
+|---------|----------|
+| Manual-only | No cron wiring in routes/service |
+| No purge apply | `previewPurge` count only — `purge_apply_available: false` in `datahubArchivingService.js` |
+| Strict confirm | `confirmArchive !== true` → `CONFIRM_ARCHIVE_REQUIRED` **400** |
+| API audit | `datahub_archiving_operations` migration `033` |
+
+---
+
 ### ۱۵. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |

@@ -180,6 +180,16 @@ Optional env: `CRAWLER_RENDER_JS_ENABLED=true` to allow Playwright `render_js` c
 | Migration file (audit hardening) | `backend/database/migrations/032_add_prioritization_audit_columns.sql` |
 | Migration run_on (pgmigrations) | `2026-05-26 18:49:57.130073` |
 
+### Migration verification — DataHub archiving (GAP-032 · 2026-05-26)
+
+| Field | Value |
+|-------|--------|
+| Migration file | `backend/database/migrations/033_create_datahub_archiving_operations.sql` |
+| Table | `datahub_archiving_operations` |
+| Environment | **dev** — host `ubuntu`, DB `titangold_db` |
+| Command | `cd backend && npm run migrate` |
+| Migration run_on (pgmigrations) | `2026-05-26 19:40:23.976429` |
+
 #### Host / toolchain
 
 | Field | Value |
@@ -187,7 +197,7 @@ Optional env: `CRAWLER_RENDER_JS_ENABLED=true` to allow Playwright `render_js` c
 | `hostname` | `ubuntu` |
 | `pwd` (repo root) | `/home/ubuntu/webapp/TitanGold` |
 | `git branch` | `feat/gap-008-sources-backend-wiring` |
-| `git commit (short)` | `b055378` |
+| `git commit (short)` | see latest on branch after GAP-032 push |
 | `current_database()` | `titangold_db` |
 | `current_user` | `postgres` |
 

@@ -151,13 +151,7 @@ const AdvancedFeatures: React.FC<{
             )}
 
             {activeFeature === 'archive' && (
-                <Archiving
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                />
+                <Archiving t={t} />
             )}
 
             {/* Pipeline Quality Snapshot - Keep high-level view if needed or move to Dashboard */}

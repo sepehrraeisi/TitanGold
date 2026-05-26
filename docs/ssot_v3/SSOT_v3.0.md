@@ -83,7 +83,7 @@
 | `dataHub.advanced.blacklist` | Blacklist / Whitelist | `BlacklistWhitelist.tsx` | CRUD + evaluate `/api/v1/data-hub/filter-rules`; ingestion enforce on collected-data | `datahub_filter_rules` (migration 028) | GAP-024 | **Implemented · Design: Done** | Backend-first; publishing evaluate only until GAP-025 |
 | `dataHub.advanced.telegramPublisher` | Telegram Publisher | `TelegramPublisher.tsx` | `/api/v1/data-hub/telegram-publishers` | `telegram_publishers`, `publisher_delivery_history` | publisher worker | **Implemented · Design: Done** | GAP-016 · Design-3. GAP-017 RBAC v3.1. |
 | `dataHub.advanced.automation` | Automation / Routing | `AutomationTopics.tsx` | `/api/v1/data-hub/automation` | `datahub_automation_topics`, `datahub_automation_queue`, `datahub_automation_schedule`, `datahub_automation_executions` | manual dispatch + publisher API | **Implemented · Design: Done** | GAP-018/019 · Design-3. GAP-020 cron v3.1. |
-| `dataHub.advanced.archiving` | Archiving & Cold Storage | `Archiving.tsx` | اسکریپت‌ها / endpointهای نگهداری آرشیو (partial) | `ai_decisions`, `ai_decisions_archive`, `ai_decisions_archive_stats`, view `ai_decisions_all` | archive jobs/cron | Partial | DB: `backend/database/migrations/006_partition_ai_decisions.sql`, `008_create_archive_tables.sql` |
+| `dataHub.advanced.archiving` | Archiving & Cold Storage | `Archiving.tsx` | `/api/v1/data-hub/archiving` health/stats/records + manual archive/restore/purge-preview | `ai_decisions_archive`, `ai_decisions_archive_stats`, `datahub_archiving_operations` (033), view `ai_decisions_all` | manual only (no cron v3.0) | **Implemented · Design: Done** | SQL functions from `008` + API GAP-032; no auto-delete |
 
 ---
 
