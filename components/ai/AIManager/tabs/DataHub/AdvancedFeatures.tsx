@@ -36,58 +36,84 @@ const AdvancedFeatures: React.FC<{
 
     return (
         <div className="space-y-6">
-            {/* Feature navigation tabs */}
-            <div className="flex gap-2 flex-wrap border-b border-border pb-2">
+            {/* Feature navigation tabs (redesigned to match DESIGN_SYSTEM_DATAHUB.md) */}
+            <div className="border border-white/5 bg-slate-950/70 rounded-xl p-2 overflow-x-auto no-scrollbar">
+                <div className="flex gap-2 whitespace-nowrap">
                 <button
                     onClick={() => setActiveFeature('crawlers')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'crawlers' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    type="button"
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
+                        activeFeature === 'crawlers' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
+                    }`}
                 >
-                    {t('web_crawlers') || 'Web Crawlers'}
+                    {t('web_crawlers')}
                 </button>
                 <button
                     onClick={() => setActiveFeature('discovery')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'discovery' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    type="button"
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
+                        activeFeature === 'discovery' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
+                    }`}
                 >
-                    {t('auto_discovery') || 'Auto Discovery'}
+                    {t('auto_discovery')}
                 </button>
                 <button
                     onClick={() => setActiveFeature('prioritization')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'prioritization' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    type="button"
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
+                        activeFeature === 'prioritization' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
+                    }`}
                 >
-                    {t('smart_prioritization') || 'Smart Prioritization'}
+                    {t('smart_prioritization')}
                 </button>
                 <button
                     onClick={() => setActiveFeature('access')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'access' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    type="button"
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
+                        activeFeature === 'access' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
+                    }`}
                 >
-                    {t('access_control') || 'Access Control'}
+                    {t('access_control')}
                 </button>
                 <button
                     onClick={() => setActiveFeature('blacklist')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'blacklist' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    type="button"
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
+                        activeFeature === 'blacklist' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
+                    }`}
                 >
-                    {t('blacklist_whitelist') || 'Blacklist/Whitelist'}
+                    {t('blacklist_whitelist')}
                 </button>
                 <button
                     onClick={() => setActiveFeature('telegram')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-1.5 ${activeFeature === 'telegram' ? 'bg-sky-500/15 text-sky-300 border-b-2 border-sky-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    type="button"
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                        activeFeature === 'telegram' ? 'bg-sky-500/15 border-sky-500/60 text-sky-300' : ''
+                    }`}
                 >
                     <span>📱</span>
-                    {t('telegram_publisher') || 'Telegram Publisher'}
+                    {t('telegram_publisher')}
                 </button>
                 <button
                     onClick={() => setActiveFeature('automation')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-1.5 ${activeFeature === 'automation' ? 'bg-purple-500/15 text-purple-300 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    type="button"
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                        activeFeature === 'automation' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
+                    }`}
                 >
                     <span>🤖</span>
-                    {t('automation_routing') || 'Automation'}
+                    {t('automation_routing')}
                 </button>
                 <button
                     onClick={() => setActiveFeature('archive')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'archive' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
+                    type="button"
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
+                        activeFeature === 'archive' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
+                    }`}
                 >
-                    {t('archiving') || 'Archiving'}
+                    {t('archiving')}
                 </button>
+                </div>
             </div>
 
             {/* Telegram-specific hints (TASK-DHT-065) */}
@@ -97,14 +123,14 @@ const AdvancedFeatures: React.FC<{
                         <span className="text-sky-400 text-lg">💡</span>
                         <div className="flex-1">
                             <p className="text-xs font-semibold text-sky-200 mb-1">
-                                {activeFeature === 'telegram' 
-                                    ? t('telegram_publisher_hint_title') || 'Telegram Publisher - Input vs Output Channels'
-                                    : t('telegram_automation_hint_title') || 'Telegram Automation - How It Works'}
+                                {activeFeature === 'telegram'
+                                    ? t('telegram_publisher_hint_title')
+                                    : t('telegram_automation_hint_title')}
                             </p>
                             <p className="text-[11px] text-sky-300/80 leading-relaxed">
-                                {activeFeature === 'telegram' 
-                                    ? t('telegram_publisher_hint') || 'Input channels collect data from Telegram (configured in Telegram Collector tab). Output channels (publishers) broadcast AI-analyzed signals back to Telegram. Use Automation Rules to connect input channels to output publishers.'
-                                    : t('telegram_automation_hint') || 'Create automation rules with dataType="telegram" to trigger actions when Telegram messages match your criteria (categories, tags, keywords). These rules can route signals to Telegram publishers for automated broadcasting.'}
+                                {activeFeature === 'telegram'
+                                    ? t('telegram_publisher_hint')
+                                    : t('telegram_automation_hint')}
                             </p>
                         </div>
                     </div>

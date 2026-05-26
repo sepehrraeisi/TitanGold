@@ -344,6 +344,16 @@ rg -n "fetchDataHubState|createManualArchive|restoreFromArchive" \
 
 ---
 
+### ۲۱. DataHub tab/subtab navigation redesign (pill + slate) + Not Found sanitize
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| DataHub main tab navigation redesigned | `DataHubTab.tsx` | L190–224 | تغییر استایل tabها به pill rounded با `border-white/5` + `bg-slate-900` و active state واضح. |
+| Advanced subtabs navigation redesigned | `AdvancedFeatures.tsx` | L39–138 | تغییر استایل navigation subtabs به همان pill slate و حذف fallbackهای inline انگلیسی برای label/hints. |
+| Raw HTTP “Not Found” sanitized | `dataHubI18n.ts` | L1–44 | `formatApiErrorForUi` الگوهای HTTP مثل `Not Found` را به کلیدهای i18n مثل `datahub_error_not_found` تبدیل می‌کند. |
+
+---
+
 ### ۱۹. Health Monitoring tab (`dataHub.health` · v3.0 blocker fix)
 
 | Claim | File | Lines | توضیح |

@@ -23,6 +23,15 @@
 
 ---
 
+### dataHub.navigation — tab bar + advanced subtab navigation (redesigned)
+
+- **Success scenario (UI):**
+  1. `AI Center → DataHub` : ردیف tabها به شکل pill/rounded درآمده، با `border-white/5` و `bg-slate-900` و active state واضح (Purple برای اکثر tabها، Sky برای `Telegram`).
+  2. `AI Center → DataHub → Advanced` : navigation subtabs (Crawlers/Discovery/Prioritization/Access/Safety Filtering/Publisher/Automation/Archiving) هم دقیقاً از همان سبک slate pill تبعیت می‌کند.
+- **Not Found/raw error sanitization (UI):**
+  1. اگر یک request برای برخی endpointها `404` یا `Not Found` برگرداند، هیچ متن خامی مثل `Not Found` در header/subtab title دیده نمی‌شود.
+  2. در panelها/بنرها پیام خطا با i18n sanitize می‌شود (استفاده از `formatApiErrorForUi` و `datahub_error_not_found`).
+
 ### dataHub.telegram – Telegram Panel / Agents / Breaking News
 
 - **Success Scenario (healthy pipeline)**  
