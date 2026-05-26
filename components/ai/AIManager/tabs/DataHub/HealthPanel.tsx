@@ -1,189 +1,379 @@
 import React, { useMemo } from 'react';
-import * as api from '../../../../../services/api';
-import { DataHubState, TelegramCollectorState } from '../../../../../types';
+import { TelegramCollectorState } from '../../../../../types';
 import SkeletonLoader from '../../../../common/SkeletonLoader';
-import ApiWrapper from '../../../../common/ApiWrapper';
+import {
+    useDataHubHealthLogCountsQuery,
+    useDataHubSourcesHealthQuery,
+    useDataHubSourcesStateQuery,
+    useDataHubSourcesStatsQuery,
+} from '../../../../../hooks/useDataHubState';
+import {
+    BTN_PRIMARY,
+    DATAHUB_SHELL,
+    DataHubAlert,
+    MetricCard,
+} from './dataHubUi';
+import {
+    formatAvgLatency,
+    formatCountDisplay,
+    formatNaDisplay,
+    formatSystemStatus,
+    parseFiniteCount,
+    systemStatusTextClass,
+    type PipelineHealthSystemStatus,
+} from './pipelineHealthFormat';
 
 interface HealthPanelProps {
     t: (key: string) => string;
-    health: DataHubState['health'];
-    handleCheckHealth: () => void;
-    isLoading: boolean;
-    error: string | null;
-    setError: (err: string | null) => void;
-    Card: React.FC<{ children: React.ReactNode; className?: string }>;
+    formatTimeAgo: (timestamp?: string) => string;
     telegramCollector?: TelegramCollectorState | null;
-    dataHub?: DataHubState | null;
 }
 
-const HealthPanel: React.FC<HealthPanelProps> = ({
-    t,
-    health,
-    handleCheckHealth,
-    isLoading,
-    error,
-    setError,
-    Card,
-    telegramCollector,
-    dataHub
-}) => {
-    // Calculate Telegram-specific metrics (TASK-DHT-040, TASK-DHT-041)
+function statusLabel(t: (key: string) => string, status: PipelineHealthSystemStatus): string {
+    const key = `pipeline_health_status_${status}`;
+    const translated = t(key);
+    return translated !== key ? translated : status;
+}
+
+function databaseLabel(t: (key: string) => string, raw?: string): string {
+    const s = String(raw ?? '').toLowerCase();
+    if (s === 'connected') {
+        const key = 'datahub_health_db_connected';
+        const tr = t(key);
+        return tr !== key ? tr : s;
+    }
+    if (s === 'disconnected') {
+        const key = 'datahub_health_db_disconnected';
+        const tr = t(key);
+        return tr !== key ? tr : s;
+    }
+    const key = 'datahub_health_db_unknown';
+    const tr = t(key);
+    return tr !== key ? tr : 'Unknown';
+}
+
+const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo, telegramCollector }) => {
+    const healthQuery = useDataHubSourcesHealthQuery();
+    const statsQuery = useDataHubSourcesStatsQuery();
+    const stateQuery = useDataHubSourcesStateQuery();
+    const logCountsQuery = useDataHubHealthLogCountsQuery();
+
+    const isLoading =
+        healthQuery.isLoading ||
+        statsQuery.isLoading ||
+        stateQuery.isLoading ||
+        logCountsQuery.isLoading;
+    const hasError =
+        healthQuery.isError ||
+        statsQuery.isError ||
+        stateQuery.isError ||
+        logCountsQuery.isError;
+
+    const systemStatus = useMemo(
+        () => formatSystemStatus(healthQuery.data?.status),
+        [healthQuery.data?.status],
+    );
+
+    const activeSources = useMemo(() => {
+        return (
+            parseFiniteCount(statsQuery.data?.active_sources) ??
+            parseFiniteCount(stateQuery.data?.activeSources) ??
+            parseFiniteCount(healthQuery.data?.activeSources) ??
+            0
+        );
+    }, [statsQuery.data, stateQuery.data, healthQuery.data]);
+
+    const totalSources = useMemo(() => {
+        return (
+            parseFiniteCount(statsQuery.data?.total_sources) ??
+            parseFiniteCount(stateQuery.data?.totalSources) ??
+            0
+        );
+    }, [statsQuery.data, stateQuery.data]);
+
+    const recentErrors = useMemo(() => {
+        const err = logCountsQuery.data?.statusCounts?.error;
+        return parseFiniteCount(err) ?? 0;
+    }, [logCountsQuery.data]);
+
+    const recentActivity = useMemo(() => {
+        return formatNaDisplay(healthQuery.data?.recentActivity);
+    }, [healthQuery.data?.recentActivity]);
+
+    const lastCheckLabel = useMemo(() => {
+        const ts = healthQuery.data?.timestamp;
+        if (!ts) return 'N/A';
+        const ago = formatTimeAgo(ts);
+        return ago || 'N/A';
+    }, [healthQuery.data?.timestamp, formatTimeAgo]);
+
+    const avgResponse = useMemo(() => formatAvgLatency(null), []);
+    const cacheHit = useMemo(() => ({ display: 'N/A', available: false }), []);
+
+    const sourcesByType = stateQuery.data?.sourcesByType;
+
     const telegramHealth = useMemo(() => {
-        if (!telegramCollector && !dataHub?.telegramCollector) return null;
-        const collector = telegramCollector || dataHub?.telegramCollector;
-        if (!collector) return null;
-
-        const channels = collector.channels || [];
-        const activeChannels = channels.filter((ch: any) => ch.isActive !== false).length;
-        const errorChannels = channels.filter((ch: any) => ch.lastError).length;
-
-        // Determine overall status
-        let status: 'healthy' | 'degraded' | 'down' = 'healthy';
-        if (collector.status === 'offline' || collector.status === 'error') {
-            status = 'down';
-        } else if (errorChannels > 0 || collector.status === 'degraded') {
+        if (!telegramCollector) return null;
+        const channels = telegramCollector.channels || [];
+        const activeChannels = channels.filter(ch => ch.isActive !== false).length;
+        const errorChannels = channels.filter(ch => ch.lastError).length;
+        let status: PipelineHealthSystemStatus = 'healthy';
+        if (telegramCollector.status === 'offline' || telegramCollector.status === 'error') {
+            status = 'unhealthy';
+        } else if (errorChannels > 0 || telegramCollector.status === 'degraded') {
             status = 'degraded';
         }
-
-        // Check for flood risk (TASK-DHT-041)
-        const hasFloodRisk = channels.some((ch: any) =>
-            ch.lastError && (ch.lastError.includes('FLOOD') || ch.lastError.includes('Flood'))
+        const hasFloodRisk = channels.some(
+            ch =>
+                ch.lastError &&
+                (ch.lastError.includes('FLOOD') || ch.lastError.includes('Flood')),
         );
-
         return {
             status,
             activeChannels,
             totalChannels: channels.length,
             errorChannels,
             hasFloodRisk,
-            // از healthSummary که در api.buildCollectorHealthSummary محاسبه می‌شود استفاده می‌کنیم
-            avgLatency: collector.healthSummary?.avgLatencyMs ?? null,
+            avgLatency: formatAvgLatency(telegramCollector.healthSummary?.avgLatencyMs ?? null),
         };
-    }, [telegramCollector, dataHub?.telegramCollector]);
+    }, [telegramCollector]);
 
-    // Count Telegram accounts from dataHub sources (if available)
-    const telegramAccountsCount = useMemo(() => {
-        if (!dataHub?.sources) return null;
-        const telegramSources = dataHub.sources.filter(s => s.type === 'telegram');
-        return telegramSources.length;
-    }, [dataHub?.sources]);
+    const refetchAll = () => {
+        void healthQuery.refetch();
+        void statsQuery.refetch();
+        void stateQuery.refetch();
+        void logCountsQuery.refetch();
+    };
+
+    const statusI18n = statusLabel(t, systemStatus);
 
     return (
-        <ApiWrapper
-            error={error}
-            setError={setError}
-            isLoading={isLoading && !health}
-        >
-            <div className="space-y-4">
-                {/* Main Health Card */}
-                <Card>
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-semibold text-foreground">{t('health_monitoring') || 'Health Monitoring'}</h3>
-                        <button
-                            onClick={handleCheckHealth}
-                            disabled={isLoading}
-                            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg text-sm"
-                        >
-                            {isLoading ? t('checking') || 'Checking...' : t('check_health') || 'Check Health'}
-                        </button>
+        <div className={DATAHUB_SHELL}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+                <div>
+                    <h3 className="text-sm md:text-base font-semibold text-foreground">
+                        {t('health_monitoring')}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
+                        {t('datahub_health_desc')}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={refetchAll}
+                    disabled={isLoading}
+                    className={BTN_PRIMARY}
+                >
+                    {isLoading ? t('checking') : t('datahub_health_refresh')}
+                </button>
+            </div>
+
+            {hasError && !isLoading && (
+                <div className="mb-4">
+                    <DataHubAlert
+                        variant="error"
+                        message={t('datahub_health_load_error')}
+                        onRetry={refetchAll}
+                        retryLabel={t('retry')}
+                    />
+                </div>
+            )}
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-5">
+                <MetricCard
+                    label={t('health_status')}
+                    color={
+                        systemStatus === 'healthy'
+                            ? 'emerald'
+                            : systemStatus === 'degraded'
+                              ? 'amber'
+                              : systemStatus === 'unhealthy'
+                                ? 'red'
+                                : 'blue'
+                    }
+                    value={
+                        isLoading ? (
+                            <SkeletonLoader width="72px" height="1.25rem" />
+                        ) : (
+                            <span className={systemStatusTextClass(systemStatus)}>{statusI18n}</span>
+                        )
+                    }
+                />
+                <MetricCard
+                    label={t('active_sources')}
+                    color="emerald"
+                    value={
+                        isLoading ? (
+                            <SkeletonLoader width="32px" height="1.25rem" />
+                        ) : (
+                            formatCountDisplay(activeSources)
+                        )
+                    }
+                />
+                <MetricCard
+                    label={t('total_sources')}
+                    color="blue"
+                    value={
+                        isLoading ? (
+                            <SkeletonLoader width="32px" height="1.25rem" />
+                        ) : (
+                            formatCountDisplay(totalSources)
+                        )
+                    }
+                />
+                <MetricCard
+                    label={t('datahub_health_recent_errors')}
+                    color="red"
+                    value={
+                        isLoading ? (
+                            <SkeletonLoader width="32px" height="1.25rem" />
+                        ) : (
+                            formatCountDisplay(recentErrors)
+                        )
+                    }
+                />
+                <MetricCard
+                    label={t('datahub_health_last_check')}
+                    color="purple"
+                    value={
+                        isLoading ? (
+                            <SkeletonLoader width="64px" height="1.25rem" />
+                        ) : (
+                            lastCheckLabel
+                        )
+                    }
+                />
+                <MetricCard
+                    label={t('datahub_health_recent_activity')}
+                    color="amber"
+                    value={
+                        isLoading ? (
+                            <SkeletonLoader width="32px" height="1.25rem" />
+                        ) : (
+                            recentActivity
+                        )
+                    }
+                />
+                <MetricCard
+                    label={t('avg_response_time')}
+                    color="blue"
+                    value={
+                        isLoading ? (
+                            <SkeletonLoader width="40px" height="1.25rem" />
+                        ) : (
+                            <span title={t('datahub_health_avg_response_na')}>
+                                {avgResponse.display}
+                            </span>
+                        )
+                    }
+                />
+                <MetricCard
+                    label={t('cache_hit_rate')}
+                    color="purple"
+                    value={
+                        isLoading ? (
+                            <SkeletonLoader width="40px" height="1.25rem" />
+                        ) : (
+                            <span title={t('datahub_health_cache_hit_na')}>{cacheHit.display}</span>
+                        )
+                    }
+                />
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 mb-5">
+                <p className="text-[11px] text-muted-foreground mb-3">{t('datahub_health_sources_by_type')}</p>
+                {isLoading ? (
+                    <SkeletonLoader width="100%" height="2rem" />
+                ) : (
+                    <div className="grid grid-cols-3 gap-3">
+                        <MetricCard
+                            label={t('telegram')}
+                            color="blue"
+                            value={formatCountDisplay(sourcesByType?.telegram)}
+                        />
+                        <MetricCard
+                            label={t('rss')}
+                            color="amber"
+                            value={formatCountDisplay(sourcesByType?.rss)}
+                        />
+                        <MetricCard
+                            label={t('api')}
+                            color="purple"
+                            value={formatCountDisplay(sourcesByType?.api)}
+                        />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <p className="text-xs text-muted-foreground mb-1">{t('active_connections') || 'Active Connections'}</p>
-                            {isLoading ? <SkeletonLoader width="40px" height="1.75rem" /> : <p className="text-lg font-bold text-green-400">{health.activeConnections}</p>}
-                        </div>
-                        <div>
-                            <p className="text-xs text-muted-foreground mb-1">{t('failed_connections') || 'Failed Connections'}</p>
-                            {isLoading ? <SkeletonLoader width="40px" height="1.75rem" /> : <p className="text-lg font-bold text-red-400">{health.failedConnections}</p>}
-                        </div>
-                        <div>
-                            <p className="text-xs text-muted-foreground mb-1">{t('avg_response_time') || 'Avg Response Time'}</p>
-                            {isLoading ? <SkeletonLoader width="60px" height="1.75rem" /> : <p className="text-lg font-bold text-foreground">{health.averageResponseTime.toFixed(0)}ms</p>}
-                        </div>
-                        <div>
-                            <p className="text-xs text-muted-foreground mb-1">{t('cache_hit_rate') || 'Cache Hit Rate'}</p>
-                            {isLoading ? <SkeletonLoader width="60px" height="1.75rem" /> : <p className="text-lg font-bold text-purple-400">{health.cacheHitRate.toFixed(1)}%</p>}
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Telegram Collector Health Card (TASK-DHT-040, TASK-DHT-041, TASK-DHT-045) */}
-                {telegramHealth && (
-                    <Card className="bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-[0_18px_60px_rgba(15,23,42,0.9)]">
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-semibold text-foreground">
-                                    {t('telegram_collector_health') || 'Telegram Collector Health'}
-                                </h4>
-                                <span className={`w-2 h-2 rounded-full ${telegramHealth.status === 'healthy'
-                                        ? 'bg-emerald-400 animate-pulse'
-                                        : telegramHealth.status === 'degraded'
-                                            ? 'bg-amber-400 animate-pulse'
-                                            : 'bg-red-500'
-                                    }`} />
-                            </div>
-                            {telegramHealth.hasFloodRisk && (
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/40">
-                                    {t('telegram_flood_risk') || 'Flood Risk'}
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div className="rounded-xl border border-white/5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-3 backdrop-blur-sm">
-                                <p className="text-[11px] text-emerald-300/80 mb-1">
-                                    {t('collector_status') || 'Status'}
-                                </p>
-                                <p className={`text-sm font-semibold capitalize ${telegramHealth.status === 'healthy'
-                                        ? 'text-emerald-100'
-                                        : telegramHealth.status === 'degraded'
-                                            ? 'text-amber-100'
-                                            : 'text-red-100'
-                                    }`}>
-                                    {telegramHealth.status}
-                                </p>
-                            </div>
-                            <div className="rounded-xl border border-white/5 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent p-3 backdrop-blur-sm">
-                                <p className="text-[11px] text-blue-300/80 mb-1">
-                                    {t('active_channels') || 'Active Channels'}
-                                </p>
-                                <p className="text-sm font-semibold text-blue-100">
-                                    {telegramHealth.activeChannels} / {telegramHealth.totalChannels}
-                                </p>
-                            </div>
-                            {telegramHealth.avgLatency !== null && (
-                                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent p-3 backdrop-blur-sm">
-                                    <p className="text-[11px] text-purple-300/80 mb-1">
-                                        {t('avg_latency') || 'Avg Latency'}
-                                    </p>
-                                    <p className="text-sm font-semibold text-purple-100">
-                                        {Math.round(telegramHealth.avgLatency)}ms
-                                    </p>
-                                </div>
-                            )}
-                            {telegramAccountsCount !== null && (
-                                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-sky-500/10 via-sky-500/5 to-transparent p-3 backdrop-blur-sm">
-                                    <p className="text-[11px] text-sky-300/80 mb-1">
-                                        {t('telegram_sources') || 'Telegram Sources'}
-                                    </p>
-                                    <p className="text-sm font-semibold text-sky-100">
-                                        {telegramAccountsCount}
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
-                        {telegramHealth.errorChannels > 0 && (
-                            <div className="mt-3 pt-3 border-t border-slate-800/60">
-                                <p className="text-[11px] text-red-300">
-                                    {t('channels_with_errors') || 'Channels with errors'}: {telegramHealth.errorChannels}
-                                </p>
-                            </div>
-                        )}
-                    </Card>
+                )}
+                {!isLoading && healthQuery.data?.database && (
+                    <p className="text-[10px] text-muted-foreground mt-3">
+                        {t('datahub_health_database')}: {databaseLabel(t, healthQuery.data.database)}
+                    </p>
                 )}
             </div>
-        </ApiWrapper>
+
+            {telegramHealth && (
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-semibold text-foreground">
+                                {t('telegram_collector_health')}
+                            </h4>
+                            <span
+                                className={`w-2 h-2 rounded-full ${
+                                    telegramHealth.status === 'healthy'
+                                        ? 'bg-emerald-400 animate-pulse'
+                                        : telegramHealth.status === 'degraded'
+                                          ? 'bg-amber-400 animate-pulse'
+                                          : 'bg-red-500'
+                                }`}
+                            />
+                        </div>
+                        {telegramHealth.hasFloodRisk && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/40">
+                                {t('telegram_flood_risk')}
+                            </span>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <MetricCard
+                            label={t('collector_status')}
+                            color={
+                                telegramHealth.status === 'healthy'
+                                    ? 'emerald'
+                                    : telegramHealth.status === 'degraded'
+                                      ? 'amber'
+                                      : 'red'
+                            }
+                            value={statusLabel(t, telegramHealth.status)}
+                        />
+                        <MetricCard
+                            label={t('active_channels')}
+                            color="blue"
+                            value={`${formatCountDisplay(telegramHealth.activeChannels)} / ${formatCountDisplay(telegramHealth.totalChannels)}`}
+                        />
+                        <MetricCard
+                            label={t('avg_latency')}
+                            color="purple"
+                            value={
+                                <span
+                                    title={
+                                        telegramHealth.avgLatency.available
+                                            ? undefined
+                                            : t('pipeline_latency_not_available')
+                                    }
+                                >
+                                    {telegramHealth.avgLatency.display}
+                                </span>
+                            }
+                        />
+                        <MetricCard
+                            label={t('datahub_health_recent_errors')}
+                            color="red"
+                            value={formatCountDisplay(telegramHealth.errorChannels)}
+                        />
+                    </div>
+                </div>
+            )}
+        </div>
     );
 };
 

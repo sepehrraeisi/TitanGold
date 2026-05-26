@@ -18,6 +18,7 @@
 | **Prioritization** | `dataHub.advanced.prioritization` | GAP-030 · Design Done |
 | **Archiving** | `dataHub.advanced.archiving` | GAP-032 · Design Done |
 | **Pipeline Health Overview** | `dataHub.advanced.pipelineHealth` | GAP-034 (latency API) · v3.0 safe metrics |
+| **Health Monitoring** | `dataHub.health` | GAP-035 (avg response/cache API) · Design Done |
 
 ---
 
@@ -380,4 +381,21 @@ Evidence: `docs/ssot_v3/EVIDENCE.md` § Crawler runtime safety.
 rg "overallStatus|avgLatency|activeSources.*totalSources" components/ai/AIManager/tabs/DataHub/AdvancedFeatures.tsx
 # → no matches
 rg "PipelineHealthOverview|fetchDataHubSourcesHealth" components/ai/AIManager/tabs/DataHub/
+```
+
+### dataHub.health – Health Monitoring (v3.0 backend-first · GAP-035 avg response/cache API)
+
+**UI:** `AI Center → DataHub → Health` (`HealthPanel.tsx`).
+
+| سناریو | Network | Expected UI |
+|--------|---------|-------------|
+| **Success** | `GET /health`, `GET /stats`, `GET /state`, `GET /access-logs?limit=1` (برای `statusCounts`) | Overall status ترجمه‌شده؛ Active/Total sources اعداد معتبر؛ Logged errors = `statusCounts.error`؛ Last check = `formatTimeAgo(timestamp)`؛ Sources by type (telegram/rss/api)؛ Avg response + Cache = **N/A** + tooltip |
+| **Empty** | `stats` → zeros؛ `access-logs` → `error: 0` | همه شمارنده‌ها `0` — نه `undefined`/`NaN`/`/` |
+| **API failure** | هر یک از health/stats/state/access-logs → خطا | بنر `datahub_health_load_error` + Retry؛ skeleton در load |
+
+**Forbidden in UI:** `Undefined`, `NaN ms`, `health.averageResponseTime.toFixed`, `cacheHitRate.toFixed` روی دادهٔ IndexedDB.
+
+```bash
+rg "checkDataHubHealth|health\\.averageResponseTime|health\\.cacheHitRate" components/ai/AIManager/tabs/DataHub/HealthPanel.tsx
+# → no matches (HealthPanel uses React Query + formatters)
 ```

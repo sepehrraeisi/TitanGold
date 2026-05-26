@@ -334,6 +334,16 @@ rg -n "fetchDataHubState|createManualArchive|restoreFromArchive" \
 
 ---
 
+### ۱۹. Health Monitoring tab (`dataHub.health` · v3.0 blocker fix)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| Health tab از APIهای واقعی می‌خواند | `HealthPanel.tsx`, `services/dataSourcesApi.ts`, `hooks/useDataHubState.ts` | `fetchDataHubSourcesHealth`, `fetchDataHubSourcesStats`, `fetchDataHubSourcesState`; `useDataHubHealthLogCountsQuery` → `fetchDataAccessLogs` | دیگر `dataHub.health` از IndexedDB/`checkDataHubHealth` در این تب رندر نمی‌شود. |
+| بدون NaN/undefined در متریک‌ها | `pipelineHealthFormat.ts`, `HealthPanel.tsx` | `formatCountDisplay`, `formatAvgLatency`, `formatSystemStatus` | avg response و cache = N/A تا GAP-035. |
+| SSOT status | `docs/ssot_v3/SSOT_v3.0.md` | `dataHub.health` row | **Implemented · Design: Done** |
+
+---
+
 ### ۱۸. Pipeline Health Overview (Advanced · v3.0 blocker fix)
 
 | Claim | File | Lines | توضیح |

@@ -32,6 +32,16 @@ export function formatAvgLatency(
     return { display: `${Math.round(value)} ms`, available: true };
 }
 
+export function formatCountDisplay(value: unknown): string {
+    const n = parseFiniteCount(value);
+    return n != null ? String(n) : '0';
+}
+
+export function formatNaDisplay(value: unknown): string {
+    const n = parseFiniteCount(value);
+    return n != null ? String(n) : 'N/A';
+}
+
 export function systemStatusTextClass(status: PipelineHealthSystemStatus): string {
     switch (status) {
         case 'healthy':

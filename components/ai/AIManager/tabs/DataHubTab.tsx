@@ -59,7 +59,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         channelTestPreview,
         isRefreshingChannels,
         telegramCollectorUrl,
-        handleCheckHealth,
         handleCollectorHealth,
         handleDiagnoseCollector,
         handleCollectorInputChange,
@@ -102,11 +101,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         setPipelineError,
         categoriesError,
         setCategoriesError,
-        healthError,
-        setHealthError,
         logsError,
         setLogsError,
-        isLoadingHealth,
         isLoadingLogs,
         currentError,
         clearError,
@@ -329,14 +325,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     {activeView === 'health' && (
                         <HealthPanel
                             t={t}
-                            health={dataHub.health}
-                            handleCheckHealth={handleCheckHealth}
-                            isLoading={isLoadingHealth}
-                            error={healthError}
-                            setError={setHealthError}
-                            Card={Card}
+                            formatTimeAgo={formatTimeAgo}
                             telegramCollector={dataHub.telegramCollector || null}
-                            dataHub={dataHub}
                         />
                     )}
 

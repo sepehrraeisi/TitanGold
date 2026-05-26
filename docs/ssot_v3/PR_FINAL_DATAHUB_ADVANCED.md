@@ -12,6 +12,12 @@
 - Avg latency فعلاً **N/A** + tooltip تا API تجمیعی آماده شود.
 - **GAP-034** (aggregate pipeline latency API) برای **v3.1** باز است.
 
+**Pre-merge blocker (resolved) — Health Monitoring tab:**
+
+- تب **Health Monitoring** (`dataHub.health`) backend-first شد: `/health`, `/stats`, `/state`, access-log error counts.
+- دیگر `0ms` ساختگی، `NaN`، یا `health.averageResponseTime.toFixed` از IndexedDB نمایش داده نمی‌شود.
+- Avg response time و cache hit rate = **N/A** (GAP-035 → v3.1).
+
 ---
 
 ## 1) Git clean proof
@@ -223,6 +229,7 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 - [ ] Crawler: run once → run history
 - [ ] Filter rule: POST collected-data blocked when rule matches
 - [ ] Advanced → Pipeline Health Overview: status from `/health`, sources `N/M` from `/stats`, latency **N/A** (no Undefined/NaN)
+- [ ] Health tab: overall from `/health`, active/total from `/stats`, errors from access-logs `statusCounts`, last check from `timestamp`, avg response/cache **N/A**
 
 ---
 
@@ -231,8 +238,10 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 | Check | Result |
 |-------|--------|
 | Pipeline Health Overview blocker | **Resolved** (`f42d8f2`) |
-| Undefined / NaN ms in Advanced health strip | **None** |
-| Latency metric | **N/A** (GAP-034 → v3.1) |
+| Health Monitoring tab blocker | **Resolved** (backend-first `HealthPanel`) |
+| Undefined / NaN ms in health UI | **None** |
+| Latency metric (Advanced overview) | **N/A** (GAP-034 → v3.1) |
+| Avg response / cache (Health tab) | **N/A** (GAP-035 → v3.1) |
 | Branch pushed to `origin` | **Yes** — `git push origin feat/gap-008-sources-backend-wiring` (includes `f42d8f2`, `c7f38de`) |
 
 *Checkpoint updated 2026-05-26 · **ready for final PR merge** — working tree clean, branch synced with `origin`.*

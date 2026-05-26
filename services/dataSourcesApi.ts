@@ -357,3 +357,21 @@ export type DataHubSourcesStats = {
 export async function fetchDataHubSourcesStats(): Promise<DataHubSourcesStats> {
     return dataSourcesRequest<DataHubSourcesStats>('/stats');
 }
+
+/** GET /api/v1/data-sources/state — aggregate counts + source type breakdown */
+export type DataHubSourcesState = {
+    status?: string;
+    totalSources?: number;
+    activeSources?: number;
+    sourcesByType?: {
+        telegram?: number;
+        rss?: number;
+        api?: number;
+    };
+    recentLogs?: number;
+    totalLogs?: number;
+};
+
+export async function fetchDataHubSourcesState(): Promise<DataHubSourcesState> {
+    return dataSourcesRequest<DataHubSourcesState>('/state');
+}
