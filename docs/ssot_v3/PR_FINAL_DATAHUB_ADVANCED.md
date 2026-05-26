@@ -14,6 +14,8 @@ $ git status --short
 # (empty — working tree clean)
 
 $ git log --oneline -8
+f42d8f2 fix(datahub): guard pipeline health overview metrics
+1eda662 docs(datahub): final release checkpoint for advanced v3.0 PR
 43b6368 feat(datahub): GAP-032 archiving backend-first (manual archive/restore)
 df64454 feat(datahub): GAP-030 smart prioritization backend-first (preview + manual apply)
 b055378 feat(datahub): GAP-028 auto discovery suggestion-only backend
@@ -84,7 +86,19 @@ No advanced subtab row remains **Partial** for v3.0 delivery.
 | **GAP-029** | Discovery scheduler daemon |
 | **GAP-031** | Prioritization scheduler / auto-apply |
 | **GAP-033** | Archiving scheduler cron |
+| **GAP-034** | Aggregate pipeline avg latency API (`data_hub_logs.execution_time_ms` or pipeline `/stats`) |
 | GAP-001/002/003/005/015 | Analytics, orchestration, pipeline snapshots, backtesting, logs scale |
+
+### Pre-merge blocker fix — Pipeline Health Overview
+
+| Item | Status |
+|------|--------|
+| Blocker UI (Advanced → Pipeline Health Overview) | **Fixed** — commit `f42d8f2` |
+| `Undefined` / `NaN ms` in UI | **Removed** — safe formatters + `/health` + `/stats` |
+| Avg latency display | **N/A** + tooltip (`pipeline_latency_not_available`) until GAP-034 |
+| GAP-034 (aggregate latency API) | **Open** — v3.1 |
+
+Component: `PipelineHealthOverview.tsx` · APIs: `GET /api/v1/data-sources/health`, `GET /api/v1/data-sources/stats` · Demos: `DataHub_DEMOS.md` § `dataHub.advanced.pipelineHealth`.
 
 ---
 
@@ -139,6 +153,7 @@ Core DataHub (same PR branch): `/api/v1/data-sources`, `/data-categories`, `/dat
 | `AutoDiscoveryConfig.tsx` | `dataHubDiscoveryApi` |
 | `SmartPrioritization.tsx` | `dataHubPrioritizationApi` · `useDataHubPrioritization` |
 | `Archiving.tsx` | `dataHubArchivingApi` · `useDataHubArchiving` |
+| `PipelineHealthOverview.tsx` (Advanced footer) | `dataSourcesApi` · `useDataHubSourcesHealthQuery` / `useDataHubSourcesStatsQuery` |
 
 **Design:** all above per `DESIGN_SYSTEM_DATAHUB.md` (slate shell, tables, modals, badges). See `DATAHUB_DESIGN_BACKLOG.md`.
 
@@ -169,9 +184,9 @@ Core DataHub (same PR branch): `/api/v1/data-sources`, `/data-categories`, `/dat
 
 Full scenarios: `docs/ssot_v3/DataHub_DEMOS.md` — **Demo index** table at top covers:
 
-Sources · Categories · Pipeline · Logs · Telegram · Access Control · Telegram Publisher · Automation · Blacklist/Whitelist · Crawlers · Discovery · Prioritization · Archiving
+Sources · Categories · Pipeline · Logs · Telegram · Access Control · Telegram Publisher · Automation · Blacklist/Whitelist · Crawlers · Discovery · Prioritization · Archiving · **Pipeline Health Overview**
 
-Evidence (grep / no-mock): `docs/ssot_v3/EVIDENCE.md` §§ 8–17.
+Evidence (grep / no-mock): `docs/ssot_v3/EVIDENCE.md` §§ 8–18.
 
 ---
 
@@ -199,7 +214,17 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 - [ ] Discovery: scan → approve suggestion (no auto-create on scan)
 - [ ] Crawler: run once → run history
 - [ ] Filter rule: POST collected-data blocked when rule matches
+- [ ] Advanced → Pipeline Health Overview: status from `/health`, sources `N/M` from `/stats`, latency **N/A** (no Undefined/NaN)
 
 ---
 
-*Checkpoint generated 2026-05-26 · ready for final PR merge review.*
+## 11) Final status
+
+| Check | Result |
+|-------|--------|
+| Pipeline Health Overview blocker | **Resolved** (`f42d8f2`) |
+| Undefined / NaN ms in Advanced health strip | **None** |
+| Latency metric | **N/A** (GAP-034 → v3.1) |
+| Branch pushed to `origin` | After `git push origin feat/gap-008-sources-backend-wiring` |
+
+*Checkpoint updated 2026-05-26 · **ready for final PR merge** after push + clean `git status`.*
