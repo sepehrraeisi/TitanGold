@@ -127,6 +127,105 @@ cd backend && node scripts/verify_automation_demo.js
 
 **Greenfield کامل (`schema.sql` + migrate):** هنوز migrationهای legacy قدیمی‌تر (مثلاً `004_add_autopilot_system`) ممکن است به ستون‌هایی وابسته باشند که در `database/schema.sql` نیستند؛ مسیر رسمی verify برای automation: **migrate روی DB dev موجود** + اسکریپت demo بالا.
 
+### Migration verification — DataHub filter rules (GAP-024 · 2026-05-25)
+
+| Field | Value |
+|-------|--------|
+| Migration file | `backend/database/migrations/028_create_datahub_filter_rules.sql` |
+| Table | `datahub_filter_rules` |
+| Environment | **dev** — `titangold_db` on `127.0.0.1:5433` (same host as automation proof) |
+| Command | `cd backend && npm run migrate` |
+| Result | **PASS** — log includes `MIGRATION 028_create_datahub_filter_rules (UP)` and `Migrations complete!` |
+
+Verify table:
+
+```sql
+\dt datahub_filter_rules
+SELECT COUNT(*) FROM datahub_filter_rules WHERE deleted_at IS NULL;
+```
+
+Runtime demos: `docs/ssot_v3/DataHub_DEMOS.md` § `dataHub.advanced.blacklist` (ingestion 403, batch `blocked`, evaluate-only publishing).
+
+### Migration verification — DataHub crawlers (GAP-026 · 2026-05-25)
+
+| Field | Value |
+|-------|--------|
+| Migration file | `backend/database/migrations/029_create_datahub_crawlers.sql` |
+| Tables | `datahub_crawlers`, `datahub_crawler_runs` |
+| Environment | **dev** — `titangold_db` @ `127.0.0.1:5433` |
+| Command | `cd backend && npm run migrate` |
+| Result | **PASS** — `029_create_datahub_crawlers (UP)` |
+
+Optional env: `CRAWLER_RENDER_JS_ENABLED=true` to allow Playwright `render_js` crawls (default off in production).
+
+### Migration verification — DataHub discovery (GAP-028 · 2026-05-25)
+
+| Field | Value |
+|-------|--------|
+| Migration | `030_create_datahub_discovery.sql` |
+| Tables | `datahub_discovery_settings`, `datahub_discovery_rules`, `datahub_discovery_scans`, `datahub_discovery_suggestions` |
+| DB | dev `titangold_db` @ `127.0.0.1:5433` |
+| Command | `cd backend && npm run migrate` → **PASS** |
+
+### Migration verification — DataHub prioritization (GAP-030 · 2026-05-26)
+
+| Field | Value |
+|-------|--------|
+| Migration file | `backend/database/migrations/031_create_datahub_prioritization.sql` |
+| Tables (created/altered) | `datahub_prioritization_settings`, `datahub_source_priorities`, `datahub_prioritization_runs`; `data_sources.priority*` columns |
+| Environment | **dev** — host `ubuntu`, repo `/home/ubuntu/webapp/TitanGold`, DB `titangold_db` |
+| Command | `cd backend && npm run migrate` |
+| Migration run_on (pgmigrations) | `2026-05-26 18:33:18.256651` |
+
+| Migration file (audit hardening) | `backend/database/migrations/032_add_prioritization_audit_columns.sql` |
+| Migration run_on (pgmigrations) | `2026-05-26 18:49:57.130073` |
+
+### Migration verification — DataHub archiving (GAP-032 · 2026-05-26)
+
+| Field | Value |
+|-------|--------|
+| Migration file | `backend/database/migrations/033_create_datahub_archiving_operations.sql` |
+| Table | `datahub_archiving_operations` |
+| Environment | **dev** — host `ubuntu`, DB `titangold_db` |
+| Command | `cd backend && npm run migrate` |
+| Migration run_on (pgmigrations) | `2026-05-26 19:40:23.976429` |
+
+#### Host / toolchain
+
+| Field | Value |
+|-------|--------|
+| `hostname` | `ubuntu` |
+| `pwd` (repo root) | `/home/ubuntu/webapp/TitanGold` |
+| `git branch` | `feat/gap-008-sources-backend-wiring` |
+| `git commit (short)` | see latest on branch after GAP-032 push |
+| `current_database()` | `titangold_db` |
+| `current_user` | `postgres` |
+
+**Real server proof:** migration executed on the same dev host shown above (not a local laptop).
+
+### Migration runner — `Can't determine timestamp for …` warnings
+
+When running `cd backend && npm run migrate`, `node-pg-migrate` may print many lines such as:
+
+```text
+Can't determine timestamp for 030
+Can't determine timestamp for 031
+Can't determine timestamp for 032
+Can't determine timestamp for 20260214
+Can't determine timestamp for add
+```
+
+**Verdict: harmless on this repo (observed 2026-05-26).**
+
+| Cause | Detail |
+|-------|--------|
+| Mixed filename styles | Same directory mixes `NNN_description.sql` (e.g. `031_create_datahub_prioritization.sql`), date-prefixed files (`20260216_add_priority_error_tracking.sql`), and legacy names (`add_2fa_columns.sql`, `query_performance_optimization.sql`). |
+| Tool behavior | `node-pg-migrate` tries to infer ordering from a leading timestamp; when absent it logs `Can't determine timestamp` — it does **not** mean the migration failed. |
+| Our wrapper | `backend/database/migrate.js` runs `up` with `--no-check-order`, so chain order is driven by **applied state in `pgmigrations`**, not inferred timestamps. |
+| Production safety | Migrations **030 / 031 / 032** applied successfully on dev (`pgmigrations.run_on` recorded). Do **not** rename already-applied migration files on shared DBs. |
+
+**Convention for new migrations (post GAP-030):** prefer `033_<snake_case_description>.sql` numeric sequence under `backend/database/migrations/` (same as 028–032). Optional future cleanup: standardize legacy files only on greenfield — not required for v3.0.
+
 ### Environment Proof — `dataHub.advanced.automation` (2026-05-24)
 
 > **Scope:** dev DB on application server (`ubuntu` host) — **not production.**  

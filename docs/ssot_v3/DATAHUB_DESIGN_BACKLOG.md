@@ -82,11 +82,11 @@
 
 | Subtab | Backend | Design | Phase |
 |--------|---------|--------|-------|
-| blacklist | Partial | Not started | Post Design-3 |
-| crawlers | Partial | Not started | Post Design-3 |
-| discovery | Partial | Not started | Post Design-3 |
-| prioritization | Partial | Not started | Post Design-3 |
-| archiving | Partial | Not started | Post Design-3 |
+| blacklist | **Implemented · Design: Done** | GAP-024 closed | Backend-first `datahub_filter_rules` |
+| crawlers | **Implemented · Design: Done** | GAP-026 closed | Backend-first + run history |
+| discovery | **Implemented · Design: Done** | GAP-028 closed | Suggestion-only + approval audit |
+| prioritization | **Implemented · Design: Done** | GAP-030 closed | Backend-first preview/apply/override + full i18n + demos |
+| archiving | **Implemented · Design: Done** | GAP-032 closed | Backend-first manual archive/restore + dry-run |
 
 ---
 
@@ -97,8 +97,20 @@
 | GAP-007 | Frontend chunk size >500KB (DataHubTab bundle) | **Open** v3.1 — build passes; not a Design blocker |
 | GAP-021 | Core tabs design pass | **Closed** (Design-1/2) |
 | GAP-022 | Access Control + design | **Closed** |
-| GAP-023 | Advanced subtabs design | **Partial** — Done: publisher, automation, access · Pending: blacklist, crawlers, discovery, prioritization, archiving |
-| GAP-024 | Blacklist backend-first + design | Open — see `BLACKLIST_WHITELIST_API_CONTRACT.md` |
+| GAP-023 | Advanced subtabs design | **Closed** — all advanced subtabs Design Done through GAP-032 |
+| GAP-024 | Blacklist backend-first + design | **Closed** |
+| GAP-026 | Crawlers backend-first + design | **Closed** |
+| GAP-027 | Crawler scheduler + prod Playwright | **Open** v3.1 only |
+| GAP-028 | Auto Discovery backend-first | **Closed** |
+| GAP-029 | Discovery scheduler | **Open** v3.1 |
+| GAP-030 | Smart Prioritization | **Closed** — backend-first preview/apply/override + Design Done |
+| GAP-031 | Prioritization scheduler / auto-apply | **Open** v3.1 |
+| GAP-032 | Archiving backend-first | **Closed** |
+| GAP-033 | Archiving scheduler cron | **Open** v3.1 |
+
+---
+
+**Next contract:** none for v3.0 advanced (all subtabs implemented).
 
 ---
 

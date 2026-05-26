@@ -1,18 +1,37 @@
 import React, { useState } from 'react';
-import { DataSource } from '../../../../../../types';
+import type { DataSource } from '../../../../../../types';
+import type {
+    CreateCrawlerPayload,
+    CrawlerTargetType,
+    DataHubCrawler,
+    CrawlerScheduleInterval,
+} from '../../../../../../services/dataHubCrawlersApi';
 
 const WebCrawlerModal: React.FC<{
-    crawler?: any;
+    crawler?: DataHubCrawler;
     sources: DataSource[];
     onClose: () => void;
-    onSave: (data: any) => Promise<void>;
+    onSave: (data: CreateCrawlerPayload) => Promise<void>;
+    isSaving?: boolean;
     t: (key: string) => string;
-}> = ({ crawler, sources, onClose, onSave, t }) => {
+}> = ({ crawler, sources, onClose, onSave, isSaving = false, t }) => {
     const [name, setName] = useState(crawler?.name || '');
-    const [url, setUrl] = useState(crawler?.url || '');
-    const [sourceId, setSourceId] = useState(crawler?.sourceId || '');
-    const [interval, setInterval] = useState<'realtime' | '1min' | '5min' | '15min' | '30min' | '1hour' | 'daily'>(crawler?.interval || '5min');
-    const [enabled, setEnabled] = useState(crawler?.enabled ?? true);
+    const [targetType, setTargetType] = useState<CrawlerTargetType>(crawler?.target_type || 'website');
+    const [startUrl, setStartUrl] = useState(crawler?.start_url || '');
+    const [sourceMode, setSourceMode] = useState<'existing' | 'new'>(
+        crawler?.source_id ? 'existing' : 'new',
+    );
+    const [sourceId, setSourceId] = useState(crawler?.source_id || '');
+    const [newSourceName, setNewSourceName] = useState('');
+    const [scheduleInterval, setScheduleInterval] = useState<CrawlerScheduleInterval>(
+        crawler?.schedule_interval || '5min',
+    );
+    const [maxDepth, setMaxDepth] = useState(String(crawler?.max_depth ?? 0));
+    const [maxPages, setMaxPages] = useState(String(crawler?.max_pages_per_run ?? 50));
+    const [timeoutMs, setTimeoutMs] = useState(String(crawler?.timeout_ms ?? 600000));
+    const [isEnabled, setIsEnabled] = useState(crawler?.is_enabled ?? true);
+    const [respectRobots, setRespectRobots] = useState(crawler?.respect_robots ?? true);
+    const [renderJs, setRenderJs] = useState(crawler?.render_js ?? false);
     const [selectors, setSelectors] = useState({
         title: crawler?.selectors?.title || '',
         content: crawler?.selectors?.content || '',
@@ -20,211 +39,296 @@ const WebCrawlerModal: React.FC<{
         volume: crawler?.selectors?.volume || '',
         date: crawler?.selectors?.date || '',
     });
-    const [isSaving, setIsSaving] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
-    
-    const handleSubmit = async () => {
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
         const newErrors: Record<string, string> = {};
-        if (!name.trim()) {
-            newErrors.name = t('crawler_name_required') || 'Crawler name is required.';
-        }
-        if (!url.trim()) {
-            newErrors.url = t('crawler_url_required') || 'URL is required.';
-        } else {
-            try {
-                const parsed = new URL(url.trim());
-                if (!['http:', 'https:'].includes(parsed.protocol)) {
-                    newErrors.url = t('crawler_url_invalid') || 'URL must start with http or https.';
-                }
-            } catch {
-                newErrors.url = t('crawler_url_invalid') || 'Please enter a valid URL.';
+        if (!name.trim()) newErrors.name = t('crawler_name_required');
+        try {
+            const parsed = new URL(startUrl.trim());
+            if (!['http:', 'https:'].includes(parsed.protocol)) {
+                newErrors.start_url = t('crawler_url_invalid');
             }
+        } catch {
+            newErrors.start_url = t('crawler_url_invalid');
         }
-        const hasSelectors = Object.values(selectors).some(value => value.trim().length > 0);
-        if (!hasSelectors) {
-            newErrors.selectors = t('crawler_selector_required') || 'Provide at least one CSS selector to extract data.';
+        if (sourceMode === 'existing' && !sourceId) {
+            newErrors.source = t('crawler_source_required');
         }
-        
-        if (Object.keys(newErrors).length > 0) {
+        if (sourceMode === 'new' && !newSourceName.trim()) {
+            newErrors.source = t('crawler_source_required');
+        }
+        if (targetType === 'website') {
+            const hasSelectors = Object.values(selectors).some(v => v.trim());
+            if (!hasSelectors) newErrors.selectors = t('crawler_selector_required');
+        }
+        if (Object.keys(newErrors).length) {
             setErrors(newErrors);
             return;
         }
-        setErrors({});
-        
-        setIsSaving(true);
-        try {
-            await onSave({
-                name,
-                url,
-                sourceId: sourceId || undefined,
-                interval,
-                enabled,
-                selectors: Object.fromEntries(
-                    Object.entries(selectors).filter(([_, v]) => v.trim() !== '')
-                ),
-            });
-        } catch (e) {
-            console.error('Failed to save crawler:', e);
-        } finally {
-            setIsSaving(false);
+
+        const selectorPayload = Object.fromEntries(
+            Object.entries(selectors).filter(([, v]) => v.trim()),
+        );
+
+        const payload: CreateCrawlerPayload = {
+            name: name.trim(),
+            target_type: targetType,
+            start_url: startUrl.trim(),
+            max_depth: targetType === 'rss' ? 0 : Math.min(5, parseInt(maxDepth, 10) || 0),
+            max_pages_per_run: Math.min(500, parseInt(maxPages, 10) || 50),
+            schedule_interval: scheduleInterval,
+            respect_robots: respectRobots,
+            render_js: renderJs,
+            selectors: selectorPayload,
+            timeout_ms: parseInt(timeoutMs, 10) || 600000,
+            is_enabled: isEnabled,
+        };
+
+        if (sourceMode === 'existing') {
+            payload.source_id = sourceId;
+        } else {
+            payload.source = {
+                name: newSourceName.trim(),
+                url: startUrl.trim(),
+                type: targetType === 'rss' ? 'rss' : 'web',
+                update_interval: scheduleInterval,
+            };
         }
+
+        setErrors({});
+        await onSave(payload);
     };
-    
+
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {crawler ? t('edit_crawler') || 'Edit Crawler' : t('create_crawler') || 'Create Web Crawler'}
-                </h3>
-                
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm text-muted-foreground mb-1">{t('name') || 'Name'} *</label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                            placeholder={t('crawler_name') || 'Crawler name'}
-                        />
-                        {errors.name && <p className="text-xs text-red-400 mt-1">{errors.name}</p>}
-                    </div>
-                    
-                    <div>
-                        <label className="block text-sm text-muted-foreground mb-1">{t('url') || 'URL'} *</label>
-                        <input
-                            type="url"
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
-                            placeholder="https://example.com"
-                        />
-                        {errors.url && <p className="text-xs text-red-400 mt-1">{errors.url}</p>}
-                    </div>
-                    
-                    <div>
-                        <label className="block text-sm text-muted-foreground mb-1">{t('link_to_source') || 'Link to Source'} (Optional)</label>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
+            <form
+                onSubmit={handleSubmit}
+                className="relative bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+            >
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
+                    <h3 className="text-sm font-semibold text-foreground">
+                        {crawler ? t('edit_crawler') : t('create_crawler')}
+                    </h3>
+                    <button type="button" onClick={onClose} className="text-xl text-muted-foreground">
+                        ×
+                    </button>
+                </div>
+
+                <div className="p-4 overflow-y-auto space-y-3 flex-1">
+                    <label className="block text-[11px] text-muted-foreground">
+                        {t('crawler_target_type')}
                         <select
-                            value={sourceId}
-                            onChange={(e) => setSourceId(e.target.value)}
-                            className="w-full p-2 bg-secondary border border-border rounded text-foreground"
+                            value={targetType}
+                            onChange={e => setTargetType(e.target.value as CrawlerTargetType)}
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm"
                         >
-                            <option value="">{t('none') || 'None'}</option>
-                            {sources.map(s => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
+                            <option value="website">{t('crawler_type_website')}</option>
+                            <option value="rss">{t('crawler_type_rss')}</option>
                         </select>
+                    </label>
+
+                    <label className="block text-[11px] text-muted-foreground">
+                        {t('name')} *
+                        <input
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm"
+                        />
+                        {errors.name ? <p className="text-red-400 text-[10px] mt-0.5">{errors.name}</p> : null}
+                    </label>
+
+                    <label className="block text-[11px] text-muted-foreground">
+                        {t('crawler_start_url')} *
+                        <input
+                            value={startUrl}
+                            onChange={e => setStartUrl(e.target.value)}
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm font-mono"
+                        />
+                        {errors.start_url ? (
+                            <p className="text-red-400 text-[10px] mt-0.5">{errors.start_url}</p>
+                        ) : null}
+                    </label>
+
+                    <div className="flex gap-4 text-[11px]">
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="radio"
+                                checked={sourceMode === 'existing'}
+                                onChange={() => setSourceMode('existing')}
+                            />
+                            {t('crawler_source_existing')}
+                        </label>
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="radio"
+                                checked={sourceMode === 'new'}
+                                onChange={() => setSourceMode('new')}
+                            />
+                            {t('crawler_source_new')}
+                        </label>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm text-muted-foreground mb-1">{t('interval') || 'Interval'}</label>
+
+                    {sourceMode === 'existing' ? (
+                        <label className="block text-[11px] text-muted-foreground">
+                            {t('crawler_source')}
                             <select
-                                value={interval}
-                                onChange={(e) => setInterval(e.target.value as any)}
-                                className="w-full p-2 bg-secondary border border-border rounded text-foreground"
+                                value={sourceId}
+                                onChange={e => setSourceId(e.target.value)}
+                                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm"
                             >
-                                <option value="realtime">{t('realtime') || 'Real-time'}</option>
-                                <option value="1min">{t('1min') || '1 Minute'}</option>
-                                <option value="5min">{t('5min') || '5 Minutes'}</option>
-                                <option value="15min">{t('15min') || '15 Minutes'}</option>
-                                <option value="30min">{t('30min') || '30 Minutes'}</option>
-                                <option value="1hour">{t('1hour') || '1 Hour'}</option>
-                                <option value="daily">{t('daily') || 'Daily'}</option>
+                                <option value="">{t('crawler_select_source')}</option>
+                                {sources.map(s => (
+                                    <option key={s.id} value={s.id}>
+                                        {s.name} ({s.type})
+                                    </option>
+                                ))}
                             </select>
-                        </div>
-                        
-                        <div className="flex items-center pt-6">
-                            <label className="flex items-center gap-2 text-sm">
+                        </label>
+                    ) : (
+                        <label className="block text-[11px] text-muted-foreground">
+                            {t('crawler_new_source_name')}
+                            <input
+                                value={newSourceName}
+                                onChange={e => setNewSourceName(e.target.value)}
+                                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm"
+                            />
+                        </label>
+                    )}
+                    {errors.source ? (
+                        <p className="text-red-400 text-[10px]">{errors.source}</p>
+                    ) : null}
+
+                    <div className="grid grid-cols-2 gap-3">
+                        {targetType === 'website' ? (
+                            <label className="block text-[11px] text-muted-foreground">
+                                {t('crawler_depth')}
+                                <input
+                                    type="number"
+                                    min={0}
+                                    max={5}
+                                    value={maxDepth}
+                                    onChange={e => setMaxDepth(e.target.value)}
+                                    className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm"
+                                />
+                            </label>
+                        ) : null}
+                        <label className="block text-[11px] text-muted-foreground">
+                            {t('crawler_max_pages')}
+                            <input
+                                type="number"
+                                min={1}
+                                max={500}
+                                value={maxPages}
+                                onChange={e => setMaxPages(e.target.value)}
+                                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm"
+                            />
+                        </label>
+                        <label className="block text-[11px] text-muted-foreground">
+                            {t('crawler_timeout_ms')}
+                            <input
+                                type="number"
+                                min={5000}
+                                value={timeoutMs}
+                                onChange={e => setTimeoutMs(e.target.value)}
+                                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm"
+                            />
+                        </label>
+                        <label className="block text-[11px] text-muted-foreground">
+                            {t('interval')}
+                            <select
+                                value={scheduleInterval}
+                                onChange={e =>
+                                    setScheduleInterval(e.target.value as CrawlerScheduleInterval)
+                                }
+                                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm"
+                            >
+                                <option value="5min">{t('5min')}</option>
+                                <option value="15min">{t('15min')}</option>
+                                <option value="1hour">{t('1hour')}</option>
+                                <option value="daily">{t('daily')}</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 text-[11px] text-muted-foreground">
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={isEnabled}
+                                onChange={e => setIsEnabled(e.target.checked)}
+                            />
+                            {t('enabled')}
+                        </label>
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={respectRobots}
+                                onChange={e => setRespectRobots(e.target.checked)}
+                            />
+                            {t('crawler_respect_robots')}
+                        </label>
+                        {targetType === 'website' ? (
+                            <label className="flex items-center gap-2">
                                 <input
                                     type="checkbox"
-                                    checked={enabled}
-                                    onChange={(e) => setEnabled(e.target.checked)}
-                                    className="rounded"
+                                    checked={renderJs}
+                                    onChange={e => setRenderJs(e.target.checked)}
                                 />
-                                {t('enabled') || 'Enabled'}
+                                {t('crawler_render_js')}
                             </label>
-                        </div>
+                        ) : null}
                     </div>
-                    
-                    <div className="border-t border-border pt-4">
-                        <h4 className="text-sm font-semibold text-foreground mb-3">{t('css_selectors') || 'CSS Selectors'} (Optional)</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs text-muted-foreground mb-1">{t('title_selector') || 'Title'}</label>
-                                <input
-                                    type="text"
-                                    value={selectors.title}
-                                    onChange={(e) => setSelectors({ ...selectors, title: e.target.value })}
-                                    className="w-full p-2 bg-secondary border border-border rounded text-foreground text-xs"
-                                    placeholder="h1.title"
-                                />
+                    {renderJs ? (
+                        <p className="text-[10px] text-amber-300/90">{t('crawler_render_js_disabled_hint')}</p>
+                    ) : null}
+
+                    {targetType === 'website' ? (
+                        <div className="border-t border-white/10 pt-3">
+                            <p className="text-[11px] font-semibold text-foreground mb-2">
+                                {t('css_selectors')}
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                                {(['title', 'content', 'price', 'volume', 'date'] as const).map(key => (
+                                    <input
+                                        key={key}
+                                        placeholder={key}
+                                        value={selectors[key]}
+                                        onChange={e =>
+                                            setSelectors({ ...selectors, [key]: e.target.value })
+                                        }
+                                        className="rounded-lg border border-white/10 bg-slate-900/80 px-2 py-1.5 text-xs font-mono"
+                                    />
+                                ))}
                             </div>
-                            <div>
-                                <label className="block text-xs text-muted-foreground mb-1">{t('content_selector') || 'Content'}</label>
-                                <input
-                                    type="text"
-                                    value={selectors.content}
-                                    onChange={(e) => setSelectors({ ...selectors, content: e.target.value })}
-                                    className="w-full p-2 bg-secondary border border-border rounded text-foreground text-xs"
-                                    placeholder=".content"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-muted-foreground mb-1">{t('price_selector') || 'Price'}</label>
-                                <input
-                                    type="text"
-                                    value={selectors.price}
-                                    onChange={(e) => setSelectors({ ...selectors, price: e.target.value })}
-                                    className="w-full p-2 bg-secondary border border-border rounded text-foreground text-xs"
-                                    placeholder=".price"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-muted-foreground mb-1">{t('volume_selector') || 'Volume'}</label>
-                                <input
-                                    type="text"
-                                    value={selectors.volume}
-                                    onChange={(e) => setSelectors({ ...selectors, volume: e.target.value })}
-                                    className="w-full p-2 bg-secondary border border-border rounded text-foreground text-xs"
-                                    placeholder=".volume"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-muted-foreground mb-1">{t('date_selector') || 'Date'}</label>
-                                <input
-                                    type="text"
-                                    value={selectors.date}
-                                    onChange={(e) => setSelectors({ ...selectors, date: e.target.value })}
-                                    className="w-full p-2 bg-secondary border border-border rounded text-foreground text-xs"
-                                    placeholder=".date"
-                                />
-                            </div>
+                            {errors.selectors ? (
+                                <p className="text-red-400 text-[10px] mt-1">{errors.selectors}</p>
+                            ) : null}
                         </div>
-                        {errors.selectors && <p className="text-xs text-red-400 mt-2">{errors.selectors}</p>}
-                    </div>
+                    ) : null}
                 </div>
-                
-                <div className="flex justify-end gap-2 mt-6">
+
+                <div className="flex justify-end gap-2 p-4 border-t border-white/10">
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="px-4 py-2 bg-secondary hover:bg-accent text-secondary-foreground rounded-lg text-sm"
-                        disabled={isSaving}
+                        className="text-[11px] px-3 py-1.5 rounded-full border border-white/10"
                     >
-                        {t('cancel') || 'Cancel'}
+                        {t('cancel')}
                     </button>
                     <button
-                        onClick={handleSubmit}
+                        type="submit"
                         disabled={isSaving}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm"
+                        className="text-[11px] px-4 py-1.5 rounded-full bg-purple-600 text-white disabled:opacity-50"
                     >
-                        {isSaving ? t('saving') || 'Saving...' : t('save') || 'Save'}
+                        {isSaving ? t('saving') : t('save')}
                     </button>
                 </div>
-            </div>
+            </form>
         </div>
     );
 };
 
 export default WebCrawlerModal;
-

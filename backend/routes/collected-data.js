@@ -14,6 +14,7 @@ import {
     uuidParamSchema
 } from '../schemas/dataHubSchemas.js';
 import * as deduplicationService from '../services/deduplicationService.js';
+import { enforceIngestionFilter } from '../services/datahubFilterRulesService.js';
 
 const router = express.Router();
 
@@ -153,6 +154,20 @@ router.post('/', authenticate, writeRateLimiter, validateBody(createCollectedDat
             metadata
         } = req.body;
 
+        const meta = metadata && typeof metadata === 'object' ? metadata : {};
+        const norm = normalized_data && typeof normalized_data === 'object' ? normalized_data : {};
+        await enforceIngestionFilter({
+            source_id,
+            url: meta.url || meta.source_url || norm.metadata?.url,
+            text:
+                norm.content ||
+                norm.text ||
+                raw_data?.text ||
+                raw_data?.message ||
+                meta.title,
+            metadata: meta,
+        });
+
         // Check for duplicate if content_hash provided
         if (content_hash) {
             const duplicateCheck = await query(
@@ -191,10 +206,17 @@ router.post('/', authenticate, writeRateLimiter, validateBody(createCollectedDat
         res.status(201).json(result.rows[0]);
 
     } catch (error) {
+        if (error.status === 403 && error.code === 'FILTER_BLOCKED') {
+            return res.status(403).json({
+                error: error.message,
+                code: error.code,
+                details: error.details,
+            });
+        }
         logger.error('Error creating collected data:', error);
-        res.status(500).json({ 
+        res.status(error.status || 500).json({
             error: 'Failed to create collected data',
-            message: error.message 
+            message: error.message,
         });
     }
 });
@@ -210,12 +232,41 @@ router.post('/batch', authenticate, writeRateLimiter, validateBody(batchCreateCo
         const results = {
             inserted: 0,
             duplicates: 0,
+            blocked: 0,
             errors: 0,
             ids: []
         };
 
         for (const message of messages) {
             try {
+                const meta =
+                    message.metadata && typeof message.metadata === 'object'
+                        ? message.metadata
+                        : {};
+                const norm =
+                    message.normalized_data && typeof message.normalized_data === 'object'
+                        ? message.normalized_data
+                        : {};
+                try {
+                    await enforceIngestionFilter({
+                        source_id,
+                        url: meta.url || meta.source_url || norm.metadata?.url,
+                        text:
+                            norm.content ||
+                            norm.text ||
+                            message.raw_data?.text ||
+                            message.raw_data?.message ||
+                            meta.title,
+                        metadata: meta,
+                    });
+                } catch (filterErr) {
+                    if (filterErr.code === 'FILTER_BLOCKED') {
+                        results.blocked++;
+                        continue;
+                    }
+                    throw filterErr;
+                }
+
                 // Check for duplicate if content_hash provided
                 if (message.content_hash) {
                     const duplicateCheck = await query(

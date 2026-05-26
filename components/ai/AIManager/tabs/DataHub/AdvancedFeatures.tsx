@@ -27,7 +27,6 @@ const AdvancedFeatures: React.FC<{
         setActiveFeature,
         advanced,
         pipelineSnapshot,
-        sourceQualityMap,
         agentMap,
         publisherMap,
         topicMap,
@@ -114,38 +113,13 @@ const AdvancedFeatures: React.FC<{
             )}
 
             {/* Conditionally rendered feature sections */}
-            {activeFeature === 'crawlers' && (
-                <WebCrawlerConfig
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    sourceQualityMap={sourceQualityMap}
-                    getStatusBadgeClass={getStatusBadgeClass}
-                />
-            )}
+            {activeFeature === 'crawlers' && <WebCrawlerConfig t={t} />}
 
-            {activeFeature === 'discovery' && (
-                <AutoDiscoveryConfig
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    findCategorySignal={findCategorySignal}
-                />
-            )}
+            {activeFeature === 'discovery' && <AutoDiscoveryConfig t={t} />}
 
             {activeFeature === 'prioritization' && (
                 <SmartPrioritization
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
                     t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    sourceQualityMap={sourceQualityMap}
-                    getStatusBadgeClass={getStatusBadgeClass}
                 />
             )}
 
@@ -153,17 +127,7 @@ const AdvancedFeatures: React.FC<{
                 <AccessControlPanel t={t} />
             )}
 
-            {activeFeature === 'blacklist' && (
-                <BlacklistWhitelist
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    sourceQualityMap={sourceQualityMap}
-                    prioritizationSummary={{ lastUpdate: advanced.smartPrioritization.lastUpdate }}
-                />
-            )}
+            {activeFeature === 'blacklist' && <BlacklistWhitelist t={t} />}
 
             {activeFeature === 'telegram' && (
                 <TelegramPublisher
@@ -187,13 +151,7 @@ const AdvancedFeatures: React.FC<{
             )}
 
             {activeFeature === 'archive' && (
-                <Archiving
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
-                    t={t}
-                    formatTimeAgo={formatTimeAgo}
-                />
+                <Archiving t={t} />
             )}
 
             {/* Pipeline Quality Snapshot - Keep high-level view if needed or move to Dashboard */}

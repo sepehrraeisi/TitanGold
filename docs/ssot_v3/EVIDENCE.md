@@ -184,7 +184,157 @@ grep -rn "fetchDataHubState\|createAutomationTopic\|refreshAutomationQueue" \
 # → 0 matches
 ```
 
-### ۱۲. Migrations / Greenfield Bootstrap
+### ۱۲. DataHub filter rules (GAP-024)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| جدول قوانین فیلتر | `backend/database/migrations/028_create_datahub_filter_rules.sql` | L1–55 | `datahub_filter_rules` با `rule_type`, `scope`, `pattern`, `match_type`, `apply_target`, `action`, `priority`, soft delete |
+| CRUD + evaluate API | `backend/routes/data-hub-filter-rules.js` | router | `GET/POST/PUT/DELETE /api/v1/data-hub/filter-rules`, `POST /evaluate` |
+| ارزیابی و enforce ingestion | `backend/services/datahubFilterRulesService.js` | `evaluateFilterRules`, `enforceIngestionFilter` | اولویت + whitelist بر blacklist در تساوی |
+| **collected-data POST → 403** | `backend/routes/collected-data.js` | `router.post('/')` | `await enforceIngestionFilter(...)` قبل از INSERT؛ `catch` → `403` + `code: FILTER_BLOCKED` |
+| **batch → blocked count** | `backend/routes/collected-data.js` | `router.post('/batch')` | `results.blocked++` و `continue` روی `FILTER_BLOCKED` |
+| **telegramPipeline قبل از INSERT** | `backend/services/telegramPipeline.js` | قبل از `INSERT INTO collected_data` | `enforceIngestionFilter`؛ skip با `action: filter_blocked` |
+| Publishing worker hook | — | — | **v3.0 ندارد** — فقط `POST /evaluate`؛ **GAP-025** |
+| UI backend-first | `services/dataHubFilterRulesApi.ts`, `hooks/useDataHubFilterRules.ts`, `advanced/BlacklistWhitelist.tsx` | — | بدون `fetchDataHubState` / IndexedDB برای لیست قوانین |
+
+### ۱۳. DataHub crawlers (GAP-026)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Tables | `backend/database/migrations/029_create_datahub_crawlers.sql` | `datahub_crawlers`, `datahub_crawler_runs` |
+| API | `backend/routes/data-hub-crawlers.js` | CRUD + `POST /:id/run` + `GET /:id/runs` |
+| Pre-crawl filter | `backend/services/datahubCrawlersService.js` | `preCrawlFilterCheck` → 403 before run |
+| Ingestion filter | same | `enforceIngestionFilter` per item in `ingestItem` |
+| Website engine | `backend/services/webCrawler.js` | depth cap, maxPages, skipRobots |
+| RSS | `backend/services/rssFetcher.js` | cheerio XML parse |
+| render_js gate | `datahubCrawlersService.js` | `CRAWLER_RENDER_JS_ENABLED` |
+| UI | `WebCrawlerConfig.tsx`, `dataHubCrawlersApi.ts` | no IndexedDB crawler list |
+
+#### Crawler runtime safety
+
+| Claim | File | Behavior |
+|---|---|---|
+| `render_js` default false | `029_create_datahub_crawlers.sql`, `createCrawlerSchema` | DB + API default `false` |
+| render_js without env | `datahubCrawlersService.js` `assertRenderJsAllowed` | **400** unless `CRAWLER_RENDER_JS_ENABLED=true` |
+| max_depth cap 5 | `datahubCrawlersSchemas.js`, `webCrawler.js` | zod max 5; crawl uses `Math.min(depth, 5)` |
+| max pages per run | `webCrawler.js` `config.maxPages` | loop stops when `results.length >= maxPages` |
+| robots.txt | `webCrawler.js` | enforced unless `config.skipRobots` (only when `respect_robots=false`) |
+
+### ۱۴. DataHub discovery (GAP-028 Closed)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Tables | `030_create_datahub_discovery.sql` | suggestions, rules, scans, settings |
+| API | `backend/routes/data-hub-discovery.js` | scan, approve, reject, stats, history |
+| 3-layer dedupe | `backend/utils/discoveryDedupe.js` | host, path, title similarity |
+| Scoring | `backend/utils/discoveryScoring.js` | weighted **0–100** (`priority_score` CHECK 0–100) |
+| SSRF | `backend/utils/discoverySafety.js` | explicit block list (see below) |
+| No auto-create on scan | `datahubDiscoveryService.js` | scan **never** `INSERT` into `data_sources` |
+| Approve-only source create | `approveSuggestion` in `datahubDiscoveryService.js` | **only** `POST …/approve` creates `data_sources` |
+| Duplicate suggestions | migration `030` + dedupe service | `status=duplicate`, `duplicate_of_source_id` / `duplicate_of_suggestion_id` |
+| Audit fields | migration `030` | `approved_by`, `rejected_by`, `review_note`, `reviewed_at` |
+| UI | `AutoDiscoveryConfig.tsx` | backend-first · no IndexedDB discovery state |
+| Contract / SSOT | `DISCOVERY_API_CONTRACT.md`, `SSOT_v3.0.md` | **Implemented · Design: Done** · GAP-028 **Closed** |
+
+#### Discovery safety (locked v3.0)
+
+| Control | Implementation | Failure / outcome |
+|---|---|---|
+| **SSRF — schemes** | `discoverySafety.js` | Only `http`/`https`; block `file://`, `ftp://`, `gopher`, `data:`, `javascript:`, `mailto` → `SSRF_BLOCKED` **400** |
+| **SSRF — localhost** | hostname `localhost`, `*.localhost` | `SSRF_BLOCKED` **400** |
+| **SSRF — private IP** | IPv4 private/link-local ranges; IPv6 `::1` / ULA | `SSRF_BLOCKED` **400** |
+| **SSRF — metadata / internal** | `metadata.*`, `*.internal`, `*.local` | `SSRF_BLOCKED` **400** |
+| **Scan mutates sources** | `runDiscoveryScan` | **No** `data_sources` rows created |
+| **Approve creates source** | `approveSuggestion` + filter evaluate | Single approved path → `INSERT data_sources` |
+| **Duplicate storage** | `datahub_discovery_suggestions` | `duplicate_of_*` populated; not re-queued as pending |
+| **Scoring bounds** | `discoveryScoring.js` + DB CHECK | `priority_score` always **0–100** |
+
+### ۱۶. DataHub Smart Prioritization (GAP-030 Closed)
+
+#### ۱۶.۱ No Mock Verification (v3.0 backend-first)
+
+**Grep (0 matches in prioritization UI / hooks / API):**
+
+```bash
+rg -n "fetchDataHubState" \
+  components/ai/AIManager/tabs/DataHub/advanced/SmartPrioritization.tsx \
+  hooks/useDataHubPrioritization.ts \
+  services/dataHubPrioritizationApi.ts \
+  # → 0 matches
+
+rg -n "smartPrioritization" \
+  components/ai/AIManager/tabs/DataHub/advanced/SmartPrioritization.tsx \
+  hooks/useDataHubPrioritization.ts \
+  services/dataHubPrioritizationApi.ts \
+  # → 0 matches
+
+rg -n "indexedDB|data_hub_state|dataHub\\.advanced\\.smartPrioritization" \
+  components/ai/AIManager/tabs/DataHub/advanced/SmartPrioritization.tsx \
+  hooks/useDataHubPrioritization.ts \
+  services/dataHubPrioritizationApi.ts \
+  # → 0 matches
+
+rg -n "services/api" components/ai/AIManager/tabs/DataHub/advanced/SmartPrioritization.tsx
+  # → 0 matches
+```
+
+**Legacy mocks still exist in `services/api.ts` but are not imported by prioritization UI:**
+- `services/api.ts` contains `fetchDataHubState` (`40` matches) and `smartPrioritization` (`6` matches).
+- `SmartPrioritization.tsx` does not import `services/api.ts` (grep above → 0).
+
+#### ۱۶.۲ Apply Safety (confirm + atomic transaction)
+
+- **Strict confirm flag**: `applyPrioritization()` در صورت `confirmApply !== true` خطای `400` با کد `CONFIRM_APPLY_REQUIRED` می‌دهد.  
+  Evidence: `backend/services/datahubPrioritizationService.js` `L379–385`
+
+- **Transactional apply**: آپدیت‌های `data_sources` و `datahub_source_priorities` داخل `transaction()` با `BEGIN/COMMIT/ROLLBACK` انجام می‌شود.  
+  Evidence: `backend/database/db.js` `L153–167` and `backend/services/datahubPrioritizationService.js` `L424–479`
+
+#### ۱۶.۳ Score Stability (clamp + deterministic tier mapping)
+
+- `calculated_score` و `finalScore` با `clampScore()` محدود به `0–100` هستند.  
+  Evidence: `backend/services/datahubPrioritizationService.js` `L30–33`
+
+- Tier mapping کاملاً deterministic و ثابت است:  
+  `0–24 low`, `25–49 medium`, `50–74 high`, `75–100 critical`.  
+  Evidence: `backend/services/datahubPrioritizationService.js` `L13–18` and `L72–78`
+
+#### ۱۶.۴ Audit Trail — `datahub_prioritization_runs`
+
+- Migration `032` ستون‌های زیر را اضافه می‌کند: `started_at`, `completed_at`, `applied_by`, `settings_snapshot`, `preview_only`, `status`, `error_summary`.  
+  Evidence: `backend/database/migrations/032_add_prioritization_audit_columns.sql` `L1–12`
+
+- `previewPrioritization` و `applyPrioritization` این فیلدها را با:
+  - insert در start (`started_at`, `preview_only`, `applied_by`, `settings_snapshot`, `status`)
+  - update در پایان (`completed_at`, `status`, `summary` یا `error_summary`)
+  پر می‌کنند.  
+  Evidence: `backend/services/datahubPrioritizationService.js` `L410–469` (preview+complete) و `L411–477` (apply+complete/fail)
+
+### ۱۷. DataHub Archiving (GAP-032 Closed)
+
+#### No Mock Verification
+
+```bash
+rg -n "fetchDataHubState|createManualArchive|restoreFromArchive" \
+  components/ai/AIManager/tabs/DataHub/advanced/Archiving.tsx \
+  hooks/useDataHubArchiving.ts services/dataHubArchivingApi.ts
+# → 0 matches
+```
+
+`Archiving.tsx` uses `useDataHubArchiving` + `/api/v1/data-hub/archiving` only.
+
+#### Safety (v3.0)
+
+| Control | Evidence |
+|---------|----------|
+| Manual-only | No cron wiring in routes/service |
+| No purge apply | `previewPurge` count only — `purge_apply_available: false` in `datahubArchivingService.js` |
+| Strict confirm | `confirmArchive !== true` → `CONFIRM_ARCHIVE_REQUIRED` **400** |
+| API audit | `datahub_archiving_operations` migration `033` |
+
+---
+
+### ۱۵. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |
 |---|---|---|---|

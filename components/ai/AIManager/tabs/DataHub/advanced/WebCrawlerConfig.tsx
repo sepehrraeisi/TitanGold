@@ -1,222 +1,307 @@
-
-import React, { useState, useMemo } from 'react';
-import * as api from '../../../../../../services/api';
-import { DataHubState, DataPipelineSourceSnapshot } from '../../../../../../types';
+import React, { useMemo, useState } from 'react';
 import WebCrawlerModal from '../modals/WebCrawlerModal';
-import { SummaryCard } from '../../../../../ui/summary-card';
-import { EmptyState } from '../../../../../ui/empty-state';
-import { ActionButton } from '../../../../../ui/action-button';
-import { StatusBadge } from '../../../../../ui/status-badge';
-import ApiWrapper from '../../../../../common/ApiWrapper';
-import { useAsync } from '../../../../../../hooks/useAsync';
+import {
+    useDataHubCrawlersQuery,
+    useCreateCrawlerMutation,
+    useUpdateCrawlerMutation,
+    useDeleteCrawlerMutation,
+    useRunCrawlerMutation,
+    useCrawlerRunsQuery,
+} from '../../../../../../hooks/useDataHubCrawlers';
+import { useDataSourcesQuery } from '../../../../../../hooks/useDataHubState';
+import type { DataHubCrawler } from '../../../../../../services/dataHubCrawlersApi';
+import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
+import type { CreateCrawlerPayload } from '../../../../../../services/dataHubCrawlersApi';
 
 interface WebCrawlerConfigProps {
-    dataHub: DataHubState;
-    setDataHub: (hub: DataHubState) => void;
-    onRefresh: () => void;
     t: (key: string) => string;
-    formatTimeAgo: (timestamp?: string) => string;
-    sourceQualityMap: Record<string, DataPipelineSourceSnapshot>;
-    getStatusBadgeClass: (status?: string) => string;
 }
 
-const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({
-    dataHub,
-    setDataHub,
-    onRefresh,
-    t,
-    formatTimeAgo,
-    sourceQualityMap,
-    getStatusBadgeClass
-}) => {
-    const [showCrawlerModal, setShowCrawlerModal] = useState(false);
-    const [editingCrawler, setEditingCrawler] = useState<any>(null);
+const SHELL =
+    'bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg rounded-xl p-4 md:p-5';
 
-    const saveAsync = useAsync(async (crawlerData: any) => {
-        if (editingCrawler) {
-            return api.updateWebCrawler(editingCrawler.id, crawlerData);
+const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({ t }) => {
+    const { data, isLoading, error, refetch } = useDataHubCrawlersQuery();
+    const { data: sourcesResult } = useDataSourcesQuery({ page: 1, limit: 100 });
+    const sources = sourcesResult?.data ?? [];
+
+    const createMut = useCreateCrawlerMutation();
+    const updateMut = useUpdateCrawlerMutation();
+    const deleteMut = useDeleteCrawlerMutation();
+    const runMut = useRunCrawlerMutation();
+
+    const crawlers = data?.crawlers ?? [];
+    const summary = data?.summary;
+
+    const [modalCrawler, setModalCrawler] = useState<DataHubCrawler | null | undefined>(undefined);
+    const [expandedRunsId, setExpandedRunsId] = useState<string | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const { data: runs = [], isLoading: runsLoading } = useCrawlerRunsQuery(expandedRunsId);
+
+    const filtered = useMemo(() => {
+        const q = searchTerm.trim().toLowerCase();
+        if (!q) return crawlers;
+        return crawlers.filter(
+            c =>
+                c.name.toLowerCase().includes(q) ||
+                c.start_url.toLowerCase().includes(q) ||
+                (c.source_name || '').toLowerCase().includes(q),
+        );
+    }, [crawlers, searchTerm]);
+
+    const apiError =
+        error instanceof DataHubApiError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : null;
+
+    const handleSave = async (payload: CreateCrawlerPayload) => {
+        if (modalCrawler?.id) {
+            await updateMut.mutateAsync({ id: modalCrawler.id, payload });
         } else {
-            return api.createWebCrawler(crawlerData);
+            await createMut.mutateAsync(payload);
         }
-    });
-
-    const deleteAsync = useAsync(api.deleteWebCrawler);
-
-    const advanced = dataHub.advanced || { webCrawlers: [] };
-    const crawlers = advanced.webCrawlers;
-
-    const metrics = useMemo(() => ({
-        total: crawlers.length,
-        active: crawlers.filter(c => c.enabled).length,
-        avgInterval: crawlers.length > 0
-            ? Math.round(crawlers.reduce((acc, c) => acc + (parseInt(c.interval) || 0), 0) / crawlers.length)
-            : 0,
-        unhealthy: crawlers.filter(c => {
-            const signal = c.sourceId ? sourceQualityMap[c.sourceId] : undefined;
-            return signal && signal.lastStatus === 'failed';
-        }).length
-    }), [crawlers, sourceQualityMap]);
-
-    const handleAddCrawler = () => {
-        setEditingCrawler(null);
-        setShowCrawlerModal(true);
+        setModalCrawler(undefined);
     };
 
-    const handleSaveCrawler = async (crawlerData: any) => {
-        try {
-            await saveAsync.execute(crawlerData);
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-            setShowCrawlerModal(false);
-            setEditingCrawler(null);
-        } catch (e: any) {
-            console.error('Failed to save crawler:', e);
-        }
+    const handleDelete = async (id: string) => {
+        if (!window.confirm(t('crawler_delete_confirm'))) return;
+        await deleteMut.mutateAsync(id);
+        if (expandedRunsId === id) setExpandedRunsId(null);
     };
 
-    const handleDeleteCrawler = async (crawlerId: string) => {
-        const confirmed = window.confirm(t('confirm_delete') || 'Are you sure?');
-        if (confirmed) {
-            try {
-                await deleteAsync.execute(crawlerId);
-                const updated = await api.fetchDataHubState();
-                setDataHub(updated);
-                onRefresh();
-            } catch (e: any) {
-                console.error('Failed to delete crawler:', e);
-            }
-        }
+    const handleRun = async (id: string, dryRun: boolean) => {
+        await runMut.mutateAsync({ id, dry_run: dryRun });
     };
 
     return (
-        <ApiWrapper
-            error={saveAsync.error || deleteAsync.error}
-            setError={() => { saveAsync.setError(null); deleteAsync.setError(null); }}
-            isLoading={saveAsync.isLoading || deleteAsync.isLoading}
-        >
-            <div className="bg-card border border-border rounded-lg p-4">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-                    <div>
-                        <h3 className="font-semibold text-foreground flex items-center gap-2">
-                            🕷️ {t('web_crawlers') || 'Web Crawlers'}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {t('web_crawlers_desc') || 'Configure high-frequency data collection from web endpoints and HTML sources.'}
-                        </p>
-                    </div>
-                    <div className="flex gap-2">
-                        <ActionButton variant="secondary" size="sm">Bulk Play/Pause</ActionButton>
-                        <ActionButton variant="primary" size="sm" onClick={handleAddCrawler}>+ Add Crawler</ActionButton>
-                    </div>
+        <div className={SHELL}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <div>
+                    <h3 className="text-sm md:text-base font-semibold text-foreground">
+                        {t('web_crawlers')}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
+                        {t('web_crawlers_desc')}
+                    </p>
                 </div>
-
-                {/* Metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    <SummaryCard
-                        label={t('total_crawlers') || 'Total'}
-                        value={metrics.total}
-                        icon={<span className="text-2xl">🕷️</span>}
-                    />
-                    <SummaryCard
-                        label={t('active_crawlers') || 'Active'}
-                        value={metrics.active}
-                        variant="success"
-                        icon={<span className="text-2xl">⚡</span>}
-                    />
-                    <SummaryCard
-                        label={t('avg_interval') || 'Avg Interval'}
-                        value={`${metrics.avgInterval}m`}
-                        icon={<span className="text-2xl">⏱️</span>}
-                    />
-                    <SummaryCard
-                        label={t('unhealthy_crawlers') || 'Unhealthy'}
-                        value={metrics.unhealthy}
-                        variant={metrics.unhealthy > 0 ? 'error' : 'default'}
-                        icon={<span className="text-2xl">⚠️</span>}
-                    />
-                </div>
-
-                {/* Content Area */}
-                {crawlers.length > 0 ? (
-                    <div className="space-y-4">
-                        {crawlers.map(crawler => {
-                            const sourceSignal = crawler.sourceId ? sourceQualityMap[crawler.sourceId] : undefined;
-                            const isUnhealthy = sourceSignal?.lastStatus === 'failed';
-
-                            return (
-                                <div key={crawler.id} className={`border rounded-lg p-4 transition-all ${isUnhealthy ? 'border-red-500/50 bg-red-500/5' : 'border-border bg-secondary/5'}`}>
-                                    <div className="flex flex-col md:flex-row justify-between items-start gap-3">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h4 className="font-bold text-foreground truncate">{crawler.name}</h4>
-                                                <StatusBadge
-                                                    status={crawler.enabled ? 'success' : 'neutral'}
-                                                    label={crawler.enabled ? 'Running' : 'Paused'}
-                                                    size="sm"
-                                                />
-                                                {isUnhealthy && <StatusBadge status="error" label="Failed" size="sm" pulse />}
-                                            </div>
-                                            <p className="text-[10px] text-muted-foreground font-mono break-all opacity-70 mb-2">{crawler.url}</p>
-
-                                            <div className="flex flex-wrap gap-4 text-[11px]">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="text-muted-foreground">Interval:</span>
-                                                    <span className="font-semibold">{crawler.interval} minutes</span>
-                                                </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="text-muted-foreground">Last Run:</span>
-                                                    <span className="font-semibold">{sourceSignal?.lastChecked ? formatTimeAgo(sourceSignal.lastChecked) : 'Never'}</span>
-                                                </div>
-                                                {sourceSignal?.lastResponseTime && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <span className="text-muted-foreground">Latency:</span>
-                                                        <span className="text-purple-300">{sourceSignal.lastResponseTime}ms</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="flex gap-2 shrink-0">
-                                            <ActionButton variant="ghost" size="sm" onClick={() => { setEditingCrawler(crawler); setShowCrawlerModal(true); }}>Edit</ActionButton>
-                                            <ActionButton variant="danger" size="sm" loading={deleteAsync.isLoading} onClick={() => handleDeleteCrawler(crawler.id)}>Delete</ActionButton>
-                                        </div>
-                                    </div>
-
-                                    {/* Mini Timeline Placeholder */}
-                                    <div className="mt-3 pt-3 border-t border-border/30 flex gap-1">
-                                        {[1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1].map((s, i) => (
-                                            <div key={i} className={`h-4 flex-1 rounded-sm ${s ? 'bg-green-500/30' : 'bg-red-500/50 animate-pulse'}`} />
-                                        ))}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : (
-                    <EmptyState
-                        title="No crawlers configured"
-                        description="Automate data collection from websites by creating your first crawler rule."
-                        icon={<span className="text-4xl">🕸️</span>}
-                        action={<ActionButton variant="primary" onClick={handleAddCrawler}>+ Add Crawler</ActionButton>}
-                    />
-                )}
-
-                {showCrawlerModal && (
-                    <WebCrawlerModal
-                        crawler={editingCrawler}
-                        sources={dataHub.sources}
-                        onClose={() => {
-                            setShowCrawlerModal(false);
-                            setEditingCrawler(null);
-                        }}
-                        onSave={handleSaveCrawler}
-                        t={t}
-                    />
-                )}
+                <button
+                    type="button"
+                    onClick={() => refetch()}
+                    disabled={isLoading}
+                    className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+                >
+                    {isLoading ? t('refreshing') : t('refresh')}
+                </button>
             </div>
-        </ApiWrapper>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 mb-6">
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-purple-300/80 mb-1">{t('total_crawlers')}</p>
+                    <p className="text-sm font-semibold text-purple-100">{summary?.total ?? 0}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-3">
+                    <p className="text-[11px] text-emerald-300/80 mb-1">{t('active_crawlers')}</p>
+                    <p className="text-sm font-semibold text-emerald-100">{summary?.enabled ?? 0}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-3 col-span-2 md:col-span-1">
+                    <p className="text-[11px] text-amber-300/80 mb-1">{t('crawler_metric_errors')}</p>
+                    <p className="text-sm font-semibold text-amber-100">{summary?.failed24h ?? 0}</p>
+                </div>
+            </div>
+
+            {apiError ? (
+                <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                    {apiError}
+                </div>
+            ) : null}
+
+            {runMut.error instanceof DataHubApiError ? (
+                <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                    {runMut.error.message}
+                    {runMut.error.status === 400 &&
+                    String(runMut.error.message).includes('RENDER_JS') ? (
+                        <p className="mt-1 opacity-80">{t('crawler_render_js_disabled_hint')}</p>
+                    ) : null}
+                </div>
+            ) : null}
+
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <input
+                    type="text"
+                    placeholder={t('crawler_search_placeholder')}
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-slate-900/60 text-sm"
+                />
+                <button
+                    type="button"
+                    onClick={() => setModalCrawler(null)}
+                    className="text-[11px] px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white whitespace-nowrap"
+                >
+                    {t('crawler_add')}
+                </button>
+            </div>
+
+            {isLoading ? (
+                <p className="text-[11px] text-muted-foreground py-8 text-center">{t('loading')}</p>
+            ) : filtered.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                    <p className="text-sm font-medium">{t('crawler_empty_title')}</p>
+                    <p className="text-[11px] mt-1">{t('crawler_empty_hint')}</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {filtered.map(crawler => (
+                        <div
+                            key={crawler.id}
+                            className="rounded-xl border border-white/5 bg-slate-900/40 p-3"
+                        >
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-semibold text-foreground">
+                                            {crawler.name}
+                                        </span>
+                                        <span className="text-[10px] uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                                            {crawler.target_type}
+                                        </span>
+                                        <span
+                                            className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                                crawler.is_enabled
+                                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                                    : 'bg-slate-700 text-slate-400'
+                                            }`}
+                                        >
+                                            {crawler.is_enabled
+                                                ? t('crawler_enabled')
+                                                : t('crawler_paused')}
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] font-mono text-muted-foreground mt-1 truncate">
+                                        {crawler.start_url}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                                        {t('crawler_source')}: {crawler.source_name || crawler.source_id}
+                                        {' · '}
+                                        {t('crawler_depth')}: {crawler.max_depth}
+                                        {' · '}
+                                        {t('crawler_max_pages')}: {crawler.max_pages_per_run}
+                                    </p>
+                                    {crawler.last_error ? (
+                                        <p className="text-[10px] text-red-300 mt-1">{crawler.last_error}</p>
+                                    ) : null}
+                                </div>
+                                <div className="flex flex-wrap gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRun(crawler.id, true)}
+                                        disabled={runMut.isPending}
+                                        className="text-[11px] px-2 py-1 rounded-full border border-white/10"
+                                    >
+                                        {t('crawler_dry_run')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRun(crawler.id, false)}
+                                        disabled={runMut.isPending}
+                                        className="text-[11px] px-2 py-1 rounded-full bg-emerald-600/80 hover:bg-emerald-500 text-white"
+                                    >
+                                        {t('crawler_run')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setExpandedRunsId(
+                                                expandedRunsId === crawler.id ? null : crawler.id,
+                                            )
+                                        }
+                                        className="text-[11px] px-2 py-1 rounded-full border border-white/10"
+                                    >
+                                        {t('crawler_history')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setModalCrawler(crawler)}
+                                        className="text-[11px] px-2 py-1 rounded-full border border-white/10"
+                                    >
+                                        {t('edit')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDelete(crawler.id)}
+                                        className="text-[11px] px-2 py-1 rounded-full border border-red-500/30 text-red-300"
+                                    >
+                                        {t('delete')}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {expandedRunsId === crawler.id ? (
+                                <div className="mt-3 pt-3 border-t border-white/5">
+                                    {runsLoading ? (
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {t('loading')}
+                                        </p>
+                                    ) : runs.length === 0 ? (
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {t('crawler_no_runs')}
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            {runs.map(run => (
+                                                <div
+                                                    key={run.id}
+                                                    className="flex flex-wrap gap-2 text-[10px] text-muted-foreground py-1"
+                                                >
+                                                    <span
+                                                        className={
+                                                            run.status === 'success'
+                                                                ? 'text-emerald-400'
+                                                                : run.status === 'failed'
+                                                                  ? 'text-red-400'
+                                                                  : 'text-amber-400'
+                                                        }
+                                                    >
+                                                        {run.status}
+                                                    </span>
+                                                    {run.dry_run ? (
+                                                        <span className="text-sky-400">dry-run</span>
+                                                    ) : null}
+                                                    <span>
+                                                        {run.pages_fetched} {t('crawler_pages')} ·{' '}
+                                                        {run.items_ingested} {t('crawler_ingested')} ·{' '}
+                                                        {run.items_blocked} {t('crawler_blocked')}
+                                                    </span>
+                                                    {run.error_message ? (
+                                                        <span className="text-red-300">
+                                                            {run.error_message}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : null}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {modalCrawler !== undefined ? (
+                <WebCrawlerModal
+                    crawler={modalCrawler || undefined}
+                    sources={sources}
+                    onClose={() => setModalCrawler(undefined)}
+                    onSave={handleSave}
+                    isSaving={createMut.isPending || updateMut.isPending}
+                    t={t}
+                />
+            ) : null}
+        </div>
     );
 };
 

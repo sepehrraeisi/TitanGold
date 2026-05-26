@@ -189,3 +189,155 @@ Root-cause fix: `012_add_ab_testing` FK removed (partitioned `ai_decisions`). De
 | **Auth write** | POST/DELETE without admin/trader | **403** | — |
 
 Design: full pass per `DESIGN_SYSTEM_DATAHUB.md` (modal §10, metrics §2.4, badges §7).
+
+### dataHub.advanced.blacklist – Filter rules (GAP-024 closed)
+
+| سناریو | Endpoint | Expected | UI |
+|--------|----------|----------|-----|
+| **List rules** | `GET /api/v1/data-hub/filter-rules` | **200** + `rules[]` | Blacklist / Whitelist / All Rules tabs |
+| **Create blacklist domain** | `POST` `{ rule_type: blacklist, scope: domain, pattern: evil.com, match_type: contains, apply_target: ingestion }` | **201** | Add rule → Save |
+| **Create whitelist source** | `POST` `{ rule_type: whitelist, scope: source, pattern: <uuid>, match_type: exact }` | **201** | Whitelist tab |
+| **Create keyword regex** | `POST` `{ scope: keyword, match_type: regex, pattern: spam\|scam }` | **201** | All Rules tab |
+| **Evaluate blocked** | `POST /evaluate` `{ url, text, apply_target: ingestion }` with matching blacklist | **200** `allowed: false` | Evaluate tab → Blocked |
+| **Evaluate allowed** | `POST /evaluate` with whitelist match or no rules | **200** `allowed: true` | Evaluate tab → Allowed |
+| **Soft delete** | `DELETE /:id` | **200** `deleted_at` set | Delete → confirm |
+| **Invalid regex** | `POST` with `match_type: regex`, `pattern: [` | **400** | Modal / API error message |
+| **Duplicate rule** | Same `rule_type+scope+pattern+match_type` active row | **409** | Conflict message |
+| **Ingestion enforce (single)** | `POST /api/v1/collected-data` with active blacklist rule | **403** `{ code: "FILTER_BLOCKED", details }` | — |
+| **Ingestion enforce (batch)** | `POST /api/v1/collected-data/batch` with same payload | **200** body includes `blocked` incremented (row skipped, not inserted) | — |
+| **Telegram pipeline** | `transferTelegramMessagesToPipeline()` before INSERT | blocked messages → `summary.skipped++`, `action: filter_blocked` | — |
+| **Publishing path** | automation dispatch / publisher worker | **No silent drop in v3.0** — use `POST /filter-rules/evaluate` only | GAP-025 v3.1 |
+| **Auth write** | POST/PUT/DELETE without admin/trader | **403** | — |
+
+**Priority / conflict:** higher `priority` wins; tie at same priority → **whitelist** beats **blacklist**.
+
+#### Ingestion enforcement proof (code + runtime)
+
+| Path | File | Behavior |
+|------|------|----------|
+| Single insert | `backend/routes/collected-data.js` | `enforceIngestionFilter()` before duplicate check / INSERT → **403** on block |
+| Batch insert | `backend/routes/collected-data.js` | per-message `enforceIngestionFilter()` → catch `FILTER_BLOCKED` → `results.blocked++`, `continue` |
+| Telegram → collected_data | `backend/services/telegramPipeline.js` | `enforceIngestionFilter()` before INSERT; skip row on block |
+| Publishing workers | — | **Not hooked in v3.0**; evaluate API only until **GAP-025** |
+
+**Manual proof (dev DB `titangold_db`):**
+
+1. Create blacklist domain rule (`apply_target: ingestion`).
+2. `POST /api/v1/collected-data` with `metadata.url` or text matching pattern → expect **403**.
+3. `POST /api/v1/collected-data/batch` with N messages, one blocked → response `blocked >= 1`, `inserted` excludes blocked rows.
+4. `POST /api/v1/data-hub/filter-rules/evaluate` with `apply_target: publishing` → **200** (policy check only; no worker side-effect).
+
+Migration: see `docs/ssot_v3/audit/ENVIRONMENT.md` § Migration 028 · Evidence lines: `docs/ssot_v3/EVIDENCE.md` § Filter rules.
+
+Design: slate shell, metric cards, `FilterRuleModal`, no IndexedDB / `services/api.ts` blacklist helpers in panel.
+
+### dataHub.advanced.crawlers – Web/RSS crawlers (GAP-026 closed)
+
+| سناریو | Endpoint | Expected | UI |
+|--------|----------|----------|-----|
+| **List** | `GET /api/v1/data-hub/crawlers` | **200** `{ crawlers, summary }` | Crawlers panel |
+| **Create website** | `POST` `target_type: website`, `source_id` or `source{}`, selectors | **201** | Add crawler → website |
+| **Create RSS** | `POST` `target_type: rss`, `max_depth: 0` | **201** | Add crawler → RSS |
+| **Manual dry-run** | `POST /:id/run` `{ dry_run: true }` | **200** run `success`, no new `collected_data` rows | Dry run button |
+| **Manual real run** | `POST /:id/run` `{ dry_run: false }` | **200** `items_ingested` ≥ 0 | Run now |
+| **Pre-crawl blacklist** | Active domain blacklist on `start_url` | **403** `FILTER_BLOCKED_PRE_CRAWL` | Run fails before crawl |
+| **Ingestion block** | Item URL matches blacklist mid-run | `items_blocked` incremented | Run history row |
+| **Run history** | `GET /:id/runs` | **200** `runs[]` | History expand |
+| **Timeout** | `timeout_ms` very low + slow URL | run `failed`, `error_message` timeout | — |
+| **Invalid URL** | bad `start_url` on create | **400** | Modal validation |
+| **render_js blocked** | `render_js: true`, env without `CRAWLER_RENDER_JS_ENABLED=true` | **400** `RENDER_JS_DISABLED` | Warning in UI |
+
+**Double safety:** `preCrawlFilterCheck` before run + `enforceIngestionFilter` per item before insert.
+
+```bash
+cd backend && npm run migrate   # 029_create_datahub_crawlers.sql
+```
+
+Design: slate shell, `WebCrawlerModal` §10, no IndexedDB crawler CRUD.
+
+### dataHub.advanced.discovery – Auto Discovery (GAP-028 Closed)
+
+**Success path (UI + API):**
+
+| سناریو | Steps | Endpoint | Expected |
+|--------|-------|----------|----------|
+| Scan → pending suggestions | Run scan, open suggestions tab | `POST /scan` → `GET /suggestions?status=pending` | New rows `status=pending`, `priority_score` **0–100**; **no** new `data_sources` |
+| Approve → create source | Approve one pending row | `POST /suggestions/:id/approve` | `data_sources` row; `created_source_id`; `approved_by`; suggestion `approved` |
+| Reject with note | Reject + review note | `POST /suggestions/:id/reject` | `status=rejected`, `rejected_by`, `review_note`, `reviewed_at` |
+| Duplicate | Re-scan known URL | `POST /scan` | `status=duplicate`, `duplicate_of_source_id` or `duplicate_of_suggestion_id`; not pending |
+| Stats / history | Dashboard cards | `GET /stats`, `GET /history` | aggregates + scan audit rows |
+
+**Failures (required):**
+
+| Case | API | UI (`AutoDiscoveryConfig` + `ApiWrapper`) |
+|------|-----|------------------------------------------|
+| Blacklist / unsafe URL | scan `blocked++` or skip; filter on approve → `403 FILTER_BLOCKED` | Toast / blocked count; no pending for blocked URL |
+| SSRF (`localhost`, private IP, `file://`, `ftp://`, `metadata.*`) | `SSRF_BLOCKED` **400** or skipped in scan counts | Error message; URL not queued |
+| Invalid URL | `400` `INVALID_URL` | Inline / toast validation |
+| Unauthorized approve/reject | `403` | Permission denied message |
+| Rejected row | `rejected_by`, `reviewed_at` | Badge + note in history |
+| DB down / API error | `500` | **Error banner** + **Retry** (refetch suggestions/stats) |
+
+**v3.0 locked:** scan does **not** auto-create sources — only **approve** mutates `data_sources`.
+
+```bash
+cd backend && npm run migrate   # 030_create_datahub_discovery.sql
+```
+
+Design: `AutoDiscoveryConfig.tsx` slate shell · strict i18n · no IndexedDB discovery state.
+
+#### Crawler runtime safety (enforced in code)
+
+| Control | Default / rule | Failure |
+|---------|----------------|---------|
+| `render_js` | **false** | — |
+| `render_js=true` without `CRAWLER_RENDER_JS_ENABLED=true` | server env | **400** `RENDER_JS_DISABLED` |
+| `max_depth` | capped at **5** (schema + service) | **400** if RSS with depth > 0 |
+| `max_pages_per_run` | default 50, max **500** | loop stops at cap |
+| `respect_robots` | default **true** | `skipRobots` only when `respect_robots=false` (explicit override) |
+| `timeout_ms` | wall-clock per run | run **failed** with timeout message |
+
+Evidence: `docs/ssot_v3/EVIDENCE.md` § Crawler runtime safety.
+
+### dataHub.advanced.prioritization – Smart Prioritization (GAP-030 Closed)
+
+**Success path (v3.0):**
+
+| سناریو | Endpoint | Expected |
+|--------|----------|----------|
+| Preview | `POST /api/v1/data-hub/prioritization/preview` | محاسبه/ذخیره `datahub_source_priorities` + `datahub_prioritization_runs`; **بدون** تغییر `data_sources.priority_score/tier` |
+| Apply with confirm | `POST /api/v1/data-hub/prioritization/apply` (`confirm_apply=true`) | فقط این مسیر روی `data_sources.priority_score`, `priority`, `priority_updated_at` می‌نویسد |
+| Manual override | `PUT /api/v1/data-hub/prioritization/sources/:sourceId/override` | ذخیره `override_score`, `override_note`, `overridden_by`, `overridden_at` (audit) |
+| Sources view | `GET /api/v1/data-hub/prioritization/sources` | score نهایی 0–100 + `score_breakdown` JSONB |
+
+**Failures (required):**
+
+| Case | Expected |
+|------|----------|
+| Apply بدون confirm | `400` `CONFIRM_APPLY_REQUIRED` |
+| Unauthorized apply/preview/override/settings | `403` |
+| Invalid weights (sum != 100) | `400` `INVALID_WEIGHTS` |
+| Disabled prioritization + preview/apply | `400` `PRIORITIZATION_DISABLED` |
+| DB/API error | `500` + error banner + retry در UI |
+
+### dataHub.advanced.archiving – Cold storage (GAP-032 Closed)
+
+**Success path (v3.0):**
+
+| سناریو | Endpoint | Expected |
+|--------|----------|----------|
+| Health | `GET /api/v1/data-hub/archiving/health` | `check_archive_health()` JSON |
+| Archive dry-run | `POST /api/v1/data-hub/archiving/archive/preview` | `pending_count`; **no** row move |
+| Archive apply | `POST /api/v1/data-hub/archiving/archive` (`confirm_archive=true`) | `archive_old_decisions`; stats in `ai_decisions_archive_stats` |
+| Restore dry-run / apply | `POST .../restore/preview` / `POST .../restore` (`confirm_restore=true`) | preview count / `records_restored` |
+| Purge preview | `POST /api/v1/data-hub/archiving/purge/preview` | `would_purge_count` only — **no delete** |
+| Read archive | `GET /api/v1/data-hub/archiving/records` | paginated `ai_decisions_archive` rows |
+
+**Failures (required):**
+
+| Case | Expected |
+|------|----------|
+| Archive without confirm | `400` `CONFIRM_ARCHIVE_REQUIRED` |
+| Restore without confirm | `400` `CONFIRM_RESTORE_REQUIRED` |
+| Unauthorized mutate | `403` |
+| DB/API error | `500` + UI retry |

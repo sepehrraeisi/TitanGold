@@ -81,11 +81,14 @@ Table: `datahub_filter_rules`
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | UUID PK | |
-| `list_type` | `blacklist` \| `whitelist` | |
+| `rule_type` | `blacklist` \| `whitelist` | |
 | `scope` | `domain` \| `source` \| `keyword` | |
-| `match_value` | TEXT | domain host, source_id UUID string, or keyword pattern |
-| `match_kind` | `exact` \| `contains` \| `prefix` \| `regex` | default `contains` for keyword, `exact` for source |
+| `pattern` | TEXT | domain host, source_id UUID, or keyword |
+| `match_type` | `exact` \| `contains` \| `regex` | default `contains` |
 | `apply_target` | `ingestion` \| `publishing` \| `both` | default `ingestion` |
+| `action` | `block` \| `allow` | must match `rule_type` |
+| `priority` | INT default 100 | higher wins; whitelist beats blacklist on tie |
+| `metadata` | JSONB | |
 | `reason` | TEXT nullable | |
 | `is_active` | BOOLEAN default true | |
 | `deleted_at` | TIMESTAMPTZ nullable | soft delete |
@@ -199,9 +202,9 @@ Same workflow as Design-3: slate shell, metric cards, pills (`list_type`, `scope
 
 | GAP | Title | Status after v3.0 |
 |-----|-------|-------------------|
-| **GAP-024** | Blacklist/Whitelist backend-first + UI | **Target: Closed** |
+| **GAP-024** | Blacklist/Whitelist backend-first + UI | **Closed** |
 | GAP-004 | Richer policy UI + history table | Open v3.1 |
-| GAP-025 | Publishing-path enforcement in automation/publisher workers | Open v3.1 |
+| GAP-025 | Publishing-path enforcement in automation/publisher workers | **Open v3.1** |
 
 ---
 
@@ -219,18 +222,15 @@ Same workflow as Design-3: slate shell, metric cards, pills (`list_type`, `scope
 
 ---
 
-## Implementation checklist
+## Implementation status (GAP-024)
 
-- [ ] Migration `028_create_datahub_filter_rules.sql`
-- [ ] `backend/services/datahubFilterRulesService.js`
-- [ ] `backend/routes/data-hub-filter-rules.js` mounted in `server.js`
-- [ ] Frontend API + hooks + panel rewrite
-- [ ] Ingestion hook (minimal): call evaluate in `collected_data` insert path OR document as GAP-024b if too large
-- [ ] i18n keys
-- [ ] Demos + SSOT + `GAPS_AND_PLAN.md` GAP-024 Closed
-- [ ] `npm run build`
-- [ ] commit/push on feature branch
+- [x] Migration `028_create_datahub_filter_rules.sql` — applied on dev `titangold_db`
+- [x] `datahubFilterRulesService.js` + `data-hub-filter-rules.js` mounted in `v1/index.js`
+- [x] Frontend API + hooks + `BlacklistWhitelist.tsx` + `FilterRuleModal.tsx`
+- [x] Ingestion: `collected-data` POST/batch + `telegramPipeline` before INSERT
+- [x] Publishing: evaluate API only (worker hook → GAP-025)
+- [x] i18n, demos, SSOT, `npm run build`, commit `092a191`
 
 ---
 
-*Contract version: v3.0 · 2026-05-24 · Awaiting implementation (GAP-024).*
+*Contract version: v3.0 · 2026-05-25 · **Implemented** (GAP-024 Closed).*

@@ -1,492 +1,516 @@
 
-import React, { useState, useMemo } from 'react';
-import * as api from '../../../../../../services/api';
-import { DataHubState, DataPipelineSourceSnapshot } from '../../../../../../types';
-import { SummaryCard } from '../../../../../ui/summary-card';
-import { EmptyState } from '../../../../../ui/empty-state';
-import { ActionButton } from '../../../../../ui/action-button';
-import { StatusBadge } from '../../../../../ui/status-badge';
-import ApiWrapper from '../../../../../common/ApiWrapper';
-import { useAsync } from '../../../../../../hooks/useAsync';
+import React, { useMemo, useState } from 'react';
+import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
+import type { PrioritizationSource } from '../../../../../../services/dataHubPrioritizationApi';
+import {
+    usePrioritizationSettingsQuery,
+    usePrioritizationSourcesQuery,
+    usePrioritizationRunsQuery,
+    useUpdatePrioritizationSettingsMutation,
+    usePreviewPrioritizationMutation,
+    useApplyPrioritizationMutation,
+    useSetPrioritizationOverrideMutation,
+} from '../../../../../../hooks/useDataHubPrioritization';
 
 interface SmartPrioritizationProps {
-    dataHub: DataHubState;
-    setDataHub: (hub: DataHubState) => void;
-    onRefresh: () => void;
     t: (key: string) => string;
-    formatTimeAgo: (timestamp?: string) => string;
-    sourceQualityMap: Record<string, DataPipelineSourceSnapshot>;
-    getStatusBadgeClass: (status?: string) => string;
 }
 
-const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({
-    dataHub,
-    setDataHub,
-    onRefresh,
-    t,
-    formatTimeAgo,
-    sourceQualityMap,
-    getStatusBadgeClass
-}) => {
-    const toggleAsync = useAsync(api.setSmartPrioritizationEnabled);
-    const calculateAsync = useAsync(api.calculateSourcePriorities);
-    const saveFactorsAsync = useAsync(api.updatePrioritizationFactors);
-    const setOverrideAsync = useAsync(api.setPriorityOverride);
-    const removeOverrideAsync = useAsync(api.removePriorityOverride);
+const SHELL =
+    'bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg rounded-xl p-4 md:p-5';
 
-    const [showConfigModal, setShowConfigModal] = useState(false);
-    const [overrideSourceId, setOverrideSourceId] = useState<string | null>(null);
+function tierPill(tier: string, t: (k: string) => string) {
+    const map: Record<string, string> = {
+        low: 'bg-red-500/10 text-red-300 border border-red-500/40',
+        medium: 'bg-amber-500/10 text-amber-300 border border-amber-500/40',
+        high: 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/40',
+        critical: 'bg-indigo-500/20 text-indigo-200 border border-indigo-400/40',
+    };
+    return (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${map[tier] || ''}`}>
+            {t(`prioritization_tier_${tier}`) || tier}
+        </span>
+    );
+}
+
+const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
+    const { data: settings, isLoading: settingsLoading, refetch } = usePrioritizationSettingsQuery();
+    const { data: sources = [], isLoading: sourcesLoading } = usePrioritizationSourcesQuery();
+    const { data: runs = [] } = usePrioritizationRunsQuery();
+
+    const settingsMut = useUpdatePrioritizationSettingsMutation();
+    const previewMut = usePreviewPrioritizationMutation();
+    const applyMut = useApplyPrioritizationMutation();
+    const overrideMut = useSetPrioritizationOverrideMutation();
+
+    const [showConfig, setShowConfig] = useState(false);
+    const [weights, setWeights] = useState<Record<string, number>>({});
+    const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+    const [activeBreakdown, setActiveBreakdown] = useState<PrioritizationSource | null>(null);
+    const [overrideSource, setOverrideSource] = useState<PrioritizationSource | null>(null);
     const [overrideValue, setOverrideValue] = useState<number>(50);
+    const [overrideNote, setOverrideNote] = useState('');
 
-    const advanced = dataHub.advanced || { smartPrioritization: { enabled: false, rules: [] } };
-    const prioritization = advanced.smartPrioritization;
+    const apiError =
+        [settingsMut.error, previewMut.error, applyMut.error, overrideMut.error].find(
+            e => e instanceof DataHubApiError,
+        ) as DataHubApiError | undefined;
 
-    // Calculate summary metrics
     const summary = useMemo(() => {
-        const rules = prioritization.rules || [];
-        const avgPriority = rules.length > 0
-            ? rules.reduce((sum, r) => sum + r.calculatedPriority, 0) / rules.length
-            : 0;
-
-        const highPriority = rules.filter(r => r.calculatedPriority >= 70).length;
-        const mediumPriority = rules.filter(r => r.calculatedPriority >= 40 && r.calculatedPriority < 70).length;
-        const lowPriority = rules.filter(r => r.calculatedPriority < 40).length;
-
+        const total = sources.length;
+        const avg = total > 0 ? sources.reduce((acc, s) => acc + s.final_score, 0) / total : 0;
         return {
-            total: rules.length,
-            avgPriority: avgPriority.toFixed(1),
-            highPriority,
-            mediumPriority,
-            lowPriority,
-            lastUpdate: prioritization.lastUpdate
+            total,
+            avg: avg.toFixed(1),
+            low: sources.filter(s => s.suggested_tier === 'low').length,
+            medium: sources.filter(s => s.suggested_tier === 'medium').length,
+            high: sources.filter(s => s.suggested_tier === 'high').length,
+            critical: sources.filter(s => s.suggested_tier === 'critical').length,
         };
-    }, [prioritization]);
+    }, [sources]);
 
-    // Default factor weights
-    const defaultFactors = {
-        quality: 30,
-        freshness: 25,
-        reliability: 25,
-        categoryImportance: 20
-    };
-
-    const [factorWeights, setFactorWeights] = useState(defaultFactors);
-
-    const handleToggleSmartPrioritization = async (enabled: boolean) => {
-        try {
-            const updated = await toggleAsync.execute(enabled);
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to toggle smart prioritization:', e);
-        }
-    };
-
-    const handleCalculatePriorities = async () => {
-        try {
-            await calculateAsync.execute();
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Calculation failed:', e);
-        }
-    };
-
-    const handleSaveFactorWeights = async () => {
-        try {
-            await saveFactorsAsync.execute(factorWeights);
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-            setShowConfigModal(false);
-        } catch (e: any) {
-            console.error('Failed to save factors:', e);
-        }
-    };
-
-    const handleSetOverride = async (sourceId: string, priority: number) => {
-        try {
-            await setOverrideAsync.execute(sourceId, priority);
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-            setOverrideSourceId(null);
-        } catch (e: any) {
-            console.error('Failed to set override:', e);
-        }
-    };
-
-    const handleRemoveOverride = async (sourceId: string) => {
-        try {
-            await removeOverrideAsync.execute(sourceId);
-            const updated = await api.fetchDataHubState();
-            setDataHub(updated);
-            onRefresh();
-        } catch (e: any) {
-            console.error('Failed to remove override:', e);
-        }
-    };
-
-    // Sort rules by priority
-    const sortedRules = useMemo(() => {
-        return [...(prioritization.rules || [])].sort((a, b) => b.calculatedPriority - a.calculatedPriority);
-    }, [prioritization.rules]);
-
-    const getPriorityColor = (priority: number) => {
-        if (priority >= 70) return 'text-green-400';
-        if (priority >= 40) return 'text-yellow-400';
-        return 'text-red-400';
-    };
-
-    const getPriorityLabel = (priority: number) => {
-        if (priority >= 70) return 'High';
-        if (priority >= 40) return 'Medium';
-        return 'Low';
-    };
+    const sorted = useMemo(() => [...sources].sort((a, b) => b.final_score - a.final_score), [sources]);
+    const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+    const isLoading =
+        settingsLoading || sourcesLoading || settingsMut.isPending || previewMut.isPending || applyMut.isPending;
 
     return (
-        <ApiWrapper
-            error={toggleAsync.error || calculateAsync.error || saveFactorsAsync.error || setOverrideAsync.error || removeOverrideAsync.error}
-            setError={() => {
-                toggleAsync.setError(null);
-                calculateAsync.setError(null);
-                saveFactorsAsync.setError(null);
-                setOverrideAsync.setError(null);
-                removeOverrideAsync.setError(null);
-            }}
-            isLoading={toggleAsync.isLoading || calculateAsync.isLoading || saveFactorsAsync.isLoading || setOverrideAsync.isLoading || removeOverrideAsync.isLoading}
-        >
-            <div className="bg-card border border-border rounded-lg p-4">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                    <div>
-                        <h3 className="font-semibold text-foreground flex items-center gap-2">
-                            📊 {t('smart_prioritization') || 'Smart Prioritization'}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {t('prioritization_desc') || 'Automatically prioritize data sources based on quality, freshness, and reliability'}
-                        </p>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                        <label className="flex items-center gap-2 text-sm">
-                            <input
-                                type="checkbox"
-                                checked={prioritization.enabled}
-                                onChange={(e) => handleToggleSmartPrioritization(e.target.checked)}
-                                disabled={toggleAsync.isLoading}
-                                className="rounded"
-                            />
-                            <span className="text-foreground">{t('enable') || 'Enable'}</span>
-                        </label>
-                        <ActionButton
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setShowConfigModal(true)}
-                            disabled={!prioritization.enabled}
-                        >
-                            ⚙️ {t('configure') || 'Configure'}
-                        </ActionButton>
-                        <ActionButton
-                            variant="primary"
-                            size="sm"
-                            loading={calculateAsync.isLoading}
-                            onClick={handleCalculatePriorities}
-                            disabled={!prioritization.enabled}
-                        >
-                            {t('calculate_priorities') || 'Calculate'}
-                        </ActionButton>
-                    </div>
+        <div className={SHELL}>
+            <div className="sticky top-0 z-10 bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 backdrop-blur-sm border-b border-white/10 -mx-4 px-4 py-4 mb-6">
+                <div>
+                    <h3 className="text-sm md:text-base font-semibold text-foreground">{t('smart_prioritization')}</h3>
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
+                        {t('prioritization_desc_v3') ||
+                            'Preview and manually apply source priorities. No auto-apply in v3.0.'}
+                    </p>
                 </div>
-
-                {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    <SummaryCard
-                        label={t('total_sources') || 'Total Sources'}
-                        value={summary.total}
-                        icon={<span className="text-2xl">📦</span>}
-                    />
-                    <SummaryCard
-                        label={t('avg_priority') || 'Avg Priority'}
-                        value={summary.avgPriority}
-                        icon={<span className="text-2xl">📈</span>}
-                    />
-                    <SummaryCard
-                        label={t('high_priority') || 'High Priority'}
-                        value={summary.highPriority}
-                        variant="success"
-                        icon={<span className="text-2xl">🔥</span>}
-                    />
-                    <SummaryCard
-                        label={t('low_priority') || 'Low Priority'}
-                        value={summary.lowPriority}
-                        variant="warning"
-                        icon={<span className="text-2xl">❄️</span>}
-                    />
+                <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <input
+                            type="checkbox"
+                            checked={settings?.is_enabled ?? false}
+                            disabled={settingsMut.isPending}
+                            onChange={e =>
+                                settingsMut.mutate({
+                                    is_enabled: e.target.checked,
+                                    factor_weights: settings?.factor_weights || {},
+                                    tier_thresholds: settings?.tier_thresholds || {},
+                                })
+                            }
+                            className="rounded"
+                        />
+                        {t('prioritization_enabled')}
+                    </label>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setWeights(settings?.factor_weights || {});
+                            setShowConfig(true);
+                        }}
+                        className="text-[11px] px-3 py-1.5 rounded-full border border-white/10"
+                    >
+                        {t('configure')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => previewMut.mutate()}
+                        disabled={previewMut.isPending || !settings?.is_enabled}
+                        className="text-[11px] px-4 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+                    >
+                        {previewMut.isPending ? t('loading') : t('prioritization_preview')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowApplyConfirm(true)}
+                        disabled={applyMut.isPending || sorted.length === 0}
+                        className="text-[11px] px-4 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                    >
+                        {applyMut.isPending ? t('loading') : t('prioritization_apply')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => refetch()}
+                        className="text-[11px] px-3 py-1.5 rounded-full border border-white/10"
+                    >
+                        {t('refresh')}
+                    </button>
                 </div>
+            </div>
 
-                {/* Priority Distribution Chart */}
-                {sortedRules.length > 0 && (
-                    <div className="bg-secondary/20 border border-border rounded-lg p-4 mb-4">
-                        <h4 className="text-sm font-semibold text-foreground mb-3">
-                            {t('priority_distribution') || 'Priority Distribution'}
-                        </h4>
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-xs">
-                                <div className="w-20 text-muted-foreground">{t('high') || 'High'}</div>
-                                <div className="flex-1 bg-background rounded-full h-6 overflow-hidden">
-                                    <div
-                                        className="bg-green-500 h-full flex items-center justify-end pr-2 text-white text-[10px] font-bold"
-                                        style={{ width: `${(summary.highPriority / summary.total) * 100}%` }}
-                                    >
-                                        {summary.highPriority > 0 && summary.highPriority}
-                                    </div>
-                                </div>
-                                <div className="w-12 text-right text-muted-foreground">
-                                    {((summary.highPriority / summary.total) * 100).toFixed(0)}%
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs">
-                                <div className="w-20 text-muted-foreground">{t('medium') || 'Medium'}</div>
-                                <div className="flex-1 bg-background rounded-full h-6 overflow-hidden">
-                                    <div
-                                        className="bg-yellow-500 h-full flex items-center justify-end pr-2 text-white text-[10px] font-bold"
-                                        style={{ width: `${(summary.mediumPriority / summary.total) * 100}%` }}
-                                    >
-                                        {summary.mediumPriority > 0 && summary.mediumPriority}
-                                    </div>
-                                </div>
-                                <div className="w-12 text-right text-muted-foreground">
-                                    {((summary.mediumPriority / summary.total) * 100).toFixed(0)}%
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs">
-                                <div className="w-20 text-muted-foreground">{t('low') || 'Low'}</div>
-                                <div className="flex-1 bg-background rounded-full h-6 overflow-hidden">
-                                    <div
-                                        className="bg-red-500 h-full flex items-center justify-end pr-2 text-white text-[10px] font-bold"
-                                        style={{ width: `${(summary.lowPriority / summary.total) * 100}%` }}
-                                    >
-                                        {summary.lowPriority > 0 && summary.lowPriority}
-                                    </div>
-                                </div>
-                                <div className="w-12 text-right text-muted-foreground">
-                                    {((summary.lowPriority / summary.total) * 100).toFixed(0)}%
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3 mb-5">
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent p-3 backdrop-blur-sm">
+                    <p className="text-[11px] text-muted-foreground mb-1">{t('total_sources')}</p>
+                    <p className="text-sm font-semibold">{summary.total}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent p-3 backdrop-blur-sm">
+                    <p className="text-[11px] text-muted-foreground mb-1">{t('avg_priority')}</p>
+                    <p className="text-sm font-semibold">{summary.avg}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-3 backdrop-blur-sm">
+                    <p className="text-[11px] text-emerald-300/80 mb-1">{t('high')}</p>
+                    <p className="text-sm font-semibold text-emerald-100">{summary.high + summary.critical}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-3 backdrop-blur-sm">
+                    <p className="text-[11px] text-amber-300/80 mb-1">{t('medium')}</p>
+                    <p className="text-sm font-semibold text-amber-100">{summary.medium}</p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent p-3 backdrop-blur-sm">
+                    <p className="text-[11px] text-red-300/80 mb-1">{t('low')}</p>
+                    <p className="text-sm font-semibold text-red-100">{summary.low}</p>
+                </div>
+            </div>
 
-                {/* Sources List */}
-                {sortedRules.length > 0 ? (
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between mb-2">
-                            <h4 className="text-sm font-semibold text-foreground">
-                                {t('source_priorities') || 'Source Priorities'}
-                            </h4>
-                            <p className="text-xs text-muted-foreground">
-                                {summary.lastUpdate ? `${t('last_update') || 'Updated'}: ${formatTimeAgo(summary.lastUpdate)}` : ''}
-                            </p>
-                        </div>
-                        {sortedRules.slice(0, 20).map(rule => {
-                            const source = dataHub.sources.find(s => s.id === rule.sourceId);
-                            const sourceSignal = sourceQualityMap[rule.sourceId];
-                            const isOverridden = rule.manualOverride !== undefined;
-                            const priority = isOverridden ? rule.manualOverride! : rule.calculatedPriority;
+            {apiError ? (
+                <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                    <span>{apiError.message}</span>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            void refetch();
+                        }}
+                        className="px-2 py-1 rounded bg-red-500/20"
+                    >
+                        {t('retry')}
+                    </button>
+                </div>
+            ) : null}
 
-                            return (
-                                <div key={rule.sourceId} className="border border-border rounded-lg p-3">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h5 className="font-semibold text-foreground">
-                                                    {source?.name || rule.sourceId}
-                                                </h5>
-                                                <StatusBadge
-                                                    status={priority >= 70 ? 'success' : priority >= 40 ? 'warning' : 'error'}
-                                                    label={getPriorityLabel(priority)}
-                                                    size="sm"
-                                                />
-                                                {isOverridden && (
-                                                    <StatusBadge status="info" label="Manual" size="sm" />
-                                                )}
+            {isLoading ? (
+                <p className="text-[11px] text-muted-foreground py-8 text-center">{t('loading')}</p>
+            ) : sorted.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                    <p className="text-sm font-medium">{t('prioritization_empty_title')}</p>
+                    <p className="text-[11px] mt-1">{t('prioritization_empty_hint')}</p>
+                </div>
+            ) : (
+                <div className="overflow-x-auto -mx-3 mt-2">
+                    <table className="min-w-full text-xs text-foreground/90">
+                        <thead className="border-b border-slate-800 text-[11px] text-muted-foreground">
+                            <tr>
+                                <th className="px-3 py-2 text-left">Source</th>
+                                <th className="px-3 py-2 text-left">Tier</th>
+                                <th className="px-3 py-2 text-left">Score</th>
+                                <th className="px-3 py-2 text-left">Reliability</th>
+                                <th className="px-3 py-2 text-left">Freshness</th>
+                                <th className="px-3 py-2 text-left">Health</th>
+                                <th className="px-3 py-2 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sorted.map(source => {
+                                const b = (source.score_breakdown || {}) as any;
+                                const reliability = typeof b.reliability === 'number' ? b.reliability : null;
+                                const successRate = typeof b.success_rate === 'number' ? b.success_rate : null;
+                                const freshness = typeof b.freshness === 'number' ? b.freshness : null;
+                                const errorHealth = typeof b.error_health === 'number' ? b.error_health : null;
+
+                                return (
+                                    <tr
+                                        key={source.source_id}
+                                        className="border-b border-slate-900/60 last:border-0"
+                                    >
+                                        <td className="px-3 py-2 align-top">
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-xs font-semibold text-foreground">
+                                                        {source.source_name}
+                                                    </span>
+                                                    {tierPill(source.suggested_tier, t)}
+                                                    {source.override_score != null ? (
+                                                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-200">
+                                                            {t('prioritization_override')}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                                <div className="text-[11px] text-muted-foreground">
+                                                    {source.source_type} · {source.category || 'uncategorized'}
+                                                </div>
                                             </div>
-
-                                            {/* Priority Bar */}
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className="flex-1 bg-background rounded-full h-2 overflow-hidden">
+                                        </td>
+                                        <td className="px-3 py-2 align-top">
+                                            <div className="text-[11px] text-muted-foreground">
+                                                {t(`prioritization_tier_${source.suggested_tier}`) ||
+                                                    source.suggested_tier}
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2 align-top">
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-2 w-24 rounded-full bg-slate-800 overflow-hidden">
                                                     <div
-                                                        className={`h-full ${priority >= 70 ? 'bg-green-500' : priority >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                                                        style={{ width: `${priority}%` }}
+                                                        className="h-full bg-gradient-to-r from-amber-500 to-purple-500"
+                                                        style={{
+                                                            width: `${Math.max(
+                                                                0,
+                                                                Math.min(100, source.final_score),
+                                                            )}%`,
+                                                        }}
                                                     />
                                                 </div>
-                                                <span className={`text-sm font-bold ${getPriorityColor(priority)}`}>
-                                                    {priority.toFixed(1)}
+                                                <span className="text-[11px] font-semibold text-purple-200">
+                                                    {source.final_score.toFixed(1)}
                                                 </span>
                                             </div>
+                                        </td>
+                                        <td className="px-3 py-2 align-top">
+                                            <div className="flex flex-col">
+                                                <span className="text-[11px] font-medium">
+                                                    {reliability != null ? reliability.toFixed(0) : '—'}
+                                                </span>
+                                                <span className="text-[10px] text-muted-foreground">
+                                                    {successRate != null ? `SR ${successRate.toFixed(0)}` : ''}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2 align-top">
+                                            <div className="flex flex-col">
+                                                <span className="text-[11px] font-medium">
+                                                    {freshness != null ? freshness.toFixed(0) : '—'}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2 align-top">
+                                            <div className="flex flex-col">
+                                                <span className="text-[11px] font-medium">
+                                                    {errorHealth != null ? errorHealth.toFixed(0) : '—'}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2 align-top text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setActiveBreakdown(source)}
+                                                    className="text-[11px] px-2 py-1 rounded-full border border-white/10 text-foreground hover:bg-white/5"
+                                                >
+                                                    {t('prioritization_breakdown')}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setOverrideSource(source);
+                                                        setOverrideValue(
+                                                            Math.round(source.override_score ?? source.final_score ?? 50),
+                                                        );
+                                                        setOverrideNote(source.override_note || '');
+                                                    }}
+                                                    className="text-[11px] px-2 py-1 rounded-full border border-purple-500/40 text-purple-200 hover:bg-purple-500/10"
+                                                >
+                                                    {t('override')}
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
-                                            {/* Factors */}
-                                            {!isOverridden && rule.factors && (
-                                                <div className="text-[11px] text-muted-foreground flex flex-wrap gap-2">
-                                                    {Object.entries(rule.factors).map(([key, weight]) => (
-                                                        <span key={key} className="inline-flex items-center gap-1">
-                                                            <span className="capitalize">{t(key) || key}:</span>
-                                                            <span className="text-foreground font-medium">{(weight * 100).toFixed(0)}%</span>
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            {/* Pipeline Signal */}
-                                            {sourceSignal && (
-                                                <div className="text-[11px] text-muted-foreground mt-2 flex flex-wrap gap-3">
-                                                    <span className="flex items-center gap-1">
-                                                        {t('pipeline_signal_last_status') || 'Status'}:
-                                                        <span className={`px-2 py-0.5 rounded-full font-semibold text-[10px] ${getStatusBadgeClass(sourceSignal.lastStatus)}`}>
-                                                            {sourceSignal.lastStatus}
-                                                        </span>
-                                                    </span>
-                                                    {typeof sourceSignal.lastResponseTime === 'number' && (
-                                                        <span>{sourceSignal.lastResponseTime} ms</span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Actions */}
-                                        <div className="flex flex-col gap-1">
-                                            {overrideSourceId === rule.sourceId ? (
-                                                <div className="flex flex-col gap-2 bg-secondary/20 p-2 rounded">
-                                                    <input
-                                                        type="range"
-                                                        min="0"
-                                                        max="100"
-                                                        value={overrideValue}
-                                                        onChange={(e) => setOverrideValue(Number(e.target.value))}
-                                                        className="w-32"
-                                                    />
-                                                    <div className="flex gap-1">
-                                                        <ActionButton
-                                                            variant="success"
-                                                            size="sm"
-                                                            onClick={() => handleSetOverride(rule.sourceId, overrideValue)}
-                                                        >
-                                                            ✓
-                                                        </ActionButton>
-                                                        <ActionButton
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => setOverrideSourceId(null)}
-                                                        >
-                                                            ✕
-                                                        </ActionButton>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <ActionButton
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                            setOverrideSourceId(rule.sourceId);
-                                                            setOverrideValue(Math.round(priority));
-                                                        }}
-                                                    >
-                                                        📌 {t('override') || 'Override'}
-                                                    </ActionButton>
-                                                    {isOverridden && (
-                                                        <ActionButton
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleRemoveOverride(rule.sourceId)}
-                                                        >
-                                                            🔄 {t('reset') || 'Reset'}
-                                                        </ActionButton>
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                        {sortedRules.length > 20 && (
-                            <p className="text-xs text-center text-muted-foreground py-2">
-                                {t('showing_top_20') || 'Showing top 20 sources'} ({sortedRules.length} {t('total') || 'total'})
-                            </p>
-                        )}
-                    </div>
+            <div className="mt-5 border-t border-white/10 pt-3">
+                <p className="text-[11px] text-muted-foreground mb-2">{t('prioritization_recent_runs')}</p>
+                {runs.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground">{t('no_history')}</p>
                 ) : (
-                    <EmptyState
-                        icon={<span className="text-4xl">📊</span>}
-                        title={t('no_priorities') || 'No priorities calculated'}
-                        description={t('priorities_desc') || 'Enable smart prioritization and click Calculate to automatically prioritize your data sources'}
-                        action={
-                            prioritization.enabled ? (
-                                <ActionButton
-                                    variant="primary"
-                                    onClick={handleCalculatePriorities}
-                                    loading={calculateAsync.isLoading}
-                                >
-                                    {t('calculate_now') || 'Calculate Now'}
-                                </ActionButton>
-                            ) : undefined
-                        }
-                    />
-                )}
-
-                {/* Factor Configuration Modal */}
-                {showConfigModal && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-card border border-border rounded-lg p-6 max-w-md w-full">
-                            <h3 className="text-lg font-semibold text-foreground mb-4">
-                                {t('configure_factors') || 'Configure Priority Factors'}
-                            </h3>
-                            <div className="space-y-4 mb-6">
-                                {Object.entries(factorWeights).map(([key, value]) => (
-                                    <div key={key}>
-                                        <label className="block text-sm font-medium text-foreground mb-2 capitalize">
-                                            {t(key) || key}: {value}%
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="100"
-                                            value={value}
-                                            onChange={(e) => setFactorWeights(prev => ({
-                                                ...prev,
-                                                [key]: Number(e.target.value)
-                                            }))}
-                                            className="w-full"
-                                        />
-                                    </div>
-                                ))}
-                                <div className="bg-secondary/20 rounded p-3 text-xs text-muted-foreground">
-                                    <p className="font-semibold mb-1">{t('total') || 'Total'}: {Object.values(factorWeights).reduce((a, b) => a + b, 0)}%</p>
-                                    <p>{t('factor_weights_note') || 'Adjust weights to control how each factor influences priority calculation'}</p>
-                                </div>
+                    <div className="space-y-1">
+                        {runs.slice(0, 5).map(run => (
+                            <div
+                                key={run.id}
+                                className="text-[10px] text-muted-foreground flex items-center justify-between"
+                            >
+                                <span>
+                                    {run.run_type} · {run.source_count} {t('total')}
+                                </span>
+                                <span>{new Date(run.created_at).toLocaleString()}</span>
                             </div>
-                            <div className="flex gap-2 justify-end">
-                                <ActionButton
-                                    variant="ghost"
-                                    onClick={() => setShowConfigModal(false)}
-                                >
-                                    {t('cancel') || 'Cancel'}
-                                </ActionButton>
-                                <ActionButton
-                                    variant="primary"
-                                    loading={saveFactorsAsync.isLoading}
-                                    onClick={handleSaveFactorWeights}
-                                >
-                                    {t('save') || 'Save'}
-                                </ActionButton>
-                            </div>
-                        </div>
+                        ))}
                     </div>
                 )}
             </div>
-        </ApiWrapper>
+
+            {showConfig ? (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-xl bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl p-4">
+                        <h4 className="text-sm font-semibold mb-3">{t('configure_factors')}</h4>
+                        <div className="space-y-3">
+                            {Object.entries(weights).map(([key, value]) => (
+                                <div key={key}>
+                                    <label className="block text-[11px] mb-1">
+                                        {t(`prioritization_factor_${key}`) || key}: {value}
+                                    </label>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={100}
+                                        value={value}
+                                        onChange={e =>
+                                            setWeights(prev => ({
+                                                ...prev,
+                                                [key]: Number(e.target.value),
+                                            }))
+                                        }
+                                        className="w-full"
+                                    />
+                                </div>
+                            ))}
+                            <p className="text-[11px] text-muted-foreground">
+                                {t('total')}: {totalWeight}%
+                            </p>
+                        </div>
+                        <div className="mt-4 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowConfig(false)}
+                                className="text-[11px] bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5"
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    await settingsMut.mutateAsync({
+                                        is_enabled: settings?.is_enabled ?? false,
+                                        factor_weights: weights,
+                                        tier_thresholds: settings?.tier_thresholds || {},
+                                    });
+                                    setShowConfig(false);
+                                }}
+                                disabled={totalWeight !== 100 || settingsMut.isPending}
+                                className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {t('save')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {showApplyConfirm ? (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl p-4">
+                        <h4 className="text-sm font-semibold mb-2">{t('prioritization_apply_confirm_title')}</h4>
+                        <p className="text-[11px] text-muted-foreground mb-4">
+                            {t('prioritization_apply_confirm_desc')}
+                        </p>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowApplyConfirm(false)}
+                                className="text-[11px] bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5"
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    await applyMut.mutateAsync({});
+                                    setShowApplyConfirm(false);
+                                }}
+                                className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={applyMut.isPending}
+                            >
+                                {t('confirm')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {activeBreakdown ? (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-xl bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl p-4">
+                        <h4 className="text-sm font-semibold mb-1">{t('prioritization_breakdown')}</h4>
+                        <p className="text-[11px] text-muted-foreground mb-3">{activeBreakdown.source_name}</p>
+                        <div className="space-y-1 max-h-[50vh] overflow-auto">
+                            {Object.entries(activeBreakdown.score_breakdown || {}).map(([k, v]) => (
+                                <div key={k} className="text-[11px] flex justify-between border-b border-white/5 py-1">
+                                    <span>{t(`prioritization_factor_${k}`) || k}</span>
+                                    <span className="text-purple-200">
+                                        {typeof v === 'number' ? v.toFixed(1) : JSON.stringify(v)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setActiveBreakdown(null)}
+                                className="text-[11px] bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5"
+                            >
+                                {t('close') || 'Close'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {overrideSource ? (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl p-4">
+                        <h4 className="text-sm font-semibold mb-1">{t('prioritization_override_title')}</h4>
+                        <p className="text-[11px] text-muted-foreground mb-3">{overrideSource.source_name}</p>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-[11px] mb-1">
+                                    {t('prioritization_override_score')}: {overrideValue}
+                                </label>
+                                <input
+                                    type="range"
+                                    min={0}
+                                    max={100}
+                                    value={overrideValue}
+                                    onChange={e => setOverrideValue(Number(e.target.value))}
+                                    className="w-full"
+                                />
+                            </div>
+                            <textarea
+                                value={overrideNote}
+                                onChange={e => setOverrideNote(e.target.value)}
+                                placeholder={t('prioritization_override_note')}
+                                className="w-full min-h-20 text-[11px] rounded-lg border border-white/10 bg-slate-900 px-2 py-2"
+                            />
+                        </div>
+                        <div className="mt-4 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setOverrideSource(null)}
+                                className="text-[11px] bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5"
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    await overrideMut.mutateAsync({
+                                        sourceId: overrideSource.source_id,
+                                        override_score: null,
+                                        override_note: null,
+                                    });
+                                    setOverrideSource(null);
+                                }}
+                                className="text-[11px] px-3 py-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-white"
+                            >
+                                {t('reset')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    await overrideMut.mutateAsync({
+                                        sourceId: overrideSource.source_id,
+                                        override_score: overrideValue,
+                                        override_note: overrideNote || null,
+                                    });
+                                    setOverrideSource(null);
+                                }}
+                                className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {t('save')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+        </div>
     );
 };
 

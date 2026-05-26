@@ -41,6 +41,11 @@ import topicRoutingRoutes from '../topic-routing.js';
 import telegramRoutes from '../telegram.js';
 import telegramPublishersRoutes from '../telegram-publishers.js';
 import dataHubAutomationRoutes from '../data-hub-automation.js';
+import dataHubFilterRulesRoutes from '../data-hub-filter-rules.js';
+import dataHubCrawlersRoutes from '../data-hub-crawlers.js';
+import dataHubDiscoveryRoutes from '../data-hub-discovery.js';
+import dataHubPrioritizationRoutes from '../data-hub-prioritization.js';
+import dataHubArchivingRoutes from '../data-hub-archiving.js';
 
 const router = express.Router();
 
@@ -84,6 +89,11 @@ router.use('/data-categories', dataCategoryRoutes);
 router.use('/data-hub/access-control', accessControlRoutes);
 router.use('/data-hub/telegram-publishers', telegramPublishersRoutes);
 router.use('/data-hub/automation', dataHubAutomationRoutes);
+router.use('/data-hub/filter-rules', dataHubFilterRulesRoutes);
+router.use('/data-hub/crawlers', dataHubCrawlersRoutes);
+router.use('/data-hub/discovery', dataHubDiscoveryRoutes);
+router.use('/data-hub/prioritization', dataHubPrioritizationRoutes);
+router.use('/data-hub/archiving', dataHubArchivingRoutes);
 router.use('/topic-routing', topicRoutingRoutes);
 router.use('/telegram', telegramRoutes);
 
