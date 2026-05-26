@@ -255,29 +255,30 @@ cd backend && npm run migrate   # 029_create_datahub_crawlers.sql
 
 Design: slate shell, `WebCrawlerModal` §10, no IndexedDB crawler CRUD.
 
-### dataHub.advanced.discovery – Auto Discovery (GAP-028 closed)
+### dataHub.advanced.discovery – Auto Discovery (GAP-028 Closed)
 
-| سناریو | Endpoint | Expected |
-|--------|----------|----------|
-| Create website/RSS via scan inputs | `POST /scan` | `added` / `duplicates` / `blocked` counts |
-| List suggestions | `GET /suggestions?status=pending` | scored 0–100 |
-| Approve | `POST /suggestions/:id/approve` | `data_sources` row + `approved_by` |
-| Reject | `POST /suggestions/:id/reject` | `rejected_by` + `review_note` |
-| Stats / history | `GET /stats`, `GET /history` | aggregates + scan rows |
+**Success path (UI + API):**
+
+| سناریو | Steps | Endpoint | Expected |
+|--------|-------|----------|----------|
+| Scan → pending suggestions | Run scan, open suggestions tab | `POST /scan` → `GET /suggestions?status=pending` | New rows `status=pending`, `priority_score` **0–100**; **no** new `data_sources` |
+| Approve → create source | Approve one pending row | `POST /suggestions/:id/approve` | `data_sources` row; `created_source_id`; `approved_by`; suggestion `approved` |
+| Reject with note | Reject + review note | `POST /suggestions/:id/reject` | `status=rejected`, `rejected_by`, `review_note`, `reviewed_at` |
+| Duplicate | Re-scan known URL | `POST /scan` | `status=duplicate`, `duplicate_of_source_id` or `duplicate_of_suggestion_id`; not pending |
+| Stats / history | Dashboard cards | `GET /stats`, `GET /history` | aggregates + scan audit rows |
 
 **Failures (required):**
 
-| Case | Expected |
-|------|----------|
-| Duplicate (3-layer) | `status=duplicate`, `duplicate_of_*`, no new pending |
-| Blacklist blocked | scan `blocked++`, no pending |
-| SSRF (`localhost`, private IP, `file://`) | skipped / `SSRF_BLOCKED` |
-| Invalid URL | `400` |
-| Unauthorized approve | `403` |
-| Rejected | `rejected_by`, `reviewed_at` |
-| DB down | `500` |
+| Case | API | UI (`AutoDiscoveryConfig` + `ApiWrapper`) |
+|------|-----|------------------------------------------|
+| Blacklist / unsafe URL | scan `blocked++` or skip; filter on approve → `403 FILTER_BLOCKED` | Toast / blocked count; no pending for blocked URL |
+| SSRF (`localhost`, private IP, `file://`, `ftp://`, `metadata.*`) | `SSRF_BLOCKED` **400** or skipped in scan counts | Error message; URL not queued |
+| Invalid URL | `400` `INVALID_URL` | Inline / toast validation |
+| Unauthorized approve/reject | `403` | Permission denied message |
+| Rejected row | `rejected_by`, `reviewed_at` | Badge + note in history |
+| DB down / API error | `500` | **Error banner** + **Retry** (refetch suggestions/stats) |
 
-**v3.0:** scan does **not** auto-create sources — only approve path mutates `data_sources`.
+**v3.0 locked:** scan does **not** auto-create sources — only **approve** mutates `data_sources`.
 
 ```bash
 cd backend && npm run migrate   # 030_create_datahub_discovery.sql
@@ -297,3 +298,24 @@ Design: `AutoDiscoveryConfig.tsx` slate shell · strict i18n · no IndexedDB dis
 | `timeout_ms` | wall-clock per run | run **failed** with timeout message |
 
 Evidence: `docs/ssot_v3/EVIDENCE.md` § Crawler runtime safety.
+
+### dataHub.advanced.prioritization – Smart Prioritization (GAP-030 Closed)
+
+**Success path (v3.0):**
+
+| سناریو | Endpoint | Expected |
+|--------|----------|----------|
+| Preview | `POST /api/v1/data-hub/prioritization/preview` | محاسبه/ذخیره `datahub_source_priorities` + `datahub_prioritization_runs`; **بدون** تغییر `data_sources.priority_score/tier` |
+| Apply with confirm | `POST /api/v1/data-hub/prioritization/apply` (`confirm_apply=true`) | فقط این مسیر روی `data_sources.priority_score`, `priority`, `priority_updated_at` می‌نویسد |
+| Manual override | `PUT /api/v1/data-hub/prioritization/sources/:sourceId/override` | ذخیره `override_score`, `override_note`, `overridden_by`, `overridden_at` (audit) |
+| Sources view | `GET /api/v1/data-hub/prioritization/sources` | score نهایی 0–100 + `score_breakdown` JSONB |
+
+**Failures (required):**
+
+| Case | Expected |
+|------|----------|
+| Apply بدون confirm | `400` `CONFIRM_APPLY_REQUIRED` |
+| Unauthorized apply/preview/override/settings | `403` |
+| Invalid weights (sum != 100) | `400` `INVALID_WEIGHTS` |
+| Disabled prioritization + preview/apply | `400` `PRIORITIZATION_DISABLED` |
+| DB/API error | `500` + error banner + retry در UI |

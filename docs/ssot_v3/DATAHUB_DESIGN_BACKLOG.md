@@ -85,7 +85,7 @@
 | blacklist | **Implemented · Design: Done** | GAP-024 closed | Backend-first `datahub_filter_rules` |
 | crawlers | **Implemented · Design: Done** | GAP-026 closed | Backend-first + run history |
 | discovery | **Implemented · Design: Done** | GAP-028 closed | Suggestion-only + approval audit |
-| prioritization | Partial | Not started | Post Design-3 |
+| prioritization | **Implemented · Design: Done** | GAP-030 closed | Backend-first preview/apply/override + full i18n + demos |
 | archiving | Partial | Not started | Post Design-3 |
 
 ---
@@ -103,6 +103,12 @@
 | GAP-027 | Crawler scheduler + prod Playwright | **Open** v3.1 only |
 | GAP-028 | Auto Discovery backend-first | **Closed** |
 | GAP-029 | Discovery scheduler | **Open** v3.1 |
+| GAP-030 | Smart Prioritization | **Closed** — backend-first preview/apply/override + Design Done |
+| GAP-031 | Prioritization scheduler / auto-apply | **Open** v3.1 |
+
+---
+
+**Next contract:** `archiving` (prioritization contract implemented).
 
 ---
 

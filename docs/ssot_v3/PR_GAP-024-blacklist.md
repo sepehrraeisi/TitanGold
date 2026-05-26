@@ -10,9 +10,9 @@
 | **Web Crawlers** | `/api/v1/data-hub/crawlers` + migration `029` | Done | **GAP-026 Closed** |
 | **Auto Discovery** | `/api/v1/data-hub/discovery` + migration `030` | Done | **GAP-028 Closed** |
 
-**Pending advanced:** prioritization, archiving.
+**Pending advanced:** archiving.
 
-**Open v3.1:** GAP-025 · GAP-027 · GAP-029.
+**Open v3.1:** GAP-025 (publishing filter hook) · GAP-027 (crawler scheduler / Playwright prod) · GAP-029 (discovery scheduler).
 
 Contract: `docs/ssot_v3/advanced/BLACKLIST_WHITELIST_API_CONTRACT.md`  
 Demos + ingestion proof: `docs/ssot_v3/DataHub_DEMOS.md` § `dataHub.advanced.blacklist`  

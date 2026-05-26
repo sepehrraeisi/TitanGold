@@ -27,7 +27,6 @@ const AdvancedFeatures: React.FC<{
         setActiveFeature,
         advanced,
         pipelineSnapshot,
-        sourceQualityMap,
         agentMap,
         publisherMap,
         topicMap,
@@ -120,13 +119,7 @@ const AdvancedFeatures: React.FC<{
 
             {activeFeature === 'prioritization' && (
                 <SmartPrioritization
-                    dataHub={dataHub}
-                    setDataHub={setDataHub}
-                    onRefresh={onRefresh}
                     t={t}
-                    formatTimeAgo={formatTimeAgo}
-                    sourceQualityMap={sourceQualityMap}
-                    getStatusBadgeClass={getStatusBadgeClass}
                 />
             )}
 
