@@ -428,3 +428,11 @@ During an attempted DataHub browser smoke on host `ubuntu` (`/home/ubuntu/webapp
 - Confirmed: `/?view=ai` → `readStateFromURL()` / `ViewKey: 'ai'` (`utils/urlSync.ts`, `types/navigation.ts`).
 - **Not** in URL today: `AICenter` sub-tab (`manager` vs `agents`), `AIManager` sub-tab (`data_hub`). Defaults: `agents` + `overview` — manual clicks or owner-provided deep-link required.
 
+### Browser smoke environment findings (read-only, no env/db mutation)
+
+- `CORS_ALLOWED_ORIGINS` key exists in backend `.env`.
+- Current configured allowed-origin set does **not** include `localhost:5173` (presence check only; value not printed).
+- `JWT_SECRET` and `DATABASE_URL` keys exist in backend `.env` (presence check only; values not printed).
+- Smoke credential user `dev` is missing in DB for this environment (read-only existence check).
+- Consequence during smoke: `POST /api/v1/auth/login` from `http://localhost:5173` failed with CORS (`Not allowed by CORS`) before auth handler validation.
+

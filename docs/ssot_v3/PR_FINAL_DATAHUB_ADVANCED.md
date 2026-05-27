@@ -254,6 +254,20 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 
 ---
 
+## 11.1) Final Browser Smoke Blocker (environment, not DataHub UI)
+
+- `500 POST /api/v1/auth/login` observed in smoke was caused by **CORS reject** before login handler logic.
+- Backend logs show: `CORS blocked request from origin: http://localhost:5173` → `Not allowed by CORS` on `/api/v1/auth/login`.
+- `CORS_ALLOWED_ORIGINS` key exists in backend `.env`, but current value set does **not** include `localhost:5173`.
+- Smoke credential `dev/password` is not valid in this DB environment (`dev` user record missing), so even after CORS approval this test credential would not authenticate.
+- No production environment variables were changed.
+- No DB seed/write was performed for smoke.
+- Required next step for full browser smoke: **approved smoke origin** + **approved valid test user/token**.
+
+**Operational status:** **Ready except final browser smoke — blocked by approved test environment**.
+
+---
+
 ## 12) Final status
 
 | Check | Result |
@@ -265,7 +279,7 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 | Undefined / NaN ms in health UI | **None** (code-level) |
 | Latency metric (Advanced overview) | **N/A** (GAP-034 → v3.1) |
 | Avg response / cache (Health tab) | **N/A** (GAP-035 → v3.1) |
-| Browser smoke (E2E) | **Attempted · blocked** (see §11) |
+| Browser smoke (E2E) | **Attempted · blocked by environment** (CORS origin + test credential), not DataHub UI |
 | Branch pushed to `origin` | **Yes** — `feat/gap-008-sources-backend-wiring` |
 
-*Checkpoint updated 2026-05-27 · **Ready except final browser smoke** — design/navigation commits OK; merge after confirmed deep-link smoke on agreed runtime.*
+*Checkpoint updated 2026-05-27 · **Ready except final browser smoke — blocked by approved test environment**.*
