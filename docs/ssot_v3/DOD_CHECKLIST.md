@@ -13,4 +13,5 @@
 - [x] Single migration path (فقط مسیر node-pg-migrate / `npm run migrate`).
 - [x] Greenfield DB works (Bootstrap migration تست‌شده روی DB خالی).
 - [x] SSOT has evidence lines (برای همه claimهای مهم).
+- [x] No active mock/local fallback leakage on implemented DataHub surfaces (local fallback neutralized; backend-fed or explicit degraded/N/A semantics).
 

@@ -24,6 +24,16 @@
 - حذف mock: `cache.hitRate: 75`, `totalSources` از IndexedDB/pagination, `t(health.overall)` محلی.
 - خطاهای خام HTTP مثل «Not Found» در advanced panels → i18n (`formatApiErrorForUi`).
 
+**Pre-merge blocker (resolved) — Leak-proof guard:**
+
+- Leak-proof guard completed to neutralize local/mock fallback exposure on implemented surfaces.
+- Commit: `a1ac041` (`fix(datahub): neutralize local fallback leakage`).
+- `Sources/Categories` implemented paths no longer present IndexedDB fallback as real backend data.
+- Advanced auxiliary props no longer inherit hidden local fallback.
+- Telegram shell falls back to degraded/unknown semantics when backend sources are unavailable.
+- Synthetic agent telemetry (`latency/throughput/errorRate`) is neutralized (no fake numeric display).
+- No active mock leakage blocker remains.
+
 ---
 
 ## 1) Git clean proof
@@ -281,5 +291,6 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 | Avg response / cache (Health tab) | **N/A** (GAP-035 → v3.1) |
 | Browser smoke (E2E) | **Attempted · blocked by environment** (CORS origin + test credential), not DataHub UI |
 | Branch pushed to `origin` | **Yes** — `feat/gap-008-sources-backend-wiring` |
+| Leak-proof fallback blocker | **Resolved** (`a1ac041`) |
 
 *Checkpoint updated 2026-05-27 · **Ready except final browser smoke — blocked by approved test environment**.*

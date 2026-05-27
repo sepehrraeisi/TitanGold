@@ -40,3 +40,9 @@
 | GAP-034 | Aggregate pipeline avg latency API (`GET /api/v1/data-sources/pipeline` or `/stats` rolling `avg_latency_ms` from `data_hub_logs.execution_time_ms`) | Low | `dataHub.advanced` (Pipeline Health Overview) | **Open** | v3.1 | v3.0: Advanced **Pipeline Health Overview** uses `/health` + `/stats`; latency shows **N/A** + tooltip (no `NaN`/`undefined`). |
 | GAP-035 | Health tab aggregate metrics: `avg_response_time` + `cache_hit_rate` on `/api/v1/data-sources/health` or `/stats` (rolling from `data_hub_logs` / cache layer) | Low | `dataHub.health` | **Open** | v3.1 | v3.0: **Health Monitoring** uses `/health`, `/stats`, `/state`, access-log `statusCounts`; avg response + cache show **N/A** (no fake `0ms` / IndexedDB). |
 
+### Leak-proof note (v3.0)
+
+- There is no open GAP for active mock/local leakage in v3.0 implemented DataHub surfaces.
+- Leakage guard completed in commit `a1ac041` (local fallback neutralized; synthetic telemetry neutralized).
+- Remaining related work is legacy cleanup only (dead/unreachable compatibility paths in `services/api.ts`) and stays in v3.1 stabilization scope.
+
