@@ -111,7 +111,7 @@ const AdvancedFeatures: React.FC<{
                         activeFeature === 'archive' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
                     }`}
                 >
-                    {t('archiving')}
+                    {t('data_archiving')}
                 </button>
                 </div>
             </div>

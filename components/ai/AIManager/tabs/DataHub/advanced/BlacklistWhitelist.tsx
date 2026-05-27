@@ -197,24 +197,28 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                 </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-4 border-b border-white/10 mb-4">
-                {(['blacklist', 'whitelist', 'rules', 'evaluate'] as const).map(tab => (
-                    <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setActiveTab(tab)}
-                        className={`pb-2 text-[11px] font-bold transition-all relative ${
-                            activeTab === tab
-                                ? 'text-purple-400'
-                                : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        {safeDynamicT(t, 'safety_tab_', tab)}
-                        {activeTab === tab ? (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 rounded-full" />
-                        ) : null}
-                    </button>
-                ))}
+            {/* Safety Filtering navigation (redesigned pill style to match DESIGN_SYSTEM_DATAHUB.md) */}
+            <div className="border border-white/5 bg-slate-950/70 rounded-xl p-2 overflow-x-auto no-scrollbar mb-4">
+                <div className="flex gap-2 whitespace-nowrap flex-wrap">
+                    {(['blacklist', 'whitelist', 'rules', 'evaluate'] as const).map(tab => {
+                        const isActive = activeTab === tab;
+                        const base =
+                            'px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap';
+                        const active = tab === 'evaluate'
+                            ? 'bg-amber-500/15 border-amber-500/60 text-amber-300'
+                            : 'bg-purple-600/20 border-purple-500/60 text-purple-300';
+                        return (
+                            <button
+                                key={tab}
+                                type="button"
+                                onClick={() => setActiveTab(tab)}
+                                className={`${base} ${isActive ? active : ''}`}
+                            >
+                                {safeDynamicT(t, 'safety_tab_', tab)}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             {activeTab !== 'evaluate' ? (

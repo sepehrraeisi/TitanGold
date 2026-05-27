@@ -428,3 +428,18 @@ rg "75\\.0%|hitRate\\.toFixed" components/ai/AIManager/tabs/DataHub/
 rg "checkDataHubHealth|health\\.averageResponseTime|health\\.cacheHitRate" components/ai/AIManager/tabs/DataHub/HealthPanel.tsx
 # → no matches (HealthPanel uses React Query + formatters)
 ```
+
+### dataHub.smoke.latest – Browser smoke (2026-05-27)
+
+| آیتم | نتیجه | توضیح |
+|------|-------|-------|
+| Launch app + auth | ✅ Pass | `http://localhost:5173` بالا آمد و login انجام شد |
+| Open `AI Center → DataHub` | ⚠️ Blocked | در این محیط runtime، از صفحه Dashboard آیتم/selector قابل‌کلیک برای `AI Center/Data Hub` پیدا نشد (Playwright timeout روی locator). Screenshot نشان می‌دهد صفحه روی `Trading Overview` مانده و به AI Center route نرسیده است. |
+| Header KPI validation | ⏸ Pending (navigation blocked) | چون route به DataHub باز نشد، smoke network/UI assertion برای `/api/v1/data-sources/stats` و `/health` در browser کامل نشد |
+| Main tabs / Advanced subtabs | ⏸ Pending (navigation blocked) | به دلیل blocker بالا |
+
+**Evidence (artifacts):**
+- `test-results/dataHubSmokeNav-DataHub-sm-75df6-raw-Not-Found-undefined-NaN-chromium/test-failed-1.png`
+- `test-results/dataHubSmokeNav-DataHub-sm-75df6-raw-Not-Found-undefined-NaN-chromium/video.webm`
+
+**Next action required for full smoke pass:** مسیر دقیق UI برای ورود به `AI Center` در همین runtime را مشخص/ثابت کنید (مثلاً selector قطعی یا route مستقیم)، سپس همین checklist دوباره اجرا شود.
