@@ -480,3 +480,23 @@ rg "checkDataHubHealth|health\\.averageResponseTime|health\\.cacheHitRate" compo
 - `test-results/dataHub.controlled-smoke-C-fa313-aw-errors-cache-hit-not-75--chromium/test-failed-1.png`
 - `test-results/dataHub.controlled-smoke-C-fa313-aw-errors-cache-hit-not-75--chromium/video.webm`
 - `test-results/datahub-smoke-ai-manager-loading-failed.png`
+
+### dataHub.smoke.final-warning-gate (required in approved test environment)
+
+Final browser smoke must explicitly check the original warning strings below.  
+If **any one** is visible in UI, smoke = **FAIL**.
+
+| Warning text to check | Expected v3.0 outcome |
+|-----------------------|-----------------------|
+| `Data Preparation & Screening: Not Found` | Not visible; pipeline panel uses backend data or normalized error/empty UI |
+| `Health Monitoring: Could not load health metrics. Check your connection and try again.` | Not visible as raw warning; only normalized health alert/retry states |
+| `Access Logs: Not Found` | Not visible; logs panel uses backend logs API with controlled empty/error states |
+| `Web Crawlers: Resource not found on the server.` | Not visible as raw text; crawler panel shows sanitized error state |
+| `Access Control: Resource not found on the server.` | Not visible as raw text; access panel shows sanitized error state |
+| `Safety Filtering: Resource not found on the server.` | Not visible as raw text; safety panel shows sanitized error state |
+| `Telegram Publisher: Not Found` | Not visible as raw text; publisher panel shows sanitized error state |
+| `Automation Routing: Not Found` | Not visible as raw text; automation panel shows sanitized error state |
+
+Gate rule:
+- Pass only if all 8 warnings above are absent.
+- If one appears, classify smoke as failed and keep PR status unchanged.

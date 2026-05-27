@@ -278,6 +278,25 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 
 ---
 
+## 11.2) Original UI Warnings Under Verification
+
+The original smoke goal remains explicit verification that these warnings no longer appear in browser UI.
+
+| Original warning | Expected v3.0 behavior | Current evidence | Final verification |
+|------------------|------------------------|------------------|--------------------|
+| `Data Preparation & Screening: Not Found` | Pipeline panel resolves through backend endpoint and controlled error/empty state (no raw `Not Found`) | Pipeline tab wiring to `/api/v1/data-sources/pipeline`; leak-proof + sanitizer docs updated | Pending browser smoke in approved test environment |
+| `Health Monitoring: Could not load health metrics. Check your connection and try again.` | Health panel shows normalized alert/retry with backend-first metrics and safe fallbacks (`N/A` where API is unavailable) | `HealthPanel` backend-first evidence in docs + safe fallback guards | Pending browser smoke in approved test environment |
+| `Access Logs: Not Found` | Logs panel renders backend logs or normalized empty/error state; no raw `Not Found` | Logs tab backend-first evidence (`/api/v1/data-sources/access-logs`) | Pending browser smoke in approved test environment |
+| `Web Crawlers: Resource not found on the server.` | Advanced Crawlers panel uses dedicated backend API and sanitized error presentation | GAP-026 closed + demos/evidence for crawlers backend wiring | Pending browser smoke in approved test environment |
+| `Access Control: Resource not found on the server.` | Access Control uses backend list/upsert/delete and normalized error state | GAP-022 closed + advanced panel backend-first evidence | Pending browser smoke in approved test environment |
+| `Safety Filtering: Resource not found on the server.` | Safety Filtering (Blacklist/Whitelist) uses backend API with controlled UI states | GAP-024 closed + evidence for filter-rules API usage | Pending browser smoke in approved test environment |
+| `Telegram Publisher: Not Found` | Telegram Publisher uses `/api/v1/data-hub/telegram-publishers` with sanitized error handling | GAP-016 closed + panel/hook wiring evidence | Pending browser smoke in approved test environment |
+| `Automation Routing: Not Found` | Automation panel uses `/api/v1/data-hub/automation` overview/queue/schedule APIs with controlled error states | GAP-018/019 closed + backend-first evidence | Pending browser smoke in approved test environment |
+
+Status framing remains strict: **Ready except final browser smoke — specifically blocked from verifying the original UI warnings due to approved test environment missing.**
+
+---
+
 ## 12) Final status
 
 | Check | Result |
