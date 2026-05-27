@@ -1,5 +1,6 @@
 import { _data } from './_data.ts';
 import { generateDemoChartData } from './chartDataGenerator.ts';
+import { DEFAULT_ARTEMIS_STATE } from '../components/ai/defaults.ts';
 import type {
     User,
     FavoriteItem,
