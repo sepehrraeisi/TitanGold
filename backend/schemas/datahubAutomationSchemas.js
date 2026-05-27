@@ -6,7 +6,7 @@ export const uuidParamSchema = z.object({
 
 const prioritySchema = z.enum(['low', 'medium', 'high', 'critical']);
 
-export const createAutomationTopicSchema = z.object({
+const automationTopicBaseSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   title: z.string().min(1).max(255).optional(),
   topic_key: z.string().min(1).max(120).optional(),
@@ -23,9 +23,15 @@ export const createAutomationTopicSchema = z.object({
   includeStatuses: z.array(z.string()).optional(),
   publisherTargets: z.array(z.string().uuid()).optional().default([]),
   enabled: z.boolean().optional().default(true),
-}).refine(d => d.name || d.title, { message: 'name or title required' });
+});
 
-export const updateAutomationTopicSchema = createAutomationTopicSchema.partial();
+// refine() returns ZodEffects, which has no .partial(); keep base object for updates.
+export const createAutomationTopicSchema = automationTopicBaseSchema.refine(
+  (d) => d.name || d.title,
+  { message: 'name or title required' },
+);
+
+export const updateAutomationTopicSchema = automationTopicBaseSchema.partial();
 
 export const updateScheduleSchema = z.object({
   enabled: z.boolean().optional(),
