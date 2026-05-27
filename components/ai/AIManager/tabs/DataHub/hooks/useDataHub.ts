@@ -94,13 +94,17 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const mergedDataHub = useMemo((): DataHubState | null => {
         if (!dataHub) return null;
-        const sources = sourcesResult?.data ?? dataHub.sources;
-        const categoriesBase = categoriesResult ?? dataHub.categories;
+        // Leak guard: do not present local IndexedDB fallback as implemented backend data.
+        const sources = sourcesResult?.data ?? [];
+        const categoriesBase = categoriesResult ?? [];
         const categories = api.enrichCategoriesWithSourceCounts(categoriesBase, sources);
+        const backendSourcesReady = Array.isArray(sourcesResult?.data);
         return {
             ...dataHub,
             sources,
             categories,
+            // Treat collector snapshot as non-authoritative when backend sources are unavailable.
+            telegramCollector: backendSourcesReady ? dataHub.telegramCollector : null,
         };
     }, [dataHub, sourcesResult, categoriesResult]);
 

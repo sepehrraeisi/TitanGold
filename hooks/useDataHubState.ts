@@ -122,9 +122,10 @@ export const useAgentsQuery = () => {
                 lastUpdate: a.lastUpdate || new Date().toISOString(),
                 metrics: {
                     accuracy: a.accuracy || 0.85,
-                    latency: 120,
-                    throughput: 50,
-                    errorRate: 0.02,
+                    // Leak guard: avoid presenting synthetic telemetry as real backend metrics.
+                    latency: null,
+                    throughput: null,
+                    errorRate: null,
                 },
             }));
         },
