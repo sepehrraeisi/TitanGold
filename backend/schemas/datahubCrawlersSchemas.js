@@ -19,8 +19,7 @@ const nestedSourceSchema = z.object({
     update_interval: scheduleIntervalEnum.optional(),
 });
 
-export const createCrawlerSchema = z
-    .object({
+const crawlerBaseSchema = z.object({
         name: z.string().min(1).max(255),
         source_id: z.string().uuid().optional(),
         source: nestedSourceSchema.optional(),
@@ -35,8 +34,9 @@ export const createCrawlerSchema = z
         timeout_ms: z.number().int().min(5000).max(3600000).default(600000),
         is_enabled: z.boolean().default(true),
         metadata: z.record(z.unknown()).optional().default({}),
-    })
-    .superRefine((data, ctx) => {
+    });
+
+export const createCrawlerSchema = crawlerBaseSchema.superRefine((data, ctx) => {
         if (!data.source_id && !data.source) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
@@ -53,7 +53,7 @@ export const createCrawlerSchema = z
         }
     });
 
-export const updateCrawlerSchema = createCrawlerSchema
+export const updateCrawlerSchema = crawlerBaseSchema
     .partial()
     .omit({ source: true })
     .extend({
