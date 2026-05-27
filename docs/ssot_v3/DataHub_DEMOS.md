@@ -443,3 +443,39 @@ rg "checkDataHubHealth|health\\.averageResponseTime|health\\.cacheHitRate" compo
 - `test-results/dataHubSmokeNav-DataHub-sm-75df6-raw-Not-Found-undefined-NaN-chromium/video.webm`
 
 **Next action required for full smoke pass:** مسیر دقیق UI برای ورود به `AI Center` در همین runtime را مشخص/ثابت کنید (مثلاً selector قطعی یا route مستقیم)، سپس همین checklist دوباره اجرا شود.
+
+### dataHub.smoke.retry1.controlled – Browser smoke (2026-05-27, single controlled retry)
+
+| آیتم | نتیجه | توضیح |
+|------|-------|-------|
+| Smoke scope | ✅ Controlled | فقط `/?view=ai` + تب‌های `Manager` و سپس `Data Hub`; بدون install/migration/restart production |
+| Browser smoke | ❌ **Fail** | در `AI Center -> Manager`، لود AIManager تا timeout (20s) کامل نشد و تب‌های `Overview/Decision Engine/Data Hub` visible نشدند |
+| Failure point | `AIManager loading` | UI روی `Loading...` ماند؛ بنابراین navigation به DataHub انجام نشد |
+| Result classification | **Ready except final browser smoke** | full browser smoke pass claimed **نشده** |
+
+**Used URL and selectors:**
+
+- URL: `/?view=ai`
+- AICenter selector: `button:has-text("Manager")`
+- AIManager readiness wait (20s): any of  
+  `button:has-text("Overview")` / `button:has-text("Decision Engine")` / `button:has-text("Data Hub")`
+
+**Observed likely API/loading blockers (captured during failure):**
+
+- `500 POST /api/v1/auth/login`
+- Repeated `401` on:
+  - `/api/v1/artemis/state`
+  - `/api/v1/trading-engine/status`
+  - `/api/v1/connections/mexc`
+  - `/api/v1/wallet`
+  - `/api/v1/ai-agents`
+- Console/runtime errors:
+  - `Failed to load Artemis state: ReferenceError: DEFAULT_ARTEMIS_STATE is not defined`
+  - `Error fetching trading engine status: Failed to fetch trading engine status`
+  - WebSocket errors during unauthorized state
+
+**Artifacts:**
+
+- `test-results/dataHub.controlled-smoke-C-fa313-aw-errors-cache-hit-not-75--chromium/test-failed-1.png`
+- `test-results/dataHub.controlled-smoke-C-fa313-aw-errors-cache-hit-not-75--chromium/video.webm`
+- `test-results/datahub-smoke-ai-manager-loading-failed.png`
