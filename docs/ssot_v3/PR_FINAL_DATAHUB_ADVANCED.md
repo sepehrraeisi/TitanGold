@@ -240,16 +240,32 @@ stash@{0}: out-of-scope telegram/agents changes before GAP-024
 
 ---
 
-## 11) Final status
+## 11) Browser smoke (attempted · not complete)
+
+| Item | Result |
+|------|--------|
+| Browser smoke attempted | **Yes** (Playwright on dev server `http://localhost:5173`) |
+| Outcome | **Blocked** — route/selector to **AI Center → DataHub** not reachable from Dashboard in this runtime (timeout waiting for `Data Hub` tab; screenshot stayed on Trading Overview) |
+| Full browser smoke pass | **No claim** — header KPI / main tabs / Advanced subtabs not validated end-to-end in browser |
+| Next smoke approach | **Direct URL only** (no click guessing): `/?view=ai` per `utils/urlSync.ts` (`ViewKey: 'ai'`). Then **AI Manager** + **Data Hub** are **internal React state** (`AICenter` tab `manager`, `AIManager` tab `data_hub`) — **not** in `urlSync` today. Confirm exact deep-link with owner before re-run. |
+| Production impact | Smoke-only Vite on `:5173` stopped; **no** production PM2/backend restart |
+
+**PR status:** **Ready except final browser smoke** — not **Ready to merge**.
+
+---
+
+## 12) Final status
 
 | Check | Result |
 |-------|--------|
 | Pipeline Health Overview blocker | **Resolved** (`f42d8f2`) |
 | Health Monitoring tab blocker | **Resolved** (backend-first `HealthPanel`) |
 | Header summary KPI blocker | **Resolved** (`DataHubSummaryCards` + `/stats` `/health`) |
-| Undefined / NaN ms in health UI | **None** |
+| Tab/subtab navigation redesign | **Done** (`39c474c`, Safety Filtering pills `c0f89b2`) |
+| Undefined / NaN ms in health UI | **None** (code-level) |
 | Latency metric (Advanced overview) | **N/A** (GAP-034 → v3.1) |
 | Avg response / cache (Health tab) | **N/A** (GAP-035 → v3.1) |
-| Branch pushed to `origin` | **Yes** — `git push origin feat/gap-008-sources-backend-wiring` (includes `f42d8f2`, `c7f38de`) |
+| Browser smoke (E2E) | **Attempted · blocked** (see §11) |
+| Branch pushed to `origin` | **Yes** — `feat/gap-008-sources-backend-wiring` |
 
-*Checkpoint updated 2026-05-26 · **ready for final PR merge** — working tree clean, branch synced with `origin`.*
+*Checkpoint updated 2026-05-27 · **Ready except final browser smoke** — design/navigation commits OK; merge after confirmed deep-link smoke on agreed runtime.*
