@@ -247,7 +247,7 @@ export function getSuggestedAction(errorType: ErrorType): string {
         [ErrorType.NETWORK]: 'Check your internet connection and try again.',
         [ErrorType.AUTHENTICATION]: 'Please log in again to continue.',
         [ErrorType.RATE_LIMIT]: 'Wait a moment and try again.',
-        [ErrorType.SESSION_EXPIRED]: 'Reconnect your Telegram account in Settings.',
+        [ErrorType.SESSION_EXPIRED]: 'Reconnect your Telegram account in DataHub → Telegram.',
         [ErrorType.VALIDATION]: 'Please review your input and try again.',
         [ErrorType.CONFLICT]: 'Resolve the conflict (duplicate name or linked data) and try again.',
         [ErrorType.DATABASE]: 'Try again in a few moments. Contact support if the issue persists.',
