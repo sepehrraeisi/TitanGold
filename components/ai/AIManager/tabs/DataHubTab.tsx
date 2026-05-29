@@ -173,7 +173,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 {currentError && (
                     <ErrorNotification
                         error={currentError}
-                        onClose={clearError}
+                        onDismiss={clearError}
                     />
                 )}
 
