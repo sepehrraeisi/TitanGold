@@ -87,6 +87,41 @@ function sourceTypeFactor(type) {
     return 0.85;
 }
 
+/** Derive success rate from fetch/error history — 0 when no fetches recorded. */
+function deriveSuccessRate(row) {
+    const fetchCount = Number(row.fetch_count || 0);
+    const errorCount = Number(row.error_count || 0);
+    const lastStatus = String(row.last_status || '').toLowerCase();
+    if (fetchCount <= 0) return 0;
+
+    const successes = Math.max(0, fetchCount - Math.min(errorCount, fetchCount));
+    let rate = clampScore((100 * successes) / fetchCount);
+    if (lastStatus === 'error' || lastStatus === 'failed' || lastStatus === 'timeout') {
+        rate = clampScore(rate * 0.7);
+    }
+    return rate;
+}
+
+/** Derive reliability from success rate + health/status — conservative, no optimistic defaults. */
+function deriveReliabilityScore(row, successRate) {
+    const fetchCount = Number(row.fetch_count || 0);
+    const healthStatus = String(row.health_status || row.status || '').toLowerCase();
+    if (fetchCount <= 0 && !healthStatus) return 0;
+
+    let score = successRate;
+    if (
+        healthStatus === 'degraded' ||
+        healthStatus === 'unhealthy' ||
+        healthStatus === 'error' ||
+        healthStatus === 'failed'
+    ) {
+        score = clampScore(score * 0.5);
+    } else if (fetchCount <= 0) {
+        score = 0;
+    }
+    return clampScore(score);
+}
+
 async function ensureSettingsRow() {
     // Ensure singleton exists
     await query(
@@ -163,13 +198,20 @@ async function getUsageCountsLast24h() {
 }
 
 function computeScoresForSource(row, weights, usageCount) {
-    const reliability = clampScore(Number(row.reliability_score || 0));
-    const successRate = clampScore(Number(row.success_rate || 0));
+    const successRate = deriveSuccessRate(row);
+    const reliability = deriveReliabilityScore(row, successRate);
 
     const errorCount = Number(row.error_count || 0);
+    const fetchCount = Number(row.fetch_count || 0);
     const lastStatus = String(row.last_status || '').toLowerCase();
-    const healthPenalty = lastStatus === 'error' ? 0.7 : 1.0;
-    const errorFactor = 1 / (1 + Math.max(0, errorCount) / 5); // 0..1
+    const healthStatus = String(row.health_status || row.status || '').toLowerCase();
+    const healthPenalty =
+        lastStatus === 'error' || lastStatus === 'failed'
+            ? 0.7
+            : healthStatus === 'degraded' || healthStatus === 'unhealthy' || healthStatus === 'error'
+              ? 0.5
+              : 1.0;
+    const errorFactor = fetchCount > 0 ? 1 / (1 + Math.max(0, errorCount) / 5) : 0;
     const errorHealthScore = clampScore(100 * clamp01(errorFactor * healthPenalty));
 
     const refreshIntervalMin = Number(row.refresh_interval || 60);
@@ -200,8 +242,12 @@ function computeScoresForSource(row, weights, usageCount) {
         meta: {
             refresh_interval_min: refreshIntervalMin,
             last_status: lastStatus || null,
+            health_status: healthStatus || null,
+            fetch_count: fetchCount,
             error_count: errorCount,
             usage_24h: usageCount || 0,
+            derived_success_rate: successRate,
+            derived_reliability: reliability,
         },
     };
 
@@ -235,7 +281,7 @@ export async function previewPrioritization(userId) {
     const usageMap = await getUsageCountsLast24h();
 
     const sourcesRes = await query(
-        `SELECT id, name, type, category, reliability_score, success_rate, error_count, last_status,
+        `SELECT id, name, type, category, error_count, fetch_count, last_status, health_status, status,
                 refresh_interval, last_fetch_at
          FROM data_sources
          WHERE is_active = TRUE`,
