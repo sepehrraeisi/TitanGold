@@ -249,6 +249,14 @@ grep -rn "fetchDataHubState\|createAutomationTopic\|refreshAutomationQueue" \
 | **Duplicate storage** | `datahub_discovery_suggestions` | `duplicate_of_*` populated; not re-queued as pending |
 | **Scoring bounds** | `discoveryScoring.js` + DB CHECK | `priority_score` always **0–100** |
 
+#### Schema drift fix — scan action (ca6226e · 2026-05-29)
+
+| Claim | File | توضیح |
+|---|---|---|
+| `loadSourceFingerprints` no longer SELECTs missing columns | `backend/services/datahubDiscoveryService.js` | `success_rate` / `reliability_score` removed from SQL; `deriveSuccessRate` / `deriveReliabilityScore` from `fetch_count`, `error_count`, `last_status`, `health_status` |
+| Scan action runtime verified | `POST /api/v1/data-hub/discovery/scan` | **200** `status: success` (2026-05-29); prior failure: `column "success_rate" does not exist` in `datahub_discovery_scans.error_message` |
+| No migration required | — | Fix is service-layer derive only |
+
 ### ۱۶. DataHub Smart Prioritization (GAP-030 Closed)
 
 #### ۱۶.۱ No Mock Verification (v3.0 backend-first)
@@ -309,6 +317,15 @@ rg -n "services/api" components/ai/AIManager/tabs/DataHub/advanced/SmartPrioriti
   - update در پایان (`completed_at`, `status`, `summary` یا `error_summary`)
   پر می‌کنند.  
   Evidence: `backend/services/datahubPrioritizationService.js` `L410–469` (preview+complete) و `L411–477` (apply+complete/fail)
+
+#### Schema drift fix — preview action (ca6226e · 2026-05-29)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Source SELECT uses only existing `data_sources` columns | `backend/services/datahubPrioritizationService.js` | `fetch_count`, `error_count`, `last_status`, `health_status`, `status`, `refresh_interval`, `last_fetch_at` — not `success_rate` / `reliability_score` |
+| `computeScoresForSource` derives reliability/success | same | `deriveSuccessRate` / `deriveReliabilityScore`; `error_health=0` when `fetch_count=0`; meta includes `derived_success_rate`, `derived_reliability` |
+| Preview action runtime verified | `POST /api/v1/data-hub/prioritization/preview` | **200** — 48 sources; summary tiers `{ low: 45, high: 2, critical: 1 }` (2026-05-29) |
+| No migration required | — | Service-layer derive only |
 
 ### ۱۷. DataHub Archiving (GAP-032 Closed)
 

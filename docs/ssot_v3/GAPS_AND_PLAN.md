@@ -31,9 +31,9 @@
 | GAP-025 | Enforce filter rules on publishing path (automation dispatch + telegram publish) | Low | `dataHub.advanced.automation`, `dataHub.advanced.telegramPublisher` | Open | v3.1 | v3.0 stores rules + `POST /evaluate` only; publisher worker hook in v3.1. |
 | GAP-026 | Web Crawlers backend-first (`datahub_crawlers` + runs + manual/schedule) | Medium | `dataHub.advanced.crawlers` | **Closed** | v3.0 | Migration `029`, website+RSS, pre-crawl+ingestion filter, `POST /:id/run`, dry-run. |
 | GAP-027 | Crawler scheduler daemon (`next_run_at` worker) + prod Playwright enablement | Low | `dataHub.advanced.crawlers` | **Open** | v3.1 | `CRAWLER_RENDER_JS_ENABLED`; cron refresh-queue worker only — **not** v3.0 scope. |
-| GAP-028 | Auto Discovery backend-first (suggestions + admin approval) | Medium | `dataHub.advanced.discovery` | **Closed** | v3.0 | Migration `030`, 3-layer dedupe, weighted scoring, SSRF guard, approve-only source create. |
+| GAP-028 | Auto Discovery backend-first (suggestions + admin approval) | Medium | `dataHub.advanced.discovery` | **Closed** | v3.0 | Migration `030`, 3-layer dedupe, weighted scoring, SSRF guard, approve-only source create. Runtime scan action fix `ca6226e` (schema drift: derive scoring without `success_rate`/`reliability_score` columns). |
 | GAP-029 | Discovery scheduler daemon (auto-scan on interval) | Low | `dataHub.advanced.discovery` | **Open** | v3.1 | v3.0: manual `POST /scan` only. |
-| GAP-030 | Smart Prioritization backend-first (preview + manual apply) | Medium | `dataHub.advanced.prioritization` | **Closed** | v3.0 | Migration `031`; `/api/v1/data-hub/prioritization`; confirm-only apply; override audit fields; no auto-apply. |
+| GAP-030 | Smart Prioritization backend-first (preview + manual apply) | Medium | `dataHub.advanced.prioritization` | **Closed** | v3.0 | Migration `031`; `/api/v1/data-hub/prioritization`; confirm-only apply; override audit fields; no auto-apply. Runtime preview action fix `ca6226e` (schema drift: derive scoring from existing `data_sources` columns). |
 | GAP-031 | Prioritization scheduler / auto-apply daemon | Low | `dataHub.advanced.prioritization` | **Open** | v3.1 | Optional background cron/worker for scheduled previews/apply policies; not blocker for v3.0. |
 | GAP-032 | DataHub Archiving backend-first (manual archive/restore) | Medium | `dataHub.advanced.archiving` | **Closed** | v3.0 | Migration `033`; `/api/v1/data-hub/archiving`; dry-run + confirm; read archive; no purge apply. |
 | GAP-033 | Archiving scheduler daemon (monthly archive cron) | Low | `dataHub.advanced.archiving` | **Open** | v3.1 | Shell/cron exists (`archive-old-decisions.sh`); not wired to UI in v3.0. |
@@ -45,4 +45,5 @@
 - There is no open GAP for active mock/local leakage in v3.0 implemented DataHub surfaces.
 - Leakage guard completed in commit `a1ac041` (local fallback neutralized; synthetic telemetry neutralized).
 - Remaining related work is legacy cleanup only (dead/unreachable compatibility paths in `services/api.ts`) and stays in v3.1 stabilization scope.
+- **Resolved runtime action error (2026-05-29):** Discovery Scan / Prioritization Preview returned **500** (`datahub_error_generic` in UI) because `datahubDiscoveryService.js` and `datahubPrioritizationService.js` SELECTed `data_sources.success_rate` / `reliability_score` columns that were never migrated. Fixed in **`ca6226e`** — backend-only derive from `fetch_count`, `error_count`, `last_status`, `health_status`; no migration. Verified: scan **200** success; preview **200** with 48 sources.
 
