@@ -49,7 +49,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         selectedSnapshotId,
         setSelectedSnapshotId,
         isLoadingPipeline,
-        pipelineError,
+        pipelineApiError,
         agents,
         isLoadingAgents,
         isLoadingCollector,
@@ -103,8 +103,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         setPipelineError,
         categoriesError,
         setCategoriesError,
-        logsError,
         setLogsError,
+        accessLogsApiError,
         isLoadingLogs,
         currentError,
         clearError,
@@ -255,8 +255,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             logStatusCounts={logStatusCounts}
                             downloadCSV={downloadCSV}
                             isLoading={isLoadingLogs}
-                            error={logsError}
-                            setError={setLogsError}
+                            apiError={accessLogsApiError}
                             onRetry={() => {
                                 setLogsError(null);
                                 onRefresh();
@@ -273,7 +272,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             normalizedData={normalizedData}
                             handleRefreshPipelineSnapshot={handleRefreshPipelineSnapshot}
                             isLoadingPipeline={isLoadingPipeline}
-                            pipelineError={pipelineError}
+                            pipelineApiError={pipelineApiError}
                             setPipelineError={setPipelineError}
                             formatTimeAgo={formatTimeAgo}
                             selectedSnapshotId={selectedSnapshotId}

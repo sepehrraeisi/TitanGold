@@ -15,6 +15,7 @@ import {
     MetricCard,
     StatusPill,
 } from './dataHubUi';
+import { formatDataHubQueryError } from './dataHubI18n';
 
 interface CategoriesPanelProps {
     t: (key: string) => string;
@@ -82,14 +83,7 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
         };
     }, [categories, filteredCategoriesList.length, telegramSourceCountByCategory, categoryMetricsById]);
 
-    const conflictMessage =
-        apiError instanceof DataHubApiError && apiError.status === 409 ? apiError.message : null;
-    const validationMessage =
-        apiError instanceof DataHubApiError && apiError.status === 400 ? apiError.message : null;
-    const serverError =
-        apiError instanceof DataHubApiError && apiError.status >= 500 ? apiError.message : null;
-    const genericError =
-        !validationMessage && !serverError && apiError instanceof Error ? apiError.message : null;
+    const queryError = formatDataHubQueryError(t, apiError);
 
     const countSummary = t('categories_count_summary').replace('{{count}}', String(categories.length));
 
@@ -155,15 +149,11 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
                 <MetricCard label={t('categories_metric_tracked')} value={metrics.withMetrics} color="amber" />
             </div>
 
-            {conflictMessage && <DataHubAlert variant="warning" message={conflictMessage} />}
-            {(validationMessage || genericError) && (
-                <DataHubAlert variant="warning" message={validationMessage || genericError || ''} />
-            )}
-            {serverError && (
+            {queryError && (
                 <DataHubAlert
-                    variant="error"
-                    message={serverError}
-                    onRetry={onRefresh}
+                    variant={queryError.variant}
+                    message={queryError.message}
+                    onRetry={queryError.retryable ? onRefresh : undefined}
                     retryLabel={t('retry')}
                 />
             )}
