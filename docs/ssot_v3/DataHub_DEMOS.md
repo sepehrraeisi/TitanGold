@@ -1,5 +1,37 @@
 ## DataHub Runtime Demos
 
+### Demo index (v3.0 release checkpoint)
+
+| Area | Section in this file | GAP / status |
+|------|----------------------|--------------|
+| **Sources** | `dataHub.sources` | GAP-008 · Design Done |
+| **Categories** | `dataHub.categories` | GAP-010 · Design Done |
+| **Pipeline** | `dataHub.pipeline` | GAP-012 · Design Done |
+| **Logs** | `dataHub.logs` | GAP-013 · Design Done |
+| **Telegram** | `dataHub.telegram` | GAP-006 security · Implemented |
+| **Access Control** | `dataHub.advanced.access` | GAP-022 · Design Done |
+| **Telegram Publisher** | `dataHub.advanced.telegramPublisher` | GAP-016 · Design Done |
+| **Automation** | `dataHub.advanced.automation` | GAP-018/019 · Design Done |
+| **Blacklist/Whitelist** | `dataHub.advanced.blacklist` | GAP-024 · Design Done |
+| **Crawlers** | `dataHub.advanced.crawlers` | GAP-026 · Design Done |
+| **Discovery** | `dataHub.advanced.discovery` | GAP-028 · Design Done |
+| **Prioritization** | `dataHub.advanced.prioritization` | GAP-030 · Design Done |
+| **Archiving** | `dataHub.advanced.archiving` | GAP-032 · Design Done |
+| **Pipeline Health Overview** | `dataHub.advanced.pipelineHealth` | GAP-034 (latency API) · v3.0 safe metrics |
+| **Health Monitoring** | `dataHub.health` | GAP-035 (avg response/cache API) · Design Done |
+| **Header summary KPIs** | `dataHub.summary` | GAP-035 (cache) · backend `/stats` + `/health` |
+
+---
+
+### dataHub.navigation — tab bar + advanced subtab navigation (redesigned)
+
+- **Success scenario (UI):**
+  1. `AI Center → DataHub` : ردیف tabها به شکل pill/rounded درآمده، با `border-white/5` و `bg-slate-900` و active state واضح (Purple برای اکثر tabها، Sky برای `Telegram`).
+  2. `AI Center → DataHub → Advanced` : navigation subtabs (Crawlers/Discovery/Prioritization/Access/Safety Filtering/Publisher/Automation/Archiving) هم دقیقاً از همان سبک slate pill تبعیت می‌کند.
+- **Not Found/raw error sanitization (UI):**
+  1. اگر یک request برای برخی endpointها `404` یا `Not Found` برگرداند، هیچ متن خامی مثل `Not Found` در header/subtab title دیده نمی‌شود.
+  2. در panelها/بنرها پیام خطا با i18n sanitize می‌شود (استفاده از `formatApiErrorForUi` و `datahub_error_not_found`).
+
 ### dataHub.telegram – Telegram Panel / Agents / Breaking News
 
 - **Success Scenario (healthy pipeline)**  
@@ -341,3 +373,130 @@ Evidence: `docs/ssot_v3/EVIDENCE.md` § Crawler runtime safety.
 | Restore without confirm | `400` `CONFIRM_RESTORE_REQUIRED` |
 | Unauthorized mutate | `403` |
 | DB/API error | `500` + UI retry |
+
+### dataHub.advanced.pipelineHealth – Pipeline Health Overview (v3.0 safe metrics · GAP-034 latency API)
+
+**UI:** `AI Center → DataHub → Advanced` — بخش پایین صفحه **Pipeline Health Overview** (`PipelineHealthOverview.tsx`).
+
+| سناریو | Network | Expected UI |
+|--------|---------|-------------|
+| **Normal** | `GET /api/v1/data-sources/health` → `200` `{ status: healthy\|degraded, activeSources }`; `GET /api/v1/data-sources/stats` → `200` `{ active_sources, total_sources }` | System Status = ترجمه‌شده (Healthy/Degraded/…); Active Sources = `N / M` با اعداد معتبر؛ Avg Latency = **N/A** + tooltip «Latency metric not available yet» |
+| **Empty stats** | `stats` → `{ active_sources: 0, total_sources: 0 }` | `0 / 0` — نه `/` یا `undefined` |
+| **Missing latency metric** | (بدون endpoint latency در v3.0) | همیشه **N/A** + tooltip؛ هرگز `NaN ms` |
+| **API failure** | health یا stats → `500` / network error | بنر خطا + Retry؛ skeleton در حین load؛ System Status fallback **Unknown** اگر health ناموفق و stats هم ناموفق |
+
+**grep proof (no stale snapshot fields):**
+
+```bash
+rg "overallStatus|avgLatency|activeSources.*totalSources" components/ai/AIManager/tabs/DataHub/AdvancedFeatures.tsx
+# → no matches
+rg "PipelineHealthOverview|fetchDataHubSourcesHealth" components/ai/AIManager/tabs/DataHub/
+```
+
+### dataHub.summary – Header KPI cards (v3.0 backend-first)
+
+**UI:** `AI Center → DataHub` — ردیف بالای تب‌ها (`DataHubSummaryCards.tsx`).
+
+| سناریو | Network | Expected UI |
+|--------|---------|-------------|
+| **Success** | `GET /stats` + `GET /health` | Total/Active از `stats`؛ Health status از `health.status` (ترجمه‌شده)؛ Cache hit = **N/A** + tooltip |
+| **Empty DB** | stats zeros | `0` / `0` / N/A / Degraded یا Healthy — بدون `45`/`75%` ساختگی |
+| **API failure** | 500/404 | بنر `datahub_summary_load_error` + Retry؛ skeleton در load |
+
+**Forbidden:** `dataHub.totalSources`, `dataHub.cache.hitRate`, `hitRate: 75` mock در `services/api.ts` برای این کارت‌ها.
+
+```bash
+rg "dataHub\\.cache\\.hitRate|dataHub\\.totalSources|dataHub\\.health\\.overall" components/ai/AIManager/tabs/DataHubTab.tsx
+# → no matches (summary uses DataHubSummaryCards only)
+rg "75\\.0%|hitRate\\.toFixed" components/ai/AIManager/tabs/DataHub/
+# → no matches in summary path
+```
+
+### dataHub.health – Health Monitoring (v3.0 backend-first · GAP-035 avg response/cache API)
+
+**UI:** `AI Center → DataHub → Health` (`HealthPanel.tsx`).
+
+| سناریو | Network | Expected UI |
+|--------|---------|-------------|
+| **Success** | `GET /health`, `GET /stats`, `GET /state`, `GET /access-logs?limit=1` (برای `statusCounts`) | Overall status ترجمه‌شده؛ Active/Total sources اعداد معتبر؛ Logged errors = `statusCounts.error`؛ Last check = `formatTimeAgo(timestamp)`؛ Sources by type (telegram/rss/api)؛ Avg response + Cache = **N/A** + tooltip |
+| **Empty** | `stats` → zeros؛ `access-logs` → `error: 0` | همه شمارنده‌ها `0` — نه `undefined`/`NaN`/`/` |
+| **API failure** | هر یک از health/stats/state/access-logs → خطا | بنر `datahub_health_load_error` + Retry؛ skeleton در load |
+
+**Forbidden in UI:** `Undefined`, `NaN ms`, `health.averageResponseTime.toFixed`, `cacheHitRate.toFixed` روی دادهٔ IndexedDB.
+
+```bash
+rg "checkDataHubHealth|health\\.averageResponseTime|health\\.cacheHitRate" components/ai/AIManager/tabs/DataHub/HealthPanel.tsx
+# → no matches (HealthPanel uses React Query + formatters)
+```
+
+### dataHub.smoke.latest – Browser smoke (2026-05-27)
+
+| آیتم | نتیجه | توضیح |
+|------|-------|-------|
+| Launch app + auth | ✅ Pass | `http://localhost:5173` بالا آمد و login انجام شد |
+| Open `AI Center → DataHub` | ⚠️ Blocked | در این محیط runtime، از صفحه Dashboard آیتم/selector قابل‌کلیک برای `AI Center/Data Hub` پیدا نشد (Playwright timeout روی locator). Screenshot نشان می‌دهد صفحه روی `Trading Overview` مانده و به AI Center route نرسیده است. |
+| Header KPI validation | ⏸ Pending (navigation blocked) | چون route به DataHub باز نشد، smoke network/UI assertion برای `/api/v1/data-sources/stats` و `/health` در browser کامل نشد |
+| Main tabs / Advanced subtabs | ⏸ Pending (navigation blocked) | به دلیل blocker بالا |
+
+**Evidence (artifacts):**
+- `test-results/dataHubSmokeNav-DataHub-sm-75df6-raw-Not-Found-undefined-NaN-chromium/test-failed-1.png`
+- `test-results/dataHubSmokeNav-DataHub-sm-75df6-raw-Not-Found-undefined-NaN-chromium/video.webm`
+
+**Next action required for full smoke pass:** مسیر دقیق UI برای ورود به `AI Center` در همین runtime را مشخص/ثابت کنید (مثلاً selector قطعی یا route مستقیم)، سپس همین checklist دوباره اجرا شود.
+
+### dataHub.smoke.retry1.controlled – Browser smoke (2026-05-27, single controlled retry)
+
+| آیتم | نتیجه | توضیح |
+|------|-------|-------|
+| Smoke scope | ✅ Controlled | فقط `/?view=ai` + تب‌های `Manager` و سپس `Data Hub`; بدون install/migration/restart production |
+| Browser smoke | ❌ **Fail** | در `AI Center -> Manager`، لود AIManager تا timeout (20s) کامل نشد و تب‌های `Overview/Decision Engine/Data Hub` visible نشدند |
+| Failure point | `AIManager loading` | UI روی `Loading...` ماند؛ بنابراین navigation به DataHub انجام نشد |
+| Fail reason classification | **Environment blocker** | blocker از DataHub UI نبود؛ auth قبل از handler با CORS fail شد + credential تست معتبر نبود |
+| Result classification | **Ready except final browser smoke** | full browser smoke pass claimed **نشده** |
+
+**Used URL and selectors:**
+
+- URL: `/?view=ai`
+- AICenter selector: `button:has-text("Manager")`
+- AIManager readiness wait (20s): any of  
+  `button:has-text("Overview")` / `button:has-text("Decision Engine")` / `button:has-text("Data Hub")`
+
+**Observed exact environment blockers (captured during failure):**
+
+- `500 POST /api/v1/auth/login` with backend log reason: `Not allowed by CORS` for origin `http://localhost:5173`
+- `dev/password` test credential missing/invalid in this DB environment (no matching `dev` user)
+- Repeated `401` on:
+  - `/api/v1/artemis/state`
+  - `/api/v1/trading-engine/status`
+  - `/api/v1/connections/mexc`
+  - `/api/v1/wallet`
+  - `/api/v1/ai-agents`
+- `401` cascade treated as downstream effect of auth environment failure (not DataHub-specific UI regression)
+
+**Important:** This smoke failure is **not** a DataHub implementation blocker; it is blocked by approved test environment (origin allowlist + valid test credential/token).
+
+**Artifacts:**
+
+- `test-results/dataHub.controlled-smoke-C-fa313-aw-errors-cache-hit-not-75--chromium/test-failed-1.png`
+- `test-results/dataHub.controlled-smoke-C-fa313-aw-errors-cache-hit-not-75--chromium/video.webm`
+- `test-results/datahub-smoke-ai-manager-loading-failed.png`
+
+### dataHub.smoke.final-warning-gate (required in approved test environment)
+
+Final browser smoke must explicitly check the original warning strings below.  
+If **any one** is visible in UI, smoke = **FAIL**.
+
+| Warning text to check | Expected v3.0 outcome |
+|-----------------------|-----------------------|
+| `Data Preparation & Screening: Not Found` | Not visible; pipeline panel uses backend data or normalized error/empty UI |
+| `Health Monitoring: Could not load health metrics. Check your connection and try again.` | Not visible as raw warning; only normalized health alert/retry states |
+| `Access Logs: Not Found` | Not visible; logs panel uses backend logs API with controlled empty/error states |
+| `Web Crawlers: Resource not found on the server.` | Not visible as raw text; crawler panel shows sanitized error state |
+| `Access Control: Resource not found on the server.` | Not visible as raw text; access panel shows sanitized error state |
+| `Safety Filtering: Resource not found on the server.` | Not visible as raw text; safety panel shows sanitized error state |
+| `Telegram Publisher: Not Found` | Not visible as raw text; publisher panel shows sanitized error state |
+| `Automation Routing: Not Found` | Not visible as raw text; automation panel shows sanitized error state |
+
+Gate rule:
+- Pass only if all 8 warnings above are absent.
+- If one appears, classify smoke as failed and keep PR status unchanged.

@@ -12,7 +12,6 @@ import {
     mapHistoryToUiItem,
     TelegramPublisherRecord,
 } from '../../../../../../services/telegramPublishersApi';
-import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import {
     DATAHUB_SHELL,
     DATAHUB_INNER_LIST,
@@ -29,7 +28,10 @@ import {
     DataHubModal,
     MetricCard,
     StatusPill,
+    DataHubSectionHeader,
+    DataHubSubTabBar,
 } from '../dataHubUi';
+import { formatDataHubQueryError } from '../dataHubI18n';
 
 interface TelegramPublisherProps {
     t: (key: string) => string;
@@ -90,12 +92,14 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
         [historyData],
     );
 
-    const apiError =
-        listError instanceof DataHubApiError
-            ? listError.message
-            : listError instanceof Error
-              ? listError.message
-              : null;
+    const listQueryError = formatDataHubQueryError(t, listError);
+    const actionQueryError = formatDataHubQueryError(
+        t,
+        createMutation.error ||
+            disableMutation.error ||
+            testMutation.error ||
+            publishMutation.error,
+    );
 
     const selectedPublisher = publishers.find(p => p.id === selectedPublisherId);
 
@@ -124,7 +128,10 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             setActionMessage(t('publisher_created'));
             await refetch();
         } catch (e: unknown) {
-            setActionError(e instanceof Error ? e.message : t('publisher_create_failed'));
+            setActionError(
+                formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_create_failed')))
+                    ?.message || t('publisher_create_failed'),
+            );
         }
     };
 
@@ -144,7 +151,10 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             setSelectedPublisherId(pub.id);
             await refetch();
         } catch (e: unknown) {
-            setActionError(e instanceof Error ? e.message : t('publisher_test_failed'));
+            setActionError(
+                formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_test_failed')))
+                    ?.message || t('publisher_test_failed'),
+            );
         }
     };
 
@@ -170,7 +180,10 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             setSelectedPublisherId(pub.id);
             await refetch();
         } catch (e: unknown) {
-            setActionError(e instanceof Error ? e.message : t('publisher_publish_failed'));
+            setActionError(
+                formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_publish_failed')))
+                    ?.message || t('publisher_publish_failed'),
+            );
         }
     };
 
@@ -182,16 +195,12 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             if (selectedPublisherId === pub.id) setSelectedPublisherId(null);
             await refetch();
         } catch (e: unknown) {
-            setActionError(e instanceof Error ? e.message : t('publisher_disable_failed'));
+            setActionError(
+                formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_disable_failed')))
+                    ?.message || t('publisher_disable_failed'),
+            );
         }
     };
-
-    const tabClass = (tab: typeof activeTab) =>
-        `pb-2 text-[11px] font-semibold transition-all border-b-2 ${
-            activeTab === tab
-                ? 'border-purple-500 text-purple-300'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-        }`;
 
     return (
         <div className={DATAHUB_SHELL}>
@@ -203,24 +212,30 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                     </button>
                 </div>
             )}
-            {actionError && <DataHubAlert variant="error" message={actionError} />}
+            {(actionQueryError || actionError) && (
+                <DataHubAlert
+                    variant={actionQueryError?.variant || 'error'}
+                    message={actionQueryError?.message || actionError || ''}
+                />
+            )}
 
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
-                <div>
-                    <h3 className="text-sm md:text-base font-semibold text-foreground">
-                        {t('telegram_publisher')}
-                    </h3>
-                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
-                        {t('telegram_publisher_desc')}
-                    </p>
-                </div>
-                <button type="button" onClick={() => setShowCreateModal(true)} className={BTN_PRIMARY}>
-                    {t('new_publisher_channel')}
-                </button>
-            </div>
+            <DataHubSectionHeader
+                title={t('telegram_publisher')}
+                subtitle={t('telegram_publisher_desc')}
+                actions={
+                    <button type="button" onClick={() => setShowCreateModal(true)} className={BTN_PRIMARY}>
+                        {t('new_publisher_channel')}
+                    </button>
+                }
+            />
 
-            {apiError && (
-                <DataHubAlert variant="error" message={apiError} onRetry={() => refetch()} retryLabel={t('retry')} />
+            {listQueryError && (
+                <DataHubAlert
+                    variant={listQueryError.variant}
+                    message={listQueryError.message}
+                    onRetry={listQueryError.retryable ? () => refetch() : undefined}
+                    retryLabel={t('retry')}
+                />
             )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -238,13 +253,17 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                 />
             </div>
 
-            <div className="flex gap-4 border-b border-slate-800/60 mb-5">
-                {(['channels', 'history', 'templates'] as const).map(tab => (
-                    <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={tabClass(tab)}>
-                        {t(`publisher_tab_${tab}`)}
-                    </button>
-                ))}
-            </div>
+            <DataHubSubTabBar
+                className="mb-5"
+                ariaLabel={t('telegram_publisher') || 'Telegram publisher'}
+                activeId={activeTab}
+                onChange={id => setActiveTab(id as typeof activeTab)}
+                items={(['channels', 'history', 'templates'] as const).map(tab => ({
+                    id: tab,
+                    label: t(`publisher_tab_${tab}`),
+                    activeVariant: tab === 'channels' ? ('telegram' as const) : ('default' as const),
+                }))}
+            />
 
             {isLoading && publishers.length === 0 ? (
                 <div className="py-12 text-center text-xs text-muted-foreground">{t('publisher_loading')}</div>

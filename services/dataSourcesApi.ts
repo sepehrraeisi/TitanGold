@@ -330,3 +330,48 @@ export async function testDataSourceConnection(
         responseTime: result.responseTime,
     };
 }
+
+/** GET /api/v1/data-sources/health — system status for Pipeline Health Overview */
+export type DataHubSourcesHealth = {
+    status: 'healthy' | 'degraded' | 'unhealthy' | string;
+    database?: string;
+    activeSources?: number;
+    recentActivity?: number;
+    timestamp?: string;
+    error?: string;
+};
+
+export async function fetchDataHubSourcesHealth(): Promise<DataHubSourcesHealth> {
+    return dataSourcesRequest<DataHubSourcesHealth>('/health');
+}
+
+/** GET /api/v1/data-sources/stats — active/total source counts */
+export type DataHubSourcesStats = {
+    total_sources?: number | string;
+    active_sources?: number | string;
+    total_logs?: number | string;
+    logs_24h?: number | string;
+    logs_7d?: number | string;
+};
+
+export async function fetchDataHubSourcesStats(): Promise<DataHubSourcesStats> {
+    return dataSourcesRequest<DataHubSourcesStats>('/stats');
+}
+
+/** GET /api/v1/data-sources/state — aggregate counts + source type breakdown */
+export type DataHubSourcesState = {
+    status?: string;
+    totalSources?: number;
+    activeSources?: number;
+    sourcesByType?: {
+        telegram?: number;
+        rss?: number;
+        api?: number;
+    };
+    recentLogs?: number;
+    totalLogs?: number;
+};
+
+export async function fetchDataHubSourcesState(): Promise<DataHubSourcesState> {
+    return dataSourcesRequest<DataHubSourcesState>('/state');
+}

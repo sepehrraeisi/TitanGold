@@ -12,6 +12,8 @@ import type {
     DataHubFilterRule,
 } from '../../../../../../services/dataHubFilterRulesApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
+import { formatApiErrorForUi, safeDynamicT } from '../dataHubI18n';
+import { DataHubTabStrip } from '../dataHubUi';
 
 interface BlacklistWhitelistProps {
     t: (key: string) => string;
@@ -77,9 +79,9 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
 
     const apiError =
         error instanceof DataHubApiError
-            ? error.message
+            ? formatApiErrorForUi(t, error.message)
             : error instanceof Error
-              ? error.message
+              ? formatApiErrorForUi(t, error.message)
               : null;
 
     const handleSave = async (
@@ -119,7 +121,7 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                         {t(rule.rule_type)}
                     </span>
                     <span className="text-[10px] text-muted-foreground uppercase">
-                        {t(`filter_scope_${rule.scope}`)}
+                        {safeDynamicT(t, 'filter_scope_', rule.scope)}
                     </span>
                     <span className="text-[10px] text-muted-foreground">
                         {rule.match_type} · {rule.apply_target} · P{rule.priority}
@@ -196,25 +198,19 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                 </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-4 border-b border-white/10 mb-4">
-                {(['blacklist', 'whitelist', 'rules', 'evaluate'] as const).map(tab => (
-                    <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setActiveTab(tab)}
-                        className={`pb-2 text-[11px] font-bold transition-all relative ${
-                            activeTab === tab
-                                ? 'text-purple-400'
-                                : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        {t(`safety_tab_${tab}`)}
-                        {activeTab === tab ? (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 rounded-full" />
-                        ) : null}
-                    </button>
-                ))}
-            </div>
+            {/* Safety Filtering navigation */}
+            <DataHubTabStrip
+                className="mb-4"
+                wrap
+                ariaLabel={t('blacklist_whitelist') || 'Safety filtering'}
+                activeId={activeTab}
+                onChange={id => setActiveTab(id as typeof activeTab)}
+                items={(['blacklist', 'whitelist', 'rules', 'evaluate'] as const).map(tab => ({
+                    id: tab,
+                    label: safeDynamicT(t, 'safety_tab_', tab),
+                    activeVariant: tab === 'evaluate' ? ('warning' as const) : ('default' as const),
+                }))}
+            />
 
             {activeTab !== 'evaluate' ? (
                 <>
@@ -326,7 +322,9 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                         </div>
                     ) : null}
                     {evaluateMut.error instanceof DataHubApiError ? (
-                        <p className="text-[11px] text-red-300">{evaluateMut.error.message}</p>
+                        <p className="text-[11px] text-red-300">
+                            {formatApiErrorForUi(t, evaluateMut.error.message)}
+                        </p>
                     ) : null}
                 </div>
             )}

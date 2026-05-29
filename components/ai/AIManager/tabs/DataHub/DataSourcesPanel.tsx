@@ -20,6 +20,7 @@ import {
     sourceStatusVariant,
     priorityVariant,
 } from './dataHubUi';
+import { formatDataHubQueryError } from './dataHubI18n';
 
 type Props = {
     t: (key: string) => string;
@@ -79,10 +80,7 @@ const DataSourcesPanel: React.FC<Props> = ({
         downloadCSV('data-sources', sources);
     };
 
-    const conflictMessage =
-        apiError instanceof DataHubApiError && apiError.status === 409 ? apiError.message : null;
-    const serverError =
-        apiError instanceof DataHubApiError && apiError.status >= 500 ? apiError.message : null;
+    const queryError = formatDataHubQueryError(t, apiError);
 
     const paginationSummary =
         pagination &&
@@ -133,13 +131,11 @@ const DataSourcesPanel: React.FC<Props> = ({
                 <MetricCard label={t('sources_metric_telegram')} value={metrics.telegram} color="purple" />
             </div>
 
-            {conflictMessage && <DataHubAlert variant="warning" message={conflictMessage} />}
-
-            {serverError && (
+            {queryError && (
                 <DataHubAlert
-                    variant="error"
-                    message={serverError}
-                    onRetry={onRefresh}
+                    variant={queryError.variant}
+                    message={queryError.message}
+                    onRetry={queryError.retryable ? onRefresh : undefined}
                     retryLabel={t('retry')}
                 />
             )}

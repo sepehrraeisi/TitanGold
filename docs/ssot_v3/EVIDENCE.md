@@ -334,6 +334,46 @@ rg -n "fetchDataHubState|createManualArchive|restoreFromArchive" \
 
 ---
 
+### ۲۰. DataHub header summary KPIs (`dataHub.summary` · v3.0 blocker fix)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| Summary cards از `/stats` + `/health` | `DataHubSummaryCards.tsx`, `hooks/useDataHubSummary.ts` | `useDataHubSummaryMetrics` | نه `dataHub.totalSources` / `cache.hitRate` IndexedDB. |
+| Cache hit not faked | `useDataHubSummary.ts` | `cacheHitDisplay: 'N/A'` | تا GAP-035؛ بدون `75%`. |
+| Raw HTTP "Not Found" sanitized | `dataHubI18n.ts`, advanced `*Panel.tsx` | `formatApiErrorForUi`, `safeDynamicT` | خطای 404 به i18n تبدیل می‌شود. |
+
+---
+
+### ۲۱. DataHub tab/subtab navigation redesign (pill + slate) + Not Found sanitize
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| DataHub main tab navigation redesigned | `DataHubTab.tsx` | L190–224 | تغییر استایل tabها به pill rounded با `border-white/5` + `bg-slate-900` و active state واضح. |
+| Advanced subtabs navigation redesigned | `AdvancedFeatures.tsx` | L39–138 | تغییر استایل navigation subtabs به همان pill slate و حذف fallbackهای inline انگلیسی برای label/hints. |
+| Raw HTTP “Not Found” sanitized | `dataHubI18n.ts` | L1–44 | `formatApiErrorForUi` الگوهای HTTP مثل `Not Found` را به کلیدهای i18n مثل `datahub_error_not_found` تبدیل می‌کند. |
+
+---
+
+### ۱۹. Health Monitoring tab (`dataHub.health` · v3.0 blocker fix)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| Health tab از APIهای واقعی می‌خواند | `HealthPanel.tsx`, `services/dataSourcesApi.ts`, `hooks/useDataHubState.ts` | `fetchDataHubSourcesHealth`, `fetchDataHubSourcesStats`, `fetchDataHubSourcesState`; `useDataHubHealthLogCountsQuery` → `fetchDataAccessLogs` | دیگر `dataHub.health` از IndexedDB/`checkDataHubHealth` در این تب رندر نمی‌شود. |
+| بدون NaN/undefined در متریک‌ها | `pipelineHealthFormat.ts`, `HealthPanel.tsx` | `formatCountDisplay`, `formatAvgLatency`, `formatSystemStatus` | avg response و cache = N/A تا GAP-035. |
+| SSOT status | `docs/ssot_v3/SSOT_v3.0.md` | `dataHub.health` row | **Implemented · Design: Done** |
+
+---
+
+### ۱۸. Pipeline Health Overview (Advanced · v3.0 blocker fix)
+
+| Claim | File | Lines | توضیح |
+|---|---|---|---|
+| Overview از `/health` + `/stats` می‌خواند (نه `dataHub.pipelineSnapshot` mock) | `PipelineHealthOverview.tsx`, `services/dataSourcesApi.ts` | `useDataHubSourcesHealthQuery`, `useDataHubSourcesStatsQuery`; `fetchDataHubSourcesHealth`, `fetchDataHubSourcesStats` | UI دیگر `overallStatus` / `avgLatency` روی snapshot قدیمی ندارد. |
+| فرمت امن بدون `undefined`/`NaN` | `pipelineHealthFormat.ts` | `formatSystemStatus`, `formatActiveSourcesLabel`, `formatAvgLatency` | Unknown / `0 / 0` / N/A |
+| Latency API در v3.1 | `docs/ssot_v3/GAPS_AND_PLAN.md` | GAP-034 | v3.0: N/A + tooltip `pipeline_latency_not_available` |
+
+---
+
 ### ۱۵. Migrations / Greenfield Bootstrap
 
 | Claim | File | Lines | توضیح |

@@ -78,6 +78,18 @@ export function parseDataHubError(error: any): DataHubError {
         };
     }
 
+    // Not found (HTTP 404)
+    if (error.status === 404 || error.message?.includes('Not Found') || error.message?.includes('not found')) {
+        return {
+            type: ErrorType.VALIDATION,
+            message: 'Not found',
+            originalError: error,
+            retryable: false,
+            userMessage: 'The requested resource was not found. It may not be configured on this server yet.',
+            technicalDetails: error.message,
+        };
+    }
+
     // Permission errors (HTTP 403)
     if (error.status === 403 || error.message?.includes('Forbidden') || error.message?.includes('permission')) {
         return {
@@ -235,7 +247,7 @@ export function getSuggestedAction(errorType: ErrorType): string {
         [ErrorType.NETWORK]: 'Check your internet connection and try again.',
         [ErrorType.AUTHENTICATION]: 'Please log in again to continue.',
         [ErrorType.RATE_LIMIT]: 'Wait a moment and try again.',
-        [ErrorType.SESSION_EXPIRED]: 'Reconnect your Telegram account in Settings.',
+        [ErrorType.SESSION_EXPIRED]: 'Reconnect your Telegram account in DataHub → Telegram.',
         [ErrorType.VALIDATION]: 'Please review your input and try again.',
         [ErrorType.CONFLICT]: 'Resolve the conflict (duplicate name or linked data) and try again.',
         [ErrorType.DATABASE]: 'Try again in a few moments. Contact support if the issue persists.',

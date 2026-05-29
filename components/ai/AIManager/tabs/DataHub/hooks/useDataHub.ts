@@ -83,8 +83,6 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         refetch: refetchPipeline,
         isFetching: isFetchingPipeline,
     } = usePipelineQuery({ enabled: pipelineEnabled });
-    const healthAsync = useAsync(api.checkDataHubHealth);
-
     const logsEnabled = activeView === 'logs';
     const {
         data: accessLogsResult,
@@ -96,15 +94,17 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const mergedDataHub = useMemo((): DataHubState | null => {
         if (!dataHub) return null;
-        const sources = sourcesResult?.data ?? dataHub.sources;
-        const categoriesBase = categoriesResult ?? dataHub.categories;
+        // Leak guard: do not present local IndexedDB fallback as implemented backend data.
+        const sources = sourcesResult?.data ?? [];
+        const categoriesBase = categoriesResult ?? [];
         const categories = api.enrichCategoriesWithSourceCounts(categoriesBase, sources);
+        const backendSourcesReady = Array.isArray(sourcesResult?.data);
         return {
             ...dataHub,
             sources,
             categories,
-            totalSources: sourcesResult?.pagination.total ?? dataHub.totalSources,
-            activeSources: sources.filter(s => s.status === 'active').length,
+            // Treat collector snapshot as non-authoritative when backend sources are unavailable.
+            telegramCollector: backendSourcesReady ? dataHub.telegramCollector : null,
         };
     }, [dataHub, sourcesResult, categoriesResult]);
 
@@ -191,15 +191,6 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     }, [loadDataHub]);
 
     // Handlers
-    const handleCheckHealth = async () => {
-        try {
-            setCurrentError(null);
-            await healthAsync.execute();
-        } catch (error) {
-            handleError(error, 'Health Check', handleCheckHealth);
-        }
-    };
-
     const handleCreateSource = async (source: Omit<DataSource, 'id' | 'createdAt' | 'lastUpdate'>) => {
         try {
             setCurrentError(null);
@@ -794,14 +785,11 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setCollectorMessage,
         categoriesError: categoriesApiError instanceof Error ? categoriesApiError.message : null,
         setCategoriesError: () => { },
-        healthError: healthAsync.error,
-        setHealthError: healthAsync.setError,
         accessLogs,
         refetchAccessLogs,
         logsError,
         setLogsError,
         accessLogsApiError,
-        isLoadingHealth: healthAsync.isLoading,
         isLoadingLogs: isLoadingLogs || isFetchingAccessLogs,
         logStatusCounts,
         collectorForm,
@@ -815,18 +803,6 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         accountsRefreshTrigger,
         channelsRefreshTrigger,
         collectorCooldownSeconds,
-        handleCheckHealth: async () => {
-            setIsLoadingHealth(true);
-            setHealthError(null);
-            try {
-                await handleCheckHealth();
-            } catch (err: any) {
-                setHealthError(err.message || 'Failed to check health');
-                throw err;
-            } finally {
-                setIsLoadingHealth(false);
-            }
-        },
         handleCollectorHealth,
         handleDiagnoseCollector,
         handleCollectorInputChange,

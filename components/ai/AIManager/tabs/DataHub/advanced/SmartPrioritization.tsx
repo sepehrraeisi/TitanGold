@@ -11,6 +11,8 @@ import {
     useApplyPrioritizationMutation,
     useSetPrioritizationOverrideMutation,
 } from '../../../../../../hooks/useDataHubPrioritization';
+import { formatDataHubQueryError, safeDynamicT } from '../dataHubI18n';
+import { DataHubAlert } from '../dataHubUi';
 
 interface SmartPrioritizationProps {
     t: (key: string) => string;
@@ -28,14 +30,15 @@ function tierPill(tier: string, t: (k: string) => string) {
     };
     return (
         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${map[tier] || ''}`}>
-            {t(`prioritization_tier_${tier}`) || tier}
+            {safeDynamicT(t, 'prioritization_tier_', tier)}
         </span>
     );
 }
 
 const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
-    const { data: settings, isLoading: settingsLoading, refetch } = usePrioritizationSettingsQuery();
-    const { data: sources = [], isLoading: sourcesLoading } = usePrioritizationSourcesQuery();
+    const { data: settings, isLoading: settingsLoading, error: settingsError, refetch } =
+        usePrioritizationSettingsQuery();
+    const { data: sources = [], isLoading: sourcesLoading, error: sourcesError } = usePrioritizationSourcesQuery();
     const { data: runs = [] } = usePrioritizationRunsQuery();
 
     const settingsMut = useUpdatePrioritizationSettingsMutation();
@@ -55,6 +58,12 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
         [settingsMut.error, previewMut.error, applyMut.error, overrideMut.error].find(
             e => e instanceof DataHubApiError,
         ) as DataHubApiError | undefined;
+
+    const queryError = formatDataHubQueryError(
+        t,
+        (settingsError as Error | null) || (sourcesError as Error | null),
+    );
+    const mutationError = apiError ? formatDataHubQueryError(t, apiError) : null;
 
     const summary = useMemo(() => {
         const total = sources.length;
@@ -160,18 +169,31 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                 </div>
             </div>
 
-            {apiError ? (
+            {queryError && (
+                <div className="mb-4">
+                    <DataHubAlert
+                        variant={queryError.variant}
+                        message={queryError.message}
+                        onRetry={queryError.retryable ? () => void refetch() : undefined}
+                        retryLabel={t('retry')}
+                    />
+                </div>
+            )}
+
+            {mutationError ? (
                 <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                    <span>{apiError.message}</span>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            void refetch();
-                        }}
-                        className="px-2 py-1 rounded bg-red-500/20"
-                    >
-                        {t('retry')}
-                    </button>
+                    <span>{mutationError.message}</span>
+                    {mutationError.retryable ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                void refetch();
+                            }}
+                            className="px-2 py-1 rounded bg-red-500/20"
+                        >
+                            {t('retry')}
+                        </button>
+                    ) : null}
                 </div>
             ) : null}
 
@@ -229,8 +251,7 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                         </td>
                                         <td className="px-3 py-2 align-top">
                                             <div className="text-[11px] text-muted-foreground">
-                                                {t(`prioritization_tier_${source.suggested_tier}`) ||
-                                                    source.suggested_tier}
+                                                {safeDynamicT(t, 'prioritization_tier_', source.suggested_tier)}
                                             </div>
                                         </td>
                                         <td className="px-3 py-2 align-top">
@@ -336,7 +357,7 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                             {Object.entries(weights).map(([key, value]) => (
                                 <div key={key}>
                                     <label className="block text-[11px] mb-1">
-                                        {t(`prioritization_factor_${key}`) || key}: {value}
+                                        {safeDynamicT(t, 'prioritization_factor_', key)}: {value}
                                     </label>
                                     <input
                                         type="range"
@@ -424,7 +445,7 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                         <div className="space-y-1 max-h-[50vh] overflow-auto">
                             {Object.entries(activeBreakdown.score_breakdown || {}).map(([k, v]) => (
                                 <div key={k} className="text-[11px] flex justify-between border-b border-white/5 py-1">
-                                    <span>{t(`prioritization_factor_${k}`) || k}</span>
+                                    <span>{safeDynamicT(t, 'prioritization_factor_', k)}</span>
                                     <span className="text-purple-200">
                                         {typeof v === 'number' ? v.toFixed(1) : JSON.stringify(v)}
                                     </span>

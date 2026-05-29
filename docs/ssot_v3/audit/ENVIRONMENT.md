@@ -398,3 +398,41 @@ Run: `cd /home/ubuntu/webapp/TitanGold/backend && node scripts/verify_automation
 - `BEHIND_HTTPS_PROXY`
 - `EXTERNAL_API_SSL_VERIFY`
 
+### Playwright smoke attempt (2026-05-27) — host packages (no further installs without approval)
+
+During an attempted DataHub browser smoke on host `ubuntu` (`/home/ubuntu/webapp/TitanGold`), Playwright Chromium failed to launch until these **Ubuntu apt** libraries were installed (one-time, for headless browser deps):
+
+| Package | Purpose |
+|---------|---------|
+| `libatk1.0-0` | ATK (Chromium) |
+| `libatk-bridge2.0-0` | AT-SPI bridge |
+| `libxcomposite1`, `libxdamage1`, `libxfixes3`, `libxrandr2` | X11 libs |
+| `libgbm1` | GBM |
+| `libxkbcommon0` | Keyboard |
+| `libasound2` | ALSA (Chromium load) |
+
+**Not installed:** full `playwright install-deps` meta-package (only missing libs added incrementally).
+
+**Processes (smoke only, stopped after run):**
+
+- Vite dev: `vite --port 5173 --strictPort --host 0.0.0.0` (PIDs ~54316–54329) — **stopped**; port 5173 no longer listening.
+- **No** lingering `playwright` / `chromium` processes after last run.
+
+**Left running (pre-existing, not smoke):**
+
+- Vite from 2026-02-23 (`node …/vite` PID ~103054) — separate long-running dev instance; **not** stopped.
+- Production: `backend/server.js` (PM2), `telegram-collector`, `engineWorker` — **untouched**.
+
+**URL deep-link (from code, for next smoke):**
+
+- Confirmed: `/?view=ai` → `readStateFromURL()` / `ViewKey: 'ai'` (`utils/urlSync.ts`, `types/navigation.ts`).
+- **Not** in URL today: `AICenter` sub-tab (`manager` vs `agents`), `AIManager` sub-tab (`data_hub`). Defaults: `agents` + `overview` — manual clicks or owner-provided deep-link required.
+
+### Browser smoke environment findings (read-only, no env/db mutation)
+
+- `CORS_ALLOWED_ORIGINS` key exists in backend `.env`.
+- Current configured allowed-origin set does **not** include `localhost:5173` (presence check only; value not printed).
+- `JWT_SECRET` and `DATABASE_URL` keys exist in backend `.env` (presence check only; values not printed).
+- Smoke credential user `dev` is missing in DB for this environment (read-only existence check).
+- Consequence during smoke: `POST /api/v1/auth/login` from `http://localhost:5173` failed with CORS (`Not allowed by CORS`) before auth handler validation.
+

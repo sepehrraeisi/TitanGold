@@ -4,6 +4,7 @@ import CategoriesPanel from './DataHub/CategoriesPanel';
 import LogsPanel from './DataHub/LogsPanel';
 import PipelinePanel from './DataHub/PipelinePanel';
 import HealthPanel from './DataHub/HealthPanel';
+import DataHubSummaryCards from './DataHub/DataHubSummaryCards';
 import TelegramDataPanel from './DataHub/TelegramDataPanel';
 import TelegramPanel from './DataHub/TelegramPanel';
 import DataSourcesPanel from './DataHub/DataSourcesPanel';
@@ -14,6 +15,7 @@ import ErrorBoundary from '../../../common/ErrorBoundary';
 import SkeletonLoader from '../../../common/SkeletonLoader';
 import ApiWrapper from '../../../common/ApiWrapper';
 import ErrorNotification from './DataHub/components/ErrorNotification';
+import { DataHubTabStrip, DataHubTabStripSkeleton } from './DataHub/dataHubUi';
 
 interface Props {
     artemis: ArtemisState;
@@ -47,7 +49,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         selectedSnapshotId,
         setSelectedSnapshotId,
         isLoadingPipeline,
-        pipelineError,
+        pipelineApiError,
         agents,
         isLoadingAgents,
         isLoadingCollector,
@@ -59,7 +61,6 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         channelTestPreview,
         isRefreshingChannels,
         telegramCollectorUrl,
-        handleCheckHealth,
         handleCollectorHealth,
         handleDiagnoseCollector,
         handleCollectorInputChange,
@@ -102,11 +103,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         setPipelineError,
         categoriesError,
         setCategoriesError,
-        healthError,
-        setHealthError,
-        logsError,
         setLogsError,
-        isLoadingHealth,
+        accessLogsApiError,
         isLoadingLogs,
         currentError,
         clearError,
@@ -137,13 +135,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 </div>
 
                 {/* Navigation Tabs Skeletons */}
-                <div className="flex gap-2 border-b border-border overflow-x-auto no-scrollbar">
-                    {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <div key={i} className="px-4 py-2">
-                            <SkeletonLoader width="4rem" height="1.25rem" />
-                        </div>
-                    ))}
-                </div>
+                <DataHubTabStripSkeleton count={7} />
 
                 {/* Content Panel Skeleton */}
                 <Card>
@@ -171,7 +163,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
     }
 
     if (!dataHub) {
-        return <div className="text-center p-10">{t('data_hub_not_available') || 'Data Hub not available'}</div>;
+        return <div className="text-center p-10">{t('data_hub_not_available')}</div>;
     }
 
     return (
@@ -181,71 +173,34 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 {currentError && (
                     <ErrorNotification
                         error={currentError}
-                        onClose={clearError}
+                        onDismiss={clearError}
                     />
                 )}
 
-                {/* Overview Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card>
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground mb-1">{t('total_sources') || 'Total Sources'}</p>
-                            <p className="text-2xl font-bold text-foreground">{dataHub?.totalSources ?? 0}</p>
-                        </div>
-                    </Card>
-                    <Card>
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground mb-1">{t('active_sources') || 'Active Sources'}</p>
-                            <p className="text-2xl font-bold text-green-400">{dataHub?.activeSources ?? 0}</p>
-                        </div>
-                    </Card>
-                    <Card>
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground mb-1">{t('cache_hit_rate') || 'Cache Hit Rate'}</p>
-                            <p className="text-2xl font-bold text-purple-400">
-                                {typeof dataHub?.cache?.hitRate === 'number'
-                                    ? dataHub.cache.hitRate.toFixed(1)
-                                    : '0.0'
-                                }%
-                            </p>
-                        </div>
-                    </Card>
-                    <Card>
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground mb-1">{t('health_status') || 'Health Status'}</p>
-                            <p className={`text-2xl font-bold ${
-                                dataHub?.health?.overall === 'healthy' ? 'text-green-400' :
-                                dataHub?.health?.overall === 'degraded' ? 'text-yellow-400' : 'text-red-400'
-                                }`}>
-                                {dataHub?.health?.overall ? (t(dataHub.health.overall) || dataHub.health.overall) : 'Unknown'}
-                            </p>
-                        </div>
-                    </Card>
-                </div>
+                {/* Overview Stats — backend: GET /stats + GET /health (not IndexedDB / mock cache) */}
+                <Card>
+                    <DataHubSummaryCards t={t} />
+                </Card>
 
-                {/* Navigation Tabs */}
-                <div className="flex gap-2 border-b border-border overflow-x-auto no-scrollbar">
-                    {[
-                        { id: 'sources', label: t('data_sources') || 'Sources' },
-                        { id: 'categories', label: t('categories') || 'Categories' },
-                        { id: 'pipeline', label: t('data_pipeline') || 'Pipeline' },
-                        { id: 'health', label: t('health_monitoring') || 'Health' },
-                        { id: 'logs', label: t('access_logs') || 'Logs' },
-                        { id: 'advanced', label: t('advanced_features') || 'Advanced' },
-                        { id: 'telegram', label: t('telegram_collector') || 'Telegram' }
-                    ].map(view => (
-                        <button
-                            key={view.id}
-                            onClick={() => setActiveView(view.id as any)}
-                            className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${activeView === view.id
-                                ? 'border-b-2 border-purple-500 text-purple-400'
-                                : 'text-muted-foreground hover:text-foreground'
-                                }`}
-                        >
-                            {view.label}
-                        </button>
-                    ))}
-                </div>
+                <DataHubTabStrip
+                    ariaLabel={t('data_hub_navigation') || 'Data Hub navigation'}
+                    activeId={activeView}
+                    onChange={id => setActiveView(id as typeof activeView)}
+                    items={[
+                        { id: 'sources', label: t('data_sources') },
+                        { id: 'categories', label: t('categories') },
+                        { id: 'pipeline', label: t('data_pipeline') },
+                        { id: 'health', label: t('health_monitoring') },
+                        { id: 'logs', label: t('access_logs') },
+                        { id: 'advanced', label: t('advanced_features') },
+                        {
+                            id: 'telegram',
+                            label: t('telegram_collector'),
+                            icon: '📱',
+                            activeVariant: 'telegram',
+                        },
+                    ]}
+                />
 
                 {/* Content Views */}
                 <div className="mt-4">
@@ -300,8 +255,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             logStatusCounts={logStatusCounts}
                             downloadCSV={downloadCSV}
                             isLoading={isLoadingLogs}
-                            error={logsError}
-                            setError={setLogsError}
+                            apiError={accessLogsApiError}
                             onRetry={() => {
                                 setLogsError(null);
                                 onRefresh();
@@ -318,7 +272,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             normalizedData={normalizedData}
                             handleRefreshPipelineSnapshot={handleRefreshPipelineSnapshot}
                             isLoadingPipeline={isLoadingPipeline}
-                            pipelineError={pipelineError}
+                            pipelineApiError={pipelineApiError}
                             setPipelineError={setPipelineError}
                             formatTimeAgo={formatTimeAgo}
                             selectedSnapshotId={selectedSnapshotId}
@@ -329,14 +283,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     {activeView === 'health' && (
                         <HealthPanel
                             t={t}
-                            health={dataHub.health}
-                            handleCheckHealth={handleCheckHealth}
-                            isLoading={isLoadingHealth}
-                            error={healthError}
-                            setError={setHealthError}
-                            Card={Card}
+                            formatTimeAgo={formatTimeAgo}
                             telegramCollector={dataHub.telegramCollector || null}
-                            dataHub={dataHub}
                         />
                     )}
 

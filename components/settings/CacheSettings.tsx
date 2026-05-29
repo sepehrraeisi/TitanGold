@@ -268,6 +268,10 @@ const CacheSettings: React.FC = () => {
               {t('clear_cache_warning') ||
                 'Clearing cache will log you out and remove all locally saved data. Make sure to save any unsaved work before proceeding.'}
             </p>
+            <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-2">
+              {t('clear_cache_datahub_note') ||
+                'Clearing cache may remove legacy local DataHub snapshots; backend data in the database remains safe.'}
+            </p>
           </div>
         </div>
       </div>

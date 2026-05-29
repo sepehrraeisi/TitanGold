@@ -9,6 +9,8 @@ import BlacklistWhitelist from './advanced/BlacklistWhitelist';
 import TelegramPublisher from './advanced/TelegramPublisher';
 import AutomationTopics from './advanced/AutomationTopics';
 import Archiving from './advanced/Archiving';
+import PipelineHealthOverview from './PipelineHealthOverview';
+import { DataHubTabStrip } from './dataHubUi';
 
 // Custom Hook
 import { useAdvancedFeatures } from '../../../../../hooks/useAdvancedFeatures';
@@ -26,70 +28,41 @@ const AdvancedFeatures: React.FC<{
         activeFeature,
         setActiveFeature,
         advanced,
-        pipelineSnapshot,
         agentMap,
         publisherMap,
         topicMap,
         findCategorySignal,
-        getStatusBadgeClass
     } = useAdvancedFeatures({ dataHub, agents });
 
 
+    const advancedTabItems = [
+        { id: 'crawlers', label: t('web_crawlers') },
+        { id: 'discovery', label: t('auto_discovery') },
+        { id: 'prioritization', label: t('smart_prioritization') },
+        { id: 'access', label: t('access_control') },
+        { id: 'blacklist', label: t('blacklist_whitelist') },
+        {
+            id: 'telegram',
+            label: t('telegram_publisher'),
+            icon: '📱',
+            activeVariant: 'telegram' as const,
+        },
+        {
+            id: 'automation',
+            label: t('automation_routing'),
+            icon: '🤖',
+        },
+        { id: 'archive', label: t('data_archiving') },
+    ];
+
     return (
         <div className="space-y-6">
-            {/* Feature navigation tabs */}
-            <div className="flex gap-2 flex-wrap border-b border-border pb-2">
-                <button
-                    onClick={() => setActiveFeature('crawlers')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'crawlers' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                    {t('web_crawlers') || 'Web Crawlers'}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('discovery')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'discovery' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                    {t('auto_discovery') || 'Auto Discovery'}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('prioritization')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'prioritization' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                    {t('smart_prioritization') || 'Smart Prioritization'}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('access')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'access' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                    {t('access_control') || 'Access Control'}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('blacklist')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'blacklist' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                    {t('blacklist_whitelist') || 'Blacklist/Whitelist'}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('telegram')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-1.5 ${activeFeature === 'telegram' ? 'bg-sky-500/15 text-sky-300 border-b-2 border-sky-500' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                    <span>📱</span>
-                    {t('telegram_publisher') || 'Telegram Publisher'}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('automation')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-1.5 ${activeFeature === 'automation' ? 'bg-purple-500/15 text-purple-300 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                    <span>🤖</span>
-                    {t('automation_routing') || 'Automation'}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('archive')}
-                    className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeFeature === 'archive' ? 'bg-secondary/20 text-purple-400 border-b-2 border-purple-500' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                    {t('archiving') || 'Archiving'}
-                </button>
-            </div>
+            <DataHubTabStrip
+                ariaLabel={t('advanced_features') || 'Advanced features'}
+                activeId={activeFeature}
+                onChange={id => setActiveFeature(id as typeof activeFeature)}
+                items={advancedTabItems}
+            />
 
             {/* Telegram-specific hints (TASK-DHT-065) */}
             {(activeFeature === 'telegram' || activeFeature === 'automation') && (
@@ -98,14 +71,14 @@ const AdvancedFeatures: React.FC<{
                         <span className="text-sky-400 text-lg">💡</span>
                         <div className="flex-1">
                             <p className="text-xs font-semibold text-sky-200 mb-1">
-                                {activeFeature === 'telegram' 
-                                    ? t('telegram_publisher_hint_title') || 'Telegram Publisher - Input vs Output Channels'
-                                    : t('telegram_automation_hint_title') || 'Telegram Automation - How It Works'}
+                                {activeFeature === 'telegram'
+                                    ? t('telegram_publisher_hint_title')
+                                    : t('telegram_automation_hint_title')}
                             </p>
                             <p className="text-[11px] text-sky-300/80 leading-relaxed">
-                                {activeFeature === 'telegram' 
-                                    ? t('telegram_publisher_hint') || 'Input channels collect data from Telegram (configured in Telegram Collector tab). Output channels (publishers) broadcast AI-analyzed signals back to Telegram. Use Automation Rules to connect input channels to output publishers.'
-                                    : t('telegram_automation_hint') || 'Create automation rules with dataType="telegram" to trigger actions when Telegram messages match your criteria (categories, tags, keywords). These rules can route signals to Telegram publishers for automated broadcasting.'}
+                                {activeFeature === 'telegram'
+                                    ? t('telegram_publisher_hint')
+                                    : t('telegram_automation_hint')}
                             </p>
                         </div>
                     </div>
@@ -154,28 +127,7 @@ const AdvancedFeatures: React.FC<{
                 <Archiving t={t} />
             )}
 
-            {/* Pipeline Quality Snapshot - Keep high-level view if needed or move to Dashboard */}
-            {pipelineSnapshot && (
-                <div className="mt-8 border-t border-border pt-6">
-                    <h3 className="text-lg font-semibold mb-4 text-foreground">{t('pipeline_health_overview') || 'Pipeline Health Overview'}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-secondary/20 border border-border rounded p-4">
-                            <p className="text-xs text-muted-foreground uppercase">{t('system_status') || 'System Status'}</p>
-                            <p className={`text-xl font-bold mt-1 ${getStatusBadgeClass(pipelineSnapshot.overallStatus).replace('bg-', 'text-').replace('/20', '')}`}>
-                                {t(`log_status_${pipelineSnapshot.overallStatus}` as any) || pipelineSnapshot.overallStatus}
-                            </p>
-                        </div>
-                        <div className="bg-secondary/20 border border-border rounded p-4">
-                            <p className="text-xs text-muted-foreground uppercase">{t('active_sources') || 'Active Sources'}</p>
-                            <p className="text-xl font-bold mt-1">{pipelineSnapshot.activeSources} / {pipelineSnapshot.totalSources}</p>
-                        </div>
-                        <div className="bg-secondary/20 border border-border rounded p-4">
-                            <p className="text-xs text-muted-foreground uppercase">{t('avg_latency') || 'Avg Latency'}</p>
-                            <p className="text-xl font-bold mt-1">{Math.round(pipelineSnapshot.avgLatency)} ms</p>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <PipelineHealthOverview t={t} />
         </div>
     );
 };

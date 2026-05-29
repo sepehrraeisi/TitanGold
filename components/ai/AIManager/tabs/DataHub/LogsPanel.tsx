@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { DataAccessLog } from '../../../../../types';
+import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 import {
     DATAHUB_SHELL,
     DATAHUB_INNER_LIST,
@@ -13,6 +14,7 @@ import {
     MetricCard,
     StatusPill,
 } from './dataHubUi';
+import { formatDataHubQueryError } from './dataHubI18n';
 
 interface LogsPanelProps {
     t: (key: string) => string;
@@ -20,8 +22,7 @@ interface LogsPanelProps {
     logStatusCounts: Record<string, number>;
     downloadCSV: (data: any[], filename: string) => void;
     isLoading?: boolean;
-    error?: string | null;
-    setError?: (err: string | null) => void;
+    apiError?: DataHubApiError | Error | null;
     onRetry?: () => void;
 }
 
@@ -39,8 +40,7 @@ const LogsPanel: React.FC<LogsPanelProps> = ({
     logStatusCounts,
     downloadCSV,
     isLoading = false,
-    error = null,
-    setError = () => {},
+    apiError = null,
     onRetry,
 }) => {
     const [logsSourceFilter, setLogsSourceFilter] = useState('');
@@ -113,8 +113,9 @@ const LogsPanel: React.FC<LogsPanelProps> = ({
         [filteredLogs, visibleLogs],
     );
 
+    const queryError = formatDataHubQueryError(t, apiError);
+
     const handleRetry = () => {
-        setError(null);
         onRetry?.();
     };
 
@@ -183,11 +184,11 @@ const LogsPanel: React.FC<LogsPanelProps> = ({
                 </div>
             </div>
 
-            {error && (
+            {queryError && (
                 <DataHubAlert
-                    variant="error"
-                    message={error}
-                    onRetry={onRetry ? handleRetry : undefined}
+                    variant={queryError.variant}
+                    message={queryError.message}
+                    onRetry={queryError.retryable && onRetry ? handleRetry : undefined}
                     retryLabel={t('retry')}
                 />
             )}

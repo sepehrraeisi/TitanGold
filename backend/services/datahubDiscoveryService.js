@@ -68,28 +68,70 @@ function mapScanRow(row) {
     };
 }
 
+function clampScore(n) {
+    if (!Number.isFinite(n)) return 0;
+    return Math.min(100, Math.max(0, n));
+}
+
+/** Derive success rate from fetch/error history — 0 when no fetches recorded. */
+function deriveSuccessRate(row) {
+    const fetchCount = Number(row.fetch_count || 0);
+    const errorCount = Number(row.error_count || 0);
+    const lastStatus = String(row.last_status || '').toLowerCase();
+    if (fetchCount <= 0) return 0;
+
+    const successes = Math.max(0, fetchCount - Math.min(errorCount, fetchCount));
+    let rate = clampScore((100 * successes) / fetchCount);
+    if (lastStatus === 'error' || lastStatus === 'failed' || lastStatus === 'timeout') {
+        rate = clampScore(rate * 0.7);
+    }
+    return rate;
+}
+
+/** Derive reliability from success rate + health/status — conservative, no optimistic defaults. */
+function deriveReliabilityScore(row, successRate) {
+    const fetchCount = Number(row.fetch_count || 0);
+    const healthStatus = String(row.health_status || row.status || '').toLowerCase();
+    if (fetchCount <= 0 && !healthStatus) return 0;
+
+    let score = successRate;
+    if (
+        healthStatus === 'degraded' ||
+        healthStatus === 'unhealthy' ||
+        healthStatus === 'error' ||
+        healthStatus === 'failed'
+    ) {
+        score = clampScore(score * 0.5);
+    } else if (fetchCount <= 0) {
+        score = 0;
+    }
+    return clampScore(score);
+}
+
 async function loadSourceFingerprints() {
     const result = await query(
         `SELECT id, name, type, url, category,
                 LOWER(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(url,''), '^https?://(www\\.)?', ''), '/.*$', '')) AS host_key,
                 COALESCE(NULLIF(LOWER(REGEXP_REPLACE(url, '^https?://[^/]+', '')), ''), '/') AS path_key,
-                COALESCE(success_rate, 0) AS success_rate,
-                COALESCE(reliability_score, 0) AS reliability_score,
+                fetch_count, error_count, last_status, health_status, status,
                 last_fetch_at
          FROM data_sources WHERE is_active = true AND url IS NOT NULL`,
     );
-    return result.rows.map(r => ({
-        id: r.id,
-        name: r.name,
-        type: r.type,
-        url: r.url,
-        category: r.category,
-        host_key: (r.host_key || '').replace(/^www\./, ''),
-        path_key: r.path_key || '/',
-        success_rate: Number(r.success_rate || 0),
-        reliability_score: Number(r.reliability_score || 0),
-        last_fetch_at: r.last_fetch_at,
-    }));
+    return result.rows.map(r => {
+        const success_rate = deriveSuccessRate(r);
+        return {
+            id: r.id,
+            name: r.name,
+            type: r.type,
+            url: r.url,
+            category: r.category,
+            host_key: (r.host_key || '').replace(/^www\./, ''),
+            path_key: r.path_key || '/',
+            success_rate,
+            reliability_score: deriveReliabilityScore(r, success_rate),
+            last_fetch_at: r.last_fetch_at,
+        };
+    });
 }
 
 async function loadActiveSuggestions() {
@@ -392,7 +434,7 @@ export async function runDiscoveryScan(userId) {
             );
 
             const reputation =
-                sources.find(s => s.host_key === c.hostKey)?.reliability_score ?? 50;
+                sources.find(s => s.host_key === c.hostKey)?.reliability_score ?? 0;
             const categoryMatch = sources.some(s => s.category === c.category) ? 80 : 40;
             const score = computeDiscoveryScore({
                 rulePriority: c.rulePriority || 'medium',

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { DataPipelineSnapshot, DataNormalizationSummary, NormalizedDataRecord } from '../../../../../types';
+import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 import {
     DATAHUB_SHELL,
     DATAHUB_INNER_LIST,
@@ -12,6 +13,7 @@ import {
     MetricCard,
     StatusPill,
 } from './dataHubUi';
+import { formatDataHubQueryError } from './dataHubI18n';
 
 interface PipelinePanelProps {
     t: (key: string) => string;
@@ -21,7 +23,7 @@ interface PipelinePanelProps {
     normalizedData: NormalizedDataRecord[];
     handleRefreshPipelineSnapshot: () => void;
     isLoadingPipeline: boolean;
-    pipelineError: string | null;
+    pipelineApiError?: DataHubApiError | Error | null;
     setPipelineError: (err: string | null) => void;
     formatTimeAgo: (date: string | Date | undefined) => string;
     selectedSnapshotId: string;
@@ -50,12 +52,14 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     normalizedData,
     handleRefreshPipelineSnapshot,
     isLoadingPipeline,
-    pipelineError,
+    pipelineApiError = null,
     setPipelineError,
     formatTimeAgo,
     selectedSnapshotId,
     setSelectedSnapshotId,
 }) => {
+    const queryError = formatDataHubQueryError(t, pipelineApiError);
+
     const [categorySearch, setCategorySearch] = useState('');
     const [sourceSearch, setSourceSearch] = useState('');
     const [sourceStatusFilter, setSourceStatusFilter] = useState<'all' | 'success' | 'cached' | 'failed' | 'timeout'>(
@@ -140,14 +144,18 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                 </div>
             </div>
 
-            {pipelineError && (
+            {queryError && (
                 <DataHubAlert
-                    variant="error"
-                    message={pipelineError}
-                    onRetry={() => {
-                        setPipelineError(null);
-                        handleRefreshPipelineSnapshot();
-                    }}
+                    variant={queryError.variant}
+                    message={queryError.message}
+                    onRetry={
+                        queryError.retryable
+                            ? () => {
+                                  setPipelineError(null);
+                                  handleRefreshPipelineSnapshot();
+                              }
+                            : undefined
+                    }
                     retryLabel={t('retry')}
                 />
             )}

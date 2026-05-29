@@ -6,20 +6,20 @@ const matchTypeEnum = z.enum(['exact', 'contains', 'regex']);
 const applyTargetEnum = z.enum(['ingestion', 'publishing', 'both']);
 const actionEnum = z.enum(['block', 'allow']);
 
-export const createFilterRuleSchema = z
-    .object({
-        rule_type: ruleTypeEnum,
-        scope: scopeEnum,
-        pattern: z.string().min(1).max(2000),
-        match_type: matchTypeEnum.default('contains'),
-        apply_target: applyTargetEnum.default('ingestion'),
-        action: actionEnum.optional(),
-        is_active: z.boolean().optional().default(true),
-        priority: z.number().int().min(0).max(10000).default(100),
-        metadata: z.record(z.unknown()).optional().default({}),
-        reason: z.string().max(2000).optional().nullable(),
-    })
-    .superRefine((data, ctx) => {
+const filterRuleBaseSchema = z.object({
+    rule_type: ruleTypeEnum,
+    scope: scopeEnum,
+    pattern: z.string().min(1).max(2000),
+    match_type: matchTypeEnum.default('contains'),
+    apply_target: applyTargetEnum.default('ingestion'),
+    action: actionEnum.optional(),
+    is_active: z.boolean().optional().default(true),
+    priority: z.number().int().min(0).max(10000).default(100),
+    metadata: z.record(z.unknown()).optional().default({}),
+    reason: z.string().max(2000).optional().nullable(),
+});
+
+export const createFilterRuleSchema = filterRuleBaseSchema.superRefine((data, ctx) => {
         const expectedAction = data.rule_type === 'blacklist' ? 'block' : 'allow';
         if (data.action && data.action !== expectedAction) {
             ctx.addIssue({
@@ -37,7 +37,7 @@ export const createFilterRuleSchema = z
         }
     });
 
-export const updateFilterRuleSchema = createFilterRuleSchema.partial().extend({
+export const updateFilterRuleSchema = filterRuleBaseSchema.partial().extend({
     rule_type: ruleTypeEnum.optional(),
     scope: scopeEnum.optional(),
     pattern: z.string().min(1).max(2000).optional(),

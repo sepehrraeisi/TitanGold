@@ -4,6 +4,9 @@ import CategoryBreakdown from './CategoryBreakdown';
 import BreakingNewsMonitor from './BreakingNewsMonitor';
 import AgentDetailPanel from './AgentDetailPanel';
 import ErrorBoundary from '../../../../common/ErrorBoundary';
+import { DataHubSubTabBar, DataHubAlert, DataHubEmpty } from './dataHubUi';
+import { formatDataHubQueryError } from './dataHubI18n';
+import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 
 const GeographicHeatMap = lazy(() => import('./GeographicHeatMap'));
 
@@ -70,13 +73,24 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
     );
     const [selectedAgent, setSelectedAgent] = useState<{ key: string; name: string } | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<Error | null>(null);
     
     // State for data
     const [health, setHealth] = useState<PipelineHealth | null>(null);
     const [agents, setAgents] = useState<AgentSummary[]>([]);
     const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
     const [timeRange, setTimeRange] = useState(24);
+
+    const toQueryError = (err: unknown): Error => {
+        const axiosErr = err as {
+            response?: { status?: number; data?: { message?: string } };
+            message?: string;
+        };
+        const status = axiosErr.response?.status ?? 0;
+        const message =
+            axiosErr.response?.data?.message || axiosErr.message || t('datahub_error_generic');
+        return status > 0 ? new DataHubApiError(status, message) : new Error(message);
+    };
 
     const API_BASE = '/api/v1/telegram';
 
@@ -87,6 +101,8 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
                 : null;
         return token ? { Authorization: `Bearer ${token}` } : undefined;
     };
+
+    const displayError = formatDataHubQueryError(t, error);
 
     // Fetch health data (same request style as other DataHub tabs)
     const fetchHealth = async () => {
@@ -116,8 +132,8 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
                 setAgents(response.data.agents);
                 setSystemStats(response.data.systemStats);
             }
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Failed to fetch agents data');
+        } catch (err: unknown) {
+            setError(toQueryError(err));
         } finally {
             setIsLoading(false);
         }
@@ -244,45 +260,52 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
                     </button>
                 </div>
 
-                {/* Navigation Tabs */}
-                <div className="mt-4 flex gap-2 border-b border-border overflow-x-auto no-scrollbar">
-                    {[
-                        { id: 'overview', label: '📊 Overview' },
-                        { id: 'agents', label: '🤖 Telegram AI Inbox (15 Agents)' },
-                        { id: 'categories', label: '📑 Categories' },
-                        { id: 'breaking', label: '🚨 Breaking News' },
-                        { id: 'geographic', label: '🗺️ Geographic Map' },
-                    ].map((tab) => {
-                        const isActive = activeTab === tab.id;
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => {
-                                    setActiveTab(tab.id as any);
-                                    setSelectedAgent(null);
-                                }}
-                                className={`px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium whitespace-nowrap rounded-t-lg border-b-2 transition-colors ${
-                                    isActive
-                                        ? 'border-purple-500 text-purple-300'
-                                        : 'border-transparent text-muted-foreground hover:text-foreground'
-                                }`}
-                            >
-                                {tab.label}
-                            </button>
-                        );
-                    })}
-                </div>
+                <DataHubSubTabBar
+                    className="mt-4"
+                    ariaLabel={t('telegram_data_navigation') || 'Telegram analytics'}
+                    activeId={activeTab}
+                    onChange={id => {
+                        setActiveTab(id as typeof activeTab);
+                        setSelectedAgent(null);
+                    }}
+                    items={[
+                        { id: 'overview', label: t('telegram_data_tab_overview') },
+                        { id: 'agents', label: t('telegram_data_tab_agents') },
+                        { id: 'categories', label: t('telegram_data_tab_categories') },
+                        { id: 'breaking', label: t('telegram_data_tab_breaking') },
+                        { id: 'geographic', label: t('telegram_data_tab_geographic') },
+                    ]}
+                />
             </Card>
 
             {/* Content */}
             <div className="mt-2">
-                {error && (
-                    <div className="bg-red-500/10 border border-red-500/20 rounded p-4 mb-4">
-                        <p className="text-sm text-red-400">{error}</p>
+                {displayError && (
+                    <div className="mb-4">
+                        <DataHubAlert
+                            variant={displayError.variant}
+                            message={displayError.message}
+                            onRetry={
+                                displayError.retryable
+                                    ? () => {
+                                          fetchHealth();
+                                          fetchAgents();
+                                      }
+                                    : undefined
+                            }
+                            retryLabel={t('retry')}
+                        />
                     </div>
                 )}
 
-                {activeTab === 'overview' && systemStats && (
+                {activeTab === 'overview' &&
+                    (isLoading && !systemStats ? (
+                        <div className="py-12 text-center text-xs text-muted-foreground">
+                            {t('telegram_data_overview_loading')}
+                        </div>
+                    ) : !systemStats ? (
+                        <DataHubEmpty message={t('telegram_data_overview_empty')} />
+                    ) : (
                     <Card className="bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
                             <div>
@@ -333,7 +356,7 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
                             </div>
                         </div>
                     </Card>
-                )}
+                    ))}
 
                 {activeTab === 'agents' && (
                     <div className="space-y-4">
