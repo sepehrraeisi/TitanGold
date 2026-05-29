@@ -233,3 +233,176 @@ export function priorityVariant(priority: string): PillVariant {
     if (priority === 'medium') return 'info';
     return 'neutral';
 }
+
+// --- Tab / header primitives (DESIGN_SYSTEM_DATAHUB.md §14, TAB_HEADER_REDESIGN_PLAN) ---
+
+export type DataHubTabVariant = 'default' | 'telegram' | 'warning';
+
+const TAB_STRIP_ACTIVE: Record<DataHubTabVariant, string> = {
+    default: 'bg-purple-600/20 border-purple-500/60 text-purple-300',
+    telegram: 'bg-sky-500/15 border-sky-500/60 text-sky-300',
+    warning: 'bg-amber-500/15 border-amber-500/60 text-amber-300',
+};
+
+const TAB_STRIP_ITEM_BASE =
+    'px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed';
+
+const TAB_STRIP_CONTAINER =
+    'border border-white/5 bg-slate-950/70 rounded-xl p-2 overflow-x-auto no-scrollbar';
+
+export type DataHubTabStripItem = {
+    id: string;
+    label: string;
+    icon?: React.ReactNode;
+    activeVariant?: DataHubTabVariant;
+    disabled?: boolean;
+};
+
+export function DataHubTabStrip({
+    items,
+    activeId,
+    onChange,
+    ariaLabel,
+    wrap = false,
+    className = '',
+}: {
+    items: DataHubTabStripItem[];
+    activeId: string;
+    onChange: (id: string) => void;
+    ariaLabel?: string;
+    wrap?: boolean;
+    className?: string;
+}) {
+    return (
+        <div className={`${TAB_STRIP_CONTAINER} ${className}`.trim()}>
+            <div
+                role="tablist"
+                aria-label={ariaLabel}
+                className={`flex gap-2 whitespace-nowrap ${wrap ? 'flex-wrap' : ''}`}
+            >
+                {items.map(item => {
+                    const isActive = activeId === item.id;
+                    const variant = item.activeVariant ?? 'default';
+                    return (
+                        <button
+                            key={item.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={isActive}
+                            disabled={item.disabled}
+                            onClick={() => onChange(item.id)}
+                            className={`${TAB_STRIP_ITEM_BASE} ${
+                                isActive ? TAB_STRIP_ACTIVE[variant] : ''
+                            }`}
+                        >
+                            <span className="inline-flex items-center gap-1.5">
+                                {item.icon ? <span aria-hidden>{item.icon}</span> : null}
+                                {item.label}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+export type DataHubSubTabItem = {
+    id: string;
+    label: string;
+    disabled?: boolean;
+    activeVariant?: DataHubTabVariant;
+};
+
+const SUB_TAB_ACTIVE: Record<DataHubTabVariant, string> = {
+    default: 'border-purple-500 text-purple-300',
+    telegram: 'border-sky-500 text-sky-300',
+    warning: 'border-amber-500 text-amber-300',
+};
+
+export function DataHubSubTabBar({
+    items,
+    activeId,
+    onChange,
+    ariaLabel,
+    className = '',
+}: {
+    items: DataHubSubTabItem[];
+    activeId: string;
+    onChange: (id: string) => void;
+    ariaLabel?: string;
+    className?: string;
+}) {
+    return (
+        <div
+            role="tablist"
+            aria-label={ariaLabel}
+            className={`flex gap-2 md:gap-4 border-b border-white/10 overflow-x-auto no-scrollbar ${className}`.trim()}
+        >
+            {items.map(item => {
+                const isActive = activeId === item.id;
+                const variant = item.activeVariant ?? 'default';
+                return (
+                    <button
+                        key={item.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        disabled={item.disabled}
+                        onClick={() => onChange(item.id)}
+                        className={`pb-2 text-[11px] font-semibold whitespace-nowrap border-b-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                            isActive
+                                ? SUB_TAB_ACTIVE[variant]
+                                : 'border-transparent text-muted-foreground hover:text-foreground'
+                        }`}
+                    >
+                        {item.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+export function DataHubSectionHeader({
+    title,
+    subtitle,
+    actions,
+    className = '',
+}: {
+    title: string;
+    subtitle?: string;
+    actions?: React.ReactNode;
+    className?: string;
+}) {
+    return (
+        <div
+            className={`flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4 md:mb-5 ${className}`.trim()}
+        >
+            <div>
+                <h3 className="text-sm md:text-base font-semibold text-foreground">{title}</h3>
+                {subtitle ? (
+                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">{subtitle}</p>
+                ) : null}
+            </div>
+            {actions ? <div className="flex flex-wrap gap-2 shrink-0">{actions}</div> : null}
+        </div>
+    );
+}
+
+/** Skeleton placeholder matching DataHubTabStrip pill shape */
+export function DataHubTabStripSkeleton({ count = 7 }: { count?: number }) {
+    return (
+        <div className={TAB_STRIP_CONTAINER}>
+            <div className="flex gap-2 whitespace-nowrap">
+                {Array.from({ length: count }, (_, i) => (
+                    <div
+                        key={i}
+                        className="h-8 rounded-full bg-slate-900/60 border border-white/5 animate-pulse"
+                        style={{ width: `${3.5 + (i % 3) * 0.75}rem` }}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
