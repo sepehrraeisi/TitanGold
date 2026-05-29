@@ -4,6 +4,7 @@ import CategoryBreakdown from './CategoryBreakdown';
 import BreakingNewsMonitor from './BreakingNewsMonitor';
 import AgentDetailPanel from './AgentDetailPanel';
 import ErrorBoundary from '../../../../common/ErrorBoundary';
+import { DataHubSubTabBar } from './dataHubUi';
 
 const GeographicHeatMap = lazy(() => import('./GeographicHeatMap'));
 
@@ -244,34 +245,22 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
                     </button>
                 </div>
 
-                {/* Navigation Tabs */}
-                <div className="mt-4 flex gap-2 border-b border-border overflow-x-auto no-scrollbar">
-                    {[
-                        { id: 'overview', label: '📊 Overview' },
-                        { id: 'agents', label: '🤖 Telegram AI Inbox (15 Agents)' },
-                        { id: 'categories', label: '📑 Categories' },
-                        { id: 'breaking', label: '🚨 Breaking News' },
-                        { id: 'geographic', label: '🗺️ Geographic Map' },
-                    ].map((tab) => {
-                        const isActive = activeTab === tab.id;
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => {
-                                    setActiveTab(tab.id as any);
-                                    setSelectedAgent(null);
-                                }}
-                                className={`px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium whitespace-nowrap rounded-t-lg border-b-2 transition-colors ${
-                                    isActive
-                                        ? 'border-purple-500 text-purple-300'
-                                        : 'border-transparent text-muted-foreground hover:text-foreground'
-                                }`}
-                            >
-                                {tab.label}
-                            </button>
-                        );
-                    })}
-                </div>
+                <DataHubSubTabBar
+                    className="mt-4"
+                    ariaLabel={t('telegram_data_navigation') || 'Telegram analytics'}
+                    activeId={activeTab}
+                    onChange={id => {
+                        setActiveTab(id as typeof activeTab);
+                        setSelectedAgent(null);
+                    }}
+                    items={[
+                        { id: 'overview', label: t('telegram_data_tab_overview') },
+                        { id: 'agents', label: t('telegram_data_tab_agents') },
+                        { id: 'categories', label: t('telegram_data_tab_categories') },
+                        { id: 'breaking', label: t('telegram_data_tab_breaking') },
+                        { id: 'geographic', label: t('telegram_data_tab_geographic') },
+                    ]}
+                />
             </Card>
 
             {/* Content */}

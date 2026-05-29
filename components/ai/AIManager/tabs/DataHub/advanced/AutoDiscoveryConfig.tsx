@@ -14,6 +14,7 @@ import {
 import type { DiscoverySuggestion } from '../../../../../../services/dataHubDiscoveryApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import { formatApiErrorForUi, safeDynamicT } from '../dataHubI18n';
+import { DataHubSubTabBar } from '../dataHubUi';
 
 interface AutoDiscoveryConfigProps {
     t: (key: string) => string;
@@ -151,20 +152,16 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                 </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-4 border-b border-white/10 mb-4">
-                {(['discovered', 'rules', 'history'] as const).map(tab => (
-                    <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setActiveTab(tab)}
-                        className={`pb-2 text-[11px] font-bold ${
-                            activeTab === tab ? 'text-purple-400' : 'text-muted-foreground'
-                        }`}
-                    >
-                        {safeDynamicT(t, 'discovery_tab_', tab)}
-                    </button>
-                ))}
-            </div>
+            <DataHubSubTabBar
+                className="mb-4"
+                ariaLabel={t('auto_discovery') || 'Auto discovery'}
+                activeId={activeTab}
+                onChange={id => setActiveTab(id as typeof activeTab)}
+                items={(['discovered', 'rules', 'history'] as const).map(tab => ({
+                    id: tab,
+                    label: safeDynamicT(t, 'discovery_tab_', tab),
+                }))}
+            />
 
             {activeTab === 'discovered' && (
                 <div className="space-y-2">

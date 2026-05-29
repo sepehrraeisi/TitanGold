@@ -10,6 +10,7 @@ import TelegramPublisher from './advanced/TelegramPublisher';
 import AutomationTopics from './advanced/AutomationTopics';
 import Archiving from './advanced/Archiving';
 import PipelineHealthOverview from './PipelineHealthOverview';
+import { DataHubTabStrip } from './dataHubUi';
 
 // Custom Hook
 import { useAdvancedFeatures } from '../../../../../hooks/useAdvancedFeatures';
@@ -34,87 +35,34 @@ const AdvancedFeatures: React.FC<{
     } = useAdvancedFeatures({ dataHub, agents });
 
 
+    const advancedTabItems = [
+        { id: 'crawlers', label: t('web_crawlers') },
+        { id: 'discovery', label: t('auto_discovery') },
+        { id: 'prioritization', label: t('smart_prioritization') },
+        { id: 'access', label: t('access_control') },
+        { id: 'blacklist', label: t('blacklist_whitelist') },
+        {
+            id: 'telegram',
+            label: t('telegram_publisher'),
+            icon: '📱',
+            activeVariant: 'telegram' as const,
+        },
+        {
+            id: 'automation',
+            label: t('automation_routing'),
+            icon: '🤖',
+        },
+        { id: 'archive', label: t('data_archiving') },
+    ];
+
     return (
         <div className="space-y-6">
-            {/* Feature navigation tabs (redesigned to match DESIGN_SYSTEM_DATAHUB.md) */}
-            <div className="border border-white/5 bg-slate-950/70 rounded-xl p-2 overflow-x-auto no-scrollbar">
-                <div className="flex gap-2 whitespace-nowrap">
-                <button
-                    onClick={() => setActiveFeature('crawlers')}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
-                        activeFeature === 'crawlers' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
-                    }`}
-                >
-                    {t('web_crawlers')}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('discovery')}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
-                        activeFeature === 'discovery' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
-                    }`}
-                >
-                    {t('auto_discovery')}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('prioritization')}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
-                        activeFeature === 'prioritization' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
-                    }`}
-                >
-                    {t('smart_prioritization')}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('access')}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
-                        activeFeature === 'access' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
-                    }`}
-                >
-                    {t('access_control')}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('blacklist')}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
-                        activeFeature === 'blacklist' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
-                    }`}
-                >
-                    {t('blacklist_whitelist')}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('telegram')}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                        activeFeature === 'telegram' ? 'bg-sky-500/15 border-sky-500/60 text-sky-300' : ''
-                    }`}
-                >
-                    <span>📱</span>
-                    {t('telegram_publisher')}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('automation')}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                        activeFeature === 'automation' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
-                    }`}
-                >
-                    <span>🤖</span>
-                    {t('automation_routing')}
-                </button>
-                <button
-                    onClick={() => setActiveFeature('archive')}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap ${
-                        activeFeature === 'archive' ? 'bg-purple-600/20 border-purple-500/60 text-purple-300' : ''
-                    }`}
-                >
-                    {t('data_archiving')}
-                </button>
-                </div>
-            </div>
+            <DataHubTabStrip
+                ariaLabel={t('advanced_features') || 'Advanced features'}
+                activeId={activeFeature}
+                onChange={id => setActiveFeature(id as typeof activeFeature)}
+                items={advancedTabItems}
+            />
 
             {/* Telegram-specific hints (TASK-DHT-065) */}
             {(activeFeature === 'telegram' || activeFeature === 'automation') && (

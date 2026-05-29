@@ -15,6 +15,7 @@ import ErrorBoundary from '../../../common/ErrorBoundary';
 import SkeletonLoader from '../../../common/SkeletonLoader';
 import ApiWrapper from '../../../common/ApiWrapper';
 import ErrorNotification from './DataHub/components/ErrorNotification';
+import { DataHubTabStrip, DataHubTabStripSkeleton } from './DataHub/dataHubUi';
 
 interface Props {
     artemis: ArtemisState;
@@ -134,13 +135,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 </div>
 
                 {/* Navigation Tabs Skeletons */}
-                <div className="flex gap-2 border-b border-border overflow-x-auto no-scrollbar">
-                    {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <div key={i} className="px-4 py-2">
-                            <SkeletonLoader width="4rem" height="1.25rem" />
-                        </div>
-                    ))}
-                </div>
+                <DataHubTabStripSkeleton count={7} />
 
                 {/* Content Panel Skeleton */}
                 <Card>
@@ -187,41 +182,25 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     <DataHubSummaryCards t={t} />
                 </Card>
 
-                {/* Navigation Tabs (redesigned to match DESIGN_SYSTEM_DATAHUB.md §۱۴/§۶) */}
-                <div className="border border-white/5 bg-slate-950/70 rounded-xl p-2 overflow-x-auto no-scrollbar">
-                    <div className="flex gap-2 whitespace-nowrap">
-                        {[
-                            { id: 'sources', label: t('data_sources') },
-                            { id: 'categories', label: t('categories') },
-                            { id: 'pipeline', label: t('data_pipeline') },
-                            { id: 'health', label: t('health_monitoring') },
-                            { id: 'logs', label: t('access_logs') },
-                            { id: 'advanced', label: t('advanced_features') },
-                            { id: 'telegram', label: t('telegram_collector'), icon: '📱' },
-                        ].map(view => {
-                            const isActive = activeView === view.id;
-                            const base =
-                                'px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap';
-                            const active =
-                                view.id === 'telegram'
-                                    ? 'bg-sky-500/15 border-sky-500/60 text-sky-300'
-                                    : 'bg-purple-600/20 border-purple-500/60 text-purple-300';
-                            return (
-                                <button
-                                    key={view.id}
-                                    type="button"
-                                    onClick={() => setActiveView(view.id as any)}
-                                    className={`${base} ${isActive ? active : ''}`}
-                                >
-                                    <span className="inline-flex items-center gap-1.5">
-                                        {view.icon ? <span>{view.icon}</span> : null}
-                                        {view.label}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
+                <DataHubTabStrip
+                    ariaLabel={t('data_hub_navigation') || 'Data Hub navigation'}
+                    activeId={activeView}
+                    onChange={id => setActiveView(id as typeof activeView)}
+                    items={[
+                        { id: 'sources', label: t('data_sources') },
+                        { id: 'categories', label: t('categories') },
+                        { id: 'pipeline', label: t('data_pipeline') },
+                        { id: 'health', label: t('health_monitoring') },
+                        { id: 'logs', label: t('access_logs') },
+                        { id: 'advanced', label: t('advanced_features') },
+                        {
+                            id: 'telegram',
+                            label: t('telegram_collector'),
+                            icon: '📱',
+                            activeVariant: 'telegram',
+                        },
+                    ]}
+                />
 
                 {/* Content Views */}
                 <div className="mt-4">

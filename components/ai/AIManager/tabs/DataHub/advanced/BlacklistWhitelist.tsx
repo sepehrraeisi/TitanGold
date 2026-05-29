@@ -13,6 +13,7 @@ import type {
 } from '../../../../../../services/dataHubFilterRulesApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import { formatApiErrorForUi, safeDynamicT } from '../dataHubI18n';
+import { DataHubTabStrip } from '../dataHubUi';
 
 interface BlacklistWhitelistProps {
     t: (key: string) => string;
@@ -197,29 +198,19 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                 </div>
             ) : null}
 
-            {/* Safety Filtering navigation (redesigned pill style to match DESIGN_SYSTEM_DATAHUB.md) */}
-            <div className="border border-white/5 bg-slate-950/70 rounded-xl p-2 overflow-x-auto no-scrollbar mb-4">
-                <div className="flex gap-2 whitespace-nowrap flex-wrap">
-                    {(['blacklist', 'whitelist', 'rules', 'evaluate'] as const).map(tab => {
-                        const isActive = activeTab === tab;
-                        const base =
-                            'px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground transition-colors whitespace-nowrap';
-                        const active = tab === 'evaluate'
-                            ? 'bg-amber-500/15 border-amber-500/60 text-amber-300'
-                            : 'bg-purple-600/20 border-purple-500/60 text-purple-300';
-                        return (
-                            <button
-                                key={tab}
-                                type="button"
-                                onClick={() => setActiveTab(tab)}
-                                className={`${base} ${isActive ? active : ''}`}
-                            >
-                                {safeDynamicT(t, 'safety_tab_', tab)}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
+            {/* Safety Filtering navigation */}
+            <DataHubTabStrip
+                className="mb-4"
+                wrap
+                ariaLabel={t('blacklist_whitelist') || 'Safety filtering'}
+                activeId={activeTab}
+                onChange={id => setActiveTab(id as typeof activeTab)}
+                items={(['blacklist', 'whitelist', 'rules', 'evaluate'] as const).map(tab => ({
+                    id: tab,
+                    label: safeDynamicT(t, 'safety_tab_', tab),
+                    activeVariant: tab === 'evaluate' ? ('warning' as const) : ('default' as const),
+                }))}
+            />
 
             {activeTab !== 'evaluate' ? (
                 <>
