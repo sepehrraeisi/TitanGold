@@ -3945,6 +3945,8 @@
   "telegram_data_tab_categories": "Categories",
   "telegram_data_tab_breaking": "Breaking News",
   "telegram_data_tab_geographic": "Geographic Map",
+  "telegram_data_overview_loading": "Loading Telegram analytics overview…",
+  "telegram_data_overview_empty": "No overview data yet. Processed messages will appear after the collector runs.",
   "telegram_sync_completed": "Telegram channels synced with Data Sources.",
   "telegram_flood_risk": "Flood Risk",
   "telegram_login_wizard": "Telegram Login Wizard",

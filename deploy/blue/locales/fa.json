@@ -3741,6 +3741,8 @@
   "telegram_data_tab_categories": "دسته‌بندی‌ها",
   "telegram_data_tab_breaking": "اخبار فوری",
   "telegram_data_tab_geographic": "نقشه جغرافیایی",
+  "telegram_data_overview_loading": "در حال بارگذاری نمای کلی تحلیل تلگرام…",
+  "telegram_data_overview_empty": "هنوز داده‌ای برای نمای کلی نیست. پس از اجرای جمع‌آور، پیام‌های پردازش‌شده اینجا نمایش داده می‌شوند.",
   "parse_urls": "تجزیه URLها",
   "include_media": "شامل رسانه",
   "fetch_limit": "حداکثر تعداد دریافت",

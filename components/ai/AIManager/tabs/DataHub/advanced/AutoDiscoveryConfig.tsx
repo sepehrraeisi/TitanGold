@@ -13,8 +13,8 @@ import {
 } from '../../../../../../hooks/useDataHubDiscovery';
 import type { DiscoverySuggestion } from '../../../../../../services/dataHubDiscoveryApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
-import { formatApiErrorForUi, safeDynamicT } from '../dataHubI18n';
-import { DataHubSubTabBar } from '../dataHubUi';
+import { formatDataHubQueryError, safeDynamicT } from '../dataHubI18n';
+import { DataHubAlert, DataHubSubTabBar } from '../dataHubUi';
 
 interface AutoDiscoveryConfigProps {
     t: (key: string) => string;
@@ -38,8 +38,8 @@ function statusPill(status: string, t: (k: string) => string) {
 }
 
 const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
-    const { data: stats, isLoading: statsLoading, refetch } = useDiscoveryStatsQuery();
-    const { data: pending = [], isLoading: sugLoading } = useDiscoverySuggestionsQuery('pending');
+    const { data: stats, isLoading: statsLoading, error: statsError, refetch } = useDiscoveryStatsQuery();
+    const { data: pending = [], isLoading: sugLoading, error: suggestionsError } = useDiscoverySuggestionsQuery('pending');
     const { data: rules = [] } = useDiscoveryRulesQuery();
 
     const settingsMut = useUpdateDiscoverySettingsMutation();
@@ -58,6 +58,12 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
         [scanMut.error, approveMut.error, rejectMut.error].find(e => e instanceof DataHubApiError) as
             | DataHubApiError
             | undefined;
+
+    const queryError = formatDataHubQueryError(
+        t,
+        (statsError as Error | null) || (suggestionsError as Error | null),
+    );
+    const mutationError = apiError ? formatDataHubQueryError(t, apiError) : null;
 
     const isLoading = statsLoading || sugLoading;
 
@@ -139,9 +145,20 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                 </div>
             </div>
 
-            {apiError ? (
+            {queryError && (
+                <div className="mb-4">
+                    <DataHubAlert
+                        variant={queryError.variant}
+                        message={queryError.message}
+                        onRetry={queryError.retryable ? () => void refetch() : undefined}
+                        retryLabel={t('retry')}
+                    />
+                </div>
+            )}
+
+            {mutationError ? (
                 <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                    {formatApiErrorForUi(t, apiError.message)}
+                    {mutationError.message}
                 </div>
             ) : null}
 

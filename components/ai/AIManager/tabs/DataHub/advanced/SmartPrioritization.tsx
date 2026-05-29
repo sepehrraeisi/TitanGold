@@ -11,7 +11,8 @@ import {
     useApplyPrioritizationMutation,
     useSetPrioritizationOverrideMutation,
 } from '../../../../../../hooks/useDataHubPrioritization';
-import { formatApiErrorForUi, safeDynamicT } from '../dataHubI18n';
+import { formatDataHubQueryError, safeDynamicT } from '../dataHubI18n';
+import { DataHubAlert } from '../dataHubUi';
 
 interface SmartPrioritizationProps {
     t: (key: string) => string;
@@ -35,8 +36,9 @@ function tierPill(tier: string, t: (k: string) => string) {
 }
 
 const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
-    const { data: settings, isLoading: settingsLoading, refetch } = usePrioritizationSettingsQuery();
-    const { data: sources = [], isLoading: sourcesLoading } = usePrioritizationSourcesQuery();
+    const { data: settings, isLoading: settingsLoading, error: settingsError, refetch } =
+        usePrioritizationSettingsQuery();
+    const { data: sources = [], isLoading: sourcesLoading, error: sourcesError } = usePrioritizationSourcesQuery();
     const { data: runs = [] } = usePrioritizationRunsQuery();
 
     const settingsMut = useUpdatePrioritizationSettingsMutation();
@@ -56,6 +58,12 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
         [settingsMut.error, previewMut.error, applyMut.error, overrideMut.error].find(
             e => e instanceof DataHubApiError,
         ) as DataHubApiError | undefined;
+
+    const queryError = formatDataHubQueryError(
+        t,
+        (settingsError as Error | null) || (sourcesError as Error | null),
+    );
+    const mutationError = apiError ? formatDataHubQueryError(t, apiError) : null;
 
     const summary = useMemo(() => {
         const total = sources.length;
@@ -161,18 +169,31 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                 </div>
             </div>
 
-            {apiError ? (
+            {queryError && (
+                <div className="mb-4">
+                    <DataHubAlert
+                        variant={queryError.variant}
+                        message={queryError.message}
+                        onRetry={queryError.retryable ? () => void refetch() : undefined}
+                        retryLabel={t('retry')}
+                    />
+                </div>
+            )}
+
+            {mutationError ? (
                 <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                    <span>{formatApiErrorForUi(t, apiError.message)}</span>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            void refetch();
-                        }}
-                        className="px-2 py-1 rounded bg-red-500/20"
-                    >
-                        {t('retry')}
-                    </button>
+                    <span>{mutationError.message}</span>
+                    {mutationError.retryable ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                void refetch();
+                            }}
+                            className="px-2 py-1 rounded bg-red-500/20"
+                        >
+                            {t('retry')}
+                        </button>
+                    ) : null}
                 </div>
             ) : null}
 

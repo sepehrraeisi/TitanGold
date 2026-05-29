@@ -10,7 +10,8 @@ import {
     useExecuteRestoreMutation,
     usePreviewPurgeMutation,
 } from '../../../../../../hooks/useDataHubArchiving';
-import { formatApiErrorForUi } from '../dataHubI18n';
+import { formatDataHubQueryError } from '../dataHubI18n';
+import { DataHubAlert } from '../dataHubUi';
 
 interface ArchivingProps {
     t: (key: string) => string;
@@ -27,7 +28,7 @@ function healthBadge(status: string) {
 }
 
 const Archiving: React.FC<ArchivingProps> = ({ t }) => {
-    const { data: dashboard, isLoading, refetch } = useArchiveStatsQuery();
+    const { data: dashboard, isLoading, error: statsError, refetch } = useArchiveStatsQuery();
     const { data: recordsPage } = useArchivedRecordsQuery(0, 50);
 
     const previewArchiveMut = usePreviewArchiveMutation();
@@ -59,6 +60,9 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
         executeRestoreMut.error,
         previewPurgeMut.error,
     ].find(e => e instanceof DataHubApiError) as DataHubApiError | undefined;
+
+    const queryError = formatDataHubQueryError(t, statsError as Error | null);
+    const mutationError = apiError ? formatDataHubQueryError(t, apiError) : null;
 
     const summary = useMemo(
         () => ({
@@ -112,12 +116,25 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                 </div>
             </div>
 
-            {apiError ? (
+            {queryError && (
+                <div className="mb-4">
+                    <DataHubAlert
+                        variant={queryError.variant}
+                        message={queryError.message}
+                        onRetry={queryError.retryable ? () => void refetch() : undefined}
+                        retryLabel={t('retry')}
+                    />
+                </div>
+            )}
+
+            {mutationError ? (
                 <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                    <span>{formatApiErrorForUi(t, apiError.message)}</span>
-                    <button type="button" onClick={() => void refetch()} className="px-2 py-1 rounded bg-red-500/20">
-                        {t('retry')}
-                    </button>
+                    <span>{mutationError.message}</span>
+                    {mutationError.retryable ? (
+                        <button type="button" onClick={() => void refetch()} className="px-2 py-1 rounded bg-red-500/20">
+                            {t('retry')}
+                        </button>
+                    ) : null}
                 </div>
             ) : null}
 
