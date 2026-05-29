@@ -33,6 +33,7 @@ import {
     MetricCard,
     StatusPill,
 } from '../dataHubUi';
+import { formatDataHubQueryError } from '../dataHubI18n';
 
 interface AutomationTopicsProps {
     categories: DataCategory[];
@@ -180,12 +181,13 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
         await retryExecution.mutateAsync(executionId);
     };
 
-    const combinedError =
-        (error as Error | null)?.message ||
-        createTopic.error?.message ||
-        updateTopic.error?.message ||
-        dispatchQueue.error?.message ||
-        null;
+    const combinedError = formatDataHubQueryError(
+        t,
+        (error as Error | null) ||
+            createTopic.error ||
+            updateTopic.error ||
+            dispatchQueue.error,
+    );
 
     const isBusy =
         createTopic.isPending ||
@@ -246,9 +248,9 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
 
             {combinedError && (
                 <DataHubAlert
-                    variant="error"
-                    message={combinedError}
-                    onRetry={() => refetch()}
+                    variant={combinedError.variant}
+                    message={combinedError.message}
+                    onRetry={combinedError.retryable ? () => refetch() : undefined}
                     retryLabel={t('retry')}
                 />
             )}

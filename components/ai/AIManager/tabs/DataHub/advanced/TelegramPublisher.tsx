@@ -12,7 +12,6 @@ import {
     mapHistoryToUiItem,
     TelegramPublisherRecord,
 } from '../../../../../../services/telegramPublishersApi';
-import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import {
     DATAHUB_SHELL,
     DATAHUB_INNER_LIST,
@@ -32,6 +31,7 @@ import {
     DataHubSectionHeader,
     DataHubSubTabBar,
 } from '../dataHubUi';
+import { formatDataHubQueryError } from '../dataHubI18n';
 
 interface TelegramPublisherProps {
     t: (key: string) => string;
@@ -92,12 +92,14 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
         [historyData],
     );
 
-    const apiError =
-        listError instanceof DataHubApiError
-            ? listError.message
-            : listError instanceof Error
-              ? listError.message
-              : null;
+    const listQueryError = formatDataHubQueryError(t, listError);
+    const actionQueryError = formatDataHubQueryError(
+        t,
+        createMutation.error ||
+            disableMutation.error ||
+            testMutation.error ||
+            publishMutation.error,
+    );
 
     const selectedPublisher = publishers.find(p => p.id === selectedPublisherId);
 
@@ -126,7 +128,10 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             setActionMessage(t('publisher_created'));
             await refetch();
         } catch (e: unknown) {
-            setActionError(e instanceof Error ? e.message : t('publisher_create_failed'));
+            setActionError(
+                formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_create_failed')))
+                    ?.message || t('publisher_create_failed'),
+            );
         }
     };
 
@@ -146,7 +151,10 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             setSelectedPublisherId(pub.id);
             await refetch();
         } catch (e: unknown) {
-            setActionError(e instanceof Error ? e.message : t('publisher_test_failed'));
+            setActionError(
+                formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_test_failed')))
+                    ?.message || t('publisher_test_failed'),
+            );
         }
     };
 
@@ -172,7 +180,10 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             setSelectedPublisherId(pub.id);
             await refetch();
         } catch (e: unknown) {
-            setActionError(e instanceof Error ? e.message : t('publisher_publish_failed'));
+            setActionError(
+                formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_publish_failed')))
+                    ?.message || t('publisher_publish_failed'),
+            );
         }
     };
 
@@ -184,7 +195,10 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             if (selectedPublisherId === pub.id) setSelectedPublisherId(null);
             await refetch();
         } catch (e: unknown) {
-            setActionError(e instanceof Error ? e.message : t('publisher_disable_failed'));
+            setActionError(
+                formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_disable_failed')))
+                    ?.message || t('publisher_disable_failed'),
+            );
         }
     };
 
@@ -198,7 +212,12 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                     </button>
                 </div>
             )}
-            {actionError && <DataHubAlert variant="error" message={actionError} />}
+            {(actionQueryError || actionError) && (
+                <DataHubAlert
+                    variant={actionQueryError?.variant || 'error'}
+                    message={actionQueryError?.message || actionError || ''}
+                />
+            )}
 
             <DataHubSectionHeader
                 title={t('telegram_publisher')}
@@ -210,8 +229,13 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                 }
             />
 
-            {apiError && (
-                <DataHubAlert variant="error" message={apiError} onRetry={() => refetch()} retryLabel={t('retry')} />
+            {listQueryError && (
+                <DataHubAlert
+                    variant={listQueryError.variant}
+                    message={listQueryError.message}
+                    onRetry={listQueryError.retryable ? () => refetch() : undefined}
+                    retryLabel={t('retry')}
+                />
             )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
