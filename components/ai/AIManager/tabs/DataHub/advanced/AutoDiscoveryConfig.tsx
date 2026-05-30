@@ -14,7 +14,8 @@ import {
 import type { DiscoverySuggestion } from '../../../../../../services/dataHubDiscoveryApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import { formatDataHubQueryError, safeDynamicT } from '../dataHubI18n';
-import { DataHubAlert, DataHubSubTabBar } from '../dataHubUi';
+import { DataHubAlert, DataHubSubTabBar, dataHubWriteGate } from '../dataHubUi';
+import { useDataHubPermissions } from '../hooks/useDataHubPermissions';
 
 interface AutoDiscoveryConfigProps {
     t: (key: string) => string;
@@ -38,6 +39,8 @@ function statusPill(status: string, t: (k: string) => string) {
 }
 
 const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const { data: stats, isLoading: statsLoading, error: statsError, refetch } = useDiscoveryStatsQuery();
     const { data: pending = [], isLoading: sugLoading, error: suggestionsError } = useDiscoverySuggestionsQuery('pending');
     const { data: rules = [] } = useDiscoveryRulesQuery();
@@ -98,8 +101,9 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                         <input
                             type="checkbox"
                             checked={stats?.settings?.enabled ?? false}
-                            disabled={settingsMut.isPending}
-                            onChange={e => settingsMut.mutate(e.target.checked)}
+                            disabled={wg(settingsMut.isPending).disabled}
+                            title={wg(settingsMut.isPending).title}
+                            onChange={e => canWrite && settingsMut.mutate(e.target.checked)}
                             className="rounded"
                         />
                         {t('discovery_enabled')}
@@ -107,7 +111,8 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                     <button
                         type="button"
                         onClick={() => scanMut.mutate()}
-                        disabled={scanMut.isPending || !stats?.settings?.enabled}
+                        disabled={wg(scanMut.isPending || !stats?.settings?.enabled).disabled}
+                        title={wg(scanMut.isPending || !stats?.settings?.enabled).title}
                         className="text-[11px] px-4 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
                     >
                         {scanMut.isPending ? t('loading') : t('run_discovery_btn')}
@@ -214,7 +219,8 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                                     <button
                                         type="button"
                                         onClick={() => handleApprove(s)}
-                                        disabled={approveMut.isPending}
+                                        disabled={wg(approveMut.isPending).disabled}
+                                        title={wg(approveMut.isPending).title}
                                         className="text-[11px] px-3 py-1 rounded-full bg-emerald-600/90 text-white"
                                     >
                                         {t('discovery_approve')}
@@ -222,6 +228,8 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                                     <button
                                         type="button"
                                         onClick={() => setRejectingId(s.id)}
+                                        disabled={wg().disabled}
+                                        title={wg().title}
                                         className="text-[11px] px-3 py-1 rounded-full border border-red-500/40 text-red-300"
                                     >
                                         {t('discovery_reject')}
@@ -238,6 +246,8 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                                         <button
                                             type="button"
                                             onClick={() => handleReject(s.id)}
+                                            disabled={wg().disabled}
+                                            title={wg().title}
                                             className="text-[11px] px-2 py-1 rounded-full bg-red-600/80 text-white"
                                         >
                                             {t('confirm')}
@@ -257,7 +267,9 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                         <button
                             type="button"
                             onClick={() => setShowRuleModal(true)}
-                            className="text-[11px] px-3 py-1 rounded-full bg-purple-600 text-white"
+                            disabled={wg().disabled}
+                            title={wg().title}
+                            className="text-[11px] px-3 py-1 rounded-full bg-purple-600 text-white disabled:opacity-50"
                         >
                             {t('discovery_rule_add')}
                         </button>
@@ -272,12 +284,15 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                                     <span className="text-sm font-semibold">{rule.name}</span>
                                     <button
                                         type="button"
+                                        disabled={wg().disabled}
+                                        title={wg().title}
                                         onClick={() => {
+                                            if (!canWrite) return;
                                             if (window.confirm(t('discovery_rule_delete_confirm'))) {
                                                 deleteRuleMut.mutate(rule.id);
                                             }
                                         }}
-                                        className="text-[10px] text-red-300"
+                                        className="text-[10px] text-red-300 disabled:opacity-50"
                                     >
                                         {t('delete')}
                                     </button>

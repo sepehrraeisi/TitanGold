@@ -37,6 +37,19 @@ export const BTN_OUTLINE_SLATE =
 export const BTN_OUTLINE_PURPLE =
     'text-[10px] px-2 py-0.5 rounded-full border border-purple-500/70 text-purple-200 hover:bg-purple-500/10';
 
+/** Disable + tooltip when user lacks admin/trader write access. */
+export function dataHubWriteGate(
+    canWrite: boolean,
+    t: (key: string) => string,
+    extraDisabled = false,
+): { disabled: boolean; title?: string } {
+    const disabled = extraDisabled || !canWrite;
+    return {
+        disabled,
+        title: !canWrite ? t('datahub_requires_admin_trader') : undefined,
+    };
+}
+
 type PillVariant = 'success' | 'error' | 'warning' | 'info' | 'neutral' | 'primary';
 
 const PILL: Record<PillVariant, string> = {
@@ -143,20 +156,31 @@ export function DataHubToggle({
     onChange,
     label,
     id,
+    disabled = false,
+    title,
 }: {
     checked: boolean;
     onChange: (v: boolean) => void;
     label: string;
     id: string;
+    disabled?: boolean;
+    title?: string;
 }) {
     return (
-        <label htmlFor={id} className="flex items-center gap-2 text-[11px] text-foreground cursor-pointer">
+        <label
+            htmlFor={id}
+            title={title}
+            className={`flex items-center gap-2 text-[11px] text-foreground ${
+                disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            }`}
+        >
             <button
                 type="button"
                 id={id}
                 role="switch"
                 aria-checked={checked}
-                onClick={() => onChange(!checked)}
+                disabled={disabled}
+                onClick={() => !disabled && onChange(!checked)}
                 className={`inline-flex items-center justify-center w-8 h-4 rounded-full transition-colors shrink-0 ${
                     checked ? 'bg-emerald-500/80' : 'bg-slate-700'
                 }`}

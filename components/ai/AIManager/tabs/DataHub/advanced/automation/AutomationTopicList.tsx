@@ -4,12 +4,14 @@ import {
     BTN_OUTLINE_RED,
     BTN_OUTLINE_SLATE,
     StatusPill,
+    dataHubWriteGate,
 } from '../../dataHubUi';
 
 interface AutomationTopicListProps {
     topics: any[];
     agentMap: Record<string, AIAgent>;
     publisherMap: Record<string, { name?: string }>;
+    canWrite: boolean;
     t: (key: string) => string;
     onEdit: (topic: any) => void;
     onDelete: (topicId: string) => void;
@@ -20,11 +22,13 @@ const AutomationTopicList: React.FC<AutomationTopicListProps> = ({
     topics,
     agentMap,
     publisherMap,
+    canWrite,
     t,
     onEdit,
     onDelete,
     deletingTopicId,
 }) => {
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     return (
         <div className="space-y-3">
             <h4 className="text-[11px] font-semibold text-foreground px-1">
@@ -52,12 +56,19 @@ const AutomationTopicList: React.FC<AutomationTopicListProps> = ({
                                 </div>
                             </div>
                             <div className="flex gap-1 shrink-0">
-                                <button type="button" onClick={() => onEdit(topic)} className={BTN_OUTLINE_SLATE}>
+                                <button
+                                    type="button"
+                                    onClick={() => onEdit(topic)}
+                                    className={BTN_OUTLINE_SLATE}
+                                    disabled={wg().disabled}
+                                    title={wg().title}
+                                >
                                     {t('edit')}
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={deletingTopicId === topic.id}
+                                    disabled={wg(deletingTopicId === topic.id).disabled}
+                                    title={wg(deletingTopicId === topic.id).title}
                                     onClick={() => onDelete(topic.id)}
                                     className={BTN_OUTLINE_RED}
                                 >

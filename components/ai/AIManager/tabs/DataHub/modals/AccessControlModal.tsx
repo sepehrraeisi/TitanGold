@@ -15,8 +15,20 @@ const AccessControlModal: React.FC<{
         maxRequestsPerMinute?: number;
     }) => Promise<void>;
     isSaving?: boolean;
+    saveDisabled?: boolean;
+    saveTitle?: string;
     t: (key: string) => string;
-}> = ({ sourceId, sourceName, accessControl, onClose, onSave, isSaving = false, t }) => {
+}> = ({
+    sourceId,
+    sourceName,
+    accessControl,
+    onClose,
+    onSave,
+    isSaving = false,
+    saveDisabled = false,
+    saveTitle,
+    t,
+}) => {
     const [allowedAgents, setAllowedAgents] = useState(
         (accessControl?.allowedAgents || []).join(', '),
     );
@@ -165,7 +177,8 @@ const AccessControlModal: React.FC<{
                     <button
                         type="button"
                         onClick={handleSubmit}
-                        disabled={isSaving}
+                        disabled={isSaving || saveDisabled}
+                        title={saveTitle}
                         className="text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white rounded px-3 py-1.5 disabled:opacity-50"
                     >
                         {isSaving ? t('saving') : t('save')}

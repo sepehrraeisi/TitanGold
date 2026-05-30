@@ -30,8 +30,10 @@ import {
     StatusPill,
     DataHubSectionHeader,
     DataHubSubTabBar,
+    dataHubWriteGate,
 } from '../dataHubUi';
 import { formatDataHubQueryError } from '../dataHubI18n';
+import { useDataHubPermissions } from '../hooks/useDataHubPermissions';
 
 interface TelegramPublisherProps {
     t: (key: string) => string;
@@ -44,6 +46,8 @@ const defaultTemplate = `📢 **Signal**
 _Source: Titan DataHub_`;
 
 const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSources }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const [activeTab, setActiveTab] = useState<'channels' | 'history' | 'templates'>('channels');
     const [selectedPublisherId, setSelectedPublisherId] = useState<string | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -223,7 +227,13 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                 title={t('telegram_publisher')}
                 subtitle={t('telegram_publisher_desc')}
                 actions={
-                    <button type="button" onClick={() => setShowCreateModal(true)} className={BTN_PRIMARY}>
+                    <button
+                        type="button"
+                        onClick={() => setShowCreateModal(true)}
+                        className={BTN_PRIMARY}
+                        disabled={wg().disabled}
+                        title={wg().title}
+                    >
                         {t('new_publisher_channel')}
                     </button>
                 }
@@ -337,7 +347,8 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        disabled={testMutation.isPending}
+                                                        disabled={wg(testMutation.isPending).disabled}
+                                                        title={wg(testMutation.isPending).title}
                                                         onClick={() => handleTest(pub)}
                                                         className={BTN_OUTLINE_EMERALD}
                                                     >
@@ -345,7 +356,8 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        disabled={publishMutation.isPending}
+                                                        disabled={wg(publishMutation.isPending).disabled}
+                                                        title={wg(publishMutation.isPending).title}
                                                         onClick={() => handlePublish(pub)}
                                                         className={BTN_OUTLINE_PURPLE}
                                                     >
@@ -353,7 +365,8 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        disabled={disableMutation.isPending}
+                                                        disabled={wg(disableMutation.isPending).disabled}
+                                                        title={wg(disableMutation.isPending).title}
                                                         onClick={() => handleDisable(pub)}
                                                         className={BTN_OUTLINE_RED}
                                                     >
@@ -459,8 +472,13 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                             <button
                                 type="button"
                                 disabled={
-                                    createMutation.isPending || !form.name || !form.channel_id
+                                    wg(
+                                        createMutation.isPending ||
+                                            !form.name ||
+                                            !form.channel_id,
+                                    ).disabled
                                 }
+                                title={wg(createMutation.isPending).title}
                                 onClick={handleCreate}
                                 className={BTN_PRIMARY}
                             >

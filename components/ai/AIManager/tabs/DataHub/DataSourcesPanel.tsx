@@ -19,8 +19,10 @@ import {
     StatusPill,
     sourceStatusVariant,
     priorityVariant,
+    dataHubWriteGate,
 } from './dataHubUi';
 import { formatDataHubQueryError } from './dataHubI18n';
+import { useDataHubPermissions } from './hooks/useDataHubPermissions';
 
 type Props = {
     t: (key: string) => string;
@@ -61,6 +63,8 @@ const DataSourcesPanel: React.FC<Props> = ({
     isLoading,
     apiError,
 }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const sources = dataHub.sources || [];
 
     const metrics = useMemo(() => {
@@ -118,6 +122,8 @@ const DataSourcesPanel: React.FC<Props> = ({
                             setShowCreateSourceModal(true);
                         }}
                         className={BTN_PRIMARY}
+                        disabled={wg().disabled}
+                        title={wg().title}
                     >
                         {t('add_source')}
                     </button>
@@ -288,6 +294,8 @@ const DataSourcesPanel: React.FC<Props> = ({
                                             type="button"
                                             onClick={() => handleTestSource(source.id)}
                                             className={BTN_OUTLINE_EMERALD}
+                                            disabled={wg().disabled}
+                                            title={wg().title}
                                         >
                                             {t('test_connection')}
                                         </button>
@@ -298,6 +306,8 @@ const DataSourcesPanel: React.FC<Props> = ({
                                                 setShowCreateSourceModal(true);
                                             }}
                                             className={BTN_OUTLINE_SLATE}
+                                            disabled={wg().disabled}
+                                            title={wg().title}
                                         >
                                             {t('edit')}
                                         </button>
@@ -306,6 +316,8 @@ const DataSourcesPanel: React.FC<Props> = ({
                                                 type="button"
                                                 onClick={() => handleRestoreSource(source.id)}
                                                 className={BTN_OUTLINE_SKY}
+                                                disabled={wg().disabled}
+                                                title={wg().title}
                                             >
                                                 {t('restore')}
                                             </button>
@@ -314,6 +326,8 @@ const DataSourcesPanel: React.FC<Props> = ({
                                                 type="button"
                                                 onClick={() => handleDeleteSource(source.id, false)}
                                                 className={BTN_OUTLINE_AMBER}
+                                                disabled={wg().disabled}
+                                                title={wg().title}
                                             >
                                                 {t('soft_delete')}
                                             </button>
@@ -322,6 +336,8 @@ const DataSourcesPanel: React.FC<Props> = ({
                                             type="button"
                                             onClick={() => handleDeleteSource(source.id, true)}
                                             className={BTN_OUTLINE_RED}
+                                            disabled={wg().disabled}
+                                            title={wg().title}
                                         >
                                             {t('hard_delete')}
                                         </button>

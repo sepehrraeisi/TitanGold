@@ -32,8 +32,10 @@ import {
     DataHubToggle,
     MetricCard,
     StatusPill,
+    dataHubWriteGate,
 } from '../dataHubUi';
 import { formatDataHubQueryError } from '../dataHubI18n';
+import { useDataHubPermissions } from '../hooks/useDataHubPermissions';
 
 interface AutomationTopicsProps {
     categories: DataCategory[];
@@ -54,6 +56,8 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
     agentMap,
     availableDataTypes,
 }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const { data: overview, isLoading, error, refetch } = useAutomationOverviewQuery();
     const { data: publishersData } = useTelegramPublishersQuery();
 
@@ -219,7 +223,8 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                     />
                     <button
                         type="button"
-                        disabled={testRun.isPending}
+                        disabled={wg(testRun.isPending).disabled}
+                        title={wg(testRun.isPending).title}
                         onClick={handleTestRun}
                         className={BTN_SECONDARY}
                     >
@@ -227,7 +232,8 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                     </button>
                     <button
                         type="button"
-                        disabled={refreshQueue.isPending}
+                        disabled={wg(refreshQueue.isPending).disabled}
+                        title={wg(refreshQueue.isPending).title}
                         onClick={handleRefreshAutomation}
                         className={BTN_SECONDARY}
                     >
@@ -240,6 +246,8 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                             setShowAutomationModal(true);
                         }}
                         className={BTN_PRIMARY}
+                        disabled={wg().disabled}
+                        title={wg().title}
                     >
                         {t('add_topic')}
                     </button>
@@ -291,6 +299,7 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                             isUpdating={updateSchedule.isPending}
                             onToggle={handleToggleSchedule}
                             onUpdateInterval={handleUpdateScheduleInterval}
+                            canWrite={canWrite}
                             t={t}
                         />
                     )}
@@ -301,6 +310,7 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                                 topics={topics}
                                 agentMap={agentMap}
                                 publisherMap={publisherMap}
+                                canWrite={canWrite}
                                 t={t}
                                 onEdit={topic => {
                                     setEditingTopic(topic);
@@ -320,6 +330,7 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                                 ...item,
                                 topicId: topicMap.get(item.topicId)?.title || item.topicId,
                             }))}
+                            canWrite={canWrite}
                             isDispatching={dispatchQueue.isPending}
                             onDispatch={handleDispatchAutomation}
                             onPreview={setPreviewQueueItem}
@@ -386,7 +397,8 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                                                 {isFailed && (
                                                     <button
                                                         type="button"
-                                                        disabled={retryExecution.isPending}
+                                                        disabled={wg(retryExecution.isPending).disabled}
+                                                        title={wg(retryExecution.isPending).title}
                                                         onClick={() => handleRetry(entry.id)}
                                                         className={`${BTN_OUTLINE_SLATE} mt-2`}
                                                     >

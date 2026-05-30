@@ -12,7 +12,8 @@ import {
     useSetPrioritizationOverrideMutation,
 } from '../../../../../../hooks/useDataHubPrioritization';
 import { formatDataHubQueryError, safeDynamicT } from '../dataHubI18n';
-import { DataHubAlert } from '../dataHubUi';
+import { DataHubAlert, dataHubWriteGate } from '../dataHubUi';
+import { useDataHubPermissions } from '../hooks/useDataHubPermissions';
 
 interface SmartPrioritizationProps {
     t: (key: string) => string;
@@ -36,6 +37,8 @@ function tierPill(tier: string, t: (k: string) => string) {
 }
 
 const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const { data: settings, isLoading: settingsLoading, error: settingsError, refetch } =
         usePrioritizationSettingsQuery();
     const { data: sources = [], isLoading: sourcesLoading, error: sourcesError } = usePrioritizationSourcesQuery();
@@ -98,14 +101,16 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                         <input
                             type="checkbox"
                             checked={settings?.is_enabled ?? false}
-                            disabled={settingsMut.isPending}
-                            onChange={e =>
+                            disabled={wg(settingsMut.isPending).disabled}
+                            title={wg(settingsMut.isPending).title}
+                            onChange={e => {
+                                if (!canWrite) return;
                                 settingsMut.mutate({
                                     is_enabled: e.target.checked,
                                     factor_weights: settings?.factor_weights || {},
                                     tier_thresholds: settings?.tier_thresholds || {},
-                                })
-                            }
+                                });
+                            }}
                             className="rounded"
                         />
                         {t('prioritization_enabled')}
@@ -116,14 +121,17 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                             setWeights(settings?.factor_weights || {});
                             setShowConfig(true);
                         }}
-                        className="text-[11px] px-3 py-1.5 rounded-full border border-white/10"
+                        disabled={wg().disabled}
+                        title={wg().title}
+                        className="text-[11px] px-3 py-1.5 rounded-full border border-white/10 disabled:opacity-50"
                     >
                         {t('configure')}
                     </button>
                     <button
                         type="button"
                         onClick={() => previewMut.mutate()}
-                        disabled={previewMut.isPending || !settings?.is_enabled}
+                        disabled={wg(previewMut.isPending || !settings?.is_enabled).disabled}
+                        title={wg(previewMut.isPending || !settings?.is_enabled).title}
                         className="text-[11px] px-4 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
                     >
                         {previewMut.isPending ? t('loading') : t('prioritization_preview')}
@@ -131,7 +139,8 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                     <button
                         type="button"
                         onClick={() => setShowApplyConfirm(true)}
-                        disabled={applyMut.isPending || sorted.length === 0}
+                        disabled={wg(applyMut.isPending || sorted.length === 0).disabled}
+                        title={wg(applyMut.isPending || sorted.length === 0).title}
                         className="text-[11px] px-4 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
                     >
                         {applyMut.isPending ? t('loading') : t('prioritization_apply')}
@@ -314,7 +323,9 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                                         );
                                                         setOverrideNote(source.override_note || '');
                                                     }}
-                                                    className="text-[11px] px-2 py-1 rounded-full border border-purple-500/40 text-purple-200 hover:bg-purple-500/10"
+                                                    disabled={wg().disabled}
+                                                    title={wg().title}
+                                                    className="text-[11px] px-2 py-1 rounded-full border border-purple-500/40 text-purple-200 hover:bg-purple-500/10 disabled:opacity-50"
                                                 >
                                                     {t('override')}
                                                 </button>
@@ -396,7 +407,8 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                     });
                                     setShowConfig(false);
                                 }}
-                                disabled={totalWeight !== 100 || settingsMut.isPending}
+                                disabled={wg(totalWeight !== 100 || settingsMut.isPending).disabled}
+                                title={wg(totalWeight !== 100 || settingsMut.isPending).title}
                                 className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {t('save')}
@@ -428,7 +440,8 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                     setShowApplyConfirm(false);
                                 }}
                                 className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled={applyMut.isPending}
+                                disabled={wg(applyMut.isPending).disabled}
+                                title={wg(applyMut.isPending).title}
                             >
                                 {t('confirm')}
                             </button>
@@ -509,7 +522,9 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                     });
                                     setOverrideSource(null);
                                 }}
-                                className="text-[11px] px-3 py-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-white"
+                                disabled={wg().disabled}
+                                title={wg().title}
+                                className="text-[11px] px-3 py-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50"
                             >
                                 {t('reset')}
                             </button>
@@ -523,6 +538,8 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                     });
                                     setOverrideSource(null);
                                 }}
+                                disabled={wg().disabled}
+                                title={wg().title}
                                 className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {t('save')}

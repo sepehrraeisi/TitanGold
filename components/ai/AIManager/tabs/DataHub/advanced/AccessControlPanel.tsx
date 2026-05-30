@@ -9,6 +9,8 @@ import {
 import type { SourceAccessControlUi } from '../../../../../../services/accessControlApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import { formatApiErrorForUi } from '../dataHubI18n';
+import { dataHubWriteGate } from '../dataHubUi';
+import { useDataHubPermissions } from '../hooks/useDataHubPermissions';
 
 interface AccessControlPanelProps {
     t: (key: string) => string;
@@ -18,6 +20,8 @@ const SHELL =
     'bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg rounded-xl p-4 md:p-5';
 
 const AccessControlPanel: React.FC<AccessControlPanelProps> = ({ t }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const { data: rules = [], isLoading, error, refetch } = useAccessControlListQuery();
     const upsert = useUpsertAccessControlMutation();
     const reset = useResetAccessControlMutation();
@@ -194,7 +198,9 @@ const AccessControlPanel: React.FC<AccessControlPanelProps> = ({ t }) => {
                                     <button
                                         type="button"
                                         onClick={() => setEditing(rule)}
-                                        className="text-[10px] px-2 py-0.5 rounded-full border border-blue-500/60 text-blue-200 hover:bg-blue-500/10"
+                                        disabled={wg().disabled}
+                                        title={wg().title}
+                                        className="text-[10px] px-2 py-0.5 rounded-full border border-blue-500/60 text-blue-200 hover:bg-blue-500/10 disabled:opacity-50"
                                     >
                                         {t('configure')}
                                     </button>
@@ -202,7 +208,8 @@ const AccessControlPanel: React.FC<AccessControlPanelProps> = ({ t }) => {
                                         <button
                                             type="button"
                                             onClick={() => handleReset(rule.sourceId)}
-                                            disabled={reset.isPending}
+                                            disabled={wg(reset.isPending).disabled}
+                                            title={wg(reset.isPending).title}
                                             className="text-[10px] px-2 py-0.5 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 disabled:opacity-40"
                                         >
                                             {t('access_reset')}
@@ -227,6 +234,8 @@ const AccessControlPanel: React.FC<AccessControlPanelProps> = ({ t }) => {
                     onClose={() => setEditing(null)}
                     onSave={handleSave}
                     isSaving={upsert.isPending}
+                    saveDisabled={wg().disabled}
+                    saveTitle={wg().title}
                     t={t}
                 />
             )}

@@ -13,6 +13,8 @@ import type { DataHubCrawler } from '../../../../../../services/dataHubCrawlersA
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import type { CreateCrawlerPayload } from '../../../../../../services/dataHubCrawlersApi';
 import { formatApiErrorForUi } from '../dataHubI18n';
+import { dataHubWriteGate } from '../dataHubUi';
+import { useDataHubPermissions } from '../hooks/useDataHubPermissions';
 
 interface WebCrawlerConfigProps {
     t: (key: string) => string;
@@ -22,6 +24,8 @@ const SHELL =
     'bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg rounded-xl p-4 md:p-5';
 
 const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({ t }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const { data, isLoading, error, refetch } = useDataHubCrawlersQuery();
     const { data: sourcesResult } = useDataSourcesQuery({ page: 1, limit: 100 });
     const sources = sourcesResult?.data ?? [];
@@ -140,7 +144,9 @@ const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({ t }) => {
                 <button
                     type="button"
                     onClick={() => setModalCrawler(null)}
-                    className="text-[11px] px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white whitespace-nowrap"
+                    className="text-[11px] px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white whitespace-nowrap disabled:opacity-50"
+                    disabled={wg().disabled}
+                    title={wg().title}
                 >
                     {t('crawler_add')}
                 </button>
@@ -199,7 +205,8 @@ const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({ t }) => {
                                     <button
                                         type="button"
                                         onClick={() => handleRun(crawler.id, true)}
-                                        disabled={runMut.isPending}
+                                        disabled={wg(runMut.isPending).disabled}
+                                        title={wg(runMut.isPending).title}
                                         className="text-[11px] px-2 py-1 rounded-full border border-white/10"
                                     >
                                         {t('crawler_dry_run')}
@@ -207,7 +214,8 @@ const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({ t }) => {
                                     <button
                                         type="button"
                                         onClick={() => handleRun(crawler.id, false)}
-                                        disabled={runMut.isPending}
+                                        disabled={wg(runMut.isPending).disabled}
+                                        title={wg(runMut.isPending).title}
                                         className="text-[11px] px-2 py-1 rounded-full bg-emerald-600/80 hover:bg-emerald-500 text-white"
                                     >
                                         {t('crawler_run')}
@@ -227,6 +235,8 @@ const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({ t }) => {
                                         type="button"
                                         onClick={() => setModalCrawler(crawler)}
                                         className="text-[11px] px-2 py-1 rounded-full border border-white/10"
+                                        disabled={wg().disabled}
+                                        title={wg().title}
                                     >
                                         {t('edit')}
                                     </button>
@@ -234,6 +244,8 @@ const WebCrawlerConfig: React.FC<WebCrawlerConfigProps> = ({ t }) => {
                                         type="button"
                                         onClick={() => handleDelete(crawler.id)}
                                         className="text-[11px] px-2 py-1 rounded-full border border-red-500/30 text-red-300"
+                                        disabled={wg().disabled}
+                                        title={wg().title}
                                     >
                                         {t('delete')}
                                     </button>

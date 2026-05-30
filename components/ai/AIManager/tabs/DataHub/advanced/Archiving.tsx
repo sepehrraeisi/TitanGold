@@ -11,7 +11,8 @@ import {
     usePreviewPurgeMutation,
 } from '../../../../../../hooks/useDataHubArchiving';
 import { formatDataHubQueryError } from '../dataHubI18n';
-import { DataHubAlert } from '../dataHubUi';
+import { DataHubAlert, dataHubWriteGate } from '../dataHubUi';
+import { useDataHubPermissions } from '../hooks/useDataHubPermissions';
 
 interface ArchivingProps {
     t: (key: string) => string;
@@ -28,6 +29,8 @@ function healthBadge(status: string) {
 }
 
 const Archiving: React.FC<ArchivingProps> = ({ t }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const { data: dashboard, isLoading, error: statsError, refetch } = useArchiveStatsQuery();
     const { data: recordsPage } = useArchivedRecordsQuery(0, 50);
 
@@ -166,7 +169,8 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                         </button>
                         <button
                             type="button"
-                            disabled={busy}
+                            disabled={wg(busy).disabled}
+                            title={wg(busy).title}
                             onClick={() => setShowArchiveConfirm(true)}
                             className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
                         >
@@ -212,7 +216,8 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                         </button>
                         <button
                             type="button"
-                            disabled={busy || !restoreStart || !restoreEnd}
+                            disabled={wg(busy || !restoreStart || !restoreEnd).disabled}
+                            title={wg(busy || !restoreStart || !restoreEnd).title}
                             onClick={() => setShowRestoreConfirm(true)}
                             className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
                         >
@@ -351,6 +356,8 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                             </button>
                             <button
                                 type="button"
+                                disabled={wg(executeArchiveMut.isPending).disabled}
+                                title={wg(executeArchiveMut.isPending).title}
                                 onClick={async () => {
                                     await executeArchiveMut.mutateAsync({
                                         days_old: daysOld,
@@ -359,7 +366,7 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                                     setShowArchiveConfirm(false);
                                     setArchivePreview(null);
                                 }}
-                                className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 text-white"
+                                className="text-[11px] px-3 py-1.5 rounded-full bg-purple-600 text-white disabled:opacity-50"
                             >
                                 {t('confirm')}
                             </button>
@@ -383,6 +390,8 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                             </button>
                             <button
                                 type="button"
+                                disabled={wg(executeRestoreMut.isPending).disabled}
+                                title={wg(executeRestoreMut.isPending).title}
                                 onClick={async () => {
                                     await executeRestoreMut.mutateAsync({
                                         start_date: new Date(restoreStart).toISOString(),
@@ -392,7 +401,7 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                                     setShowRestoreConfirm(false);
                                     setRestorePreview(null);
                                 }}
-                                className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-600 text-white"
+                                className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-600 text-white disabled:opacity-50"
                             >
                                 {t('confirm')}
                             </button>

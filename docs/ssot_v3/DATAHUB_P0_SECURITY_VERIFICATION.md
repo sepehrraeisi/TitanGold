@@ -1,6 +1,6 @@
 # DataHub P0 Security Verification (DH-P0-SECURITY-1)
 
-> **Status:** DH-P0-SECURITY-5 — CROSS-002 **runtime verified** (`45ac3a1`); high-risk still **NO-GO** (GAP-036, CROSS-003)  
+> **Status:** DH-P0-SECURITY-6 — CROSS-003 **code implemented** (frontend role gates); **runtime/UI verification pending**; high-risk still **NO-GO** (GAP-036)  
 > **Date:** 2026-05-30  
 > **Prerequisites:** [`DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md`](./DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md) (DH-CROSS-1), [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLAN.md)  
 > **Next step:** Review this doc → approve minimal hardening plan → implement in separate phase (not this commit)
@@ -17,9 +17,10 @@ Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** an
 | **GAP-009** | Sources write routes: `writeAuth` — **runtime verified 11/11 write checks** | — | **Closed** |
 | **GAP-011** | Categories write routes: `writeAuth` — **runtime verified** | — | **Closed** |
 | **CROSS-002** | `telegramReadAuth` — **runtime verified 18/18 auth checks** (1 handler 500 pre-existing) | — | **Closed** |
-| **CROSS-003** | **No** DataHub panel role-gates write buttons; Core backend now protected | **Medium** | **Yes** — UX still allows write buttons for non-admin/trader |
+| **CROSS-003** | DataHub write buttons gated in frontend (`useDataHubPermissions` + `dataHubWriteGate`); **UI verification pending** | **Medium** | **Partial** — UX fixed in code; not manually verified in browser |
+| **GAP-037** | `GET /api/v1/telegram/stats/real-time` → 500 after auth (`telegram_created_at` missing) | **Medium** | **No** — separate schema bug; not auth |
 
-**Recommendation:** Do **not** execute high-risk actions until **GAP-036** resolved. **CROSS-002** closed. Next: **CROSS-003** UI role gates.
+**Recommendation:** Do **not** execute high-risk actions until **GAP-036** resolved. **CROSS-002** closed. **CROSS-003:** verify gated UI with non-admin/trader session before marking closed.
 
 ---
 
@@ -135,24 +136,26 @@ Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** an
 
 ## 5. CROSS-003 — Frontend write button role gates
 
-**Method:** Grep `role`, `userRole`, `Admin`, `Trader`, `useAppContext` under `components/ai/AIManager/tabs/DataHub/` — **no user-role checks found** (only ARIA `role=` attributes).
+**DH-P0-SECURITY-1 (pre-fix):** No user-role checks under DataHub panels.
 
-| Component | Write buttons role-gated? | Backend protected? | UX risk |
-|-----------|---------------------------|-------------------|---------|
-| **DataSourcesPanel** | ❌ No | ✅ GAP-009 closed | Medium — buttons visible; API 403 for non-admin/trader |
-| **CategoriesPanel** | ❌ No | ✅ GAP-011 closed | Medium — buttons visible; API 403 for non-admin/trader |
-| **TelegramPublisher** | ❌ No | ✅ Advanced writes: admin/trader | Medium — viewer sees Publish/Test; API 403 |
-| **AutomationTopics** | ❌ No | ✅ admin/trader on dispatch/mutate | Medium |
-| **WebCrawlerConfig** | ❌ No | ✅ admin/trader on run/create | Medium |
-| **AutoDiscoveryConfig** | ❌ No | ✅ admin/trader on scan/approve | Medium |
-| **SmartPrioritization** | ❌ No | ✅ admin/trader on apply/preview | Medium |
-| **AccessControlPanel** | ❌ No | ✅ admin/trader on save | Medium |
-| **BlacklistWhitelist** | ❌ No | ✅ admin/trader on CRUD | Medium |
-| **Archiving** | ❌ No | ✅ admin/trader on execute | Medium |
+**DH-P0-SECURITY-6 (implemented):** Shared helpers `dataHubPermissions.ts`, `useDataHubPermissions.ts` (role from `useAppContext().user.role` + `titan_user` fallback), `dataHubWriteGate()` → `disabled` + `title` (`datahub_requires_admin_trader`). Write allowed only for normalized `admin` / `trader`.
 
-**Gap confirmed:** Frontend shows all write affordances regardless of `user.role`. Core panels are **both** UX-unprotected **and** backend-unprotected. Advanced panels rely on backend 403 only.
+| Component | Write buttons role-gated? | How verified | Backend protected? |
+|-----------|---------------------------|--------------|-------------------|
+| **DataSourcesPanel** | ✅ Yes | Static — `wg()` on create/test/edit/restore/delete | ✅ GAP-009 |
+| **CategoriesPanel** | ✅ Yes | Static — create/edit/delete | ✅ GAP-011 |
+| **TelegramPublisher** | ✅ Yes | Static — create/test/publish/disable/modal | ✅ |
+| **AutomationTopics** + children | ✅ Yes | Static — test-run, queue, topics, schedule via `canWrite` | ✅ |
+| **WebCrawlerConfig** | ✅ Yes | Static — CRUD/run/dry-run | ✅ |
+| **AutoDiscoveryConfig** | ✅ Yes | Static — scan/approve/reject/rules | ✅ |
+| **SmartPrioritization** | ✅ Yes | Static — preview/apply/override/config | ✅ |
+| **AccessControlPanel** | ✅ Yes | Static — configure/reset + modal save | ✅ |
+| **BlacklistWhitelist** | ✅ Yes (CRUD) | Static — add/edit/delete/modal; evaluate **read-only** left enabled | ✅ |
+| **Archiving** | ✅ Yes (execute) | Static — apply/restore/confirm; preview/dry-run left enabled | ✅ |
 
-**Minimal fix (future phase):** Shared hook e.g. `useDataHubWriteAccess()` → hide/disable when role ∉ `{admin, trader}`; map frontend `Admin`/`Trader` to backend roles; apply after GAP-009/011 backend fix.
+**Status:** **Implemented — pending runtime/UI verification** (no browser session test in this phase). Do **not** mark CROSS-003 fully closed until manual UI check or component test.
+
+**Separate bug (not CROSS-003):** `GET /api/v1/telegram/stats/real-time` returns **500** for admin after auth pass — `column "telegram_created_at" does not exist`. Tracked as **GAP-037**; not an auth failure.
 
 ---
 
@@ -178,11 +181,11 @@ Implemented in `e9115af`; runtime verified DH-P0-SECURITY-3.
 
 Implemented `45ac3a1`; runtime verified DH-P0-SECURITY-5.
 
-### Phase C — Frontend role gates (CROSS-003)
+### Phase C — Frontend role gates (CROSS-003) ✅ Code done (DH-P0-SECURITY-6)
 
-After Phase A: hide Create/Edit/Delete/Restore/Test on Sources/Categories; hide Advanced write buttons for non-admin/trader.
+Disable write buttons + tooltip for non-admin/trader via `useDataHubPermissions` / `dataHubWriteGate`. **Runtime/UI verify pending.**
 
-**Files:** DataHub panels + optional shared hook — no backend change.
+**Files:** `components/ai/AIManager/tabs/DataHub/**` — no backend change.
 
 ### Phase D — GAP-036 (ops, separate approval)
 
@@ -202,12 +205,13 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 | GAP-009 Sources RBAC | ✅ **Closed** — runtime verified DH-P0-SECURITY-3 |
 | GAP-011 Categories RBAC | ✅ **Closed** — runtime verified DH-P0-SECURITY-3 |
 | CROSS-002 Telegram auth | ✅ **Closed** — runtime verified DH-P0-SECURITY-5 |
-| CROSS-003 UI role gates | ❌ **Open** |
-| **High-risk execution (DH-FINAL-6R)** | ❌ **NO-GO** |
+| CROSS-003 UI role gates | ⚠️ **Implemented — pending UI verification** |
+| GAP-037 stats/real-time schema | ❌ **Open** (500 after auth; not auth) |
+| **High-risk execution (DH-FINAL-6R)** | ❌ **NO-GO** (GAP-036) |
 
-**Safe to proceed (after separate approval):** P0-Security implementation Phases A→C above — **not** high-risk runtime tests.
+**Safe to proceed:** Manual UI verify CROSS-003 with user/vip roles — **not** high-risk runtime tests.
 
-**Next phase:** CROSS-003 UI role gates.
+**Next phase:** CROSS-003 browser verification; GAP-037 backend schema fix (separate approval).
 
 ---
 
@@ -272,7 +276,7 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 
 **Summary:** **18/18 auth enforcement checks Pass**. No unauthenticated 200 on any read route. `mark-processed` write path unchanged (401 without token; 400 with empty `message_ids`). **CROSS-002 closed.**
 
-**Known non-auth issue:** `GET /stats/real-time` returns 500 for admin after auth pass — `column "telegram_created_at" does not exist` in processor stats query; track separately (not CROSS-002 scope).
+**Known non-auth issue (GAP-037):** `GET /stats/real-time` returns 500 for admin after auth pass — `column "telegram_created_at" does not exist` in processor stats query; tracked in `GAPS_AND_PLAN.md` — **not** CROSS-002/CROSS-003 scope; **not** fixed in DH-P0-SECURITY-6.
 
 ---
 
@@ -301,3 +305,4 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 | 2026-05-30 | DH-P0-SECURITY-3 — post-restart runtime verify 11/11 Pass; GAP-009/GAP-011 closed |
 | 2026-05-30 | DH-P0-SECURITY-4 — restore `telegramReadAuth`; all Telegram read routes wired; runtime pending |
 | 2026-05-30 | DH-P0-SECURITY-5 — Telegram read auth runtime verify 18/18 auth Pass; CROSS-002 closed |
+| 2026-05-30 | DH-P0-SECURITY-6 — frontend DataHub write role gates; CROSS-003 code implemented; GAP-037 documented; UI verify pending |
