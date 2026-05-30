@@ -1,6 +1,6 @@
 # DataHub Dry-Run Test Plan (DH-FINAL-5)
 
-> **Status:** Plan / docs only — **no runtime execution yet**  
+> **Status:** D-01 executed (Pass); D-02/D-03 **NO-GO** on production runtime (DH-FINAL-5G)  
 > **Date:** 2026-05-30  
 > **Prerequisite:** [`DATAHUB_LOW_RISK_RUNTIME_RESULTS.md`](./DATAHUB_LOW_RISK_RUNTIME_RESULTS.md) (DH-FINAL-4 — 37/37 pass)  
 > **Next phase:** DH-FINAL-5R executes this plan after explicit go/no-go sign-off per test.
@@ -73,8 +73,8 @@ Before executing D-01, D-02, or D-03, prove each action is **actually dry-run** 
 | Test ID | Action | Endpoint | Payload must include | Precondition | How to prove dry-run | Possible side effects | Stop condition |
 |---------|--------|----------|----------------------|--------------|----------------------|----------------------|----------------|
 | **D-01** | Crawler dry-run | `POST /api/v1/data-hub/crawlers/:id/run` | `{ "dry_run": true }` — **never omit** (Zod default is `false`) | DH-FINAL-4 green; pick **one** enabled crawler (prefer RSS `b1f6ab9b-…`); admin/trader JWT; no concurrent `running` crawl | **(1)** Network/curl body shows `"dry_run": true`. **(2)** Response `run.dry_run === true` and `run.metadata.dry_run === true`. **(3)** `SELECT COUNT(*) FROM collected_data WHERE source_id = :source_id` **unchanged** before vs after (±0). **(4)** New row in `datahub_crawler_runs` with `dry_run=true` | **Acceptable:** HTTP fetch to RSS/website (read-only external); `datahub_crawler_runs` insert; `datahub_crawlers`/`data_sources` timestamp updates (`last_run_at`, `last_fetch_at`). **Not acceptable:** any `collected_data` INSERT | Payload missing `dry_run: true`; response `run.dry_run === false`; `collected_data` count increased; **Run (live)** clicked; 403 `FILTER_BLOCKED_PRE_CRAWL` → record and stop D-01 (do not retry live) |
-| **D-02** | Publisher test | `POST /api/v1/data-hub/telegram-publishers/:id/test` | `{ "message": "..." }` only — dry-run is **server-side** | Verify env gate **before** test (see below); publisher active; prefer channel used in DH-FINAL-4 (`5ab9a6bc-…`) | **(1)** Response `dry_run: true` AND `status: "dry_run"` AND `telegram_message_id: null`. **(2)** History row `status = 'dry_run'` (not `test` or `sent`). **(3)** If `TELEGRAM_PUBLISHER_DRY_RUN=true` or `NODE_ENV !== 'production'` → proceed; else **NO-GO** | **Acceptable:** `publisher_delivery_history` row with `status=dry_run`, `telegram_message_id=null`. **Not acceptable:** live Telegram API call → `status=test/sent`, non-null `telegram_message_id`, channel message visible | Response `dry_run: false` with non-null `telegram_message_id`; env is production + `has_bot_token=true` + `TELEGRAM_PUBLISHER_DRY_RUN` not `true`; **Publish** clicked |
-| **D-03** | Automation test-run | `POST /api/v1/data-hub/automation/test-run` | `{ "dry_run": true }` — verify in Network even though schema default is `true` | ≥1 enabled automation topic with publisher target; env gate same as D-02; admin/trader JWT | **(1)** Request body `dry_run: true`. **(2)** Response `publishResult.dry_run === true` OR top-level execution `dry_run === true` with `status: dry_run`. **(3)** `telegram_message_id` null in publish result. **(4)** No `sent_count` increment on publisher | **Acceptable:** `refreshAutomationQueue()` inside service may **add** queue rows; one queue item status update; `datahub_automation_executions` insert with `dry_run=true`; optional `publisher_delivery_history` dry_run row. **Not acceptable:** live Telegram send; queue dispatch without dry_run; execution with `dry_run=false` and `status=sent` | `dry_run: false` in request; nested `publishResult.dry_run === false` **and** `telegram_message_id` set; **Dispatch** or **Refresh queue** clicked manually; production env without publisher dry-run gate |
+| **D-02** | Publisher test | `POST /api/v1/data-hub/telegram-publishers/:id/test` | `{ "message": "..." }` only — dry-run is **server-side** | Verify env gate **before** test (see below); publisher active; prefer channel used in DH-FINAL-4 (`5ab9a6bc-…`). **Current production runtime: NO-GO unless `TELEGRAM_PUBLISHER_DRY_RUN=true` or publisher has no bot token.** | **(1)** Response `dry_run: true` AND `status: "dry_run"` AND `telegram_message_id: null`. **(2)** History row `status = 'dry_run'` (not `test` or `sent`). **(3)** If `TELEGRAM_PUBLISHER_DRY_RUN=true` or `NODE_ENV !== 'production'` → proceed; else **NO-GO** | **Acceptable:** `publisher_delivery_history` row with `status=dry_run`, `telegram_message_id=null`. **Not acceptable:** live Telegram API call → `status=test/sent`, non-null `telegram_message_id`, channel message visible | Response `dry_run: false` with non-null `telegram_message_id`; env is production + `has_bot_token=true` + `TELEGRAM_PUBLISHER_DRY_RUN` not `true`; **Publish** clicked |
+| **D-03** | Automation test-run | `POST /api/v1/data-hub/automation/test-run` | `{ "dry_run": true }` — verify in Network even though schema default is `true` | **Hard dependency on D-02 gate:** D-03 must not run until D-02 env proves forced dry-run on the **same publisher target chain**. ≥1 enabled automation topic with publisher target; admin/trader JWT. **Current production runtime: NO-GO unless `TELEGRAM_PUBLISHER_DRY_RUN=true` or publisher has no bot token.** | **(1)** Request body `dry_run: true`. **(2)** Response `publishResult.dry_run === true` OR top-level execution `dry_run === true` with `status: dry_run`. **(3)** `telegram_message_id` null in publish result. **(4)** No `sent_count` increment on publisher | **Acceptable:** `refreshAutomationQueue()` inside service may **add** queue rows; one queue item status update; `datahub_automation_executions` insert with `dry_run=true`; optional `publisher_delivery_history` dry_run row. **Not acceptable:** live Telegram send; queue dispatch without dry_run; execution with `dry_run=false` and `status=sent` | `dry_run: false` in request; nested `publishResult.dry_run === false` **and** `telegram_message_id` set; **Dispatch** or **Refresh queue** clicked manually; production env without publisher dry-run gate; **D-02 gate not passed** |
 
 ---
 
@@ -155,11 +155,13 @@ Or infer from D-02 probe on a publisher with known token: if first response has 
 | Production + bot token + dry-run env unset/false | **NO-GO** — skip D-02 and D-03 |
 | Publisher without bot token | **GO** — service dry-runs when no token |
 
-Current DH-FINAL-4 evidence: publisher has `has_bot_token: true`. **Local `:5002` dev → likely GO**; **production deploy → NO-GO unless env explicitly set.**
+**DH-FINAL-5G audit (2026-05-30):** PM2 `titan-backend` on `:5002` runs with `NODE_ENV=production`, `TELEGRAM_PUBLISHER_DRY_RUN` unset. Active publisher `5ab9a6bc-…` has `has_bot_token=true`. **Current production runtime: NO-GO** unless `TELEGRAM_PUBLISHER_DRY_RUN=true` or publisher has no bot token.
 
 ---
 
 ### D-03 — Automation test-run dry-run
+
+> **D-03 depends on D-02:** Do not execute D-03 until D-02 env gate is **GO** and a probe confirms `dry_run: true` + `telegram_message_id: null`. Automation `{ dry_run: true }` alone does **not** prevent live Telegram send — `dispatchQueueItem` still calls `runPublisherPublish(confirm_publish: true)` and only the **publisher env gate** blocks outbound messages.
 
 **Implementation reference:** `runAutomationTest()` calls `refreshAutomationQueue()` then `dispatchQueueItem(..., { dryRun })`. The automation `dryRun` flag marks execution as dry-run but **`runPublisherPublish()` is still invoked** with `confirm_publish: true` — live send prevention depends on **publisher env gate** (same as D-02).
 
@@ -233,11 +235,11 @@ Run **one test at a time**; confirm evidence before proceeding.
 
 ## Go / no-go summary
 
-| Test ID | Recommendation (current local dev) | Blocker |
-|---------|-----------------------------------|---------|
-| **D-01** | **GO** | Must send `{ dry_run: true }`; verify `collected_data` count; never click Run (live) |
-| **D-02** | **GO** (conditional) | **NO-GO** on production with bot token unless `TELEGRAM_PUBLISHER_DRY_RUN=true` |
-| **D-03** | **GO** (conditional) | Depends on D-02 env gate; accept queue/execution rows; **NO-GO** if live Telegram possible |
+| Test ID | Recommendation (current PM2 production `:5002`) | Blocker |
+|---------|-----------------------------------------------|---------|
+| **D-01** | **GO** (executed — Pass) | Must send `{ dry_run: true }`; verify `collected_data` count |
+| **D-02** | **NO-GO** | `NODE_ENV=production` + `TELEGRAM_PUBLISHER_DRY_RUN` unset + `has_bot_token=true` |
+| **D-03** | **NO-GO** | Hard dependency on D-02 gate; same production publisher chain |
 
 ---
 
@@ -255,3 +257,4 @@ Run **one test at a time**; confirm evidence before proceeding.
 | Date | Change |
 |------|--------|
 | 2026-05-30 | DH-FINAL-5 initial dry-run plan — docs only |
+| 2026-05-30 | DH-FINAL-5G — production runtime NO-GO for D-02/D-03 documented |

@@ -1,6 +1,6 @@
 # DataHub Dry-Run Runtime Results
 
-> **Status:** Partial execution — **D-01 only**  
+> **Status:** D-01 **Pass**; D-02/D-03 **NO-GO** (env gate audit DH-FINAL-5G)  
 > **Date:** 2026-05-30  
 > **Plan:** [`DATAHUB_DRY_RUN_TEST_PLAN.md`](./DATAHUB_DRY_RUN_TEST_PLAN.md) (DH-FINAL-5)  
 > **Branch:** `feat/gap-008-sources-backend-wiring`  
@@ -13,8 +13,10 @@
 | Test ID | Result | Notes |
 |---------|--------|-------|
 | **D-01** Crawler dry-run | **Pass** | `dry_run: true`; `collected_data` count unchanged |
-| D-02 Publisher test | **Skipped** | Awaiting Telegram Publisher env dry-run gate confirmation |
-| D-03 Automation test-run | **Skipped** | Blocked until D-02 gate cleared |
+| **D-02** Publisher test | **NO-GO** | DH-FINAL-5G: production env + bot token — live Telegram send possible; **not executed** |
+| **D-03** Automation test-run | **NO-GO** | Same publisher chain as D-02; **not executed** |
+
+**No Telegram message was sent** during any dry-run phase (D-02/D-03 were never invoked).
 
 ---
 
@@ -90,20 +92,39 @@ SELECT COUNT(*) FROM collected_data WHERE source_id = 'b1ec7306-fc00-4d3c-8857-0
 
 ---
 
-## Skipped intentionally
+## DH-FINAL-5G — Publisher dry-run gate audit (read-only)
 
-| Test ID | Reason |
-|---------|--------|
-| **D-02** | User approval: defer until `TELEGRAM_PUBLISHER_DRY_RUN` / `NODE_ENV` gate confirmed with certainty |
-| **D-03** | Blocked — depends on D-02 publisher dry-run gate |
+Audit date: **2026-05-30**. No env changes, no restart, **no D-02/D-03 execution**, **no Telegram send**.
+
+| Check | Result |
+|-------|--------|
+| PM2 `titan-backend` (`:5002`) | `NODE_ENV=production`, `TELEGRAM_PUBLISHER_DRY_RUN=null` (unset) |
+| `isPublisherDryRunForced()` | **false** — unset env + production → not forced |
+| Active publisher `5ab9a6bc-…` | `is_active=true`, `has_bot_token=true`, `has_chat_id=true` |
+| `/test` code path | `dryRun = forced \|\| !token` → **false** → may call `sendTelegramBotMessage()` |
+| D-03 code path | `runAutomationTest` → `runPublisherPublish(confirm_publish:true)` — same gate |
+
+### D-02 / D-03 decision
+
+| Test ID | Decision | Reason |
+|---------|----------|--------|
+| **D-02** | **NO-GO** | Production runtime without `TELEGRAM_PUBLISHER_DRY_RUN=true`; active publisher has bot token + chat_id → `POST /telegram-publishers/:id/test` can send a **live** Telegram message |
+| **D-03** | **NO-GO** | Automation test-run invokes publisher publish chain; automation `{ dry_run: true }` does **not** bypass publisher env gate — live send equally possible |
+
+**Execution status:** D-02 and D-03 were **not run**. No `publisher_delivery_history` test rows, no `telegram_message_id`, no channel traffic from this verification batch.
+
+### Unblock criteria (future — requires separate approval + likely restart)
+
+- Set `TELEGRAM_PUBLISHER_DRY_RUN=true` on PM2 env and restart, **or**
+- Use publisher without bot token for probe, **or**
+- Run on non-production runtime (`NODE_ENV !== 'production'`)
 
 ---
 
 ## Next recommended phase
 
-1. **Env audit:** Record `NODE_ENV` and `TELEGRAM_PUBLISHER_DRY_RUN` on target runtime (read-only, no restart).
-2. **D-02 probe:** Single publisher test only if gate proves forced dry-run (`dry_run: true` + `telegram_message_id: null`).
-3. **D-03:** Only after D-02 pass on same publisher chain.
+1. **High-risk writes planning** (DH-FINAL-6+) — planning only, no execution.
+2. **D-02/D-03:** Remain blocked until env gate fixed and explicit user approval for probe.
 
 ---
 
@@ -112,3 +133,4 @@ SELECT COUNT(*) FROM collected_data WHERE source_id = 'b1ec7306-fc00-4d3c-8857-0
 | Date | Change |
 |------|--------|
 | 2026-05-30 | D-01 executed — Pass; D-02/D-03 skipped |
+| 2026-05-30 | DH-FINAL-5G gate audit — D-02/D-03 **NO-GO**; no Telegram send |
