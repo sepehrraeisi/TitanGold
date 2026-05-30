@@ -270,8 +270,8 @@ Actions that **mutate production data**, **send external messages**, or **requir
 
 | ID | Area | Issue | Impact |
 |----|------|-------|--------|
-| INV-001 | Sources Export CSV | `downloadCSV('data-sources', sources)` — filename/data args reversed vs `useDataHub.downloadCSV(data, filename)` | Export produces invalid/empty CSV |
-| INV-002 | AgentDetailPanel | `mark-processed` POST without `Authorization` header | 401 in prod; silent console error |
+| INV-001 | Sources Export CSV | `downloadCSV('data-sources', sources)` — filename/data args reversed vs `useDataHub.downloadCSV(data, filename)` | **Fixed** (DH-FINAL-2) |
+| INV-002 | AgentDetailPanel | `mark-processed` POST without `Authorization` header | **Fixed** (DH-FINAL-2) — Bearer header + sanitized `datahub_error_generic` on failure |
 | INV-003 | TelegramPanel | `handleRefreshCollectorChannels` in hook but no UI button | Users cannot manually refresh channels from panel |
 | INV-004 | ViewSourceDataModal | Depends on `api.fetchCollectedData` — verify active export in `services/api.ts` | View data may fail at runtime |
 | INV-005 | Core write routes | No `authorize('admin','trader')` on Sources/Categories (GAP-009/011) | Any authenticated user can mutate |
@@ -299,4 +299,4 @@ Actions that **mutate production data**, **send external messages**, or **requir
 
 | Date | Change |
 |------|--------|
-| 2026-05-29 | DH-FINAL-1 initial inventory — audit/docs only |
+| 2026-05-29 | DH-FINAL-2 — INV-001 CSV arg order; INV-002 mark-processed auth header |

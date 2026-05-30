@@ -77,7 +77,7 @@ const DataSourcesPanel: React.FC<Props> = ({
 
     const handleExport = () => {
         if (!sources.length) return;
-        downloadCSV('data-sources', sources);
+        downloadCSV(sources, 'data-sources');
     };
 
     const queryError = formatDataHubQueryError(t, apiError);

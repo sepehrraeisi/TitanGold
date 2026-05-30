@@ -76,6 +76,14 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
   const LIMIT = 20;
 
+  const getAuthHeaders = () => {
+    const token =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token')
+        : null;
+    return token ? { Authorization: `Bearer ${token}` } : undefined;
+  };
+
   useEffect(() => {
     fetchAgentData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,18 +108,9 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
       }
 
       // Attach auth token similar to other secured endpoints
-      const token =
-        typeof localStorage !== 'undefined'
-          ? localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token')
-          : null;
-
       const response = await axios.get(url, {
         withCredentials: true,
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : undefined,
+        headers: getAuthHeaders(),
       });
 
       if (response.data.success) {
@@ -161,14 +160,20 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
   const handleMarkProcessed = async (messageId: string) => {
     try {
-      await axios.post(`/api/v1/telegram/agents/${agentKey}/mark-processed`, {
-        message_ids: [messageId],
-      });
+      await axios.post(
+        `/api/v1/telegram/agents/${agentKey}/mark-processed`,
+        { message_ids: [messageId] },
+        {
+          withCredentials: true,
+          headers: getAuthHeaders(),
+        },
+      );
 
       // Remove from list
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to mark processed:', err);
+      setError(t('datahub_error_generic'));
     }
   };
 
