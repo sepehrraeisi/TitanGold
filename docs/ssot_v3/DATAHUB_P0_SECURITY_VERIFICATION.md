@@ -1,6 +1,6 @@
 # DataHub P0 Security Verification (DH-P0-SECURITY-1)
 
-> **Status:** DH-P0-SECURITY-3 — GAP-009 / GAP-011 **runtime verified** (`e9115af`); high-risk execution still **NO-GO** (GAP-036, CROSS-002, CROSS-003 open)  
+> **Status:** DH-P0-SECURITY-4 — CROSS-002 **code restored**; runtime verification **pending restart**  
 > **Date:** 2026-05-30  
 > **Prerequisites:** [`DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md`](./DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md) (DH-CROSS-1), [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLAN.md)  
 > **Next step:** Review this doc → approve minimal hardening plan → implement in separate phase (not this commit)
@@ -16,10 +16,10 @@ Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** an
 | **GAP-036** | `NODE_ENV=production`, `TELEGRAM_PUBLISHER_DRY_RUN` unset, 1 active publisher with bot token + chat_id | **High** | **Yes** — D-02/D-03 NO-GO |
 | **GAP-009** | Sources write routes: `writeAuth` — **runtime verified 11/11 write checks** | — | **Closed** |
 | **GAP-011** | Categories write routes: `writeAuth` — **runtime verified** | — | **Closed** |
-| **CROSS-002** | `telegramAuth.js` / `telegramReadAuth` **missing**; 3 analytics routes unauthenticated vs GAP-006 docs | **High** | **Yes** — production data exposure |
+| **CROSS-002** | `telegramReadAuth` **restored** in `telegramAuth.js`; all read routes wired — **runtime pending** | **High** | **Pending runtime verify** |
 | **CROSS-003** | **No** DataHub panel role-gates write buttons; Core backend now protected | **Medium** | **Yes** — UX still allows write buttons for non-admin/trader |
 
-**Recommendation:** Do **not** execute high-risk actions until **GAP-036** resolved. Reconcile **CROSS-002** next. Add **CROSS-003** UI affordances.
+**Recommendation:** Do **not** execute high-risk actions until **GAP-036** resolved. **CROSS-002** code done — restart + runtime verify next (DH-P0-SECURITY-5). Add **CROSS-003** UI affordances.
 
 ---
 
@@ -87,33 +87,59 @@ Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** an
 
 ## 4. CROSS-002 — Telegram analytics auth / documentation drift
 
-**Code search:** `backend/middleware/telegramAuth.js` — **not found** (0 files).  
-**`telegramReadAuth`:** **not referenced** in codebase.  
-**`TELEGRAM_READ_MODE`:** documented in GAP-006 / EVIDENCE.md — **not wired** in current `telegram.js`.
+**DH-P0-SECURITY-4 (2026-05-30):** `backend/middleware/telegramAuth.js` **restored**; all read routes wired with `readAuth = [telegramReadAuth, readRateLimiter]`.
 
-**GAP-006 status in `GAPS_AND_PLAN.md`:** **Closed** — claims all read-only routes pass `telegramReadAuth` before `readRateLimiter`.
+**Middleware:** `telegramReadAuth` — modes `auth-role` | `internal` | `dev-open` (see mode table below).  
+**Allowed roles (`auth-role`):** `admin`, `trader` only (DB has `admin|trader|user|vip`; `analyst`/`viewer` documented as future role-model gap).  
+**Write route unchanged:** `POST /agents/:agentKey/mark-processed` → `authenticate` + `writeRateLimiter`.
 
-| Route | Current auth | Expected auth (GAP-006 / docs) | Drift? | Risk |
-|-------|--------------|--------------------------------|--------|------|
-| `GET /health` | **None** | `telegramReadAuth` + readRateLimiter | **Yes** | Medium — DB counts exposed |
-| `GET /agents/summary` | readRateLimiter only | `telegramReadAuth` + JWT role | **Yes** | **High** — agent metrics public |
-| `GET /agents/:agentKey/feed` | authenticate + readRateLimiter | `telegramReadAuth` + JWT role | Partial | Medium — auth present but not role-scoped per docs |
-| `POST /agents/:agentKey/mark-processed` | authenticate + writeRateLimiter | authenticate + writeRateLimiter | **No** | Low — write protected |
-| `GET /breaking-news` | authenticate + readRateLimiter | `telegramReadAuth` + JWT role | Partial | Medium |
-| `GET /events/recent` | authenticate + readRateLimiter | `telegramReadAuth` + JWT role | Partial | Medium |
-| `GET /categories/summary` | readRateLimiter only | `telegramReadAuth` + JWT role | **Yes** | **High** — category aggregates public |
-| `GET /categories/:category/timeline` | authenticate + readRateLimiter | `telegramReadAuth` + JWT role | Partial | Medium |
-| `GET /stats/real-time` | authenticate + readRateLimiter | `telegramReadAuth` + JWT role | Partial | Medium |
+### Mode behavior (static)
 
-**Drift summary:**
+| Mode | Production default (if unset) | Behavior |
+|------|------------------------------|----------|
+| `auth-role` | **Yes** (`NODE_ENV=production`) | JWT required; 401 invalid/missing; 403 if role ∉ `{admin,trader}` |
+| `internal` | No (explicit env only) | Trusted IP (`INTERNAL_TRUSTED_IPS`) **or** `x-internal-request: true` + `x-internal-secret`; fail closed if neither secret nor allowlist configured |
+| `dev-open` | No | Open reads; **403 fail-closed** if `NODE_ENV=production` |
+| invalid / unset non-prod | non-prod default → `dev-open` | Fail closed on invalid mode value |
 
-| Item | Docs say | Code has |
-|------|----------|----------|
-| Middleware file | `telegramAuth.js` with `telegramReadAuth` | **Missing** |
-| GAP-006 | Closed | **Should be re-opened or code restored** |
-| Fully open routes | 0 in production auth-role mode | **3** (`/health`, `/agents/summary`, `/categories/summary`) |
+### Route protection (static — post DH-P0-SECURITY-4)
 
-**Minimal fix (future phase):** Either implement `telegramReadAuth` per EVIDENCE.md **or** update GAP-006 to Open and add `authenticate` + role check on open routes; align docs with code.
+| Route | telegramReadAuth | readRateLimiter | Notes |
+|-------|:----------------:|:---------------:|-------|
+| `GET /health` | ✅ | ✅ | Was open; now protected |
+| `GET /agents/summary` | ✅ | ✅ | Was open; now protected |
+| `GET /agents/:agentKey/feed` | ✅ | ✅ | Replaced bare `authenticate` |
+| `GET /breaking-news` | ✅ | ✅ | Replaced bare `authenticate` |
+| `GET /events/recent` | ✅ | ✅ | Replaced bare `authenticate` |
+| `GET /categories/summary` | ✅ | ✅ | Was open; now protected |
+| `GET /categories/:category/timeline` | ✅ | ✅ | Replaced bare `authenticate` |
+| `GET /stats/real-time` | ✅ | ✅ | Replaced bare `authenticate` |
+| `POST /agents/:agentKey/mark-processed` | ❌ | ❌ (write) | `authenticate` + `writeRateLimiter` unchanged |
+
+**Code status:** Implemented — **runtime 401/403/200 tests not run** (backend restart required).
+
+**Expected post-restart tests (DH-P0-SECURITY-5):**
+
+| Test | Expected |
+|------|----------|
+| Unauth `GET /agents/summary` | 401 |
+| Unauth `GET /categories/summary` | 401 |
+| Unauth `GET /health` | 401 (production `auth-role` default) |
+| Admin token same routes | 200 |
+| User role same routes | 403 |
+
+### Prior audit snapshot (DH-P0-SECURITY-1 — superseded)
+
+<details>
+<summary>Pre-fix drift table (historical)</summary>
+
+| Route | Was (pre-fix) | Expected |
+|-------|---------------|----------|
+| `GET /health` | None | `telegramReadAuth` + readRateLimiter |
+| `GET /agents/summary` | readRateLimiter only | `telegramReadAuth` + JWT role |
+| `GET /categories/summary` | readRateLimiter only | `telegramReadAuth` + JWT role |
+
+</details>
 
 ---
 
@@ -147,7 +173,7 @@ Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** an
 | 1 | **GAP-036** | Critical (ops) | Live Telegram send on production without dry-run gate |
 | 2 | ~~**GAP-009**~~ | — | **Closed** (DH-P0-SECURITY-3) |
 | 3 | ~~**GAP-011**~~ | — | **Closed** (DH-P0-SECURITY-3) |
-| 4 | **CROSS-002** | High | Doc/code drift; public analytics endpoints |
+| 4 | **CROSS-002** | High | Code restored — runtime verify pending |
 | 5 | **CROSS-003** | Medium | Misleading UI; backend now 403 on Core writes |
 
 ---
@@ -158,11 +184,9 @@ Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** an
 
 Implemented in `e9115af`; runtime verified DH-P0-SECURITY-3.
 
-### Phase B — Telegram analytics (CROSS-002)
+### Phase B — Telegram analytics (CROSS-002) ✅ Code done
 
-**Option 1 (preferred per GAP-006):** Restore/implement `backend/middleware/telegramAuth.js`; wire `telegramReadAuth` on all read routes; default `TELEGRAM_READ_MODE=auth-role` in production.
-
-**Option 2 (minimal):** Add `authenticate` to `/health`, `/agents/summary`, `/categories/summary`; re-open GAP-006 in `GAPS_AND_PLAN.md`.
+Implemented DH-P0-SECURITY-4: `backend/middleware/telegramAuth.js` + `readAuth` on all read routes. Runtime verify pending restart.
 
 ### Phase C — Frontend role gates (CROSS-003)
 
@@ -187,13 +211,13 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 | GAP-036 publisher/automation dry-run | ❌ **NO-GO** |
 | GAP-009 Sources RBAC | ✅ **Closed** — runtime verified DH-P0-SECURITY-3 |
 | GAP-011 Categories RBAC | ✅ **Closed** — runtime verified DH-P0-SECURITY-3 |
-| CROSS-002 Telegram auth | ❌ **Drift — treat as open** |
+| CROSS-002 Telegram auth | ⏳ **Code restored — pending runtime verify** |
 | CROSS-003 UI role gates | ❌ **Open** |
 | **High-risk execution (DH-FINAL-6R)** | ❌ **NO-GO** |
 
 **Safe to proceed (after separate approval):** P0-Security implementation Phases A→C above — **not** high-risk runtime tests.
 
-**Next phase:** CROSS-002 Telegram auth reconcile; CROSS-003 UI role gates.
+**Next phase:** DH-P0-SECURITY-5 Telegram auth runtime verify (after restart approval); CROSS-003 UI role gates.
 
 ---
 
@@ -231,6 +255,7 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 | Sources routes | `backend/routes/data-sources.js` |
 | Categories routes | `backend/routes/data-categories.js` |
 | Telegram routes | `backend/routes/telegram.js` |
+| Telegram read auth | `backend/middleware/telegramAuth.js` |
 | Advanced writeAuth pattern | `backend/routes/data-hub-crawlers.js:24` |
 | Publisher dry-run logic | `backend/services/telegramPublisherService.js:5–8` |
 | GAP-006 claim | `docs/ssot_v3/GAPS_AND_PLAN.md:12` |
@@ -246,3 +271,4 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 | 2026-05-30 | DH-P0-SECURITY-1 read-only verification — docs only |
 | 2026-05-30 | DH-P0-SECURITY-2 — `writeAuth` on Sources/Categories mutate routes; runtime verify pending (no restart) |
 | 2026-05-30 | DH-P0-SECURITY-3 — post-restart runtime verify 11/11 Pass; GAP-009/GAP-011 closed |
+| 2026-05-30 | DH-P0-SECURITY-4 — restore `telegramReadAuth`; all Telegram read routes wired; runtime pending |
