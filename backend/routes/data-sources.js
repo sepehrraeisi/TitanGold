@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
 import { validateBody, validateQuery, validateParams, validateResponse } from '../middleware/validation.js';
 import { writeRateLimiter, readRateLimiter } from '../middleware/rateLimiter.js';
@@ -30,8 +30,9 @@ import { encryptSecret, decryptSecret, isEncrypted } from '../utils/crypto.js';
 import { calculatePagination, formatPaginatedResponse } from '../utils/pagination.js';
 
 const router = express.Router();
+const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
 
-router.post('/publish-telegram', authenticate, async (req, res) => {
+router.post('/publish-telegram', ...writeAuth, async (req, res) => {
   try {
     const { channelId, message, photoUrl } = req.body;
 
@@ -51,7 +52,7 @@ router.post('/publish-telegram', authenticate, async (req, res) => {
 // Telegram Collector ↔ Data Sources Sync (TASK-DHT-010)
 // ---------------------------------------------------------------------------
 
-router.post('/telegram-sync', authenticate, writeRateLimiter, async (req, res) => {
+router.post('/telegram-sync', ...writeAuth, async (req, res) => {
   try {
     const summary = await syncTelegramChannelsToDataSources();
     res.json({
@@ -68,7 +69,7 @@ router.post('/telegram-sync', authenticate, writeRateLimiter, async (req, res) =
 });
 
 // Sync category for a specific telegram channel → data source (TASK-DHT-020)
-router.post('/telegram-sync-category', authenticate, writeRateLimiter, async (req, res) => {
+router.post('/telegram-sync-category', ...writeAuth, async (req, res) => {
   try {
     const { channelId, category } = req.body;
     
@@ -91,7 +92,7 @@ router.post('/telegram-sync-category', authenticate, writeRateLimiter, async (re
 });
 
 // Transfer telegram messages to pipeline (TASK-DHT-030)
-router.post('/telegram-transfer-messages', authenticate, writeRateLimiter, async (req, res) => {
+router.post('/telegram-transfer-messages', ...writeAuth, async (req, res) => {
   try {
     const { batchSize } = req.body;
     const size = batchSize && batchSize > 0 && batchSize <= 500 ? batchSize : 50;
@@ -138,7 +139,7 @@ router.get('/telegram-account-metrics', authenticate, readRateLimiter, async (re
 });
 
 // Test data source connection (TASK-BE-007)
-router.post('/test-connection', authenticate, writeRateLimiter, validateBody(createDataSourceSchema), async (req, res) => {
+router.post('/test-connection', ...writeAuth, validateBody(createDataSourceSchema), async (req, res) => {
   try {
     const sourceConfig = req.validatedBody;
     const result = await dataFetcherService.testConnection(sourceConfig);
@@ -188,7 +189,7 @@ router.get('/', authenticate, readRateLimiter, validateResponse(dataSourcesListR
   }
 });
 
-router.post('/', authenticate, writeRateLimiter, validateBody(createDataSourceSchema), validateResponse(dataSourceResponseSchema), async (req, res) => {
+router.post('/', ...writeAuth, validateBody(createDataSourceSchema), validateResponse(dataSourceResponseSchema), async (req, res) => {
   try {
     const { name, type, url, category_id, category, method, refresh_interval, config, credentials } = req.validatedBody;
 
@@ -222,7 +223,7 @@ router.post('/', authenticate, writeRateLimiter, validateBody(createDataSourceSc
   }
 });
 
-router.put('/:id', authenticate, writeRateLimiter, validateParams(uuidParamSchema), validateBody(updateDataSourceSchema), validateResponse(dataSourceResponseSchema), async (req, res) => {
+router.put('/:id', ...writeAuth, validateParams(uuidParamSchema), validateBody(updateDataSourceSchema), validateResponse(dataSourceResponseSchema), async (req, res) => {
   try {
     const { id } = req.validatedParams;
     const { name, type, url, category, refresh_interval, config, credentials, is_active } = req.validatedBody;
@@ -288,7 +289,7 @@ router.put('/:id', authenticate, writeRateLimiter, validateParams(uuidParamSchem
   }
 });
 
-router.delete('/:id', authenticate, writeRateLimiter, validateParams(uuidParamSchema), async (req, res) => {
+router.delete('/:id', ...writeAuth, validateParams(uuidParamSchema), async (req, res) => {
   try {
     const { id } = req.validatedParams;
     const { hard } = req.query; // Optional query param for hard delete
@@ -347,7 +348,7 @@ router.delete('/:id', authenticate, writeRateLimiter, validateParams(uuidParamSc
 });
 
 // Restore soft-deleted data source (TASK-BE-017)
-router.patch('/:id/restore', authenticate, writeRateLimiter, validateResponse(dataSourceResponseSchema), async (req, res) => {
+router.patch('/:id/restore', ...writeAuth, validateResponse(dataSourceResponseSchema), async (req, res) => {
   try {
     const { id } = req.params;
 

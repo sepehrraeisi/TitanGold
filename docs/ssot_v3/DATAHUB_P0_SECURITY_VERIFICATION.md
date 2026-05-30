@@ -1,6 +1,6 @@
 # DataHub P0 Security Verification (DH-P0-SECURITY-1)
 
-> **Status:** Read-only verification — **no implementation, no env change**  
+> **Status:** DH-P0-SECURITY-2 — backend RBAC **implemented in code**; **runtime verification pending** (restart not performed)  
 > **Date:** 2026-05-30  
 > **Prerequisites:** [`DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md`](./DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md) (DH-CROSS-1), [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLAN.md)  
 > **Next step:** Review this doc → approve minimal hardening plan → implement in separate phase (not this commit)
@@ -14,8 +14,8 @@ Read-only verification confirms **all five P0 blockers remain open**. High-risk 
 | ID | Finding | Severity | High-risk blocker? |
 |----|---------|----------|-------------------|
 | **GAP-036** | `NODE_ENV=production`, `TELEGRAM_PUBLISHER_DRY_RUN` unset, 1 active publisher with bot token + chat_id | **High** | **Yes** — D-02/D-03 NO-GO |
-| **GAP-009** | Sources write routes: `authenticate` only — **no `authorize()`** on any mutate route | **High** | **Yes** — any auth user can CRUD sources |
-| **GAP-011** | Categories write routes: `authenticate` only — **no `authorize()`**, **no `writeRateLimiter`** | **High** | **Yes** |
+| **GAP-009** | Sources write routes: **`writeAuth` implemented** — pending runtime verify after restart | **High** | **Yes** — blocked until runtime 403/200 verified |
+| **GAP-011** | Categories write routes: **`writeAuth` implemented** — pending runtime verify after restart | **High** | **Yes** — blocked until runtime 403/200 verified |
 | **CROSS-002** | `telegramAuth.js` / `telegramReadAuth` **missing**; 3 analytics routes unauthenticated vs GAP-006 docs | **High** | **Yes** — production data exposure |
 | **CROSS-003** | **No** DataHub panel role-gates write buttons; Core backend unprotected | **Medium** | **Yes** — UX allows actions that should 403 on Advanced only |
 
@@ -48,38 +48,40 @@ Read-only verification confirms **all five P0 blockers remain open**. High-risk 
 ## 2. GAP-009 — Sources write RBAC
 
 **File:** `backend/routes/data-sources.js`  
-**Imports:** `authenticate`, `readRateLimiter`, `writeRateLimiter` — **`authorize` not imported**
+**Imports:** `authenticate`, `authorize`, `readRateLimiter`, `writeRateLimiter`  
+**Pattern:** `const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter]` (DH-P0-SECURITY-2)
 
-| Route | Method | authenticate | authorize | roles | rate limit | gap? |
-|-------|--------|--------------|-----------|-------|------------|------|
-| `/` | POST | ✅ | ❌ | — | writeRateLimiter | **Yes — GAP-009** |
-| `/:id` | PUT | ✅ | ❌ | — | writeRateLimiter | **Yes** |
-| `/:id` | DELETE | ✅ | ❌ | — | writeRateLimiter | **Yes** |
-| `/:id/restore` | PATCH | ✅ | ❌ | — | writeRateLimiter | **Yes** |
-| `/test-connection` | POST | ✅ | ❌ | — | writeRateLimiter | **Yes** |
-| `/telegram-sync` | POST | ✅ | ❌ | — | writeRateLimiter | **Yes** |
-| `/telegram-sync-category` | POST | ✅ | ❌ | — | writeRateLimiter | **Yes** |
-| `/telegram-transfer-messages` | POST | ✅ | ❌ | — | writeRateLimiter | **Yes** |
-| `/publish-telegram` | POST | ✅ | ❌ | — | ❌ none | **Yes — also missing rate limit** |
+| Route | Method | authenticate | authorize admin/trader | writeRateLimiter | gap? |
+|-------|--------|--------------|------------------------|------------------|------|
+| `/` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/:id` | PUT | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/:id` | DELETE | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/:id/restore` | PATCH | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/test-connection` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/telegram-sync` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/telegram-sync-category` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/telegram-transfer-messages` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/publish-telegram` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
 
-**Reference pattern (Advanced):** `const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter]` — e.g. `data-hub-crawlers.js:24`.
-
-**Gap confirmed:** Any authenticated user (`admin`, `trader`, `user`, `vip`) can mutate sources.
+**Code status (2026-05-30):** All mutate routes use `...writeAuth`. **Runtime 403/200 tests not run** — backend restart required.
 
 ---
 
 ## 3. GAP-011 — Categories write RBAC
 
 **File:** `backend/routes/data-categories.js`  
-**Imports:** `authenticate` only — **no `authorize`, no rate limiters**
+**Imports:** `authenticate`, `authorize`, `readRateLimiter`, `writeRateLimiter`  
+**Pattern:** `const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter]` (DH-P0-SECURITY-2)
 
-| Route | Method | authenticate | authorize | roles | rate limit | gap? |
-|-------|--------|--------------|-----------|-------|------------|------|
-| `/` | POST | ✅ | ❌ | — | ❌ | **Yes — GAP-011** |
-| `/:id` | PUT | ✅ | ❌ | — | ❌ | **Yes** |
-| `/:id` | DELETE | ✅ | ❌ | — | ❌ | **Yes** |
+| Route | Method | authenticate | authorize admin/trader | writeRateLimiter | gap? |
+|-------|--------|--------------|------------------------|------------------|------|
+| `/` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/:id` | PUT | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/:id` | DELETE | ✅ | ✅ | ✅ | **Pending runtime verify** |
 
-**Gap confirmed:** Any authenticated user can create/update/delete categories; no write rate limiting.
+**Read routes:** `GET /` and `GET /:id` remain `authenticate` + `readRateLimiter` (unchanged auth requirement).
+
+**Code status (2026-05-30):** All mutate routes use `...writeAuth`. **Runtime 403/200 tests not run** — backend restart required.
 
 ---
 
@@ -121,8 +123,8 @@ Read-only verification confirms **all five P0 blockers remain open**. High-risk 
 
 | Component | Write buttons role-gated? | Backend protected? | UX risk |
 |-----------|---------------------------|-------------------|---------|
-| **DataSourcesPanel** | ❌ No | ❌ GAP-009 — any auth user | **High** — Create/Edit/Delete/Restore/Test visible to all |
-| **CategoriesPanel** | ❌ No | ❌ GAP-011 | **High** |
+| **DataSourcesPanel** | ❌ No | ⏳ GAP-009 — code fixed; runtime pending | **High** — Create/Edit/Delete/Restore/Test visible to all |
+| **CategoriesPanel** | ❌ No | ⏳ GAP-011 — code fixed; runtime pending | **High** |
 | **TelegramPublisher** | ❌ No | ✅ Advanced writes: admin/trader | Medium — viewer sees Publish/Test; API 403 |
 | **AutomationTopics** | ❌ No | ✅ admin/trader on dispatch/mutate | Medium |
 | **WebCrawlerConfig** | ❌ No | ✅ admin/trader on run/create | Medium |
@@ -188,8 +190,8 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 | Low-risk runtime (DH-FINAL-4) | ✅ Pass |
 | Crawler dry-run D-01 | ✅ Pass |
 | GAP-036 publisher/automation dry-run | ❌ **NO-GO** |
-| GAP-009 Sources RBAC | ❌ **Open** |
-| GAP-011 Categories RBAC | ❌ **Open** |
+| GAP-009 Sources RBAC | ⏳ **Backend implemented — pending runtime verify** |
+| GAP-011 Categories RBAC | ⏳ **Backend implemented — pending runtime verify** |
 | CROSS-002 Telegram auth | ❌ **Drift — treat as open** |
 | CROSS-003 UI role gates | ❌ **Open** |
 | **High-risk execution (DH-FINAL-6R)** | ❌ **NO-GO** |
@@ -220,3 +222,4 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 | Date | Change |
 |------|--------|
 | 2026-05-30 | DH-P0-SECURITY-1 read-only verification — docs only |
+| 2026-05-30 | DH-P0-SECURITY-2 — `writeAuth` on Sources/Categories mutate routes; runtime verify pending (no restart) |
