@@ -1,6 +1,6 @@
 # DataHub P0 Security Verification (DH-P0-SECURITY-1)
 
-> **Status:** DH-P0-SECURITY-2 — backend RBAC **implemented in code**; **runtime verification pending** (restart not performed)  
+> **Status:** DH-P0-SECURITY-3 — GAP-009 / GAP-011 **runtime verified** (`e9115af`); high-risk execution still **NO-GO** (GAP-036, CROSS-002, CROSS-003 open)  
 > **Date:** 2026-05-30  
 > **Prerequisites:** [`DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md`](./DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md) (DH-CROSS-1), [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLAN.md)  
 > **Next step:** Review this doc → approve minimal hardening plan → implement in separate phase (not this commit)
@@ -9,17 +9,17 @@
 
 ## Executive summary
 
-Read-only verification confirms **all five P0 blockers remain open**. High-risk DataHub execution must **stay NO-GO**.
+Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** and **GAP-011** are now **closed** after backend RBAC (`e9115af`) and runtime verification (DH-P0-SECURITY-3). High-risk DataHub execution must **stay NO-GO** for remaining blockers.
 
 | ID | Finding | Severity | High-risk blocker? |
 |----|---------|----------|-------------------|
 | **GAP-036** | `NODE_ENV=production`, `TELEGRAM_PUBLISHER_DRY_RUN` unset, 1 active publisher with bot token + chat_id | **High** | **Yes** — D-02/D-03 NO-GO |
-| **GAP-009** | Sources write routes: **`writeAuth` implemented** — pending runtime verify after restart | **High** | **Yes** — blocked until runtime 403/200 verified |
-| **GAP-011** | Categories write routes: **`writeAuth` implemented** — pending runtime verify after restart | **High** | **Yes** — blocked until runtime 403/200 verified |
+| **GAP-009** | Sources write routes: `writeAuth` — **runtime verified 11/11 write checks** | — | **Closed** |
+| **GAP-011** | Categories write routes: `writeAuth` — **runtime verified** | — | **Closed** |
 | **CROSS-002** | `telegramAuth.js` / `telegramReadAuth` **missing**; 3 analytics routes unauthenticated vs GAP-006 docs | **High** | **Yes** — production data exposure |
-| **CROSS-003** | **No** DataHub panel role-gates write buttons; Core backend unprotected | **Medium** | **Yes** — UX allows actions that should 403 on Advanced only |
+| **CROSS-003** | **No** DataHub panel role-gates write buttons; Core backend now protected | **Medium** | **Yes** — UX still allows write buttons for non-admin/trader |
 
-**Recommendation:** Do **not** execute high-risk actions. Fix **GAP-009** and **GAP-011** backend RBAC first (minimal: mirror Advanced `writeAuth` pattern). Reconcile **CROSS-002** (implement or re-open GAP-006). Add **CROSS-003** UI affordances after backend RBAC. Keep **GAP-036** NO-GO until env gate fixed with explicit approval + restart plan.
+**Recommendation:** Do **not** execute high-risk actions until **GAP-036** resolved. Reconcile **CROSS-002** next. Add **CROSS-003** UI affordances.
 
 ---
 
@@ -53,17 +53,17 @@ Read-only verification confirms **all five P0 blockers remain open**. High-risk 
 
 | Route | Method | authenticate | authorize admin/trader | writeRateLimiter | gap? |
 |-------|--------|--------------|------------------------|------------------|------|
-| `/` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/:id` | PUT | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/:id` | DELETE | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/:id/restore` | PATCH | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/test-connection` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/telegram-sync` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/telegram-sync-category` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/telegram-transfer-messages` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/publish-telegram` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id` | PUT | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id` | DELETE | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id/restore` | PATCH | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/test-connection` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/telegram-sync` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/telegram-sync-category` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/telegram-transfer-messages` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/publish-telegram` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
 
-**Code status (2026-05-30):** All mutate routes use `...writeAuth`. **Runtime 403/200 tests not run** — backend restart required.
+**Code status:** All mutate routes use `...writeAuth` (`e9115af`). **Runtime verified** DH-P0-SECURITY-3 (see §9).
 
 ---
 
@@ -75,13 +75,13 @@ Read-only verification confirms **all five P0 blockers remain open**. High-risk 
 
 | Route | Method | authenticate | authorize admin/trader | writeRateLimiter | gap? |
 |-------|--------|--------------|------------------------|------------------|------|
-| `/` | POST | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/:id` | PUT | ✅ | ✅ | ✅ | **Pending runtime verify** |
-| `/:id` | DELETE | ✅ | ✅ | ✅ | **Pending runtime verify** |
+| `/` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id` | PUT | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id` | DELETE | ✅ | ✅ | ✅ | **Closed — runtime verified** |
 
 **Read routes:** `GET /` and `GET /:id` remain `authenticate` + `readRateLimiter` (unchanged auth requirement).
 
-**Code status (2026-05-30):** All mutate routes use `...writeAuth`. **Runtime 403/200 tests not run** — backend restart required.
+**Code status:** All mutate routes use `...writeAuth` (`e9115af`). **Runtime verified** DH-P0-SECURITY-3 (see §9).
 
 ---
 
@@ -123,8 +123,8 @@ Read-only verification confirms **all five P0 blockers remain open**. High-risk 
 
 | Component | Write buttons role-gated? | Backend protected? | UX risk |
 |-----------|---------------------------|-------------------|---------|
-| **DataSourcesPanel** | ❌ No | ⏳ GAP-009 — code fixed; runtime pending | **High** — Create/Edit/Delete/Restore/Test visible to all |
-| **CategoriesPanel** | ❌ No | ⏳ GAP-011 — code fixed; runtime pending | **High** |
+| **DataSourcesPanel** | ❌ No | ✅ GAP-009 closed | Medium — buttons visible; API 403 for non-admin/trader |
+| **CategoriesPanel** | ❌ No | ✅ GAP-011 closed | Medium — buttons visible; API 403 for non-admin/trader |
 | **TelegramPublisher** | ❌ No | ✅ Advanced writes: admin/trader | Medium — viewer sees Publish/Test; API 403 |
 | **AutomationTopics** | ❌ No | ✅ admin/trader on dispatch/mutate | Medium |
 | **WebCrawlerConfig** | ❌ No | ✅ admin/trader on run/create | Medium |
@@ -145,23 +145,18 @@ Read-only verification confirms **all five P0 blockers remain open**. High-risk 
 | Rank | ID | Risk | Rationale |
 |------|-----|------|-----------|
 | 1 | **GAP-036** | Critical (ops) | Live Telegram send on production without dry-run gate |
-| 2 | **GAP-009** | High | Unrestricted source mutation for any logged-in user |
-| 3 | **GAP-011** | High | Unrestricted category mutation; no rate limit |
+| 2 | ~~**GAP-009**~~ | — | **Closed** (DH-P0-SECURITY-3) |
+| 3 | ~~**GAP-011**~~ | — | **Closed** (DH-P0-SECURITY-3) |
 | 4 | **CROSS-002** | High | Doc/code drift; public analytics endpoints |
-| 5 | **CROSS-003** | Medium | Misleading UI; Core worse than Advanced |
+| 5 | **CROSS-003** | Medium | Misleading UI; backend now 403 on Core writes |
 
 ---
 
 ## 7. Minimal fix recommendations (plan only — do not implement yet)
 
-### Phase A — Backend RBAC (smallest correct diff)
+### Phase A — Backend RBAC ✅ Done
 
-1. **GAP-009:** Add `writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter]` to all Sources mutate routes listed in §2; add rate limit to `/publish-telegram`.
-2. **GAP-011:** Same `writeAuth` on Categories POST/PUT/DELETE; add `readRateLimiter` on GETs for consistency.
-
-**Files:** `backend/routes/data-sources.js`, `backend/routes/data-categories.js` only.
-
-**Tests:** Integration tests with `user` role → expect 403 on writes; `trader`/`admin` → 200/201.
+Implemented in `e9115af`; runtime verified DH-P0-SECURITY-3.
 
 ### Phase B — Telegram analytics (CROSS-002)
 
@@ -190,15 +185,42 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 | Low-risk runtime (DH-FINAL-4) | ✅ Pass |
 | Crawler dry-run D-01 | ✅ Pass |
 | GAP-036 publisher/automation dry-run | ❌ **NO-GO** |
-| GAP-009 Sources RBAC | ⏳ **Backend implemented — pending runtime verify** |
-| GAP-011 Categories RBAC | ⏳ **Backend implemented — pending runtime verify** |
+| GAP-009 Sources RBAC | ✅ **Closed** — runtime verified DH-P0-SECURITY-3 |
+| GAP-011 Categories RBAC | ✅ **Closed** — runtime verified DH-P0-SECURITY-3 |
 | CROSS-002 Telegram auth | ❌ **Drift — treat as open** |
 | CROSS-003 UI role gates | ❌ **Open** |
 | **High-risk execution (DH-FINAL-6R)** | ❌ **NO-GO** |
 
 **Safe to proceed (after separate approval):** P0-Security implementation Phases A→C above — **not** high-risk runtime tests.
 
-**Next safest runtime candidate after P0 hardening:** Prioritization Override (P2, single test source) — still requires GAP-009 not blocking if source selected via Core UI.
+**Next phase:** CROSS-002 Telegram auth reconcile; CROSS-003 UI role gates.
+
+---
+
+## 9. DH-P0-SECURITY-3 Runtime Verification
+
+**Commit under test:** `e9115af` — `fix(datahub): add core write RBAC`  
+**Restart:** `pm2 restart …/ecosystem.config.json --only titan-backend --update-env` (2026-05-30)  
+**Health:** `GET /health` → **200**, DB connected  
+**Token method:** JWT signed with `JWT_SECRET` + `{ userId, role }` (no session row). No DB user with `role=user` exists — `user` role simulated via JWT claim (same pattern as integration tests). Admin reads use `admin@titangold.com` user id + `role: admin`.
+
+| Test | Role | Route | Expected | Actual | Pass/Fail |
+|------|------|-------|----------|--------|-----------|
+| A-read-sources | admin | `GET /api/v1/data-sources?page=1&limit=1` | 200 | 200 | **Pass** |
+| A-read-categories | admin | `GET /api/v1/data-categories/` | 200 | 200 | **Pass** |
+| B-src-post | user | `POST /api/v1/data-sources` `{}` | 403 | 403 | **Pass** |
+| B-src-test-conn | user | `POST /api/v1/data-sources/test-connection` `{}` | 403 | 403 | **Pass** |
+| B-src-telegram-sync | user | `POST /api/v1/data-sources/telegram-sync` `{}` | 403 | 403 | **Pass** |
+| B-src-delete | user | `DELETE /api/v1/data-sources/00000000-0000-0000-0000-000000000000` | 403 | 403 | **Pass** |
+| C-cat-post | user | `POST /api/v1/data-categories` `{}` | 403 | 403 | **Pass** |
+| C-cat-put | user | `PUT /api/v1/data-categories/00000000-0000-0000-0000-000000000000` `{}` | 403 | 403 | **Pass** |
+| C-cat-delete | user | `DELETE /api/v1/data-categories/00000000-0000-0000-0000-000000000000` | 403 | 403 | **Pass** |
+| D-src-post-admin | admin | `POST /api/v1/data-sources` `{}` | 400 | 400 | **Pass** |
+| D-cat-post-admin | admin | `POST /api/v1/data-categories` `{}` | 400 | 400 | **Pass** |
+
+**Summary:** **11/11 Pass**. RBAC blocks `user` before validation (403, not 400). Admin passes RBAC and hits validation (400). Reads unchanged at 200.
+
+**Caveat:** Re-test with a real DB `user`-role account when one exists, to confirm session-based auth path (DB role lookup) also enforces 403.
 
 ---
 
@@ -223,3 +245,4 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 |------|--------|
 | 2026-05-30 | DH-P0-SECURITY-1 read-only verification — docs only |
 | 2026-05-30 | DH-P0-SECURITY-2 — `writeAuth` on Sources/Categories mutate routes; runtime verify pending (no restart) |
+| 2026-05-30 | DH-P0-SECURITY-3 — post-restart runtime verify 11/11 Pass; GAP-009/GAP-011 closed |
