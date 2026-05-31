@@ -226,11 +226,78 @@ While `TELEGRAM_PUBLISHER_DRY_RUN=true`:
 | Criterion | Status |
 |-----------|--------|
 | Plan documented | ✅ This doc (DH-P0-SECURITY-8) |
-| Env gate applied | ⏳ Pending approval |
-| D-02 Pass | ⏳ Pending |
-| D-03 Pass | ⏳ Pending |
-| Rollback tested or documented | ⏳ Pending |
-| GAP-036 marked Closed in `GAPS_AND_PLAN.md` | ⏳ After execution |
+| Env gate applied | ✅ DH-P0-SECURITY-9 (`e4f2b79` + restart) |
+| D-02 Pass | ⏳ Pending separate approval |
+| D-03 Pass | ⏳ Pending separate approval |
+| Rollback tested or documented | ⏳ Documented in Rollback plan (not exercised) |
+| GAP-036 marked Closed in `GAPS_AND_PLAN.md` | ⏳ After D-02 and D-03 pass |
+
+---
+
+## DH-P0-SECURITY-9 Env Gate Execution
+
+**Date (UTC):** 2026-05-31  
+**Config commit:** `e4f2b79` — `chore(datahub): force telegram publisher dry-run`  
+**D-02 / D-03 executed:** **No** (not approved this phase)
+
+### Step 0 — Env source confirmation
+
+| Check | Result |
+|-------|--------|
+| `pm2 describe titan-backend` | Script `/home/ubuntu/webapp/TitanGold/backend/server.js`, cwd `backend/`, cluster ×2, `node env` production |
+| `pm2 jlist` env (pre-change) | `NODE_ENV=production`, `TELEGRAM_PUBLISHER_DRY_RUN=null`, `env_file=backend/.env` (both pm_id 4 and 5) |
+| `backend/ecosystem.config.json` | Defines `titan-backend` `env` + `env_file`; **effective source for PM2 restart** |
+| `backend/.env` | No `TELEGRAM_PUBLISHER_DRY_RUN` line (grep) — ecosystem `env` block is authoritative for this flag |
+
+**Conclusion:** Edit `backend/ecosystem.config.json` → `apps[0].env.TELEGRAM_PUBLISHER_DRY_RUN`.
+
+### Step 1 — Pre-change capture
+
+| Check | Result |
+|-------|--------|
+| `git status` | Clean (before config commit) |
+| `git log -1` (pre) | `0977c72` docs plan |
+| `pm2 status` | `titan-backend` online ×2; `titan-engine-worker` 9d uptime; `telegram-collector` ~67m uptime |
+| `GET /health` (`:5002`) | **200** |
+| PM2 `TELEGRAM_PUBLISHER_DRY_RUN` (pre) | **null** (both instances) |
+| Publisher counts (SQL) | `active_count=1`, `with_token=1`, `with_chat=1` |
+
+### Step 2–3 — Change and config commit
+
+Added to `backend/ecosystem.config.json` under `titan-backend.env`:
+
+```json
+"TELEGRAM_PUBLISHER_DRY_RUN": "true"
+```
+
+No changes to `NODE_ENV`, DB, tokens, or publisher rows.
+
+### Step 4 — Restart
+
+```bash
+pm2 restart /home/ubuntu/webapp/TitanGold/backend/ecosystem.config.json --only titan-backend --update-env
+```
+
+| Check | Result |
+|-------|--------|
+| Processes restarted | **Only** `titan-backend` (pm_id 4, 5) |
+| `titan-engine-worker` | **Not** restarted (uptime remained ~9 days) |
+| `telegram-collector` | **Not** restarted (uptime remained ~68 min) |
+
+### Step 5 — Post-restart verification
+
+| Check | Result |
+|-------|--------|
+| `pm2 status` | `titan-backend` online ×2, uptime seconds |
+| `GET /health` | **HTTP 200**, DB connected (log: `request_completed` status 200) |
+| PM2 `TELEGRAM_PUBLISHER_DRY_RUN` (post) | **`true`** (pm_id 4 and 5) |
+| PM2 `NODE_ENV` (post) | **`production`** (unchanged) |
+| Boot errors | **None** — PostgreSQL connected, API initialized |
+| D-02 executed | **No** |
+| D-03 executed | **No** |
+| Telegram send | **None** |
+
+**Effective gate:** `isPublisherDryRunForced()` → **true** while env remains `true` (code path in `telegramPublisherService.js`).
 
 ---
 
@@ -239,3 +306,4 @@ While `TELEGRAM_PUBLISHER_DRY_RUN=true`:
 | Date | Change |
 |------|--------|
 | 2026-05-31 | DH-P0-SECURITY-8 — planning doc created; no env/restart/D-02/D-03 |
+| 2026-05-31 | DH-P0-SECURITY-9 — Option A env gate applied (`e4f2b79`); `titan-backend` restart; D-02/D-03 not run |
