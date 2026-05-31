@@ -227,7 +227,7 @@ While `TELEGRAM_PUBLISHER_DRY_RUN=true`:
 |-----------|--------|
 | Plan documented | ✅ This doc (DH-P0-SECURITY-8) |
 | Env gate applied | ✅ DH-P0-SECURITY-9 (`e4f2b79` + restart) |
-| D-02 Pass | ⏳ Pending separate approval |
+| D-02 Pass | ✅ DH-P0-SECURITY-10 (see `DATAHUB_DRY_RUN_RUNTIME_RESULTS.md`) |
 | D-03 Pass | ⏳ Pending separate approval |
 | Rollback tested or documented | ⏳ Documented in Rollback plan (not exercised) |
 | GAP-036 marked Closed in `GAPS_AND_PLAN.md` | ⏳ After D-02 and D-03 pass |
@@ -307,3 +307,16 @@ pm2 restart /home/ubuntu/webapp/TitanGold/backend/ecosystem.config.json --only t
 |------|--------|
 | 2026-05-31 | DH-P0-SECURITY-8 — planning doc created; no env/restart/D-02/D-03 |
 | 2026-05-31 | DH-P0-SECURITY-9 — Option A env gate applied (`e4f2b79`); `titan-backend` restart; D-02/D-03 not run |
+| 2026-05-31 | DH-P0-SECURITY-10 — D-02 **Pass**; D-03 not run |
+
+---
+
+## DH-P0-SECURITY-10 — D-02 execution summary
+
+| Check | Result |
+|-------|--------|
+| Env gate pre-check | `TELEGRAM_PUBLISHER_DRY_RUN=true`, health **200** |
+| Publisher | `5ab9a6bc-5f17-4aae-bb06-4a34e827af24` (active, has token) |
+| D-02 HTTP | **200**, `dry_run: true`, `telegram_message_id: null` |
+| D-03 | **Not executed** |
+| GAP-036 closed | **No** — pending D-03 |

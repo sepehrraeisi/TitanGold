@@ -1,7 +1,7 @@
 # DataHub Dry-Run Runtime Results
 
-> **Status:** D-01 **Pass**; D-02/D-03 **NO-GO** (env gate audit DH-FINAL-5G)  
-> **Date:** 2026-05-30  
+> **Status:** D-01 **Pass**; D-02 **Pass** (DH-P0-SECURITY-10); D-03 **Pending**  
+> **Date:** 2026-05-31 (D-02); 2026-05-30 (D-01)  
 > **Plan:** [`DATAHUB_DRY_RUN_TEST_PLAN.md`](./DATAHUB_DRY_RUN_TEST_PLAN.md) (DH-FINAL-5)  
 > **Branch:** `feat/gap-008-sources-backend-wiring`  
 > **Account:** `admin@titangold.com` (admin) — curl-auth JWT
@@ -13,10 +13,10 @@
 | Test ID | Result | Notes |
 |---------|--------|-------|
 | **D-01** Crawler dry-run | **Pass** | `dry_run: true`; `collected_data` count unchanged |
-| **D-02** Publisher test | **NO-GO** | DH-FINAL-5G: production env + bot token — live Telegram send possible; **not executed** |
-| **D-03** Automation test-run | **NO-GO** | Same publisher chain as D-02; **not executed** |
+| **D-02** Publisher test | **Pass** | DH-P0-SECURITY-10; forced dry-run under `TELEGRAM_PUBLISHER_DRY_RUN=true` |
+| **D-03** Automation test-run | **Pending** | Not executed this phase |
 
-**No Telegram message was sent** during any dry-run phase (D-02/D-03 were never invoked).
+**No live Telegram send** from D-02 probe (`telegram_message_id: null`, `status: dry_run`).
 
 ---
 
@@ -119,12 +119,92 @@ Audit date: **2026-05-30**. No env changes, no restart, **no D-02/D-03 execution
 - Use publisher without bot token for probe, **or**
 - Run on non-production runtime (`NODE_ENV !== 'production'`)
 
+**Update:** Env gate applied DH-P0-SECURITY-9 (`e4f2b79`); D-02 executed DH-P0-SECURITY-10 — see below.
+
+---
+
+## D-02 — Publisher test dry-run (DH-P0-SECURITY-10)
+
+**Prerequisites:** `TELEGRAM_PUBLISHER_DRY_RUN=true` on both `titan-backend` workers (SECURITY-9). **D-03 not executed.**
+
+### Pre-run gate
+
+| Check | Result |
+|-------|--------|
+| `GET /health` (`:5002`) | **200** |
+| PM2 `TELEGRAM_PUBLISHER_DRY_RUN` | **`true`** (both instances) |
+| PM2 `NODE_ENV` | `production` |
+
+### Publisher selected (read-only)
+
+| Field | Value |
+|-------|-------|
+| **Publisher ID** | `5ab9a6bc-5f17-4aae-bb06-4a34e827af24` |
+| **Name** | تایتان تست |
+| **is_active** | true |
+| **has_bot_token** | true |
+| **channel_id** | set (not null) |
+
+### History count
+
+| Metric | Value |
+|--------|-------|
+| **Before** | `5` |
+| **After** | `6` |
+| **Delta** | `+1` (dry-run history row — acceptable) |
+
+### Request
+
+| Field | Value |
+|-------|-------|
+| **Timestamp (UTC)** | `2026-05-31T13:51:47.981Z` |
+| **Method** | curl-auth (JWT, `admin@titangold.com` user id) |
+| **Endpoint** | `POST /api/v1/data-hub/telegram-publishers/5ab9a6bc-5f17-4aae-bb06-4a34e827af24/test` |
+| **Body** | `{ "message": "DH-P0-SECURITY-10 D-02 dry-run probe" }` |
+
+### Response
+
+| Field | Value | Pass? |
+|-------|-------|-------|
+| **HTTP status** | **200** | ✅ |
+| **success** | `true` | ✅ |
+| **dry_run** | `true` | ✅ |
+| **status** | `dry_run` | ✅ |
+| **telegram_message_id** | `null` | ✅ |
+| **error** | `null` | ✅ |
+| **history_id** | `e3844022-dcef-433b-ac8c-2505edc07674` | ✅ |
+
+### Latest `publisher_delivery_history` (probe row)
+
+| Field | Value |
+|-------|-------|
+| **id** | `e3844022-dcef-433b-ac8c-2505edc07674` |
+| **status** | `dry_run` |
+| **telegram_message_id** | `null` |
+| **metadata.mode** | `test` |
+
+Note: Table has no `dry_run` column; dry-run is indicated by `status = 'dry_run'`. Older rows on same publisher show prior `test`/`sent` with message ids (pre–env-gate runs).
+
+### Log safety
+
+| Check | Result |
+|-------|--------|
+| `POST …/test` completed 200 | Yes |
+| `sendTelegramBotMessage` / Bot API send in logs | **Not observed** |
+| Automation/dispatch endpoints | **Not called** |
+
+### D-02 verdict
+
+| Result | **Pass** |
+|--------|----------|
+| **D-03** | **Not executed** (separate approval) |
+
 ---
 
 ## Next recommended phase
 
-1. **High-risk writes planning** (DH-FINAL-6+) — planning only, no execution.
-2. **D-02/D-03:** Remain blocked until env gate fixed and explicit user approval for probe.
+1. **D-03** — automation test-run dry-run (separate approval).
+2. Close **GAP-036** after D-03 passes.
 
 ---
 
@@ -134,3 +214,4 @@ Audit date: **2026-05-30**. No env changes, no restart, **no D-02/D-03 execution
 |------|--------|
 | 2026-05-30 | D-01 executed — Pass; D-02/D-03 skipped |
 | 2026-05-30 | DH-FINAL-5G gate audit — D-02/D-03 **NO-GO**; no Telegram send |
+| 2026-05-31 | DH-P0-SECURITY-10 — D-02 **Pass** under `TELEGRAM_PUBLISHER_DRY_RUN=true`; D-03 pending |
