@@ -228,9 +228,9 @@ While `TELEGRAM_PUBLISHER_DRY_RUN=true`:
 | Plan documented | ✅ This doc (DH-P0-SECURITY-8) |
 | Env gate applied | ✅ DH-P0-SECURITY-9 (`e4f2b79` + restart) |
 | D-02 Pass | ✅ DH-P0-SECURITY-10 (see `DATAHUB_DRY_RUN_RUNTIME_RESULTS.md`) |
-| D-03 Pass | ⏳ Pending separate approval |
+| D-03 Pass | ❌ **Fail** (SECURITY-11 — stale queue / missing `collected_data` records; HTTP 500) |
 | Rollback tested or documented | ⏳ Documented in Rollback plan (not exercised) |
-| GAP-036 marked Closed in `GAPS_AND_PLAN.md` | ⏳ After D-02 and D-03 pass |
+| GAP-036 marked Closed in `GAPS_AND_PLAN.md` | ❌ **Not closed** — D-03 did not pass |
 
 ---
 
@@ -308,6 +308,20 @@ pm2 restart /home/ubuntu/webapp/TitanGold/backend/ecosystem.config.json --only t
 | 2026-05-31 | DH-P0-SECURITY-8 — planning doc created; no env/restart/D-02/D-03 |
 | 2026-05-31 | DH-P0-SECURITY-9 — Option A env gate applied (`e4f2b79`); `titan-backend` restart; D-02/D-03 not run |
 | 2026-05-31 | DH-P0-SECURITY-10 — D-02 **Pass**; D-03 not run |
+| 2026-05-31 | DH-P0-SECURITY-11 — D-03 **Fail** (HTTP 500); GAP-036 remains Open |
+
+---
+
+## DH-P0-SECURITY-11 — D-03 execution summary
+
+| Item | Result |
+|------|--------|
+| Env gate applied | ✅ `TELEGRAM_PUBLISHER_DRY_RUN=true` |
+| D-02 Pass | ✅ (SECURITY-10) |
+| D-03 executed | ✅ Once — `POST /api/v1/data-hub/automation/test-run` |
+| D-03 Pass | ❌ HTTP **500** `Source record not found` |
+| Telegram send | **None** (publisher path not reached) |
+| GAP-036 closed | **No** |
 
 ---
 
