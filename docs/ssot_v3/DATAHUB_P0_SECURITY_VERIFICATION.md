@@ -1,6 +1,6 @@
 # DataHub P0 Security Verification (DH-P0-SECURITY-1)
 
-> **Status:** DH-P0-SECURITY-7 — CROSS-003 **Closed** (UI verified, `ce944cb`); high-risk still **NO-GO** (GAP-036)  
+> **Status:** DH-P0-SECURITY-8 — GAP-036 **plan created** ([`GAP_036_DRY_RUN_GATE_PLAN.md`](./GAP_036_DRY_RUN_GATE_PLAN.md)); **execution not started**; high-risk still **NO-GO** (GAP-036)  
 > **Date:** 2026-05-30  
 > **Prerequisites:** [`DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md`](./DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md) (DH-CROSS-1), [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLAN.md)  
 > **Next step:** Review this doc → approve minimal hardening plan → implement in separate phase (not this commit)
@@ -42,7 +42,7 @@ Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** an
 
 **Decision:** **NO-GO** for publisher test, publisher publish, automation dispatch, automation test-run.
 
-**Minimal fix (future phase, not now):** Set `TELEGRAM_PUBLISHER_DRY_RUN=true` in PM2 env + controlled restart, **or** staging with `NODE_ENV !== 'production'`, **or** token-less probe publisher.
+**Operational plan (DH-P0-SECURITY-8):** [`GAP_036_DRY_RUN_GATE_PLAN.md`](./GAP_036_DRY_RUN_GATE_PLAN.md) — recommends Option A (`TELEGRAM_PUBLISHER_DRY_RUN=true` + `titan-backend` restart only). **Execution not started** — no env change, no restart, no D-02/D-03 in this phase.
 
 ---
 
@@ -187,11 +187,13 @@ Implemented DH-P0-SECURITY-6 (`ce944cb`); UI verified DH-P0-SECURITY-7.
 
 **Files:** `components/ai/AIManager/tabs/DataHub/**` — no backend change.
 
-### Phase D — GAP-036 (ops, separate approval)
+### Phase D — GAP-036 (ops, separate approval) — plan only
 
-Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart; re-run D-02 probe only after explicit approval.
+**Plan:** [`GAP_036_DRY_RUN_GATE_PLAN.md`](./GAP_036_DRY_RUN_GATE_PLAN.md) (DH-P0-SECURITY-8). Option A: `TELEGRAM_PUBLISHER_DRY_RUN=true` in `backend/ecosystem.config.json` + `pm2 restart … --only titan-backend --update-env`; then D-02 → D-03 per dry-run test plan.
 
-**Not in code phase** — env/ops change only.
+**Status:** Plan created — **execution not started**. GAP-036 remains **Open**.
+
+**Not in code phase** — env/ops change only when explicitly approved.
 
 ---
 
@@ -211,7 +213,7 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 
 **Safe to proceed:** Routine DataHub UI use with role gates — **not** high-risk runtime tests until GAP-036 resolved.
 
-**Next phase:** GAP-037 backend schema fix (separate approval); GAP-036 ops dry-run gate.
+**Next phase:** Approve and execute GAP-036 Option A per [`GAP_036_DRY_RUN_GATE_PLAN.md`](./GAP_036_DRY_RUN_GATE_PLAN.md); then GAP-037 backend schema fix (separate approval).
 
 ---
 
@@ -307,3 +309,4 @@ Set `TELEGRAM_PUBLISHER_DRY_RUN=true` via PM2 ecosystem file; scheduled restart;
 | 2026-05-30 | DH-P0-SECURITY-5 — Telegram read auth runtime verify 18/18 auth Pass; CROSS-002 closed |
 | 2026-05-30 | DH-P0-SECURITY-6 — frontend DataHub write role gates; GAP-037 documented |
 | 2026-05-31 | DH-P0-SECURITY-7 — UI role-gate verification; CROSS-003 **Closed** (`DATAHUB_UI_ROLE_GATE_VERIFICATION.md`) |
+| 2026-05-31 | DH-P0-SECURITY-8 — GAP-036 dry-run gate plan (`GAP_036_DRY_RUN_GATE_PLAN.md`); execution not started |
