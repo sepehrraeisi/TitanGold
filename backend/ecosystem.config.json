@@ -9,7 +9,8 @@
       "env": {
         "NODE_ENV": "production",
         "PORT": 5002,
-        "DISABLE_ENGINES": "true"
+        "DISABLE_ENGINES": "true",
+        "TELEGRAM_PUBLISHER_DRY_RUN": "true"
       },
       "env_file": "/home/ubuntu/webapp/TitanGold/backend/.env",
       "error_file": "/home/ubuntu/.pm2/logs/titan-backend-error.log",
