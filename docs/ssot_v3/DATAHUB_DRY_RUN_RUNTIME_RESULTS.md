@@ -1,7 +1,7 @@
 # DataHub Dry-Run Runtime Results
 
-> **Status:** D-01 **Pass**; D-02 **Pass** (SECURITY-10); D-03 **Partial** (SECURITY-14 no-op safe pass; full chain unproven)  
-> **Date:** 2026-06-01 (D-03 re-run); 2026-05-31 (D-02, D-03 fail); 2026-05-30 (D-01)  
+> **Status:** D-01 **Pass**; D-02 **Pass** (SECURITY-10); D-03 **Pass** (SECURITY-16 full-chain)  
+> **Date:** 2026-06-01 (D-03 full-chain); 2026-05-31 (D-02, D-03 fail/partial); 2026-05-30 (D-01)  
 > **Plan:** [`DATAHUB_DRY_RUN_TEST_PLAN.md`](./DATAHUB_DRY_RUN_TEST_PLAN.md) (DH-FINAL-5)  
 > **Branch:** `feat/gap-008-sources-backend-wiring`  
 > **Account:** `admin@titangold.com` (admin) — curl-auth JWT
@@ -14,9 +14,9 @@
 |---------|--------|-------|
 | **D-01** Crawler dry-run | **Pass** | `dry_run: true`; `collected_data` count unchanged |
 | **D-02** Publisher test | **Pass** | DH-P0-SECURITY-10; forced dry-run under `TELEGRAM_PUBLISHER_DRY_RUN=true` |
-| **D-03** Automation test-run | **Partial** | SECURITY-11 **Fail** (HTTP 500); SECURITY-14 **no-op safe pass** (HTTP 200, `no_valid_queue_item`) — publisher chain not invoked |
+| **D-03** Automation test-run | **Pass** | SECURITY-16 full-chain — fixture → queue → `publishResult.dry_run: true`, `telegram_message_id: null` |
 
-**No live Telegram send** from D-02 probe or D-03 attempt (`telegram_message_id: null` where applicable; no Bot API send in logs).
+**No live Telegram send** from D-02 or D-03 probes (`telegram_message_id: null`; no Bot API send in logs).
 
 ---
 
@@ -362,11 +362,84 @@ Note: Table has no `dry_run` column; dry-run is indicated by `status = 'dry_run'
 
 ---
 
+## DH-P0-SECURITY-16 — Full-Chain D-03 Fixture Verification
+
+**Prerequisites:** `TELEGRAM_PUBLISHER_DRY_RUN=true`; test-run fix `be32243`; fixture plan SECURITY-15 Option B.
+
+### Pre-flight
+
+| Check | Result |
+|-------|--------|
+| `GET /health` | **200** |
+| PM2 `TELEGRAM_PUBLISHER_DRY_RUN` | **`true`** (both workers) |
+| Source `774acc11-…` | type **telegram**, category **signals** |
+| Topic `bc6c5f1b-…` (سیگنال) | active; publisher `5ab9a6bc-…` |
+| Publisher | active; has bot token (env gate protects) |
+
+### Fixture (API only)
+
+| Step | Result |
+|------|--------|
+| `POST /api/v1/collected-data` | **201** — fixture id `7655bc34-c8b8-4b5f-83b4-a27cae35ee4d` |
+| `PUT …/collected-data/7655bc34-…` | **200** — `status=processed`, `processed_at` set |
+| Pipeline top-6 | Fixture ranked **#1** (`processed_at` newest) |
+| Cleanup | `DELETE …?hard=true` **200** — row removed (soft delete first per default API; hard delete for cleanup) |
+
+### Counts
+
+| Table | Before | After D-03 | After fixture delete |
+|-------|--------|------------|----------------------|
+| `collected_data` | **296** | **297** | **296** |
+| Topic queue (`bc6c5f1b-…`) | **0** | **1** (queue item `c544965c-…`, status `sent`) | **1** (unchanged — audit) |
+| `datahub_automation_executions` | **14** | **15** | **15** |
+| `publisher_delivery_history` | **16** | **17** | **17** |
+
+### D-03 request
+
+| Field | Value |
+|-------|-------|
+| **Timestamp (UTC)** | `2026-06-01T14:40:08.303Z` |
+| **Endpoint** | `POST /api/v1/data-hub/automation/test-run` |
+| **Body** | `{ "dry_run": true, "topic_id": "bc6c5f1b-4df1-4e11-a324-3f94efc55e0e" }` |
+
+### D-03 response — **Full-chain pass**
+
+| Field | Value | Pass? |
+|-------|-------|-------|
+| **HTTP status** | **200** | ✅ |
+| **dryRun** | `true` | ✅ |
+| **processed** | `1` | ✅ |
+| **status** | `dry_run` | ✅ |
+| **record_id** | `7655bc34-c8b8-4b5f-83b4-a27cae35ee4d` (fixture) | ✅ |
+| **publishResult.dry_run** | `true` | ✅ |
+| **publishResult.status** | `dry_run` | ✅ |
+| **telegram_message_id** | `null` | ✅ |
+| **publishResult.history_id** | `dbfcda79-04ed-47c2-a0f2-70195fd1520a` | ✅ |
+| **execution.id** | `84b5a95b-e461-4c51-982c-f90a468decaa` | ✅ |
+| **execution.dry_run** | `true` | ✅ |
+
+### Log safety
+
+| Check | Result |
+|-------|--------|
+| `POST …/automation/test-run` | **200** at 14:40:08 UTC |
+| `sendMessage` / Bot API | **Not observed** |
+| `/queue/dispatch` | **Not called** |
+| Live publish/test endpoints | **Not called** |
+
+### D-03 verdict (SECURITY-16)
+
+| Result | **Pass — full chain** |
+|--------|------------------------|
+| **GAP-036** | **Ready to close** — env gate + D-02 + D-03 full-chain verified |
+
+---
+
 ## Next recommended phase
 
-1. Ensure topic **سیگنال** has a valid pending queue item (pipeline records matching topic triggers) **or** approve synthetic/seeded queue probe.
-2. Re-run **D-03** once when a valid item exists → expect `publishResult.dry_run: true`, `telegram_message_id: null`.
-3. Close **GAP-036** only after **full-chain** D-03 pass.
+1. Mark **GAP-036 Closed** in SSOT (SECURITY-16).
+2. Live publish/dispatch remains **separate high-risk approval** while `TELEGRAM_PUBLISHER_DRY_RUN=true`.
+3. Optional: widen pipeline refresh window (code) so production automation does not depend on fixture tricks — track separately from GAP-036 closure.
 
 ---
 
@@ -380,3 +453,4 @@ Note: Table has no `dry_run` column; dry-run is indicated by `status = 'dry_run'
 | 2026-05-31 | DH-P0-SECURITY-11 — D-03 **Fail** (HTTP 500, stale queue); no Telegram send; GAP-036 remains Open |
 | 2026-05-31 | DH-P0-SECURITY-13 — test-run queue scoping fix implemented; D-03 re-run pending |
 | 2026-06-01 | DH-P0-SECURITY-14 — D-03 re-run **no-op safe pass** (200); GAP-036 remains Open (full chain unproven) |
+| 2026-06-01 | DH-P0-SECURITY-16 — D-03 **full-chain Pass** with API fixture; GAP-036 closed |

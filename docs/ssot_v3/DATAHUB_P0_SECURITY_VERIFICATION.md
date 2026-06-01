@@ -1,6 +1,6 @@
 # DataHub P0 Security Verification (DH-P0-SECURITY-1)
 
-> **Status:** DH-P0-SECURITY-14 — GAP-036 **D-02 Pass**, **D-03 Partial** (no-op safe pass); high-risk **NO-GO** until full-chain D-03 pass  
+> **Status:** DH-P0-SECURITY-16 — **GAP-036 Closed**; D-02 + D-03 full-chain **Pass**; high-risk live publish/dispatch still **NO-GO** (separate approval)  
 > **Date:** 2026-05-30  
 > **Prerequisites:** [`DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md`](./DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md) (DH-CROSS-1), [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLAN.md)  
 > **Next step:** Review this doc → approve minimal hardening plan → implement in separate phase (not this commit)
@@ -13,14 +13,14 @@ Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** an
 
 | ID | Finding | Severity | High-risk blocker? |
 |----|---------|----------|-------------------|
-| **GAP-036** | Env gate applied; **D-02 Pass**; **D-03 Partial** (SECURITY-14 no-op pass; full chain unproven) | **High** | **Yes** — high-risk NO-GO until full-chain D-03 pass |
+| **GAP-036** | Env gate applied; **D-02 Pass**; **D-03 Pass** (SECURITY-16 full-chain) | **High** | **Closed** — dry-run gate verified; live outbound still NO-GO without separate approval |
 | **GAP-009** | Sources write routes: `writeAuth` — **runtime verified 11/11 write checks** | — | **Closed** |
 | **GAP-011** | Categories write routes: `writeAuth` — **runtime verified** | — | **Closed** |
 | **CROSS-002** | `telegramReadAuth` — **runtime verified 18/18 auth checks** (1 handler 500 pre-existing) | — | **Closed** |
 | **CROSS-003** | DataHub write buttons gated in frontend — **UI verified** DH-P0-SECURITY-7 | — | **Closed** |
 | **GAP-037** | `GET /api/v1/telegram/stats/real-time` → 500 after auth (`telegram_created_at` missing) | **Medium** | **No** — separate schema bug; not auth |
 
-**Recommendation:** Live publish/dispatch still **NO-GO** until **full-chain D-03 passes**. **D-02** verified. **D-03** re-run after fix (SECURITY-14): HTTP **200**, `no_valid_queue_item` — safe, but publisher path not exercised. **CROSS-002** and **CROSS-003** closed. See [`DATAHUB_DRY_RUN_RUNTIME_RESULTS.md`](./DATAHUB_DRY_RUN_RUNTIME_RESULTS.md) § SECURITY-14.
+**Recommendation:** **GAP-036 closed** after SECURITY-16 full-chain D-03. Forced dry-run active (`TELEGRAM_PUBLISHER_DRY_RUN=true`). Live publish/dispatch remains **NO-GO** until separate high-risk approval. See [`DATAHUB_DRY_RUN_RUNTIME_RESULTS.md`](./DATAHUB_DRY_RUN_RUNTIME_RESULTS.md) § SECURITY-16.
 
 ---
 
@@ -40,10 +40,10 @@ Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** an
 | `titan-backend` restart | — | **Yes** (only backend) |
 | `GET /health` | 200 | **200** |
 | D-02 | **Not executed** | **Pass** — `dry_run: true`, `telegram_message_id: null` (SECURITY-10) |
-| D-03 (SECURITY-11) | **Fail** | HTTP **500** — stale global queue head |
-| D-03 (SECURITY-14) | **Partial** | HTTP **200**, `no_valid_queue_item` — fix works; publisher not invoked |
+| D-03 (SECURITY-14) | **Partial** | HTTP **200**, `no_valid_queue_item` |
+| D-03 (SECURITY-16) | **Pass** | Full chain — fixture `7655bc34-…`, `publishResult.dry_run: true`, `telegram_message_id: null` |
 
-**Decision:** Env gate **applied**. **D-02 Pass.** **D-03 partial** — test-run safe after `be32243`; full automation→publisher dry-run **not proven**. GAP-036 **Open (partial)**. **NO-GO** for live publish/dispatch.
+**Decision:** Env gate **applied**. **D-02 Pass.** **D-03 Pass** (full chain). **GAP-036 Closed.** **NO-GO** for live publish/dispatch without separate approval; env forced dry-run remains active.
 
 ---
 

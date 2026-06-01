@@ -228,11 +228,11 @@ While `TELEGRAM_PUBLISHER_DRY_RUN=true`:
 | Plan documented | ✅ This doc (DH-P0-SECURITY-8) |
 | Env gate applied | ✅ DH-P0-SECURITY-9 (`e4f2b79` + restart) |
 | D-02 Pass | ✅ DH-P0-SECURITY-10 (see `DATAHUB_DRY_RUN_RUNTIME_RESULTS.md`) |
-| D-03 Pass (full chain) | ❌ **Not met** — SECURITY-14 no-op safe pass only (`no_valid_queue_item`) |
-| D-03 Pass (safety / no 500) | ✅ SECURITY-14 — HTTP 200 after `be32243` + restart |
-| Test-run code fix | ✅ SECURITY-13 (`be32243`) — runtime verified SECURITY-14 |
+| D-03 Pass (full chain) | ✅ SECURITY-16 — `publishResult.dry_run: true`, `telegram_message_id: null`, fixture record exercised |
+| D-03 Pass (safety / no 500) | ✅ SECURITY-14 + SECURITY-16 |
+| Test-run code fix | ✅ SECURITY-13 (`be32243`) |
 | Rollback tested or documented | ⏳ Documented in Rollback plan (not exercised) |
-| GAP-036 marked Closed in `GAPS_AND_PLAN.md` | ❌ **Not closed** — full automation→publisher dry-run path still unproven |
+| GAP-036 marked Closed in `GAPS_AND_PLAN.md` | ✅ **Closed** (SECURITY-16) |
 
 ---
 
@@ -313,6 +313,18 @@ pm2 restart /home/ubuntu/webapp/TitanGold/backend/ecosystem.config.json --only t
 | 2026-05-31 | DH-P0-SECURITY-11 — D-03 **Fail** (HTTP 500); GAP-036 remains Open |
 | 2026-05-31 | DH-P0-SECURITY-13 — test-run queue fix implemented; D-03 re-run pending |
 | 2026-06-01 | DH-P0-SECURITY-14 — D-03 re-run no-op safe pass; GAP-036 Open |
+| 2026-06-01 | DH-P0-SECURITY-16 — D-03 full-chain **Pass**; **GAP-036 Closed** |
+
+---
+
+## DH-P0-SECURITY-16 — Full-chain D-03 + GAP-036 closure
+
+| Item | Result |
+|------|--------|
+| Fixture | API POST + PUT processed (`7655bc34-…`); hard-deleted after evidence |
+| D-03 | **200**, `processed: 1`, `publishResult.dry_run: true`, `telegram_message_id: null` |
+| Telegram send | **None** |
+| **GAP-036** | **Closed** |
 
 ---
 
