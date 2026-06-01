@@ -7,10 +7,12 @@ import {
     BTN_OUTLINE_SLATE,
     DataHubEmpty,
     StatusPill,
+    dataHubWriteGate,
 } from '../../dataHubUi';
 
 interface AutomationQueueManagerProps {
     queue: any[];
+    canWrite: boolean;
     isDispatching: boolean;
     onDispatch: () => void;
     onPreview: (item: any) => void;
@@ -22,6 +24,7 @@ interface AutomationQueueManagerProps {
 
 const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
     queue,
+    canWrite,
     isDispatching,
     onDispatch,
     onPreview,
@@ -30,6 +33,7 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
     formatTimeAgo,
     t,
 }) => {
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     return (
         <div className={DATAHUB_INNER_LIST}>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
@@ -45,7 +49,8 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                 </div>
                 <button
                     type="button"
-                    disabled={queue.length === 0 || isDispatching}
+                    disabled={wg(queue.length === 0 || isDispatching).disabled}
+                    title={wg(queue.length === 0 || isDispatching).title}
                     onClick={onDispatch}
                     className={BTN_PRIMARY}
                 >
@@ -99,7 +104,8 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                                             </button>
                                             <button
                                                 type="button"
-                                                disabled={processingId === item.id}
+                                                disabled={wg(processingId === item.id).disabled}
+                                                title={wg(processingId === item.id).title}
                                                 onClick={() => onProcess(item.id, 'sent')}
                                                 className={BTN_OUTLINE_EMERALD}
                                             >
@@ -107,6 +113,8 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                                             </button>
                                             <button
                                                 type="button"
+                                                disabled={wg().disabled}
+                                                title={wg().title}
                                                 onClick={() => onProcess(item.id, 'failed')}
                                                 className={BTN_OUTLINE_RED}
                                             >

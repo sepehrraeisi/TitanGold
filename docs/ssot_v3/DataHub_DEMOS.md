@@ -318,6 +318,16 @@ cd backend && npm run migrate   # 030_create_datahub_discovery.sql
 
 Design: `AutoDiscoveryConfig.tsx` slate shell · strict i18n · no IndexedDB discovery state.
 
+#### Runtime action verification (schema drift fix · `ca6226e` · 2026-05-29)
+
+| Check | Endpoint | Result |
+|-------|----------|--------|
+| Scan action | `POST /api/v1/data-hub/discovery/scan` `{}` | **200** — `status: success`; `added: 0`, `duplicates: 26`, `blocked: 0` |
+| DB audit | `datahub_discovery_scans` latest row | `status=success`, `error_message` null (was `column "success_rate" does not exist` before fix) |
+
+**Root cause:** `loadSourceFingerprints()` selected `data_sources.success_rate` / `reliability_score` — columns never migrated.  
+**Fix:** derive scoring in `datahubDiscoveryService.js` from `fetch_count`, `error_count`, `last_status`, `health_status` — **no migration**.
+
 #### Crawler runtime safety (enforced in code)
 
 | Control | Default / rule | Failure |
@@ -351,6 +361,16 @@ Evidence: `docs/ssot_v3/EVIDENCE.md` § Crawler runtime safety.
 | Invalid weights (sum != 100) | `400` `INVALID_WEIGHTS` |
 | Disabled prioritization + preview/apply | `400` `PRIORITIZATION_DISABLED` |
 | DB/API error | `500` + error banner + retry در UI |
+
+#### Runtime action verification (schema drift fix · `ca6226e` · 2026-05-29)
+
+| Check | Endpoint | Result |
+|-------|----------|--------|
+| Preview action | `POST /api/v1/data-hub/prioritization/preview` `{}` | **200** — `48` sources; summary `{ low: 45, high: 2, medium: 0, critical: 1 }` |
+| DB audit | `datahub_prioritization_runs` latest row | `run_type=preview`, `status=success`, `source_count=48` |
+
+**Root cause:** source SELECT included missing `success_rate` / `reliability_score` on `data_sources`.  
+**Fix:** `computeScoresForSource()` derives from existing columns (`fetch_count`, `error_count`, `last_status`, `health_status`, …) — **no migration**. Sources without fetch history score degraded (tier `low`, derived rates `0`).
 
 ### dataHub.advanced.archiving – Cold storage (GAP-032 Closed)
 

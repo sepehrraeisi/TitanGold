@@ -2,22 +2,24 @@ import express from 'express';
 import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
 import { authenticate } from '../middleware/auth.js';
+import { telegramReadAuth } from '../middleware/telegramAuth.js';
 import { readRateLimiter, writeRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
+const readAuth = [telegramReadAuth, readRateLimiter];
 
 // Debug log
 logger.info('📡 Telegram API routes module loaded');
 
 // ============================================================================
-// HEALTH CHECK (NO AUTH)
+// HEALTH CHECK
 // ============================================================================
 
 /**
  * GET /api/v1/telegram/health
- * Health check endpoint for Telegram services (no authentication required)
+ * Health check endpoint for Telegram services
  */
-router.get('/health', async (req, res) => {
+router.get('/health', ...readAuth, async (req, res) => {
     try {
         // Check database connection
         const dbCheck = await query('SELECT COUNT(*) as count FROM telegram_messages');
@@ -61,7 +63,7 @@ router.get('/health', async (req, res) => {
  * - timeRange: time range in hours (default: 24)
  * - requiresAction: filter messages requiring action (true/false)
  */
-router.get('/agents/:agentKey/feed', authenticate, readRateLimiter, async (req, res) => {
+router.get('/agents/:agentKey/feed', ...readAuth, async (req, res) => {
     try {
         const { agentKey } = req.params;
         const {
@@ -181,7 +183,7 @@ router.get('/agents/:agentKey/feed', authenticate, readRateLimiter, async (req, 
  * GET /api/v1/telegram/agents/summary
  * Get overview of all 15 agents with message counts and stats
  */
-router.get('/agents/summary', readRateLimiter, async (req, res) => {
+router.get('/agents/summary', ...readAuth, async (req, res) => {
     try {
         const hours = Math.min(720, Math.max(1, parseInt(req.query.timeRange, 10) || 24));
 
@@ -251,7 +253,7 @@ router.get('/agents/summary', readRateLimiter, async (req, res) => {
  * - categories: comma-separated event categories
  * - severity: filter by severity level (high/medium/low)
  */
-router.get('/breaking-news', authenticate, readRateLimiter, async (req, res) => {
+router.get('/breaking-news', ...readAuth, async (req, res) => {
     try {
         const {
             limit = 20,
@@ -389,7 +391,7 @@ function countriesToRegions(countries) {
  * GET /api/v1/telegram/events/recent
  * Get latest categorized events
  */
-router.get('/events/recent', authenticate, readRateLimiter, async (req, res) => {
+router.get('/events/recent', ...readAuth, async (req, res) => {
     try {
         const { limit = 50, categories, timeRange = 24 } = req.query;
 
@@ -479,7 +481,7 @@ router.get('/events/recent', authenticate, readRateLimiter, async (req, res) => 
  * GET /api/v1/telegram/categories/summary
  * Get message distribution across 15 categories
  */
-router.get('/categories/summary', readRateLimiter, async (req, res) => {
+router.get('/categories/summary', ...readAuth, async (req, res) => {
     try {
         const { timeRange = 24 } = req.query;
 
@@ -539,7 +541,7 @@ router.get('/categories/summary', readRateLimiter, async (req, res) => {
  * GET /api/v1/telegram/categories/:category/timeline
  * Get historical timeline for a specific category
  */
-router.get('/categories/:category/timeline', authenticate, readRateLimiter, async (req, res) => {
+router.get('/categories/:category/timeline', ...readAuth, async (req, res) => {
     try {
         const { category } = req.params;
         const { timeRange = 168, interval = 'hour' } = req.query; // Default 7 days
@@ -597,7 +599,7 @@ router.get('/categories/:category/timeline', authenticate, readRateLimiter, asyn
  * GET /api/v1/telegram/stats/real-time
  * Get live processing stats and collector health
  */
-router.get('/stats/real-time', authenticate, readRateLimiter, async (req, res) => {
+router.get('/stats/real-time', ...readAuth, async (req, res) => {
     try {
         // Pipeline stats from view
         const pipelineStats = await query('SELECT * FROM telegram_pipeline_stats');
@@ -616,10 +618,11 @@ router.get('/stats/real-time', authenticate, readRateLimiter, async (req, res) =
         const processorStats = await query(`
             SELECT 
                 COUNT(*) as messages_processed,
-                AVG(EXTRACT(EPOCH FROM (created_at - telegram_created_at))) * 1000 as avg_processing_delay_ms,
-                COUNT(DISTINCT channel_id) as channels_processed
-            FROM processed_telegram_messages
-            WHERE created_at >= NOW() - INTERVAL '1 hour'
+                AVG(EXTRACT(EPOCH FROM (pm.created_at - COALESCE(tm.telegram_created_at, tm.created_at)))) * 1000 as avg_processing_delay_ms,
+                COUNT(DISTINCT pm.channel_id) as channels_processed
+            FROM processed_telegram_messages pm
+            INNER JOIN telegram_messages tm ON pm.raw_message_id = tm.id
+            WHERE pm.created_at >= NOW() - INTERVAL '1 hour'
         `);
 
         // Agent activity (last hour)

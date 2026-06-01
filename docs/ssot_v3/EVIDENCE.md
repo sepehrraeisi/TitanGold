@@ -11,7 +11,7 @@
 | DataHub Health از backend health استفاده می‌کند | `backend/routes/data-sources.js` | L240–310 (تقریبی) | اندپوینت `GET /api/v1/data-sources/health` وضعیت health و لاگ‌های DataHub را از DB برمی‌گرداند و در `HealthPanel.tsx` مصرف می‌شود. |
 | دموهای runtime موفق/ناموفق برای زیرتب Telegram مستند شده‌اند | `docs/ssot_v3/DataHub_DEMOS.md` | بخش «dataHub.telegram» | سناریوهای موفق و failure برای تب Telegram (AI Inbox, Breaking News, Geographic Map) با مراحل UI + API + DB توضیح داده شده تا DoD لایه Runtime Demo پاس شود. |
 
-| روت‌های read-only تلگرام پشت لایه‌ی امنیتی قابل‌پیکربندی هستند (`TELEGRAM_READ_MODE`) | `backend/middleware/telegramAuth.js`, `backend/routes/telegram.js` | middleware: L1–90, wiring: `router.get('/health'...)`, `router.get('/agents/:agentKey/feed'...)`, `router.get('/agents/summary'...)`, `router.get('/breaking-news'...)`, `router.get('/events/recent'...)`, `router.get('/categories/*'...)`, `router.get('/stats/real-time'...)` | `telegramReadAuth` سه حالت دارد: `dev-open` (فقط dev/test)، `auth-role` (پیش‌فرض امن در production؛ JWT + نقش در یکی از `admin/trader/analyst/viewer`) و `internal` (محدود به IPهای داخل allowlist یا هدر داخلی با shared secret). همه روت‌های read-only تلگرام قبل از `readRateLimiter` از این middleware عبور می‌کنند. |
+| روت‌های read-only تلگرام پشت لایه‌ی امنیتی قابل‌پیکربندی هستند (`TELEGRAM_READ_MODE`) | `backend/middleware/telegramAuth.js`, `backend/routes/telegram.js` | middleware: L1–108 (`telegramReadAuth`, `resolveTelegramReadMode`); wiring: `readAuth = [telegramReadAuth, readRateLimiter]` on L22, L66, L186, L256, L394, L484, L544, L602 | `telegramReadAuth` سه حالت: `dev-open` (non-prod only; fail-closed in production), `auth-role` (prod default; JWT + role `admin`/`trader`), `internal` (IP allowlist `INTERNAL_TRUSTED_IPS` or header `x-internal-request` + `x-internal-secret`). Middleware order: **`telegramReadAuth` before `readRateLimiter`**. DB roles today: admin/trader/user/vip — read guard allows admin/trader only. |
 | تب Sources از API واقعی لیست می‌گیرد (نه IndexedDB) | `services/dataSourcesApi.ts`, `hooks/useDataHubState.ts` | `fetchDataSources` → `GET /api/v1/data-sources`; `useDataSourcesQuery` با `queryKey` جدا از `useDataHubQuery` | Network tab در تب Sources باید `GET /api/v1/data-sources?page=&limit=` را نشان دهد. |
 | mutations Sources به backend POST/PUT/DELETE/PATCH می‌زنند | `services/dataSourcesApi.ts`, `hooks/useDataHubState.ts` | `createDataSource`, `updateDataSource`, `deleteDataSource`, `restoreDataSource`; invalidate `DATA_HUB_KEYS.sources` | Create/Edit/Delete در UI باید همان متدها را روی `/api/v1/data-sources` فراخوانی کند. |
 | pagination Sources در UI با پاسخ backend sync است | `components/ai/AIManager/tabs/DataHub/DataSourcesPanel.tsx`, `components/ai/AIManager/tabs/DataHub/hooks/useDataHub.ts` | props `pagination`, `page`, `onPageChange` از `sourcesResult.pagination` | Previous/Next و خلاصه «Page X · N of total» از `hasNextPage`/`hasPrevPage`/`total` پر می‌شود. |
@@ -27,7 +27,7 @@
   - اگر DB یا viewهای تلگرام در دسترس نباشند، تمام روت‌های read-only (`/health`, `/agents/summary`, `/agents/:agentKey/feed`, `/breaking-news`, `/events/recent`, `/categories/*`, `/stats/real-time`) در بلوک `catch` با `logger.error(...)` لاگ و پاسخ استاندارد JSON با `success: false`, `error`, `message` و کد ۵۰۰ یا ۵۰۳ برمی‌گردانند؛ UI در `TelegramDataPanel`, `AgentDetailPanel`, `BreakingNewsMonitor` در این حالت بنر خطا یا empty-safe state رندر می‌کند (بدون crash).  
 - **Security Check**:  
   - روت `POST /agents/:agentKey/mark-processed` پشت `authenticate` و `writeRateLimiter` است و فقط با JWT معتبر و rate limit منطقی قابل فراخوانی است؛ چون از هدر `Authorization: Bearer` استفاده می‌کند و کوکی سشن در تصمیم دخیل نیست، ریسک CSRF روی این اکشن پایین است.  
-  - تمام روت‌های read-only تلگرام (health, feeds, summary, breaking-news, events, categories, stats) اکنون قبل از `readRateLimiter` از `telegramReadAuth` عبور می‌کنند. در production و در صورت عدم‌تنظیم، مقدار پیش‌فرض `TELEGRAM_READ_MODE` برابر `auth-role` است (JWT + نقش در یکی از `admin/trader/analyst/viewer`) و برای dev/test می‌توان به‌صورت صریح `dev-open` را در ENV ست کرد یا برای محیط‌های کاملاً داخلی از حالت `internal` (IP allowlist یا هدر داخلی با secret) استفاده کرد.  
+  - **Runtime verified (DH-P0-SECURITY-5, 2026-05-30; DH-BUGFIX-2, 2026-06-01):** production `auth-role` default — unauth → 401, admin → 200 (including `/stats/real-time` after GAP-037 fix `559c0e5`), user/vip JWT → 403 on read routes; `mark-processed` → 401 unauth, 400 empty payload with auth.  
 - **Logging & Trace**:  
   - کل backend از `requestContextMiddleware` و `performanceMiddleware` استفاده می‌کند؛ هر ریکوئست تلگرام یک `requestId` دریافت کرده و لاگ `request_completed` با فیلدهای `requestId`, `method`, `path`, `status`, `durationMs` تولید می‌شود (`backend/services/logger.js` + خروجی‌های `test_output_api_*.txt`).  
   - در سطح روت، همه خطاهای مهم (`health`, `agents/summary`, `feed`, `breaking-news`, `events/recent`, `categories/*`, `stats/real-time`, `mark-processed`) با `logger.error` لاگ می‌شوند و بنابراین قابل ردیابی با همان `requestId` هستند.
@@ -249,6 +249,14 @@ grep -rn "fetchDataHubState\|createAutomationTopic\|refreshAutomationQueue" \
 | **Duplicate storage** | `datahub_discovery_suggestions` | `duplicate_of_*` populated; not re-queued as pending |
 | **Scoring bounds** | `discoveryScoring.js` + DB CHECK | `priority_score` always **0–100** |
 
+#### Schema drift fix — scan action (ca6226e · 2026-05-29)
+
+| Claim | File | توضیح |
+|---|---|---|
+| `loadSourceFingerprints` no longer SELECTs missing columns | `backend/services/datahubDiscoveryService.js` | `success_rate` / `reliability_score` removed from SQL; `deriveSuccessRate` / `deriveReliabilityScore` from `fetch_count`, `error_count`, `last_status`, `health_status` |
+| Scan action runtime verified | `POST /api/v1/data-hub/discovery/scan` | **200** `status: success` (2026-05-29); prior failure: `column "success_rate" does not exist` in `datahub_discovery_scans.error_message` |
+| No migration required | — | Fix is service-layer derive only |
+
 ### ۱۶. DataHub Smart Prioritization (GAP-030 Closed)
 
 #### ۱۶.۱ No Mock Verification (v3.0 backend-first)
@@ -309,6 +317,15 @@ rg -n "services/api" components/ai/AIManager/tabs/DataHub/advanced/SmartPrioriti
   - update در پایان (`completed_at`, `status`, `summary` یا `error_summary`)
   پر می‌کنند.  
   Evidence: `backend/services/datahubPrioritizationService.js` `L410–469` (preview+complete) و `L411–477` (apply+complete/fail)
+
+#### Schema drift fix — preview action (ca6226e · 2026-05-29)
+
+| Claim | File | توضیح |
+|---|---|---|
+| Source SELECT uses only existing `data_sources` columns | `backend/services/datahubPrioritizationService.js` | `fetch_count`, `error_count`, `last_status`, `health_status`, `status`, `refresh_interval`, `last_fetch_at` — not `success_rate` / `reliability_score` |
+| `computeScoresForSource` derives reliability/success | same | `deriveSuccessRate` / `deriveReliabilityScore`; `error_health=0` when `fetch_count=0`; meta includes `derived_success_rate`, `derived_reliability` |
+| Preview action runtime verified | `POST /api/v1/data-hub/prioritization/preview` | **200** — 48 sources; summary tiers `{ low: 45, high: 2, critical: 1 }` (2026-05-29) |
+| No migration required | — | Service-layer derive only |
 
 ### ۱۷. DataHub Archiving (GAP-032 Closed)
 

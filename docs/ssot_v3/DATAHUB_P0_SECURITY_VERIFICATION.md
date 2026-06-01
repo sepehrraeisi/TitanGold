@@ -1,0 +1,325 @@
+# DataHub P0 Security Verification (DH-P0-SECURITY-1)
+
+> **Status:** **P0 security blockers closed** — see [`DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md`](./DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md)  
+> **Detail:** DH-P0-SECURITY-16 — **GAP-036 Closed**; D-02 + D-03 full-chain **Pass**; live publish/dispatch **NO-GO** (separate approval)  
+> **Date:** 2026-05-30 (initial); 2026-06-01 (closure summary)  
+> **Prerequisites:** [`DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md`](./DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md) (DH-CROSS-1), [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLAN.md)
+
+---
+
+## Executive summary
+
+Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **All are now closed** — see **[`DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md`](./DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md)** for the consolidated closure table and operational warnings.
+
+| ID | Finding | Severity | High-risk blocker? |
+|----|---------|----------|-------------------|
+| **GAP-036** | Env gate applied; **D-02 Pass**; **D-03 Pass** (SECURITY-16 full-chain) | **High** | **Closed** — dry-run gate verified; live outbound still NO-GO without separate approval |
+| **GAP-009** | Sources write routes: `writeAuth` — **runtime verified 11/11 write checks** | — | **Closed** |
+| **GAP-011** | Categories write routes: `writeAuth` — **runtime verified** | — | **Closed** |
+| **CROSS-002** | `telegramReadAuth` — **runtime verified 18/18 auth checks** (1 handler 500 pre-existing) | — | **Closed** |
+| **CROSS-003** | DataHub write buttons gated in frontend — **UI verified** DH-P0-SECURITY-7 | — | **Closed** |
+| **GAP-037** | `GET /api/v1/telegram/stats/real-time` → 500 after auth (`telegram_created_at` missing) | **Medium** | **No** — separate schema bug; not auth |
+
+**Recommendation:** **GAP-036 closed** after SECURITY-16 full-chain D-03. Forced dry-run active (`TELEGRAM_PUBLISHER_DRY_RUN=true`). Live publish/dispatch remains **NO-GO** until separate high-risk approval. See [`DATAHUB_DRY_RUN_RUNTIME_RESULTS.md`](./DATAHUB_DRY_RUN_RUNTIME_RESULTS.md) § SECURITY-16.
+
+---
+
+## 1. GAP-036 — Publisher / automation dry-run gate
+
+**DH-P0-SECURITY-1 baseline (pre-change):** PM2 `TELEGRAM_PUBLISHER_DRY_RUN` unset → `isPublisherDryRunForced()` **false** → live send possible.
+
+**DH-P0-SECURITY-9 (2026-05-31):** Option A executed — see [`GAP_036_DRY_RUN_GATE_PLAN.md`](./GAP_036_DRY_RUN_GATE_PLAN.md) § DH-P0-SECURITY-9.
+
+| Check | Pre (5G) | Post (SECURITY-9) |
+|-------|----------|-------------------|
+| PM2 `NODE_ENV` | `production` | `production` (unchanged) |
+| PM2 `TELEGRAM_PUBLISHER_DRY_RUN` | unset (`null`) | **`true`** (both cluster workers) |
+| `isPublisherDryRunForced()` | **false** | **true** (expected) |
+| Active publishers / token / chat | 1 / 1 / 1 | 1 / 1 / 1 (unchanged) |
+| Config commit | — | `e4f2b79` |
+| `titan-backend` restart | — | **Yes** (only backend) |
+| `GET /health` | 200 | **200** |
+| D-02 | **Not executed** | **Pass** — `dry_run: true`, `telegram_message_id: null` (SECURITY-10) |
+| D-03 (SECURITY-14) | **Partial** | HTTP **200**, `no_valid_queue_item` |
+| D-03 (SECURITY-16) | **Pass** | Full chain — fixture `7655bc34-…`, `publishResult.dry_run: true`, `telegram_message_id: null` |
+
+**Decision:** Env gate **applied**. **D-02 Pass.** **D-03 Pass** (full chain). **GAP-036 Closed.** **NO-GO** for live publish/dispatch without separate approval; env forced dry-run remains active.
+
+---
+
+## 2. GAP-009 — Sources write RBAC
+
+**File:** `backend/routes/data-sources.js`  
+**Imports:** `authenticate`, `authorize`, `readRateLimiter`, `writeRateLimiter`  
+**Pattern:** `const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter]` (DH-P0-SECURITY-2)
+
+| Route | Method | authenticate | authorize admin/trader | writeRateLimiter | gap? |
+|-------|--------|--------------|------------------------|------------------|------|
+| `/` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id` | PUT | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id` | DELETE | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id/restore` | PATCH | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/test-connection` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/telegram-sync` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/telegram-sync-category` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/telegram-transfer-messages` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/publish-telegram` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+
+**Code status:** All mutate routes use `...writeAuth` (`e9115af`). **Runtime verified** DH-P0-SECURITY-3 (see §9).
+
+---
+
+## 3. GAP-011 — Categories write RBAC
+
+**File:** `backend/routes/data-categories.js`  
+**Imports:** `authenticate`, `authorize`, `readRateLimiter`, `writeRateLimiter`  
+**Pattern:** `const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter]` (DH-P0-SECURITY-2)
+
+| Route | Method | authenticate | authorize admin/trader | writeRateLimiter | gap? |
+|-------|--------|--------------|------------------------|------------------|------|
+| `/` | POST | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id` | PUT | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+| `/:id` | DELETE | ✅ | ✅ | ✅ | **Closed — runtime verified** |
+
+**Read routes:** `GET /` and `GET /:id` remain `authenticate` + `readRateLimiter` (unchanged auth requirement).
+
+**Code status:** All mutate routes use `...writeAuth` (`e9115af`). **Runtime verified** DH-P0-SECURITY-3 (see §9).
+
+---
+
+## 4. CROSS-002 — Telegram analytics auth / documentation drift
+
+**DH-P0-SECURITY-4 (2026-05-30):** `backend/middleware/telegramAuth.js` **restored**; all read routes wired with `readAuth = [telegramReadAuth, readRateLimiter]`.
+
+**Middleware:** `telegramReadAuth` — modes `auth-role` | `internal` | `dev-open` (see mode table below).  
+**Allowed roles (`auth-role`):** `admin`, `trader` only (DB has `admin|trader|user|vip`; `analyst`/`viewer` documented as future role-model gap).  
+**Write route unchanged:** `POST /agents/:agentKey/mark-processed` → `authenticate` + `writeRateLimiter`.
+
+### Mode behavior (static)
+
+| Mode | Production default (if unset) | Behavior |
+|------|------------------------------|----------|
+| `auth-role` | **Yes** (`NODE_ENV=production`) | JWT required; 401 invalid/missing; 403 if role ∉ `{admin,trader}` |
+| `internal` | No (explicit env only) | Trusted IP (`INTERNAL_TRUSTED_IPS`) **or** `x-internal-request: true` + `x-internal-secret`; fail closed if neither secret nor allowlist configured |
+| `dev-open` | No | Open reads; **403 fail-closed** if `NODE_ENV=production` |
+| invalid / unset non-prod | non-prod default → `dev-open` | Fail closed on invalid mode value |
+
+### Route protection (static — post DH-P0-SECURITY-4)
+
+| Route | telegramReadAuth | readRateLimiter | Notes |
+|-------|:----------------:|:---------------:|-------|
+| `GET /health` | ✅ | ✅ | Was open; now protected |
+| `GET /agents/summary` | ✅ | ✅ | Was open; now protected |
+| `GET /agents/:agentKey/feed` | ✅ | ✅ | Replaced bare `authenticate` |
+| `GET /breaking-news` | ✅ | ✅ | Replaced bare `authenticate` |
+| `GET /events/recent` | ✅ | ✅ | Replaced bare `authenticate` |
+| `GET /categories/summary` | ✅ | ✅ | Was open; now protected |
+| `GET /categories/:category/timeline` | ✅ | ✅ | Replaced bare `authenticate` |
+| `GET /stats/real-time` | ✅ | ✅ | Replaced bare `authenticate` |
+| `POST /agents/:agentKey/mark-processed` | ❌ | ❌ (write) | `authenticate` + `writeRateLimiter` unchanged |
+
+**Code status:** Implemented and **runtime verified** DH-P0-SECURITY-5 (see §10). `GET /stats/real-time` returns **500** after auth pass — pre-existing schema error (`telegram_created_at` column); not an auth regression.
+
+### Prior audit snapshot (DH-P0-SECURITY-1 — superseded)
+
+<details>
+<summary>Pre-fix drift table (historical)</summary>
+
+| Route | Was (pre-fix) | Expected |
+|-------|---------------|----------|
+| `GET /health` | None | `telegramReadAuth` + readRateLimiter |
+| `GET /agents/summary` | readRateLimiter only | `telegramReadAuth` + JWT role |
+| `GET /categories/summary` | readRateLimiter only | `telegramReadAuth` + JWT role |
+
+</details>
+
+---
+
+## 5. CROSS-003 — Frontend write button role gates
+
+**DH-P0-SECURITY-1 (pre-fix):** No user-role checks under DataHub panels.
+
+**DH-P0-SECURITY-6 (implemented):** Shared helpers `dataHubPermissions.ts`, `useDataHubPermissions.ts` (role from `useAppContext().user.role` + `titan_user` fallback), `dataHubWriteGate()` → `disabled` + `title` (`datahub_requires_admin_trader`). Write allowed only for normalized `admin` / `trader`.
+
+| Component | Write buttons role-gated? | How verified | Backend protected? |
+|-----------|---------------------------|--------------|-------------------|
+| **DataSourcesPanel** | ✅ Yes | Static — `wg()` on create/test/edit/restore/delete | ✅ GAP-009 |
+| **CategoriesPanel** | ✅ Yes | Static — create/edit/delete | ✅ GAP-011 |
+| **TelegramPublisher** | ✅ Yes | Static — create/test/publish/disable/modal | ✅ |
+| **AutomationTopics** + children | ✅ Yes | Static — test-run, queue, topics, schedule via `canWrite` | ✅ |
+| **WebCrawlerConfig** | ✅ Yes | Static — CRUD/run/dry-run | ✅ |
+| **AutoDiscoveryConfig** | ✅ Yes | Static — scan/approve/reject/rules | ✅ |
+| **SmartPrioritization** | ✅ Yes | Static — preview/apply/override/config | ✅ |
+| **AccessControlPanel** | ✅ Yes | Static — configure/reset + modal save | ✅ |
+| **BlacklistWhitelist** | ✅ Yes (CRUD) | Static — add/edit/delete/modal; evaluate **read-only** left enabled | ✅ |
+| **Archiving** | ✅ Yes (execute) | Static — apply/restore/confirm; preview/dry-run left enabled | ✅ |
+
+**Status:** **Closed** — UI verification DH-P0-SECURITY-7 (`DATAHUB_UI_ROLE_GATE_VERIFICATION.md`). Playwright + scoped button checks on `http://127.0.0.1:3000`; permission tooltip `Requires admin or trader access` confirmed for non-writers on core and advanced write controls.
+
+**Separate bug (not CROSS-003):** `GET /api/v1/telegram/stats/real-time` returns **500** for admin after auth pass — `column "telegram_created_at" does not exist`. Tracked as **GAP-037**; not an auth failure.
+
+---
+
+## 6. Risk ranking
+
+| Rank | ID | Risk | Rationale |
+|------|-----|------|-----------|
+| 1 | **GAP-036** | Critical (ops) | Live Telegram send on production without dry-run gate |
+| 2 | ~~**GAP-009**~~ | — | **Closed** (DH-P0-SECURITY-3) |
+| 3 | ~~**GAP-011**~~ | — | **Closed** (DH-P0-SECURITY-3) |
+| 4 | ~~**CROSS-002**~~ | — | **Closed** (DH-P0-SECURITY-5) |
+| 5 | **CROSS-003** | Medium | Misleading UI; backend now 403 on Core writes |
+
+---
+
+## 7. Minimal fix recommendations (plan only — do not implement yet)
+
+### Phase A — Backend RBAC ✅ Done
+
+Implemented in `e9115af`; runtime verified DH-P0-SECURITY-3.
+
+### Phase B — Telegram analytics (CROSS-002) ✅ Done
+
+Implemented `45ac3a1`; runtime verified DH-P0-SECURITY-5.
+
+### Phase C — Frontend role gates (CROSS-003) ✅ Closed
+
+Implemented DH-P0-SECURITY-6 (`ce944cb`); UI verified DH-P0-SECURITY-7.
+
+**Files:** `components/ai/AIManager/tabs/DataHub/**` — no backend change.
+
+### Phase D — GAP-036 (ops)
+
+**Plan:** [`GAP_036_DRY_RUN_GATE_PLAN.md`](./GAP_036_DRY_RUN_GATE_PLAN.md).
+
+| Step | Status |
+|------|--------|
+| Option A env gate (`e4f2b79`) | ✅ DH-P0-SECURITY-9 |
+| `titan-backend` restart only | ✅ Verified |
+| D-02 publisher test | ✅ DH-P0-SECURITY-10 |
+| D-03 automation test-run | ❌ **Fail** (SECURITY-11 — HTTP 500, stale queue) |
+| GAP-036 closed | ❌ **Open** — D-03 did not pass |
+
+---
+
+## 8. Go / No-Go — high-risk execution
+
+| Gate | Status |
+|------|--------|
+| Low-risk runtime (DH-FINAL-4) | ✅ Pass |
+| Crawler dry-run D-01 | ✅ Pass |
+| GAP-036 env gate (`TELEGRAM_PUBLISHER_DRY_RUN=true`) | ✅ **Applied** (SECURITY-9) |
+| GAP-036 D-02 verification | ✅ **Pass** (SECURITY-10) |
+| GAP-036 D-03 verification | ❌ **Fail** (SECURITY-11) |
+| GAP-036 closed | ❌ **Open** |
+| GAP-009 Sources RBAC | ✅ **Closed** — runtime verified DH-P0-SECURITY-3 |
+| GAP-011 Categories RBAC | ✅ **Closed** — runtime verified DH-P0-SECURITY-3 |
+| CROSS-002 Telegram auth | ✅ **Closed** — runtime verified DH-P0-SECURITY-5 |
+| CROSS-003 UI role gates | ✅ **Closed** — DH-P0-SECURITY-7 |
+| GAP-037 stats/real-time schema | ❌ **Open** (500 after auth; not auth) |
+| **High-risk execution (DH-FINAL-6R)** | ❌ **NO-GO** (GAP-036) |
+
+**Safe to proceed:** Routine DataHub UI use with role gates — **not** high-risk runtime tests until GAP-036 resolved.
+
+**Next phase:** Remediate stale automation queue / test-run scoping; re-run D-03; then close GAP-036; GAP-037 backend schema fix (separate approval).
+
+---
+
+## 9. DH-P0-SECURITY-3 Runtime Verification
+
+**Commit under test:** `e9115af` — `fix(datahub): add core write RBAC`  
+**Restart:** `pm2 restart …/ecosystem.config.json --only titan-backend --update-env` (2026-05-30)  
+**Health:** `GET /health` → **200**, DB connected  
+**Token method:** JWT signed with `JWT_SECRET` + `{ userId, role }` (no session row). No DB user with `role=user` exists — `user` role simulated via JWT claim (same pattern as integration tests). Admin reads use `admin@titangold.com` user id + `role: admin`.
+
+| Test | Role | Route | Expected | Actual | Pass/Fail |
+|------|------|-------|----------|--------|-----------|
+| A-read-sources | admin | `GET /api/v1/data-sources?page=1&limit=1` | 200 | 200 | **Pass** |
+| A-read-categories | admin | `GET /api/v1/data-categories/` | 200 | 200 | **Pass** |
+| B-src-post | user | `POST /api/v1/data-sources` `{}` | 403 | 403 | **Pass** |
+| B-src-test-conn | user | `POST /api/v1/data-sources/test-connection` `{}` | 403 | 403 | **Pass** |
+| B-src-telegram-sync | user | `POST /api/v1/data-sources/telegram-sync` `{}` | 403 | 403 | **Pass** |
+| B-src-delete | user | `DELETE /api/v1/data-sources/00000000-0000-0000-0000-000000000000` | 403 | 403 | **Pass** |
+| C-cat-post | user | `POST /api/v1/data-categories` `{}` | 403 | 403 | **Pass** |
+| C-cat-put | user | `PUT /api/v1/data-categories/00000000-0000-0000-0000-000000000000` `{}` | 403 | 403 | **Pass** |
+| C-cat-delete | user | `DELETE /api/v1/data-categories/00000000-0000-0000-0000-000000000000` | 403 | 403 | **Pass** |
+| D-src-post-admin | admin | `POST /api/v1/data-sources` `{}` | 400 | 400 | **Pass** |
+| D-cat-post-admin | admin | `POST /api/v1/data-categories` `{}` | 400 | 400 | **Pass** |
+
+**Summary:** **11/11 Pass**. RBAC blocks `user` before validation (403, not 400). Admin passes RBAC and hits validation (400). Reads unchanged at 200.
+
+**Caveat:** Re-test with a real DB `user`-role account when one exists, to confirm session-based auth path (DB role lookup) also enforces 403.
+
+---
+
+## 10. DH-P0-SECURITY-5 Runtime Verification
+
+**Commit under test:** `45ac3a1` — `fix(datahub): restore telegram read auth guard`  
+**Restart:** `pm2 restart …/ecosystem.config.json --only titan-backend --update-env` (2026-05-30)  
+**Health:** `GET /health` → **200**, DB connected, no boot errors  
+**Mode:** Production default `auth-role` (`NODE_ENV=production`, `TELEGRAM_READ_MODE` unset)  
+**Token method:** Same as DH-P0-SECURITY-3 — JWT `{ userId, role }` without session row.
+
+| Test | Role | Route | Expected | Actual | Pass/Fail |
+|------|------|-------|----------|--------|-----------|
+| T-01 | none | `GET /api/v1/telegram/health` | 401 | 401 | **Pass** |
+| T-02 | admin | `GET /api/v1/telegram/health` | 200 | 200 | **Pass** |
+| T-03 | user | `GET /api/v1/telegram/health` | 403 | 403 | **Pass** |
+| T-04 | none | `GET /api/v1/telegram/agents/summary` | 401 | 401 | **Pass** |
+| T-05 | admin | `GET /api/v1/telegram/agents/summary` | 200 | 200 | **Pass** |
+| T-06 | user | `GET /api/v1/telegram/agents/summary` | 403 | 403 | **Pass** |
+| T-07 | none | `GET /api/v1/telegram/categories/summary` | 401 | 401 | **Pass** |
+| T-08 | admin | `GET /api/v1/telegram/categories/summary` | 200 | 200 | **Pass** |
+| T-09 | user | `GET /api/v1/telegram/categories/summary` | 403 | 403 | **Pass** |
+| T-10 | none | `GET /api/v1/telegram/stats/real-time` | 401 | 401 | **Pass** |
+| T-11 | admin | `GET /api/v1/telegram/stats/real-time` | 200 | 500 | **Auth Pass** — handler schema error (pre-existing) |
+| T-12 | user | `GET /api/v1/telegram/stats/real-time` | 403 | 403 | **Pass** |
+| T-13 | none | `GET /api/v1/telegram/breaking-news` | 401 | 401 | **Pass** |
+| T-14 | admin | `GET /api/v1/telegram/breaking-news` | 200 | 200 | **Pass** |
+| T-15 | user | `GET /api/v1/telegram/breaking-news` | 403 | 403 | **Pass** |
+| T-16 | none | `GET /api/v1/telegram/events/recent` | 401 | 401 | **Pass** |
+| T-17 | admin | `GET /api/v1/telegram/events/recent` | 200 | 200 | **Pass** |
+| T-18 | user | `GET /api/v1/telegram/events/recent` | 403 | 403 | **Pass** |
+| T-19 | none | `POST …/test-agent/mark-processed` `{}` | 401 | 401 | **Pass** |
+| T-20 | user | `POST …/test-agent/mark-processed` `{message_ids:[]}` | not 401 | 400 | **Pass** — authenticated, validation error |
+| T-21 | admin | `POST …/test-agent/mark-processed` `{message_ids:[]}` | not 401/403 | 400 | **Pass** — reaches validation |
+
+**Summary:** **18/18 auth enforcement checks Pass**. No unauthenticated 200 on any read route. `mark-processed` write path unchanged (401 without token; 400 with empty `message_ids`). **CROSS-002 closed.**
+
+**Known non-auth issue (GAP-037):** `GET /stats/real-time` returns 500 for admin after auth pass — `column "telegram_created_at" does not exist` in processor stats query; tracked in `GAPS_AND_PLAN.md` — **not** CROSS-002/CROSS-003 scope; **not** fixed in DH-P0-SECURITY-6.
+
+---
+
+## Evidence index
+
+| Area | File verified |
+|------|----------------|
+| Sources routes | `backend/routes/data-sources.js` |
+| Categories routes | `backend/routes/data-categories.js` |
+| Telegram routes | `backend/routes/telegram.js` |
+| Telegram read auth | `backend/middleware/telegramAuth.js` |
+| Advanced writeAuth pattern | `backend/routes/data-hub-crawlers.js:24` |
+| Publisher dry-run logic | `backend/services/telegramPublisherService.js:5–8` |
+| GAP-006 claim | `docs/ssot_v3/GAPS_AND_PLAN.md:12` |
+| Frontend panels | `components/ai/AIManager/tabs/DataHub/**` |
+| PM2 env | `pm2 jlist` read-only 2026-05-30 |
+
+---
+
+## Changelog
+
+| Date | Change |
+|------|--------|
+| 2026-05-30 | DH-P0-SECURITY-1 read-only verification — docs only |
+| 2026-05-30 | DH-P0-SECURITY-2 — `writeAuth` on Sources/Categories mutate routes; runtime verify pending (no restart) |
+| 2026-05-30 | DH-P0-SECURITY-3 — post-restart runtime verify 11/11 Pass; GAP-009/GAP-011 closed |
+| 2026-05-30 | DH-P0-SECURITY-4 — restore `telegramReadAuth`; all Telegram read routes wired; runtime pending |
+| 2026-05-30 | DH-P0-SECURITY-5 — Telegram read auth runtime verify 18/18 auth Pass; CROSS-002 closed |
+| 2026-05-30 | DH-P0-SECURITY-6 — frontend DataHub write role gates; GAP-037 documented |
+| 2026-05-31 | DH-P0-SECURITY-7 — UI role-gate verification; CROSS-003 **Closed** (`DATAHUB_UI_ROLE_GATE_VERIFICATION.md`) |
+| 2026-05-31 | DH-P0-SECURITY-8 — GAP-036 dry-run gate plan (`GAP_036_DRY_RUN_GATE_PLAN.md`); execution not started |
+| 2026-05-31 | DH-P0-SECURITY-9 — `TELEGRAM_PUBLISHER_DRY_RUN=true` applied (`e4f2b79`); titan-backend restart; D-02/D-03 not run |
+| 2026-05-31 | DH-P0-SECURITY-10 — D-02 **Pass**; D-03 not run |
+| 2026-05-31 | DH-P0-SECURITY-11 — D-03 **Fail** (HTTP 500); no Telegram send; GAP-036 remains Open |
+| 2026-06-01 | DH-P0-SECURITY-16 — D-03 full-chain **Pass**; GAP-036 **Closed** |
+| 2026-06-01 | DH-P0-SECURITY-17 — P0 closure summary doc; all P0 blockers closed |

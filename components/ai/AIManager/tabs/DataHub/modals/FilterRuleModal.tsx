@@ -22,8 +22,19 @@ const FilterRuleModal: React.FC<{
         is_active: boolean;
     }) => Promise<void>;
     isSaving?: boolean;
+    saveDisabled?: boolean;
+    saveTitle?: string;
     t: (key: string) => string;
-}> = ({ rule, defaultRuleType = 'blacklist', onClose, onSave, isSaving = false, t }) => {
+}> = ({
+    rule,
+    defaultRuleType = 'blacklist',
+    onClose,
+    onSave,
+    isSaving = false,
+    saveDisabled = false,
+    saveTitle,
+    t,
+}) => {
     const [ruleType, setRuleType] = useState<FilterRuleType>(rule?.rule_type ?? defaultRuleType);
     const [scope, setScope] = useState<FilterRuleScope>(rule?.scope ?? 'domain');
     const [pattern, setPattern] = useState(rule?.pattern ?? '');
@@ -188,7 +199,8 @@ const FilterRuleModal: React.FC<{
                     </button>
                     <button
                         type="submit"
-                        disabled={isSaving || !pattern.trim()}
+                        disabled={isSaving || saveDisabled || !pattern.trim()}
+                        title={saveTitle}
                         className="text-[11px] px-4 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
                     >
                         {isSaving ? t('saving') : t('save')}

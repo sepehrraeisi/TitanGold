@@ -11,6 +11,7 @@ interface AutomationSchedulePanelProps {
     isUpdating: boolean;
     onToggle: (enabled: boolean) => void;
     onUpdateInterval: (interval: number) => void;
+    canWrite: boolean;
     t: (key: string) => string;
 }
 
@@ -19,8 +20,10 @@ const AutomationSchedulePanel: React.FC<AutomationSchedulePanelProps> = ({
     isUpdating,
     onToggle,
     onUpdateInterval,
+    canWrite,
     t,
 }) => {
+    const wgTitle = !canWrite ? t('datahub_requires_admin_trader') : undefined;
     return (
         <div className="rounded-xl border border-purple-500/30 bg-slate-950/70 p-4 mb-5">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
@@ -34,6 +37,8 @@ const AutomationSchedulePanel: React.FC<AutomationSchedulePanelProps> = ({
                     id="automation-schedule-enabled"
                     checked={schedule.enabled}
                     onChange={onToggle}
+                    disabled={!canWrite || isUpdating}
+                    title={wgTitle}
                     label={
                         schedule.enabled
                             ? t('automation_schedule_enabled')
@@ -53,7 +58,8 @@ const AutomationSchedulePanel: React.FC<AutomationSchedulePanelProps> = ({
                                 onChange={e => onUpdateInterval(parseInt(e.target.value, 10) || 1)}
                                 className={`${INPUT_CLASS} w-20`}
                                 min={1}
-                                disabled={isUpdating}
+                                disabled={isUpdating || !canWrite}
+                                title={wgTitle}
                             />
                             <span className="text-[10px] text-muted-foreground">{t('minutes')}</span>
                         </div>

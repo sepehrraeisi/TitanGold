@@ -14,8 +14,10 @@ import {
     DataHubEmpty,
     MetricCard,
     StatusPill,
+    dataHubWriteGate,
 } from './dataHubUi';
 import { formatDataHubQueryError } from './dataHubI18n';
+import { useDataHubPermissions } from './hooks/useDataHubPermissions';
 
 interface CategoriesPanelProps {
     t: (key: string) => string;
@@ -44,6 +46,8 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
     apiError = null,
     dataHub,
 }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const [categoryFilter, setCategoryFilter] = useState('');
     const [categoryTagFilter, setCategoryTagFilter] = useState('');
 
@@ -136,6 +140,8 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
                             setShowCreateCategoryModal(true);
                         }}
                         className={BTN_PRIMARY}
+                        disabled={wg().disabled}
+                        title={wg().title}
                     >
                         {t('add_category')}
                     </button>
@@ -252,6 +258,8 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
                                                 setShowCreateCategoryModal(true);
                                             }}
                                             className={BTN_OUTLINE_SLATE}
+                                            disabled={wg().disabled}
+                                            title={wg().title}
                                         >
                                             {t('edit')}
                                         </button>
@@ -259,6 +267,8 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
                                             type="button"
                                             onClick={() => handleDeleteCategory(category.id)}
                                             className={BTN_OUTLINE_RED}
+                                            disabled={wg().disabled}
+                                            title={wg().title}
                                         >
                                             {t('delete')}
                                         </button>

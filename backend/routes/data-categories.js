@@ -1,5 +1,6 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
+import { readRateLimiter, writeRateLimiter } from '../middleware/rateLimiter.js';
 import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
 import { validateBody, validateParams, validateResponse } from '../middleware/validation.js';
@@ -11,9 +12,10 @@ import {
 } from '../schemas/dataHubSchemas.js';
 
 const router = express.Router();
+const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
 
 // Get all categories
-router.get('/', authenticate, validateResponse(categoryListResponseSchema), async (req, res) => {
+router.get('/', authenticate, readRateLimiter, validateResponse(categoryListResponseSchema), async (req, res) => {
     try {
         const result = await query('SELECT * FROM data_categories ORDER BY name ASC');
         res.json(result.rows);
@@ -24,7 +26,7 @@ router.get('/', authenticate, validateResponse(categoryListResponseSchema), asyn
 });
 
 // Get a single category
-router.get('/:id', authenticate, validateParams(uuidParamSchema), validateResponse(categoryResponseSchema), async (req, res) => {
+router.get('/:id', authenticate, readRateLimiter, validateParams(uuidParamSchema), validateResponse(categoryResponseSchema), async (req, res) => {
     try {
         const { id } = req.validatedParams;
         const result = await query('SELECT * FROM data_categories WHERE id = $1', [id]);
@@ -41,7 +43,7 @@ router.get('/:id', authenticate, validateParams(uuidParamSchema), validateRespon
 });
 
 // Create a new category
-router.post('/', authenticate, validateBody(categorySchema), validateResponse(categoryResponseSchema), async (req, res) => {
+router.post('/', ...writeAuth, validateBody(categorySchema), validateResponse(categoryResponseSchema), async (req, res) => {
     try {
         const { name, description, color, icon } = req.validatedBody;
 
@@ -61,7 +63,7 @@ router.post('/', authenticate, validateBody(categorySchema), validateResponse(ca
 });
 
 // Update a category
-router.put('/:id', authenticate, validateParams(uuidParamSchema), validateBody(categorySchema), validateResponse(categoryResponseSchema), async (req, res) => {
+router.put('/:id', ...writeAuth, validateParams(uuidParamSchema), validateBody(categorySchema), validateResponse(categoryResponseSchema), async (req, res) => {
     try {
         const { id } = req.validatedParams;
         const { name, description, color, icon } = req.validatedBody;
@@ -86,7 +88,7 @@ router.put('/:id', authenticate, validateParams(uuidParamSchema), validateBody(c
 });
 
 // Delete a category
-router.delete('/:id', authenticate, validateParams(uuidParamSchema), async (req, res) => {
+router.delete('/:id', ...writeAuth, validateParams(uuidParamSchema), async (req, res) => {
     try {
         const { id } = req.validatedParams;
 

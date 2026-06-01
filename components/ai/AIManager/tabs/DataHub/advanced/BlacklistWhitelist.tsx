@@ -13,7 +13,8 @@ import type {
 } from '../../../../../../services/dataHubFilterRulesApi';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import { formatApiErrorForUi, safeDynamicT } from '../dataHubI18n';
-import { DataHubTabStrip } from '../dataHubUi';
+import { DataHubTabStrip, dataHubWriteGate } from '../dataHubUi';
+import { useDataHubPermissions } from '../hooks/useDataHubPermissions';
 
 interface BlacklistWhitelistProps {
     t: (key: string) => string;
@@ -23,6 +24,8 @@ const SHELL =
     'bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg rounded-xl p-4 md:p-5';
 
 const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
+    const { canWrite } = useDataHubPermissions();
+    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const { data: rules = [], isLoading, error, refetch } = useDataHubFilterRulesQuery({
         active_only: true,
     });
@@ -136,15 +139,18 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                 <button
                     type="button"
                     onClick={() => setModalRule(rule)}
-                    className="text-[11px] px-2 py-1 rounded-full border border-white/10 hover:border-purple-500/50"
+                    disabled={wg().disabled}
+                    title={wg().title}
+                    className="text-[11px] px-2 py-1 rounded-full border border-white/10 hover:border-purple-500/50 disabled:opacity-50"
                 >
                     {t('edit')}
                 </button>
                 <button
                     type="button"
                     onClick={() => handleDelete(rule.id)}
-                    disabled={deleteMut.isPending}
-                    className="text-[11px] px-2 py-1 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10"
+                    disabled={wg(deleteMut.isPending).disabled}
+                    title={wg(deleteMut.isPending).title}
+                    className="text-[11px] px-2 py-1 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
                 >
                     {t('delete')}
                 </button>
@@ -225,7 +231,9 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                         <button
                             type="button"
                             onClick={() => setModalRule(null)}
-                            className="text-[11px] px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white whitespace-nowrap"
+                            disabled={wg().disabled}
+                            title={wg().title}
+                            className="text-[11px] px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white whitespace-nowrap disabled:opacity-50"
                         >
                             {t('filter_rule_add')}
                         </button>
@@ -342,6 +350,8 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                     onClose={() => setModalRule(undefined)}
                     onSave={handleSave}
                     isSaving={createMut.isPending || updateMut.isPending}
+                    saveDisabled={wg().disabled}
+                    saveTitle={wg().title}
                     t={t}
                 />
             ) : null}
