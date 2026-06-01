@@ -1,15 +1,15 @@
 # DataHub P0 Security Verification (DH-P0-SECURITY-1)
 
-> **Status:** DH-P0-SECURITY-16 — **GAP-036 Closed**; D-02 + D-03 full-chain **Pass**; high-risk live publish/dispatch still **NO-GO** (separate approval)  
-> **Date:** 2026-05-30  
-> **Prerequisites:** [`DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md`](./DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md) (DH-CROSS-1), [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLAN.md)  
-> **Next step:** Review this doc → approve minimal hardening plan → implement in separate phase (not this commit)
+> **Status:** **P0 security blockers closed** — see [`DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md`](./DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md)  
+> **Detail:** DH-P0-SECURITY-16 — **GAP-036 Closed**; D-02 + D-03 full-chain **Pass**; live publish/dispatch **NO-GO** (separate approval)  
+> **Date:** 2026-05-30 (initial); 2026-06-01 (closure summary)  
+> **Prerequisites:** [`DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md`](./DATAHUB_CROSS_MODULE_DEPENDENCY_AUDIT.md) (DH-CROSS-1), [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLAN.md)
 
 ---
 
 ## Executive summary
 
-Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **GAP-009** and **GAP-011** are now **closed** after backend RBAC (`e9115af`) and runtime verification (DH-P0-SECURITY-3). High-risk DataHub execution must **stay NO-GO** for remaining blockers.
+Read-only verification (DH-P0-SECURITY-1) found five P0 blockers. **All are now closed** — see **[`DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md`](./DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md)** for the consolidated closure table and operational warnings.
 
 | ID | Finding | Severity | High-risk blocker? |
 |----|---------|----------|-------------------|
@@ -321,3 +321,5 @@ Implemented DH-P0-SECURITY-6 (`ce944cb`); UI verified DH-P0-SECURITY-7.
 | 2026-05-31 | DH-P0-SECURITY-9 — `TELEGRAM_PUBLISHER_DRY_RUN=true` applied (`e4f2b79`); titan-backend restart; D-02/D-03 not run |
 | 2026-05-31 | DH-P0-SECURITY-10 — D-02 **Pass**; D-03 not run |
 | 2026-05-31 | DH-P0-SECURITY-11 — D-03 **Fail** (HTTP 500); no Telegram send; GAP-036 remains Open |
+| 2026-06-01 | DH-P0-SECURITY-16 — D-03 full-chain **Pass**; GAP-036 **Closed** |
+| 2026-06-01 | DH-P0-SECURITY-17 — P0 closure summary doc; all P0 blockers closed |

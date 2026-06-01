@@ -34,6 +34,12 @@
 - Synthetic agent telemetry (`latency/throughput/errorRate`) is neutralized (no fake numeric display).
 - No active mock leakage blocker remains.
 
+**P0 security closure (2026-06-01):**
+
+- All DataHub P0 security blockers **closed** — GAP-009, GAP-011, GAP-006/CROSS-002, CROSS-003, GAP-036.
+- See [`DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md`](./DATAHUB_P0_SECURITY_CLOSURE_SUMMARY.md).
+- Live publish/dispatch still **NO-GO** without separate high-risk approval; `TELEGRAM_PUBLISHER_DRY_RUN=true` remains active.
+
 ---
 
 ## 1) Git clean proof
