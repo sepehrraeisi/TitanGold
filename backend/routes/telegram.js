@@ -618,10 +618,11 @@ router.get('/stats/real-time', ...readAuth, async (req, res) => {
         const processorStats = await query(`
             SELECT 
                 COUNT(*) as messages_processed,
-                AVG(EXTRACT(EPOCH FROM (created_at - telegram_created_at))) * 1000 as avg_processing_delay_ms,
-                COUNT(DISTINCT channel_id) as channels_processed
-            FROM processed_telegram_messages
-            WHERE created_at >= NOW() - INTERVAL '1 hour'
+                AVG(EXTRACT(EPOCH FROM (pm.created_at - COALESCE(tm.telegram_created_at, tm.created_at)))) * 1000 as avg_processing_delay_ms,
+                COUNT(DISTINCT pm.channel_id) as channels_processed
+            FROM processed_telegram_messages pm
+            INNER JOIN telegram_messages tm ON pm.raw_message_id = tm.id
+            WHERE pm.created_at >= NOW() - INTERVAL '1 hour'
         `);
 
         // Agent activity (last hour)

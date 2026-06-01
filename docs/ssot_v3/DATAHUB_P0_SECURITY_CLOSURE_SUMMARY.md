@@ -89,13 +89,13 @@ Follow [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLA
 
 Config source: `backend/ecosystem.config.json` (commit `e4f2b79`).
 
-### 5.3 GAP-037 remains open
+### 5.3 GAP-037 fix implemented separately after P0 closure; runtime verification pending
 
 `GET /api/v1/telegram/stats/real-time`:
 
-- Returns **500** after successful auth (`column "telegram_created_at" does not exist`)
+- Pre-fix: **500** after successful auth (`column "telegram_created_at" does not exist` on `processed_telegram_messages`)
 - **Not** an authentication failure (401/403 pass under `telegramReadAuth`)
-- Should be fixed before treating Telegram stats tab as production-stable
+- Backend query fix applied in DH-BUGFIX-1 (JOIN `telegram_messages` for timestamp); **runtime verification pending** after restart
 - Tracked separately from CROSS-002 / GAP-006 closure
 
 ---
