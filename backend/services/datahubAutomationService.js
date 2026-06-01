@@ -349,10 +349,13 @@ function recordMatchesTopic(record, topic, categoryNameById) {
   return matchesDataType;
 }
 
-export async function refreshAutomationQueue() {
-  const topics = (await listAutomationTopics()).filter(
+export async function refreshAutomationQueue({ topicId } = {}) {
+  let topics = (await listAutomationTopics()).filter(
     t => t.enabled && (t.publisherTargets?.length || 0) > 0,
   );
+  if (topicId) {
+    topics = topics.filter(t => t.id === topicId);
+  }
   if (topics.length === 0) {
     return { added: 0, queue: await listAutomationQueue() };
   }
@@ -679,23 +682,123 @@ export async function retryAutomationExecution(executionId, userId) {
   return dispatchQueueItem(insert.rows[0], userId, { dryRun: false });
 }
 
+const TEST_RUN_ORPHAN_ERROR = 'Source record not found during test-run';
+
+async function listAutomationQueueForTestRun({ topicId, limit = 10 } = {}) {
+  if (topicId) {
+    const result = await query(
+      `SELECT * FROM datahub_automation_queue
+       WHERE status = 'pending' AND topic_id = $1
+       ORDER BY priority DESC, created_at ASC
+       LIMIT $2`,
+      [topicId, limit],
+    );
+    return result.rows;
+  }
+  const result = await query(
+    `SELECT * FROM datahub_automation_queue
+     WHERE status = 'pending'
+     ORDER BY priority DESC, created_at ASC
+     LIMIT $1`,
+    [limit],
+  );
+  return result.rows;
+}
+
+async function markTestRunOrphanQueueItem(row, userId, dryRun, errorMessage) {
+  await query(
+    `UPDATE datahub_automation_queue SET status = 'failed', processed_at = NOW(), updated_at = NOW()
+     WHERE id = $1`,
+    [row.id],
+  );
+  await query(
+    `INSERT INTO datahub_automation_executions (
+      queue_item_id, topic_id, publisher_id, record_id, agent_id,
+      status, dry_run, error_message, payload_preview, metadata
+    ) VALUES ($1, $2, $3, $4, $5, 'failed', $6, $7, $8, $9)`,
+    [
+      row.id,
+      row.topic_id,
+      row.publisher_id,
+      row.record_id,
+      row.agent_id,
+      dryRun,
+      errorMessage,
+      row.payload_preview,
+      JSON.stringify({ mode: 'test_run_orphan', user_id: userId }),
+    ],
+  );
+}
+
+async function findNextValidQueueItemForTestRun({ topicId, userId, dryRun, limit = 10 }) {
+  const candidates = await listAutomationQueueForTestRun({ topicId, limit });
+  const skipped = [];
+  for (const row of candidates) {
+    const payload = await loadRecordPayload(row.record_id);
+    if (!payload) {
+      await markTestRunOrphanQueueItem(row, userId, dryRun, TEST_RUN_ORPHAN_ERROR);
+      skipped.push({ queueItemId: row.id, reason: TEST_RUN_ORPHAN_ERROR });
+      continue;
+    }
+    return { row, skipped };
+  }
+  return { row: null, skipped };
+}
+
 export async function runAutomationTest(userId, { topicId, dryRun = true } = {}) {
-  const topics = topicId
-    ? [await getAutomationTopic(topicId)]
-    : (await listAutomationTopics()).filter(t => t.enabled);
-  if (topics.length === 0) {
-    const err = new Error('No active automation topic');
-    err.status = 400;
-    throw err;
+  const effectiveDryRun = dryRun !== false;
+
+  if (topicId) {
+    const topic = await getAutomationTopic(topicId);
+    if (!topic.enabled) {
+      const err = new Error('Automation topic is disabled');
+      err.status = 400;
+      throw err;
+    }
+    if (!topic.publisherTargets?.length) {
+      const err = new Error('Automation topic has no publisher targets');
+      err.status = 400;
+      throw err;
+    }
+  } else {
+    const enabledTopics = (await listAutomationTopics()).filter(t => t.enabled);
+    if (enabledTopics.length === 0) {
+      const err = new Error('No active automation topic');
+      err.status = 400;
+      throw err;
+    }
   }
-  const refresh = await refreshAutomationQueue();
-  const queue = refresh.queue;
-  if (queue.length === 0) {
-    return { dryRun, message: 'Queue empty after refresh', queue: [], processed: 0 };
+
+  await refreshAutomationQueue(topicId ? { topicId } : {});
+
+  const { row, skipped } = await findNextValidQueueItemForTestRun({
+    topicId,
+    userId,
+    dryRun: effectiveDryRun,
+    limit: 10,
+  });
+
+  if (!row) {
+    return {
+      dryRun: effectiveDryRun,
+      processed: 0,
+      status: 'no_valid_queue_item',
+      message: topicId
+        ? 'No valid queue item available for the selected topic'
+        : 'No valid queue item available for test-run',
+      skipped: skipped.length,
+      ...(skipped.length > 0 ? { skippedItems: skipped } : {}),
+    };
   }
-  const item = queue[0];
-  const row = await query(`SELECT * FROM datahub_automation_queue WHERE id = $1`, [item.id]);
-  return dispatchQueueItem(row.rows[0], userId, { dryRun: dryRun !== false });
+
+  const outcome = await dispatchQueueItem(row, userId, { dryRun: effectiveDryRun });
+  return {
+    ...outcome,
+    dryRun: effectiveDryRun,
+    processed: 1,
+    skipped: skipped.length,
+    ...(skipped.length > 0 ? { skippedItems: skipped } : {}),
+  };
 }
 
 export async function getAutomationOverview() {

@@ -1,6 +1,6 @@
 # DataHub Automation Test-Run — RCA & Minimal Fix Plan
 
-> **Phase:** DH-P0-SECURITY-12 (RCA + plan only — **no implementation**)  
+> **Phase:** DH-P0-SECURITY-12 (RCA + plan); **DH-P0-SECURITY-13** (code fix implemented)  
 > **Date:** 2026-05-31  
 > **Branch:** `feat/gap-008-sources-backend-wiring`  
 > **Related:** D-03 (SECURITY-11), GAP-036, [`DATAHUB_DRY_RUN_RUNTIME_RESULTS.md`](./DATAHUB_DRY_RUN_RUNTIME_RESULTS.md) § D-03
@@ -313,8 +313,23 @@ Close GAP-036 in `GAPS_AND_PLAN.md` only when **D-02 Pass** (done) **and** **D-0
 
 ---
 
+## 12. Implementation note (DH-P0-SECURITY-13)
+
+| Item | Status |
+|------|--------|
+| Code fix | ✅ `backend/services/datahubAutomationService.js` — topic-scoped test-run + orphan handling |
+| `refreshAutomationQueue({ topicId })` | Optional scope when `topic_id` provided on test-run |
+| `runAutomationTest()` | Uses `findNextValidQueueItemForTestRun()`; no global `queue[0]` when `topicId` set |
+| Orphan heads | Marked `failed` + execution `metadata.mode: test_run_orphan`; tries next candidate (limit 10) |
+| No valid item | HTTP **200** with `status: no_valid_queue_item` (not opaque 500) |
+| Runtime D-03 re-run | ⏳ **Pending** separate approval (requires `titan-backend` restart/deploy to load code) |
+| GAP-036 | **Open** until D-03 re-run passes |
+
+---
+
 ## Changelog
 
 | Date | Change |
 |------|--------|
 | 2026-05-31 | DH-P0-SECURITY-12 — RCA + minimal fix plan (no code) |
+| 2026-05-31 | DH-P0-SECURITY-13 — Option A+B implemented in service; D-03 re-run pending |

@@ -228,9 +228,10 @@ While `TELEGRAM_PUBLISHER_DRY_RUN=true`:
 | Plan documented | ✅ This doc (DH-P0-SECURITY-8) |
 | Env gate applied | ✅ DH-P0-SECURITY-9 (`e4f2b79` + restart) |
 | D-02 Pass | ✅ DH-P0-SECURITY-10 (see `DATAHUB_DRY_RUN_RUNTIME_RESULTS.md`) |
-| D-03 Pass | ❌ **Fail** (SECURITY-11 — stale queue / missing `collected_data` records; HTTP 500) |
+| D-03 Pass | ❌ **Fail** (SECURITY-11); code fix **SECURITY-13** — runtime re-run **pending** |
+| Test-run code fix | ✅ SECURITY-13 — topic-scoped queue + orphan handling (`datahubAutomationService.js`) |
 | Rollback tested or documented | ⏳ Documented in Rollback plan (not exercised) |
-| GAP-036 marked Closed in `GAPS_AND_PLAN.md` | ❌ **Not closed** — D-03 did not pass |
+| GAP-036 marked Closed in `GAPS_AND_PLAN.md` | ❌ **Not closed** — D-03 runtime pass still required |
 
 ---
 
@@ -309,6 +310,18 @@ pm2 restart /home/ubuntu/webapp/TitanGold/backend/ecosystem.config.json --only t
 | 2026-05-31 | DH-P0-SECURITY-9 — Option A env gate applied (`e4f2b79`); `titan-backend` restart; D-02/D-03 not run |
 | 2026-05-31 | DH-P0-SECURITY-10 — D-02 **Pass**; D-03 not run |
 | 2026-05-31 | DH-P0-SECURITY-11 — D-03 **Fail** (HTTP 500); GAP-036 remains Open |
+| 2026-05-31 | DH-P0-SECURITY-13 — test-run queue fix implemented; D-03 re-run pending |
+
+---
+
+## DH-P0-SECURITY-13 — Test-run fix (no D-03 re-run)
+
+| Item | Result |
+|------|--------|
+| Scope | `runAutomationTest()` + `refreshAutomationQueue({ topicId })` helpers |
+| D-03 executed | **No** |
+| Restart | **No** |
+| GAP-036 closed | **No** — pending D-03 re-run after deploy |
 
 ---
 

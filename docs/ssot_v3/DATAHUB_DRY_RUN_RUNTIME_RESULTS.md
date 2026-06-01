@@ -278,14 +278,22 @@ Note: Table has no `dry_run` column; dry-run is indicated by `status = 'dry_run'
 | **Dry-run proof** | **Not demonstrated** — HTTP 500 before `dispatchQueueItem` completes |
 | **GAP-036** | **Not closed** — D-03 pass criterion unmet |
 
-**Unblock (separate approval):** Clear or fail stale pending queue rows with orphaned `record_id`s, **or** code fix to scope test-run to selected topic / skip invalid queue heads, **or** ensure refresh enqueues a valid item for D-02 publisher ahead of stale rows — then re-run D-03 once.
+**Unblock:** Addressed by code fix **DH-P0-SECURITY-13** (`fix(datahub): scope automation test-run queue`) — topic-scoped selection + orphan-safe test-run. See [`DATAHUB_AUTOMATION_TEST_RUN_RCA.md`](./DATAHUB_AUTOMATION_TEST_RUN_RCA.md) §12.
+
+### Post-fix status (SECURITY-13)
+
+| Item | Status |
+|------|--------|
+| D-03 runtime (SECURITY-11) | **Fail** — HTTP 500, stale global `queue[0]` |
+| Code fix (SECURITY-13) | **Implemented** — not yet runtime-verified |
+| D-03 re-run | ⏳ **Pending** (restart/deploy + separate approval) |
 
 ---
 
 ## Next recommended phase
 
-1. Remediate stale automation queue / test-run topic scoping (ops or code — **not** in SECURITY-11 scope).
-2. Re-run **D-03** once after valid queue head exists for D-02 publisher chain.
+1. Deploy/restart `titan-backend` to load SECURITY-13 fix (separate approval).
+2. Re-run **D-03** once with `{ "dry_run": true, "topic_id": "bc6c5f1b-…" }`.
 3. Close **GAP-036** only after D-03 **Pass**.
 
 ---
@@ -298,3 +306,4 @@ Note: Table has no `dry_run` column; dry-run is indicated by `status = 'dry_run'
 | 2026-05-30 | DH-FINAL-5G gate audit — D-02/D-03 **NO-GO**; no Telegram send |
 | 2026-05-31 | DH-P0-SECURITY-10 — D-02 **Pass** under `TELEGRAM_PUBLISHER_DRY_RUN=true`; D-03 pending |
 | 2026-05-31 | DH-P0-SECURITY-11 — D-03 **Fail** (HTTP 500, stale queue); no Telegram send; GAP-036 remains Open |
+| 2026-05-31 | DH-P0-SECURITY-13 — test-run queue scoping fix implemented; D-03 re-run pending |
