@@ -17,7 +17,7 @@ All **DataHub P0 security blockers** identified in DH-P0-SECURITY-1 through DH-P
 - **Live outbound Telegram** (publisher publish, automation dispatch) remains **NO-GO** without a **separate high-risk execution approval** — even though GAP-036 is closed.
 - PM2 currently forces **`TELEGRAM_PUBLISHER_DRY_RUN=true`**, which protects tests and blocks accidental live sends.
 
-**What remains open** are **non-P0** stability, RBAC hardening, and enhancement gaps (notably **GAP-037** schema drift on Telegram real-time stats).
+**What remains open** are **non-P0** stability, RBAC hardening, and enhancement gaps (GAP-037 closed separately in DH-BUGFIX-2).
 
 ---
 
@@ -55,7 +55,6 @@ These are **open** but **not P0 security blockers** for DataHub v3.0 release:
 
 | ID | Description | Impact | Notes |
 |----|-------------|--------|-------|
-| **GAP-037** | Telegram real-time stats schema drift (`telegram_created_at` missing → 500 after auth) | Medium | Auth passes; handler/schema bug — **recommended next fix** |
 | **GAP-014** | Access logs read RBAC (`GET …/access-logs` without role gate) | Low | Authenticated only today |
 | **GAP-017** | Telegram Publisher read RBAC | Low | Write already gated; read open to authenticated users |
 | **GAP-025** | Filter rules on publishing path | Low | Rules enforced on ingestion; not yet on publish/dispatch |
@@ -89,29 +88,21 @@ Follow [`DATAHUB_HIGH_RISK_EXECUTION_PLAN.md`](./DATAHUB_HIGH_RISK_EXECUTION_PLA
 
 Config source: `backend/ecosystem.config.json` (commit `e4f2b79`).
 
-### 5.3 GAP-037 fix implemented separately after P0 closure; runtime verification pending
+### 5.3 GAP-037 fixed and runtime verified after P0 closure
 
 `GET /api/v1/telegram/stats/real-time`:
 
-- Pre-fix: **500** after successful auth (`column "telegram_created_at" does not exist` on `processed_telegram_messages`)
-- **Not** an authentication failure (401/403 pass under `telegramReadAuth`)
-- Backend query fix applied in DH-BUGFIX-1 (JOIN `telegram_messages` for timestamp); **runtime verification pending** after restart
-- Tracked separately from CROSS-002 / GAP-006 closure
+- Fixed in `559c0e5` (processor stats JOIN `telegram_messages`); runtime verified DH-BUGFIX-2 (2026-06-01)
+- Auth: no token → **401**; user/vip → **403**; admin → **200** with stable JSON (`processor.messages_processed`, `avg_processing_delay_ms`, `channels_processed`)
+- No `column "telegram_created_at" does not exist` error in logs or response
 
 ---
 
 ## 6. Recommended next phase
 
-### **DH-BUGFIX-1 — Fix GAP-037 Telegram real-time stats schema drift**
+### **DH-BUGFIX-2 — GAP-037 closed**
 
-**Before any high-risk live Telegram execution.**
-
-| Reason | Detail |
-|--------|--------|
-| Real 500 | Authenticated users hit a broken endpoint |
-| Contained scope | Schema/query fix in Telegram stats handler or migration |
-| Stability | Improves DataHub Telegram tab reliability |
-| Lower risk | Safer than live publish/dispatch or env gate rollback |
+Telegram real-time stats schema drift fixed and runtime verified. See `GAPS_AND_PLAN.md` GAP-037.
 
 **Not recommended as immediate next step:** live publisher publish, live automation dispatch, or disabling `TELEGRAM_PUBLISHER_DRY_RUN` without explicit ops approval.
 
