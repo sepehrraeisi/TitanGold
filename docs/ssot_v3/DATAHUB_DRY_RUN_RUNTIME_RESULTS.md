@@ -1,7 +1,7 @@
 # DataHub Dry-Run Runtime Results
 
-> **Status:** D-01 **Pass**; D-02 **Pass** (DH-P0-SECURITY-10); D-03 **Fail** (DH-P0-SECURITY-11)  
-> **Date:** 2026-05-31 (D-02, D-03); 2026-05-30 (D-01)  
+> **Status:** D-01 **Pass**; D-02 **Pass** (SECURITY-10); D-03 **Partial** (SECURITY-14 no-op safe pass; full chain unproven)  
+> **Date:** 2026-06-01 (D-03 re-run); 2026-05-31 (D-02, D-03 fail); 2026-05-30 (D-01)  
 > **Plan:** [`DATAHUB_DRY_RUN_TEST_PLAN.md`](./DATAHUB_DRY_RUN_TEST_PLAN.md) (DH-FINAL-5)  
 > **Branch:** `feat/gap-008-sources-backend-wiring`  
 > **Account:** `admin@titangold.com` (admin) — curl-auth JWT
@@ -14,7 +14,7 @@
 |---------|--------|-------|
 | **D-01** Crawler dry-run | **Pass** | `dry_run: true`; `collected_data` count unchanged |
 | **D-02** Publisher test | **Pass** | DH-P0-SECURITY-10; forced dry-run under `TELEGRAM_PUBLISHER_DRY_RUN=true` |
-| **D-03** Automation test-run | **Fail** | HTTP 500 — stale queue `record_id`s missing from `collected_data`; publisher path not reached |
+| **D-03** Automation test-run | **Partial** | SECURITY-11 **Fail** (HTTP 500); SECURITY-14 **no-op safe pass** (HTTP 200, `no_valid_queue_item`) — publisher chain not invoked |
 
 **No live Telegram send** from D-02 probe or D-03 attempt (`telegram_message_id: null` where applicable; no Bot API send in logs).
 
@@ -285,16 +285,88 @@ Note: Table has no `dry_run` column; dry-run is indicated by `status = 'dry_run'
 | Item | Status |
 |------|--------|
 | D-03 runtime (SECURITY-11) | **Fail** — HTTP 500, stale global `queue[0]` |
-| Code fix (SECURITY-13) | **Implemented** — not yet runtime-verified |
-| D-03 re-run | ⏳ **Pending** (restart/deploy + separate approval) |
+| Code fix (SECURITY-13) | **Implemented** (`be32243`) |
+| D-03 re-run (SECURITY-14) | **Done** — see § DH-P0-SECURITY-14 below |
+
+---
+
+## DH-P0-SECURITY-14 — D-03 Re-run After Fix (`be32243`)
+
+**Prerequisites:** `titan-backend` restart only; `TELEGRAM_PUBLISHER_DRY_RUN=true`; fix `be32243` loaded.
+
+### Restart
+
+| Check | Result |
+|-------|--------|
+| Command | `pm2 restart …/ecosystem.config.json --only titan-backend --update-env` |
+| Only `titan-backend` restarted | ✅ (uptime reset; `titan-engine-worker` ~10d unchanged) |
+| `GET /health` post-restart | **200** |
+| PM2 `TELEGRAM_PUBLISHER_DRY_RUN` | **`true`** (both workers) |
+
+### Topic
+
+| Field | Value |
+|-------|-------|
+| **Topic ID** | `bc6c5f1b-4df1-4e11-a324-3f94efc55e0e` |
+| **Name** | سیگنال |
+| **is_active** | true |
+| **Publisher** | `5ab9a6bc-5f17-4aae-bb06-4a34e827af24` |
+| Pending queue rows (topic-scoped, pre-run) | **0** |
+
+### Counts
+
+| Table | Before | After | Delta |
+|-------|--------|-------|-------|
+| `datahub_automation_executions` | **10** | **10** | **0** |
+| `publisher_delivery_history` | **14** | **14** | **0** |
+
+### Request
+
+| Field | Value |
+|-------|-------|
+| **Timestamp (UTC)** | `2026-06-01T12:41:13.242Z` |
+| **Endpoint** | `POST /api/v1/data-hub/automation/test-run` |
+| **Body** | `{ "dry_run": true, "topic_id": "bc6c5f1b-4df1-4e11-a324-3f94efc55e0e" }` |
+| **Auth** | Valid `user_sessions` token (`admin@titangold.com`) |
+
+### Response
+
+| Field | Value |
+|-------|-------|
+| **HTTP status** | **200** |
+| **dryRun** | `true` |
+| **processed** | `0` |
+| **status** | `no_valid_queue_item` |
+| **message** | `No valid queue item available for the selected topic` |
+| **skipped** | `0` |
+| **publishResult** | *(absent — publisher not invoked)* |
+| **telegram_message_id** | *(none)* |
+
+### Classification
+
+| Result | **No-op safe pass** |
+|--------|---------------------|
+| Fix verified | ✅ No HTTP 500; topic-scoped path (no global stale `queue[0]` crash) |
+| Full automation→publisher dry-run chain | ❌ **Not proven** — no pending/valid queue item for topic after scoped refresh |
+| Telegram safety | ✅ No live send; no new history rows |
+| **GAP-036** | **Open** (partial) — needs full-chain pass with valid queue item |
+
+### Log safety
+
+| Check | Result |
+|-------|--------|
+| `POST …/automation/test-run` | **200** at 12:41:13 UTC |
+| `sendMessage` / Bot API | **Not observed** |
+| `/queue/dispatch` | **Not called** (this run) |
+| Unexpected 500 on D-03 | **None** (successful run) |
 
 ---
 
 ## Next recommended phase
 
-1. Deploy/restart `titan-backend` to load SECURITY-13 fix (separate approval).
-2. Re-run **D-03** once with `{ "dry_run": true, "topic_id": "bc6c5f1b-…" }`.
-3. Close **GAP-036** only after D-03 **Pass**.
+1. Ensure topic **سیگنال** has a valid pending queue item (pipeline records matching topic triggers) **or** approve synthetic/seeded queue probe.
+2. Re-run **D-03** once when a valid item exists → expect `publishResult.dry_run: true`, `telegram_message_id: null`.
+3. Close **GAP-036** only after **full-chain** D-03 pass.
 
 ---
 
@@ -307,3 +379,4 @@ Note: Table has no `dry_run` column; dry-run is indicated by `status = 'dry_run'
 | 2026-05-31 | DH-P0-SECURITY-10 — D-02 **Pass** under `TELEGRAM_PUBLISHER_DRY_RUN=true`; D-03 pending |
 | 2026-05-31 | DH-P0-SECURITY-11 — D-03 **Fail** (HTTP 500, stale queue); no Telegram send; GAP-036 remains Open |
 | 2026-05-31 | DH-P0-SECURITY-13 — test-run queue scoping fix implemented; D-03 re-run pending |
+| 2026-06-01 | DH-P0-SECURITY-14 — D-03 re-run **no-op safe pass** (200); GAP-036 remains Open (full chain unproven) |
