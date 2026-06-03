@@ -3877,6 +3877,8 @@
   "datahub_health_cache_hit_na": "Cache hit rate is not exposed by the health API yet (GAP-035).",
   "datahub_summary_load_error": "Could not load DataHub summary metrics. Check your connection and try again.",
   "datahub_collected_unavailable": "Collected data could not be loaded.",
+  "datahub_source_status_pill": "Status: {{status}}",
+  "datahub_source_priority_pill": "Priority: {{priority}}",
   "datahub_summary_api_hint": "Summary metrics from GET /api/v1/data-sources/stats and GET /api/v1/data-sources/health.",
   "datahub_error_not_found": "Resource not found on the server.",
   "datahub_error_unauthorized": "Unauthorized — please sign in again.",

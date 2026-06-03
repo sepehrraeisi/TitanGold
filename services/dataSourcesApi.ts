@@ -120,13 +120,25 @@ function mapStatus(row: BackendDataSourceRow): DataSource['status'] {
     return 'active';
 }
 
+/**
+ * Map DB/API priority to UI tier. Legacy rows use INTEGER 1–10 (default 5 = normal queue weight).
+ * Do not treat 5 as critical — that was an off-by-one index bug (priority - 1 → critical).
+ */
 function normalizePriority(priority: unknown): DataSource['priority'] {
-    if (typeof priority === 'string' && ['low', 'medium', 'high', 'critical'].includes(priority)) {
-        return priority as DataSource['priority'];
+    if (typeof priority === 'string') {
+        const tier = priority.trim().toLowerCase();
+        if (['low', 'medium', 'high', 'critical'].includes(tier)) {
+            return tier as DataSource['priority'];
+        }
+        return 'medium';
     }
-    if (typeof priority === 'number') {
-        const map: DataSource['priority'][] = ['low', 'medium', 'high', 'critical'];
-        return map[Math.min(Math.max(priority - 1, 0), 3)] || 'low';
+    if (typeof priority === 'number' && Number.isFinite(priority)) {
+        const n = Math.round(priority);
+        if (n >= 9) return 'critical';
+        if (n >= 7) return 'high';
+        if (n >= 4) return 'medium';
+        if (n >= 1) return 'low';
+        return 'medium';
     }
     return 'medium';
 }

@@ -174,11 +174,17 @@ const DataSourcesPanel: React.FC<Props> = ({
                                         </div>
                                         <div className="flex flex-wrap gap-1.5 justify-end">
                                             <StatusPill
-                                                label={t(source.status)}
+                                                label={t('datahub_source_status_pill').replace(
+                                                    '{{status}}',
+                                                    t(source.status),
+                                                )}
                                                 variant={sourceStatusVariant(source.status)}
                                             />
                                             <StatusPill
-                                                label={t(source.priority)}
+                                                label={t('datahub_source_priority_pill').replace(
+                                                    '{{priority}}',
+                                                    t(source.priority),
+                                                )}
                                                 variant={priorityVariant(source.priority)}
                                             />
                                         </div>

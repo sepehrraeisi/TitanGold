@@ -3705,6 +3705,8 @@
   "datahub_health_cache_hit_na": "نرخ برخورد کش هنوز در API سلامت موجود نیست (GAP-035).",
   "datahub_summary_load_error": "بارگذاری خلاصه DataHub ممکن نشد. اتصال را بررسی و دوباره تلاش کنید.",
   "datahub_collected_unavailable": "بارگذاری داده‌های جمع‌آوری‌شده ممکن نشد.",
+  "datahub_source_status_pill": "وضعیت: {{status}}",
+  "datahub_source_priority_pill": "اولویت: {{priority}}",
   "datahub_summary_api_hint": "خلاصه از GET /api/v1/data-sources/stats و GET /api/v1/data-sources/health.",
   "datahub_error_not_found": "منبع روی سرور یافت نشد.",
   "datahub_error_unauthorized": "غیرمجاز — لطفاً دوباره وارد شوید.",
