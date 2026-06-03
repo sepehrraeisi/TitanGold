@@ -168,8 +168,8 @@ add_header Content-Disposition "attachment";
 **File:** `/etc/titangold-backup.env` (600 permissions, root only)
 
 ```bash
-TELEGRAM_CHAT_ID="104595348"
-TELEGRAM_BOT_TOKEN="7614906095:AAHH_yejspiQpElwkSFgRwlr8tM-71z-lA"
+TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
+TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
 BACKUP_BASE_URL="https://titan.zala.ir"
 BACKUP_LINK_TTL_HOURS="24"
 ```
