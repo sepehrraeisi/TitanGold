@@ -248,6 +248,8 @@ export function sourceStatusVariant(status: string): PillVariant {
     if (status === 'active') return 'success';
     if (status === 'error') return 'error';
     if (status === 'testing') return 'warning';
+    if (status === 'pending') return 'warning';
+    if (status === 'linked') return 'info';
     return 'neutral';
 }
 

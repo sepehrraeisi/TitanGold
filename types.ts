@@ -4124,7 +4124,10 @@ export interface DataSource {
   endpoint?: string;
   category: string;
   tags: string[];
-  status: 'active' | 'inactive' | 'error' | 'testing';
+  status: 'active' | 'inactive' | 'error' | 'testing' | 'linked' | 'pending';
+  /** When 'na', Success Rate shows N/A (collector ingestion, not bot-pull). */
+  successRateDisplay?: 'na';
+  telegramIngestionMode?: 'collector' | 'bot';
   priority: 'low' | 'medium' | 'high' | 'critical';
   updateInterval: 'realtime' | '1min' | '5min' | '15min' | '30min' | '1hour' | 'daily';
   lastUpdate?: string;

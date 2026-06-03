@@ -7,6 +7,11 @@ import { fetchFromWeb } from './fetchers/webCrawlerFetcher.js';
 import { processWebhookData } from './fetchers/webhookFetcher.js';
 import { decryptSecret, isEncrypted } from '../utils/crypto.js';
 import crypto from 'crypto';
+import {
+    hasTelegramBotToken,
+    parseSourceConfig,
+    telegramChannelKeys,
+} from './telegramCollectorSourceStatus.js';
 
 /**
  * Main service to coordinate data fetching across all sources
@@ -47,6 +52,28 @@ export class DataFetcherService {
             }
 
             logger.info(`Starting fetch for source: ${source.name} (${source.type})`);
+
+            // Collector-linked Telegram: skip bot-pull (no token) — ingestion is via collector pipeline
+            if (source.type === 'telegram') {
+                const config = parseSourceConfig(source);
+                const { channelId, channelUsername } = telegramChannelKeys(source, config);
+                if (!hasTelegramBotToken(source, config) && (channelId || channelUsername)) {
+                    const channel = await this.findCollectorChannel(channelId, channelUsername);
+                    if (channel?.is_active) {
+                        const interval = source.refresh_interval || 60;
+                        await query(
+                            `UPDATE data_sources
+                             SET next_fetch_at = NOW() + (COALESCE($1, 60))::integer * INTERVAL '1 minute'
+                             WHERE id = $2`,
+                            [interval, source.id],
+                        );
+                        logger.info(
+                            `Skipping bot-pull fetch for collector-linked Telegram source: ${source.name}`,
+                        );
+                        return { success: true, skipped: true, reason: 'collector_ingestion' };
+                    }
+                }
+            }
 
             // 2. Delegate to specific fetcher based on type
             const rawData = await this.fetchRawData(source);

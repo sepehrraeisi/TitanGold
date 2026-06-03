@@ -112,12 +112,38 @@ function mapApiTypeToUi(type: string): DataSource['type'] {
     return API_TO_UI_TYPE[type] || 'api';
 }
 
+const OPERATIONAL_STATUS_MAP: Record<string, DataSource['status']> = {
+    active: 'active',
+    linked: 'linked',
+    pending: 'pending',
+    error: 'error',
+};
+
 function mapStatus(row: BackendDataSourceRow): DataSource['status'] {
     if (row.is_active === false) return 'inactive';
+
+    const operational = String(row.operational_status || '').toLowerCase();
+    if (operational && OPERATIONAL_STATUS_MAP[operational]) {
+        return OPERATIONAL_STATUS_MAP[operational];
+    }
+
     const lastStatus = String(row.last_status || '').toLowerCase();
     if (lastStatus === 'error' || lastStatus === 'failed') return 'error';
     if (lastStatus === 'testing') return 'testing';
     return 'active';
+}
+
+export function dataHubSourceStatusLabel(t: (key: string) => string, status: DataSource['status']): string {
+    const keyByStatus: Partial<Record<DataSource['status'], string>> = {
+        linked: 'datahub_status_linked',
+        pending: 'datahub_status_pending_ingestion',
+    };
+    const key = keyByStatus[status];
+    if (key) {
+        const translated = t(key);
+        if (translated !== key) return translated;
+    }
+    return t(status);
 }
 
 /**
@@ -156,6 +182,11 @@ export function mapBackendRowToDataSource(row: BackendDataSourceRow): DataSource
             : (row.config as DataSource['config']) || {};
 
     const tags = Array.isArray(row.tags) ? (row.tags as string[]) : [];
+    const status = mapStatus(row);
+    const suppressLastError = row.suppress_last_error === true;
+    const collectorActivity = row.collector_last_activity_at
+        ? String(row.collector_last_activity_at)
+        : undefined;
 
     return {
         id: String(row.id),
@@ -164,19 +195,27 @@ export function mapBackendRowToDataSource(row: BackendDataSourceRow): DataSource
         url: row.url != null ? String(row.url) : undefined,
         category: String(row.category || row.category_id || 'uncategorized'),
         tags,
-        status: mapStatus(row),
+        status,
         priority: normalizePriority(row.priority),
+        telegramIngestionMode:
+            row.telegram_ingestion_mode === 'collector' || row.telegram_ingestion_mode === 'bot'
+                ? row.telegram_ingestion_mode
+                : undefined,
         updateInterval: minutesToUpdateInterval(
             typeof row.refresh_interval === 'number' ? row.refresh_interval : null,
         ),
-        lastUpdate: row.last_fetch_at ? String(row.last_fetch_at) : undefined,
+        lastUpdate: collectorActivity || (row.last_fetch_at ? String(row.last_fetch_at) : undefined),
         lastSuccess:
             row.last_status === 'success' && row.last_fetch_at
                 ? String(row.last_fetch_at)
                 : undefined,
-        lastError: row.last_status === 'error' ? String(row.last_error || row.last_status) : undefined,
+        lastError:
+            !suppressLastError && row.last_status === 'error'
+                ? String(row.last_error || row.last_status)
+                : undefined,
         errorCount: Number(row.error_count ?? 0),
-        successRate: Number(row.success_rate ?? 0),
+        successRate: row.success_rate_display === 'na' ? 0 : Number(row.success_rate ?? 0),
+        successRateDisplay: row.success_rate_display === 'na' ? 'na' : undefined,
         reliabilityScore: Number(row.reliability_score ?? 0),
         responseTime: row.response_time != null ? Number(row.response_time) : undefined,
         config,

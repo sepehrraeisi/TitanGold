@@ -28,6 +28,10 @@ import { dataFetcherService } from '../services/dataFetcher.js';
 import { logger } from '../services/logger.js';
 import { encryptSecret, decryptSecret, isEncrypted } from '../utils/crypto.js';
 import { calculatePagination, formatPaginatedResponse } from '../utils/pagination.js';
+import {
+    applyTelegramListEnrichment,
+    batchTelegramCollectorEnrichment,
+} from '../services/telegramCollectorSourceStatus.js';
 
 const router = express.Router();
 const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
@@ -195,13 +199,16 @@ router.get('/', authenticate, readRateLimiter, validateResponse(dataSourcesListR
       [pagination.limit, pagination.offset]
     );
 
-    // Mask sensitive data
+    const enrichmentById = await batchTelegramCollectorEnrichment(result.rows);
+
+    // Mask sensitive data; enrich collector-linked Telegram operational status
     const sources = result.rows.map(source => {
       const { credentials, ...safeSource } = source;
-      return {
+      const base = {
         ...safeSource,
-        hasCredentials: !!credentials && Object.keys(credentials).length > 0
+        hasCredentials: !!credentials && Object.keys(credentials).length > 0,
       };
+      return applyTelegramListEnrichment(base, enrichmentById.get(source.id));
     });
 
     res.json(formatPaginatedResponse(sources, pagination));

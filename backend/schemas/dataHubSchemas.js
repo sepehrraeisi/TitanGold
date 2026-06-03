@@ -187,7 +187,12 @@ export const dataSourceResponseSchema = z.object({
     created_at: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString()),
     updated_at: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString()).optional().nullable(),
     deleted_at: z.string().datetime().or(z.date()).transform(val => val ? new Date(val).toISOString() : null).optional().nullable(),
-    hasCredentials: z.boolean().optional()
+    hasCredentials: z.boolean().optional(),
+    telegram_ingestion_mode: z.enum(['collector', 'bot']).optional().nullable(),
+    operational_status: z.enum(['active', 'linked', 'pending', 'error']).optional().nullable(),
+    suppress_last_error: z.boolean().optional(),
+    success_rate_display: z.enum(['na']).optional().nullable(),
+    collector_last_activity_at: z.string().datetime().optional().nullable(),
 });
 
 // Paginated Data Sources Schema

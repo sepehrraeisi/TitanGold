@@ -1,6 +1,9 @@
 import React, { useMemo } from 'react';
 import { DataHubState, DataSource } from '../../../../../types';
-import { DataHubApiError } from '../../../../../services/dataSourcesApi';
+import {
+    DataHubApiError,
+    dataHubSourceStatusLabel,
+} from '../../../../../services/dataSourcesApi';
 import type { DataSourcesPagination } from '../../../../../services/dataSourcesApi';
 import {
     DATAHUB_SHELL,
@@ -176,7 +179,7 @@ const DataSourcesPanel: React.FC<Props> = ({
                                             <StatusPill
                                                 label={t('datahub_source_status_pill').replace(
                                                     '{{status}}',
-                                                    t(source.status),
+                                                    dataHubSourceStatusLabel(t, source.status),
                                                 )}
                                                 variant={sourceStatusVariant(source.status)}
                                             />
@@ -189,6 +192,12 @@ const DataSourcesPanel: React.FC<Props> = ({
                                             />
                                         </div>
                                     </div>
+
+                                    {isTelegram && source.telegramIngestionMode === 'collector' && (
+                                        <p className="text-[10px] text-sky-300/90 mt-2">
+                                            {t('datahub_collector_linked_hint')}
+                                        </p>
+                                    )}
 
                                     {isTelegram && source.config && (
                                         <div className="mt-3 pt-3 border-t border-slate-800/60">
@@ -212,7 +221,9 @@ const DataSourcesPanel: React.FC<Props> = ({
                                         <div>
                                             <p className="text-muted-foreground">{t('success_rate')}</p>
                                             <p className="font-semibold text-foreground">
-                                                {source.successRate.toFixed(1)}%
+                                                {source.successRateDisplay === 'na'
+                                                    ? t('success_rate_na')
+                                                    : `${source.successRate.toFixed(1)}%`}
                                             </p>
                                         </div>
                                         <div>
@@ -243,9 +254,13 @@ const DataSourcesPanel: React.FC<Props> = ({
                                                         ? 'bg-emerald-400 animate-pulse'
                                                         : source.status === 'error'
                                                           ? 'bg-red-500'
-                                                          : source.status === 'testing'
-                                                            ? 'bg-amber-400 animate-pulse'
-                                                            : 'bg-slate-500'
+                                                          : source.status === 'linked'
+                                                            ? 'bg-sky-400'
+                                                            : source.status === 'pending'
+                                                              ? 'bg-amber-400'
+                                                              : source.status === 'testing'
+                                                                ? 'bg-amber-400 animate-pulse'
+                                                                : 'bg-slate-500'
                                                 }`}
                                             />
                                             <span className="text-muted-foreground">
@@ -253,9 +268,13 @@ const DataSourcesPanel: React.FC<Props> = ({
                                                     ? t('connected')
                                                     : source.status === 'error'
                                                       ? t('error')
-                                                      : source.status === 'testing'
-                                                        ? t('testing')
-                                                        : t('inactive')}
+                                                      : source.status === 'linked'
+                                                        ? dataHubSourceStatusLabel(t, 'linked')
+                                                        : source.status === 'pending'
+                                                          ? dataHubSourceStatusLabel(t, 'pending')
+                                                          : source.status === 'testing'
+                                                            ? t('testing')
+                                                            : t('inactive')}
                                             </span>
                                         </div>
                                         <div className="text-muted-foreground">
