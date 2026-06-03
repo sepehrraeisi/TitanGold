@@ -104,7 +104,7 @@ Superseded inconclusive items: `DATAHUB_MERGE_READINESS_REVIEW.md`.
 
 ## Role gates
 
-Automated role inject timed out on `Add Source` button locator (label/i18n). **CROSS-003** UI gates were **Pass** in DH-P0-SECURITY-7 (`DATAHUB_UI_ROLE_GATE_VERIFICATION.md`). No regression signal in this smoke.
+DH-SMOKE-1: role inject timed out on `Add Source` locator. **DH-MERGE-READINESS-1:** 5/5 Pass (admin, trader, user, vip, viewer). **CROSS-003** remains closed.
 
 ---
 
