@@ -57,11 +57,11 @@
 |--------|-----------|-------|
 | Overview | **Pass** | Default view; health metrics visible |
 | Agents | **Pass** | `GET /api/v1/telegram/agents/summary?timeRange=24` 200 |
-| Categories | **Harness inconclusive** | Label collision with main Data Hub “Categories” tab |
-| Breaking | **Harness inconclusive** | Tab click not confirmed in automated sweep |
-| Geographic | **Harness inconclusive** | Lazy-loaded map; not clicked reliably in sweep |
+| Categories | **Pass** (DH-MERGE-READINESS-1) | Was inconclusive in DH-SMOKE-1; fixed via scoped `Telegram analytics` tablist |
+| Breaking News | **Pass** (DH-MERGE-READINESS-1) | `GET /api/v1/telegram/breaking-news` 200 |
+| Geographic Map | **Pass** (DH-MERGE-READINESS-1) | Panel renders; map uses `events/recent` (lazy) |
 
-Manual expectation: subtabs are wired in `TelegramDataPanel.tsx`; no 500 observed on parent panel.
+Superseded inconclusive items: `DATAHUB_MERGE_READINESS_REVIEW.md`.
 
 ---
 
@@ -132,10 +132,9 @@ Automated role inject timed out on `Add Source` button locator (label/i18n). **C
 
 ## Recommendation
 
-**Proceed to Merge Readiness Review** for DataHub v3.0 stabilization branch.
+**Merge readiness completed** — see `DATAHUB_MERGE_READINESS_REVIEW.md` (**Ready to merge** with non-blocking notes).
 
 **Non-blocking follow-ups:**
 
 1. Optional UI wiring for `GET /stats/real-time` if product wants that aggregate (currently unused).
-2. Manual click-check Telegram subtabs Categories / Breaking / Geographic if required for sign-off.
-3. Re-run role-gate spot-check only if CROSS-003 evidence is considered stale.
+2. Monitor rare transient 404 on `agents/summary` during fast tab switches (curl re-test: 200).
