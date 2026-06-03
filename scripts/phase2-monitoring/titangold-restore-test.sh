@@ -25,7 +25,7 @@ DB_USER="postgres"
 PRODUCTION_DB="titangold_db"  # NEVER touch this database!
 
 # GPG passphrase (empty for symmetric encryption with no password)
-GPG_PASSPHRASE="TitanGold_Backup_Key_2026"
+GPG_PASSPHRASE="${BACKUP_ENCRYPTION_KEY:-}"
 
 # Logging function
 log() {

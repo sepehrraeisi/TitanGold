@@ -127,7 +127,7 @@ All backups are encrypted using **GPG (GNU Privacy Guard)** with the following s
 - **Algorithm**: AES256 (symmetric encryption)
 - **Cipher**: AES256
 - **Passphrase**: Stored in environment variable `BACKUP_ENCRYPTION_KEY`
-- **Default Passphrase**: `TitanGold_Backup_Key_2026` (change in production!)
+- **Default Passphrase**: `YOUR_ENCRYPTION_KEY_HERE` (change in production!)
 
 ### Security Considerations
 
@@ -526,10 +526,10 @@ sudo nano /etc/postgresql/*/main/pg_hba.conf
 echo $BACKUP_ENCRYPTION_KEY
 
 # Set correct passphrase
-export BACKUP_ENCRYPTION_KEY="TitanGold_Backup_Key_2026"
+export BACKUP_ENCRYPTION_KEY="YOUR_ENCRYPTION_KEY_HERE"
 
 # Test decryption manually
-echo "TitanGold_Backup_Key_2026" | gpg --batch --passphrase-fd 0 --decrypt backup.sql.gpg
+echo "YOUR_ENCRYPTION_KEY_HERE" | gpg --batch --passphrase-fd 0 --decrypt backup.sql.gpg
 ```
 
 #### Issue: Disk Space Full
@@ -822,7 +822,7 @@ grep CRON /var/log/syslog | tail -20
 
 ```bash
 # Backup encryption key (REQUIRED)
-export BACKUP_ENCRYPTION_KEY="TitanGold_Backup_Key_2026"
+export BACKUP_ENCRYPTION_KEY="YOUR_ENCRYPTION_KEY_HERE"
 
 # Add to postgres user profile
 sudo -u postgres bash -c 'echo "export BACKUP_ENCRYPTION_KEY=\"your-key\"" >> ~/.bashrc'

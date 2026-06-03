@@ -68,7 +68,7 @@ Phase 2 adds comprehensive monitoring, validation, and alerting capabilities to 
 2. **Decryption Test**
    - Tests GPG decryption with passphrase
    - Validates encrypted backup can be opened
-   - Uses passphrase: `TitanGold_Backup_Key_2026`
+   - Uses passphrase from BACKUP_ENCRYPTION_KEY env variable
 
 3. **Restore to Temporary Database**
    - Creates isolated temporary database
