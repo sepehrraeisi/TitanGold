@@ -21,7 +21,7 @@ NGINX_ACCESS_LOG="/var/log/nginx/titangold-backup-downloads.log"
 
 # Frontend and Backend URLs
 FRONTEND_URL="https://titan.zala.ir"
-BACKEND_HEALTH_URL="https://titan.zala.ir/api/health"
+BACKEND_HEALTH_URL="http://localhost:5002/health"  # FIXED: Using working endpoint
 
 # Logging function
 log() {
@@ -174,22 +174,23 @@ else
 fi
 REPORT="${REPORT}  Nginx: ${NGINX_STATUS}%0A"
 
-# Backend (PM2)
-BACKEND_PM2_STATUS=$(pm2 jlist 2>/dev/null | jq -r '.[] | select(.name=="titan-backend") | .pm2_env.status' 2>/dev/null || echo "unknown")
-if [ "$BACKEND_PM2_STATUS" == "online" ]; then
-    BACKEND_STATUS="ONLINE"
+# Backend (PM2) - FIXED: Check for titan-backend process
+BACKEND_PM2_COUNT=$(pm2 jlist 2>/dev/null | jq -r '.[] | select(.name=="titan-backend") | .pm2_env.status' 2>/dev/null | grep -c "online" || echo "0")
+if [ "$BACKEND_PM2_COUNT" -gt 0 ]; then
+    BACKEND_STATUS="ONLINE (${BACKEND_PM2_COUNT} instances)"
 else
     BACKEND_STATUS="OFFLINE"
 fi
 REPORT="${REPORT}  Backend: ${BACKEND_STATUS}%0A"
 
-# Docker (if used)
-if command -v docker &> /dev/null; then
-    DOCKER_RUNNING=$(docker ps -q 2>/dev/null | wc -l || echo "0")
-    if [ "$DOCKER_RUNNING" -gt 0 ]; then
-        REPORT="${REPORT}  Docker: ${DOCKER_RUNNING} containers%0A"
-    fi
+# Frontend (PM2)
+FRONTEND_PM2_STATUS=$(pm2 jlist 2>/dev/null | jq -r '.[] | select(.name=="titan-frontend") | .pm2_env.status' 2>/dev/null || echo "unknown")
+if [ "$FRONTEND_PM2_STATUS" == "online" ]; then
+    FRONTEND_PM2="ONLINE"
+else
+    FRONTEND_PM2="OFFLINE"
 fi
+REPORT="${REPORT}  Frontend PM2: ${FRONTEND_PM2}%0A"
 
 REPORT="${REPORT}%0A"
 
@@ -208,15 +209,18 @@ else
 fi
 REPORT="${REPORT}  Frontend: ${FRONTEND_STATUS} - HTTP ${FRONTEND_HTTP_CODE} (${FRONTEND_RESPONSE_TIME}s)%0A"
 
-# Backend API health check
+# Backend API health check - FIXED: Using localhost:5002/health
 BACKEND_HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$BACKEND_HEALTH_URL" 2>/dev/null || echo "000")
 BACKEND_RESPONSE_TIME=$(curl -s -o /dev/null -w '%{time_total}' --max-time 10 "$BACKEND_HEALTH_URL" 2>/dev/null || echo "timeout")
 if [ "$BACKEND_HTTP_CODE" == "200" ]; then
     BACKEND_API_STATUS="OK"
+    # Get database status from health endpoint
+    DB_STATUS=$(curl -s --max-time 5 "$BACKEND_HEALTH_URL" 2>/dev/null | jq -r '.database' 2>/dev/null || echo "unknown")
+    REPORT="${REPORT}  API Health: ${BACKEND_API_STATUS} - HTTP ${BACKEND_HTTP_CODE} (${BACKEND_RESPONSE_TIME}s, DB: ${DB_STATUS})%0A"
 else
     BACKEND_API_STATUS="FAILED"
+    REPORT="${REPORT}  API Health: ${BACKEND_API_STATUS} - HTTP ${BACKEND_HTTP_CODE} (${BACKEND_RESPONSE_TIME}s)%0A"
 fi
-REPORT="${REPORT}  API Health: ${BACKEND_API_STATUS} - HTTP ${BACKEND_HTTP_CODE} (${BACKEND_RESPONSE_TIME}s)%0A"
 
 # SSL/HTTPS check
 SSL_EXPIRY=$(echo | openssl s_client -servername titan.zala.ir -connect titan.zala.ir:443 2>/dev/null | openssl x509 -noout -dates 2>/dev/null | grep notAfter | cut -d= -f2 || echo "Unknown")
