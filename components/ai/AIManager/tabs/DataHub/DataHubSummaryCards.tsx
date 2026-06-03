@@ -1,7 +1,7 @@
 import React from 'react';
 import SkeletonLoader from '../../../../common/SkeletonLoader';
 import { useDataHubSummaryMetrics } from '../../../../../hooks/useDataHubSummary';
-import { DataHubAlert, MetricCard } from './dataHubUi';
+import { DATAHUB_SHELL, DataHubAlert, MetricCard } from './dataHubUi';
 import { systemStatusTextClass } from './pipelineHealthFormat';
 import { safeT } from './dataHubI18n';
 
@@ -18,7 +18,7 @@ const DataHubSummaryCards: React.FC<DataHubSummaryCardsProps> = ({ t }) => {
     const statusI18n = statusLabel(t, summary.systemStatus);
 
     return (
-        <div className="space-y-3">
+        <div className={`${DATAHUB_SHELL} space-y-3`}>
             {summary.hasError && !summary.isLoading && (
                 <DataHubAlert
                     variant="error"
