@@ -138,7 +138,7 @@ router.get('/telegram-account-metrics', authenticate, readRateLimiter, async (re
   }
 });
 
-// Test data source connection (TASK-BE-007)
+// Test data source connection (TASK-BE-007) — draft config from create/edit modal
 router.post('/test-connection', ...writeAuth, validateBody(createDataSourceSchema), async (req, res) => {
   try {
     const sourceConfig = req.validatedBody;
@@ -155,6 +155,28 @@ router.post('/test-connection', ...writeAuth, validateBody(createDataSourceSchem
     res.status(500).json({ error: 'Failed to test connection' });
   }
 });
+
+// Test persisted source by ID — credentials never sent or returned to client
+router.post(
+  '/:id/test-connection',
+  ...writeAuth,
+  validateParams(uuidParamSchema),
+  async (req, res) => {
+    try {
+      const { id } = req.validatedParams;
+      const result = await dataFetcherService.testConnectionById(id);
+
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(422).json(result);
+      }
+    } catch (error) {
+      logger.error('Failed to test connection by id:', error);
+      res.status(500).json({ error: 'Failed to test connection' });
+    }
+  },
+);
 
 router.get('/', authenticate, readRateLimiter, validateResponse(dataSourcesListResponseSchema), async (req, res) => {
   try {

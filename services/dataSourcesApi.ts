@@ -309,25 +309,55 @@ export async function testDataSourceConfiguration(
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
         const message =
-            (typeof body.error === 'string' && body.error) ||
             (typeof body.message === 'string' && body.message) ||
+            (typeof body.error === 'string' && body.error) ||
             'Connection test failed';
         if (res.status === 422) {
             return { success: false, message, responseTime: body.responseTime };
         }
         throw new DataHubApiError(res.status, message, body);
     }
-    return body;
+    return {
+        success: true,
+        message:
+            (typeof body.message === 'string' && body.message) || 'Connection test successful',
+        sampleData: body.data,
+        responseTime: body.responseTime,
+    };
 }
 
+/** POST /api/v1/data-sources/:id/test-connection — server-side credentials, no body secrets */
 export async function testDataSourceConnection(
-    source: DataSource,
-): Promise<{ success: boolean; message: string; responseTime?: number }> {
-    const result = await testDataSourceConfiguration(source);
+    sourceId: string,
+): Promise<{ success: boolean; message: string; responseTime?: number; mode?: string }> {
+    const res = await fetch(`${BASE}/${sourceId}/test-connection`, {
+        method: 'POST',
+        headers: authHeaders(),
+    });
+
+    const body = await res.json().catch(() => ({}));
+    const message =
+        (typeof body.message === 'string' && body.message) ||
+        (typeof body.error === 'string' && body.error) ||
+        'Connection test failed';
+
+    if (!res.ok) {
+        if (res.status === 422) {
+            return {
+                success: false,
+                message,
+                responseTime: body.responseTime,
+                mode: body.mode,
+            };
+        }
+        throw new DataHubApiError(res.status, message, body);
+    }
+
     return {
-        success: result.success,
-        message: result.message,
-        responseTime: result.responseTime,
+        success: true,
+        message,
+        responseTime: body.responseTime,
+        mode: body.mode,
     };
 }
 
