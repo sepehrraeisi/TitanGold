@@ -375,3 +375,61 @@ export type DataHubSourcesState = {
 export async function fetchDataHubSourcesState(): Promise<DataHubSourcesState> {
     return dataSourcesRequest<DataHubSourcesState>('/state');
 }
+
+/** GET /api/v1/data-sources/collected — paginated collected_data rows */
+export type CollectedDataRecord = {
+    id: string;
+    source_id: string;
+    raw_data: unknown;
+    normalized_data?: unknown | null;
+    collected_at: string;
+    processed_at?: string | null;
+    status: 'pending' | 'processed' | 'error';
+    error_message?: string | null;
+    metadata?: Record<string, unknown> | null;
+    created_at: string;
+    source_name?: string | null;
+    source_type?: string | null;
+};
+
+export type CollectedDataPagination = {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+};
+
+export type CollectedDataFilters = {
+    status?: 'pending' | 'processed' | 'error';
+    /** YYYY-MM-DD or ISO-8601 datetime */
+    start_date?: string;
+    end_date?: string;
+    source_id?: string;
+    limit?: number;
+    offset?: number;
+};
+
+function toIsoDateBoundary(date: string, endOfDay: boolean): string {
+    if (date.includes('T')) return date;
+    return endOfDay ? `${date}T23:59:59.999Z` : `${date}T00:00:00.000Z`;
+}
+
+export async function fetchCollectedData(
+    filters: CollectedDataFilters = {},
+): Promise<{ data: CollectedDataRecord[]; pagination: CollectedDataPagination }> {
+    const limit = Math.min(Math.max(filters.limit ?? 50, 1), 100);
+    const offset = Math.max(filters.offset ?? 0, 0);
+    const qs = new URLSearchParams({
+        limit: String(limit),
+        offset: String(offset),
+    });
+    if (filters.source_id) qs.set('source_id', filters.source_id);
+    if (filters.status) qs.set('status', filters.status);
+    if (filters.start_date) qs.set('start_date', toIsoDateBoundary(filters.start_date, false));
+    if (filters.end_date) qs.set('end_date', toIsoDateBoundary(filters.end_date, true));
+
+    return dataSourcesRequest<{ data: CollectedDataRecord[]; pagination: CollectedDataPagination }>(
+        `/collected?${qs.toString()}`,
+        { method: 'GET' },
+    );
+}

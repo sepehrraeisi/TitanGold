@@ -14,7 +14,7 @@ DB_PORT="5433"
 DB_USER="postgres"
 BACKUP_BASE_DIR="/var/backups/titangold"
 LOG_FILE="/var/log/titangold-restore.log"
-ENCRYPTION_PASSPHRASE="${BACKUP_ENCRYPTION_KEY:-TitanGold_Backup_Key_2026}"
+ENCRYPTION_PASSPHRASE="${BACKUP_ENCRYPTION_KEY:-}"
 
 # Color codes for output
 RED='\033[0;31m'

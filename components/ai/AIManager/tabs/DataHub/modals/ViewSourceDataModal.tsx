@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { DataSource } from '../../../../../../types';
-import * as api from '../../../../../../services/api';
+import {
+    fetchCollectedData,
+    DataHubApiError,
+    type CollectedDataRecord,
+} from '../../../../../../services/dataSourcesApi';
+import { DataHubAlert } from '../dataHubUi';
 
 type Props = {
     source: DataSource;
@@ -8,19 +13,21 @@ type Props = {
     t: (key: string) => string;
 };
 
+const PAGE_LIMIT = 20;
+
 const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
-    const [historyData, setHistoryData] = useState<any[]>([]);
+    const [historyData, setHistoryData] = useState<CollectedDataRecord[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [pagination, setPagination] = useState({ limit: 10, offset: 0, total: 0 });
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [pagination, setPagination] = useState({ limit: PAGE_LIMIT, offset: 0, total: 0 });
     const [filters, setFilters] = useState({
         status: 'all',
         startDate: '',
         endDate: '',
-        search: ''
+        search: '',
     });
-    const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
+    const [selectedRecord, setSelectedRecord] = useState<CollectedDataRecord | null>(null);
 
-    // Debounce search
     const [debouncedSearch, setDebouncedSearch] = useState('');
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -29,58 +36,84 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
         return () => clearTimeout(timer);
     }, [filters.search]);
 
-    const loadHistory = async () => {
+    const loadHistory = useCallback(async () => {
         setIsLoading(true);
+        setLoadError(null);
         try {
-            const apiFilters: any = {
+            const response = await fetchCollectedData({
                 source_id: source.id,
                 limit: pagination.limit,
-                offset: pagination.offset
-            };
-
-            if (filters.status !== 'all') apiFilters.status = filters.status;
-            if (filters.startDate) apiFilters.start_date = filters.startDate;
-            if (filters.endDate) apiFilters.end_date = filters.endDate;
-
-            const response = await api.fetchCollectedData(apiFilters);
+                offset: pagination.offset,
+                status:
+                    filters.status === 'all'
+                        ? undefined
+                        : (filters.status as 'pending' | 'processed' | 'error'),
+                start_date: filters.startDate || undefined,
+                end_date: filters.endDate || undefined,
+            });
             setHistoryData(response.data);
             setPagination(prev => ({ ...prev, total: response.pagination.total }));
+            setSelectedRecord(prev =>
+                prev && response.data.some(r => r.id === prev.id) ? prev : null,
+            );
         } catch (e) {
-            console.error('Failed to load history:', e);
+            const message =
+                e instanceof DataHubApiError
+                    ? e.message
+                    : e instanceof Error
+                      ? e.message
+                      : t('datahub_collected_load_error') || 'Failed to load collected data';
+            setLoadError(message);
+            setHistoryData([]);
+            setSelectedRecord(null);
+            setPagination(prev => ({ ...prev, total: 0 }));
+            console.error('Failed to load collected data:', e);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [
+        source.id,
+        pagination.limit,
+        pagination.offset,
+        filters.status,
+        filters.startDate,
+        filters.endDate,
+        t,
+    ]);
 
     useEffect(() => {
-        loadHistory();
-    }, [pagination.offset, filters.status, filters.startDate, filters.endDate, source.id]);
+        void loadHistory();
+    }, [loadHistory]);
 
-    // Client-side search filtering (since backend might not support partial text search on all fields efficiently yet)
-    // Or if backend supports it, we would add it to apiFilters.
-    // Assuming backend DOES NOT support 'search' param based on previous api.ts check.
+    useEffect(() => {
+        setPagination(prev => ({ ...prev, offset: 0 }));
+        setSelectedRecord(null);
+    }, [source.id]);
+
     const displayedData = useMemo(() => {
         if (!debouncedSearch) return historyData;
         const lowerSearch = debouncedSearch.toLowerCase();
         return historyData.filter(record =>
-            JSON.stringify(record).toLowerCase().includes(lowerSearch)
+            JSON.stringify(record).toLowerCase().includes(lowerSearch),
         );
     }, [historyData, debouncedSearch]);
 
-    const formatData = (data: any): string => {
+    const formatData = (data: unknown): string => {
         if (!data) return t('no_data') || 'No data';
         try {
             return JSON.stringify(data, null, 2);
-        } catch (e) {
+        } catch {
             return String(data);
         }
     };
+
+    const showEmpty =
+        !isLoading && !loadError && displayedData.length === 0;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
             <div className="relative bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-                {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-white/10">
                     <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
@@ -92,7 +125,8 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                             </span>
                         </div>
                         <p className="text-[11px] text-muted-foreground">
-                            {t('select_record_to_view') || 'Browse collected records and inspect raw vs normalized data.'}
+                            {t('select_record_to_view') ||
+                                'Browse collected records and inspect raw vs normalized data.'}
                         </p>
                     </div>
                     <button
@@ -104,23 +138,26 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                     </button>
                 </div>
 
-                {/* Filters */}
                 <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4 border-b border-white/10 bg-slate-950/80">
                     <div>
-                        <label className="text-[11px] text-muted-foreground mb-1 block">{t('search') || 'Search'}</label>
+                        <label className="text-[11px] text-muted-foreground mb-1 block">
+                            {t('search') || 'Search'}
+                        </label>
                         <input
                             type="text"
                             value={filters.search}
-                            onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                            onChange={e => setFilters(prev => ({ ...prev, search: e.target.value }))}
                             placeholder={t('search_placeholder') || 'Search data...'}
                             className="w-full px-3 py-1.5 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
                         />
                     </div>
                     <div>
-                        <label className="text-[11px] text-muted-foreground mb-1 block">{t('status') || 'Status'}</label>
+                        <label className="text-[11px] text-muted-foreground mb-1 block">
+                            {t('status') || 'Status'}
+                        </label>
                         <select
                             value={filters.status}
-                            onChange={(e) => {
+                            onChange={e => {
                                 setFilters(prev => ({ ...prev, status: e.target.value }));
                                 setPagination(prev => ({ ...prev, offset: 0 }));
                             }}
@@ -133,11 +170,13 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                         </select>
                     </div>
                     <div>
-                        <label className="text-[11px] text-muted-foreground mb-1 block">{t('start_date') || 'Start Date'}</label>
+                        <label className="text-[11px] text-muted-foreground mb-1 block">
+                            {t('start_date') || 'Start Date'}
+                        </label>
                         <input
                             type="date"
                             value={filters.startDate}
-                            onChange={(e) => {
+                            onChange={e => {
                                 setFilters(prev => ({ ...prev, startDate: e.target.value }));
                                 setPagination(prev => ({ ...prev, offset: 0 }));
                             }}
@@ -145,11 +184,13 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                         />
                     </div>
                     <div>
-                        <label className="text-[11px] text-muted-foreground mb-1 block">{t('end_date') || 'End Date'}</label>
+                        <label className="text-[11px] text-muted-foreground mb-1 block">
+                            {t('end_date') || 'End Date'}
+                        </label>
                         <input
                             type="date"
                             value={filters.endDate}
-                            onChange={(e) => {
+                            onChange={e => {
                                 setFilters(prev => ({ ...prev, endDate: e.target.value }));
                                 setPagination(prev => ({ ...prev, offset: 0 }));
                             }}
@@ -158,87 +199,123 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                     </div>
                 </div>
 
-                {/* Content */}
+                {loadError && (
+                    <div className="px-4 pt-3">
+                        <DataHubAlert
+                            variant="error"
+                            message={loadError}
+                            onRetry={() => void loadHistory()}
+                            retryLabel={t('retry') || 'Retry'}
+                        />
+                    </div>
+                )}
+
                 <div className="flex-1 overflow-hidden flex bg-slate-950/70">
-                    {/* List */}
-                    <div className={`${selectedRecord ? 'w-1/3 hidden md:block' : 'w-full'} border-r border-slate-800/60 overflow-y-auto`}>
-                        {isLoading ? (
-                            <div className="flex justify-center items-center h-40">
-                                <div className="animate-spin text-2xl text-sky-400">⚙️</div>
-                            </div>
-                        ) : displayedData.length === 0 ? (
-                            <div className="p-8 text-center text-[11px] text-muted-foreground">
-                                {t('no_records_found') || 'No records found'}
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-slate-800/60">
-                                {displayedData.map((record) => (
-                                    <div
-                                        key={record.id}
-                                        onClick={() => setSelectedRecord(record)}
-                                        className={`p-3 cursor-pointer transition-colors border-l-2 ${
-                                            selectedRecord?.id === record.id
-                                                ? 'bg-slate-900/80 border-l-sky-400'
-                                                : 'hover:bg-slate-900/40 border-l-transparent'
-                                        }`}
-                                    >
-                                        <div className="flex justify-between items-start mb-1">
-                                            <span
-                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium uppercase ${
-                                                    record.status === 'processed'
-                                                        ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/40'
-                                                        : record.status === 'error'
-                                                        ? 'bg-red-500/10 text-red-300 border border-red-500/40'
-                                                        : 'bg-amber-500/10 text-amber-300 border border-amber-500/40'
-                                                }`}
-                                            >
-                                                {record.status}
-                                            </span>
-                                            <span className="text-[11px] text-muted-foreground">
-                                                {new Date(record.collected_at).toLocaleDateString()}
-                                            </span>
+                    <div
+                        className={`${selectedRecord ? 'w-1/3 hidden md:block' : 'w-full'} border-r border-slate-800/60 overflow-y-auto flex flex-col`}
+                    >
+                        <div className="flex-1 overflow-y-auto">
+                            {isLoading ? (
+                                <div className="flex justify-center items-center h-40">
+                                    <div className="animate-spin text-2xl text-sky-400">⚙️</div>
+                                </div>
+                            ) : showEmpty ? (
+                                <div className="p-8 text-center text-[11px] text-muted-foreground">
+                                    {t('no_records_found') || 'No records found'}
+                                </div>
+                            ) : loadError ? (
+                                <div className="p-8 text-center text-[11px] text-muted-foreground">
+                                    {t('datahub_collected_unavailable') ||
+                                        'Collected data could not be loaded.'}
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-800/60">
+                                    {displayedData.map(record => (
+                                        <div
+                                            key={record.id}
+                                            onClick={() => setSelectedRecord(record)}
+                                            className={`p-3 cursor-pointer transition-colors border-l-2 ${
+                                                selectedRecord?.id === record.id
+                                                    ? 'bg-slate-900/80 border-l-sky-400'
+                                                    : 'hover:bg-slate-900/40 border-l-transparent'
+                                            }`}
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span
+                                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium uppercase ${
+                                                        record.status === 'processed'
+                                                            ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/40'
+                                                            : record.status === 'error'
+                                                              ? 'bg-red-500/10 text-red-300 border border-red-500/40'
+                                                              : 'bg-amber-500/10 text-amber-300 border border-amber-500/40'
+                                                    }`}
+                                                >
+                                                    {record.status}
+                                                </span>
+                                                <span className="text-[11px] text-muted-foreground">
+                                                    {new Date(record.collected_at).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            <div className="text-[11px] text-muted-foreground truncate">
+                                                {new Date(record.collected_at).toLocaleTimeString()}
+                                            </div>
+                                            <div className="text-[11px] mt-1 truncate font-mono opacity-70 text-muted-foreground">
+                                                ID: {record.id.substring(0, 8)}...
+                                            </div>
                                         </div>
-                                        <div className="text-[11px] text-muted-foreground truncate">
-                                            {new Date(record.collected_at).toLocaleTimeString()}
-                                        </div>
-                                        <div className="text-[11px] mt-1 truncate font-mono opacity-70 text-muted-foreground">
-                                            ID: {record.id.substring(0, 8)}...
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {!loadError && (
+                            <div className="p-2 border-t border-slate-800/60 flex justify-between items-center text-[11px] text-muted-foreground">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setPagination(prev => ({
+                                            ...prev,
+                                            offset: Math.max(0, prev.offset - prev.limit),
+                                        }))
+                                    }
+                                    disabled={pagination.offset === 0 || isLoading}
+                                    className="px-2 py-1 rounded-full text-[11px] bg-slate-900/70 border border-slate-700 text-foreground disabled:opacity-40"
+                                >
+                                    {t('prev') || 'Prev'}
+                                </button>
+                                <span>
+                                    {pagination.total === 0
+                                        ? '0'
+                                        : `${pagination.offset + 1}-${Math.min(pagination.offset + pagination.limit, pagination.total)} / ${pagination.total}`}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setPagination(prev => ({
+                                            ...prev,
+                                            offset: prev.offset + prev.limit,
+                                        }))
+                                    }
+                                    disabled={
+                                        pagination.offset + pagination.limit >= pagination.total ||
+                                        isLoading
+                                    }
+                                    className="px-2 py-1 rounded-full text-[11px] bg-slate-900/70 border border-slate-700 text-foreground disabled:opacity-40"
+                                >
+                                    {t('next') || 'Next'}
+                                </button>
                             </div>
                         )}
-
-                        {/* Pagination */}
-                        <div className="p-2 border-t border-slate-800/60 flex justify-between items-center text-[11px] text-muted-foreground">
-                            <button
-                                onClick={() => setPagination(prev => ({ ...prev, offset: Math.max(0, prev.offset - prev.limit) }))}
-                                disabled={pagination.offset === 0 || isLoading}
-                                className="px-2 py-1 rounded-full text-[11px] bg-slate-900/70 border border-slate-700 text-foreground disabled:opacity-40"
-                            >
-                                {t('prev') || 'Prev'}
-                            </button>
-                            <span>
-                                {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, pagination.total)} / {pagination.total}
-                            </span>
-                            <button
-                                onClick={() => setPagination(prev => ({ ...prev, offset: prev.offset + prev.limit }))}
-                                disabled={pagination.offset + pagination.limit >= pagination.total || isLoading}
-                                className="px-2 py-1 rounded-full text-[11px] bg-slate-900/70 border border-slate-700 text-foreground disabled:opacity-40"
-                            >
-                                {t('next') || 'Next'}
-                            </button>
-                        </div>
                     </div>
 
-                    {/* Details */}
-                    {selectedRecord ? (
+                    {selectedRecord && !loadError ? (
                         <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-br from-slate-950/80 via-slate-950/70 to-slate-900/80">
                             <div className="flex justify-between items-center mb-4">
                                 <h4 className="text-sm font-semibold text-foreground">
                                     {t('record_details') || 'Record Details'}
                                 </h4>
                                 <button
+                                    type="button"
                                     onClick={() => setSelectedRecord(null)}
                                     className="md:hidden text-[11px] text-sky-300 hover:text-sky-200"
                                 >
@@ -275,7 +352,7 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                                     </pre>
                                 </div>
 
-                                {selectedRecord.normalized_data && (
+                                {selectedRecord.normalized_data != null && (
                                     <div>
                                         <div className="text-[11px] text-muted-foreground mb-2 font-bold uppercase">
                                             {t('normalized_data') || 'Normalized Data'}
@@ -299,12 +376,14 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
                             </div>
                         </div>
                     ) : (
-                        <div className="hidden md:flex flex-1 items-center justify-center text-muted-foreground flex-col gap-2">
-                            <div className="text-4xl opacity-20">📋</div>
-                            <p className="text-[11px]">
-                                {t('select_record_to_view') || 'Select a record to view details'}
-                            </p>
-                        </div>
+                        !loadError && (
+                            <div className="hidden md:flex flex-1 items-center justify-center text-muted-foreground flex-col gap-2">
+                                <div className="text-4xl opacity-20">📋</div>
+                                <p className="text-[11px]">
+                                    {t('select_record_to_view') || 'Select a record to view details'}
+                                </p>
+                            </div>
+                        )
                     )}
                 </div>
             </div>
@@ -313,4 +392,3 @@ const ViewSourceDataModal: React.FC<Props> = ({ source, onClose, t }) => {
 };
 
 export default ViewSourceDataModal;
-

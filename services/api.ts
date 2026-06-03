@@ -20959,6 +20959,7 @@ export {
     restoreDataSource,
     testDataSourceConfiguration,
     testDataSourceConnection,
+    fetchCollectedData,
     DataHubApiError,
 } from './dataSourcesApi';
 
