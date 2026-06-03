@@ -3892,6 +3892,8 @@
   "datahub_status_pending_ingestion": "Pending ingestion",
   "datahub_collector_linked_hint": "Collector-linked — messages ingest via Telegram Collector, not bot pull.",
   "success_rate_na": "N/A",
+  "soft_delete": "Deactivate",
+  "hard_delete": "Delete permanently",
   "datahub_summary_api_hint": "Summary metrics from GET /api/v1/data-sources/stats and GET /api/v1/data-sources/health.",
   "datahub_error_not_found": "Resource not found on the server.",
   "datahub_error_unauthorized": "Unauthorized — please sign in again.",

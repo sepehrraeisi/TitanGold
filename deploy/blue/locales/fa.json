@@ -3679,6 +3679,8 @@
   "datahub_status_pending_ingestion": "در انتظار ingestion",
   "datahub_collector_linked_hint": "متصل به Telegram Collector — پیام‌ها از مسیر جمع‌آور وارد می‌شوند، نه bot pull.",
   "success_rate_na": "نامشخص",
+  "soft_delete": "غیرفعال‌سازی",
+  "hard_delete": "حذف دائمی",
   "datahub_summary_api_hint": "خلاصه از GET /api/v1/data-sources/stats و GET /api/v1/data-sources/health.",
   "datahub_error_not_found": "منبع روی سرور یافت نشد.",
   "datahub_error_unauthorized": "غیرمجاز — لطفاً دوباره وارد شوید.",
