@@ -1,9 +1,15 @@
 import { query } from '../database/db.js';
+import { coerceReadModel } from './normalizers/normalizedDataContract.js';
 import {
   batchTelegramCollectorEnrichment,
   mapCollectorOperationalToPipelineStatus,
   resolveCollectorOperationalStatus,
 } from './telegramCollectorSourceStatus.js';
+
+/** @deprecated import from normalizedDataContract — kept for tests */
+export function normalizeReadModel(normalized) {
+  return coerceReadModel(normalized);
+}
 
 function mapCollectedStatusToAccessStatus(status) {
   if (status === 'processed') return 'success';
@@ -95,8 +101,9 @@ function resolveQualityDisplay(row, status) {
 }
 
 function mapToNormalizedRecord(row, categoryName) {
+  const read = coerceReadModel(row.normalized_data);
   const normalized = row.normalized_data || {};
-  const metadata = normalized.metadata || row.metadata || {};
+  const metadata = read?.metadata || normalized.metadata || row.metadata || {};
   const status = resolveNormalizedPreviewStatus(row);
   const { qualityScore, qualityPending } = resolveQualityDisplay(row, status);
 
@@ -106,13 +113,18 @@ function mapToNormalizedRecord(row, categoryName) {
   return {
     id: row.id,
     sourceId: row.source_id,
-    sourceName: row.source_name || undefined,
-    category: categoryName || 'uncategorized',
-    dataType: metadata.data_type || row.source_type || 'unknown',
-    tags: Array.isArray(metadata.tags) ? metadata.tags : [],
+    sourceName: row.source_name || read?.sourceName || undefined,
+    category: categoryName || read?.category || 'uncategorized',
+    dataType: metadata.data_type || read?.sourceType || row.source_type || 'unknown',
+    tags: read?.tags?.length ? read.tags : Array.isArray(metadata.tags) ? metadata.tags : [],
     payload: {
-      title: normalized.title || normalized.content?.slice?.(0, 120),
-      content: typeof normalized.content === 'string' ? normalized.content : undefined,
+      title: read?.title || normalized.title || normalized.content?.slice?.(0, 120),
+      content:
+        typeof read?.content === 'string'
+          ? read.content
+          : typeof normalized.content === 'string'
+            ? normalized.content
+            : undefined,
       value: normalized.value,
       metadata,
     },

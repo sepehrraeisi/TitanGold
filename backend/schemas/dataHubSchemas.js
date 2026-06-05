@@ -313,7 +313,7 @@ export const normalizedExtractedSchema = z.object({
     dates: z.array(z.string()).optional().nullable()
 });
 
-// Full Normalized Message Schema
+// Full Normalized Message Schema (legacy telegram-collector shape)
 export const normalizedMessageSchema = z.object({
     message_id: z.number().int().positive(),
     content: z.string().default(''),
@@ -322,11 +322,50 @@ export const normalizedMessageSchema = z.object({
     extracted: normalizedExtractedSchema
 });
 
+// Canonical normalized_data v1 (DH-NORMALIZATION-P0-CONTRACT-1)
+export const normalizedDataV1MetadataSchema = z
+    .object({
+        rawStatus: z.string().nullable().optional(),
+        ingestionMode: z.string().optional(),
+        telegramMessageId: z.string().nullable().optional(),
+        telegramChannelId: z.string().nullable().optional(),
+        telegramChannelUsername: z.string().nullable().optional(),
+        normalizedAt: z.string().optional(),
+        normalizerVersion: z.string().optional(),
+    })
+    .passthrough();
+
+export const normalizedDataV1Schema = z
+    .object({
+        version: z.literal('datahub.normalized.v1').optional(),
+        title: z.string().min(1),
+        content: z.string(),
+        summary: z.string().nullable().optional(),
+        sourceType: z.enum(['telegram', 'rss', 'api', 'webhook', 'crawler', 'unknown']),
+        sourceId: z.string().uuid().nullable().optional(),
+        sourceName: z.string().nullable().optional(),
+        category: z.string().min(1),
+        language: z.string().nullable().optional(),
+        timestamp: z.string(),
+        publishedAt: z.string().nullable().optional(),
+        entities: z.record(z.any()).optional(),
+        signals: z.array(z.any()).optional(),
+        tags: z.array(z.string()).optional(),
+        metadata: normalizedDataV1MetadataSchema.optional(),
+    })
+    .passthrough();
+
+/** API ingress: v1 contract, legacy collector message, or transfer envelope */
+export const normalizedDataAcceptSchema = z
+    .union([normalizedDataV1Schema, normalizedMessageSchema, z.record(z.any())])
+    .optional()
+    .nullable();
+
 // Create Collected Data Schema (POST)
 export const createCollectedDataSchema = z.object({
     source_id: z.string().uuid('Source ID must be a valid UUID'),
     raw_data: z.record(z.any()), // JSONB - any valid JSON
-    normalized_data: normalizedMessageSchema.optional().nullable(),
+    normalized_data: normalizedDataAcceptSchema,
     content_hash: z.string()
         .min(1, 'Content hash cannot be empty')
         .max(64, 'Content hash must not exceed 64 characters')
@@ -347,7 +386,7 @@ export const batchCreateCollectedDataSchema = z.object({
 
 // Update Collected Data Schema (PUT)
 export const updateCollectedDataSchema = z.object({
-    normalized_data: normalizedMessageSchema.optional().nullable(),
+    normalized_data: normalizedDataAcceptSchema,
     status: z.enum(['pending', 'processed', 'error']).optional(),
     processed_at: z.string().datetime().or(z.date()).optional().nullable(),
     error_message: z.string().max(1000).optional().nullable(),
@@ -376,7 +415,8 @@ export const collectedDataFilterSchema = z.object({
 export const validationResultSchema = z.object({
     valid: z.boolean(),
     errors: z.array(z.string()).default([]),
-    warnings: z.array(z.string()).default([])
+    warnings: z.array(z.string()).default([]),
+    qualityHints: z.array(z.string()).default([]).optional(),
 });
 
 // Process Message Response Schema
