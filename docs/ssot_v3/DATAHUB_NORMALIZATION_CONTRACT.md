@@ -171,15 +171,9 @@ validateContract(data) → {
 
 ---
 
-## Next task
+## Worker (implemented)
 
-**DH-NORMALIZATION-P0-WORKER-1**
-
-1. Schedule `processPendingData()` with advisory lock + batch size.
-2. Re-normalize pending rows (or skip rows already v1-complete).
-3. Set `status=processed`, `processed_at`.
-4. Add quality scoring module writing `metadata.quality_score`.
-5. Wire `data_queue` consumer or document agent deferral.
+See [`DATAHUB_NORMALIZATION_WORKER.md`](./DATAHUB_NORMALIZATION_WORKER.md) — `processNormalizationBatch()` scheduled at 1 min / 100 rows. Agent queue wiring remains deferred.
 
 ---
 

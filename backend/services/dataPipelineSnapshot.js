@@ -87,7 +87,13 @@ function resolveNormalizedPreviewStatus(row) {
 }
 
 function resolveQualityDisplay(row, status) {
-  const metadata = row.normalized_data?.metadata || row.metadata || {};
+  const readMeta = row.normalized_data?.metadata;
+  const metadata =
+    readMeta && typeof readMeta === 'object'
+      ? readMeta
+      : row.metadata && typeof row.metadata === 'object'
+        ? row.metadata
+        : {};
   if (metadata.quality_score != null && Number.isFinite(Number(metadata.quality_score))) {
     return { qualityScore: Number(metadata.quality_score), qualityPending: false };
   }
@@ -202,6 +208,7 @@ export async function buildDataPipelineView() {
           COUNT(cd.id) FILTER (WHERE cd.collected_at > NOW() - INTERVAL '24 hours')::int AS inflow,
           COUNT(cd.id) FILTER (
             WHERE cd.collected_at > NOW() - INTERVAL '24 hours'
+              AND cd.status = 'processed'
               AND cd.normalized_data IS NOT NULL
           )::int AS passed_count
         FROM data_categories dc
@@ -226,11 +233,18 @@ export async function buildDataPipelineView() {
       `),
       query(`
         SELECT
-          COUNT(*)::int AS total_processed,
+          COUNT(*) FILTER (WHERE status IN ('processed', 'error'))::int AS total_processed,
           COUNT(*) FILTER (WHERE status = 'processed' AND normalized_data IS NOT NULL)::int AS passed,
-          COUNT(*) FILTER (WHERE status = 'processed' AND normalized_data IS NULL)::int AS warnings,
+          COUNT(*) FILTER (
+            WHERE status = 'processed'
+              AND normalized_data IS NOT NULL
+              AND (
+                normalized_data->'metadata'->>'quality_warning' = 'true'
+                OR normalized_data->'metadata'->>'quality_band' IN ('weak', 'poor')
+              )
+          )::int AS warnings,
           COUNT(*) FILTER (WHERE status = 'error')::int AS rejected,
-          MAX(COALESCE(processed_at, collected_at)) AS last_processed_at
+          MAX(processed_at) FILTER (WHERE status = 'processed') AS last_processed_at
         FROM collected_data
       `),
       query(`
@@ -242,7 +256,7 @@ export async function buildDataPipelineView() {
         FROM collected_data cd
         LEFT JOIN data_sources ds ON ds.id = cd.source_id
         LEFT JOIN data_categories dc ON dc.name = ds.category
-        ORDER BY cd.collected_at DESC
+        ORDER BY cd.processed_at DESC NULLS LAST, cd.collected_at DESC
         LIMIT 8
       `),
     ]);

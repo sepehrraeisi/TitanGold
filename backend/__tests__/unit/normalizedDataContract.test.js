@@ -119,12 +119,12 @@ describe('NormalizedData contract', () => {
     });
 });
 
-describe('dataPipeline status contract', () => {
-    test('scheduler does not import processPendingData batch runner', async () => {
+describe('scheduler normalization wiring', () => {
+    test('scheduler uses normalization worker not legacy dataPipeline batch', async () => {
         const schedulerSource = await import('fs').then((fs) =>
             fs.readFileSync(new URL('../../engine/scheduler.js', import.meta.url), 'utf8'),
         );
-        expect(schedulerSource).not.toMatch(/processPendingData/);
-        expect(schedulerSource).not.toMatch(/dataPipeline\.process/);
+        expect(schedulerSource).toMatch(/processNormalizationBatch/);
+        expect(schedulerSource).not.toMatch(/dataPipeline\.processPendingData/);
     });
 });

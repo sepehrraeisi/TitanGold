@@ -6,6 +6,10 @@ import { logger } from '../services/logger.js';
 import { runDataFetchJob } from '../jobs/dataFetchScheduler.js';
 import { maintenanceService } from '../services/maintenance.js';
 import { transferTelegramMessagesToPipeline, TELEGRAM_TRANSFER_DEFAULT_BATCH } from '../services/telegramPipeline.js';
+import {
+    processNormalizationBatch,
+    NORMALIZATION_DEFAULT_BATCH,
+} from '../services/normalizationWorker.js';
 
 class SchedulerService {
     constructor() {
@@ -47,7 +51,12 @@ class SchedulerService {
             telegramPipeline: {
                 enabled: true,
                 interval: parseInt(process.env.TELEGRAM_PIPELINE_INTERVAL_MS) || 5 * 60 * 1000 // 5 minutes default (TASK-TC-003)
-            }
+            },
+            normalization: {
+                enabled: true,
+                interval: 60 * 1000, // 1 minute (DH-NORMALIZATION-P0-WORKER-1)
+                batchSize: NORMALIZATION_DEFAULT_BATCH,
+            },
         };
     }
 
@@ -68,6 +77,7 @@ class SchedulerService {
             this.startAgentScheduler();
             this.startDataHubScheduler();
             this.startTelegramPipelineScheduler();
+            this.startNormalizationScheduler();
             this.startTrainingScheduler();
             this.startAnalyticsScheduler();
             this.startArtemisScheduler();
@@ -263,6 +273,36 @@ class SchedulerService {
         logger.info(`✅ Telegram Pipeline Scheduler started (interval: ${this.config.telegramPipeline.interval / 1000}s)`);
     }
 
+    // Normalization Worker — pending collected_data → processed (no agents/publish)
+    startNormalizationScheduler() {
+        if (!this.config.normalization?.enabled) {
+            logger.info('⏸️ Normalization Worker Scheduler is disabled');
+            return;
+        }
+
+        const intervalId = setInterval(async () => {
+            if (!this.isRunning || !this.config.normalization?.enabled) return;
+
+            try {
+                const batchSize =
+                    this.config.normalization.batchSize || NORMALIZATION_DEFAULT_BATCH;
+                const summary = await processNormalizationBatch(batchSize);
+                if (summary.processed > 0 || summary.errors > 0) {
+                    logger.info(
+                        `📐 Normalization: selected=${summary.selected} processed=${summary.processed} errors=${summary.errors} backlog=${summary.backlogRemaining} durationMs=${summary.durationMs}`,
+                    );
+                }
+            } catch (error) {
+                logger.error('❌ Normalization worker scheduler error:', error);
+            }
+        }, this.config.normalization.interval);
+
+        this.intervals.set('normalization', intervalId);
+        logger.info(
+            `✅ Normalization Worker Scheduler started (interval: ${this.config.normalization.interval / 1000}s, batch: ${this.config.normalization.batchSize || NORMALIZATION_DEFAULT_BATCH})`,
+        );
+    }
+
     // Training Scheduler - Auto-schedule training sessions
     startTrainingScheduler() {
         if (!this.config.training.enabled) {
@@ -430,6 +470,7 @@ class SchedulerService {
                 else if (section === 'artemis') this.startArtemisScheduler();
                 else if (section === 'maintenance') this.startMaintenanceScheduler();
                 else if (section === 'telegramPipeline') this.startTelegramPipelineScheduler();
+                else if (section === 'normalization') this.startNormalizationScheduler();
             }
         }
     }
