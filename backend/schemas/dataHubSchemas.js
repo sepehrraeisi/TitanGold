@@ -404,6 +404,7 @@ export const dataPipelineSnapshotSchema = z.object({
         category: z.string(),
         lastDataType: z.string(),
         lastStatus: pipelineAccessStatus,
+        operationalStatus: z.enum(['active', 'linked', 'pending', 'error']).optional(),
         lastResponseTime: z.number().optional(),
         lastChecked: z.string().optional(),
         issues: z.array(z.string()).optional()
@@ -467,6 +468,7 @@ export const dataPipelineViewResponseSchema = z.object({
     normalizedData: z.array(z.object({
         id: z.string().uuid(),
         sourceId: z.string().uuid(),
+        sourceName: z.string().optional(),
         category: z.string(),
         dataType: z.string(),
         tags: z.array(z.string()),

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { DataPipelineSnapshot, DataNormalizationSummary, NormalizedDataRecord } from '../../../../../types';
+import { DataPipelineSnapshot, DataPipelineSourceSnapshot, DataNormalizationSummary, NormalizedDataRecord } from '../../../../../types';
 import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 import {
     DATAHUB_SHELL,
@@ -14,6 +14,8 @@ import {
     StatusPill,
 } from './dataHubUi';
 import { formatDataHubQueryError } from './dataHubI18n';
+import { dataHubSourceStatusLabel } from '../../../../../services/dataSourcesApi';
+import type { DataSource } from '../../../../../types';
 
 interface PipelinePanelProps {
     t: (key: string) => string;
@@ -36,6 +38,16 @@ function statusVariant(status: string): 'success' | 'error' | 'warning' | 'info'
     if (status === 'timeout') return 'warning';
     if (status === 'cached') return 'info';
     return 'neutral';
+}
+
+function pipelineStatusLabel(
+    t: (key: string) => string,
+    src: { lastStatus: string; operationalStatus?: DataPipelineSourceSnapshot['operationalStatus'] },
+): string {
+    if (src.operationalStatus) {
+        return dataHubSourceStatusLabel(t, src.operationalStatus as DataSource['status']);
+    }
+    return t(src.lastStatus);
 }
 
 function normStatusVariant(status: NormalizedDataRecord['status']): 'success' | 'warning' | 'error' {
@@ -293,7 +305,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                     </td>
                                                     <td className="py-2 pr-2">
                                                         <StatusPill
-                                                            label={t(src.lastStatus)}
+                                                            label={pipelineStatusLabel(t, src)}
                                                             variant={statusVariant(src.lastStatus)}
                                                         />
                                                     </td>
@@ -363,7 +375,14 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                 key={row.id}
                                                 className="border-b border-slate-900/60 hover:bg-slate-900/40"
                                             >
-                                                <td className="py-2 pr-2 font-mono text-[10px]">{row.sourceId}</td>
+                                                <td className="py-2 pr-2">
+                                                    <span
+                                                        className="text-foreground font-medium"
+                                                        title={row.sourceId}
+                                                    >
+                                                        {row.sourceName || row.sourceId}
+                                                    </span>
+                                                </td>
                                                 <td className="py-2 pr-2">{row.category}</td>
                                                 <td className="py-2 pr-2">{row.dataType}</td>
                                                 <td className="py-2 pr-2">{row.qualityScore}</td>

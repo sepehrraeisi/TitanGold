@@ -4240,6 +4240,7 @@ export interface DataPipelineSourceSnapshot {
   category: string;
   lastDataType: string;
   lastStatus: DataAccessLog['status'];
+  operationalStatus?: 'active' | 'linked' | 'pending' | 'error';
   lastResponseTime?: number;
   lastChecked?: string;
   issues?: string[];
@@ -4275,6 +4276,7 @@ export type NormalizedDataStatus = 'ready' | 'warning' | 'rejected';
 export interface NormalizedDataRecord {
   id: string;
   sourceId: string;
+  sourceName?: string;
   category: string;
   dataType: string;
   tags: string[];

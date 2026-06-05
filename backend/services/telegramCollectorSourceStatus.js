@@ -156,6 +156,25 @@ export function resolveCollectorOperationalStatus(source, enrichment) {
 }
 
 /**
+ * Map collector operational_status to pipeline Source Quality Board lastStatus.
+ * Keeps RSS/API/bot-pull on fetch-scheduler semantics when this returns null.
+ */
+export function mapCollectorOperationalToPipelineStatus(operationalStatus) {
+    switch (operationalStatus) {
+        case 'active':
+            return 'success';
+        case 'pending':
+            return 'cached';
+        case 'linked':
+            return 'cached';
+        case 'error':
+            return 'failed';
+        default:
+            return null;
+    }
+}
+
+/**
  * Attach list-safe enrichment fields for the Data Sources API.
  */
 export function applyTelegramListEnrichment(source, enrichment) {

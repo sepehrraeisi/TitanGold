@@ -1,10 +1,40 @@
 import { query } from '../database/db.js';
+import {
+  batchTelegramCollectorEnrichment,
+  mapCollectorOperationalToPipelineStatus,
+  resolveCollectorOperationalStatus,
+} from './telegramCollectorSourceStatus.js';
 
 function mapCollectedStatusToAccessStatus(status) {
   if (status === 'processed') return 'success';
   if (status === 'error') return 'failed';
   if (status === 'pending') return 'timeout';
   return 'success';
+}
+
+function resolvePipelineSourceStatus(row, enrichment) {
+  const operationalStatus = resolveCollectorOperationalStatus(
+    {
+      type: row.type,
+      config: row.config,
+      credentials: row.credentials,
+    },
+    enrichment,
+  );
+
+  if (operationalStatus) {
+    return {
+      lastStatus: mapCollectorOperationalToPipelineStatus(operationalStatus),
+      operationalStatus,
+    };
+  }
+
+  return {
+    lastStatus: row.status
+      ? mapCollectedStatusToAccessStatus(row.status)
+      : 'timeout',
+    operationalStatus: null,
+  };
 }
 
 function mapToNormalizedRecord(row, categoryName) {
@@ -21,6 +51,7 @@ function mapToNormalizedRecord(row, categoryName) {
   return {
     id: row.id,
     sourceId: row.source_id,
+    sourceName: row.source_name || undefined,
     category: categoryName || 'uncategorized',
     dataType: metadata.data_type || row.source_type || 'unknown',
     tags: Array.isArray(metadata.tags) ? metadata.tags : [],
@@ -71,6 +102,8 @@ export async function buildDataPipelineView() {
           ds.name,
           ds.type,
           ds.category,
+          ds.config,
+          ds.credentials,
           ds.is_active,
           ds.last_fetch_at,
           dc.name AS category_name
@@ -145,30 +178,48 @@ export async function buildDataPipelineView() {
   const normalizedPercent =
     totalRecords === 0 ? 0 : Number(((normalizedCount / totalRecords) * 100).toFixed(1));
 
+  const collectorEnrichment = await batchTelegramCollectorEnrichment(
+    sourcesRows.rows.map((row) => ({ ...row, id: row.source_id })),
+  );
+
   const sources = sourcesRows.rows.map(row => {
+    const enrichment = collectorEnrichment.get(row.source_id);
+    const { lastStatus, operationalStatus } = resolvePipelineSourceStatus(row, enrichment);
+
     const issues = [];
     if (row.is_active === false) issues.push('inactive');
-    if (row.status === 'error') issues.push('last_request_failed');
-    if (!row.collected_at) issues.push('no_data');
+    if (row.status === 'error' && !operationalStatus) issues.push('last_request_failed');
+    if (
+      !row.collected_at &&
+      operationalStatus !== 'active' &&
+      operationalStatus !== 'pending' &&
+      operationalStatus !== 'linked'
+    ) {
+      issues.push('no_data');
+    }
+    if (operationalStatus === 'error') issues.push('collector_unavailable');
 
     const metadata = row.metadata || {};
+    const collectorActivity =
+      enrichment?.latest_message_at || enrichment?.latest_collected_at || null;
 
     return {
       sourceId: row.source_id,
       name: row.name,
       category: row.category_name || row.category || 'uncategorized',
       lastDataType: metadata.data_type || row.type || 'unknown',
-      lastStatus: row.status
-        ? mapCollectedStatusToAccessStatus(row.status)
-        : 'timeout',
+      lastStatus,
+      operationalStatus: operationalStatus || undefined,
       lastResponseTime: metadata.response_time_ms
         ? Number(metadata.response_time_ms)
         : undefined,
       lastChecked: row.collected_at
         ? new Date(row.collected_at).toISOString()
-        : row.last_fetch_at
-          ? new Date(row.last_fetch_at).toISOString()
-          : undefined,
+        : collectorActivity
+          ? new Date(collectorActivity).toISOString()
+          : row.last_fetch_at
+            ? new Date(row.last_fetch_at).toISOString()
+            : undefined,
       issues,
     };
   });
