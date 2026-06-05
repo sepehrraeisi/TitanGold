@@ -278,7 +278,7 @@ if [ -f "$NGINX_ACCESS_LOG" ]; then
     
     DOWNLOAD_COUNT=$(grep -E "($YESTERDAY|$TODAY)" "$NGINX_ACCESS_LOG" 2>/dev/null | wc -l || echo "0")
     
-    if [ "$((DOWNLOAD_COUNT))" -gt 0 ]; then
+    DOWNLOAD_COUNT=$(echo "$DOWNLOAD_COUNT" | sed "s/^0*//" | grep -v "^$" || echo "0"); if [ "$DOWNLOAD_COUNT" -gt 0 ] 2>/dev/null; then
         UNIQUE_IPS=$(grep -E "($YESTERDAY|$TODAY)" "$NGINX_ACCESS_LOG" 2>/dev/null | awk '{print $1}' | sort -u | wc -l || echo "0")
         REPORT="${REPORT}Last 24h: ${DOWNLOAD_COUNT}%0A"
         REPORT="${REPORT}Unique IPs: ${UNIQUE_IPS}%0A"

@@ -174,6 +174,14 @@ perform_backup() {
                 
                 local encrypted_size=$(du -h "${backup_file}" | cut -f1)
                 log_success "Backup encrypted successfully (Size: ${encrypted_size})"
+                
+                # Generate SHA256 checksum
+                log_info "Generating SHA256 checksum..."
+                if sha256sum "${backup_file}" > "${backup_file}.sha256" 2>> "${LOG_FILE}"; then
+                    log_success "SHA256 checksum generated"
+                else
+                    log_warning "Failed to generate SHA256 checksum"
+                fi
             else
                 log_error "Encryption failed. Keeping unencrypted backup."
                 send_alert "Backup encryption failed for ${DB_NAME}"
