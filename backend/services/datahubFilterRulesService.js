@@ -177,6 +177,15 @@ export async function evaluateFilterRules(input) {
     };
 }
 
+/** Cached ingestion filter for batch transfers (no per-row DB rule load). */
+export async function createIngestionFilterEvaluator() {
+    const rules = await loadActiveRules('ingestion');
+    return (ctx) => {
+        const matching = rules.filter((r) => ruleMatches(r, ctx));
+        return resolveDecision(matching);
+    };
+}
+
 export async function enforceIngestionFilter({ source_id, url, text, metadata }) {
     const evalResult = await evaluateFilterRules({
         source_id,

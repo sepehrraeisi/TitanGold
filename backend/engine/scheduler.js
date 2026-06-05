@@ -5,7 +5,7 @@ import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
 import { runDataFetchJob } from '../jobs/dataFetchScheduler.js';
 import { maintenanceService } from '../services/maintenance.js';
-import { transferTelegramMessagesToPipeline } from '../services/telegramPipeline.js';
+import { transferTelegramMessagesToPipeline, TELEGRAM_TRANSFER_DEFAULT_BATCH } from '../services/telegramPipeline.js';
 
 class SchedulerService {
     constructor() {
@@ -241,9 +241,18 @@ class SchedulerService {
             if (!this.isRunning || !this.config.telegramPipeline?.enabled) return;
 
             try {
-                const summary = await transferTelegramMessagesToPipeline(50);
-                if (summary.transferred > 0) {
-                    logger.info(`📨 Telegram pipeline: transferred ${summary.transferred} messages to collected_data`);
+                const summary = await transferTelegramMessagesToPipeline(
+                    TELEGRAM_TRANSFER_DEFAULT_BATCH,
+                );
+                if (
+                    summary.inserted > 0 ||
+                    summary.duplicates > 0 ||
+                    summary.skipped_no_source > 0 ||
+                    summary.skipped_filtered > 0
+                ) {
+                    logger.info(
+                        `📨 Telegram pipeline: selected=${summary.selected} inserted=${summary.inserted} backlog=${summary.backlogRemaining} durationMs=${summary.durationMs}`,
+                    );
                 }
             } catch (error) {
                 logger.error('❌ Telegram pipeline scheduler error:', error);
