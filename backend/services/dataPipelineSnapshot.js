@@ -37,13 +37,68 @@ function resolvePipelineSourceStatus(row, enrichment) {
   };
 }
 
+function extractResponseTimeMs({ logExecutionMs, collectedMetadata, logMetadata }) {
+  if (logExecutionMs != null && Number.isFinite(Number(logExecutionMs))) {
+    return Number(logExecutionMs);
+  }
+
+  const sources = [collectedMetadata, logMetadata].filter(Boolean);
+  for (const meta of sources) {
+    for (const key of ['response_time_ms', 'execution_time_ms', 'duration_ms']) {
+      const val = meta[key];
+      if (val != null && Number.isFinite(Number(val))) {
+        return Number(val);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function resolveNormalizedPreviewStatus(row) {
+  const statusRaw = String(row.status || '').toLowerCase();
+  const hasNormalized =
+    row.normalized_data != null &&
+    typeof row.normalized_data === 'object' &&
+    Object.keys(row.normalized_data).length > 0;
+  const hasRaw =
+    row.raw_data != null &&
+    typeof row.raw_data === 'object' &&
+    Object.keys(row.raw_data).length > 0;
+  const hasError = statusRaw === 'error' || Boolean(row.error_message);
+  const metadata = row.normalized_data?.metadata || row.metadata || {};
+  const hasQualityIssue =
+    metadata.quality_warning === true ||
+    metadata.validation_failed === true ||
+    (Array.isArray(metadata.quality_issues) && metadata.quality_issues.length > 0);
+
+  if (hasError) return 'rejected';
+  if (hasNormalized && !hasQualityIssue) return 'ready';
+  if (hasQualityIssue) return 'warning';
+  if (statusRaw === 'pending' || (hasRaw && !hasNormalized)) return 'pending_normalization';
+  if (hasRaw) return 'ingested';
+  return 'pending_normalization';
+}
+
+function resolveQualityDisplay(row, status) {
+  const metadata = row.normalized_data?.metadata || row.metadata || {};
+  if (metadata.quality_score != null && Number.isFinite(Number(metadata.quality_score))) {
+    return { qualityScore: Number(metadata.quality_score), qualityPending: false };
+  }
+  if (status === 'ready') {
+    return { qualityScore: undefined, qualityPending: false };
+  }
+  if (status === 'pending_normalization' || status === 'ingested') {
+    return { qualityScore: undefined, qualityPending: true };
+  }
+  return { qualityScore: undefined, qualityPending: false };
+}
+
 function mapToNormalizedRecord(row, categoryName) {
   const normalized = row.normalized_data || {};
   const metadata = normalized.metadata || row.metadata || {};
-  const statusRaw = row.status;
-  let status = 'ready';
-  if (statusRaw === 'error') status = 'rejected';
-  else if (statusRaw === 'pending' || !row.normalized_data) status = 'warning';
+  const status = resolveNormalizedPreviewStatus(row);
+  const { qualityScore, qualityPending } = resolveQualityDisplay(row, status);
 
   const issues = [];
   if (row.error_message) issues.push(String(row.error_message).slice(0, 200));
@@ -61,7 +116,8 @@ function mapToNormalizedRecord(row, categoryName) {
       value: normalized.value,
       metadata,
     },
-    qualityScore: Number(metadata.quality_score ?? (status === 'ready' ? 90 : 60)),
+    qualityScore,
+    qualityPending: qualityPending || undefined,
     issues,
     status,
     receivedAt: new Date(row.collected_at).toISOString(),
@@ -106,7 +162,9 @@ export async function buildDataPipelineView() {
           ds.credentials,
           ds.is_active,
           ds.last_fetch_at,
-          dc.name AS category_name
+          dc.name AS category_name,
+          dhl.execution_time_ms AS log_execution_time_ms,
+          dhl.log_metadata
         FROM data_sources ds
         LEFT JOIN data_categories dc ON dc.name = ds.category
         LEFT JOIN LATERAL (
@@ -116,6 +174,13 @@ export async function buildDataPipelineView() {
           ORDER BY collected_at DESC
           LIMIT 1
         ) cd ON true
+        LEFT JOIN LATERAL (
+          SELECT execution_time_ms, metadata AS log_metadata
+          FROM data_hub_logs
+          WHERE source_id = ds.id
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) dhl ON true
         ORDER BY ds.name
       `),
       query(`
@@ -165,9 +230,8 @@ export async function buildDataPipelineView() {
         FROM collected_data cd
         LEFT JOIN data_sources ds ON ds.id = cd.source_id
         LEFT JOIN data_categories dc ON dc.name = ds.category
-        WHERE cd.normalized_data IS NOT NULL
-        ORDER BY cd.processed_at DESC NULLS LAST, cd.collected_at DESC
-        LIMIT 6
+        ORDER BY cd.collected_at DESC
+        LIMIT 8
       `),
     ]);
 
@@ -202,6 +266,11 @@ export async function buildDataPipelineView() {
     const metadata = row.metadata || {};
     const collectorActivity =
       enrichment?.latest_message_at || enrichment?.latest_collected_at || null;
+    const lastResponseTime = extractResponseTimeMs({
+      logExecutionMs: row.log_execution_time_ms,
+      collectedMetadata: metadata,
+      logMetadata: row.log_metadata,
+    });
 
     return {
       sourceId: row.source_id,
@@ -210,9 +279,7 @@ export async function buildDataPipelineView() {
       lastDataType: metadata.data_type || row.type || 'unknown',
       lastStatus,
       operationalStatus: operationalStatus || undefined,
-      lastResponseTime: metadata.response_time_ms
-        ? Number(metadata.response_time_ms)
-        : undefined,
+      lastResponseTime,
       lastChecked: row.collected_at
         ? new Date(row.collected_at).toISOString()
         : collectorActivity

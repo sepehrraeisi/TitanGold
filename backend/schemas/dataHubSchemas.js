@@ -388,7 +388,13 @@ export const processMessageResponseSchema = z.object({
 
 // Pipeline snapshot (GAP-012)
 const pipelineAccessStatus = z.enum(['success', 'failed', 'cached', 'timeout']);
-const pipelineNormalizedStatus = z.enum(['ready', 'warning', 'rejected']);
+const pipelineNormalizedStatus = z.enum([
+  'ready',
+  'warning',
+  'rejected',
+  'pending_normalization',
+  'ingested',
+]);
 
 export const dataPipelineSnapshotSchema = z.object({
     lastRefreshed: z.string(),
@@ -473,7 +479,8 @@ export const dataPipelineViewResponseSchema = z.object({
         dataType: z.string(),
         tags: z.array(z.string()),
         payload: z.record(z.any()),
-        qualityScore: z.number(),
+        qualityScore: z.number().optional(),
+        qualityPending: z.boolean().optional(),
         issues: z.array(z.string()),
         status: pipelineNormalizedStatus,
         receivedAt: z.string(),

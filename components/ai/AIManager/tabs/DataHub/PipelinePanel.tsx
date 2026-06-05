@@ -50,10 +50,20 @@ function pipelineStatusLabel(
     return t(src.lastStatus);
 }
 
-function normStatusVariant(status: NormalizedDataRecord['status']): 'success' | 'warning' | 'error' {
+function normStatusVariant(
+    status: NormalizedDataRecord['status'],
+): 'success' | 'warning' | 'error' | 'info' | 'neutral' {
     if (status === 'ready') return 'success';
     if (status === 'warning') return 'warning';
-    return 'error';
+    if (status === 'rejected') return 'error';
+    if (status === 'pending_normalization' || status === 'ingested') return 'info';
+    return 'neutral';
+}
+
+function normalizedStatusLabel(t: (key: string) => string, status: NormalizedDataRecord['status']): string {
+    const key = `normalized_status_${status}`;
+    const translated = t(key);
+    return translated !== key ? translated : status;
 }
 
 const PipelinePanel: React.FC<PipelinePanelProps> = ({
@@ -385,16 +395,16 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                 </td>
                                                 <td className="py-2 pr-2">{row.category}</td>
                                                 <td className="py-2 pr-2">{row.dataType}</td>
-                                                <td className="py-2 pr-2">{row.qualityScore}</td>
+                                                <td className="py-2 pr-2">
+                                                    {row.qualityPending
+                                                        ? t('pipeline_quality_pending')
+                                                        : row.qualityScore != null
+                                                          ? row.qualityScore
+                                                          : '—'}
+                                                </td>
                                                 <td className="py-2">
                                                     <StatusPill
-                                                        label={
-                                                            row.status === 'ready'
-                                                                ? t('normalized_status_ready')
-                                                                : row.status === 'warning'
-                                                                  ? t('normalized_status_warning')
-                                                                  : t('normalized_status_rejected')
-                                                        }
+                                                        label={normalizedStatusLabel(t, row.status)}
                                                         variant={normStatusVariant(row.status)}
                                                     />
                                                 </td>

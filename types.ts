@@ -4271,7 +4271,12 @@ export interface DataPipelineHistoryEntry {
   snapshot: DataPipelineSnapshot;
 }
 
-export type NormalizedDataStatus = 'ready' | 'warning' | 'rejected';
+export type NormalizedDataStatus =
+  | 'ready'
+  | 'warning'
+  | 'rejected'
+  | 'pending_normalization'
+  | 'ingested';
 
 export interface NormalizedDataRecord {
   id: string;
@@ -4286,7 +4291,8 @@ export interface NormalizedDataRecord {
     value?: number;
     metadata?: Record<string, any>;
   };
-  qualityScore: number;
+  qualityScore?: number;
+  qualityPending?: boolean;
   issues: string[];
   status: NormalizedDataStatus;
   receivedAt: string;
