@@ -158,17 +158,18 @@ export function resolveCollectorOperationalStatus(source, enrichment) {
 /**
  * Map collector operational_status to pipeline Source Quality Board lastStatus.
  * Keeps RSS/API/bot-pull on fetch-scheduler semantics when this returns null.
+ * DH-PIPELINE-FIX-3: distinct collector_* statuses (not overloaded timeout/cached).
  */
 export function mapCollectorOperationalToPipelineStatus(operationalStatus) {
     switch (operationalStatus) {
         case 'active':
-            return 'success';
+            return 'collector_active';
         case 'pending':
-            return 'cached';
+            return 'collector_pending';
         case 'linked':
-            return 'cached';
+            return 'collector_linked';
         case 'error':
-            return 'failed';
+            return 'collector_error';
         default:
             return null;
     }

@@ -1,46 +1,25 @@
 import { query } from '../database/db.js';
 import { coerceReadModel } from './normalizers/normalizedDataContract.js';
+import { batchTelegramCollectorEnrichment } from './telegramCollectorSourceStatus.js';
 import {
-  batchTelegramCollectorEnrichment,
-  mapCollectorOperationalToPipelineStatus,
-  resolveCollectorOperationalStatus,
-} from './telegramCollectorSourceStatus.js';
+  PIPELINE_SOURCE_STATUS_HINTS,
+  resolvePipelineSourceQualityStatus,
+} from './pipelineSourceQualityStatus.js';
 
 /** @deprecated import from normalizedDataContract — kept for tests */
 export function normalizeReadModel(normalized) {
   return coerceReadModel(normalized);
 }
 
-function mapCollectedStatusToAccessStatus(status) {
-  if (status === 'processed') return 'success';
-  if (status === 'error') return 'failed';
-  if (status === 'pending') return 'timeout';
-  return 'success';
-}
+export { PIPELINE_SOURCE_STATUS_HINTS } from './pipelineSourceQualityStatus.js';
+export {
+  isFetchTimeoutIndicator,
+  resolveFetchPathPipelineStatus,
+  resolvePipelineSourceQualityStatus,
+} from './pipelineSourceQualityStatus.js';
 
 function resolvePipelineSourceStatus(row, enrichment) {
-  const operationalStatus = resolveCollectorOperationalStatus(
-    {
-      type: row.type,
-      config: row.config,
-      credentials: row.credentials,
-    },
-    enrichment,
-  );
-
-  if (operationalStatus) {
-    return {
-      lastStatus: mapCollectorOperationalToPipelineStatus(operationalStatus),
-      operationalStatus,
-    };
-  }
-
-  return {
-    lastStatus: row.status
-      ? mapCollectedStatusToAccessStatus(row.status)
-      : 'timeout',
-    operationalStatus: null,
-  };
+  return resolvePipelineSourceQualityStatus(row, enrichment);
 }
 
 function extractResponseTimeMs({ logExecutionMs, collectedMetadata, logMetadata }) {
@@ -180,9 +159,12 @@ export async function buildDataPipelineView() {
           ds.credentials,
           ds.is_active,
           ds.last_fetch_at,
+          ds.last_status AS ds_last_status,
           dc.name AS category_name,
           dhl.execution_time_ms AS log_execution_time_ms,
-          dhl.log_metadata
+          dhl.log_metadata,
+          dhl.message AS log_message,
+          dhl.status AS log_status
         FROM data_sources ds
         LEFT JOIN data_categories dc ON dc.name = ds.category
         LEFT JOIN LATERAL (
@@ -193,7 +175,7 @@ export async function buildDataPipelineView() {
           LIMIT 1
         ) cd ON true
         LEFT JOIN LATERAL (
-          SELECT execution_time_ms, metadata AS log_metadata
+          SELECT execution_time_ms, metadata AS log_metadata, message, status
           FROM data_hub_logs
           WHERE source_id = ds.id
           ORDER BY created_at DESC
@@ -274,11 +256,17 @@ export async function buildDataPipelineView() {
 
   const sources = sourcesRows.rows.map(row => {
     const enrichment = collectorEnrichment.get(row.source_id);
-    const { lastStatus, operationalStatus } = resolvePipelineSourceStatus(row, enrichment);
+    const { lastStatus, operationalStatus, statusHint } = resolvePipelineSourceStatus(row, enrichment);
 
     const issues = [];
     if (row.is_active === false) issues.push('inactive');
-    if (row.status === 'error' && !operationalStatus) issues.push('last_request_failed');
+    if (
+      lastStatus === 'fetch_error' ||
+      lastStatus === 'fetch_timeout' ||
+      lastStatus === 'collector_error'
+    ) {
+      issues.push('last_request_failed');
+    }
     if (
       !row.collected_at &&
       operationalStatus !== 'active' &&
@@ -305,6 +293,7 @@ export async function buildDataPipelineView() {
       lastDataType: metadata.data_type || row.type || 'unknown',
       lastStatus,
       operationalStatus: operationalStatus || undefined,
+      statusHint: statusHint || undefined,
       lastResponseTime,
       lastChecked: row.collected_at
         ? new Date(row.collected_at).toISOString()

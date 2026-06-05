@@ -4234,13 +4234,29 @@ export interface DataCacheStats {
   data: Record<string, DataCacheEntry>;
 }
 
+export type PipelineSourceQualityStatus =
+  | 'success'
+  | 'pending_normalization'
+  | 'no_data'
+  | 'fetch_error'
+  | 'fetch_timeout'
+  | 'inactive'
+  | 'collector_active'
+  | 'collector_pending'
+  | 'collector_linked'
+  | 'collector_error'
+  | 'failed'
+  | 'cached'
+  | 'timeout';
+
 export interface DataPipelineSourceSnapshot {
   sourceId: string;
   name: string;
   category: string;
   lastDataType: string;
-  lastStatus: DataAccessLog['status'];
+  lastStatus: PipelineSourceQualityStatus;
   operationalStatus?: 'active' | 'linked' | 'pending' | 'error';
+  statusHint?: string;
   lastResponseTime?: number;
   lastChecked?: string;
   issues?: string[];

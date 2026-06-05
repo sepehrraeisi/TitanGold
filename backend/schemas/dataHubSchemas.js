@@ -426,8 +426,24 @@ export const processMessageResponseSchema = z.object({
     content_hash: z.string()
 });
 
-// Pipeline snapshot (GAP-012)
-const pipelineAccessStatus = z.enum(['success', 'failed', 'cached', 'timeout']);
+// Pipeline snapshot (GAP-012) — DH-PIPELINE-FIX-3 extended source quality statuses
+const pipelineSourceQualityStatus = z.enum([
+  'success',
+  'pending_normalization',
+  'no_data',
+  'fetch_error',
+  'fetch_timeout',
+  'inactive',
+  'collector_active',
+  'collector_pending',
+  'collector_linked',
+  'collector_error',
+  // legacy values kept for backward-compatible clients
+  'failed',
+  'cached',
+  'timeout',
+]);
+const pipelineAccessStatus = pipelineSourceQualityStatus;
 const pipelineNormalizedStatus = z.enum([
   'ready',
   'warning',
@@ -451,6 +467,7 @@ export const dataPipelineSnapshotSchema = z.object({
         lastDataType: z.string(),
         lastStatus: pipelineAccessStatus,
         operationalStatus: z.enum(['active', 'linked', 'pending', 'error']).optional(),
+        statusHint: z.string().optional(),
         lastResponseTime: z.number().optional(),
         lastChecked: z.string().optional(),
         issues: z.array(z.string()).optional()

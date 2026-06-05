@@ -65,13 +65,16 @@ export function StatusPill({
     label,
     variant = 'neutral',
     className = '',
+    title,
 }: {
     label: string;
     variant?: PillVariant;
     className?: string;
+    title?: string;
 }) {
     return (
         <span
+            title={title}
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${PILL[variant]} ${className}`}
         >
             {label}
