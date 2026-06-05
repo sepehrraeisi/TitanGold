@@ -1,211 +1,435 @@
-import { query } from '../database/db.js';
+import crypto from 'crypto';
+import { query, transaction } from '../database/db.js';
 import { logger } from './logger.js';
-import { enforceIngestionFilter } from './datahubFilterRulesService.js';
+import { createIngestionFilterEvaluator } from './datahubFilterRulesService.js';
 
-/**
- * Transfer unprocessed Telegram messages from telegram_messages to collected_data (TASK-DHT-030)
- * 
- * Strategy: Polling-based job that processes messages in batches
- * - Finds messages where is_processed = false
- * - Maps channel_id → data_source via telegram_channels
- * - Creates collected_data entries with raw_data and normalized_data
- */
-export async function transferTelegramMessagesToPipeline(batchSize = 50) {
-    const summary = {
+/** Default messages per scheduler run (override via batchSize argument). */
+export const TELEGRAM_TRANSFER_DEFAULT_BATCH = 500;
+
+/** Max rows handled per DB transaction. */
+export const TELEGRAM_TRANSFER_SUB_BATCH = 100;
+
+/** Metadata pipeline version tag. */
+export const TELEGRAM_TRANSFER_PIPELINE_VERSION = 'dh-pipeline-p0-arch-1';
+
+/** pg_try_advisory_lock key — single-flight transfer across workers. */
+const TRANSFER_ADVISORY_LOCK_KEY = 8392741;
+
+let transferInProgress = false;
+
+function parseConfig(config) {
+    if (typeof config === 'string') {
+        try {
+            return JSON.parse(config);
+        } catch {
+            return {};
+        }
+    }
+    return config || {};
+}
+
+/** Stable dedupe hash aligned with dataFetcher pattern. */
+export function generateTelegramContentHash(sourceId, telegramChannelId, messageId) {
+    const payload = `${sourceId}:${telegramChannelId}:${messageId}`;
+    return crypto.createHash('sha256').update(payload).digest('hex');
+}
+
+function emptySummary() {
+    return {
         totalMessages: 0,
-        processed: 0,
+        selected: 0,
+        inserted: 0,
         transferred: 0,
+        processed: 0,
+        duplicates: 0,
         skipped: 0,
+        skipped_no_source: 0,
+        skipped_filtered: 0,
         errors: 0,
+        durationMs: 0,
+        backlogRemaining: null,
+        batchSize: 0,
+        pipelineVersion: TELEGRAM_TRANSFER_PIPELINE_VERSION,
+        skipped_run: false,
+        skip_reason: null,
         details: [],
     };
+}
 
-    try {
-        // 1. Fetch unprocessed telegram messages
-        const messagesResult = await query(
-            `SELECT tm.*, tc.channel_id as telegram_channel_id, tc.username as channel_username, tc.title as channel_title, tc.category as channel_category
-             FROM telegram_messages tm
-             JOIN telegram_channels tc ON tm.channel_id = tc.id
-             WHERE tm.is_processed = false
-             ORDER BY tm.telegram_created_at ASC NULLS LAST, tm.created_at ASC
-             LIMIT $1`,
-            [batchSize]
-        );
+/** Backlog stats for observability. */
+export async function getTelegramTransferBacklogStats() {
+    const result = await query(`
+        SELECT
+            COUNT(*) FILTER (WHERE is_processed = false)::int AS backlog,
+            COUNT(*) FILTER (
+                WHERE is_processed = false AND created_at > NOW() - INTERVAL '24 hours'
+            )::int AS backlog_24h,
+            MIN(telegram_created_at) FILTER (WHERE is_processed = false) AS oldest_unprocessed,
+            MAX(created_at) FILTER (WHERE is_processed = false) AS newest_unprocessed
+        FROM telegram_messages
+    `);
+    return result.rows[0] || { backlog: 0, backlog_24h: 0 };
+}
 
-        const messages = messagesResult.rows;
-        summary.totalMessages = messages.length;
+/** Load telegram channel_id / username → data_source map. */
+async function loadChannelSourceMap() {
+    const result = await query(`
+        SELECT id, name, category, config
+        FROM data_sources
+        WHERE type = 'telegram' AND is_active = true
+    `);
 
-        if (messages.length === 0) {
-            logger.debug('No unprocessed telegram messages found');
-            return summary;
+    const byChannelId = new Map();
+    const byUsername = new Map();
+
+    for (const row of result.rows) {
+        const cfg = parseConfig(row.config);
+        if (cfg.channelId != null) {
+            byChannelId.set(String(cfg.channelId), row);
+        }
+        if (cfg.channelUsername) {
+            byUsername.set(String(cfg.channelUsername).replace(/^@/, '').toLowerCase(), row);
+        }
+    }
+
+    return { byChannelId, byUsername };
+}
+
+function resolveSourceForMessage(message, sourceMap) {
+    const channelIdStr = String(message.telegram_channel_id);
+    let source = sourceMap.byChannelId.get(channelIdStr);
+    if (!source && message.channel_username) {
+        const username = String(message.channel_username).replace(/^@/, '').toLowerCase();
+        source = sourceMap.byUsername.get(username);
+    }
+    return source;
+}
+
+function sanitizeText(text) {
+    if (text == null) return text;
+    return String(text).replace(/\u0000/g, '');
+}
+
+/** Truncate without splitting UTF-16 surrogate pairs (invalid in PostgreSQL jsonb). */
+function truncateText(text, maxLen) {
+    if (text == null) return text;
+    const sanitized = sanitizeText(text);
+    if (sanitized.length <= maxLen) return sanitized;
+    return [...sanitized].slice(0, maxLen).join('');
+}
+
+function buildRawData(message, channelIdStr) {
+    let extractedSignals = message.extracted_signals;
+    if (typeof extractedSignals === 'string') {
+        try {
+            extractedSignals = JSON.parse(extractedSignals);
+        } catch {
+            extractedSignals = null;
+        }
+    }
+
+    return {
+        telegram_message_id: message.message_id,
+        channel_id: message.channel_id,
+        telegram_channel_id: channelIdStr,
+        channel_username: message.channel_username,
+        channel_title: message.channel_title,
+        sender_id: message.sender_id,
+        sender_username: message.sender_username,
+        message_text: sanitizeText(message.message_text),
+        message_type: message.message_type,
+        has_media: message.has_media,
+        media_url: message.media_url,
+        telegram_created_at: message.telegram_created_at,
+        extracted_signals: extractedSignals,
+        sentiment_score: message.sentiment_score ? parseFloat(message.sentiment_score) : null,
+    };
+}
+
+function buildNormalizedData(message, channelIdStr) {
+    const text = sanitizeText(message.message_text);
+    return {
+        title: truncateText(text, 200) || `Telegram Message ${message.message_id}`,
+        content: text || '',
+        tags: ['telegram', message.channel_category || 'signals'],
+        sentiment: message.sentiment_score ? parseFloat(message.sentiment_score) : null,
+        channel: message.channel_username || message.channel_title || channelIdStr,
+        publishedAt: message.telegram_created_at || message.created_at,
+        entities: {
+            telegram: {
+                message_id: message.message_id,
+                channel_id: channelIdStr,
+                sender_id: message.sender_id,
+                sender_username: message.sender_username,
+            },
+        },
+        metadata: {
+            source_type: 'telegram',
+            has_media: message.has_media || false,
+            media_url: message.media_url || null,
+            message_type: message.message_type || 'text',
+        },
+    };
+}
+
+function buildTransferMetadata(message, channelIdStr) {
+    return {
+        telegram_message_id: message.message_id,
+        telegram_channel_id: channelIdStr,
+        telegram_channel_username: message.channel_username || null,
+        telegram_channel_title: message.channel_title || null,
+        telegram_created_at: message.telegram_created_at
+            ? new Date(message.telegram_created_at).toISOString()
+            : null,
+        channel_id: message.channel_id,
+        transferred_at: new Date().toISOString(),
+        pipeline_version: TELEGRAM_TRANSFER_PIPELINE_VERSION,
+    };
+}
+
+async function loadExistingTelegramKeys(sourceIds, messageIds) {
+    if (sourceIds.length === 0) return new Set();
+    const result = await query(
+        `SELECT source_id::text, raw_data->>'telegram_message_id' AS message_id
+         FROM collected_data
+         WHERE source_id = ANY($1::uuid[])
+           AND raw_data->>'telegram_message_id' = ANY($2::text[])`,
+        [sourceIds, messageIds],
+    );
+    return new Set(result.rows.map((r) => `${r.source_id}:${r.message_id}`));
+}
+
+async function markMessagesProcessed(client, messageIds) {
+    if (messageIds.length === 0) return;
+    await client.query(
+        `UPDATE telegram_messages
+         SET is_processed = true, processed_at = NOW()
+         WHERE id = ANY($1::uuid[])`,
+        [messageIds],
+    );
+}
+
+async function processSubBatch(messages, sourceMap, filterEvaluate) {
+    const subSummary = {
+        inserted: 0,
+        duplicates: 0,
+        skipped_no_source: 0,
+        skipped_filtered: 0,
+        errors: 0,
+    };
+
+    const resolved = [];
+    const toMarkProcessed = [];
+
+    for (const message of messages) {
+        const channelIdStr = String(message.telegram_channel_id);
+        const source = resolveSourceForMessage(message, sourceMap);
+        if (!source) {
+            subSummary.skipped_no_source += 1;
+            toMarkProcessed.push(message.id);
+            continue;
+        }
+        resolved.push({ message, source, channelIdStr });
+    }
+
+    if (resolved.length === 0) {
+        await transaction(async (client) => {
+            await markMessagesProcessed(client, toMarkProcessed);
+        });
+        return subSummary;
+    }
+
+    const sourceIds = [...new Set(resolved.map((r) => r.source.id))];
+    const messageIds = resolved.map((r) => String(r.message.message_id));
+    const existingKeys = await loadExistingTelegramKeys(sourceIds, messageIds);
+
+    const toInsert = [];
+
+    for (const item of resolved) {
+        const { message, source, channelIdStr } = item;
+        const dedupeKey = `${source.id}:${String(message.message_id)}`;
+        if (existingKeys.has(dedupeKey)) {
+            subSummary.duplicates += 1;
+            toMarkProcessed.push(message.id);
+            continue;
         }
 
-        logger.info(`Processing ${messages.length} unprocessed telegram messages...`);
+        const normalizedData = buildNormalizedData(message, channelIdStr);
+        const filterText = normalizedData.content || '';
+        const filterDecision = filterEvaluate({
+            source_id: source.id,
+            url: message.media_url,
+            text: filterText,
+        });
 
-        for (const message of messages) {
+        if (!filterDecision.allowed) {
+            subSummary.skipped_filtered += 1;
+            toMarkProcessed.push(message.id);
+            continue;
+        }
+
+        toInsert.push({
+            message,
+            source,
+            channelIdStr,
+            rawData: buildRawData(message, channelIdStr),
+            normalizedData,
+            contentHash: generateTelegramContentHash(source.id, channelIdStr, message.message_id),
+        });
+    }
+
+    if (toInsert.length === 0) {
+        await transaction(async (client) => {
+            await markMessagesProcessed(client, toMarkProcessed);
+        });
+        return subSummary;
+    }
+
+    const insertedIds = [];
+    const failedIds = [];
+
+    await transaction(async (client) => {
+        for (const row of toInsert) {
+            const { message, source, channelIdStr, rawData, normalizedData, contentHash } = row;
+            await client.query('SAVEPOINT transfer_row');
             try {
-                // 2. Find corresponding data_source for this channel
-                const channelIdStr = String(message.telegram_channel_id);
-                const dataSourceResult = await query(
-                    `SELECT id, name, category
-                     FROM data_sources
-                     WHERE type = 'telegram'
-                     AND config->>'channelId' = $1
-                     LIMIT 1`,
-                    [channelIdStr]
-                );
-
-                if (dataSourceResult.rows.length === 0) {
-                    logger.warn(`No data source found for telegram channel ${channelIdStr}, skipping message ${message.id}`);
-                    summary.skipped += 1;
-                    summary.details.push({
-                        messageId: message.id,
-                        channelId: channelIdStr,
-                        action: 'skipped',
-                        reason: 'No data source found',
-                    });
-                    continue;
-                }
-
-                const dataSource = dataSourceResult.rows[0];
-
-                // 3. Check if this message already exists in collected_data (deduplication)
-                const existingCheck = await query(
-                    `SELECT id FROM collected_data
-                     WHERE source_id = $1
-                     AND raw_data->>'telegram_message_id' = $2
-                     LIMIT 1`,
-                    [dataSource.id, String(message.message_id)]
-                );
-
-                if (existingCheck.rows.length > 0) {
-                    logger.debug(`Message ${message.message_id} already exists in collected_data, skipping`);
-                    summary.skipped += 1;
-                    // Mark as processed even if duplicate
-                    await query(
-                        'UPDATE telegram_messages SET is_processed = true, processed_at = NOW() WHERE id = $1',
-                        [message.id]
-                    );
-                    continue;
-                }
-
-                // 4. Build raw_data structure
-                const rawData = {
-                    telegram_message_id: message.message_id,
-                    channel_id: message.channel_id,
-                    telegram_channel_id: channelIdStr,
-                    channel_username: message.channel_username,
-                    channel_title: message.channel_title,
-                    sender_id: message.sender_id,
-                    sender_username: message.sender_username,
-                    message_text: message.message_text,
-                    message_type: message.message_type,
-                    has_media: message.has_media,
-                    media_url: message.media_url,
-                    telegram_created_at: message.telegram_created_at,
-                    extracted_signals: message.extracted_signals,
-                    sentiment_score: message.sentiment_score ? parseFloat(message.sentiment_score) : null,
-                };
-
-                // 5. Build normalized_data structure (basic normalization, full normalization happens in pipeline)
-                const normalizedData = {
-                    title: message.message_text?.substring(0, 200) || `Telegram Message ${message.message_id}`,
-                    content: message.message_text || '',
-                    tags: ['telegram', message.channel_category || 'signals'],
-                    sentiment: message.sentiment_score ? parseFloat(message.sentiment_score) : null,
-                    channel: message.channel_username || message.channel_title || channelIdStr,
-                    publishedAt: message.telegram_created_at || message.created_at,
-                    entities: {
-                        telegram: {
-                            message_id: message.message_id,
-                            channel_id: channelIdStr,
-                            sender_id: message.sender_id,
-                            sender_username: message.sender_username,
-                        },
-                    },
-                    metadata: {
-                        source_type: 'telegram',
-                        has_media: message.has_media || false,
-                        media_url: message.media_url || null,
-                        message_type: message.message_type || 'text',
-                    },
-                };
-
-                // 6. Ingestion filter (GAP-024)
-                try {
-                    await enforceIngestionFilter({
-                        source_id: dataSource.id,
-                        url: message.media_url || null,
-                        text: normalizedData.content || message.text || message.caption,
-                        metadata: { source_type: 'telegram', channel_id: channelIdStr },
-                    });
-                } catch (filterErr) {
-                    if (filterErr.code === 'FILTER_BLOCKED') {
-                        summary.skipped += 1;
-                        summary.details.push({
-                            messageId: message.id,
-                            channelId: channelIdStr,
-                            action: 'filter_blocked',
-                            reason: filterErr.details?.reason,
-                        });
-                        continue;
-                    }
-                    throw filterErr;
-                }
-
-                // 7. Insert into collected_data
-                const collectedDataResult = await query(
+                await client.query(
                     `INSERT INTO collected_data
-                        (source_id, raw_data, normalized_data, collected_at, status, metadata)
-                     VALUES
-                        ($1, $2, $3, $4, 'pending', $5)
-                     RETURNING id`,
+                        (source_id, raw_data, normalized_data, content_hash, collected_at, status, metadata)
+                     VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
                     [
-                        dataSource.id,
-                        JSON.stringify(rawData),
-                        JSON.stringify(normalizedData),
-                        message.telegram_created_at || message.created_at,
-                        JSON.stringify({
-                            telegram_message_id: message.message_id,
-                            channel_id: message.channel_id,
-                            transferred_at: new Date().toISOString(),
-                        }),
-                    ]
+                        source.id,
+                        rawData,
+                        normalizedData,
+                        contentHash,
+                        message.telegram_created_at || message.created_at || new Date(),
+                        buildTransferMetadata(message, channelIdStr),
+                    ],
                 );
-
-                const collectedDataId = collectedDataResult.rows[0].id;
-
-                // 7. Mark telegram message as processed
-                await query(
-                    'UPDATE telegram_messages SET is_processed = true, processed_at = NOW() WHERE id = $1',
-                    [message.id]
-                );
-
-                summary.transferred += 1;
-                summary.processed += 1;
-                summary.details.push({
-                    messageId: message.id,
-                    channelId: channelIdStr,
-                    dataSourceId: dataSource.id,
-                    collectedDataId,
-                    action: 'transferred',
-                });
-
+                await client.query('RELEASE SAVEPOINT transfer_row');
+                insertedIds.push(message.id);
+                subSummary.inserted += 1;
             } catch (error) {
-                logger.error(`Failed to transfer telegram message ${message.id}:`, {
-                    error: error.message,
-                    stack: error.stack,
-                });
-                summary.errors += 1;
-                summary.details.push({
-                    messageId: message.id,
-                    action: 'error',
-                    error: error.message,
-                });
+                await client.query('ROLLBACK TO SAVEPOINT transfer_row');
+                if (error.code === '23505') {
+                    subSummary.duplicates += 1;
+                    toMarkProcessed.push(message.id);
+                } else {
+                    subSummary.errors += 1;
+                    failedIds.push(message.id);
+                    logger.warn('Telegram transfer row failed', {
+                        messageId: message.id,
+                        error: error.message,
+                    });
+                }
             }
         }
 
-        logger.info('Telegram messages → collected_data transfer completed', summary);
+        await markMessagesProcessed(client, [...toMarkProcessed, ...insertedIds]);
+    });
+
+    if (failedIds.length > 0) {
+        logger.warn('Telegram transfer sub-batch had row errors', { count: failedIds.length });
+    }
+
+    return subSummary;
+}
+
+/**
+ * Transfer unprocessed Telegram messages → collected_data (high-throughput).
+ */
+export async function transferTelegramMessagesToPipeline(
+    batchSize = TELEGRAM_TRANSFER_DEFAULT_BATCH,
+) {
+    const started = Date.now();
+    const summary = emptySummary();
+    summary.batchSize = batchSize;
+
+    if (transferInProgress) {
+        summary.skipped_run = true;
+        summary.skip_reason = 'in_memory_lock';
+        return summary;
+    }
+
+    const lockResult = await query('SELECT pg_try_advisory_lock($1) AS acquired', [
+        TRANSFER_ADVISORY_LOCK_KEY,
+    ]);
+    if (!lockResult.rows[0]?.acquired) {
+        summary.skipped_run = true;
+        summary.skip_reason = 'advisory_lock';
+        return summary;
+    }
+
+    transferInProgress = true;
+
+    try {
+        const [sourceMap, filterEvaluate] = await Promise.all([
+            loadChannelSourceMap(),
+            createIngestionFilterEvaluator(),
+        ]);
+
+        const messagesResult = await query(
+            `SELECT tm.*,
+                    tc.channel_id AS telegram_channel_id,
+                    tc.username AS channel_username,
+                    tc.title AS channel_title,
+                    tc.category AS channel_category
+             FROM telegram_messages tm
+             INNER JOIN telegram_channels tc ON tm.channel_id = tc.id
+             WHERE tm.is_processed = false
+             ORDER BY tm.telegram_created_at ASC NULLS LAST, tm.created_at ASC
+             LIMIT $1`,
+            [batchSize],
+        );
+
+        const messages = messagesResult.rows;
+        summary.selected = messages.length;
+        summary.totalMessages = messages.length;
+
+        if (messages.length === 0) {
+            logger.debug('No unprocessed telegram messages found for transfer');
+            const backlog = await getTelegramTransferBacklogStats();
+            summary.backlogRemaining = backlog.backlog;
+            summary.durationMs = Date.now() - started;
+            return summary;
+        }
+
+        for (let offset = 0; offset < messages.length; offset += TELEGRAM_TRANSFER_SUB_BATCH) {
+            const chunk = messages.slice(offset, offset + TELEGRAM_TRANSFER_SUB_BATCH);
+            const chunkSummary = await processSubBatch(chunk, sourceMap, filterEvaluate);
+            summary.inserted += chunkSummary.inserted;
+            summary.duplicates += chunkSummary.duplicates;
+            summary.skipped_no_source += chunkSummary.skipped_no_source;
+            summary.skipped_filtered += chunkSummary.skipped_filtered;
+            summary.errors += chunkSummary.errors;
+        }
+
+        summary.skipped =
+            summary.skipped_no_source + summary.skipped_filtered + summary.duplicates;
+        summary.transferred = summary.inserted;
+        summary.processed =
+            summary.inserted +
+            summary.duplicates +
+            summary.skipped_no_source +
+            summary.skipped_filtered;
+
+        const backlog = await getTelegramTransferBacklogStats();
+        summary.backlogRemaining = backlog.backlog;
+        summary.durationMs = Date.now() - started;
+
+        logger.info('Telegram messages → collected_data transfer completed', {
+            batchSize,
+            selected: summary.selected,
+            inserted: summary.inserted,
+            duplicates: summary.duplicates,
+            skipped_no_source: summary.skipped_no_source,
+            skipped_filtered: summary.skipped_filtered,
+            errors: summary.errors,
+            durationMs: summary.durationMs,
+            backlogRemaining: summary.backlogRemaining,
+            pipelineVersion: TELEGRAM_TRANSFER_PIPELINE_VERSION,
+        });
+
         return summary;
     } catch (error) {
         logger.error('Failed to transfer telegram messages to pipeline', {
@@ -213,5 +437,8 @@ export async function transferTelegramMessagesToPipeline(batchSize = 50) {
             stack: error.stack,
         });
         throw error;
+    } finally {
+        transferInProgress = false;
+        await query('SELECT pg_advisory_unlock($1)', [TRANSFER_ADVISORY_LOCK_KEY]).catch(() => {});
     }
 }

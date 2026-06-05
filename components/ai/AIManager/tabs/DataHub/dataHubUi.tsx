@@ -65,13 +65,16 @@ export function StatusPill({
     label,
     variant = 'neutral',
     className = '',
+    title,
 }: {
     label: string;
     variant?: PillVariant;
     className?: string;
+    title?: string;
 }) {
     return (
         <span
+            title={title}
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${PILL[variant]} ${className}`}
         >
             {label}
@@ -248,6 +251,8 @@ export function sourceStatusVariant(status: string): PillVariant {
     if (status === 'active') return 'success';
     if (status === 'error') return 'error';
     if (status === 'testing') return 'warning';
+    if (status === 'pending') return 'warning';
+    if (status === 'linked') return 'info';
     return 'neutral';
 }
 

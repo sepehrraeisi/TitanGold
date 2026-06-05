@@ -187,7 +187,14 @@ export const dataSourceResponseSchema = z.object({
     created_at: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString()),
     updated_at: z.string().datetime().or(z.date()).transform(val => new Date(val).toISOString()).optional().nullable(),
     deleted_at: z.string().datetime().or(z.date()).transform(val => val ? new Date(val).toISOString() : null).optional().nullable(),
-    hasCredentials: z.boolean().optional()
+    hasCredentials: z.boolean().optional(),
+    telegram_ingestion_mode: z.enum(['collector', 'bot']).optional().nullable(),
+    operational_status: z.enum(['active', 'linked', 'pending', 'error']).optional().nullable(),
+    suppress_last_error: z.boolean().optional(),
+    success_rate_display: z.enum(['na']).optional().nullable(),
+    collector_last_activity_at: z.string().datetime().optional().nullable(),
+    effective_category: z.string().optional().nullable(),
+    category_needs_review: z.boolean().optional(),
 });
 
 // Paginated Data Sources Schema
@@ -306,7 +313,7 @@ export const normalizedExtractedSchema = z.object({
     dates: z.array(z.string()).optional().nullable()
 });
 
-// Full Normalized Message Schema
+// Full Normalized Message Schema (legacy telegram-collector shape)
 export const normalizedMessageSchema = z.object({
     message_id: z.number().int().positive(),
     content: z.string().default(''),
@@ -315,11 +322,50 @@ export const normalizedMessageSchema = z.object({
     extracted: normalizedExtractedSchema
 });
 
+// Canonical normalized_data v1 (DH-NORMALIZATION-P0-CONTRACT-1)
+export const normalizedDataV1MetadataSchema = z
+    .object({
+        rawStatus: z.string().nullable().optional(),
+        ingestionMode: z.string().optional(),
+        telegramMessageId: z.string().nullable().optional(),
+        telegramChannelId: z.string().nullable().optional(),
+        telegramChannelUsername: z.string().nullable().optional(),
+        normalizedAt: z.string().optional(),
+        normalizerVersion: z.string().optional(),
+    })
+    .passthrough();
+
+export const normalizedDataV1Schema = z
+    .object({
+        version: z.literal('datahub.normalized.v1').optional(),
+        title: z.string().min(1),
+        content: z.string(),
+        summary: z.string().nullable().optional(),
+        sourceType: z.enum(['telegram', 'rss', 'api', 'webhook', 'crawler', 'unknown']),
+        sourceId: z.string().uuid().nullable().optional(),
+        sourceName: z.string().nullable().optional(),
+        category: z.string().min(1),
+        language: z.string().nullable().optional(),
+        timestamp: z.string(),
+        publishedAt: z.string().nullable().optional(),
+        entities: z.record(z.any()).optional(),
+        signals: z.array(z.any()).optional(),
+        tags: z.array(z.string()).optional(),
+        metadata: normalizedDataV1MetadataSchema.optional(),
+    })
+    .passthrough();
+
+/** API ingress: v1 contract, legacy collector message, or transfer envelope */
+export const normalizedDataAcceptSchema = z
+    .union([normalizedDataV1Schema, normalizedMessageSchema, z.record(z.any())])
+    .optional()
+    .nullable();
+
 // Create Collected Data Schema (POST)
 export const createCollectedDataSchema = z.object({
     source_id: z.string().uuid('Source ID must be a valid UUID'),
     raw_data: z.record(z.any()), // JSONB - any valid JSON
-    normalized_data: normalizedMessageSchema.optional().nullable(),
+    normalized_data: normalizedDataAcceptSchema,
     content_hash: z.string()
         .min(1, 'Content hash cannot be empty')
         .max(64, 'Content hash must not exceed 64 characters')
@@ -340,7 +386,7 @@ export const batchCreateCollectedDataSchema = z.object({
 
 // Update Collected Data Schema (PUT)
 export const updateCollectedDataSchema = z.object({
-    normalized_data: normalizedMessageSchema.optional().nullable(),
+    normalized_data: normalizedDataAcceptSchema,
     status: z.enum(['pending', 'processed', 'error']).optional(),
     processed_at: z.string().datetime().or(z.date()).optional().nullable(),
     error_message: z.string().max(1000).optional().nullable(),
@@ -369,7 +415,8 @@ export const collectedDataFilterSchema = z.object({
 export const validationResultSchema = z.object({
     valid: z.boolean(),
     errors: z.array(z.string()).default([]),
-    warnings: z.array(z.string()).default([])
+    warnings: z.array(z.string()).default([]),
+    qualityHints: z.array(z.string()).default([]).optional(),
 });
 
 // Process Message Response Schema
@@ -379,9 +426,31 @@ export const processMessageResponseSchema = z.object({
     content_hash: z.string()
 });
 
-// Pipeline snapshot (GAP-012)
-const pipelineAccessStatus = z.enum(['success', 'failed', 'cached', 'timeout']);
-const pipelineNormalizedStatus = z.enum(['ready', 'warning', 'rejected']);
+// Pipeline snapshot (GAP-012) — DH-PIPELINE-FIX-3 extended source quality statuses
+const pipelineSourceQualityStatus = z.enum([
+  'success',
+  'pending_normalization',
+  'no_data',
+  'fetch_error',
+  'fetch_timeout',
+  'inactive',
+  'collector_active',
+  'collector_pending',
+  'collector_linked',
+  'collector_error',
+  // legacy values kept for backward-compatible clients
+  'failed',
+  'cached',
+  'timeout',
+]);
+const pipelineAccessStatus = pipelineSourceQualityStatus;
+const pipelineNormalizedStatus = z.enum([
+  'ready',
+  'warning',
+  'rejected',
+  'pending_normalization',
+  'ingested',
+]);
 
 export const dataPipelineSnapshotSchema = z.object({
     lastRefreshed: z.string(),
@@ -397,6 +466,8 @@ export const dataPipelineSnapshotSchema = z.object({
         category: z.string(),
         lastDataType: z.string(),
         lastStatus: pipelineAccessStatus,
+        operationalStatus: z.enum(['active', 'linked', 'pending', 'error']).optional(),
+        statusHint: z.string().optional(),
         lastResponseTime: z.number().optional(),
         lastChecked: z.string().optional(),
         issues: z.array(z.string()).optional()
@@ -460,11 +531,13 @@ export const dataPipelineViewResponseSchema = z.object({
     normalizedData: z.array(z.object({
         id: z.string().uuid(),
         sourceId: z.string().uuid(),
+        sourceName: z.string().optional(),
         category: z.string(),
         dataType: z.string(),
         tags: z.array(z.string()),
         payload: z.record(z.any()),
-        qualityScore: z.number(),
+        qualityScore: z.number().optional(),
+        qualityPending: z.boolean().optional(),
         issues: z.array(z.string()),
         status: pipelineNormalizedStatus,
         receivedAt: z.string(),

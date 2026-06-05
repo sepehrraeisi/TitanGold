@@ -45,12 +45,22 @@ export class DataPipeline {
      */
     async processItem(row) {
         try {
-            // 2. Normalize
-            const normalized = dataNormalizer.normalize(row.raw_data, row.source_type);
+            // 2. Normalize (canonical v1 contract — worker not scheduled in P0-CONTRACT-1)
+            const normalized = dataNormalizer.normalize(row.raw_data, row.source_type, {
+                sourceId: row.source_id,
+                category: row.source_category,
+                collectedAt: row.collected_at,
+                ingestionMode: 'fetch',
+            });
 
             // 3. Validate
-            if (!dataValidator.validate(normalized)) {
-                await this.updateCollectedStatus(row.id, 'failed', 'Validation failed');
+            const validation = dataValidator.validateContract(normalized);
+            if (!validation.valid) {
+                await this.updateCollectedStatus(
+                    row.id,
+                    'error',
+                    validation.errors.join('; ') || 'Validation failed',
+                );
                 return;
             }
 
@@ -83,7 +93,7 @@ export class DataPipeline {
 
         } catch (error) {
             logger.error(`Item processing failed [${row.id}]: ${error.message}`);
-            await this.updateCollectedStatus(row.id, 'failed', error.message);
+            await this.updateCollectedStatus(row.id, 'error', error.message);
         }
     }
 

@@ -28,7 +28,8 @@ export class DataRouter {
         }
 
         // Default routing based on source type
-        if (data.source_type === 'rss' || data.source_type === 'telegram') {
+        const sourceType = data.sourceType || data.source_type;
+        if (sourceType === 'rss' || sourceType === 'telegram') {
             agents.add('market_intelligence');
         }
 

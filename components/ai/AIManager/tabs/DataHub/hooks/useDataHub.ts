@@ -596,15 +596,10 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     };
 
     const handleTestSource = async (sourceId: string) => {
-        const source = mergedDataHub?.sources.find(s => s.id === sourceId);
-        if (!source) {
-            alert(t('source_not_found') || 'Data source not found');
-            return;
-        }
         try {
-            const result = await api.testDataSourceConnection(source);
+            const result = await api.testDataSourceConnection(sourceId);
             if (result.success) {
-                alert(t('connection_test_success') || 'Connection test successful!');
+                alert(result.message || t('connection_test_success') || 'Connection test successful!');
             } else {
                 alert(`${t('connection_test_failed') || 'Connection test failed:'} ${result.message}`);
             }

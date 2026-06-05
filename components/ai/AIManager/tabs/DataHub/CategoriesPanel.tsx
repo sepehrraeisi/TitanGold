@@ -77,15 +77,22 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
     }, [dataHub?.sources]);
 
     const metrics = useMemo(() => {
+        const approvedNames = new Set(categories.map(c => c.name));
         const withTelegram = categories.filter(c => (telegramSourceCountByCategory[c.name] || 0) > 0).length;
         const withMetrics = categories.filter(c => categoryMetricsById[c.id]).length;
+        const needsReview = (dataHub?.sources || []).filter(source => {
+            const cat = source.category?.trim();
+            if (!cat) return false;
+            return !approvedNames.has(cat);
+        }).length;
         return {
             total: categories.length,
             filtered: filteredCategoriesList.length,
             withTelegram,
             withMetrics,
+            needsReview,
         };
-    }, [categories, filteredCategoriesList.length, telegramSourceCountByCategory, categoryMetricsById]);
+    }, [categories, filteredCategoriesList.length, telegramSourceCountByCategory, categoryMetricsById, dataHub?.sources]);
 
     const queryError = formatDataHubQueryError(t, apiError);
 
@@ -93,66 +100,75 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
 
     return (
         <div className={DATAHUB_SHELL}>
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
-                <div>
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-5">
+                <div className="min-w-0">
                     <h3 className="text-sm md:text-base font-semibold text-foreground">{t('data_categories')}</h3>
                     <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">{t('data_categories_desc')}</p>
                     <p className="text-[10px] text-muted-foreground mt-1">{countSummary}</p>
                 </div>
-                <div className="flex flex-wrap gap-2 items-center">
-                    <button type="button" onClick={onRefresh} disabled={isLoading} className={BTN_PRIMARY}>
-                        {isLoading ? t('refreshing') : t('refresh')}
-                    </button>
-                    <input
-                        value={categoryFilter}
-                        onChange={e => setCategoryFilter(e.target.value)}
-                        placeholder={t('category_filter_placeholder')}
-                        className={`${INPUT_CLASS} max-w-[180px]`}
-                    />
-                    <input
-                        value={categoryTagFilter}
-                        onChange={e => setCategoryTagFilter(e.target.value)}
-                        placeholder={t('category_tag_filter_placeholder')}
-                        className={`${INPUT_CLASS} max-w-[200px]`}
-                    />
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setCategoryFilter('');
-                            setCategoryTagFilter('');
-                        }}
-                        className={BTN_SECONDARY}
-                    >
-                        {t('reset_filters')}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => downloadCSV(filteredCategoriesList, 'data-categories')}
-                        disabled={!filteredCategoriesList.length}
-                        className={BTN_SECONDARY}
-                    >
-                        {t('export_csv')}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setEditingCategory(null);
-                            setShowCreateCategoryModal(true);
-                        }}
-                        className={BTN_PRIMARY}
-                        disabled={wg().disabled}
-                        title={wg().title}
-                    >
-                        {t('add_category')}
-                    </button>
+                <div className="flex flex-col gap-2 w-full md:w-auto md:shrink-0 md:items-end">
+                    <div className="flex flex-wrap gap-2 items-center w-full md:justify-end">
+                        <input
+                            value={categoryFilter}
+                            onChange={e => setCategoryFilter(e.target.value)}
+                            placeholder={t('category_filter_placeholder')}
+                            className={`${INPUT_CLASS} w-full min-w-[140px] max-w-[180px] sm:w-auto`}
+                        />
+                        <input
+                            value={categoryTagFilter}
+                            onChange={e => setCategoryTagFilter(e.target.value)}
+                            placeholder={t('category_tag_filter_placeholder')}
+                            className={`${INPUT_CLASS} w-full min-w-[140px] max-w-[200px] sm:w-auto`}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setCategoryFilter('');
+                                setCategoryTagFilter('');
+                            }}
+                            className={BTN_SECONDARY}
+                        >
+                            {t('reset_filters')}
+                        </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 items-center w-full md:justify-end">
+                        <button type="button" onClick={onRefresh} disabled={isLoading} className={BTN_SECONDARY}>
+                            {isLoading ? t('refreshing') : t('refresh')}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => downloadCSV(filteredCategoriesList, 'data-categories')}
+                            disabled={!filteredCategoriesList.length}
+                            className={BTN_SECONDARY}
+                        >
+                            {t('export_csv')}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setEditingCategory(null);
+                                setShowCreateCategoryModal(true);
+                            }}
+                            className={BTN_PRIMARY}
+                            disabled={wg().disabled}
+                            title={wg().title}
+                        >
+                            {t('add_category')}
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
                 <MetricCard label={t('categories_metric_total')} value={metrics.total} color="blue" />
                 <MetricCard label={t('categories_metric_filtered')} value={metrics.filtered} color="purple" />
                 <MetricCard label={t('categories_metric_telegram')} value={metrics.withTelegram} color="emerald" />
                 <MetricCard label={t('categories_metric_tracked')} value={metrics.withMetrics} color="amber" />
+                <MetricCard
+                    label={t('categories_metric_needs_review')}
+                    value={metrics.needsReview}
+                    color="red"
+                />
             </div>
 
             {queryError && (

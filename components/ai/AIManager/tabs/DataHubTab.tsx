@@ -15,7 +15,7 @@ import ErrorBoundary from '../../../common/ErrorBoundary';
 import SkeletonLoader from '../../../common/SkeletonLoader';
 import ApiWrapper from '../../../common/ApiWrapper';
 import ErrorNotification from './DataHub/components/ErrorNotification';
-import { DataHubTabStrip, DataHubTabStripSkeleton } from './DataHub/dataHubUi';
+import { DATAHUB_SHELL, DataHubTabStrip, DataHubTabStripSkeleton } from './DataHub/dataHubUi';
 
 interface Props {
     artemis: ArtemisState;
@@ -118,20 +118,24 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
     if (isLoading && !dataHub) {
         return (
             <div className="space-y-6">
-                {/* Overview Stats Skeletons */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {[1, 2, 3, 4].map((i) => (
-                        <Card key={i}>
-                            <div className="text-center">
-                                <div className="flex justify-center mb-1">
+                {/* Overview Stats Skeletons — DATAHUB_SHELL (DESIGN_SYSTEM_DATAHUB.md §5) */}
+                <div className={`${DATAHUB_SHELL} space-y-3`}>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[1, 2, 3, 4].map((i) => (
+                            <div
+                                key={i}
+                                className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-500/10 via-slate-500/5 to-transparent p-3 backdrop-blur-sm"
+                            >
+                                <div className="flex justify-center mb-2">
                                     <SkeletonLoader width="60%" height="0.75rem" />
                                 </div>
                                 <div className="flex justify-center">
-                                    <SkeletonLoader width="40%" height="2rem" />
+                                    <SkeletonLoader width="40%" height="1.5rem" />
                                 </div>
                             </div>
-                        </Card>
-                    ))}
+                        ))}
+                    </div>
+                    <SkeletonLoader width="70%" height="0.625rem" />
                 </div>
 
                 {/* Navigation Tabs Skeletons */}
@@ -178,9 +182,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 )}
 
                 {/* Overview Stats — backend: GET /stats + GET /health (not IndexedDB / mock cache) */}
-                <Card>
-                    <DataHubSummaryCards t={t} />
-                </Card>
+                <DataHubSummaryCards t={t} />
 
                 <DataHubTabStrip
                     ariaLabel={t('data_hub_navigation') || 'Data Hub navigation'}

@@ -29,7 +29,11 @@ export async function runDataFetchJob() {
                 // 2. Perform the fetch
                 const outcome = await dataFetcherService.fetchSource(source.id);
 
-                if (outcome.success) {
+                if (outcome.skipped) {
+                    logger.info(
+                        `⏭️ Skipped bot-pull for ${source.name} (${outcome.reason || 'skipped'})`,
+                    );
+                } else if (outcome.success) {
                     // 3. Update success metrics
                     await query(
                         'UPDATE data_sources SET fetch_count = COALESCE(fetch_count, 0) + 1, last_fetch_at = NOW(), status = $1 WHERE id = $2',

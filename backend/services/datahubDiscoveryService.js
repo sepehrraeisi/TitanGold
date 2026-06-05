@@ -4,6 +4,7 @@ import { evaluateFilterRules } from './datahubFilterRulesService.js';
 import { assertSafeDiscoveryUrl, normalizeDiscoveryUrl, normalizeTitleKey } from '../utils/discoverySafety.js';
 import { checkDuplicateLayers, shouldSkipAsDuplicate } from '../utils/discoveryDedupe.js';
 import { computeDiscoveryScore } from '../utils/discoveryScoring.js';
+import { resolveCategoryForWrite } from '../utils/categoryTaxonomy.js';
 
 function mapRuleRow(row) {
     return {
@@ -578,7 +579,7 @@ export async function approveSuggestion(id, body, userId) {
     }
 
     const name = body.name?.trim() || row.suggested_name;
-    const category = body.category || row.category;
+    const category = await resolveCategoryForWrite(body.category || row.category, query, { log: logger });
     const dsType = row.suggested_type;
 
     const dsResult = await query(

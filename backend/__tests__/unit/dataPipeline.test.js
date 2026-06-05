@@ -9,7 +9,7 @@ import { jest } from '@jest/globals';
 
 // Mock dependencies
 const mockQuery = jest.fn();
-jest.unstable_mockModule('../database/db.js', () => ({
+jest.unstable_mockModule('../../database/db.js', () => ({
     query: mockQuery,
     transaction: jest.fn()
 }));
@@ -19,29 +19,34 @@ const mockLogger = {
     error: jest.fn(),
     warn: jest.fn()
 };
-jest.unstable_mockModule('./logger.js', () => ({
+jest.unstable_mockModule('../../services/logger.js', () => ({
     logger: mockLogger
 }));
 
 const mockNormalizer = {
     normalize: jest.fn()
 };
-jest.unstable_mockModule('./normalizers/dataNormalizer.js', () => ({
+jest.unstable_mockModule('../../services/normalizers/dataNormalizer.js', () => ({
     dataNormalizer: mockNormalizer
 }));
 
 const mockValidator = {
-    validate: jest.fn()
+    validate: jest.fn(),
+    validateContract: jest.fn(),
 };
-jest.unstable_mockModule('./validators/dataValidator.js', () => ({
+jest.unstable_mockModule('../../services/validators/dataValidator.js', () => ({
     dataValidator: mockValidator
 }));
 
 const mockRouter = {
     route: jest.fn()
 };
-jest.unstable_mockModule('./routers/dataRouter.js', () => ({
+jest.unstable_mockModule('../../services/routers/dataRouter.js', () => ({
     dataRouter: mockRouter
+}));
+
+jest.unstable_mockModule('../../services/topicRouter.js', () => ({
+    topicRouter: { route: jest.fn().mockResolvedValue([]) },
 }));
 
 // Import the module under test (after mocking)
@@ -65,8 +70,8 @@ describe('Data Pipeline Tests', () => {
 
         test('should process pending items', async () => {
             const mockRows = [
-                { id: 1, raw_data: {}, source_type: 'api', source_category: 'market' },
-                { id: 2, raw_data: {}, source_type: 'rss', source_category: 'news' }
+                { id: 1, source_id: 'src-1', raw_data: {}, source_type: 'api', source_category: 'market' },
+                { id: 2, source_id: 'src-2', raw_data: {}, source_type: 'rss', source_category: 'news' },
             ];
             mockQuery.mockResolvedValueOnce({ rows: mockRows }); // Select
 
@@ -79,7 +84,12 @@ describe('Data Pipeline Tests', () => {
 
             // Mock normalize, validate, route for item 1 and 2
             mockNormalizer.normalize.mockReturnValue({ normalized: true });
-            mockValidator.validate.mockReturnValue(true);
+            mockValidator.validateContract.mockReturnValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                qualityHints: [],
+            });
             mockRouter.route.mockReturnValue(['agent1']);
 
             // Mock DB updates (Update collected_data, Insert queue)
@@ -87,27 +97,42 @@ describe('Data Pipeline Tests', () => {
 
             await dataPipeline.processPendingData();
 
-            // 1 SELECT + (1 UPDATE collected + 1 INSERT queue) * 2 items = 5 queries
-            expect(mockQuery).toHaveBeenCalledTimes(5);
+            // 1 SELECT + (ACL check + UPDATE collected + INSERT queue) * 2 items = 7 queries
+            expect(mockQuery).toHaveBeenCalledTimes(7);
         });
     });
 
     describe('processItem', () => {
-        const mockRow = { id: 123, raw_data: { foo: 'bar' }, source_type: 'api', source_category: 'market' };
+        const mockRow = {
+            id: 123,
+            source_id: 'src-123',
+            raw_data: { foo: 'bar' },
+            source_type: 'api',
+            source_category: 'market',
+        };
 
         test('should successfully process valid item', async () => {
             const normalizedData = { foo: 'bar', normalized: true };
             mockNormalizer.normalize.mockReturnValue(normalizedData);
-            mockValidator.validate.mockReturnValue(true);
+            mockValidator.validateContract.mockReturnValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                qualityHints: [],
+            });
             mockRouter.route.mockReturnValue(['technical_agent', 'risk_agent']);
 
             await dataPipeline.processItem(mockRow);
 
             // 1. Normalize called
-            expect(mockNormalizer.normalize).toHaveBeenCalledWith(mockRow.raw_data, mockRow.source_type);
+            expect(mockNormalizer.normalize).toHaveBeenCalledWith(
+                mockRow.raw_data,
+                mockRow.source_type,
+                expect.objectContaining({ sourceId: 'src-123', category: 'market' }),
+            );
 
             // 2. Validate called
-            expect(mockValidator.validate).toHaveBeenCalledWith(normalizedData);
+            expect(mockValidator.validateContract).toHaveBeenCalledWith(normalizedData);
 
             // 3. Status updated to processed
             expect(mockQuery).toHaveBeenCalledWith(
@@ -121,7 +146,7 @@ describe('Data Pipeline Tests', () => {
             // 5. Queue inserted (2 agents)
             expect(mockQuery).toHaveBeenCalledWith(
                 expect.stringMatching(/INSERT INTO data_queue/),
-                [123, 123, 5, 'pending', 3] // Note: code uses row.source_id (which is undefined in mockRow, so undefined), row.id (123)
+                ['src-123', 123, 5, 'pending', 3],
             );
             // Actually let's check exact args. The code snippet showed: source_id, data_id
             // In mockRow I didn't verify source_id presence. Code says: `row.source_id, row.id`
@@ -130,13 +155,18 @@ describe('Data Pipeline Tests', () => {
 
         test('should mark as failed if validation fails', async () => {
             mockNormalizer.normalize.mockReturnValue({});
-            mockValidator.validate.mockReturnValue(false); // Validation fails
+            mockValidator.validateContract.mockReturnValue({
+                valid: false,
+                errors: ['Validation failed'],
+                warnings: [],
+                qualityHints: [],
+            });
 
             await dataPipeline.processItem(mockRow);
 
             expect(mockQuery).toHaveBeenCalledWith(
                 expect.stringMatching(/UPDATE collected_data SET status/),
-                ['failed', 'Validation failed', 123]
+                ['error', 'Validation failed', 123],
             );
 
             // Should NOT route or queue
@@ -153,7 +183,7 @@ describe('Data Pipeline Tests', () => {
             expect(mockLogger.error).toHaveBeenCalledWith(expect.stringMatching(/Item processing failed/));
             expect(mockQuery).toHaveBeenCalledWith(
                 expect.stringMatching(/UPDATE collected_data SET status/),
-                ['failed', 'Normalization boom', 123]
+                ['error', 'Normalization boom', 123]
             );
         });
     });

@@ -4124,7 +4124,10 @@ export interface DataSource {
   endpoint?: string;
   category: string;
   tags: string[];
-  status: 'active' | 'inactive' | 'error' | 'testing';
+  status: 'active' | 'inactive' | 'error' | 'testing' | 'linked' | 'pending';
+  /** When 'na', Success Rate shows N/A (collector ingestion, not bot-pull). */
+  successRateDisplay?: 'na';
+  telegramIngestionMode?: 'collector' | 'bot';
   priority: 'low' | 'medium' | 'high' | 'critical';
   updateInterval: 'realtime' | '1min' | '5min' | '15min' | '30min' | '1hour' | 'daily';
   lastUpdate?: string;
@@ -4231,12 +4234,29 @@ export interface DataCacheStats {
   data: Record<string, DataCacheEntry>;
 }
 
+export type PipelineSourceQualityStatus =
+  | 'success'
+  | 'pending_normalization'
+  | 'no_data'
+  | 'fetch_error'
+  | 'fetch_timeout'
+  | 'inactive'
+  | 'collector_active'
+  | 'collector_pending'
+  | 'collector_linked'
+  | 'collector_error'
+  | 'failed'
+  | 'cached'
+  | 'timeout';
+
 export interface DataPipelineSourceSnapshot {
   sourceId: string;
   name: string;
   category: string;
   lastDataType: string;
-  lastStatus: DataAccessLog['status'];
+  lastStatus: PipelineSourceQualityStatus;
+  operationalStatus?: 'active' | 'linked' | 'pending' | 'error';
+  statusHint?: string;
   lastResponseTime?: number;
   lastChecked?: string;
   issues?: string[];
@@ -4267,11 +4287,17 @@ export interface DataPipelineHistoryEntry {
   snapshot: DataPipelineSnapshot;
 }
 
-export type NormalizedDataStatus = 'ready' | 'warning' | 'rejected';
+export type NormalizedDataStatus =
+  | 'ready'
+  | 'warning'
+  | 'rejected'
+  | 'pending_normalization'
+  | 'ingested';
 
 export interface NormalizedDataRecord {
   id: string;
   sourceId: string;
+  sourceName?: string;
   category: string;
   dataType: string;
   tags: string[];
@@ -4281,7 +4307,8 @@ export interface NormalizedDataRecord {
     value?: number;
     metadata?: Record<string, any>;
   };
-  qualityScore: number;
+  qualityScore?: number;
+  qualityPending?: boolean;
   issues: string[];
   status: NormalizedDataStatus;
   receivedAt: string;

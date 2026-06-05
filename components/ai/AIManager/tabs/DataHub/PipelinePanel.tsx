@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { DataPipelineSnapshot, DataNormalizationSummary, NormalizedDataRecord } from '../../../../../types';
+import { DataPipelineSnapshot, DataPipelineSourceSnapshot, DataNormalizationSummary, NormalizedDataRecord, PipelineSourceQualityStatus } from '../../../../../types';
 import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 import {
     DATAHUB_SHELL,
@@ -14,6 +14,8 @@ import {
     StatusPill,
 } from './dataHubUi';
 import { formatDataHubQueryError } from './dataHubI18n';
+import { dataHubSourceStatusLabel } from '../../../../../services/dataSourcesApi';
+import type { DataSource } from '../../../../../types';
 
 interface PipelinePanelProps {
     t: (key: string) => string;
@@ -31,17 +33,97 @@ interface PipelinePanelProps {
 }
 
 function statusVariant(status: string): 'success' | 'error' | 'warning' | 'info' | 'neutral' {
-    if (status === 'success') return 'success';
-    if (status === 'failed') return 'error';
-    if (status === 'timeout') return 'warning';
-    if (status === 'cached') return 'info';
+    if (status === 'success' || status === 'collector_active') return 'success';
+    if (status === 'fetch_error' || status === 'collector_error' || status === 'failed') return 'error';
+    if (status === 'fetch_timeout' || status === 'no_data' || status === 'timeout') return 'warning';
+    if (
+        status === 'pending_normalization' ||
+        status === 'collector_pending' ||
+        status === 'collector_linked' ||
+        status === 'cached'
+    ) {
+        return 'info';
+    }
+    if (status === 'inactive') return 'neutral';
     return 'neutral';
 }
 
-function normStatusVariant(status: NormalizedDataRecord['status']): 'success' | 'warning' | 'error' {
+const PIPELINE_STATUS_I18N: Partial<Record<PipelineSourceQualityStatus, string>> = {
+    success: 'pipeline_source_status_success',
+    pending_normalization: 'pipeline_source_status_pending_normalization',
+    no_data: 'pipeline_source_status_no_data',
+    fetch_error: 'pipeline_source_status_fetch_error',
+    fetch_timeout: 'pipeline_source_status_fetch_timeout',
+    inactive: 'pipeline_source_status_inactive',
+    collector_active: 'pipeline_source_status_collector_active',
+    collector_pending: 'pipeline_source_status_collector_pending',
+    collector_linked: 'pipeline_source_status_collector_linked',
+    collector_error: 'pipeline_source_status_collector_error',
+    failed: 'pipeline_source_status_fetch_error',
+    cached: 'pipeline_source_status_collector_pending',
+    timeout: 'pipeline_source_status_fetch_timeout',
+};
+
+function pipelineStatusLabel(
+    t: (key: string) => string,
+    src: Pick<DataPipelineSourceSnapshot, 'lastStatus' | 'operationalStatus'>,
+): string {
+    const key = PIPELINE_STATUS_I18N[src.lastStatus];
+    if (key) {
+        const translated = t(key);
+        if (translated !== key) return translated;
+    }
+    if (src.operationalStatus) {
+        return dataHubSourceStatusLabel(t, src.operationalStatus as DataSource['status']);
+    }
+    return src.lastStatus;
+}
+
+function matchesSourceStatusFilter(
+    filter: SourceStatusFilter,
+    lastStatus: PipelineSourceQualityStatus,
+): boolean {
+    if (filter === 'all') return true;
+    if (filter === 'success') {
+        return lastStatus === 'success' || lastStatus === 'collector_active';
+    }
+    if (filter === 'pending') {
+        return (
+            lastStatus === 'pending_normalization' ||
+            lastStatus === 'collector_pending' ||
+            lastStatus === 'collector_linked'
+        );
+    }
+    if (filter === 'issues') {
+        return (
+            lastStatus === 'no_data' ||
+            lastStatus === 'fetch_error' ||
+            lastStatus === 'fetch_timeout' ||
+            lastStatus === 'collector_error' ||
+            lastStatus === 'inactive' ||
+            lastStatus === 'failed' ||
+            lastStatus === 'timeout'
+        );
+    }
+    return lastStatus === filter;
+}
+
+type SourceStatusFilter = 'all' | 'success' | 'pending' | 'issues' | PipelineSourceQualityStatus;
+
+function normStatusVariant(
+    status: NormalizedDataRecord['status'],
+): 'success' | 'warning' | 'error' | 'info' | 'neutral' {
     if (status === 'ready') return 'success';
     if (status === 'warning') return 'warning';
-    return 'error';
+    if (status === 'rejected') return 'error';
+    if (status === 'pending_normalization' || status === 'ingested') return 'info';
+    return 'neutral';
+}
+
+function normalizedStatusLabel(t: (key: string) => string, status: NormalizedDataRecord['status']): string {
+    const key = `normalized_status_${status}`;
+    const translated = t(key);
+    return translated !== key ? translated : status;
 }
 
 const PipelinePanel: React.FC<PipelinePanelProps> = ({
@@ -62,9 +144,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
 
     const [categorySearch, setCategorySearch] = useState('');
     const [sourceSearch, setSourceSearch] = useState('');
-    const [sourceStatusFilter, setSourceStatusFilter] = useState<'all' | 'success' | 'cached' | 'failed' | 'timeout'>(
-        'all',
-    );
+    const [sourceStatusFilter, setSourceStatusFilter] = useState<SourceStatusFilter>('all');
 
     const latestSnapshot = pipelineSnapshot || pipelineHistory[0]?.snapshot;
 
@@ -94,7 +174,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                 source.name.toLowerCase().includes(query) ||
                 source.category.toLowerCase().includes(query) ||
                 source.lastDataType.toLowerCase().includes(query);
-            const matchesStatus = sourceStatusFilter === 'all' || source.lastStatus === sourceStatusFilter;
+            const matchesStatus = matchesSourceStatusFilter(sourceStatusFilter, source.lastStatus);
             return matchesQuery && matchesStatus;
         });
     }, [activeSnapshot, sourceSearch, sourceStatusFilter]);
@@ -216,10 +296,13 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             className={SELECT_CLASS}
                         >
                             <option value="all">{t('status_all')}</option>
-                            <option value="success">{t('success')}</option>
-                            <option value="cached">{t('cached')}</option>
-                            <option value="failed">{t('failed')}</option>
-                            <option value="timeout">{t('timeout')}</option>
+                            <option value="success">{t('pipeline_source_status_success')}</option>
+                            <option value="pending">{t('pipeline_filter_pending')}</option>
+                            <option value="no_data">{t('pipeline_source_status_no_data')}</option>
+                            <option value="fetch_error">{t('pipeline_source_status_fetch_error')}</option>
+                            <option value="fetch_timeout">{t('pipeline_source_status_fetch_timeout')}</option>
+                            <option value="inactive">{t('pipeline_source_status_inactive')}</option>
+                            <option value="issues">{t('pipeline_filter_issues')}</option>
                         </select>
                     </div>
 
@@ -293,8 +376,13 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                     </td>
                                                     <td className="py-2 pr-2">
                                                         <StatusPill
-                                                            label={t(src.lastStatus)}
+                                                            label={pipelineStatusLabel(t, src)}
                                                             variant={statusVariant(src.lastStatus)}
+                                                            title={
+                                                                src.statusHint
+                                                                    ? t(src.statusHint)
+                                                                    : undefined
+                                                            }
                                                         />
                                                     </td>
                                                     <td className="py-2">
@@ -363,19 +451,26 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                 key={row.id}
                                                 className="border-b border-slate-900/60 hover:bg-slate-900/40"
                                             >
-                                                <td className="py-2 pr-2 font-mono text-[10px]">{row.sourceId}</td>
+                                                <td className="py-2 pr-2">
+                                                    <span
+                                                        className="text-foreground font-medium"
+                                                        title={row.sourceId}
+                                                    >
+                                                        {row.sourceName || row.sourceId}
+                                                    </span>
+                                                </td>
                                                 <td className="py-2 pr-2">{row.category}</td>
                                                 <td className="py-2 pr-2">{row.dataType}</td>
-                                                <td className="py-2 pr-2">{row.qualityScore}</td>
+                                                <td className="py-2 pr-2">
+                                                    {row.qualityPending
+                                                        ? t('pipeline_quality_pending')
+                                                        : row.qualityScore != null
+                                                          ? row.qualityScore
+                                                          : '—'}
+                                                </td>
                                                 <td className="py-2">
                                                     <StatusPill
-                                                        label={
-                                                            row.status === 'ready'
-                                                                ? t('normalized_status_ready')
-                                                                : row.status === 'warning'
-                                                                  ? t('normalized_status_warning')
-                                                                  : t('normalized_status_rejected')
-                                                        }
+                                                        label={normalizedStatusLabel(t, row.status)}
                                                         variant={normStatusVariant(row.status)}
                                                     />
                                                 </td>

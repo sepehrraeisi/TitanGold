@@ -1,19 +1,96 @@
 import { query } from '../database/db.js';
+import { coerceReadModel } from './normalizers/normalizedDataContract.js';
+import { batchTelegramCollectorEnrichment } from './telegramCollectorSourceStatus.js';
+import {
+  PIPELINE_SOURCE_STATUS_HINTS,
+  resolvePipelineSourceQualityStatus,
+} from './pipelineSourceQualityStatus.js';
 
-function mapCollectedStatusToAccessStatus(status) {
-  if (status === 'processed') return 'success';
-  if (status === 'error') return 'failed';
-  if (status === 'pending') return 'timeout';
-  return 'success';
+/** @deprecated import from normalizedDataContract — kept for tests */
+export function normalizeReadModel(normalized) {
+  return coerceReadModel(normalized);
+}
+
+export { PIPELINE_SOURCE_STATUS_HINTS } from './pipelineSourceQualityStatus.js';
+export {
+  isFetchTimeoutIndicator,
+  resolveFetchPathPipelineStatus,
+  resolvePipelineSourceQualityStatus,
+} from './pipelineSourceQualityStatus.js';
+
+function resolvePipelineSourceStatus(row, enrichment) {
+  return resolvePipelineSourceQualityStatus(row, enrichment);
+}
+
+function extractResponseTimeMs({ logExecutionMs, collectedMetadata, logMetadata }) {
+  if (logExecutionMs != null && Number.isFinite(Number(logExecutionMs))) {
+    return Number(logExecutionMs);
+  }
+
+  const sources = [collectedMetadata, logMetadata].filter(Boolean);
+  for (const meta of sources) {
+    for (const key of ['response_time_ms', 'execution_time_ms', 'duration_ms']) {
+      const val = meta[key];
+      if (val != null && Number.isFinite(Number(val))) {
+        return Number(val);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function resolveNormalizedPreviewStatus(row) {
+  const statusRaw = String(row.status || '').toLowerCase();
+  const hasNormalized =
+    row.normalized_data != null &&
+    typeof row.normalized_data === 'object' &&
+    Object.keys(row.normalized_data).length > 0;
+  const hasRaw =
+    row.raw_data != null &&
+    typeof row.raw_data === 'object' &&
+    Object.keys(row.raw_data).length > 0;
+  const hasError = statusRaw === 'error' || Boolean(row.error_message);
+  const metadata = row.normalized_data?.metadata || row.metadata || {};
+  const hasQualityIssue =
+    metadata.quality_warning === true ||
+    metadata.validation_failed === true ||
+    (Array.isArray(metadata.quality_issues) && metadata.quality_issues.length > 0);
+
+  if (hasError) return 'rejected';
+  if (hasNormalized && !hasQualityIssue) return 'ready';
+  if (hasQualityIssue) return 'warning';
+  if (statusRaw === 'pending' || (hasRaw && !hasNormalized)) return 'pending_normalization';
+  if (hasRaw) return 'ingested';
+  return 'pending_normalization';
+}
+
+function resolveQualityDisplay(row, status) {
+  const readMeta = row.normalized_data?.metadata;
+  const metadata =
+    readMeta && typeof readMeta === 'object'
+      ? readMeta
+      : row.metadata && typeof row.metadata === 'object'
+        ? row.metadata
+        : {};
+  if (metadata.quality_score != null && Number.isFinite(Number(metadata.quality_score))) {
+    return { qualityScore: Number(metadata.quality_score), qualityPending: false };
+  }
+  if (status === 'ready') {
+    return { qualityScore: undefined, qualityPending: false };
+  }
+  if (status === 'pending_normalization' || status === 'ingested') {
+    return { qualityScore: undefined, qualityPending: true };
+  }
+  return { qualityScore: undefined, qualityPending: false };
 }
 
 function mapToNormalizedRecord(row, categoryName) {
+  const read = coerceReadModel(row.normalized_data);
   const normalized = row.normalized_data || {};
-  const metadata = normalized.metadata || row.metadata || {};
-  const statusRaw = row.status;
-  let status = 'ready';
-  if (statusRaw === 'error') status = 'rejected';
-  else if (statusRaw === 'pending' || !row.normalized_data) status = 'warning';
+  const metadata = read?.metadata || normalized.metadata || row.metadata || {};
+  const status = resolveNormalizedPreviewStatus(row);
+  const { qualityScore, qualityPending } = resolveQualityDisplay(row, status);
 
   const issues = [];
   if (row.error_message) issues.push(String(row.error_message).slice(0, 200));
@@ -21,16 +98,23 @@ function mapToNormalizedRecord(row, categoryName) {
   return {
     id: row.id,
     sourceId: row.source_id,
-    category: categoryName || 'uncategorized',
-    dataType: metadata.data_type || row.source_type || 'unknown',
-    tags: Array.isArray(metadata.tags) ? metadata.tags : [],
+    sourceName: row.source_name || read?.sourceName || undefined,
+    category: categoryName || read?.category || 'uncategorized',
+    dataType: metadata.data_type || read?.sourceType || row.source_type || 'unknown',
+    tags: read?.tags?.length ? read.tags : Array.isArray(metadata.tags) ? metadata.tags : [],
     payload: {
-      title: normalized.title || normalized.content?.slice?.(0, 120),
-      content: typeof normalized.content === 'string' ? normalized.content : undefined,
+      title: read?.title || normalized.title || normalized.content?.slice?.(0, 120),
+      content:
+        typeof read?.content === 'string'
+          ? read.content
+          : typeof normalized.content === 'string'
+            ? normalized.content
+            : undefined,
       value: normalized.value,
       metadata,
     },
-    qualityScore: Number(metadata.quality_score ?? (status === 'ready' ? 90 : 60)),
+    qualityScore,
+    qualityPending: qualityPending || undefined,
     issues,
     status,
     receivedAt: new Date(row.collected_at).toISOString(),
@@ -71,9 +155,16 @@ export async function buildDataPipelineView() {
           ds.name,
           ds.type,
           ds.category,
+          ds.config,
+          ds.credentials,
           ds.is_active,
           ds.last_fetch_at,
-          dc.name AS category_name
+          ds.last_status AS ds_last_status,
+          dc.name AS category_name,
+          dhl.execution_time_ms AS log_execution_time_ms,
+          dhl.log_metadata,
+          dhl.message AS log_message,
+          dhl.status AS log_status
         FROM data_sources ds
         LEFT JOIN data_categories dc ON dc.name = ds.category
         LEFT JOIN LATERAL (
@@ -83,6 +174,13 @@ export async function buildDataPipelineView() {
           ORDER BY collected_at DESC
           LIMIT 1
         ) cd ON true
+        LEFT JOIN LATERAL (
+          SELECT execution_time_ms, metadata AS log_metadata, message, status
+          FROM data_hub_logs
+          WHERE source_id = ds.id
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) dhl ON true
         ORDER BY ds.name
       `),
       query(`
@@ -92,6 +190,7 @@ export async function buildDataPipelineView() {
           COUNT(cd.id) FILTER (WHERE cd.collected_at > NOW() - INTERVAL '24 hours')::int AS inflow,
           COUNT(cd.id) FILTER (
             WHERE cd.collected_at > NOW() - INTERVAL '24 hours'
+              AND cd.status = 'processed'
               AND cd.normalized_data IS NOT NULL
           )::int AS passed_count
         FROM data_categories dc
@@ -116,11 +215,18 @@ export async function buildDataPipelineView() {
       `),
       query(`
         SELECT
-          COUNT(*)::int AS total_processed,
+          COUNT(*) FILTER (WHERE status IN ('processed', 'error'))::int AS total_processed,
           COUNT(*) FILTER (WHERE status = 'processed' AND normalized_data IS NOT NULL)::int AS passed,
-          COUNT(*) FILTER (WHERE status = 'processed' AND normalized_data IS NULL)::int AS warnings,
+          COUNT(*) FILTER (
+            WHERE status = 'processed'
+              AND normalized_data IS NOT NULL
+              AND (
+                normalized_data->'metadata'->>'quality_warning' = 'true'
+                OR normalized_data->'metadata'->>'quality_band' IN ('weak', 'poor')
+              )
+          )::int AS warnings,
           COUNT(*) FILTER (WHERE status = 'error')::int AS rejected,
-          MAX(COALESCE(processed_at, collected_at)) AS last_processed_at
+          MAX(processed_at) FILTER (WHERE status = 'processed') AS last_processed_at
         FROM collected_data
       `),
       query(`
@@ -132,9 +238,8 @@ export async function buildDataPipelineView() {
         FROM collected_data cd
         LEFT JOIN data_sources ds ON ds.id = cd.source_id
         LEFT JOIN data_categories dc ON dc.name = ds.category
-        WHERE cd.normalized_data IS NOT NULL
         ORDER BY cd.processed_at DESC NULLS LAST, cd.collected_at DESC
-        LIMIT 6
+        LIMIT 8
       `),
     ]);
 
@@ -145,30 +250,58 @@ export async function buildDataPipelineView() {
   const normalizedPercent =
     totalRecords === 0 ? 0 : Number(((normalizedCount / totalRecords) * 100).toFixed(1));
 
+  const collectorEnrichment = await batchTelegramCollectorEnrichment(
+    sourcesRows.rows.map((row) => ({ ...row, id: row.source_id })),
+  );
+
   const sources = sourcesRows.rows.map(row => {
+    const enrichment = collectorEnrichment.get(row.source_id);
+    const { lastStatus, operationalStatus, statusHint } = resolvePipelineSourceStatus(row, enrichment);
+
     const issues = [];
     if (row.is_active === false) issues.push('inactive');
-    if (row.status === 'error') issues.push('last_request_failed');
-    if (!row.collected_at) issues.push('no_data');
+    if (
+      lastStatus === 'fetch_error' ||
+      lastStatus === 'fetch_timeout' ||
+      lastStatus === 'collector_error'
+    ) {
+      issues.push('last_request_failed');
+    }
+    if (
+      !row.collected_at &&
+      operationalStatus !== 'active' &&
+      operationalStatus !== 'pending' &&
+      operationalStatus !== 'linked'
+    ) {
+      issues.push('no_data');
+    }
+    if (operationalStatus === 'error') issues.push('collector_unavailable');
 
     const metadata = row.metadata || {};
+    const collectorActivity =
+      enrichment?.latest_message_at || enrichment?.latest_collected_at || null;
+    const lastResponseTime = extractResponseTimeMs({
+      logExecutionMs: row.log_execution_time_ms,
+      collectedMetadata: metadata,
+      logMetadata: row.log_metadata,
+    });
 
     return {
       sourceId: row.source_id,
       name: row.name,
       category: row.category_name || row.category || 'uncategorized',
       lastDataType: metadata.data_type || row.type || 'unknown',
-      lastStatus: row.status
-        ? mapCollectedStatusToAccessStatus(row.status)
-        : 'timeout',
-      lastResponseTime: metadata.response_time_ms
-        ? Number(metadata.response_time_ms)
-        : undefined,
+      lastStatus,
+      operationalStatus: operationalStatus || undefined,
+      statusHint: statusHint || undefined,
+      lastResponseTime,
       lastChecked: row.collected_at
         ? new Date(row.collected_at).toISOString()
-        : row.last_fetch_at
-          ? new Date(row.last_fetch_at).toISOString()
-          : undefined,
+        : collectorActivity
+          ? new Date(collectorActivity).toISOString()
+          : row.last_fetch_at
+            ? new Date(row.last_fetch_at).toISOString()
+            : undefined,
       issues,
     };
   });

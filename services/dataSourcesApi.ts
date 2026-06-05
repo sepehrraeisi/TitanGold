@@ -112,21 +112,59 @@ function mapApiTypeToUi(type: string): DataSource['type'] {
     return API_TO_UI_TYPE[type] || 'api';
 }
 
+const OPERATIONAL_STATUS_MAP: Record<string, DataSource['status']> = {
+    active: 'active',
+    linked: 'linked',
+    pending: 'pending',
+    error: 'error',
+};
+
 function mapStatus(row: BackendDataSourceRow): DataSource['status'] {
     if (row.is_active === false) return 'inactive';
+
+    const operational = String(row.operational_status || '').toLowerCase();
+    if (operational && OPERATIONAL_STATUS_MAP[operational]) {
+        return OPERATIONAL_STATUS_MAP[operational];
+    }
+
     const lastStatus = String(row.last_status || '').toLowerCase();
     if (lastStatus === 'error' || lastStatus === 'failed') return 'error';
     if (lastStatus === 'testing') return 'testing';
     return 'active';
 }
 
-function normalizePriority(priority: unknown): DataSource['priority'] {
-    if (typeof priority === 'string' && ['low', 'medium', 'high', 'critical'].includes(priority)) {
-        return priority as DataSource['priority'];
+export function dataHubSourceStatusLabel(t: (key: string) => string, status: DataSource['status']): string {
+    const keyByStatus: Partial<Record<DataSource['status'], string>> = {
+        linked: 'datahub_status_linked',
+        pending: 'datahub_status_pending_ingestion',
+    };
+    const key = keyByStatus[status];
+    if (key) {
+        const translated = t(key);
+        if (translated !== key) return translated;
     }
-    if (typeof priority === 'number') {
-        const map: DataSource['priority'][] = ['low', 'medium', 'high', 'critical'];
-        return map[Math.min(Math.max(priority - 1, 0), 3)] || 'low';
+    return t(status);
+}
+
+/**
+ * Map DB/API priority to UI tier. Legacy rows use INTEGER 1–10 (default 5 = normal queue weight).
+ * Do not treat 5 as critical — that was an off-by-one index bug (priority - 1 → critical).
+ */
+function normalizePriority(priority: unknown): DataSource['priority'] {
+    if (typeof priority === 'string') {
+        const tier = priority.trim().toLowerCase();
+        if (['low', 'medium', 'high', 'critical'].includes(tier)) {
+            return tier as DataSource['priority'];
+        }
+        return 'medium';
+    }
+    if (typeof priority === 'number' && Number.isFinite(priority)) {
+        const n = Math.round(priority);
+        if (n >= 9) return 'critical';
+        if (n >= 7) return 'high';
+        if (n >= 4) return 'medium';
+        if (n >= 1) return 'low';
+        return 'medium';
     }
     return 'medium';
 }
@@ -144,27 +182,42 @@ export function mapBackendRowToDataSource(row: BackendDataSourceRow): DataSource
             : (row.config as DataSource['config']) || {};
 
     const tags = Array.isArray(row.tags) ? (row.tags as string[]) : [];
+    const status = mapStatus(row);
+    const suppressLastError = row.suppress_last_error === true;
+    const collectorActivity = row.collector_last_activity_at
+        ? String(row.collector_last_activity_at)
+        : undefined;
 
     return {
         id: String(row.id),
         name: String(row.name || ''),
         type: mapApiTypeToUi(String(row.type || 'api')),
         url: row.url != null ? String(row.url) : undefined,
-        category: String(row.category || row.category_id || 'uncategorized'),
+        category: String(
+            row.effective_category ?? row.category ?? row.category_id ?? 'uncategorized',
+        ),
         tags,
-        status: mapStatus(row),
+        status,
         priority: normalizePriority(row.priority),
+        telegramIngestionMode:
+            row.telegram_ingestion_mode === 'collector' || row.telegram_ingestion_mode === 'bot'
+                ? row.telegram_ingestion_mode
+                : undefined,
         updateInterval: minutesToUpdateInterval(
             typeof row.refresh_interval === 'number' ? row.refresh_interval : null,
         ),
-        lastUpdate: row.last_fetch_at ? String(row.last_fetch_at) : undefined,
+        lastUpdate: collectorActivity || (row.last_fetch_at ? String(row.last_fetch_at) : undefined),
         lastSuccess:
             row.last_status === 'success' && row.last_fetch_at
                 ? String(row.last_fetch_at)
                 : undefined,
-        lastError: row.last_status === 'error' ? String(row.last_error || row.last_status) : undefined,
+        lastError:
+            !suppressLastError && row.last_status === 'error'
+                ? String(row.last_error || row.last_status)
+                : undefined,
         errorCount: Number(row.error_count ?? 0),
-        successRate: Number(row.success_rate ?? 0),
+        successRate: row.success_rate_display === 'na' ? 0 : Number(row.success_rate ?? 0),
+        successRateDisplay: row.success_rate_display === 'na' ? 'na' : undefined,
         reliabilityScore: Number(row.reliability_score ?? 0),
         responseTime: row.response_time != null ? Number(row.response_time) : undefined,
         config,
@@ -309,25 +362,55 @@ export async function testDataSourceConfiguration(
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
         const message =
-            (typeof body.error === 'string' && body.error) ||
             (typeof body.message === 'string' && body.message) ||
+            (typeof body.error === 'string' && body.error) ||
             'Connection test failed';
         if (res.status === 422) {
             return { success: false, message, responseTime: body.responseTime };
         }
         throw new DataHubApiError(res.status, message, body);
     }
-    return body;
+    return {
+        success: true,
+        message:
+            (typeof body.message === 'string' && body.message) || 'Connection test successful',
+        sampleData: body.data,
+        responseTime: body.responseTime,
+    };
 }
 
+/** POST /api/v1/data-sources/:id/test-connection — server-side credentials, no body secrets */
 export async function testDataSourceConnection(
-    source: DataSource,
-): Promise<{ success: boolean; message: string; responseTime?: number }> {
-    const result = await testDataSourceConfiguration(source);
+    sourceId: string,
+): Promise<{ success: boolean; message: string; responseTime?: number; mode?: string }> {
+    const res = await fetch(`${BASE}/${sourceId}/test-connection`, {
+        method: 'POST',
+        headers: authHeaders(),
+    });
+
+    const body = await res.json().catch(() => ({}));
+    const message =
+        (typeof body.message === 'string' && body.message) ||
+        (typeof body.error === 'string' && body.error) ||
+        'Connection test failed';
+
+    if (!res.ok) {
+        if (res.status === 422) {
+            return {
+                success: false,
+                message,
+                responseTime: body.responseTime,
+                mode: body.mode,
+            };
+        }
+        throw new DataHubApiError(res.status, message, body);
+    }
+
     return {
-        success: result.success,
-        message: result.message,
-        responseTime: result.responseTime,
+        success: true,
+        message,
+        responseTime: body.responseTime,
+        mode: body.mode,
     };
 }
 

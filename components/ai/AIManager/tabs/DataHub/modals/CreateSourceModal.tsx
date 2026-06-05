@@ -677,7 +677,7 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                             >
                                 <option value="">{t('select_category')}</option>
                                 {categories.map(cat => (
-                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                    <option key={cat.id} value={cat.name}>{cat.name}</option>
                                 ))}
                             </select>
                             {errors.category && <p className="text-xs text-red-500 mt-1">{errors.category}</p>}

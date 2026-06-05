@@ -7,6 +7,11 @@ import { fetchFromWeb } from './fetchers/webCrawlerFetcher.js';
 import { processWebhookData } from './fetchers/webhookFetcher.js';
 import { decryptSecret, isEncrypted } from '../utils/crypto.js';
 import crypto from 'crypto';
+import {
+    hasTelegramBotToken,
+    parseSourceConfig,
+    telegramChannelKeys,
+} from './telegramCollectorSourceStatus.js';
 
 /**
  * Main service to coordinate data fetching across all sources
@@ -47,6 +52,28 @@ export class DataFetcherService {
             }
 
             logger.info(`Starting fetch for source: ${source.name} (${source.type})`);
+
+            // Collector-linked Telegram: skip bot-pull (no token) — ingestion is via collector pipeline
+            if (source.type === 'telegram') {
+                const config = parseSourceConfig(source);
+                const { channelId, channelUsername } = telegramChannelKeys(source, config);
+                if (!hasTelegramBotToken(source, config) && (channelId || channelUsername)) {
+                    const channel = await this.findCollectorChannel(channelId, channelUsername);
+                    if (channel?.is_active) {
+                        const interval = source.refresh_interval || 60;
+                        await query(
+                            `UPDATE data_sources
+                             SET next_fetch_at = NOW() + (COALESCE($1, 60))::integer * INTERVAL '1 minute'
+                             WHERE id = $2`,
+                            [interval, source.id],
+                        );
+                        logger.info(
+                            `Skipping bot-pull fetch for collector-linked Telegram source: ${source.name}`,
+                        );
+                        return { success: true, skipped: true, reason: 'collector_ingestion' };
+                    }
+                }
+            }
 
             // 2. Delegate to specific fetcher based on type
             const rawData = await this.fetchRawData(source);
@@ -162,12 +189,160 @@ export class DataFetcherService {
             const dataArray = Array.isArray(rawData) ? rawData : [rawData];
             const sampleData = dataArray.slice(0, 3);
 
-            return { success: true, data: sampleData };
+            return { success: true, message: 'Connection test successful', data: sampleData };
 
         } catch (error) {
             logger.warn(`Test connection failed: ${error.message}`);
-            return { success: false, error: error.message };
+            return { success: false, message: error.message };
         }
+    }
+
+    /**
+     * Test connection for a persisted source (credentials loaded server-side only).
+     */
+    async testConnectionById(sourceId) {
+        const startedAt = Date.now();
+        const result = await query('SELECT * FROM data_sources WHERE id = $1', [sourceId]);
+        const row = result.rows[0];
+        if (!row) {
+            return {
+                success: false,
+                message: 'Data source not found',
+                responseTime: Date.now() - startedAt,
+            };
+        }
+
+        this.decryptSourceCredentials(row);
+
+        if (row.type === 'telegram') {
+            return this.testTelegramConnection(row, startedAt);
+        }
+
+        const config =
+            typeof row.config === 'string'
+                ? (() => {
+                      try {
+                          return JSON.parse(row.config);
+                      } catch {
+                          return {};
+                      }
+                  })()
+                : row.config || {};
+
+        const outcome = await this.testConnection({
+            id: row.id,
+            name: row.name,
+            type: row.type,
+            url: row.url,
+            config,
+            credentials: row.credentials,
+        });
+
+        return {
+            ...outcome,
+            responseTime: Date.now() - startedAt,
+        };
+    }
+
+    /**
+     * Telegram sources: bot-token pull when configured; otherwise validate collector link.
+     */
+    async testTelegramConnection(source, startedAt = Date.now()) {
+        const elapsed = () => Date.now() - startedAt;
+        let config = source.config;
+        if (typeof config === 'string') {
+            try {
+                config = JSON.parse(config);
+            } catch {
+                config = {};
+            }
+        }
+        config = config || {};
+
+        const channelId = config.channelId != null ? String(config.channelId) : null;
+        const channelUsername = config.channelUsername
+            ? String(config.channelUsername).replace(/^@/, '')
+            : null;
+
+        if (!channelId && !channelUsername) {
+            return {
+                success: false,
+                message:
+                    'Telegram channel ID or username is missing from source configuration. Edit the source or link it from Telegram Collector.',
+                responseTime: elapsed(),
+            };
+        }
+
+        const botToken = source.credentials?.botToken || config.botToken;
+        if (botToken && channelId) {
+            const outcome = await this.testConnection({
+                id: source.id,
+                name: source.name,
+                type: 'telegram',
+                url: source.url,
+                config,
+                credentials: { botToken },
+            });
+            return { ...outcome, mode: 'bot', responseTime: elapsed() };
+        }
+
+        const channel = await this.findCollectorChannel(channelId, channelUsername);
+        if (!channel) {
+            return {
+                success: false,
+                message:
+                    'Channel is not registered in Telegram Collector. Link the channel in Telegram Collector, or add a bot token to this source.',
+                responseTime: elapsed(),
+            };
+        }
+
+        if (!channel.is_active) {
+            const label = channel.title || channel.username || channelId || channelUsername;
+            return {
+                success: false,
+                message: `Telegram Collector channel "${label}" is inactive.`,
+                responseTime: elapsed(),
+            };
+        }
+
+        const countResult = await query(
+            'SELECT COUNT(*)::int AS count FROM collected_data WHERE source_id = $1',
+            [source.id],
+        );
+        const recordCount = Number(countResult.rows[0]?.count || 0);
+        const label = channel.title || (channel.username ? `@${channel.username}` : channelId);
+
+        return {
+            success: true,
+            mode: 'collector',
+            message:
+                recordCount > 0
+                    ? `Collector-linked channel "${label}" is active (${recordCount} record(s) in Data Hub). Ingestion uses Telegram Collector, not per-source bot pull.`
+                    : `Collector-linked channel "${label}" is active in Telegram Collector. No stored records yet; messages ingest via the collector.`,
+            responseTime: elapsed(),
+        };
+    }
+
+    /**
+     * Resolve telegram_channels row for a data source config.
+     */
+    async findCollectorChannel(channelId, channelUsername) {
+        const params = [channelId, channelUsername];
+        const result = await query(
+            `SELECT id, channel_id, username, title, is_active
+             FROM telegram_channels
+             WHERE (
+                 ($1::text IS NOT NULL AND channel_id::text = $1)
+                 OR (
+                     $2::text IS NOT NULL
+                     AND LOWER(REPLACE(COALESCE(username, ''), '@', '')) = LOWER($2)
+                 )
+             )
+             ORDER BY is_active DESC, updated_at DESC NULLS LAST
+             LIMIT 1`,
+            params,
+        );
+        return result.rows[0] || null;
     }
 
     /**
