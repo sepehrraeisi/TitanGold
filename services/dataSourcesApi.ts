@@ -193,7 +193,9 @@ export function mapBackendRowToDataSource(row: BackendDataSourceRow): DataSource
         name: String(row.name || ''),
         type: mapApiTypeToUi(String(row.type || 'api')),
         url: row.url != null ? String(row.url) : undefined,
-        category: String(row.category || row.category_id || 'uncategorized'),
+        category: String(
+            row.effective_category ?? row.category ?? row.category_id ?? 'uncategorized',
+        ),
         tags,
         status,
         priority: normalizePriority(row.priority),

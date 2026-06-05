@@ -77,15 +77,22 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
     }, [dataHub?.sources]);
 
     const metrics = useMemo(() => {
+        const approvedNames = new Set(categories.map(c => c.name));
         const withTelegram = categories.filter(c => (telegramSourceCountByCategory[c.name] || 0) > 0).length;
         const withMetrics = categories.filter(c => categoryMetricsById[c.id]).length;
+        const needsReview = (dataHub?.sources || []).filter(source => {
+            const cat = source.category?.trim();
+            if (!cat) return false;
+            return !approvedNames.has(cat);
+        }).length;
         return {
             total: categories.length,
             filtered: filteredCategoriesList.length,
             withTelegram,
             withMetrics,
+            needsReview,
         };
-    }, [categories, filteredCategoriesList.length, telegramSourceCountByCategory, categoryMetricsById]);
+    }, [categories, filteredCategoriesList.length, telegramSourceCountByCategory, categoryMetricsById, dataHub?.sources]);
 
     const queryError = formatDataHubQueryError(t, apiError);
 
@@ -152,11 +159,16 @@ const CategoriesPanel: React.FC<CategoriesPanelProps> = ({
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
                 <MetricCard label={t('categories_metric_total')} value={metrics.total} color="blue" />
                 <MetricCard label={t('categories_metric_filtered')} value={metrics.filtered} color="purple" />
                 <MetricCard label={t('categories_metric_telegram')} value={metrics.withTelegram} color="emerald" />
                 <MetricCard label={t('categories_metric_tracked')} value={metrics.withMetrics} color="amber" />
+                <MetricCard
+                    label={t('categories_metric_needs_review')}
+                    value={metrics.needsReview}
+                    color="red"
+                />
             </div>
 
             {queryError && (

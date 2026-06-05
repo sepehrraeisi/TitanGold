@@ -3320,6 +3320,7 @@
   "categories_metric_filtered": "Shown (filtered)",
   "categories_metric_telegram": "With Telegram sources",
   "categories_metric_tracked": "With pipeline metrics",
+  "categories_metric_needs_review": "Needs review",
   "edit_category": "Edit Category",
   "create_category_desc": "Organize sources by topic, tags, and data types.",
   "save_category": "Create Category",

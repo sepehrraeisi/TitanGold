@@ -193,6 +193,8 @@ export const dataSourceResponseSchema = z.object({
     suppress_last_error: z.boolean().optional(),
     success_rate_display: z.enum(['na']).optional().nullable(),
     collector_last_activity_at: z.string().datetime().optional().nullable(),
+    effective_category: z.string().optional().nullable(),
+    category_needs_review: z.boolean().optional(),
 });
 
 // Paginated Data Sources Schema

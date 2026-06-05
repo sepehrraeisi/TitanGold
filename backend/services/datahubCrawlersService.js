@@ -3,6 +3,7 @@ import { logger } from './logger.js';
 import { webCrawlerService } from './webCrawler.js';
 import { fetchRssFeed } from './rssFetcher.js';
 import { evaluateFilterRules, enforceIngestionFilter } from './datahubFilterRulesService.js';
+import { resolveCategoryForWrite } from '../utils/categoryTaxonomy.js';
 
 const MAX_CONCURRENT_RUNS = 3;
 const INTERVAL_MINUTES = {
@@ -118,6 +119,7 @@ async function resolveSourceId(body, userId) {
     if (body.source) {
         const dsType = body.source.type || (body.target_type === 'rss' ? 'rss' : 'web');
         const mins = INTERVAL_MINUTES[body.source.update_interval || body.schedule_interval] || 5;
+        const category = await resolveCategoryForWrite(body.source.category, query, { log: logger });
         const ins = await query(
             `INSERT INTO data_sources (name, type, url, category, refresh_interval, is_active, config)
              VALUES ($1, $2, $3, $4, $5, true, $6)
@@ -126,7 +128,7 @@ async function resolveSourceId(body, userId) {
                 body.source.name.trim(),
                 dsType,
                 body.source.url,
-                body.source.category || 'uncategorized',
+                category,
                 mins,
                 JSON.stringify({ created_from: 'datahub_crawler' }),
             ],

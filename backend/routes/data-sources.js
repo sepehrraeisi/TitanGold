@@ -32,6 +32,11 @@ import {
     applyTelegramListEnrichment,
     batchTelegramCollectorEnrichment,
 } from '../services/telegramCollectorSourceStatus.js';
+import {
+    enrichSourceCategoryFields,
+    loadApprovedCategoryLookup,
+    resolveCategoryForWrite,
+} from '../utils/categoryTaxonomy.js';
 
 const router = express.Router();
 const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
@@ -84,7 +89,8 @@ router.post('/telegram-sync-category', ...writeAuth, async (req, res) => {
       });
     }
 
-    const result = await syncChannelCategoryToDataSource(channelId, category);
+    const normalizedCategory = await resolveCategoryForWrite(category, query, { log: logger });
+    const result = await syncChannelCategoryToDataSource(channelId, normalizedCategory);
     res.json(result);
   } catch (error) {
     logger.error('Failed to sync channel category to data source:', error);
@@ -199,15 +205,21 @@ router.get('/', authenticate, readRateLimiter, validateResponse(dataSourcesListR
       [pagination.limit, pagination.offset]
     );
 
-    const enrichmentById = await batchTelegramCollectorEnrichment(result.rows);
+    const [enrichmentById, categoryLookup] = await Promise.all([
+      batchTelegramCollectorEnrichment(result.rows),
+      loadApprovedCategoryLookup(query),
+    ]);
 
-    // Mask sensitive data; enrich collector-linked Telegram operational status
+    // Mask sensitive data; enrich category + collector-linked Telegram status
     const sources = result.rows.map(source => {
       const { credentials, ...safeSource } = source;
-      const base = {
-        ...safeSource,
-        hasCredentials: !!credentials && Object.keys(credentials).length > 0,
-      };
+      const base = enrichSourceCategoryFields(
+        {
+          ...safeSource,
+          hasCredentials: !!credentials && Object.keys(credentials).length > 0,
+        },
+        categoryLookup,
+      );
       return applyTelegramListEnrichment(base, enrichmentById.get(source.id));
     });
 
@@ -234,9 +246,11 @@ router.post('/', ...writeAuth, validateBody(createDataSourceSchema), validateRes
       }
     }
 
+    const normalizedCategory = await resolveCategoryForWrite(category, query, { log: logger });
+
     const result = await query(
       'INSERT INTO data_sources (name, type, url, category, refresh_interval, next_fetch_at, config, credentials) VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7) RETURNING *',
-      [name, type, url, category, refresh_interval, JSON.stringify(config || {}), encryptedCredentials]
+      [name, type, url, normalizedCategory, refresh_interval, JSON.stringify(config || {}), encryptedCredentials]
     );
 
     const source = result.rows[0];
@@ -276,6 +290,11 @@ router.put('/:id', ...writeAuth, validateParams(uuidParamSchema), validateBody(u
       }
     }
 
+    const categoryToStore =
+      category !== undefined
+        ? await resolveCategoryForWrite(category, query, { log: logger })
+        : existingSource.category;
+
     const result = await query(
       `UPDATE data_sources 
        SET name = $1, type = $2, url = $3, category = $4, refresh_interval = $5, config = $6, credentials = $7, is_active = $8, updated_at = NOW(), updated_by = $9
@@ -284,7 +303,7 @@ router.put('/:id', ...writeAuth, validateParams(uuidParamSchema), validateBody(u
         name || existingSource.name,
         type || existingSource.type,
         url || existingSource.url,
-        category || existingSource.category,
+        categoryToStore,
         refresh_interval !== undefined ? refresh_interval : existingSource.refresh_interval,
         JSON.stringify(config || existingSource.config || {}),
         finalCredentials,

@@ -1,5 +1,10 @@
 import { query } from '../database/db.js';
 import { logger } from './logger.js';
+import {
+    loadApprovedCategoryLookup,
+    normalizeCategoryName,
+    resolveCategoryForWrite,
+} from '../utils/categoryTaxonomy.js';
 
 /**
  * Sync active Telegram collector channels from `telegram_channels`
@@ -35,12 +40,13 @@ export async function syncTelegramChannelsToDataSources() {
 
         const channels = channelsResult.rows;
         summary.totalChannels = channels.length;
+        const categoryLookup = await loadApprovedCategoryLookup(query);
 
         for (const channel of channels) {
             const channelIdStr = String(channel.channel_id);
             const username = channel.username || null;
             const title = channel.title || username || `Telegram Channel ${channelIdStr}`;
-            const category = channel.category || 'signals';
+            const category = normalizeCategoryName(channel.category || 'signals', categoryLookup);
 
             let url = null;
             if (username) {
@@ -161,6 +167,7 @@ export async function syncTelegramChannelsToDataSources() {
 export async function syncChannelCategoryToDataSource(channelId, newCategory) {
     try {
         const channelIdStr = String(channelId);
+        const normalizedCategory = await resolveCategoryForWrite(newCategory, query, { log: logger });
         
         // Find the data source for this channel
         const existingResult = await query(
@@ -180,7 +187,7 @@ export async function syncChannelCategoryToDataSource(channelId, newCategory) {
         const dataSource = existingResult.rows[0];
         
         // Only update if category actually changed
-        if (dataSource.category === newCategory) {
+        if (dataSource.category === normalizedCategory) {
             return { 
                 success: true, 
                 dataSourceId: dataSource.id, 
@@ -195,14 +202,14 @@ export async function syncChannelCategoryToDataSource(channelId, newCategory) {
              SET category = $1,
                  updated_at = NOW()
              WHERE id = $2`,
-            [newCategory, dataSource.id]
+            [normalizedCategory, dataSource.id]
         );
 
         logger.info(`Synced category for channel ${channelIdStr} → data source ${dataSource.id}`, {
             channelId: channelIdStr,
             dataSourceId: dataSource.id,
             oldCategory: dataSource.category,
-            newCategory
+            newCategory: normalizedCategory,
         });
 
         return { 
@@ -210,7 +217,7 @@ export async function syncChannelCategoryToDataSource(channelId, newCategory) {
             dataSourceId: dataSource.id, 
             updated: true,
             oldCategory: dataSource.category,
-            newCategory
+            newCategory: normalizedCategory,
         };
     } catch (error) {
         logger.error('Failed to sync channel category to data source', {

@@ -3132,6 +3132,7 @@
   "categories_metric_filtered": "نمایش (فیلترشده)",
   "categories_metric_telegram": "با منبع تلگرام",
   "categories_metric_tracked": "با متریک pipeline",
+  "categories_metric_needs_review": "نیاز به بررسی",
   "edit_category": "ویرایش دسته",
   "create_category_desc": "منابع را بر اساس موضوع، برچسب و نوع داده سازماندهی کنید.",
   "save_category": "ایجاد دسته",
