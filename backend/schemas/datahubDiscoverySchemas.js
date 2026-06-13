@@ -3,7 +3,7 @@ import { z } from 'zod';
 const sourceKindEnum = z.enum(['api', 'rss', 'website', 'telegram']);
 const suggestedTypeEnum = z.enum(['api', 'rss', 'web', 'telegram']);
 const priorityEnum = z.enum(['low', 'medium', 'high', 'critical']);
-const statusEnum = z.enum(['pending', 'approved', 'rejected', 'duplicate']);
+const statusEnum = z.enum(['pending', 'approved', 'rejected', 'duplicate', 'ignored']);
 const discoverySourceEnum = z.enum(['crawler', 'telegram', 'known_sources', 'rule']);
 
 export const updateDiscoverySettingsSchema = z.object({
@@ -33,11 +33,14 @@ export const approveSuggestionSchema = z.object({
     review_note: z.string().max(2000).optional().nullable(),
     name: z.string().min(1).max(255).optional(),
     category: z.string().max(100).optional(),
+    allow_duplicate_url: z.boolean().optional().default(false),
 });
 
 export const rejectSuggestionSchema = z.object({
     review_note: z.string().max(2000).optional().nullable(),
 });
+
+export const ignoreSuggestionSchema = rejectSuggestionSchema;
 
 export const uuidParamSchema = z.object({
     id: z.string().uuid(),

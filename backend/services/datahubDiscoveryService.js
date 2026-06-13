@@ -5,6 +5,15 @@ import { assertSafeDiscoveryUrl, normalizeDiscoveryUrl, normalizeTitleKey } from
 import { checkDuplicateLayers, shouldSkipAsDuplicate } from '../utils/discoveryDedupe.js';
 import { computeDiscoveryScore } from '../utils/discoveryScoring.js';
 import { resolveCategoryForWrite } from '../utils/categoryTaxonomy.js';
+import {
+    evaluateDuplicateUrlGuard,
+    evaluateTelegramDuplicateGuard,
+} from './dataSourceUrlDuplicateService.js';
+import {
+    normalizeTelegramChannelIdentity,
+    normalizeUrlForDuplicateCheck,
+} from '../utils/urlDuplicateNormalization.js';
+import { tryInsertDataHubAccessLog } from './dataHubAccessLogWriter.js';
 
 function mapRuleRow(row) {
     return {
@@ -54,6 +63,8 @@ function mapSuggestionRow(row) {
 }
 
 function mapScanRow(row) {
+    const metadata =
+        typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {};
     return {
         id: row.id,
         status: row.status,
@@ -61,11 +72,28 @@ function mapScanRow(row) {
         duplicate_count: Number(row.duplicate_count),
         blocked_count: Number(row.blocked_count),
         skipped_count: Number(row.skipped_count),
+        candidates_scanned: Number(metadata.candidates_scanned ?? 0),
         error_message: row.error_message,
-        metadata:
-            typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {},
+        metadata,
         started_at: new Date(row.started_at).toISOString(),
         finished_at: row.finished_at ? new Date(row.finished_at).toISOString() : null,
+    };
+}
+
+function buildDuplicateDetail(candidate, dup) {
+    return {
+        suggested_name: candidate.suggestedName,
+        suggested_url: candidate.suggestedUrl,
+        suggested_type: candidate.suggestedType,
+        discovery_source: candidate.discoverySource,
+        matched_source_id: dup.duplicateOfSourceId || null,
+        matched_source_name: dup.matchedSourceName || null,
+        matched_source_url: dup.matchedSourceUrl || null,
+        matched_suggestion_id: dup.duplicateOfSuggestionId || null,
+        duplicate_reason: dup.reason || null,
+        duplicate_confidence: dup.confidence ?? null,
+        match_type: dup.matchType || 'exact',
+        weak_hints: dup.weakHints || [],
     };
 }
 
@@ -128,6 +156,12 @@ async function loadSourceFingerprints() {
             category: r.category,
             host_key: (r.host_key || '').replace(/^www\./, ''),
             path_key: r.path_key || '/',
+            normalized_url:
+                r.type === 'telegram'
+                    ? null
+                    : normalizeUrlForDuplicateCheck(r.url),
+            telegram_identity:
+                r.type === 'telegram' ? normalizeTelegramChannelIdentity(r.url) : null,
             success_rate,
             reliability_score: deriveReliabilityScore(r, success_rate),
             last_fetch_at: r.last_fetch_at,
@@ -142,6 +176,17 @@ async function loadActiveSuggestions() {
          WHERE deleted_at IS NULL AND status IN ('pending', 'approved')`,
     );
     return result.rows;
+}
+
+async function assertDiscoveryEnabled() {
+    const settings = await getDiscoverySettings();
+    if (!settings.enabled) {
+        const err = new Error('Discovery is disabled');
+        err.status = 409;
+        err.code = 'DISCOVERY_DISABLED';
+        throw err;
+    }
+    return settings;
 }
 
 function kindToSuggestedType(kind) {
@@ -374,13 +419,45 @@ export async function getDiscoveryStats() {
     const byStatus = {};
     for (const row of counts.rows) byStatus[row.status] = row.c;
     const settings = await getDiscoverySettings();
+    const rulesCount = await query(
+        `SELECT COUNT(*)::int AS c FROM datahub_discovery_rules WHERE deleted_at IS NULL AND is_enabled = true`,
+    );
     return {
         ...byStatus,
         pending: byStatus.pending || 0,
         approved: byStatus.approved || 0,
         rejected: byStatus.rejected || 0,
         duplicate: byStatus.duplicate || 0,
+        ignored: byStatus.ignored || 0,
+        active_rules: rulesCount.rows[0]?.c || 0,
         settings,
+    };
+}
+
+export async function getScanById(scanId) {
+    const scanResult = await query(`SELECT * FROM datahub_discovery_scans WHERE id = $1`, [scanId]);
+    if (!scanResult.rows.length) {
+        const err = new Error('Scan not found');
+        err.status = 404;
+        throw err;
+    }
+
+    const suggestions = await query(
+        `SELECT s.*, ds.name AS matched_source_name, ds.url AS matched_source_url
+         FROM datahub_discovery_suggestions s
+         LEFT JOIN data_sources ds ON ds.id = s.duplicate_of_source_id
+         WHERE s.scan_id = $1 AND s.deleted_at IS NULL
+         ORDER BY s.created_at DESC`,
+        [scanId],
+    );
+
+    const scan = mapScanRow(scanResult.rows[0]);
+    const metadata = scan.metadata || {};
+    return {
+        scan,
+        suggestions: suggestions.rows.map(mapSuggestionRow),
+        duplicate_details: metadata.duplicate_details || [],
+        new_suggestions: metadata.new_suggestions || [],
     };
 }
 
@@ -393,17 +470,28 @@ export async function listScanHistory(limit = 20) {
 }
 
 export async function runDiscoveryScan(userId) {
+    await assertDiscoveryEnabled();
+
     const scanIns = await query(
         `INSERT INTO datahub_discovery_scans (status, triggered_by) VALUES ('running', $1) RETURNING *`,
         [userId || null],
     );
     const scanId = scanIns.rows[0].id;
-    const stats = { added: 0, duplicates: 0, blocked: 0, skipped: 0 };
+    const stats = {
+        candidates_scanned: 0,
+        added: 0,
+        duplicates: 0,
+        blocked: 0,
+        skipped: 0,
+    };
+    const duplicateDetails = [];
+    const newSuggestions = [];
 
     try {
         const sources = await loadSourceFingerprints();
         const suggestions = await loadActiveSuggestions();
         const { candidates } = await gatherCandidates();
+        stats.candidates_scanned = candidates.length;
 
         for (const c of candidates) {
             try {
@@ -426,10 +514,9 @@ export async function runDiscoveryScan(userId) {
 
             const dup = checkDuplicateLayers(
                 {
-                    hostKey: c.hostKey,
-                    pathKey: c.pathKey,
-                    titleKey: c.titleKey,
                     suggestedType: c.suggestedType,
+                    suggestedUrl: c.suggestedUrl,
+                    titleKey: c.titleKey,
                 },
                 { sources, suggestions },
             );
@@ -450,6 +537,8 @@ export async function runDiscoveryScan(userId) {
             });
 
             if (shouldSkipAsDuplicate(dup)) {
+                const detail = buildDuplicateDetail(c, dup);
+                duplicateDetails.push(detail);
                 try {
                     await query(
                         `INSERT INTO datahub_discovery_suggestions (
@@ -474,7 +563,11 @@ export async function runDiscoveryScan(userId) {
                             c.discoverySource,
                             c.ruleId || null,
                             scanId,
-                            JSON.stringify(c.evidence || {}),
+                            JSON.stringify({
+                                ...(c.evidence || {}),
+                                match_type: dup.matchType || 'exact',
+                                weak_hints: dup.weakHints || [],
+                            }),
                             dup.duplicateOfSourceId || null,
                             dup.duplicateOfSuggestionId || null,
                             dup.reason,
@@ -489,14 +582,14 @@ export async function runDiscoveryScan(userId) {
             }
 
             try {
-                await query(
+                const ins = await query(
                     `INSERT INTO datahub_discovery_suggestions (
                         status, suggested_name, suggested_type, suggested_url,
                         host_key, path_key, title_key, category, priority_score,
                         discovery_source, rule_id, scan_id, evidence
                     ) VALUES (
                         'pending', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-                    )`,
+                    ) RETURNING id, suggested_name, suggested_url, suggested_type, discovery_source, priority_score, created_at`,
                     [
                         c.suggestedName,
                         c.suggestedType,
@@ -509,15 +602,29 @@ export async function runDiscoveryScan(userId) {
                         c.discoverySource,
                         c.ruleId || null,
                         scanId,
-                        JSON.stringify(c.evidence || {}),
+                        JSON.stringify({
+                            ...(c.evidence || {}),
+                            weak_hints: dup.weakHints || [],
+                        }),
                     ],
                 );
+                const created = ins.rows[0];
                 stats.added += 1;
+                newSuggestions.push({
+                    id: created.id,
+                    suggested_name: created.suggested_name,
+                    suggested_url: created.suggested_url,
+                    suggested_type: created.suggested_type,
+                    discovery_source: created.discovery_source,
+                    priority_score: Number(created.priority_score),
+                    created_at: new Date(created.created_at).toISOString(),
+                });
                 suggestions.push({
                     host_key: c.hostKey,
                     path_key: c.pathKey,
                     title_key: c.titleKey,
                     suggested_type: c.suggestedType,
+                    suggested_url: c.suggestedUrl,
                     status: 'pending',
                 });
             } catch (e) {
@@ -526,18 +633,38 @@ export async function runDiscoveryScan(userId) {
             }
         }
 
+        const scanMetadata = {
+            candidates_scanned: stats.candidates_scanned,
+            duplicate_details: duplicateDetails,
+            new_suggestions: newSuggestions,
+        };
+
         await query(
             `UPDATE datahub_discovery_scans SET status = 'success', added_count = $2,
-             duplicate_count = $3, blocked_count = $4, skipped_count = $5, finished_at = NOW()
+             duplicate_count = $3, blocked_count = $4, skipped_count = $5,
+             metadata = $6, finished_at = NOW()
              WHERE id = $1`,
-            [scanId, stats.added, stats.duplicates, stats.blocked, stats.skipped],
+            [
+                scanId,
+                stats.added,
+                stats.duplicates,
+                stats.blocked,
+                stats.skipped,
+                JSON.stringify(scanMetadata),
+            ],
         );
         await query(
             `UPDATE datahub_discovery_settings SET last_scan_at = NOW(), updated_at = NOW() WHERE id = 1`,
         );
 
         const scan = await query(`SELECT * FROM datahub_discovery_scans WHERE id = $1`, [scanId]);
-        return { scan: mapScanRow(scan.rows[0]), ...stats, scan_id: scanId };
+        return {
+            scan: mapScanRow(scan.rows[0]),
+            ...stats,
+            scan_id: scanId,
+            duplicate_details: duplicateDetails,
+            new_suggestions: newSuggestions,
+        };
     } catch (error) {
         await query(
             `UPDATE datahub_discovery_scans SET status = 'failed', error_message = $2, finished_at = NOW() WHERE id = $1`,
@@ -578,9 +705,34 @@ export async function approveSuggestion(id, body, userId) {
         throw err;
     }
 
+    const allowDuplicateUrl = body.allow_duplicate_url === true;
+    const dsType = row.suggested_type;
+    const duplicateGuard =
+        dsType === 'telegram'
+            ? await evaluateTelegramDuplicateGuard({
+                  url: row.suggested_url,
+                  isActive: true,
+                  allowDuplicateUrl,
+              })
+            : await evaluateDuplicateUrlGuard({
+                  type: dsType,
+                  url: row.suggested_url,
+                  isActive: true,
+                  allowDuplicateUrl,
+              });
+
+    if (duplicateGuard.blocked) {
+        const err = new Error(duplicateGuard.message);
+        err.status = 409;
+        err.code = duplicateGuard.code;
+        err.duplicates = duplicateGuard.duplicates;
+        if (duplicateGuard.normalizedUrl) err.normalizedUrl = duplicateGuard.normalizedUrl;
+        if (duplicateGuard.telegramIdentity) err.telegramIdentity = duplicateGuard.telegramIdentity;
+        throw err;
+    }
+
     const name = body.name?.trim() || row.suggested_name;
     const category = await resolveCategoryForWrite(body.category || row.category, query, { log: logger });
-    const dsType = row.suggested_type;
 
     const dsResult = await query(
         `INSERT INTO data_sources (name, type, url, category, is_active, config)
@@ -590,7 +742,11 @@ export async function approveSuggestion(id, body, userId) {
             dsType,
             row.suggested_url,
             category,
-            JSON.stringify({ created_from: 'discovery_approval', suggestion_id: id }),
+            JSON.stringify({
+                created_from: 'discovery_approval',
+                suggestion_id: id,
+                ...(allowDuplicateUrl ? { allow_duplicate_url: true } : {}),
+            }),
         ],
     );
     const sourceId = dsResult.rows[0].id;
@@ -602,6 +758,20 @@ export async function approveSuggestion(id, body, userId) {
          WHERE id = $1`,
         [id, userId, body.review_note || null, sourceId],
     );
+
+    await tryInsertDataHubAccessLog({
+        sourceId,
+        action: 'discovery_suggestion_approved',
+        legacyLevel: 'info',
+        message: 'Data source created from discovery suggestion approval',
+        metadata: {
+            suggestion_id: id,
+            approved_by: userId,
+            suggested_url: row.suggested_url,
+            suggested_type: dsType,
+            allow_duplicate_url: allowDuplicateUrl,
+        },
+    });
 
     const updated = await query(`SELECT * FROM datahub_discovery_suggestions WHERE id = $1`, [id]);
     return { suggestion: mapSuggestionRow(updated.rows[0]), source_id: sourceId };
@@ -621,5 +791,46 @@ export async function rejectSuggestion(id, body, userId) {
         err.status = 404;
         throw err;
     }
+
+    await tryInsertDataHubAccessLog({
+        action: 'discovery_suggestion_rejected',
+        legacyLevel: 'info',
+        message: 'Discovery suggestion rejected',
+        metadata: {
+            suggestion_id: id,
+            rejected_by: userId,
+            review_note: body.review_note || null,
+        },
+    });
+
+    return mapSuggestionRow(result.rows[0]);
+}
+
+export async function ignoreSuggestion(id, body, userId) {
+    const result = await query(
+        `UPDATE datahub_discovery_suggestions
+         SET status = 'ignored', rejected_by = $2, reviewed_at = NOW(),
+             review_note = $3, updated_at = NOW()
+         WHERE id = $1 AND status = 'pending' AND deleted_at IS NULL
+         RETURNING *`,
+        [id, userId, body.review_note || null],
+    );
+    if (!result.rows.length) {
+        const err = new Error('Pending suggestion not found');
+        err.status = 404;
+        throw err;
+    }
+
+    await tryInsertDataHubAccessLog({
+        action: 'discovery_suggestion_ignored',
+        legacyLevel: 'info',
+        message: 'Discovery suggestion ignored',
+        metadata: {
+            suggestion_id: id,
+            ignored_by: userId,
+            review_note: body.review_note || null,
+        },
+    });
+
     return mapSuggestionRow(result.rows[0]);
 }

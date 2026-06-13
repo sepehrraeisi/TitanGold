@@ -2,6 +2,7 @@ import { query } from '../database/db.js';
 import {
     duplicateUrlKey,
     isUrlBearingSourceType,
+    normalizeTelegramChannelIdentity,
     normalizeUrlForDuplicateCheck,
 } from '../utils/urlDuplicateNormalization.js';
 
@@ -354,6 +355,103 @@ export async function evaluateDuplicateUrlGuard({
     return {
         blocked: false,
         normalizedUrl,
+        duplicates,
+        warnings,
+    };
+}
+
+async function loadTelegramSources() {
+    const result = await query(
+        `SELECT id, name, type, url, config, is_active, created_at, last_fetch_at,
+                refresh_interval, fetch_count, error_count
+         FROM data_sources
+         WHERE type = 'telegram' AND url IS NOT NULL AND trim(url) <> ''`,
+    );
+    return result.rows;
+}
+
+function mapTelegramDuplicateRow(row) {
+    const config = parseSourceConfig(row.config);
+    return {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        url: row.url,
+        telegramIdentity: normalizeTelegramChannelIdentity(row.url),
+        isActive: row.is_active === true,
+        ignoreDuplicateUrl: sourceIgnoresDuplicate(row.config),
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+        lastFetchAt: row.last_fetch_at ? new Date(row.last_fetch_at).toISOString() : null,
+        flagReason: 'Same Telegram channel identity',
+    };
+}
+
+export async function findDuplicateTelegramSources({
+    url,
+    excludeSourceId = null,
+    includeInactive = true,
+}) {
+    const telegramIdentity = normalizeTelegramChannelIdentity(url);
+    if (!telegramIdentity) {
+        return { telegramIdentity: null, duplicates: [] };
+    }
+
+    const sources = await loadTelegramSources();
+    const duplicates = sources
+        .filter(row => normalizeTelegramChannelIdentity(row.url) === telegramIdentity)
+        .filter(row => row.id !== excludeSourceId)
+        .filter(row => includeInactive || row.is_active === true)
+        .map(mapTelegramDuplicateRow);
+
+    return { telegramIdentity, duplicates };
+}
+
+export async function evaluateTelegramDuplicateGuard({
+    url,
+    isActive,
+    excludeSourceId = null,
+    allowDuplicateUrl = false,
+}) {
+    const { telegramIdentity, duplicates } = await findDuplicateTelegramSources({
+        url,
+        excludeSourceId,
+        includeInactive: true,
+    });
+
+    const activeDuplicates = duplicates.filter(d => d.isActive && !d.ignoreDuplicateUrl);
+    const inactiveDuplicates = duplicates.filter(d => !d.isActive);
+    const warnings = [];
+
+    if (inactiveDuplicates.length > 0) {
+        warnings.push({
+            code: 'DUPLICATE_INACTIVE_TELEGRAM',
+            message: 'Another Telegram source with this channel exists but is inactive.',
+            duplicates: inactiveDuplicates,
+        });
+    }
+
+    if (isActive && activeDuplicates.length > 0) {
+        if (!allowDuplicateUrl) {
+            return {
+                blocked: true,
+                code: 'DUPLICATE_ACTIVE_TELEGRAM',
+                message: 'This Telegram channel already exists as a source.',
+                telegramIdentity,
+                duplicates: activeDuplicates,
+                warnings,
+            };
+        }
+
+        warnings.push({
+            code: 'DUPLICATE_ACTIVE_TELEGRAM_OVERRIDE',
+            message: 'Active duplicate Telegram channel allowed by override.',
+            duplicates: activeDuplicates,
+        });
+    }
+
+    return {
+        blocked: false,
+        telegramIdentity,
         duplicates,
         warnings,
     };

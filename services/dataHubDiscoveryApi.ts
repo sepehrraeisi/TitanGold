@@ -2,8 +2,28 @@ import { DataHubApiError } from './dataSourcesApi';
 
 const BASE = '/api/v1/data-hub/discovery';
 
-export type DiscoverySuggestionStatus = 'pending' | 'approved' | 'rejected' | 'duplicate';
+export type DiscoverySuggestionStatus =
+    | 'pending'
+    | 'approved'
+    | 'rejected'
+    | 'duplicate'
+    | 'ignored';
 export type DiscoverySource = 'crawler' | 'telegram' | 'known_sources' | 'rule';
+
+export type DiscoveryDuplicateDetail = {
+    suggested_name: string;
+    suggested_url: string;
+    suggested_type: string;
+    discovery_source: string;
+    matched_source_id?: string | null;
+    matched_source_name?: string | null;
+    matched_source_url?: string | null;
+    matched_suggestion_id?: string | null;
+    duplicate_reason?: string | null;
+    duplicate_confidence?: number | null;
+    match_type?: 'exact' | 'weak';
+    weak_hints?: Array<Record<string, unknown>>;
+};
 
 export type DiscoverySuggestion = {
     id: string;
@@ -28,6 +48,19 @@ export type DiscoverySuggestion = {
     review_note?: string | null;
     created_source_id?: string | null;
     created_at: string;
+};
+
+export type DiscoveryScan = {
+    id: string;
+    status: string;
+    added_count: number;
+    duplicate_count: number;
+    blocked_count: number;
+    skipped_count: number;
+    candidates_scanned?: number;
+    error_message?: string | null;
+    started_at: string;
+    finished_at?: string | null;
 };
 
 export type DiscoveryRule = {
@@ -89,6 +122,8 @@ export async function fetchDiscoveryStats() {
         approved: number;
         rejected: number;
         duplicate: number;
+        ignored: number;
+        active_rules: number;
         settings: { enabled: boolean; last_scan_at: string | null };
     }>('/stats');
 }
@@ -127,16 +162,33 @@ export async function deleteDiscoveryRule(id: string) {
 export async function runDiscoveryScan() {
     return discoveryRequest<{
         scan_id: string;
+        scan: DiscoveryScan;
+        candidates_scanned: number;
         added: number;
         duplicates: number;
         blocked: number;
         skipped: number;
+        duplicate_details: DiscoveryDuplicateDetail[];
+        new_suggestions: Array<{
+            id: string;
+            suggested_name: string;
+            suggested_url: string;
+            suggested_type: string;
+            discovery_source: string;
+            priority_score: number;
+            created_at: string;
+        }>;
     }>('/scan', { method: 'POST', body: '{}' });
 }
 
 export async function approveDiscoverySuggestion(
     id: string,
-    payload?: { review_note?: string; name?: string; category?: string },
+    payload?: {
+        review_note?: string;
+        name?: string;
+        category?: string;
+        allow_duplicate_url?: boolean;
+    },
 ) {
     return discoveryRequest<{ suggestion: DiscoverySuggestion; source_id: string }>(
         `/suggestions/${id}/approve`,
@@ -152,7 +204,24 @@ export async function rejectDiscoverySuggestion(id: string, review_note?: string
     return data.suggestion;
 }
 
-export async function fetchDiscoveryHistory(limit = 10) {
-    const data = await discoveryRequest<{ scans: unknown[] }>(`/history?limit=${limit}`);
+export async function ignoreDiscoverySuggestion(id: string, review_note?: string) {
+    const data = await discoveryRequest<{ suggestion: DiscoverySuggestion }>(
+        `/suggestions/${id}/ignore`,
+        { method: 'POST', body: JSON.stringify({ review_note: review_note || null }) },
+    );
+    return data.suggestion;
+}
+
+export async function fetchDiscoveryHistory(limit = 20) {
+    const data = await discoveryRequest<{ scans: DiscoveryScan[] }>(`/history?limit=${limit}`);
     return data.scans;
+}
+
+export async function fetchDiscoveryScanDetail(scanId: string) {
+    return discoveryRequest<{
+        scan: DiscoveryScan;
+        suggestions: DiscoverySuggestion[];
+        duplicate_details: DiscoveryDuplicateDetail[];
+        new_suggestions: Array<Record<string, unknown>>;
+    }>(`/scans/${scanId}`);
 }

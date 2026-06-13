@@ -65,3 +65,31 @@ export function duplicateUrlKey(type, normalizedUrl) {
     if (!type || !normalizedUrl) return null;
     return `${type}::${normalizedUrl}`;
 }
+
+/**
+ * Normalize Telegram channel identity from t.me URL or @username.
+ * @param {string | null | undefined} url
+ * @returns {string | null}
+ */
+export function normalizeTelegramChannelIdentity(url) {
+    if (!url || typeof url !== 'string') return null;
+
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+
+    if (trimmed.startsWith('@')) {
+        const handle = trimmed.slice(1).split(/[/?#\s]/)[0];
+        return handle ? handle.toLowerCase() : null;
+    }
+
+    try {
+        const parsed = new URL(trimmed);
+        if (parsed.hostname.toLowerCase() !== 't.me') return null;
+        const slug = parsed.pathname.replace(/^\/+/, '').split('/')[0];
+        if (!slug) return null;
+        return slug.replace(/^@+/, '').toLowerCase();
+    } catch {
+        const match = trimmed.match(/(?:https?:\/\/)?t\.me\/@?([^/?#\s]+)/i);
+        return match ? match[1].replace(/^@+/, '').toLowerCase() : null;
+    }
+}

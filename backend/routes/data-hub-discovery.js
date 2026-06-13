@@ -10,6 +10,7 @@ import {
     listSuggestionsQuerySchema,
     approveSuggestionSchema,
     rejectSuggestionSchema,
+    ignoreSuggestionSchema,
     uuidParamSchema,
 } from '../schemas/datahubDiscoverySchemas.js';
 import {
@@ -22,9 +23,11 @@ import {
     listSuggestions,
     getDiscoveryStats,
     listScanHistory,
+    getScanById,
     runDiscoveryScan,
     approveSuggestion,
     rejectSuggestion,
+    ignoreSuggestion,
 } from '../services/datahubDiscoveryService.js';
 
 const router = express.Router();
@@ -68,6 +71,21 @@ router.get('/history', authenticate, readRateLimiter, async (req, res) => {
         res.status(500).json({ error: 'Failed to load scan history' });
     }
 });
+
+router.get(
+    '/scans/:id',
+    authenticate,
+    readRateLimiter,
+    validateParams(uuidParamSchema),
+    async (req, res) => {
+        try {
+            res.json(await getScanById(req.params.id));
+        } catch (error) {
+            const status = error.status || 500;
+            res.status(status).json({ error: error.message || 'Failed to load scan details' });
+        }
+    },
+);
 
 router.get('/rules', authenticate, readRateLimiter, async (req, res) => {
     try {
@@ -171,6 +189,9 @@ router.post(
             res.status(status).json({
                 error: error.message || 'Failed to approve',
                 code: error.code,
+                duplicates: error.duplicates,
+                normalizedUrl: error.normalizedUrl,
+                telegramIdentity: error.telegramIdentity,
             });
         }
     },
@@ -192,6 +213,26 @@ router.post(
         } catch (error) {
             const status = error.status || 500;
             res.status(status).json({ error: error.message || 'Failed to reject' });
+        }
+    },
+);
+
+router.post(
+    '/suggestions/:id/ignore',
+    ...writeAuth,
+    validateParams(uuidParamSchema),
+    validateBody(ignoreSuggestionSchema),
+    async (req, res) => {
+        try {
+            const suggestion = await ignoreSuggestion(
+                req.params.id,
+                req.validatedBody,
+                req.user?.id,
+            );
+            res.json({ suggestion });
+        } catch (error) {
+            const status = error.status || 500;
+            res.status(status).json({ error: error.message || 'Failed to ignore' });
         }
     },
 );
