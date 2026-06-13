@@ -50,7 +50,8 @@ export const createDataSourceSchema = z.object({
     refresh_interval: z.number().int().optional().nullable(),
     config: z.record(z.any()).optional().nullable(),
     credentials: z.record(z.any()).optional().nullable(),
-    is_active: z.boolean().optional().default(true)
+    is_active: z.boolean().optional().default(true),
+    allow_duplicate_url: z.boolean().optional().default(false),
 }).transform(data => {
     // Map update_interval string to refresh_interval minutes if refresh_interval not provided
     if (!data.refresh_interval && data.update_interval) {
@@ -78,7 +79,8 @@ export const updateDataSourceSchema = z.object({
     refresh_interval: z.number().int().optional().nullable(),
     config: z.record(z.any()).optional().nullable(),
     credentials: z.record(z.any()).optional().nullable(),
-    is_active: z.boolean().optional()
+    is_active: z.boolean().optional(),
+    allow_duplicate_url: z.boolean().optional().default(false),
 }).refine(
     (data) => Object.keys(data).length > 0,
     { message: 'At least one field must be provided for update' }
@@ -195,6 +197,35 @@ export const dataSourceResponseSchema = z.object({
     collector_last_activity_at: z.string().datetime().optional().nullable(),
     effective_category: z.string().optional().nullable(),
     category_needs_review: z.boolean().optional(),
+    normalized_url: z.string().optional().nullable(),
+    duplicate_url_key: z.string().optional().nullable(),
+    duplicate_url_count: z.number().int().optional().default(0),
+    duplicate_active_count: z.number().int().optional().default(0),
+    duplicate_url_severity: z.enum(['high', 'medium', 'low', 'info']).optional().nullable(),
+    duplicate_url_ignored: z.boolean().optional(),
+    duplicate_url_siblings: z.array(z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        type: z.string(),
+        url: z.string().optional().nullable(),
+        normalizedUrl: z.string().optional().nullable(),
+        isActive: z.boolean(),
+        createdAt: z.string().optional().nullable(),
+        lastFetchAt: z.string().optional().nullable(),
+        collectedCount: z.number().int().optional().default(0),
+        lastCollectedAt: z.string().optional().nullable(),
+    })).optional().default([]),
+    duplicate_url_warnings: z.array(z.object({
+        code: z.string(),
+        message: z.string().optional(),
+        duplicates: z.array(z.any()).optional(),
+    })).optional(),
+});
+
+export const checkDuplicateUrlQuerySchema = z.object({
+    type: z.enum(['rss', 'web', 'api']),
+    url: urlSchema,
+    exclude_source_id: z.string().uuid().optional(),
 });
 
 // Paginated Data Sources Schema
@@ -452,6 +483,29 @@ const pipelineNormalizedStatus = z.enum([
   'ingested',
 ]);
 
+const pipelineCollectorBacklogSchema = z.object({
+  backlogCount: z.number().int().nonnegative(),
+  oldestQueuedAt: z.string().optional(),
+  newestQueuedAt: z.string().optional(),
+  estimatedWaitHours: z.number().nonnegative().optional(),
+  estimatedWaitDays: z.number().nonnegative().optional(),
+  queuePositionRank: z.number().int().positive().optional(),
+  messagesAheadInQueue: z.number().int().nonnegative().optional(),
+});
+
+const pipelineTransferThroughputSchema = z.object({
+  processed24h: z.number().int().nonnegative(),
+  messagesPerHour: z.number().nonnegative(),
+  messagesPerDay: z.number().int().nonnegative(),
+  observedWindowHours: z.number().int().positive(),
+});
+
+const pipelineGlobalTelegramBacklogSchema = z.object({
+  unprocessedTotal: z.number().int().nonnegative(),
+  oldestUnprocessed: z.string().optional(),
+  newestUnprocessed: z.string().optional(),
+});
+
 export const dataPipelineSnapshotSchema = z.object({
     lastRefreshed: z.string(),
     totalRequests24h: z.number().int().nonnegative(),
@@ -460,6 +514,8 @@ export const dataPipelineSnapshotSchema = z.object({
     pending24h: z.number().int().nonnegative(),
     totalRecords: z.number().int().nonnegative(),
     normalizedPercent: z.number(),
+    transferThroughput: pipelineTransferThroughputSchema.optional(),
+    globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema.optional(),
     sources: z.array(z.object({
         sourceId: z.string().uuid(),
         name: z.string(),
@@ -468,6 +524,7 @@ export const dataPipelineSnapshotSchema = z.object({
         lastStatus: pipelineAccessStatus,
         operationalStatus: z.enum(['active', 'linked', 'pending', 'error']).optional(),
         statusHint: z.string().optional(),
+        collectorBacklog: pipelineCollectorBacklogSchema.optional(),
         lastResponseTime: z.number().optional(),
         lastChecked: z.string().optional(),
         issues: z.array(z.string()).optional()
@@ -478,6 +535,19 @@ export const dataPipelineSnapshotSchema = z.object({
         inflow: z.number().int().nonnegative(),
         passRate: z.number()
     }))
+});
+
+export const pipelineQuerySchema = z.object({
+  includeBacklog: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+});
+
+export const dataPipelineBacklogResponseSchema = z.object({
+  transferThroughput: pipelineTransferThroughputSchema,
+  globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema,
+  backlogBySourceId: z.record(pipelineCollectorBacklogSchema),
 });
 
 export const accessLogsQuerySchema = z.object({
@@ -492,8 +562,12 @@ export const dataAccessLogSchema = z.object({
     timestamp: z.string(),
     agentId: z.string(),
     sourceId: z.string(),
+    sourceName: z.string().optional(),
+    action: z.string().optional(),
     dataType: z.string(),
     status: z.enum(['success', 'failed', 'cached', 'timeout']),
+    message: z.string().optional(),
+    metadata: z.record(z.unknown()).optional(),
     responseTime: z.number().optional(),
     error: z.string().optional(),
     dataSize: z.number().optional()
@@ -509,8 +583,11 @@ export const accessLogsListResponseSchema = z.object({
     }),
     statusCounts: z.object({
         success: z.number().int().nonnegative(),
-        error: z.number().int().nonnegative(),
-        warning: z.number().int().nonnegative()
+        cached: z.number().int().nonnegative(),
+        failed: z.number().int().nonnegative(),
+        timeout: z.number().int().nonnegative(),
+        error: z.number().int().nonnegative().optional(),
+        warning: z.number().int().nonnegative().optional()
     })
 });
 
@@ -538,8 +615,11 @@ export const dataPipelineViewResponseSchema = z.object({
         payload: z.record(z.any()),
         qualityScore: z.number().optional(),
         qualityPending: z.boolean().optional(),
+        qualityReasonCodes: z.array(z.string()).optional(),
         issues: z.array(z.string()),
         status: pipelineNormalizedStatus,
+        ingestedAt: z.string().optional(),
+        publishedAt: z.string().optional(),
         receivedAt: z.string(),
         normalizedAt: z.string()
     }))

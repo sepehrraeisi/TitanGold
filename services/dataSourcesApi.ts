@@ -54,7 +54,7 @@ async function parseErrorResponse(res: Response): Promise<DataHubApiError> {
         (typeof body.message === 'string' && body.message) ||
         res.statusText ||
         'Request failed';
-    return new DataHubApiError(res.status, message, body.details ?? body.errors ?? body);
+    return new DataHubApiError(res.status, message, body);
 }
 
 async function dataSourcesRequest<T>(
@@ -223,11 +223,28 @@ export function mapBackendRowToDataSource(row: BackendDataSourceRow): DataSource
         config,
         createdAt: String(row.created_at || new Date().toISOString()),
         updatedAt: String(row.updated_at || row.created_at || new Date().toISOString()),
+        normalizedUrl:
+            row.normalized_url != null ? String(row.normalized_url) : undefined,
+        duplicateUrlKey:
+            row.duplicate_url_key != null ? String(row.duplicate_url_key) : undefined,
+        duplicateUrlCount: Number(row.duplicate_url_count ?? 0),
+        duplicateActiveCount: Number(row.duplicate_active_count ?? 0),
+        duplicateUrlSeverity:
+            row.duplicate_url_severity === 'high' ||
+            row.duplicate_url_severity === 'medium' ||
+            row.duplicate_url_severity === 'low' ||
+            row.duplicate_url_severity === 'info'
+                ? row.duplicate_url_severity
+                : undefined,
+        duplicateUrlSiblings: Array.isArray(row.duplicate_url_siblings)
+            ? (row.duplicate_url_siblings as DataSource['duplicateUrlSiblings'])
+            : undefined,
     };
 }
 
 export function mapUiSourceToApiPayload(
     source: Partial<DataSource> & { name: string; type: DataSource['type'] },
+    options?: { allowDuplicateUrl?: boolean },
 ): Record<string, unknown> {
     const payload: Record<string, unknown> = {
         name: source.name,
@@ -248,7 +265,94 @@ export function mapUiSourceToApiPayload(
         payload.is_active = true;
     }
 
+    if (options?.allowDuplicateUrl) {
+        payload.allow_duplicate_url = true;
+    }
+
     return payload;
+}
+
+export type DuplicateUrlSibling = NonNullable<DataSource['duplicateUrlSiblings']>[number];
+
+export type DuplicateUrlCheckResult = {
+    normalizedUrl: string | null;
+    duplicates: DuplicateUrlSibling[];
+    hasActiveDuplicate: boolean;
+    hasInactiveDuplicate: boolean;
+};
+
+export async function checkDuplicateUrl(params: {
+    type: 'rss' | 'web' | 'api';
+    url: string;
+    excludeSourceId?: string;
+}): Promise<DuplicateUrlCheckResult> {
+    const qs = new URLSearchParams({
+        type: mapUiTypeToApi(params.type) as string,
+        url: params.url,
+    });
+    if (params.excludeSourceId) {
+        qs.set('exclude_source_id', params.excludeSourceId);
+    }
+    return dataSourcesRequest(`/check-duplicate-url?${qs.toString()}`);
+}
+
+export type DuplicateUrlSeverity = 'high' | 'medium' | 'low' | 'info';
+
+export type DuplicateUrlSourceDetail = DuplicateUrlSibling & {
+    ignoreDuplicateUrl?: boolean;
+    refreshInterval?: number | null;
+    fetchCount?: number;
+    errorCount?: number;
+    crawlerLinked?: boolean;
+    crawlerId?: string | null;
+    crawlerName?: string | null;
+    flagReason?: string;
+};
+
+export type DuplicateUrlGroup = {
+    type: string;
+    normalizedUrl: string;
+    duplicateUrlKey: string;
+    sourceCount: number;
+    activeCount: number;
+    inactiveCount: number;
+    totalCollectedCount: number;
+    lastCollectedAt?: string | null;
+    severity: DuplicateUrlSeverity;
+    ignored: boolean;
+    flagReason: string;
+    sources: DuplicateUrlSourceDetail[];
+};
+
+export type DuplicateUrlDashboard = {
+    summary: {
+        duplicateGroups: number;
+        activeDuplicateSources: number;
+        inactiveDuplicateSources: number;
+        highRiskGroups: number;
+        totalGroupsIncludingIgnored: number;
+        ignoredGroups: number;
+    };
+    groups: DuplicateUrlGroup[];
+};
+
+export async function fetchDuplicateUrlDashboard(): Promise<DuplicateUrlDashboard> {
+    return dataSourcesRequest('/duplicate-urls');
+}
+
+/** @deprecated use fetchDuplicateUrlDashboard */
+export async function fetchDuplicateUrlGroups(): Promise<DuplicateUrlDashboard> {
+    return fetchDuplicateUrlDashboard();
+}
+
+export async function setDuplicateUrlIgnore(
+    sourceId: string,
+    ignore: boolean,
+): Promise<{ success: boolean; ignore: boolean; summary: DuplicateUrlDashboard['summary'] }> {
+    return dataSourcesRequest(`/${sourceId}/duplicate-url/ignore`, {
+        method: 'POST',
+        body: JSON.stringify({ ignore }),
+    });
 }
 
 export async function fetchDataSources(params?: {
@@ -285,10 +389,11 @@ export async function fetchDataSources(params?: {
 
 export async function createDataSource(
     source: Omit<DataSource, 'id' | 'createdAt' | 'updatedAt' | 'errorCount' | 'successRate' | 'reliabilityScore'>,
+    options?: { allowDuplicateUrl?: boolean },
 ): Promise<DataSource> {
     const row = await dataSourcesRequest<BackendDataSourceRow>('/', {
         method: 'POST',
-        body: JSON.stringify(mapUiSourceToApiPayload(source)),
+        body: JSON.stringify(mapUiSourceToApiPayload(source, options)),
     });
     return mapBackendRowToDataSource(row);
 }
@@ -310,8 +415,12 @@ function mapUiUpdatesToApiPayload(updates: Partial<DataSource>): Record<string, 
 export async function updateDataSource(
     id: string,
     updates: Partial<DataSource>,
+    options?: { allowDuplicateUrl?: boolean },
 ): Promise<DataSource> {
     const payload = mapUiUpdatesToApiPayload(updates);
+    if (options?.allowDuplicateUrl) {
+        payload.allow_duplicate_url = true;
+    }
     if (Object.keys(payload).length === 0) {
         throw new DataHubApiError(400, 'At least one field must be provided for update');
     }
@@ -419,9 +528,20 @@ export type DataHubSourcesHealth = {
     status: 'healthy' | 'degraded' | 'unhealthy' | string;
     database?: string;
     activeSources?: number;
+    accessLogEvents1h?: number;
+    pipelineIngested1h?: number;
+    pipelineNormalized1h?: number;
+    telegramCreated1h?: number;
+    healthLastCheckedAt?: string;
+    /** @deprecated use pipelineIngested1h */
     recentActivity?: number;
     timestamp?: string;
     error?: string;
+    dataQuality?: {
+        duplicateUrlGroups?: number;
+        highRiskDuplicateGroups?: number;
+        ignoredDuplicateGroups?: number;
+    };
 };
 
 export async function fetchDataHubSourcesHealth(): Promise<DataHubSourcesHealth> {

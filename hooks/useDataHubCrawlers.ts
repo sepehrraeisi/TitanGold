@@ -6,6 +6,7 @@ import {
     deleteCrawler,
     runCrawler,
     fetchCrawlerRuns,
+    fetchCrawlerRecentOutputs,
     CreateCrawlerPayload,
 } from '../services/dataHubCrawlersApi';
 import { DATA_HUB_KEYS } from './useDataHubState';
@@ -14,6 +15,7 @@ export const CRAWLER_KEYS = {
     all: [...DATA_HUB_KEYS.all, 'crawlers'] as const,
     list: () => [...CRAWLER_KEYS.all, 'list'] as const,
     runs: (id: string) => [...CRAWLER_KEYS.all, 'runs', id] as const,
+    recentOutputs: (id: string) => [...CRAWLER_KEYS.all, 'recent-outputs', id] as const,
 };
 
 export function useDataHubCrawlersQuery(options?: { enabled?: boolean }) {
@@ -29,6 +31,15 @@ export function useCrawlerRunsQuery(crawlerId: string | null) {
     return useQuery({
         queryKey: CRAWLER_KEYS.runs(crawlerId || ''),
         queryFn: () => fetchCrawlerRuns(crawlerId!),
+        enabled: Boolean(crawlerId),
+        staleTime: 15 * 1000,
+    });
+}
+
+export function useCrawlerRecentOutputsQuery(crawlerId: string | null) {
+    return useQuery({
+        queryKey: CRAWLER_KEYS.recentOutputs(crawlerId || ''),
+        queryFn: () => fetchCrawlerRecentOutputs(crawlerId!),
         enabled: Boolean(crawlerId),
         staleTime: 15 * 1000,
     });
@@ -62,11 +73,21 @@ export function useDeleteCrawlerMutation() {
 export function useRunCrawlerMutation() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, dry_run }: { id: string; dry_run?: boolean }) =>
-            runCrawler(id, { dry_run }),
+        mutationFn: ({
+            id,
+            dry_run,
+            force_override,
+        }: {
+            id: string;
+            dry_run?: boolean;
+            force_override?: boolean;
+        }) => runCrawler(id, { dry_run, force_override }),
         onSettled: (_d, _e, vars) => {
             qc.invalidateQueries({ queryKey: CRAWLER_KEYS.all });
-            if (vars?.id) qc.invalidateQueries({ queryKey: CRAWLER_KEYS.runs(vars.id) });
+            if (vars?.id) {
+                qc.invalidateQueries({ queryKey: CRAWLER_KEYS.runs(vars.id) });
+                qc.invalidateQueries({ queryKey: CRAWLER_KEYS.recentOutputs(vars.id) });
+            }
         },
     });
 }

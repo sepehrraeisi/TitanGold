@@ -22,6 +22,7 @@ import {
     useCreateCategoryMutation,
     useDeleteCategoryMutation,
     usePipelineQuery,
+    usePipelineBacklogQuery,
     useAccessLogsQuery,
 } from '../../../../../../hooks/useDataHubState.ts';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi.ts';
@@ -83,6 +84,13 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         refetch: refetchPipeline,
         isFetching: isFetchingPipeline,
     } = usePipelineQuery({ enabled: pipelineEnabled });
+    const pipelineMainReady = pipelineEnabled && Boolean(pipelineView?.snapshot);
+    const {
+        data: pipelineBacklog,
+        isLoading: isLoadingPipelineBacklog,
+        isFetching: isFetchingPipelineBacklog,
+        refetch: refetchPipelineBacklog,
+    } = usePipelineBacklogQuery({ enabled: pipelineMainReady });
     const logsEnabled = activeView === 'logs';
     const {
         data: accessLogsResult,
@@ -191,20 +199,31 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     }, [loadDataHub]);
 
     // Handlers
-    const handleCreateSource = async (source: Omit<DataSource, 'id' | 'createdAt' | 'lastUpdate'>) => {
+    const handleCreateSource = async (
+        source: Omit<DataSource, 'id' | 'createdAt' | 'lastUpdate'>,
+        options?: { allowDuplicateUrl?: boolean },
+    ) => {
         try {
             setCurrentError(null);
-            await createSourceMutation.mutateAsync(source);
+            await createSourceMutation.mutateAsync({ source, allowDuplicateUrl: options?.allowDuplicateUrl });
             setShowCreateSourceModal(false);
         } catch (error) {
             handleError(error, 'Create Source', () => handleCreateSource(source));
         }
     };
 
-    const handleUpdateSource = async (id: string, updates: Partial<DataSource>) => {
+    const handleUpdateSource = async (
+        id: string,
+        updates: Partial<DataSource>,
+        options?: { allowDuplicateUrl?: boolean },
+    ) => {
         try {
             setCurrentError(null);
-            await updateSourceMutation.mutateAsync({ id, updates });
+            await updateSourceMutation.mutateAsync({
+                id,
+                updates,
+                allowDuplicateUrl: options?.allowDuplicateUrl,
+            });
             setEditingSource(null);
         } catch (error) {
             handleError(error, 'Update Source', () => handleUpdateSource(id, updates));
@@ -612,12 +631,29 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const handleRefreshPipelineSnapshot = async () => {
         try {
             await refetchPipeline();
+            if (pipelineMainReady) {
+                await refetchPipelineBacklog();
+            }
         } catch (error) {
             console.error('Failed to refresh pipeline:', error);
         }
     };
 
-    const pipelineSnapshot = pipelineView?.snapshot;
+    const pipelineSnapshotBase = pipelineView?.snapshot;
+    const pipelineSnapshot = useMemo(() => {
+        if (!pipelineSnapshotBase) return undefined;
+        if (!pipelineBacklog) return pipelineSnapshotBase;
+        return {
+            ...pipelineSnapshotBase,
+            transferThroughput: pipelineBacklog.transferThroughput,
+            globalTelegramBacklog: pipelineBacklog.globalTelegramBacklog,
+            sources: pipelineSnapshotBase.sources.map((src) => ({
+                ...src,
+                collectorBacklog:
+                    pipelineBacklog.backlogBySourceId[src.sourceId] ?? src.collectorBacklog,
+            })),
+        };
+    }, [pipelineSnapshotBase, pipelineBacklog]);
     const pipelineHistory = pipelineView?.history ?? [];
     const normalizationSummary = pipelineView?.normalizationSummary;
     const normalizedData = pipelineView?.normalizedData ?? [];
@@ -682,8 +718,9 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const accessLogs = accessLogsResult?.data ?? [];
     const logStatusCounts = accessLogsResult?.statusCounts ?? {
         success: 0,
-        error: 0,
-        warning: 0,
+        cached: 0,
+        failed: 0,
+        timeout: 0,
     };
 
     const accessLogsApiError =
@@ -768,6 +805,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         refetchPipeline,
         isFetchingPipeline,
         isLoadingPipeline: isLoadingPipeline || isFetchingPipeline,
+        isLoadingPipelineBacklog: isLoadingPipelineBacklog || isFetchingPipelineBacklog,
         pipelineError,
         setPipelineError,
         pipelineApiError,

@@ -1,9 +1,12 @@
 /**
  * Quality scoring for normalized_data v1 records (DH-NORMALIZATION-P0-WORKER-1).
- * Score 0–100 from content, title, source reputation, entities, tags, completeness.
+ * v2 source-type profiles: DH-PIPELINE-P4-SCORING-CALIBRATION-1.
  */
 
 import { NORMALIZED_DATA_VERSION } from './normalizers/normalizedDataContract.js';
+import { scoreNormalizedRecordV2 } from './normalizationQualityScorerV2.js';
+
+export { scoreNormalizedRecordV2, QUALITY_REASON_CODES } from './normalizationQualityScorerV2.js';
 
 /** @typedef {'excellent'|'good'|'acceptable'|'weak'|'poor'} QualityBand */
 
@@ -24,7 +27,7 @@ export function qualityBandFromScore(score) {
  * @param {object} [sourceContext] - data_sources row fields
  * @returns {{ score: number, band: QualityBand, factors: Record<string, number> }}
  */
-export function scoreNormalizedRecord(normalized, sourceContext = {}) {
+function scoreNormalizedRecordV1(normalized, sourceContext = {}) {
     const factors = {};
 
     const content = String(normalized?.content || '').trim();
@@ -75,9 +78,22 @@ export function scoreNormalizedRecord(normalized, sourceContext = {}) {
 }
 
 /**
+ * Score v1 (legacy) + v2 (calibrated) in one call.
+ * @returns {{ score, band, factors, v2: { score, band, factors, reasonCodes } }}
+ */
+export function scoreNormalizedRecord(normalized, sourceContext = {}) {
+    const v1 = scoreNormalizedRecordV1(normalized, sourceContext);
+    const v2 = scoreNormalizedRecordV2(normalized, sourceContext);
+    return { ...v1, v2 };
+}
+
+/** @deprecated alias */
+export { scoreNormalizedRecordV1 };
+
+/**
  * Merge quality fields into normalized_data.metadata (mutates copy).
  * @param {object} normalized
- * @param {{ score: number, band: QualityBand, factors: object }} quality
+ * @param {{ score: number, band: QualityBand, factors: object, v2?: object }} quality
  * @param {string} workerVersion
  */
 export function applyQualityToNormalized(normalized, quality, workerVersion) {
@@ -88,5 +104,14 @@ export function applyQualityToNormalized(normalized, quality, workerVersion) {
     metadata.quality_factors = quality.factors;
     metadata.quality_scored_at = new Date().toISOString();
     metadata.quality_worker_version = workerVersion;
+
+    if (quality.v2) {
+        metadata.quality_score_v2 = quality.v2.score;
+        metadata.quality_band_v2 = quality.v2.band;
+        metadata.quality_factors_v2 = quality.v2.factors;
+        metadata.quality_reason_codes = quality.v2.reasonCodes;
+        metadata.quality_scored_v2_at = new Date().toISOString();
+    }
+
     return { ...normalized, metadata };
 }

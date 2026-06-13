@@ -9,7 +9,8 @@ import {
 } from './normalizationQualityScorer.js';
 
 /** Rows per scheduler tick (override via argument). */
-export const NORMALIZATION_DEFAULT_BATCH = 100;
+/** DH-PIPELINE-P1-CAPACITY: 150/min ≈ 216k/day theoretical (Option A). */
+export const NORMALIZATION_DEFAULT_BATCH = 150;
 
 /** Rows per DB transaction. */
 export const NORMALIZATION_SUB_BATCH = 25;
@@ -131,6 +132,9 @@ function processRow(row) {
         is_active: row.is_active,
         last_status: row.last_status,
         priority: row.priority,
+        source_error_count: row.source_error_count,
+        collected_at: row.collected_at,
+        source_type: row.source_type,
     });
 
     normalized = applyQualityToNormalized(normalized, quality, NORMALIZATION_WORKER_VERSION);
@@ -223,7 +227,9 @@ export async function processNormalizationBatch(
                     ds.name AS source_name,
                     ds.priority,
                     ds.is_active,
-                    ds.last_status
+                    ds.last_status,
+                    (SELECT COUNT(*)::int FROM collected_data err
+                     WHERE err.source_id = ds.id AND err.status = 'error') AS source_error_count
              FROM collected_data cd
              INNER JOIN data_sources ds ON cd.source_id = ds.id
              WHERE cd.status = 'pending'

@@ -49,6 +49,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         selectedSnapshotId,
         setSelectedSnapshotId,
         isLoadingPipeline,
+        isLoadingPipelineBacklog,
         pipelineApiError,
         agents,
         isLoadingAgents,
@@ -221,6 +222,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             handleTestSource={handleTestSource}
                             handleDeleteSource={handleDeleteSource}
                             handleRestoreSource={handleRestoreSource}
+                            handleUpdateSource={handleUpdateSource}
                             dataHub={dataHub}
                             setActiveView={setActiveView}
                             pagination={sourcesPagination}
@@ -262,6 +264,13 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                                 setLogsError(null);
                                 onRefresh();
                             }}
+                            onNavigateToSource={sourceId => {
+                                const source = dataHub?.sources?.find(s => s.id === sourceId);
+                                setActiveView('sources');
+                                if (source) {
+                                    setEditingSource(source);
+                                }
+                            }}
                         />
                     )}
 
@@ -274,6 +283,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             normalizedData={normalizedData}
                             handleRefreshPipelineSnapshot={handleRefreshPipelineSnapshot}
                             isLoadingPipeline={isLoadingPipeline}
+                            isLoadingPipelineBacklog={isLoadingPipelineBacklog}
                             pipelineApiError={pipelineApiError}
                             setPipelineError={setPipelineError}
                             formatTimeAgo={formatTimeAgo}

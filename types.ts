@@ -4163,6 +4163,23 @@ export interface DataSource {
   };
   createdAt: string;
   updatedAt: string;
+  normalizedUrl?: string | null;
+  duplicateUrlKey?: string | null;
+  duplicateUrlCount?: number;
+  duplicateActiveCount?: number;
+  duplicateUrlSeverity?: 'high' | 'medium' | 'low' | null;
+  duplicateUrlSiblings?: Array<{
+    id: string;
+    name: string;
+    type?: string;
+    url?: string | null;
+    normalizedUrl?: string | null;
+    isActive: boolean;
+    createdAt?: string | null;
+    lastFetchAt?: string | null;
+    collectedCount?: number;
+    lastCollectedAt?: string | null;
+  }>;
 }
 
 export interface DataCategory {
@@ -4182,8 +4199,12 @@ export interface DataAccessLog {
   timestamp: string;
   agentId: string;
   sourceId: string;
+  sourceName?: string;
+  action?: string;
   dataType: string;
   status: 'success' | 'failed' | 'cached' | 'timeout';
+  message?: string;
+  metadata?: Record<string, unknown>;
   responseTime?: number;
   error?: string;
   dataSize?: number;
@@ -4249,6 +4270,29 @@ export type PipelineSourceQualityStatus =
   | 'cached'
   | 'timeout';
 
+export interface PipelineCollectorBacklog {
+  backlogCount: number;
+  oldestQueuedAt?: string;
+  newestQueuedAt?: string;
+  estimatedWaitHours?: number;
+  estimatedWaitDays?: number;
+  queuePositionRank?: number;
+  messagesAheadInQueue?: number;
+}
+
+export interface PipelineTransferThroughput {
+  processed24h: number;
+  messagesPerHour: number;
+  messagesPerDay: number;
+  observedWindowHours: number;
+}
+
+export interface PipelineGlobalTelegramBacklog {
+  unprocessedTotal: number;
+  oldestUnprocessed?: string;
+  newestUnprocessed?: string;
+}
+
 export interface DataPipelineSourceSnapshot {
   sourceId: string;
   name: string;
@@ -4257,6 +4301,7 @@ export interface DataPipelineSourceSnapshot {
   lastStatus: PipelineSourceQualityStatus;
   operationalStatus?: 'active' | 'linked' | 'pending' | 'error';
   statusHint?: string;
+  collectorBacklog?: PipelineCollectorBacklog;
   lastResponseTime?: number;
   lastChecked?: string;
   issues?: string[];
@@ -4277,6 +4322,8 @@ export interface DataPipelineSnapshot {
   pending24h: number;
   totalRecords: number;
   normalizedPercent: number;
+  transferThroughput?: PipelineTransferThroughput;
+  globalTelegramBacklog?: PipelineGlobalTelegramBacklog;
   sources: DataPipelineSourceSnapshot[];
   categories: DataPipelineCategorySnapshot[];
 }
@@ -4309,8 +4356,15 @@ export interface NormalizedDataRecord {
   };
   qualityScore?: number;
   qualityPending?: boolean;
+  /** DH-PIPELINE-P4: top reason codes when v2 score is shown */
+  qualityReasonCodes?: string[];
   issues: string[];
   status: NormalizedDataStatus;
+  /** DataHub ingestion time (transfer/fetch insert). */
+  ingestedAt?: string;
+  /** Original source item publication time (Telegram/RSS/API). */
+  publishedAt?: string;
+  /** @deprecated Use ingestedAt — kept for backward compatibility. */
   receivedAt: string;
   normalizedAt: string;
 }

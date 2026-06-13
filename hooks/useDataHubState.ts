@@ -4,6 +4,8 @@ import {
     fetchDataHubSourcesHealth,
     fetchDataHubSourcesState,
     fetchDataHubSourcesStats,
+    fetchDuplicateUrlDashboard,
+    setDuplicateUrlIgnore,
 } from '../services/dataSourcesApi.ts';
 import { fetchDataAccessLogs } from '../services/dataAccessLogsApi.ts';
 import { DataHubState, DataSource, DataCategory, AIAgent } from '../types.ts';
@@ -16,12 +18,14 @@ export const DATA_HUB_KEYS = {
         [...DATA_HUB_KEYS.all, 'sources', { page: page ?? 1, limit: limit ?? 20 }] as const,
     categories: () => [...DATA_HUB_KEYS.all, 'categories'] as const,
     pipeline: () => [...DATA_HUB_KEYS.all, 'pipeline'] as const,
+    pipelineBacklog: () => [...DATA_HUB_KEYS.all, 'pipelineBacklog'] as const,
     sourcesHealth: () => [...DATA_HUB_KEYS.all, 'sourcesHealth'] as const,
     sourcesStats: () => [...DATA_HUB_KEYS.all, 'sourcesStats'] as const,
     sourcesState: () => [...DATA_HUB_KEYS.all, 'sourcesState'] as const,
     healthLogCounts: () => [...DATA_HUB_KEYS.all, 'healthLogCounts'] as const,
     accessLogs: (params?: { limit?: number; offset?: number }) =>
         [...DATA_HUB_KEYS.all, 'accessLogs', params ?? { limit: 100, offset: 0 }] as const,
+    duplicateUrls: () => [...DATA_HUB_KEYS.all, 'duplicateUrls'] as const,
 };
 
 export const useDataHubQuery = () => {
@@ -53,8 +57,17 @@ export const useDataCategoriesQuery = () => {
 export const usePipelineQuery = (options?: { enabled?: boolean }) => {
     return useQuery({
         queryKey: DATA_HUB_KEYS.pipeline(),
-        queryFn: api.fetchDataPipelineView,
+        queryFn: () => api.fetchDataPipelineView({ includeBacklog: false }),
         staleTime: 30 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const usePipelineBacklogQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.pipelineBacklog(),
+        queryFn: api.fetchDataPipelineBacklog,
+        staleTime: 60 * 1000,
         enabled: options?.enabled ?? true,
     });
 };
@@ -133,10 +146,38 @@ export const useAgentsQuery = () => {
     });
 };
 
+export const useDuplicateUrlDashboardQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.duplicateUrls(),
+        queryFn: fetchDuplicateUrlDashboard,
+        staleTime: 30 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const useSetDuplicateUrlIgnoreMutation = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ sourceId, ignore }: { sourceId: string; ignore: boolean }) =>
+            setDuplicateUrlIgnore(sourceId, ignore),
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.duplicateUrls() });
+            queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
+            queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.sourcesHealth() });
+        },
+    });
+};
+
 export const useCreateSourceMutation = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: api.createDataSource,
+        mutationFn: ({
+            source,
+            allowDuplicateUrl,
+        }: {
+            source: Parameters<typeof api.createDataSource>[0];
+            allowDuplicateUrl?: boolean;
+        }) => api.createDataSource(source, { allowDuplicateUrl }),
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.categories() });
@@ -148,8 +189,15 @@ export const useCreateSourceMutation = () => {
 export const useUpdateSourceMutation = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, updates }: { id: string; updates: Partial<DataSource> }) =>
-            api.updateDataSource(id, updates),
+        mutationFn: ({
+            id,
+            updates,
+            allowDuplicateUrl,
+        }: {
+            id: string;
+            updates: Partial<DataSource>;
+            allowDuplicateUrl?: boolean;
+        }) => api.updateDataSource(id, updates, { allowDuplicateUrl }),
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: [...DATA_HUB_KEYS.all, 'sources'] });
             queryClient.invalidateQueries({ queryKey: DATA_HUB_KEYS.categories() });

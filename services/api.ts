@@ -21807,8 +21807,9 @@ export {
 export {
     fetchDataPipelineView,
     fetchDataPipelineSnapshot,
+    fetchDataPipelineBacklog,
 } from './dataPipelineApi';
-export type { DataPipelineView } from './dataPipelineApi';
+export type { DataPipelineView, DataPipelineBacklogEnrichment } from './dataPipelineApi';
 
 export { fetchDataAccessLogs } from './dataAccessLogsApi';
 export type { AccessLogsListResult, AccessLogsStatusCounts } from './dataAccessLogsApi';

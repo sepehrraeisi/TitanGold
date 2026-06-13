@@ -33,6 +33,7 @@ export class DataFetcherService {
      * @returns {Promise<Object>} - Status of the fetch operation
      */
     async fetchSource(sourceId) {
+        const startedAt = Date.now();
         let source;
         try {
             // 1. Get source details
@@ -70,6 +71,11 @@ export class DataFetcherService {
                         logger.info(
                             `Skipping bot-pull fetch for collector-linked Telegram source: ${source.name}`,
                         );
+                        await this.logFetchSuccess(source.id, {
+                            skipped: true,
+                            reason: 'collector_ingestion',
+                            newItems: 0,
+                        }, Date.now() - startedAt);
                         return { success: true, skipped: true, reason: 'collector_ingestion' };
                     }
                 }
@@ -93,10 +99,15 @@ export class DataFetcherService {
                 ['success', interval, saveResult.lastHash, source.id]
             );
 
+            await this.logFetchSuccess(
+                source.id,
+                { newItems: saveResult.newItems, skipped: false },
+                Date.now() - startedAt,
+            );
             return { success: true, newItems: saveResult.newItems };
 
         } catch (error) {
-            await this.logError(source?.id || sourceId, error.message);
+            await this.logError(source?.id || sourceId, error.message, Date.now() - startedAt);
 
             // Update source status to error and schedule retry (e.g. in 5 mins)
             if (source?.id) {
@@ -376,18 +387,45 @@ export class DataFetcherService {
     }
 
     /**
+     * Logs a successful fetch to data_hub_logs (one row per fetch, not per message).
+     */
+    async logFetchSuccess(sourceId, { newItems = 0, skipped = false, reason }, executionTimeMs) {
+        const { tryInsertDataHubAccessLog } = await import('./dataHubAccessLogWriter.js');
+        const message = skipped
+            ? `Fetch skipped: ${reason}`
+            : `Fetch completed (${newItems} new items)`;
+        await tryInsertDataHubAccessLog({
+            sourceId,
+            action: 'fetch',
+            status: 'success',
+            message,
+            metadata: {
+                new_items: newItems,
+                skipped,
+                reason: reason || null,
+                duration_ms: executionTimeMs,
+            },
+            executionTimeMs,
+        });
+    }
+
+    /**
      * Logs an error to the data_hub_logs table
      */
-    async logError(sourceId, message) {
-        try {
-            await query(
-                'INSERT INTO data_hub_logs (source_id, level, message, metadata) VALUES ($1, $2, $3, $4)',
-                [sourceId, 'error', message, JSON.stringify({ timestamp: new Date().toISOString() })]
-            );
-            logger.error(`DataHub Error [Source ${sourceId}]: ${message}`);
-        } catch (logError) {
-            logger.error(`Failed to log DataHub error to DB: ${logError.message}`);
-        }
+    async logError(sourceId, message, executionTimeMs = null) {
+        const { tryInsertDataHubAccessLog } = await import('./dataHubAccessLogWriter.js');
+        await tryInsertDataHubAccessLog({
+            sourceId,
+            action: 'fetch_error',
+            legacyLevel: 'error',
+            message,
+            metadata: {
+                timestamp: new Date().toISOString(),
+                duration_ms: executionTimeMs,
+            },
+            executionTimeMs,
+        });
+        logger.error(`DataHub Error [Source ${sourceId}]: ${message}`);
     }
 
     /**

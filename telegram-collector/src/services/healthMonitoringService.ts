@@ -403,27 +403,30 @@ class HealthMonitoringService {
    */
   private async saveAlertToDatabase(alert: Alert): Promise<void> {
     try {
-      await db.query(`
-        INSERT INTO data_hub_logs (
-          level,
-          source,
-          category,
-          message,
-          metadata,
-          created_at
-        ) VALUES ($1, $2, $3, $4, $5, NOW())
-      `, [
-        alert.severity,
-        'telegram-collector-monitor',
-        alert.type,
-        alert.message,
-        JSON.stringify({
-          alertId: alert.id,
-          channelId: alert.channelId,
-          channelHandle: alert.channelHandle,
-          ...alert.details,
-        }),
-      ]);
+      const status =
+        alert.severity === 'error' || alert.severity === 'critical'
+          ? 'failure'
+          : alert.severity === 'warning' || alert.severity === 'warn'
+            ? 'warning'
+            : 'success';
+      await db.query(
+        `INSERT INTO data_hub_logs (source_id, action, status, message, metadata)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          null,
+          'collector_health',
+          status,
+          alert.message,
+          JSON.stringify({
+            alertId: alert.id,
+            channelId: alert.channelId,
+            channelHandle: alert.channelHandle,
+            alertType: alert.type,
+            severity: alert.severity,
+            ...alert.details,
+          }),
+        ],
+      );
     } catch (error) {
       // If table doesn't exist, just log to console
       logger.debug('Could not save alert to database (table may not exist):', error);

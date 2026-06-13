@@ -22,8 +22,15 @@ interface ModalsProps {
     viewingSourceData: DataSource | null;
     setViewingSourceData: (source: DataSource | null) => void;
     setActiveView?: (view: 'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram') => void;
-    handleCreateSource: (source: Omit<DataSource, 'id' | 'createdAt' | 'lastUpdate'>) => Promise<void>;
-    handleUpdateSource: (id: string, updates: Partial<DataSource>) => Promise<void>;
+    handleCreateSource: (
+        source: Omit<DataSource, 'id' | 'createdAt' | 'lastUpdate'>,
+        options?: { allowDuplicateUrl?: boolean },
+    ) => Promise<void>;
+    handleUpdateSource: (
+        id: string,
+        updates: Partial<DataSource>,
+        options?: { allowDuplicateUrl?: boolean },
+    ) => Promise<void>;
     onSaveCategory: (categoryData: Omit<DataCategory, 'id' | 'createdAt'>) => Promise<void>;
     onUpdateCategory: (id: string, updates: Partial<DataCategory>) => Promise<void>;
 }
@@ -59,11 +66,11 @@ const DataHubModals: React.FC<ModalsProps> = ({
                         setShowCreateSourceModal(false);
                         setEditingSource(null);
                     }}
-                    onSave={async (sourceData) => {
+                    onSave={async (sourceData, options) => {
                         if (editingSource) {
-                            await handleUpdateSource(editingSource.id, sourceData);
+                            await handleUpdateSource(editingSource.id, sourceData, options);
                         } else {
-                            await handleCreateSource(sourceData);
+                            await handleCreateSource(sourceData, options);
                         }
                         setShowCreateSourceModal(false);
                         setEditingSource(null);

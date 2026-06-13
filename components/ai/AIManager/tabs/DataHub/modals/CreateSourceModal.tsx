@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import * as api from '../../../../../../services/api';
-import { useDataSourcesQuery } from '../../../../../../hooks/useDataHubState';
-import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
+import {
+    checkDuplicateUrl,
+    DataHubApiError,
+    type DuplicateUrlCheckResult,
+} from '../../../../../../services/dataSourcesApi';
 import { DataSource, DataCategory, DetectedSourceType } from '../../../../../../types';
 import { dataSourceSchema } from '../../../../../../utils/validation';
 import { ZodError } from 'zod';
@@ -18,7 +21,10 @@ type Props = {
     source?: DataSource | null;
     categories: DataCategory[];
     onClose: () => void;
-    onSave: (source: Omit<DataSource, 'id' | 'createdAt' | 'updatedAt' | 'errorCount' | 'successRate' | 'reliabilityScore'>) => Promise<void>;
+    onSave: (
+        source: Omit<DataSource, 'id' | 'createdAt' | 'updatedAt' | 'errorCount' | 'successRate' | 'reliabilityScore'>,
+        options?: { allowDuplicateUrl?: boolean },
+    ) => Promise<void>;
     t: (key: string) => string;
     setActiveView?: (view: 'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram') => void;
 };
@@ -71,13 +77,56 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
     const [showApiKey, setShowApiKey] = useState(false);
     const [showApiSecret, setShowApiSecret] = useState(false);
 
-    // Duplicate detection
-    const { data: sourcesList } = useDataSourcesQuery({ page: 1, limit: 200 });
-    const listedSources = sourcesList?.data ?? [];
-    const [duplicateWarning, setDuplicateWarning] = useState<{
-        isOpen: boolean;
-        message: string;
-    }>({ isOpen: false, message: '' });
+    const [urlDuplicateCheck, setUrlDuplicateCheck] = useState<DuplicateUrlCheckResult | null>(null);
+    const [isCheckingDuplicateUrl, setIsCheckingDuplicateUrl] = useState(false);
+    const [duplicateOverrideConfirmed, setDuplicateOverrideConfirmed] = useState(false);
+    const [showDuplicateOverridePanel, setShowDuplicateOverridePanel] = useState(false);
+
+    const mapTypeForDuplicateCheck = (
+        sourceType: DataSource['type'],
+    ): 'rss' | 'web' | 'api' | null => {
+        if (sourceType === 'rss') return 'rss';
+        if (sourceType === 'web' || sourceType === 'website' || sourceType === 'webhook') return 'web';
+        if (['api', 'aggregator', 'third_party'].includes(sourceType)) return 'api';
+        return null;
+    };
+
+    const runDuplicateUrlCheck = async (targetUrl?: string) => {
+        const checkType = mapTypeForDuplicateCheck(type);
+        const value = (targetUrl ?? url).trim();
+        if (!checkType || value.length < 4) {
+            setUrlDuplicateCheck(null);
+            return;
+        }
+        setIsCheckingDuplicateUrl(true);
+        try {
+            const result = await checkDuplicateUrl({
+                type: checkType,
+                url: value,
+                excludeSourceId: source?.id,
+            });
+            setUrlDuplicateCheck(result);
+            if (!result.hasActiveDuplicate) {
+                setDuplicateOverrideConfirmed(false);
+                setShowDuplicateOverridePanel(false);
+            }
+        } catch {
+            setUrlDuplicateCheck(null);
+        } finally {
+            setIsCheckingDuplicateUrl(false);
+        }
+    };
+
+    useEffect(() => {
+        if (url.trim().length >= 4 && mapTypeForDuplicateCheck(type)) {
+            const handle = setTimeout(() => {
+                void runDuplicateUrlCheck();
+            }, 500);
+            return () => clearTimeout(handle);
+        }
+        setUrlDuplicateCheck(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [type, url]);
 
     useEffect(() => {
         if (!url || url.length < 6) {
@@ -399,32 +448,11 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
             return;
         }
 
-        // Check for duplicates
-        if (!duplicateWarning.isOpen && listedSources.length > 0) {
-            const isDuplicate = listedSources.some(s => {
-                if (s.id === source?.id) return false; // Ignore self when editing
-
-                if (type === 'webhook' && s.type === 'webhook') {
-                    return s.url === webhookUrl;
-                }
-
-                if (['api', 'rss', 'web', 'website', 'aggregator', 'third_party'].includes(type) &&
-                    ['api', 'rss', 'web', 'website', 'aggregator', 'third_party'].includes(s.type)) {
-                    // Normalize URLs for comparison (basic)
-                    const normalize = (u: string) => u.replace(/\/$/, '').toLowerCase();
-                    return normalize(s.url || '') === normalize(url);
-                }
-
-                return false;
-            });
-
-            if (isDuplicate) {
-                setDuplicateWarning({
-                    isOpen: true,
-                    message: t('duplicate_source_warning')
-                });
-                return;
-            }
+        const activeDuplicates =
+            urlDuplicateCheck?.duplicates.filter(d => d.isActive) ?? [];
+        if (activeDuplicates.length > 0 && !duplicateOverrideConfirmed) {
+            setShowDuplicateOverridePanel(true);
+            return;
         }
 
         setIsSaving(true);
@@ -458,26 +486,38 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                 config.renderJS = webRenderJS;
             }
 
-            await onSave({
-                name,
-                type,
-                url: finalUrl || undefined,
-                endpoint: (type === 'api' && endpoint) ? endpoint : undefined,
-                category,
-                tags: tags.split(',').map(t => t.trim()).filter(t => t),
-                status: source?.status || 'active',
-                priority,
-                updateInterval,
-                credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
-                config: Object.keys(config).length > 0 ? config : undefined,
-            });
+            await onSave(
+                {
+                    name,
+                    type,
+                    url: finalUrl || undefined,
+                    endpoint: (type === 'api' && endpoint) ? endpoint : undefined,
+                    category,
+                    tags: tags.split(',').map(t => t.trim()).filter(t => t),
+                    status: source?.status || 'active',
+                    priority,
+                    updateInterval,
+                    credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
+                    config: Object.keys(config).length > 0 ? config : undefined,
+                },
+                { allowDuplicateUrl: duplicateOverrideConfirmed },
+            );
         } catch (e) {
             console.error('Failed to save source:', e);
             if (e instanceof DataHubApiError) {
+                const body = e.details as Record<string, unknown> | undefined;
                 if (e.status === 400) {
                     setErrors({ form: e.message });
+                } else if (e.status === 409 && body?.code === 'DUPLICATE_ACTIVE_URL') {
+                    setShowDuplicateOverridePanel(true);
+                    setUrlDuplicateCheck({
+                        normalizedUrl: String(body.normalizedUrl || ''),
+                        duplicates: (body.duplicates as DuplicateUrlCheckResult['duplicates']) || [],
+                        hasActiveDuplicate: true,
+                        hasInactiveDuplicate: false,
+                    });
                 } else if (e.status === 409) {
-                    setDuplicateWarning({ isOpen: true, message: e.message });
+                    setErrors({ form: e.message });
                 } else {
                     setErrors({ form: e.message });
                 }
@@ -524,7 +564,12 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                     <button
                         type="button"
                         onClick={handleSubmit}
-                        disabled={isSaving || isExistingTelegram}
+                        disabled={
+                            isSaving ||
+                            isExistingTelegram ||
+                            (urlDuplicateCheck?.hasActiveDuplicate === true &&
+                                !duplicateOverrideConfirmed)
+                        }
                         className={BTN_PRIMARY}
                     >
                         {isSaving ? t('saving') : t('save')}
@@ -532,37 +577,61 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                 </>
             }
         >
-                {duplicateWarning.isOpen && (
-                    <div className="mb-4 bg-yellow-500/10 border border-yellow-500/30 rounded p-4">
-                        <div className="flex items-start gap-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                            <div className="flex-1">
-                                <h4 className="text-sm font-medium text-yellow-400 mb-1">
-                                    {t('possible_duplicate')}
-                                </h4>
-                                <p className="text-xs text-muted-foreground mb-3">
-                                    {duplicateWarning.message}
-                                </p>
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setDuplicateWarning({ isOpen: false, message: '' })}
-                                        className="px-3 py-1.5 text-xs font-medium text-foreground bg-secondary hover:bg-secondary/80 rounded transition-colors"
-                                    >
-                                        {t('cancel')}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleSubmit}
-                                        className="px-3 py-1.5 text-xs font-medium text-white bg-yellow-600 hover:bg-yellow-700 rounded transition-colors"
-                                    >
-                                        {t('confirm_duplicate')}
-                                    </button>
-                                </div>
+                {(urlDuplicateCheck?.hasActiveDuplicate ||
+                    urlDuplicateCheck?.hasInactiveDuplicate ||
+                    showDuplicateOverridePanel) && (
+                    <div
+                        className={`mb-4 rounded p-4 border ${
+                            urlDuplicateCheck?.hasActiveDuplicate
+                                ? 'bg-red-500/10 border-red-500/30'
+                                : 'bg-yellow-500/10 border-yellow-500/30'
+                        }`}
+                    >
+                        <h4
+                            className={`text-sm font-medium mb-1 ${
+                                urlDuplicateCheck?.hasActiveDuplicate ? 'text-red-300' : 'text-yellow-400'
+                            }`}
+                        >
+                            {urlDuplicateCheck?.hasActiveDuplicate
+                                ? t('source_duplicate_url_active_title')
+                                : t('source_duplicate_url_inactive_title')}
+                        </h4>
+                        <p className="text-xs text-muted-foreground mb-2">
+                            {urlDuplicateCheck?.hasActiveDuplicate
+                                ? t('source_duplicate_url_active_body')
+                                : t('source_duplicate_url_inactive_body')}
+                        </p>
+                        {urlDuplicateCheck?.duplicates?.length ? (
+                            <ul className="text-[11px] text-muted-foreground mb-3 space-y-1">
+                                {urlDuplicateCheck.duplicates.map(dup => (
+                                    <li key={dup.id}>
+                                        <span className="text-foreground">{dup.name}</span>
+                                        {' · '}
+                                        {dup.isActive ? t('active') : t('inactive')}
+                                        {dup.collectedCount != null ? ` · ${dup.collectedCount} ${t('records')}` : ''}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : null}
+                        {urlDuplicateCheck?.hasActiveDuplicate && (
+                            <div className="space-y-2">
+                                <label className="flex items-start gap-2 text-[11px] text-muted-foreground">
+                                    <input
+                                        type="checkbox"
+                                        checked={duplicateOverrideConfirmed}
+                                        onChange={e => setDuplicateOverrideConfirmed(e.target.checked)}
+                                        className="mt-0.5"
+                                    />
+                                    <span>{t('source_duplicate_url_override_ack')}</span>
+                                </label>
+                                {showDuplicateOverridePanel && !duplicateOverrideConfirmed ? (
+                                    <p className="text-[10px] text-red-300">{t('source_duplicate_url_save_blocked')}</p>
+                                ) : null}
                             </div>
-                        </div>
+                        )}
+                        {isCheckingDuplicateUrl ? (
+                            <p className="text-[10px] text-muted-foreground mt-2">{t('checking_duplicate_url')}</p>
+                        ) : null}
                     </div>
                 )}
 
@@ -770,7 +839,11 @@ const CreateSourceModal: React.FC<Props> = ({ source, categories, onClose, onSav
                                     <input
                                         type="url"
                                         value={url}
-                                        onChange={(e) => setUrl(e.target.value)}
+                                        onChange={(e) => {
+                                            setUrl(e.target.value);
+                                            setDuplicateOverrideConfirmed(false);
+                                        }}
+                                        onBlur={() => void runDuplicateUrlCheck()}
                                         className={`flex-1 ${INPUT_CLASS}`}
                                         placeholder={
                                             type === 'api'

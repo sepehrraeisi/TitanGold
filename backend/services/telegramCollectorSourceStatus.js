@@ -35,61 +35,79 @@ export function telegramChannelKeys(source, config = null) {
 /**
  * Batch-resolve collector ingestion context for telegram sources on the current list page.
  * @param {Array<Record<string, unknown>>} sources
+ * @param {Array<Record<string, unknown>>} sources
+ * @param {{ includeMessageStats?: boolean }} [options] — skip full message scan on fast pipeline path
  * @returns {Promise<Map<string, object>>} source id → enrichment
  */
-export async function batchTelegramCollectorEnrichment(sources) {
+export async function batchTelegramCollectorEnrichment(sources, options = {}) {
+    const { includeMessageStats = true } = options;
     const telegramRows = sources.filter((s) => s.type === 'telegram');
     const map = new Map();
     if (telegramRows.length === 0) return map;
 
     const ids = telegramRows.map((s) => s.id);
 
-    const [collectorRows, collectedRows, messageRows] = await Promise.all([
-        query(
-            `SELECT ds.id AS source_id,
-                    tc.id AS collector_id,
-                    tc.is_active AS collector_active,
-                    tc.channel_id::text AS channel_id
-             FROM data_sources ds
-             LEFT JOIN telegram_channels tc ON (
-                 (ds.config->>'channelId' IS NOT NULL AND tc.channel_id::text = ds.config->>'channelId')
-                 OR (
-                     ds.config->>'channelUsername' IS NOT NULL
-                     AND LOWER(REPLACE(COALESCE(tc.username, ''), '@', ''))
-                         = LOWER(REPLACE(ds.config->>'channelUsername', '@', ''))
-                 )
+    const collectorPromise = query(
+        `SELECT ds.id AS source_id,
+                tc.id AS collector_id,
+                tc.id AS collector_channel_uuid,
+                tc.is_active AS collector_active,
+                tc.channel_id::text AS channel_id
+         FROM data_sources ds
+         LEFT JOIN telegram_channels tc ON (
+             (ds.config->>'channelId' IS NOT NULL AND tc.channel_id::text = ds.config->>'channelId')
+             OR (
+                 ds.config->>'channelUsername' IS NOT NULL
+                 AND LOWER(REPLACE(COALESCE(tc.username, ''), '@', ''))
+                     = LOWER(REPLACE(ds.config->>'channelUsername', '@', ''))
              )
-             WHERE ds.id = ANY($1::uuid[])
-             ORDER BY ds.id, tc.is_active DESC NULLS LAST, tc.updated_at DESC NULLS LAST`,
-            [ids],
-        ),
-        query(
-            `SELECT source_id, COUNT(*)::int AS collected_count,
-                    MAX(collected_at) AS latest_collected_at
-             FROM collected_data
-             WHERE source_id = ANY($1::uuid[])
-             GROUP BY source_id`,
-            [ids],
-        ),
-        query(
-            `SELECT ds.id AS source_id,
-                    COUNT(tm.id)::int AS message_count,
-                    MAX(tm.created_at) AS latest_message_at
-             FROM data_sources ds
-             JOIN telegram_channels tc ON (
-                 (ds.config->>'channelId' IS NOT NULL AND tc.channel_id::text = ds.config->>'channelId')
-                 OR (
-                     ds.config->>'channelUsername' IS NOT NULL
-                     AND LOWER(REPLACE(COALESCE(tc.username, ''), '@', ''))
-                         = LOWER(REPLACE(ds.config->>'channelUsername', '@', ''))
+         )
+         WHERE ds.id = ANY($1::uuid[])
+         ORDER BY ds.id, tc.is_active DESC NULLS LAST, tc.updated_at DESC NULLS LAST`,
+        [ids],
+    );
+    const collectedPromise = query(
+        `SELECT source_id, COUNT(*)::int AS collected_count,
+                MAX(COALESCE((metadata->>'transferred_at')::timestamptz, collected_at)) AS latest_collected_at
+         FROM collected_data
+         WHERE source_id = ANY($1::uuid[])
+         GROUP BY source_id`,
+        [ids],
+    );
+
+    let messageRows = { rows: [] };
+    if (includeMessageStats) {
+        const channelIds = (
+            await query(
+                `SELECT DISTINCT tc.id AS channel_uuid
+                 FROM data_sources ds
+                 JOIN telegram_channels tc ON (
+                     (ds.config->>'channelId' IS NOT NULL AND tc.channel_id::text = ds.config->>'channelId')
+                     OR (
+                         ds.config->>'channelUsername' IS NOT NULL
+                         AND LOWER(REPLACE(COALESCE(tc.username, ''), '@', ''))
+                             = LOWER(REPLACE(ds.config->>'channelUsername', '@', ''))
+                     )
                  )
-             )
-             LEFT JOIN telegram_messages tm ON tm.channel_id = tc.id
-             WHERE ds.id = ANY($1::uuid[])
-             GROUP BY ds.id`,
-            [ids],
-        ),
-    ]);
+                 WHERE ds.id = ANY($1::uuid[])`,
+                [ids],
+            )
+        ).rows.map((r) => r.channel_uuid);
+
+        if (channelIds.length > 0) {
+            messageRows = await query(
+                `SELECT tm.channel_id,
+                        COUNT(*)::int AS message_count,
+                        MAX(tm.created_at) AS latest_message_at
+                 FROM telegram_messages tm
+                 WHERE tm.channel_id = ANY($1::uuid[])
+                 GROUP BY tm.channel_id`,
+                [channelIds],
+            );
+        }
+    }
+
+    const [collectorRows, collectedRows] = await Promise.all([collectorPromise, collectedPromise]);
 
     const collectorBySource = new Map();
     for (const row of collectorRows.rows) {
@@ -99,7 +117,7 @@ export async function batchTelegramCollectorEnrichment(sources) {
     }
 
     const collectedBySource = new Map(collectedRows.rows.map((r) => [r.source_id, r]));
-    const messagesBySource = new Map(messageRows.rows.map((r) => [r.source_id, r]));
+    const messagesByChannel = new Map(messageRows.rows.map((r) => [r.channel_id, r]));
 
     for (const source of telegramRows) {
         const config = parseSourceConfig(source);
@@ -107,7 +125,9 @@ export async function batchTelegramCollectorEnrichment(sources) {
         const botMode = hasTelegramBotToken(source, config);
         const collector = collectorBySource.get(source.id);
         const collected = collectedBySource.get(source.id);
-        const messages = messagesBySource.get(source.id);
+        const messages = collector?.collector_channel_uuid
+            ? messagesByChannel.get(collector.collector_channel_uuid)
+            : undefined;
 
         const collectedCount = Number(collected?.collected_count || 0);
         const messageCount = Number(messages?.message_count || 0);
@@ -118,6 +138,7 @@ export async function batchTelegramCollectorEnrichment(sources) {
             ingestion_mode: botMode ? 'bot' : hasChannelConfig && collector ? 'collector' : null,
             collector_registered: Boolean(collector?.collector_id),
             collector_active: collectorActive,
+            collector_channel_id: collector?.collector_channel_uuid || null,
             collected_count: collectedCount,
             message_count: messageCount,
             latest_collected_at: collected?.latest_collected_at || null,
