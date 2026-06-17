@@ -385,8 +385,18 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                     />
                                 </div>
                             ))}
-                            <p className="text-[11px] text-muted-foreground">
+                            <p
+                                className={`text-[11px] ${
+                                    totalWeight === 100
+                                        ? 'text-emerald-300'
+                                        : 'text-amber-300'
+                                }`}
+                            >
                                 {t('total')}: {totalWeight}%
+                                {' — '}
+                                {totalWeight === 100
+                                    ? t('prioritization_total_weight_valid')
+                                    : t('prioritization_total_weight_invalid')}
                             </p>
                         </div>
                         <div className="mt-4 flex justify-end gap-2">
@@ -423,7 +433,10 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                     <div className="w-full max-w-md bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl p-4">
                         <h4 className="text-sm font-semibold mb-2">{t('prioritization_apply_confirm_title')}</h4>
                         <p className="text-[11px] text-muted-foreground mb-4">
-                            {t('prioritization_apply_confirm_desc')}
+                            {(t('prioritization_apply_confirm_desc') || '').replace(
+                                '{count}',
+                                String(summary.total),
+                            )}
                         </p>
                         <div className="flex justify-end gap-2">
                             <button

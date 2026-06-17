@@ -198,7 +198,7 @@ export function mapBackendRowToDataSource(row: BackendDataSourceRow): DataSource
         ),
         tags,
         status,
-        priority: normalizePriority(row.priority),
+        priority: normalizePriority(row.priority_tier ?? row.priority),
         telegramIngestionMode:
             row.telegram_ingestion_mode === 'collector' || row.telegram_ingestion_mode === 'bot'
                 ? row.telegram_ingestion_mode
