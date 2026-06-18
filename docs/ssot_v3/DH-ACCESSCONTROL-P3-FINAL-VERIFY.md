@@ -3,7 +3,7 @@
 **Date:** 2026-06-18  
 **Task:** DH-ACCESSCONTROL-P3-FINAL-VERIFY-AND-COMMIT  
 **Verdict:** REAL ENFORCED  
-**Implementation commit:** pending at first commit; final response records the exact hash.
+**Implementation commit:** `6f145f417bf23af22f22a7239643bb5c78e79618`
 
 ## Code Scan Evidence
 
