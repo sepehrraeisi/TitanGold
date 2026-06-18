@@ -1,6 +1,6 @@
 import { query } from '../database/db.js';
 import { logger } from './logger.js';
-import { evaluateFilterRules } from './datahubFilterRulesService.js';
+import { evaluateFilterPolicy } from './filterRulesGateway.js';
 import { assertSafeDiscoveryUrl, normalizeDiscoveryUrl, normalizeTitleKey } from '../utils/discoverySafety.js';
 import { checkDuplicateLayers, shouldSkipAsDuplicate } from '../utils/discoveryDedupe.js';
 import { computeDiscoveryScore } from '../utils/discoveryScoring.js';
@@ -502,7 +502,7 @@ export async function runDiscoveryScan(userId) {
                 continue;
             }
 
-            const filter = await evaluateFilterRules({
+            const filter = await evaluateFilterPolicy({
                 url: c.suggestedUrl,
                 text: c.suggestedName,
                 apply_target: 'ingestion',
@@ -693,7 +693,7 @@ export async function approveSuggestion(id, body, userId) {
 
     assertSafeDiscoveryUrl(row.suggested_url);
 
-    const filter = await evaluateFilterRules({
+    const filter = await evaluateFilterPolicy({
         url: row.suggested_url,
         text: row.suggested_name,
         apply_target: 'ingestion',

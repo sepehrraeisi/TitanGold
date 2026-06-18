@@ -2,7 +2,7 @@ import { query } from '../database/db.js';
 import { logger } from './logger.js';
 import { webCrawlerService } from './webCrawler.js';
 import { fetchRssFeed } from './rssFetcher.js';
-import { evaluateFilterRules, enforceIngestionFilter } from './datahubFilterRulesService.js';
+import { enforceIngestionPolicy, evaluateFilterPolicy, isFilterRuleBlockedError } from './filterRulesGateway.js';
 import { resolveCategoryForWrite } from '../utils/categoryTaxonomy.js';
 import { normalizeWebSelectors } from './webCrawlerSourceConfig.js';
 import { buildDuplicateEnrichmentBySourceId } from './dataSourceUrlDuplicateService.js';
@@ -341,8 +341,8 @@ async function assertRenderJsAllowed(renderJs) {
 }
 
 export async function preCrawlFilterCheck({ source_id, url, text }) {
-    const result = await evaluateFilterRules({
-        source_id,
+    const result = await evaluateFilterPolicy({
+        sourceId: source_id,
         url,
         text,
         apply_target: 'ingestion',
@@ -630,10 +630,10 @@ async function ingestItem({ source_id, item, dryRun }) {
     const text = item.content || item.title || item.text || '';
     if (dryRun) {
         try {
-            await enforceIngestionFilter({ source_id, url, text });
+            await enforceIngestionPolicy({ sourceId: source_id, url, text, enforcementPath: dryRun ? 'crawler_dry_run' : 'crawler_ingest' });
             return { ingested: false, blocked: false, dryRun: true };
         } catch (e) {
-            if (e.code === 'FILTER_BLOCKED') {
+            if (isFilterRuleBlockedError(e)) {
                 return { ingested: false, blocked: true, dryRun: true };
             }
             throw e;
@@ -641,9 +641,9 @@ async function ingestItem({ source_id, item, dryRun }) {
     }
 
     try {
-        await enforceIngestionFilter({ source_id, url, text });
+        await enforceIngestionPolicy({ sourceId: source_id, url, text, enforcementPath: dryRun ? 'crawler_dry_run' : 'crawler_ingest' });
     } catch (e) {
-        if (e.code === 'FILTER_BLOCKED') {
+        if (isFilterRuleBlockedError(e)) {
             return { ingested: false, blocked: true };
         }
         throw e;

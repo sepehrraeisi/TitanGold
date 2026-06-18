@@ -238,6 +238,8 @@ router.post(
       res.status(status).json({
         error: error.message || 'Publisher publish failed',
         code: error.code || undefined,
+        reason: error.reason || undefined,
+        rule: error.rule || undefined,
       });
     }
   },

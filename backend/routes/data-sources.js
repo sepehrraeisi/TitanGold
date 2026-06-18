@@ -59,13 +59,14 @@ import {
   sourceAccessAllowedSql,
 } from '../middleware/accessControlGateway.js';
 import { resolveAgentKeyFromRequest } from '../utils/sourceAccessRequest.js';
+import { enforcePublishingPolicy } from '../services/filterRulesGateway.js';
 
 const router = express.Router();
 const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
 
 router.post('/publish-telegram', ...writeAuth, async (req, res) => {
   try {
-    const { message, photoUrl, source_id: sourceId } = req.body;
+    const { message, photoUrl, source_id: sourceId, data_type: dataType } = req.body;
 
     if (!sourceId) {
       return res.status(400).json({
@@ -81,6 +82,15 @@ router.post('/publish-telegram', ...writeAuth, async (req, res) => {
       message: 'Publisher access denied by source ACL',
     });
 
+    await enforcePublishingPolicy({
+      sourceId,
+      message,
+      dataType,
+      metadata: { photoUrl },
+      userId: req.user?.id,
+      enforcementPath: 'legacy_publish_telegram',
+    });
+
     if (photoUrl) {
       await telegramService.sendPhoto(photoUrl, message);
     } else {
@@ -92,6 +102,8 @@ router.post('/publish-telegram', ...writeAuth, async (req, res) => {
     res.status(error.status || 500).json({
       error: error.message || 'Failed to publish to Telegram',
       code: error.code || undefined,
+      reason: error.reason || undefined,
+      rule: error.rule || undefined,
     });
   }
 });

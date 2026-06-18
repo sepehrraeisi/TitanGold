@@ -14,7 +14,7 @@ import {
     uuidParamSchema
 } from '../schemas/dataHubSchemas.js';
 import * as deduplicationService from '../services/deduplicationService.js';
-import { enforceIngestionFilter } from '../services/datahubFilterRulesService.js';
+import { enforceIngestionPolicy, isFilterRuleBlockedError } from '../services/filterRulesGateway.js';
 import { enforceSourceAccess, sourceAccessAllowedSql } from '../middleware/accessControlGateway.js';
 import { resolveAgentKeyFromRequest } from '../utils/sourceAccessRequest.js';
 
@@ -170,8 +170,8 @@ router.post('/', authenticate, writeRateLimiter, validateBody(createCollectedDat
 
         const meta = metadata && typeof metadata === 'object' ? metadata : {};
         const norm = normalized_data && typeof normalized_data === 'object' ? normalized_data : {};
-        await enforceIngestionFilter({
-            source_id,
+        await enforceIngestionPolicy({
+            sourceId: source_id,
             url: meta.url || meta.source_url || norm.metadata?.url,
             text:
                 norm.content ||
@@ -180,6 +180,7 @@ router.post('/', authenticate, writeRateLimiter, validateBody(createCollectedDat
                 raw_data?.message ||
                 meta.title,
             metadata: meta,
+            enforcementPath: 'collected_data_api',
         });
 
         // Check for duplicate if content_hash provided
@@ -220,7 +221,7 @@ router.post('/', authenticate, writeRateLimiter, validateBody(createCollectedDat
         res.status(201).json(result.rows[0]);
 
     } catch (error) {
-        if (error.status === 403 && error.code === 'FILTER_BLOCKED') {
+        if (error.status === 403 && isFilterRuleBlockedError(error)) {
             return res.status(403).json({
                 error: error.message,
                 code: error.code,
@@ -262,8 +263,8 @@ router.post('/batch', authenticate, writeRateLimiter, validateBody(batchCreateCo
                         ? message.normalized_data
                         : {};
                 try {
-                    await enforceIngestionFilter({
-                        source_id,
+                    await enforceIngestionPolicy({
+                        sourceId: source_id,
                         url: meta.url || meta.source_url || norm.metadata?.url,
                         text:
                             norm.content ||
@@ -272,9 +273,10 @@ router.post('/batch', authenticate, writeRateLimiter, validateBody(batchCreateCo
                             message.raw_data?.message ||
                             meta.title,
                         metadata: meta,
+                        enforcementPath: 'collected_data_batch_api',
                     });
                 } catch (filterErr) {
-                    if (filterErr.code === 'FILTER_BLOCKED') {
+                    if (isFilterRuleBlockedError(filterErr)) {
                         results.blocked++;
                         continue;
                     }

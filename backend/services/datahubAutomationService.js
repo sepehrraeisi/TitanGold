@@ -8,6 +8,7 @@ import {
   resolveAgentKey,
   RUNTIME_AGENT_KEYS,
 } from '../middleware/accessControlGateway.js';
+import { enforcePublishingPolicy, isFilterRuleBlockedError } from './filterRulesGateway.js';
 
 const PRIORITY_TO_NUM = { low: 1, medium: 2, high: 3, critical: 4 };
 const NUM_TO_PRIORITY = { 1: 'low', 2: 'medium', 3: 'high', 4: 'critical' };
@@ -435,6 +436,22 @@ export async function refreshAutomationQueue({ topicId } = {}) {
             ? record.payload.content.slice(0, 120)
             : null) ||
           record.sourceId;
+
+        try {
+          await enforcePublishingPolicy({
+            sourceId: record.sourceId,
+            url: record.payload?.metadata?.url || record.payload?.url,
+            text: [record.payload?.title, record.payload?.content, payloadPreview]
+              .filter(Boolean)
+              .join('\n'),
+            dataType: record.dataType,
+            metadata: record.payload?.metadata,
+            enforcementPath: 'automation_enqueue',
+          });
+        } catch (error) {
+          if (isFilterRuleBlockedError(error)) continue;
+          throw error;
+        }
 
         await query(
           `INSERT INTO datahub_automation_queue (

@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { query, transaction } from '../database/db.js';
 import { getIngestionTimestampForInsert } from './collectedDataTimestamps.js';
 import { logger } from './logger.js';
-import { createIngestionFilterEvaluator } from './datahubFilterRulesService.js';
+import { enforceIngestionPolicy, isFilterRuleBlockedError } from './filterRulesGateway.js';
 
 /** Default messages per scheduler run (override via batchSize argument). */
 /** DH-PIPELINE-P1-CAPACITY: 700/5min ≈ 201k/day theoretical (Option A). */
@@ -211,7 +211,7 @@ async function markMessagesProcessed(client, messageIds) {
     );
 }
 
-async function processSubBatch(messages, sourceMap, filterEvaluate) {
+async function processSubBatch(messages, sourceMap) {
     const subSummary = {
         inserted: 0,
         duplicates: 0,
@@ -258,16 +258,21 @@ async function processSubBatch(messages, sourceMap, filterEvaluate) {
 
         const normalizedData = buildNormalizedData(message, channelIdStr);
         const filterText = normalizedData.content || '';
-        const filterDecision = filterEvaluate({
-            source_id: source.id,
-            url: message.media_url,
-            text: filterText,
-        });
-
-        if (!filterDecision.allowed) {
-            subSummary.skipped_filtered += 1;
-            toMarkProcessed.push(message.id);
-            continue;
+        try {
+            await enforceIngestionPolicy({
+                sourceId: source.id,
+                url: message.media_url,
+                text: filterText,
+                metadata: buildTransferMetadata(message, channelIdStr),
+                enforcementPath: 'telegram_transfer_pipeline',
+            });
+        } catch (error) {
+            if (isFilterRuleBlockedError(error)) {
+                subSummary.skipped_filtered += 1;
+                toMarkProcessed.push(message.id);
+                continue;
+            }
+            throw error;
         }
 
         toInsert.push({
@@ -365,10 +370,7 @@ export async function transferTelegramMessagesToPipeline(
     transferInProgress = true;
 
     try {
-        const [sourceMap, filterEvaluate] = await Promise.all([
-            loadChannelSourceMap(),
-            createIngestionFilterEvaluator(),
-        ]);
+        const sourceMap = await loadChannelSourceMap();
 
         const messagesResult = await query(
             `SELECT tm.*,
@@ -398,7 +400,7 @@ export async function transferTelegramMessagesToPipeline(
 
         for (let offset = 0; offset < messages.length; offset += TELEGRAM_TRANSFER_SUB_BATCH) {
             const chunk = messages.slice(offset, offset + TELEGRAM_TRANSFER_SUB_BATCH);
-            const chunkSummary = await processSubBatch(chunk, sourceMap, filterEvaluate);
+            const chunkSummary = await processSubBatch(chunk, sourceMap);
             summary.inserted += chunkSummary.inserted;
             summary.duplicates += chunkSummary.duplicates;
             summary.skipped_no_source += chunkSummary.skipped_no_source;

@@ -16,8 +16,8 @@ import {
     createFilterRule,
     updateFilterRule,
     softDeleteFilterRule,
-    evaluateFilterRules,
 } from '../services/datahubFilterRulesService.js';
+import { evaluateFilterPolicy } from '../services/filterRulesGateway.js';
 
 const router = express.Router();
 const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
@@ -45,7 +45,7 @@ router.post(
     validateBody(evaluateFilterSchema),
     async (req, res) => {
         try {
-            const result = await evaluateFilterRules(req.validatedBody);
+            const result = await evaluateFilterPolicy(req.validatedBody);
             res.json(result);
         } catch (error) {
             logger.error('Evaluate filter rules failed:', error);
