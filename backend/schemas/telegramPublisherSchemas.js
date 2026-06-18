@@ -88,6 +88,8 @@ export const publishPublisherSchema = z.object({
   message: z.string().min(1).max(4096),
   content_type: z.string().max(100).optional().default('manual'),
   confirm_publish: z.boolean(),
+  source_id: z.string().uuid(),
+  data_type: z.string().max(100).optional(),
   title: z.string().optional(),
   content: z.string().optional(),
 });

@@ -1,6 +1,7 @@
 import { query } from '../database/db.js';
 import { encryptSecret, decryptSecret, isEncrypted } from '../utils/crypto.js';
 import { logger } from './logger.js';
+import { assertAccessControlGateway } from '../middleware/accessControlGateway.js';
 
 export function isPublisherDryRunForced() {
   if (process.env.TELEGRAM_PUBLISHER_DRY_RUN === 'true') return true;
@@ -239,7 +240,15 @@ export async function runPublisherTest(publisherId, message, userId) {
 
 export async function runPublisherPublish(
   publisherId,
-  { message, content_type, confirm_publish, title, content },
+  {
+    message,
+    content_type,
+    confirm_publish,
+    title,
+    content,
+    source_id: sourceId,
+    accessControl = null,
+  },
   userId,
 ) {
   if (!confirm_publish) {
@@ -247,6 +256,12 @@ export async function runPublisherPublish(
     err.status = 400;
     throw err;
   }
+
+  assertAccessControlGateway({
+    accessControl,
+    sourceId,
+    agentKey: 'publisher',
+  });
 
   const row = await query('SELECT * FROM telegram_publishers WHERE id = $1', [publisherId]);
   if (row.rows.length === 0) {

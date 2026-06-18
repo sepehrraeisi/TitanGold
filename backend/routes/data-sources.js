@@ -52,13 +52,34 @@ import {
     loadApprovedCategoryLookup,
     resolveCategoryForWrite,
 } from '../utils/categoryTaxonomy.js';
+import {
+  assertAccessControlGateway,
+  enforceSourceAccess,
+  RUNTIME_AGENT_KEYS,
+  sourceAccessAllowedSql,
+} from '../middleware/accessControlGateway.js';
+import { resolveAgentKeyFromRequest } from '../utils/sourceAccessRequest.js';
 
 const router = express.Router();
 const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
 
 router.post('/publish-telegram', ...writeAuth, async (req, res) => {
   try {
-    const { channelId, message, photoUrl } = req.body;
+    const { message, photoUrl, source_id: sourceId } = req.body;
+
+    if (!sourceId) {
+      return res.status(400).json({
+        error: 'source_id is required',
+        code: 'BAD_REQUEST',
+      });
+    }
+
+    assertAccessControlGateway({
+      accessControl: req.accessControl,
+      sourceId,
+      agentKey: RUNTIME_AGENT_KEYS.PUBLISHER,
+      message: 'Publisher access denied by source ACL',
+    });
 
     if (photoUrl) {
       await telegramService.sendPhoto(photoUrl, message);
@@ -68,7 +89,10 @@ router.post('/publish-telegram', ...writeAuth, async (req, res) => {
 
     res.json({ success: true, message: 'Published to Telegram' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to publish to Telegram' });
+    res.status(error.status || 500).json({
+      error: error.message || 'Failed to publish to Telegram',
+      code: error.code || undefined,
+    });
   }
 });
 
@@ -786,8 +810,15 @@ router.get('/collected', authenticate, readRateLimiter, validateQuery(collectedD
       end_date,
       source_id,
       limit,
-      offset
+      offset,
+      agentKey: queryAgentKey,
+      agent_key: queryAgentKeySnake,
     } = req.validatedQuery;
+
+    const agentKey =
+      queryAgentKey ||
+      queryAgentKeySnake ||
+      resolveAgentKeyFromRequest(req);
 
     // Build WHERE clause dynamically
     const conditions = [];
@@ -795,29 +826,34 @@ router.get('/collected', authenticate, readRateLimiter, validateQuery(collectedD
     let paramCount = 1;
 
     if (status) {
-      conditions.push(`status = $${paramCount++}`);
+      conditions.push(`cd.status = $${paramCount++}`);
       params.push(status);
     }
 
     if (source_id) {
-      conditions.push(`source_id = $${paramCount++}`);
+      conditions.push(`cd.source_id = $${paramCount++}`);
       params.push(source_id);
     }
 
     if (start_date) {
-      conditions.push(`collected_at >= $${paramCount++}`);
+      conditions.push(`cd.collected_at >= $${paramCount++}`);
       params.push(start_date);
     }
 
     if (end_date) {
-      conditions.push(`collected_at <= $${paramCount++}`);
+      conditions.push(`cd.collected_at <= $${paramCount++}`);
       params.push(end_date);
+    }
+
+    if (agentKey) {
+      params.push(agentKey);
+      conditions.push(sourceAccessAllowedSql('cd.source_id', paramCount++));
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Get total count for pagination metadata
-    const countQuery = `SELECT COUNT(*) as total FROM collected_data ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) as total FROM collected_data cd ${whereClause}`;
     const countResult = await query(countQuery, params);
     const total = parseInt(countResult.rows[0].total);
 
@@ -867,6 +903,7 @@ router.get('/collected', authenticate, readRateLimiter, validateQuery(collectedD
 router.get('/collected/:id', authenticate, readRateLimiter, validateParams(uuidParamSchema), validateResponse(collectedDataResponseSchema), async (req, res) => {
   try {
     const { id } = req.validatedParams;
+    const agentKey = resolveAgentKeyFromRequest(req);
 
     const result = await query(`
       SELECT 
@@ -880,6 +917,24 @@ router.get('/collected/:id', authenticate, readRateLimiter, validateParams(uuidP
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Collected data record not found' });
+    }
+
+    if (agentKey) {
+      const row = result.rows[0];
+      const dataType = row.metadata?.data_type || row.normalized_data?.data_type || null;
+      const access = await enforceSourceAccess(req, {
+        sourceId: row.source_id,
+        agentKey,
+        action: 'collected_data_read',
+        dataType,
+      });
+      if (!access.allowed) {
+        return res.status(403).json({
+          error: 'Source access denied',
+          code: 'SOURCE_ACCESS_DENIED',
+          agent_key: agentKey,
+        });
+      }
     }
 
     res.json(result.rows[0]);

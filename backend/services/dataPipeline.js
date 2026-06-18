@@ -4,6 +4,7 @@ import { dataNormalizer } from './normalizers/dataNormalizer.js';
 import { dataValidator } from './validators/dataValidator.js';
 import { dataRouter } from './routers/dataRouter.js';
 import { topicRouter } from './topicRouter.js';
+import { filterAllowedAgentsThroughGateway } from '../middleware/accessControlGateway.js';
 
 /**
  * Orchestrates the data processing pipeline:
@@ -77,8 +78,8 @@ export class DataPipeline {
             const topicAgents = await topicRouter.route(normalized, row.id);
             agentKeys = [...new Set([...agentKeys, ...topicAgents])]; // Merge and deduplicate
 
-            // 6. Apply Access Control (TASK-DF-009)
-            agentKeys = await this.checkAccess(row.source_id, agentKeys, normalized);
+            // 6. Apply Access Control (DH-ACCESSCONTROL-P2)
+            agentKeys = await filterAllowedAgentsThroughGateway(row.source_id, agentKeys, normalized);
 
             // 7. Push to data_queue for each agent
             for (const agentKey of agentKeys) {
@@ -94,50 +95,6 @@ export class DataPipeline {
         } catch (error) {
             logger.error(`Item processing failed [${row.id}]: ${error.message}`);
             await this.updateCollectedStatus(row.id, 'error', error.message);
-        }
-    }
-
-    /**
-     * Checks if agents are allowed to access the data source
-     * TASK-DF-009
-     */
-    async checkAccess(sourceId, agentKeys, normalizedData) {
-        try {
-            const result = await query(
-                'SELECT allowed_agents, blocked_agents, allowed_data_types, blocked_data_types FROM source_access_controls WHERE source_id = $1',
-                [sourceId]
-            );
-
-            if (result.rows.length === 0) return agentKeys;
-
-            const acl = result.rows[0];
-            const dataType = normalizedData.data_type || normalizedData.type;
-
-            return agentKeys.filter(agentKey => {
-                // Agent Restrictions
-                if (acl.allowed_agents && acl.allowed_agents.length > 0) {
-                    if (!acl.allowed_agents.includes(agentKey)) return false;
-                }
-                if (acl.blocked_agents && acl.blocked_agents.includes(agentKey)) {
-                    return false;
-                }
-
-                // Data Type Restrictions
-                if (dataType) {
-                    if (acl.allowed_data_types && acl.allowed_data_types.length > 0) {
-                        if (!acl.allowed_data_types.includes(dataType)) return false;
-                    }
-                    if (acl.blocked_data_types && acl.blocked_data_types.includes(dataType)) {
-                        return false;
-                    }
-                }
-
-                return true;
-            });
-        } catch (error) {
-            logger.error(`ACL check failed for source ${sourceId}:`, error);
-            // On error, fail-safe: allow existing routing (or could be strict: return [])
-            return agentKeys;
         }
     }
 

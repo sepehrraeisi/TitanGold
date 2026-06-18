@@ -2,6 +2,12 @@ import { query } from '../database/db.js';
 import { logger } from './logger.js';
 import { buildDataPipelineView } from './dataPipelineSnapshot.js';
 import { runPublisherPublish } from './telegramPublisherService.js';
+import {
+  buildAllowedAccessControl,
+  enforceSourceAccess,
+  resolveAgentKey,
+  RUNTIME_AGENT_KEYS,
+} from '../middleware/accessControlGateway.js';
 
 const PRIORITY_TO_NUM = { low: 1, medium: 2, high: 3, critical: 4 };
 const NUM_TO_PRIORITY = { 1: 'low', 2: 'medium', 3: 'high', 4: 'critical' };
@@ -404,6 +410,25 @@ export async function refreshAutomationQueue({ topicId } = {}) {
         if (exists.rows.length > 0) continue;
         if (!recordMatchesTopic(record, topic, categoryNameById)) continue;
 
+        const topicAgentKey = await resolveAgentKey(topic.agentId);
+        if (topicAgentKey) {
+          const agentAccess = await enforceSourceAccess(null, {
+            sourceId: record.sourceId,
+            agentKey: topicAgentKey,
+            action: 'automation_enqueue',
+            dataType: record.dataType,
+          });
+          if (!agentAccess.allowed) continue;
+        }
+
+        const publisherAccess = await enforceSourceAccess(null, {
+          sourceId: record.sourceId,
+          agentKey: RUNTIME_AGENT_KEYS.PUBLISHER,
+          action: 'automation_enqueue',
+          dataType: record.dataType,
+        });
+        if (!publisherAccess.allowed) continue;
+
         const payloadPreview =
           record.payload?.title ||
           (typeof record.payload?.content === 'string'
@@ -470,6 +495,43 @@ async function dispatchQueueItem(item, userId, { dryRun = false } = {}) {
     throw new Error('Source record not found');
   }
 
+  const recordSource = (
+    await query('SELECT source_id FROM collected_data WHERE id = $1', [item.record_id])
+  ).rows[0]?.source_id;
+
+  if (recordSource) {
+    const publisherAccess = await enforceSourceAccess(null, {
+      sourceId: recordSource,
+      agentKey: RUNTIME_AGENT_KEYS.PUBLISHER,
+      userId,
+      action: 'automation_publish',
+      dataType: payload.dataType,
+    });
+    if (!publisherAccess.allowed) {
+      const err = new Error('Publisher access denied by source ACL');
+      err.status = 403;
+      err.code = 'SOURCE_ACCESS_DENIED';
+      throw err;
+    }
+
+    const routeAgentKey = await resolveAgentKey(item.agent_id);
+    if (routeAgentKey) {
+      const agentAccess = await enforceSourceAccess(null, {
+        sourceId: recordSource,
+        agentKey: routeAgentKey,
+        userId,
+        action: 'automation_publish',
+        dataType: payload.dataType,
+      });
+      if (!agentAccess.allowed) {
+        const err = new Error('Agent access denied by source ACL');
+        err.status = 403;
+        err.code = 'SOURCE_ACCESS_DENIED';
+        throw err;
+      }
+    }
+  }
+
   let publishResult;
   try {
     publishResult = await runPublisherPublish(
@@ -480,6 +542,13 @@ async function dispatchQueueItem(item, userId, { dryRun = false } = {}) {
         content: payload.content,
         content_type: 'automation',
         confirm_publish: true,
+        source_id: recordSource,
+        data_type: payload.dataType,
+        accessControl: buildAllowedAccessControl({
+          sourceId: recordSource,
+          agentKey: RUNTIME_AGENT_KEYS.PUBLISHER,
+          dataType: payload.dataType,
+        }),
       },
       userId,
     );

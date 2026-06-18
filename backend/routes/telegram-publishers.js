@@ -208,12 +208,37 @@ router.post(
   async (req, res) => {
     try {
       const { id } = req.validatedParams;
-      const result = await runPublisherPublish(id, req.validatedBody, req.user?.id);
+      const {
+        source_id,
+        data_type,
+        message,
+        content_type,
+        confirm_publish,
+        title,
+        content,
+      } = req.validatedBody;
+      const result = await runPublisherPublish(
+        id,
+        {
+          source_id,
+          data_type,
+          message,
+          content_type,
+          confirm_publish,
+          title,
+          content,
+          accessControl: req.accessControl,
+        },
+        req.user?.id,
+      );
       res.json(result);
     } catch (error) {
       const status = error.status || 500;
       if (status >= 500) logger.error('Publisher publish failed:', error);
-      res.status(status).json({ error: error.message || 'Publisher publish failed' });
+      res.status(status).json({
+        error: error.message || 'Publisher publish failed',
+        code: error.code || undefined,
+      });
     }
   },
 );

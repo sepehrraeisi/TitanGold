@@ -146,7 +146,9 @@ export const collectedDataQuerySchema = paginationQuerySchema.extend({
     }).optional(),
     start_date: z.string().datetime({ message: 'start_date must be a valid ISO 8601 date format' }).optional(),
     end_date: z.string().datetime({ message: 'end_date must be a valid ISO 8601 date format' }).optional(),
-    source_id: z.string().uuid({ message: 'source_id must be a valid UUID' }).optional()
+    source_id: z.string().uuid({ message: 'source_id must be a valid UUID' }).optional(),
+    agentKey: z.string().min(1).optional(),
+    agent_key: z.string().min(1).optional(),
 }).refine(
     (data) => {
         if (data.start_date && data.end_date) {
@@ -438,6 +440,8 @@ export const collectedDataFilterSchema = z.object({
     sentiment: z.enum(['positive', 'negative', 'neutral']).optional(),
     has_url: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
     has_hashtag: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+    agentKey: z.string().min(1).optional(),
+    agent_key: z.string().min(1).optional(),
     limit: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).optional().default('50'),
     offset: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).optional().default('0')
 });
