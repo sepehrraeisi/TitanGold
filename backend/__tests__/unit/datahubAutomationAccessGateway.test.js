@@ -11,23 +11,6 @@ jest.unstable_mockModule('../../database/db.js', () => ({
     query: mockQuery,
 }));
 
-jest.unstable_mockModule('../../services/dataPipelineSnapshot.js', () => ({
-    buildDataPipelineView: jest.fn().mockResolvedValue({
-        snapshot: { categories: [] },
-        normalizedData: [
-            {
-                id: 'record-1',
-                sourceId: 'source-1',
-                category: 'market_data',
-                dataType: 'price',
-                qualityScore: 90,
-                status: 'ready',
-                payload: { title: 'ACL automation test' },
-            },
-        ],
-    }),
-}));
-
 jest.unstable_mockModule('../../services/telegramPublisherService.js', () => ({
     runPublisherPublish: jest.fn(),
 }));
@@ -64,6 +47,38 @@ describe('datahubAutomationService access gateway enforcement', () => {
 
             if (text.includes('FROM datahub_automation_executions')) {
                 return { rows: [] };
+            }
+
+            if (text.includes('FROM telegram_publishers')) {
+                return {
+                    rows: [{ id: 'publisher-1', name: 'Publisher 1', is_active: true }],
+                };
+            }
+
+            if (text.includes('FROM datahub_publisher_source_mappings')) {
+                return { rows: [{ id: 'mapping-1' }] };
+            }
+
+            if (text.includes('SELECT id, name FROM data_categories')) {
+                return { rows: [] };
+            }
+
+            if (text.includes('FROM collected_data cd')) {
+                return {
+                    rows: [
+                        {
+                            id: 'record-1',
+                            source_id: 'source-1',
+                            normalized_data: {
+                                title: 'ACL automation test',
+                                metadata: { data_type: 'price', quality_score: 90 },
+                            },
+                            metadata: { data_type: 'price' },
+                            source_type: 'api',
+                            category_name: 'market_data',
+                        },
+                    ],
+                };
             }
 
             if (text.includes('COUNT(*)::int AS c FROM datahub_automation_queue')) {

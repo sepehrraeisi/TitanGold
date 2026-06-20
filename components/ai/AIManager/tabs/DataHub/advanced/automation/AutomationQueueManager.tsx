@@ -12,6 +12,7 @@ import {
 
 interface AutomationQueueManagerProps {
     queue: any[];
+    isDryRun: boolean;
     canWrite: boolean;
     isDispatching: boolean;
     onDispatch: () => void;
@@ -24,6 +25,7 @@ interface AutomationQueueManagerProps {
 
 const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
     queue,
+    isDryRun,
     canWrite,
     isDispatching,
     onDispatch,
@@ -45,7 +47,9 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                             variant={queue.length > 0 ? 'warning' : 'neutral'}
                         />
                     </h4>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{t('automation_queue_desc')}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {t('automation_queue_desc')} · {isDryRun ? t('dry_run') : t('live_requires_confirmation')}
+                    </p>
                 </div>
                 <button
                     type="button"
@@ -54,7 +58,7 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                     onClick={onDispatch}
                     className={BTN_PRIMARY}
                 >
-                    {isDispatching ? t('dispatching') : t('dispatch_queue')}
+                    {isDispatching ? t('dispatching') : isDryRun ? t('dispatch_queue_dry_run') : t('dispatch_queue_live')}
                 </button>
             </div>
 
@@ -65,8 +69,10 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                             <tr className="border-b border-slate-800 text-muted-foreground">
                                 <th className="py-2 pr-2">{t('time')}</th>
                                 <th className="py-2 pr-2">{t('topic')}</th>
+                                <th className="py-2 pr-2">{t('publisher')}</th>
                                 <th className="py-2 pr-2">{t('data_preview')}</th>
                                 <th className="py-2 pr-2">{t('priority')}</th>
+                                <th className="py-2 pr-2">{t('mode')}</th>
                                 <th className="py-2 text-right">{t('actions')}</th>
                             </tr>
                         </thead>
@@ -80,6 +86,15 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                                         {formatTimeAgo(item.createdAt)}
                                     </td>
                                     <td className="py-2 pr-2 font-medium">{item.topicId}</td>
+                                    <td className="py-2 pr-2">
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-sky-300">{item.publisherName || item.publisherId}</span>
+                                            <StatusPill
+                                                label={item.publisherActive ? t('enabled') : t('disabled')}
+                                                variant={item.publisherActive ? 'success' : 'error'}
+                                            />
+                                        </div>
+                                    </td>
                                     <td className="py-2 pr-2 truncate max-w-[150px]">{item.payloadPreview}</td>
                                     <td className="py-2 pr-2">
                                         <StatusPill
@@ -92,6 +107,15 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                                                       : 'success'
                                             }
                                         />
+                                    </td>
+                                    <td className="py-2 pr-2">
+                                        <StatusPill
+                                            label={isDryRun ? t('dry_run') : t('live')}
+                                            variant={isDryRun ? 'info' : 'warning'}
+                                        />
+                                        {item.lastErrorCode && (
+                                            <p className="text-[10px] text-amber-300 mt-1">{item.lastErrorCode}</p>
+                                        )}
                                     </td>
                                     <td className="py-2 text-right">
                                         <div className="flex justify-end gap-1 flex-wrap">
@@ -109,7 +133,7 @@ const AutomationQueueManager: React.FC<AutomationQueueManagerProps> = ({
                                                 onClick={() => onProcess(item.id, 'sent')}
                                                 className={BTN_OUTLINE_EMERALD}
                                             >
-                                                {t('approve')}
+                                                {isDryRun ? t('dry_run_publish') : t('publish_now')}
                                             </button>
                                             <button
                                                 type="button"

@@ -32,6 +32,7 @@ const AutomationSchedulePanel: React.FC<AutomationSchedulePanelProps> = ({
                         {t('automation_schedule_heading')}
                     </h4>
                     <p className="text-[10px] text-muted-foreground mt-1">{t('automation_schedule_desc')}</p>
+                    <p className="text-[10px] text-amber-300 mt-1">{t('automation_schedule_manual_only')}</p>
                 </div>
                 <DataHubToggle
                     id="automation-schedule-enabled"

@@ -4167,7 +4167,7 @@ export interface DataSource {
   duplicateUrlKey?: string | null;
   duplicateUrlCount?: number;
   duplicateActiveCount?: number;
-  duplicateUrlSeverity?: 'high' | 'medium' | 'low' | null;
+  duplicateUrlSeverity?: 'high' | 'medium' | 'low' | 'info' | null;
   duplicateUrlSiblings?: Array<{
     id: string;
     name: string;
@@ -4517,6 +4517,12 @@ export interface AgentTopicRoute {
   stats?: AgentTopicRouteStats;
 }
 
+export interface AutomationPublisherTargetStatus {
+  id: string;
+  name?: string;
+  isActive: boolean;
+}
+
 export interface AutomationScheduleConfig {
   enabled: boolean;
   intervalMinutes: number; // 1, 5, 15, 30, 60, 120, 240
@@ -4531,7 +4537,7 @@ export interface DataAutomationConfig {
   schedule?: AutomationScheduleConfig;
 }
 
-export type PublisherQueueStatus = 'pending' | 'processing';
+export type PublisherQueueStatus = 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled';
 
 export interface PublisherQueueItem {
   id: string;
@@ -4548,9 +4554,12 @@ export interface PublisherQueueItem {
   dataType: string;
   qualityScore: number;
   normalizedStatus: NormalizedDataStatus;
+  retryCount?: number;
+  maxRetryCount?: number;
+  lastErrorCode?: string | null;
 }
 
-export type PublisherHistoryStatus = 'sent' | 'failed';
+export type PublisherHistoryStatus = 'sent' | 'failed' | 'dry_run' | 'blocked' | 'skipped';
 
 export interface PublisherHistoryItem {
   id: string;
@@ -4563,6 +4572,8 @@ export interface PublisherHistoryItem {
   sentAt: string;
   latencyMs?: number;
   payloadPreview: string;
+  errorCode?: string | null;
+  deliveryMode?: string | null;
 }
 
 export interface DataHubAdvancedFeatures {

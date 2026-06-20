@@ -403,6 +403,7 @@ export async function runPublisherPublish(
     data_type: dataType,
     allow_temporary_publish: allowTemporaryPublish = false,
     accessControl = null,
+    dry_run: requestDryRun = false,
   },
   userId,
 ) {
@@ -422,6 +423,7 @@ export async function runPublisherPublish(
   if (!publisher.is_active) {
     const err = new Error('Publisher is disabled');
     err.status = 400;
+    err.code = 'PUBLISHER_DISABLED';
     throw err;
   }
 
@@ -455,7 +457,11 @@ export async function runPublisherPublish(
       dataType,
       contentType: content_type,
       contentSummary: text.slice(0, 500),
-      status: e.code === 'FILTER_RULE_BLOCKED' || e.code === 'SOURCE_ACCESS_DENIED'
+      status: [
+        'FILTER_RULE_BLOCKED',
+        'SOURCE_ACCESS_DENIED',
+        'PUBLISHER_MAPPING_REQUIRED',
+      ].includes(e.code)
         ? 'blocked'
         : 'failed',
       errorMessage: e.message,
@@ -466,6 +472,7 @@ export async function runPublisherPublish(
         user_id: userId,
         confirm_publish,
         allow_temporary_publish: allowTemporaryPublish,
+        request_dry_run: Boolean(requestDryRun),
         reason: e.reason,
         rule: e.rule,
       },
@@ -476,8 +483,9 @@ export async function runPublisherPublish(
 
   const hasToken = Boolean(publisher.bot_token_encrypted);
   const forceDryRun = isPublisherDryRunForced();
+  const requestedDryRun = Boolean(requestDryRun);
 
-  if (confirm_publish && !hasToken && !forceDryRun) {
+  if (confirm_publish && !hasToken && !forceDryRun && !requestedDryRun) {
     const history = await recordPublisherHistory({
       publisherId,
       contentType: content_type,
@@ -488,7 +496,7 @@ export async function runPublisherPublish(
       errorMessage: 'Bot token required for live publish',
       errorCode: 'BOT_TOKEN_MISSING',
       userId,
-      metadata: { mode: 'publish', user_id: userId, confirm_publish },
+      metadata: { mode: 'publish', user_id: userId, confirm_publish, request_dry_run: requestedDryRun },
     });
     const err = new Error('Bot token required for live publish');
     err.status = 401;
@@ -497,7 +505,7 @@ export async function runPublisherPublish(
     throw err;
   }
 
-  const dryRun = forceDryRun || (confirm_publish && !hasToken);
+  const dryRun = requestedDryRun || forceDryRun || (confirm_publish && !hasToken);
 
   if (dryRun) {
     const history = await recordPublisherHistory({
@@ -514,6 +522,7 @@ export async function runPublisherPublish(
         confirm_publish,
         delivery_mode: 'dry_run',
         allow_temporary_publish: allowTemporaryPublish,
+        request_dry_run: requestedDryRun,
       },
     });
     return {

@@ -75,7 +75,7 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
     const [showAutomationModal, setShowAutomationModal] = useState(false);
     const [editingTopic, setEditingTopic] = useState<AgentTopicRoute | null>(null);
     const [previewQueueItem, setPreviewQueueItem] = useState<any>(null);
-    const [dispatchDryRun, setDispatchDryRun] = useState(false);
+    const [dispatchDryRun, setDispatchDryRun] = useState(true);
 
     const topics = overview?.topics ?? [];
     const schedule = overview?.schedule;
@@ -84,9 +84,9 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
     const summary = overview?.summary;
 
     const publisherMap = useMemo(() => {
-        const map: Record<string, { id: string; name: string }> = {};
+        const map: Record<string, { id: string; name: string; isActive: boolean }> = {};
         for (const p of publishersData?.publishers ?? []) {
-            map[p.id] = { id: p.id, name: p.name };
+            map[p.id] = { id: p.id, name: p.name, isActive: p.is_active };
         }
         return map;
     }, [publishersData]);
@@ -126,6 +126,8 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                 latencyMs: entry.latencyMs,
                 payloadPreview: entry.payloadPreview || entry.errorMessage || '',
                 dryRun: entry.dryRun,
+                errorCode: entry.errorCode,
+                deliveryMode: entry.deliveryMode,
             })),
         [executions],
     );
@@ -136,7 +138,9 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
 
     const handleDispatchAutomation = async () => {
         const limit = schedule?.maxItemsPerRun ?? 5;
-        await dispatchQueue.mutateAsync({ limit, dry_run: dispatchDryRun });
+        const confirm_live = !dispatchDryRun && window.confirm(t('automation_confirm_live_publish'));
+        if (!dispatchDryRun && !confirm_live) return;
+        await dispatchQueue.mutateAsync({ limit, dry_run: dispatchDryRun, confirm_live });
     };
 
     const handleToggleSchedule = async (enabled: boolean) => {
@@ -151,7 +155,9 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
 
     const handleProcessQueueItem = async (itemId: string, action: 'sent' | 'failed') => {
         if (action === 'sent') {
-            await dispatchItem.mutateAsync({ id: itemId, dry_run: dispatchDryRun });
+            const confirm_live = !dispatchDryRun && window.confirm(t('automation_confirm_live_publish'));
+            if (!dispatchDryRun && !confirm_live) return;
+            await dispatchItem.mutateAsync({ id: itemId, dry_run: dispatchDryRun, confirm_live });
         } else {
             await failItem.mutateAsync(itemId);
         }
@@ -182,7 +188,7 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
     };
 
     const handleRetry = async (executionId: string) => {
-        await retryExecution.mutateAsync(executionId);
+        await retryExecution.mutateAsync({ id: executionId, dry_run: true });
     };
 
     const combinedError = formatDataHubQueryError(
@@ -190,7 +196,10 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
         (error as Error | null) ||
             createTopic.error ||
             updateTopic.error ||
-            dispatchQueue.error,
+            dispatchQueue.error ||
+            dispatchItem.error ||
+            retryExecution.error ||
+            testRun.error,
     );
 
     const isBusy =
@@ -329,7 +338,10 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                             queue={automationQueue.map(item => ({
                                 ...item,
                                 topicId: topicMap.get(item.topicId)?.title || item.topicId,
+                                publisherName: publisherMap[item.publisherId]?.name,
+                                publisherActive: publisherMap[item.publisherId]?.isActive,
                             }))}
+                            isDryRun={dispatchDryRun}
                             canWrite={canWrite}
                             isDispatching={dispatchQueue.isPending}
                             onDispatch={handleDispatchAutomation}
@@ -359,6 +371,8 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                                         const topic = topicMap.get(entry.topicId);
                                         const publisher = publisherMap[entry.publisherId];
                                         const isFailed = entry.status === 'failed';
+                                        const isBlocked = entry.status === 'blocked';
+                                        const isSkipped = entry.status === 'skipped';
                                         return (
                                             <div
                                                 key={entry.id}
@@ -372,14 +386,18 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                                                         label={
                                                             entry.dryRun
                                                                 ? t('dry_run')
-                                                                : isFailed
+                                                                : isBlocked
+                                                                  ? t('blocked')
+                                                                  : isSkipped
+                                                                    ? t('skipped')
+                                                                    : isFailed
                                                                   ? t('failed')
                                                                   : t('sent')
                                                         }
                                                         variant={
                                                             entry.dryRun
                                                                 ? 'info'
-                                                                : isFailed
+                                                                : isBlocked || isSkipped || isFailed
                                                                   ? 'error'
                                                                   : 'success'
                                                         }
@@ -394,6 +412,11 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                                                         {formatTimeAgo(entry.sentAt)}
                                                     </span>
                                                 </div>
+                                                {(entry.errorCode || entry.errorMessage) && (
+                                                    <p className="text-[10px] text-amber-300 mt-1">
+                                                        {entry.errorCode || entry.errorMessage}
+                                                    </p>
+                                                )}
                                                 {isFailed && (
                                                     <button
                                                         type="button"
@@ -402,7 +425,7 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                                                         onClick={() => handleRetry(entry.id)}
                                                         className={`${BTN_OUTLINE_SLATE} mt-2`}
                                                     >
-                                                        {t('retry')}
+                                                        {t('retry_dry_run')}
                                                     </button>
                                                 )}
                                             </div>

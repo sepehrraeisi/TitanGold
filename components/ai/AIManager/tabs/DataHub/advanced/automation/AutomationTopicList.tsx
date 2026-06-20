@@ -10,7 +10,7 @@ import {
 interface AutomationTopicListProps {
     topics: any[];
     agentMap: Record<string, AIAgent>;
-    publisherMap: Record<string, { name?: string }>;
+    publisherMap: Record<string, { name?: string; isActive?: boolean }>;
     canWrite: boolean;
     t: (key: string) => string;
     onEdit: (topic: any) => void;
@@ -86,10 +86,14 @@ const AutomationTopicList: React.FC<AutomationTopicListProps> = ({
                             </div>
                             <div className="flex justify-between gap-2">
                                 <span className="text-muted-foreground">{t('publish_to')}:</span>
-                                <span className="text-sky-300 font-medium truncate max-w-[150px]">
+                                <span className="text-sky-300 font-medium truncate max-w-[180px]">
                                     {topic.publisherTargets?.length > 0
                                         ? topic.publisherTargets
-                                              .map((id: string) => publisherMap[id]?.name || id)
+                                              .map((id: string) => {
+                                                  const publisher = publisherMap[id];
+                                                  const state = publisher?.isActive ? t('enabled') : t('disabled');
+                                                  return `${publisher?.name || id} (${state})`;
+                                              })
                                               .join(', ')
                                         : t('none')}
                                 </span>

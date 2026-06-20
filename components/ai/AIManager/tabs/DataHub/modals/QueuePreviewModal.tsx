@@ -32,7 +32,7 @@ const QueuePreviewModal: React.FC<{
                         disabled={processingId === item.id + 'sent'}
                         className={BTN_PRIMARY}
                     >
-                        {processingId === item.id + 'sent' ? t('processing') : t('automation_queue_publish_now')}
+                        {processingId === item.id + 'sent' ? t('processing') : t('dry_run_publish')}
                     </button>
                 </>
             }

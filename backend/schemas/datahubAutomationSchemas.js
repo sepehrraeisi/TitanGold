@@ -41,18 +41,26 @@ export const updateScheduleSchema = z.object({
 
 export const dispatchQueueSchema = z.object({
   limit: z.number().int().min(1).max(50).optional().default(5),
-  dry_run: z.boolean().optional().default(false),
+  dry_run: z.boolean().optional().default(true),
+  confirm_live: z.boolean().optional().default(false),
 });
 
 export const dispatchItemSchema = z.object({
-  dry_run: z.boolean().optional().default(false),
+  dry_run: z.boolean().optional().default(true),
+  confirm_live: z.boolean().optional().default(false),
 });
 
 export const testRunSchema = z.object({
   topic_id: z.string().uuid().optional(),
   dry_run: z.boolean().optional().default(true),
+  confirm_live: z.boolean().optional().default(false),
 });
 
 export const failQueueItemSchema = z.object({
   error_message: z.string().max(500).optional(),
+});
+
+export const retryExecutionSchema = z.object({
+  dry_run: z.boolean().optional().default(true),
+  confirm_live: z.boolean().optional().default(false),
 });

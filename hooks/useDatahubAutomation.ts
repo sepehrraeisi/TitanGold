@@ -75,7 +75,7 @@ export function useRefreshAutomationQueueMutation() {
 export function useDispatchAutomationQueueMutation() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (options?: { limit?: number; dry_run?: boolean }) =>
+        mutationFn: (options?: { limit?: number; dry_run?: boolean; confirm_live?: boolean }) =>
             dispatchAutomationQueueApi(options),
         onSettled: () => qc.invalidateQueries({ queryKey: AUTOMATION_KEYS.overview() }),
     });
@@ -84,8 +84,8 @@ export function useDispatchAutomationQueueMutation() {
 export function useDispatchQueueItemMutation() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, dry_run }: { id: string; dry_run?: boolean }) =>
-            dispatchQueueItemApi(id, dry_run),
+        mutationFn: ({ id, dry_run, confirm_live }: { id: string; dry_run?: boolean; confirm_live?: boolean }) =>
+            dispatchQueueItemApi(id, dry_run, confirm_live),
         onSettled: () => qc.invalidateQueries({ queryKey: AUTOMATION_KEYS.overview() }),
     });
 }
@@ -101,7 +101,8 @@ export function useFailQueueItemMutation() {
 export function useRetryAutomationExecutionMutation() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (id: string) => retryAutomationExecutionApi(id),
+        mutationFn: ({ id, dry_run, confirm_live }: { id: string; dry_run?: boolean; confirm_live?: boolean }) =>
+            retryAutomationExecutionApi(id, { dry_run, confirm_live }),
         onSettled: () => qc.invalidateQueries({ queryKey: AUTOMATION_KEYS.overview() }),
     });
 }
@@ -109,7 +110,7 @@ export function useRetryAutomationExecutionMutation() {
 export function useAutomationTestRunMutation() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (options?: { topic_id?: string; dry_run?: boolean }) =>
+        mutationFn: (options?: { topic_id?: string; dry_run?: boolean; confirm_live?: boolean }) =>
             runAutomationTestApi(options),
         onSettled: () => qc.invalidateQueries({ queryKey: AUTOMATION_KEYS.overview() }),
     });

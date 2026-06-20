@@ -231,9 +231,14 @@ const AutomationTopicModal: React.FC<{
                             >
                                 {publishers.length === 0 && <option value="">{t('automation_topic_publishers_none')}</option>}
                                 {publishers.map(publisher => (
-                                    <option key={publisher.id} value={publisher.id}>{publisher.name}</option>
+                                    <option key={publisher.id} value={publisher.id} disabled={!publisher.enabled}>
+                                        {publisher.name} ({publisher.enabled ? t('enabled') : t('disabled')})
+                                    </option>
                                 ))}
                             </select>
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                                {t('automation_topic_publishers_active_only')}
+                            </p>
                         </div>
                         <div>
                             <label className="block text-muted-foreground mb-1">{t('automation_topic_tags')}</label>

@@ -10,12 +10,14 @@ export type AutomationExecutionRecord = {
     topicId?: string;
     publisherId?: string;
     agentId?: string;
-    status: 'sent' | 'failed';
+    status: 'sent' | 'failed' | 'dry_run' | 'blocked' | 'skipped';
     dryRun?: boolean;
     sentAt: string;
     latencyMs?: number;
     payloadPreview?: string;
     errorMessage?: string;
+    errorCode?: string | null;
+    deliveryMode?: string | null;
     topicName?: string;
     publisherName?: string;
 };
@@ -146,6 +148,7 @@ export async function updateAutomationScheduleApi(
 
 export async function refreshAutomationQueueApi(): Promise<{
     added: number;
+    skipped?: number;
     queue: PublisherQueueItem[];
 }> {
     return automationRequest('/queue/refresh', { method: 'POST' });
@@ -154,6 +157,7 @@ export async function refreshAutomationQueueApi(): Promise<{
 export async function dispatchAutomationQueueApi(options?: {
     limit?: number;
     dry_run?: boolean;
+    confirm_live?: boolean;
 }): Promise<{
     processed: number;
     queue: PublisherQueueItem[];
@@ -163,18 +167,20 @@ export async function dispatchAutomationQueueApi(options?: {
         method: 'POST',
         body: JSON.stringify({
             limit: options?.limit ?? 5,
-            dry_run: options?.dry_run ?? false,
+            dry_run: options?.dry_run ?? true,
+            confirm_live: options?.confirm_live ?? false,
         }),
     });
 }
 
 export async function dispatchQueueItemApi(
     id: string,
-    dry_run = false,
+    dry_run = true,
+    confirm_live = false,
 ): Promise<unknown> {
     return automationRequest(`/queue/${id}/dispatch`, {
         method: 'POST',
-        body: JSON.stringify({ dry_run }),
+        body: JSON.stringify({ dry_run, confirm_live }),
     });
 }
 
@@ -185,19 +191,30 @@ export async function failQueueItemApi(id: string, error_message?: string): Prom
     });
 }
 
-export async function retryAutomationExecutionApi(id: string): Promise<unknown> {
-    return automationRequest(`/executions/${id}/retry`, { method: 'POST' });
+export async function retryAutomationExecutionApi(
+    id: string,
+    options?: { dry_run?: boolean; confirm_live?: boolean },
+): Promise<unknown> {
+    return automationRequest(`/executions/${id}/retry`, {
+        method: 'POST',
+        body: JSON.stringify({
+            dry_run: options?.dry_run ?? true,
+            confirm_live: options?.confirm_live ?? false,
+        }),
+    });
 }
 
 export async function runAutomationTestApi(options?: {
     topic_id?: string;
     dry_run?: boolean;
+    confirm_live?: boolean;
 }): Promise<unknown> {
     return automationRequest('/test-run', {
         method: 'POST',
         body: JSON.stringify({
             topic_id: options?.topic_id,
             dry_run: options?.dry_run ?? true,
+            confirm_live: options?.confirm_live ?? false,
         }),
     });
 }
