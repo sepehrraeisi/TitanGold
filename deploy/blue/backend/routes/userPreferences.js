@@ -24,6 +24,7 @@ import { authenticate } from '../middleware/auth.js';
 import { preferencesLimiter } from '../middleware/rateLimits.js';
 import Joi from 'joi';
 import { logger } from '../services/logger.js';
+import { getNotificationChannels, testNotificationChannel } from '../services/notificationService.js';
 
 const router = express.Router();
 
@@ -919,20 +920,19 @@ router.post('/sync', authenticate, async (req, res) => {
  */
 router.get('/telegram', authenticate, async (req, res) => {
     try {
-        const userId = req.user.id;
-
-        const result = await pool.query(
-            `SELECT preferences->'notifications'->'telegram' as telegram_config
-             FROM user_preferences
-             WHERE user_id = $1`,
-            [userId]
-        );
-
-        const telegramConfig = result.rows[0]?.telegram_config || { enabled: false };
+        const channels = await getNotificationChannels(req.user.id);
 
         res.json({
             success: true,
-            telegram: telegramConfig
+            telegram: {
+                enabled: channels.telegram.enabled,
+                configured: channels.telegram.configured,
+                provider: channels.telegram.provider,
+                status: channels.telegram.status,
+                publisherId: channels.telegram.publisherId,
+                publisherName: channels.telegram.publisherName,
+                destinationMasked: channels.telegram.destinationMasked
+            }
         });
     } catch (error) {
         logger.error('❌ Error fetching Telegram config:', error);
@@ -947,62 +947,11 @@ router.get('/telegram', authenticate, async (req, res) => {
  * PUT /api/user-preferences/telegram - Update Telegram configuration
  */
 router.put('/telegram', authenticate, async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const { botToken, chatId, enabled } = req.body;
-
-        // Validation
-        if (enabled && (!botToken || !chatId)) {
-            return res.status(400).json({
-                success: false,
-                error: 'Bot token and chat ID are required when enabling Telegram'
-            });
-        }
-
-        // Get current preferences
-        const current = await pool.query(
-            'SELECT preferences FROM user_preferences WHERE user_id = $1',
-            [userId]
-        );
-
-        let preferences = current.rows[0]?.preferences || {};
-        
-        // Ensure structure exists
-        if (!preferences.notifications) {
-            preferences.notifications = {};
-        }
-
-        // Update Telegram config
-        preferences.notifications.telegram = {
-            enabled: enabled || false,
-            botToken: botToken || '',
-            chatId: chatId || ''
-        };
-
-        // Save to database
-        await pool.query(
-            `INSERT INTO user_preferences (user_id, preferences)
-             VALUES ($1, $2)
-             ON CONFLICT (user_id)
-             DO UPDATE SET 
-                preferences = $2,
-                updated_at = CURRENT_TIMESTAMP`,
-            [userId, JSON.stringify(preferences)]
-        );
-
-        res.json({
-            success: true,
-            telegram: preferences.notifications.telegram,
-            message: 'Telegram configuration updated successfully'
-        });
-
-    } catch (error) {
-        logger.error('❌ Error updating Telegram config:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to update Telegram configuration'
-        });
-    }
+    return res.status(400).json({
+        success: false,
+        code: 'TELEGRAM_SETTINGS_MOVED_TO_PUBLISHER',
+        error: 'Personal notification Telegram credentials are no longer stored here. Configure Telegram delivery in DataHub Telegram Publisher.'
+    });
 });
 
 /**
@@ -1010,46 +959,21 @@ router.put('/telegram', authenticate, async (req, res) => {
  */
 router.post('/telegram/test', authenticate, async (req, res) => {
     try {
-        const userId = req.user.id;
-
-        // Get Telegram config
-        const result = await pool.query(
-            `SELECT preferences->'notifications'->'telegram' as telegram_config
-             FROM user_preferences
-             WHERE user_id = $1`,
-            [userId]
-        );
-
-        const telegramConfig = result.rows[0]?.telegram_config;
-
-        if (!telegramConfig || !telegramConfig.enabled || !telegramConfig.botToken || !telegramConfig.chatId) {
-            return res.status(400).json({
-                success: false,
-                error: 'Telegram is not configured'
-            });
-        }
-
-        // Send test message
-        const TelegramBot = (await import('node-telegram-bot-api')).default;
-        const bot = new TelegramBot(telegramConfig.botToken);
-
-        await bot.sendMessage(
-            telegramConfig.chatId,
-            '🧪 *Test Message*\n\nYour Telegram notifications are configured correctly!',
-            { parse_mode: 'Markdown' }
-        );
-
-        res.json({
-            success: true,
-            message: 'Test message sent successfully'
+        const { dry_run = true, confirm_live = false } = req.body || {};
+        const result = await testNotificationChannel({
+            userId: req.user.id,
+            channel: 'telegram',
+            dryRun: dry_run !== false,
+            confirmLive: confirm_live === true
         });
-
+        res.json(result);
     } catch (error) {
         logger.error('❌ Error testing Telegram:', error);
-        res.status(500).json({
+        res.status(error.status || 500).json({
             success: false,
-            error: 'Failed to send test message',
-            details: error.message
+            error: error.message || 'Failed to test Telegram notifications',
+            code: error.code || 'TELEGRAM_TEST_FAILED',
+            history: error.history
         });
     }
 });

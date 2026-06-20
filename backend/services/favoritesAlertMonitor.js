@@ -7,9 +7,13 @@
  */
 
 import pool from '../database/db.js';
-import { telegramService } from './telegram.js';
 import axios from 'axios';
 import { logger } from '../services/logger.js';
+import {
+    createNotificationEvent,
+    recordNotificationSkipped,
+    NOTIFICATION_ERROR_CODES,
+} from './notificationService.js';
 
 class FavoritesAlertMonitor {
     constructor() {
@@ -152,15 +156,22 @@ class FavoritesAlertMonitor {
         try {
             await client.query('BEGIN');
 
-            // Mark alert as triggered
-            await client.query(
+            // Atomically mark alert as triggered; prevents duplicate sends in multi-worker deployments.
+            const updateResult = await client.query(
                 `UPDATE favorite_alerts 
                  SET is_active = false,
                      triggered_at = CURRENT_TIMESTAMP,
                      triggered_price = $1
-                 WHERE id = $2`,
+                 WHERE id = $2 AND is_active = true
+                 RETURNING id`,
                 [currentPrice, alert.alert_id]
             );
+
+            if (updateResult.rows.length === 0) {
+                await client.query('ROLLBACK');
+                logger.info(`Alert ${alert.alert_id} was already triggered by another worker`);
+                return;
+            }
 
             await client.query('COMMIT');
 
@@ -183,48 +194,60 @@ class FavoritesAlertMonitor {
     async sendNotifications(alert, currentPrice) {
         const message = this.formatAlertMessage(alert, currentPrice);
 
-        // Send Telegram notification
+        // Telegram live delivery is intentionally disabled for P2 until personal
+        // notifications have a hardened delivery worker. Record a backend history
+        // item through notificationService instead of using raw user bot tokens.
         if (alert.notify_telegram) {
             try {
-                // Get user's Telegram config from preferences
-                const telegramResult = await pool.query(
-                    `SELECT preferences->'notifications'->'telegram' as telegram_config
-                     FROM user_preferences
-                     WHERE user_id = $1`,
-                    [alert.user_id]
-                );
-
-                const telegramConfig = telegramResult.rows[0]?.telegram_config;
-
-                if (telegramConfig && telegramConfig.enabled && telegramConfig.botToken && telegramConfig.chatId) {
-                    // Send using user's bot
-                    const TelegramBot = (await import('node-telegram-bot-api')).default;
-                    const bot = new TelegramBot(telegramConfig.botToken);
-                    
-                    await bot.sendMessage(
-                        telegramConfig.chatId,
-                        message,
-                        { parse_mode: 'Markdown' }
-                    );
-                    
-                    logger.info(`📱 Telegram notification sent to user ${alert.username} for ${alert.symbol}`);
-                } else {
-                    logger.warn(`⚠️ Telegram not configured for user ${alert.username}`);
-                }
+                await createNotificationEvent({
+                    userId: alert.user_id,
+                    channel: 'telegram',
+                    messageType: 'price_alert',
+                    title: 'Price Alert Triggered',
+                    message,
+                    dryRun: false,
+                    confirmLive: true,
+                    metadata: {
+                        source: 'favorite_alerts',
+                        alert_id: alert.alert_id,
+                        asset_id: alert.asset_id,
+                        symbol: alert.symbol,
+                        live_delivery_disabled_until: 'P3',
+                    },
+                });
             } catch (error) {
-                logger.error('❌ Telegram notification failed:', error);
+                if (error.code === NOTIFICATION_ERROR_CODES.LIVE_NOT_SUPPORTED_YET) {
+                    logger.info(`📱 Telegram favorite alert delivery skipped safely for ${alert.symbol}`);
+                } else {
+                    logger.error('❌ Telegram notification history failed:', error);
+                }
             }
         }
 
-        // TODO: Browser notification (via WebSocket)
         if (alert.notify_browser) {
-            // This would integrate with WebSocket service
-            logger.info(`🔔 Browser notification needed for ${alert.symbol}`);
+            await recordNotificationSkipped({
+                userId: alert.user_id,
+                channel: 'browser',
+                messageType: 'price_alert',
+                title: 'Price Alert Triggered',
+                message,
+                errorCode: 'BROWSER_SERVER_DELIVERY_NOT_SUPPORTED',
+                errorMessage: 'Browser notifications are local previews only in P2',
+                metadata: { source: 'favorite_alerts', alert_id: alert.alert_id, symbol: alert.symbol },
+            });
         }
 
-        // TODO: Email notification
         if (alert.notify_email) {
-            logger.info(`📧 Email notification needed for ${alert.symbol}`);
+            await recordNotificationSkipped({
+                userId: alert.user_id,
+                channel: 'email',
+                messageType: 'price_alert',
+                title: 'Price Alert Triggered',
+                message,
+                errorCode: 'EMAIL_COMING_SOON',
+                errorMessage: 'Email notifications require secured server-side SMTP configuration',
+                metadata: { source: 'favorite_alerts', alert_id: alert.alert_id, symbol: alert.symbol },
+            });
         }
     }
 

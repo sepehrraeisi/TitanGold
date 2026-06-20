@@ -1,8 +1,16 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { query } from '../database/db.js';
-import { broadcastNotification } from '../services/websocket.js';
 import { logger } from '../services/logger.js';
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  getNotificationChannels,
+  getNotificationHistory,
+  testNotificationChannel,
+  createNotificationEvent,
+  NOTIFICATION_ERROR_CODES,
+} from '../services/notificationService.js';
 
 const router = express.Router();
 
@@ -19,87 +27,136 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// Test broadcast endpoint (for admins/testers): broadcasts to all connected WS clients
-router.post('/broadcast', authenticate, async (req, res) => {
+router.get('/preferences', authenticate, async (req, res) => {
   try {
-    const { title = 'Test Notification', message = 'This is a test broadcast', level = 'info' } = req.body || {};
-
-    const payload = {
-      title,
-      message,
-      level, // info | warning | error
-      timestamp: new Date().toISOString(),
-      userId: req.user?.id,
-    };
-
-    broadcastNotification(payload);
-    logger.info('notification_broadcast', { userId: req.user?.id, level });
-
-    res.json({ success: true, broadcasted: payload });
+    const preferences = await getNotificationPreferences(req.user.id);
+    res.json({ success: true, preferences });
   } catch (error) {
-    logger.error('notification_broadcast_failed', { error: error.message });
-    res.status(500).json({ error: 'Failed to broadcast notification', message: error.message });
+    logger.error('notification_preferences_get_failed', { error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch notification preferences' });
   }
+});
+
+router.put('/preferences', authenticate, async (req, res) => {
+  try {
+    const preferences = await updateNotificationPreferences(req.user.id, req.body || {});
+    res.json({ success: true, preferences });
+  } catch (error) {
+    logger.error('notification_preferences_update_failed', { error: error.message });
+    res.status(error.status || 500).json({
+      success: false,
+      error: error.message || 'Failed to update notification preferences',
+      code: error.code,
+    });
+  }
+});
+
+router.get('/channels', authenticate, async (req, res) => {
+  try {
+    const channels = await getNotificationChannels(req.user.id);
+    res.json({ success: true, channels });
+  } catch (error) {
+    logger.error('notification_channels_get_failed', { error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch notification channels' });
+  }
+});
+
+router.post('/test', authenticate, async (req, res) => {
+  try {
+    const {
+      channel = 'system',
+      dry_run = true,
+      confirm_live = false,
+      source_id = null,
+    } = req.body || {};
+
+    const result = await testNotificationChannel({
+      userId: req.user.id,
+      channel,
+      dryRun: dry_run !== false,
+      confirmLive: confirm_live === true,
+      sourceId: source_id,
+    });
+    res.json(result);
+  } catch (error) {
+    const status = error.status || 500;
+    if (status >= 500) logger.error('notification_test_failed', { error: error.message });
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Notification test failed',
+      code: error.code || 'NOTIFICATION_TEST_FAILED',
+      history: error.history,
+    });
+  }
+});
+
+router.post('/events', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await createNotificationEvent({
+      ...body,
+      userId: body.user_id || body.userId || req.user.id,
+      dryRun: body.dry_run !== false,
+      confirmLive: body.confirm_live === true,
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    const status = error.status || 500;
+    if (status >= 500) logger.error('notification_event_failed', { error: error.message });
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Notification event failed',
+      code: error.code || 'NOTIFICATION_EVENT_FAILED',
+      history: error.history,
+    });
+  }
+});
+
+// Admin-only compatibility endpoint. Live WebSocket broadcast is frozen for P2.
+router.post('/broadcast', authenticate, authorize('admin'), async (req, res) => {
+  const { dry_run = true, confirm_live = false } = req.body || {};
+  if (dry_run !== false) {
+    return res.json({
+      success: true,
+      dry_run: true,
+      status: 'dry_run',
+      message: 'Broadcast dry-run accepted; no clients were notified.',
+    });
+  }
+  if (confirm_live !== true) {
+    return res.status(400).json({
+      success: false,
+      code: NOTIFICATION_ERROR_CODES.LIVE_CONFIRMATION_REQUIRED,
+      error: 'confirm_live must be true for live broadcast',
+    });
+  }
+  return res.status(400).json({
+    success: false,
+    code: NOTIFICATION_ERROR_CODES.LIVE_NOT_SUPPORTED_YET,
+    error: 'Live notification broadcast is disabled until scoped delivery is implemented',
+  });
 });
 
 // ---------------------------------------------------------------------------
 // New: Notification settings & history stored in database
 // ---------------------------------------------------------------------------
 
-// Get notification settings for current user
+// Legacy alias: Get notification settings for current user.
 router.get('/settings', authenticate, async (req, res) => {
   try {
-    const userId = req.user.id;
-
-    const result = await query(
-      'SELECT * FROM notification_settings WHERE user_id = $1 ORDER BY category, channel',
-      [userId]
-    );
-
-    if (result.rows.length === 0) {
-      const defaults = createDefaultNotificationSettings(userId);
-      return res.json({ settings: defaults });
-    }
-
-    res.json({ settings: result.rows });
+    const preferences = await getNotificationPreferences(req.user.id);
+    res.json({ success: true, preferences, settings: preferences });
   } catch (error) {
     logger.error('Error fetching notification settings:', error);
     res.status(500).json({ error: 'Failed to fetch notification settings' });
   }
 });
 
-// Save/update notification settings
+// Legacy alias: Save/update notification settings.
 router.put('/settings', authenticate, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { settings } = req.body;
-
-    if (!Array.isArray(settings)) {
-      return res.status(400).json({ error: 'Settings must be an array' });
-    }
-
-    for (const setting of settings) {
-      await query(
-        `INSERT INTO notification_settings (user_id, channel, category, enabled, filters)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (user_id, channel, category)
-         DO UPDATE SET 
-           enabled = $4,
-           filters = $5,
-           updated_at = NOW()`,
-        [userId, setting.channel, setting.category, setting.enabled, setting.filters || {}]
-      );
-    }
-
-    const result = await query(
-      'SELECT * FROM notification_settings WHERE user_id = $1 ORDER BY category, channel',
-      [userId]
-    );
-
-    res.json({
-      settings: result.rows,
-      message: 'Notification settings saved successfully',
-    });
+    const preferences = await updateNotificationPreferences(req.user.id, req.body?.preferences || req.body || {});
+    res.json({ success: true, preferences, settings: preferences });
   } catch (error) {
     logger.error('Error saving notification settings:', error);
     res.status(500).json({ error: 'Failed to save notification settings' });
@@ -112,30 +169,22 @@ router.get('/history', authenticate, async (req, res) => {
     const userId = req.user.id;
     const { limit = '50', offset = '0', unreadOnly = 'false' } = req.query;
 
-    let sql = `
-      SELECT * FROM notification_history 
-      WHERE user_id = $1
-    `;
-    const params = [userId];
-
-    if (unreadOnly === 'true') {
-      sql += ' AND read_at IS NULL';
-    }
-
-    sql += ' ORDER BY created_at DESC LIMIT $2 OFFSET $3';
-    params.push(parseInt(limit, 10) || 50, parseInt(offset, 10) || 0);
-
-    const result = await query(sql, params);
-
+    const history = await getNotificationHistory(userId, {
+      limit,
+      offset,
+      status: req.query.status,
+    });
     const unreadResult = await query(
       'SELECT COUNT(*) as count FROM notification_history WHERE user_id = $1 AND read_at IS NULL',
       [userId]
     );
 
     res.json({
-      notifications: result.rows,
+      notifications: history.notifications,
       unreadCount: parseInt(unreadResult.rows[0].count, 10) || 0,
-      total: result.rows.length,
+      total: history.total,
+      limit: history.limit,
+      offset: history.offset,
     });
   } catch (error) {
     logger.error('Error fetching notification history:', error);
@@ -184,39 +233,6 @@ router.delete('/history/:id', authenticate, async (req, res) => {
   } catch (error) {
     logger.error('Error deleting notification:', error);
     res.status(500).json({ error: 'Failed to delete notification' });
-  }
-});
-
-// Create test notification (and optionally send via channels in future)
-router.post('/test', authenticate, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { channel = 'in_app', category = 'system' } = req.body || {};
-
-    const result = await query(
-      `INSERT INTO notification_history (user_id, type, category, title, message, data)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [
-        userId,
-        'test',
-        category,
-        'Test Notification',
-        `This is a test ${channel} notification from TitanGold Platform. If you received this, your notification system is working correctly.`,
-        JSON.stringify({ channel, timestamp: new Date().toISOString() }),
-      ]
-    );
-
-    // In future we can actually send via email/sms/push based on channel here
-
-    res.json({
-      success: true,
-      message: 'Test notification created successfully',
-      notification: result.rows[0],
-    });
-  } catch (error) {
-    logger.error('Error sending test notification:', error);
-    res.status(500).json({ error: 'Failed to send test notification' });
   }
 });
 
