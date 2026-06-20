@@ -3,7 +3,7 @@
 Date: 2026-06-20
 Mode: AUDIT -> IMPLEMENTATION -> VERIFY
 Verdict: REAL WORKING
-Commit: TBD
+Implementation commit: 12177c3
 
 ## 1. Pre-change audit
 
