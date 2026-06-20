@@ -14,7 +14,7 @@ After: **REAL WORKING**
 
 Settings -> Notifications is now a personal notification preference center. It no longer acts as a Telegram Publisher clone, no longer accepts Telegram bot tokens or chat IDs in the Notifications UI, and no longer exposes live unsafe test/send paths for Telegram, email, or notification broadcasts.
 
-Commit hash: final hash is produced after this document is committed; record it from `git log -1 --format=%H`.
+Implementation commit hash: `0c9228b73abc6eb6052bf9ceef6e16a96a30be7c`
 
 ## Removed UI Sections
 
