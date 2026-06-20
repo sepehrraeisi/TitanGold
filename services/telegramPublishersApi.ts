@@ -35,12 +35,38 @@ export type TelegramPublishersListResult = {
 export type PublisherHistoryRecord = {
     id: string;
     publisher_id: string;
+    publisher_name?: string | null;
+    source_id?: string | null;
+    source_name?: string | null;
+    data_type?: string | null;
     content_type?: string | null;
     content_summary?: string | null;
     status: string;
     telegram_message_id?: string | null;
     error_message?: string | null;
+    error_code?: string | null;
+    delivery_mode?: string | null;
+    created_by?: string | null;
+    created_by_email?: string | null;
+    metadata?: Record<string, unknown>;
     created_at: string;
+};
+
+export type PublisherMappingRecord = {
+    id: string;
+    source_id: string;
+    source_name: string;
+    source_type: string;
+    publisher_id: string;
+    publisher_name: string;
+    publisher_channel_id: string;
+    publisher_channel_username?: string | null;
+    is_enabled: boolean;
+    template_id?: string | null;
+    last_activity_at?: string | null;
+    last_status?: string | null;
+    created_at: string;
+    updated_at: string;
 };
 
 export type PublishActionResult = {
@@ -92,10 +118,20 @@ async function publishersRequest<T>(path: string, init?: RequestInit): Promise<T
     return res.json() as Promise<T>;
 }
 
+function errorDetailsText(details: unknown): string | null {
+    if (!details || typeof details !== 'object') return null;
+    const record = details as Record<string, unknown>;
+    const parts = [record.code, record.reason, record.error]
+        .filter((v): v is string => typeof v === 'string' && v.length > 0);
+    return parts.length ? parts.join(' · ') : null;
+}
+
 export function mapHistoryToUiItem(
     row: PublisherHistoryRecord,
 ): PublisherHistoryItem {
     const ok = row.status === 'sent' || row.status === 'test' || row.status === 'dry_run';
+    const sourceLabel = row.source_name ? ` · ${row.source_name}` : '';
+    const errorLabel = row.error_code ? `[${row.error_code}] ` : '';
     return {
         id: row.id,
         queueId: '',
@@ -103,14 +139,49 @@ export function mapHistoryToUiItem(
         topicId: '',
         publisherId: row.publisher_id,
         agentId: 'system',
-        status: ok && row.status !== 'failed' ? 'sent' : 'failed',
+        status: ok && row.status !== 'failed' && row.status !== 'blocked' ? 'sent' : 'failed',
         sentAt: row.created_at,
-        payloadPreview: row.content_summary || row.error_message || row.status,
+        payloadPreview:
+            `${errorLabel}${row.content_summary || row.error_message || row.status}${sourceLabel}`,
     };
 }
 
 export async function fetchTelegramPublishers(): Promise<TelegramPublishersListResult> {
     return publishersRequest<TelegramPublishersListResult>('/', { method: 'GET' });
+}
+
+export async function fetchPublisherMappings(): Promise<{ mappings: PublisherMappingRecord[] }> {
+    return publishersRequest<{ mappings: PublisherMappingRecord[] }>('/mappings', { method: 'GET' });
+}
+
+export type CreatePublisherMappingPayload = {
+    source_id: string;
+    publisher_id: string;
+    is_enabled?: boolean;
+    template_id?: string | null;
+};
+
+export async function createPublisherMapping(
+    payload: CreatePublisherMappingPayload,
+): Promise<PublisherMappingRecord> {
+    return publishersRequest<PublisherMappingRecord>('/mappings', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function updatePublisherMapping(
+    id: string,
+    payload: Partial<CreatePublisherMappingPayload>,
+): Promise<PublisherMappingRecord> {
+    return publishersRequest<PublisherMappingRecord>(`/mappings/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function disablePublisherMapping(id: string): Promise<PublisherMappingRecord> {
+    return publishersRequest<PublisherMappingRecord>(`/mappings/${id}`, { method: 'DELETE' });
 }
 
 export async function fetchPublisherHistory(
@@ -174,12 +245,23 @@ export async function publishToTelegramPublisher(
         message: string;
         content_type?: string;
         confirm_publish: boolean;
+        source_id: string;
+        data_type?: string;
         title?: string;
         content?: string;
+        allow_temporary_publish?: boolean;
     },
 ): Promise<PublishActionResult> {
     return publishersRequest<PublishActionResult>(`/${id}/publish`, {
         method: 'POST',
         body: JSON.stringify(payload),
     });
+}
+
+export function formatPublisherApiError(error: unknown): string {
+    if (error instanceof DataHubApiError) {
+        const details = errorDetailsText(error.details);
+        return details ? `${error.message} (${details})` : error.message;
+    }
+    return error instanceof Error ? error.message : 'Request failed';
 }

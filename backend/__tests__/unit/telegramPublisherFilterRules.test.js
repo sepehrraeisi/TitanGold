@@ -54,14 +54,17 @@ describe('telegram publisher filter enforcement', () => {
         delete process.env.TELEGRAM_PUBLISHER_DRY_RUN;
     });
 
-    test('publishing keyword blacklist blocks dry-run before history write', async () => {
+    test('publishing keyword blacklist blocks dry-run and records blocked history', async () => {
         mockQuery.mockImplementation(async (sql) => {
             const text = String(sql);
             if (text.includes('SELECT * FROM datahub_filter_rules')) return { rows: [publishingRule()] };
             if (text.includes('UPDATE datahub_filter_rules')) return { rows: [] };
             if (text.includes('INSERT INTO data_hub_logs')) return { rows: [{ id: 'log-1' }] };
+            if (text.includes('SELECT id FROM datahub_publisher_source_mappings')) {
+                return { rows: [{ id: 'mapping-1' }] };
+            }
             if (text.includes('SELECT * FROM telegram_publishers')) {
-                return { rows: [{ id: PUBLISHER_ID, is_active: true }] };
+                return { rows: [{ id: PUBLISHER_ID, is_active: true, template: '{message}' }] };
             }
             if (text.includes('INSERT INTO publisher_delivery_history')) {
                 return { rows: [{ id: 'history-1' }] };
@@ -85,9 +88,10 @@ describe('telegram publisher filter enforcement', () => {
         ).rejects.toMatchObject({
             status: 403,
             code: 'FILTER_RULE_BLOCKED',
+            history_id: 'history-1',
         });
 
-        expect(mockQuery).not.toHaveBeenCalledWith(
+        expect(mockQuery).toHaveBeenCalledWith(
             expect.stringContaining('INSERT INTO publisher_delivery_history'),
             expect.any(Array),
         );
@@ -97,6 +101,9 @@ describe('telegram publisher filter enforcement', () => {
         mockQuery.mockImplementation(async (sql) => {
             const text = String(sql);
             if (text.includes('SELECT * FROM datahub_filter_rules')) return { rows: [publishingRule()] };
+            if (text.includes('SELECT id FROM datahub_publisher_source_mappings')) {
+                return { rows: [{ id: 'mapping-1' }] };
+            }
             if (text.includes('SELECT * FROM telegram_publishers')) {
                 return {
                     rows: [{
@@ -131,5 +138,38 @@ describe('telegram publisher filter enforcement', () => {
             expect.stringContaining('INSERT INTO publisher_delivery_history'),
             expect.any(Array),
         );
+    });
+
+    test('missing mapping fails before dry-run unless temporary publish is explicit', async () => {
+        mockQuery.mockImplementation(async (sql) => {
+            const text = String(sql);
+            if (text.includes('SELECT id FROM datahub_publisher_source_mappings')) return { rows: [] };
+            if (text.includes('SELECT * FROM telegram_publishers')) {
+                return { rows: [{ id: PUBLISHER_ID, is_active: true, template: '{message}' }] };
+            }
+            if (text.includes('INSERT INTO publisher_delivery_history')) {
+                return { rows: [{ id: 'history-2' }] };
+            }
+            return { rows: [] };
+        });
+
+        await expect(
+            runPublisherPublish(
+                PUBLISHER_ID,
+                {
+                    message: 'allowed message',
+                    content_type: 'manual',
+                    confirm_publish: true,
+                    source_id: SOURCE_ID,
+                    data_type: 'verify',
+                    accessControl,
+                },
+                'user-1',
+            ),
+        ).rejects.toMatchObject({
+            status: 409,
+            code: 'PUBLISHER_MAPPING_REQUIRED',
+            history_id: 'history-2',
+        });
     });
 });

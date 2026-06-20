@@ -25,12 +25,18 @@ function clean(value) {
 function deriveRuntimeAgentKey(req) {
   const path = req.originalUrl || req.url || '';
   if (
-    path.includes('/data-hub/telegram-publishers/') ||
+    (path.includes('/data-hub/telegram-publishers/') &&
+      !path.includes('/data-hub/telegram-publishers/mappings')) ||
     path.includes('/data-sources/publish-telegram')
   ) {
     return RUNTIME_AGENT_KEYS.PUBLISHER;
   }
   return null;
+}
+
+function isPublisherMappingManagementRoute(req) {
+  const path = req.originalUrl || req.url || '';
+  return path.includes('/data-hub/telegram-publishers/mappings');
 }
 
 export function extractAccessControlContext(req) {
@@ -192,6 +198,9 @@ export function assertAccessControlGateway({
 export async function accessControlGateway(req, res, next) {
   try {
     const context = extractAccessControlContext(req);
+    if (isPublisherMappingManagementRoute(req)) {
+      return next();
+    }
     if (!context.sourceId) {
       return next();
     }

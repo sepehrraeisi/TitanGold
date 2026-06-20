@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DataSource, PublisherHistoryItem } from '../../../../../../types';
+import { DataSource } from '../../../../../../types';
 import {
     useTelegramPublishersQuery,
     usePublisherHistoryQuery,
@@ -7,9 +7,14 @@ import {
     useDisableTelegramPublisherMutation,
     useTestTelegramPublisherMutation,
     usePublishTelegramPublisherMutation,
+    usePublisherMappingsQuery,
+    useCreatePublisherMappingMutation,
+    useUpdatePublisherMappingMutation,
+    useDisablePublisherMappingMutation,
 } from '../../../../../../hooks/useTelegramPublishers';
 import {
-    mapHistoryToUiItem,
+    formatPublisherApiError,
+    PublisherMappingRecord,
     TelegramPublisherRecord,
 } from '../../../../../../services/telegramPublishersApi';
 import {
@@ -45,6 +50,8 @@ const defaultTemplate = `📢 **Signal**
 
 _Source: Titan DataHub_`;
 
+const defaultPublishMessage = 'Dry-run DataHub publisher validation message.';
+
 const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSources }) => {
     const { canWrite } = useDataHubPermissions();
     const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
@@ -53,6 +60,17 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [selectedSourceId, setSelectedSourceId] = useState<string>('');
+    const [publishMessage, setPublishMessage] = useState(defaultPublishMessage);
+    const [publishContentType, setPublishContentType] = useState('manual');
+    const [allowTemporaryPublish, setAllowTemporaryPublish] = useState(false);
+    const [showMappingModal, setShowMappingModal] = useState(false);
+    const [editingMapping, setEditingMapping] = useState<PublisherMappingRecord | null>(null);
+    const [mappingForm, setMappingForm] = useState({
+        source_id: '',
+        publisher_id: '',
+        is_enabled: true,
+    });
 
     const [form, setForm] = useState({
         name: '',
@@ -66,6 +84,8 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
 
     const { data: listData, isLoading, error: listError, refetch, isFetching } =
         useTelegramPublishersQuery({ enabled: true });
+    const { data: mappingData, isLoading: isLoadingMappings } =
+        usePublisherMappingsQuery({ enabled: true });
 
     const publishers = listData?.publishers ?? [];
     const metrics = listData?.metrics ?? {
@@ -81,6 +101,12 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
         }
     }, [publishers, selectedPublisherId]);
 
+    useEffect(() => {
+        if (telegramSources.length > 0 && !selectedSourceId) {
+            setSelectedSourceId(telegramSources[0].id);
+        }
+    }, [telegramSources, selectedSourceId]);
+
     const { data: historyData, isLoading: isLoadingHistory } = usePublisherHistoryQuery(
         selectedPublisherId,
         { enabled: activeTab === 'history' && Boolean(selectedPublisherId) },
@@ -90,11 +116,11 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
     const disableMutation = useDisableTelegramPublisherMutation();
     const testMutation = useTestTelegramPublisherMutation();
     const publishMutation = usePublishTelegramPublisherMutation();
+    const createMappingMutation = useCreatePublisherMappingMutation();
+    const updateMappingMutation = useUpdatePublisherMappingMutation();
+    const disableMappingMutation = useDisablePublisherMappingMutation();
 
-    const historyItems: PublisherHistoryItem[] = useMemo(
-        () => (historyData?.data ?? []).map(mapHistoryToUiItem),
-        [historyData],
-    );
+    const mappings = mappingData?.mappings ?? [];
 
     const listQueryError = formatDataHubQueryError(t, listError);
     const actionQueryError = formatDataHubQueryError(
@@ -102,10 +128,20 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
         createMutation.error ||
             disableMutation.error ||
             testMutation.error ||
-            publishMutation.error,
+            publishMutation.error ||
+            createMappingMutation.error ||
+            updateMappingMutation.error ||
+            disableMappingMutation.error,
     );
 
     const selectedPublisher = publishers.find(p => p.id === selectedPublisherId);
+    const selectedSource = telegramSources.find(source => source.id === selectedSourceId);
+    const selectedMapping = mappings.find(
+        mapping =>
+            mapping.publisher_id === selectedPublisherId &&
+            mapping.source_id === selectedSourceId &&
+            mapping.is_enabled,
+    );
 
     const handleCreate = async () => {
         setActionError(null);
@@ -163,17 +199,31 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
     };
 
     const handlePublish = async (pub: TelegramPublisherRecord) => {
-        const message = window.prompt(t('publisher_publish_prompt'), t('publisher_publish_sample'));
-        if (!message?.trim()) return;
-        if (!window.confirm(t('publisher_publish_confirm'))) return;
+        if (!selectedSourceId) {
+            setActionError(t('publisher_source_required'));
+            return;
+        }
+        if (!publishMessage.trim()) {
+            setActionError(t('publisher_message_required'));
+            return;
+        }
+        if (!selectedMapping && !allowTemporaryPublish) {
+            setActionError(t('publisher_mapping_required'));
+            return;
+        }
 
         setActionError(null);
         try {
             const result = await publishMutation.mutateAsync({
                 id: pub.id,
-                message: message.trim(),
+                source_id: selectedSourceId,
+                data_type: selectedSource?.type || 'manual',
+                message: publishMessage.trim(),
                 confirm_publish: true,
-                content_type: 'manual',
+                content_type: publishContentType,
+                title: selectedSource?.name,
+                content: publishMessage.trim(),
+                allow_temporary_publish: allowTemporaryPublish,
             });
             const label = result.dry_run
                 ? t('publisher_publish_dry_run')
@@ -184,10 +234,70 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             setSelectedPublisherId(pub.id);
             await refetch();
         } catch (e: unknown) {
-            setActionError(
-                formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_publish_failed')))
-                    ?.message || t('publisher_publish_failed'),
-            );
+            setActionError(formatPublisherApiError(e) || t('publisher_publish_failed'));
+        }
+    };
+
+    const openCreateMapping = () => {
+        setEditingMapping(null);
+        setMappingForm({
+            source_id: selectedSourceId || telegramSources[0]?.id || '',
+            publisher_id: selectedPublisherId || publishers[0]?.id || '',
+            is_enabled: true,
+        });
+        setShowMappingModal(true);
+    };
+
+    const openEditMapping = (mapping: PublisherMappingRecord) => {
+        setEditingMapping(mapping);
+        setMappingForm({
+            source_id: mapping.source_id,
+            publisher_id: mapping.publisher_id,
+            is_enabled: mapping.is_enabled,
+        });
+        setSelectedSourceId(mapping.source_id);
+        setSelectedPublisherId(mapping.publisher_id);
+        setShowMappingModal(true);
+    };
+
+    const handleMappingSubmit = async () => {
+        if (!mappingForm.source_id || !mappingForm.publisher_id) {
+            setActionError(t('publisher_mapping_fields_required'));
+            return;
+        }
+        setActionError(null);
+        try {
+            if (editingMapping) {
+                await updateMappingMutation.mutateAsync({
+                    id: editingMapping.id,
+                    payload: {
+                        source_id: mappingForm.source_id,
+                        publisher_id: mappingForm.publisher_id,
+                        is_enabled: mappingForm.is_enabled,
+                    },
+                });
+                setActionMessage(t('publisher_mapping_updated'));
+            } else {
+                await createMappingMutation.mutateAsync({
+                    source_id: mappingForm.source_id,
+                    publisher_id: mappingForm.publisher_id,
+                    is_enabled: mappingForm.is_enabled,
+                });
+                setActionMessage(t('publisher_mapping_created'));
+            }
+            setShowMappingModal(false);
+        } catch (e: unknown) {
+            setActionError(formatPublisherApiError(e) || t('publisher_mapping_save_failed'));
+        }
+    };
+
+    const handleDisableMapping = async (mapping: PublisherMappingRecord) => {
+        if (!window.confirm(t('publisher_mapping_disable_confirm'))) return;
+        try {
+            await disableMappingMutation.mutateAsync(mapping.id);
+            setActionMessage(t('publisher_mapping_disabled'));
+        } catch (e: unknown) {
+            setActionError(formatPublisherApiError(e) || t('publisher_mapping_save_failed'));
         }
     };
 
@@ -281,24 +391,141 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                 <>
                     {activeTab === 'channels' && (
                         <div className="space-y-4">
-                            {telegramSources.length > 0 && (
-                                <div className={DATAHUB_INNER_LIST}>
-                                    <h4 className="text-[11px] font-semibold text-foreground mb-3">
-                                        {t('telegram_channel_mapping')}
-                                    </h4>
+                            <div className={DATAHUB_INNER_LIST}>
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                    <div>
+                                        <h4 className="text-[11px] font-semibold text-foreground">
+                                            {t('source_mapping')}
+                                        </h4>
+                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                            {t('source_mapping_desc')}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={openCreateMapping}
+                                        className={BTN_OUTLINE_PURPLE}
+                                        disabled={wg(createMappingMutation.isPending || publishers.length === 0 || telegramSources.length === 0).disabled}
+                                        title={wg(createMappingMutation.isPending).title}
+                                    >
+                                        {t('create_mapping')}
+                                    </button>
+                                </div>
+                                {isLoadingMappings ? (
+                                    <p className="text-[11px] text-muted-foreground">{t('publisher_mapping_loading')}</p>
+                                ) : mappings.length > 0 ? (
                                     <div className="space-y-2">
-                                        {telegramSources.slice(0, 5).map(source => (
-                                            <div
-                                                key={source.id}
-                                                className="flex items-center justify-between p-2 rounded-lg border border-white/5 bg-slate-900/60 text-[11px]"
+                                        {mappings.map(mapping => (
+                                            <button
+                                                key={mapping.id}
+                                                type="button"
+                                                onClick={() => openEditMapping(mapping)}
+                                                className="w-full text-left flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-lg border border-white/5 bg-slate-900/60 hover:border-purple-500/40 text-[11px]"
                                             >
-                                                <span className="truncate">{source.name}</span>
-                                                <StatusPill label={t('telegram')} variant="info" />
-                                            </div>
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-foreground truncate">
+                                                        {mapping.source_name} → {mapping.publisher_name}
+                                                    </p>
+                                                    <p className="text-[10px] text-muted-foreground truncate">
+                                                        {mapping.source_type} · {mapping.publisher_channel_id}
+                                                        {mapping.publisher_channel_username ? ` · @${mapping.publisher_channel_username}` : ''}
+                                                    </p>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2 justify-start sm:justify-end">
+                                                    <StatusPill
+                                                        label={mapping.is_enabled ? t('enabled') : t('disabled')}
+                                                        variant={mapping.is_enabled ? 'success' : 'neutral'}
+                                                    />
+                                                    <StatusPill label={t('policy_acl_filter_protected')} variant="info" />
+                                                    <StatusPill
+                                                        label={mapping.last_status ? t(`publisher_status_${mapping.last_status}`) : t('no_recent_activity')}
+                                                        variant={mapping.last_status === 'failed' || mapping.last_status === 'blocked' ? 'error' : 'neutral'}
+                                                    />
+                                                </div>
+                                            </button>
                                         ))}
                                     </div>
+                                ) : (
+                                    <div className="rounded-lg border border-dashed border-white/10 p-4 text-[11px] text-muted-foreground">
+                                        {t('source_mapping_empty')}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className={DATAHUB_INNER_LIST}>
+                                <h4 className="text-[11px] font-semibold text-foreground mb-2">
+                                    {t('publish_from_source')}
+                                </h4>
+                                <p className="text-[10px] text-muted-foreground mb-3">
+                                    {t('publish_from_source_desc')}
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                                    <select
+                                        value={selectedSourceId}
+                                        onChange={e => setSelectedSourceId(e.target.value)}
+                                        className={SELECT_CLASS}
+                                    >
+                                        <option value="">{t('select_source')}</option>
+                                        {telegramSources.map(source => (
+                                            <option key={source.id} value={source.id}>
+                                                {source.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={selectedPublisherId || ''}
+                                        onChange={e => setSelectedPublisherId(e.target.value)}
+                                        className={SELECT_CLASS}
+                                    >
+                                        <option value="">{t('select_publisher_channel')}</option>
+                                        {publishers.filter(p => p.is_active).map(pub => (
+                                            <option key={pub.id} value={pub.id}>
+                                                {pub.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <input
+                                        value={publishContentType}
+                                        onChange={e => setPublishContentType(e.target.value)}
+                                        className={INPUT_CLASS}
+                                        placeholder={t('content_type')}
+                                    />
                                 </div>
-                            )}
+                                <textarea
+                                    value={publishMessage}
+                                    onChange={e => setPublishMessage(e.target.value)}
+                                    rows={4}
+                                    className={`${INPUT_CLASS} resize-none`}
+                                    placeholder={t('publisher_publish_sample')}
+                                />
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+                                    <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                        <input
+                                            type="checkbox"
+                                            checked={allowTemporaryPublish}
+                                            onChange={e => setAllowTemporaryPublish(e.target.checked)}
+                                            className="rounded"
+                                        />
+                                        {t('allow_temporary_publish')}
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedMapping ? (
+                                            <StatusPill label={t('mapping_enabled')} variant="success" />
+                                        ) : (
+                                            <StatusPill label={t('mapping_required')} variant="warning" />
+                                        )}
+                                        <button
+                                            type="button"
+                                            disabled={wg(publishMutation.isPending || !selectedPublisher).disabled}
+                                            title={wg(publishMutation.isPending || !selectedPublisher).title}
+                                            onClick={() => selectedPublisher && handlePublish(selectedPublisher)}
+                                            className={BTN_OUTLINE_PURPLE}
+                                        >
+                                            {t('publish_dry_run_safe')}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
 
                             {publishers.filter(p => p.is_active).length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -401,9 +628,9 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                                 <p className="text-[11px] text-muted-foreground text-center py-8">
                                     {t('publisher_history_loading')}
                                 </p>
-                            ) : historyItems.length > 0 ? (
+                            ) : (historyData?.data ?? []).length > 0 ? (
                                 <div className="space-y-2">
-                                    {historyItems.slice(0, 20).map(item => (
+                                    {(historyData?.data ?? []).slice(0, 20).map(item => (
                                         <div
                                             key={item.id}
                                             className="rounded-lg border border-white/5 bg-slate-950/70 p-3 flex justify-between items-center gap-3 text-[11px]"
@@ -413,17 +640,28 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                                                     <StatusPill
                                                         label={t(`publisher_status_${item.status}`)}
                                                         variant={
-                                                            item.status === 'sent' ? 'success' : 'error'
+                                                            item.status === 'sent' || item.status === 'dry_run' || item.status === 'test'
+                                                                ? 'success'
+                                                                : 'error'
                                                         }
                                                     />
+                                                    {item.delivery_mode && (
+                                                        <StatusPill
+                                                            label={t(`delivery_mode_${item.delivery_mode}`)}
+                                                            variant="neutral"
+                                                        />
+                                                    )}
                                                     <span className="font-semibold truncate">
-                                                        {item.payloadPreview}
+                                                        {item.content_summary || item.error_message || item.status}
                                                     </span>
                                                 </div>
-                                                <p className="text-[10px] text-muted-foreground">
-                                                    {publishers.find(p => p.id === item.publisherId)?.name ||
-                                                        item.publisherId}{' '}
-                                                    · {new Date(item.sentAt).toLocaleString()}
+                                                <p className="text-[10px] text-muted-foreground truncate">
+                                                    {item.publisher_name || item.publisher_id}
+                                                    {item.source_name ? ` · ${item.source_name}` : ''}
+                                                    {item.error_code ? ` · ${item.error_code}` : ''}
+                                                    {item.content_type ? ` · ${item.content_type}` : ''}
+                                                    {item.created_by_email ? ` · ${item.created_by_email}` : ''}
+                                                    {' '}· {new Date(item.created_at).toLocaleString()}
                                                 </p>
                                             </div>
                                         </div>
@@ -437,10 +675,16 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
 
                     {activeTab === 'templates' && (
                         <div className={DATAHUB_INNER_LIST}>
+                            <h4 className="text-[11px] font-semibold text-foreground mb-2">
+                                {t('message_preview_templates')}
+                            </h4>
                             <p className="text-[11px] text-muted-foreground mb-3">
                                 {selectedPublisher
                                     ? `${t('template_for')}: ${selectedPublisher.name}`
                                     : t('select_publisher_for_template')}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mb-3">
+                                {t('message_preview_templates_desc')}
                             </p>
                             <pre className="block bg-slate-950/80 border border-slate-700 rounded-lg p-3 text-[10px] whitespace-pre-wrap text-foreground font-mono">
                                 {selectedPublisher?.template || defaultTemplate}
@@ -452,6 +696,88 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
 
             {isFetching && (
                 <p className="text-[10px] text-muted-foreground mt-4 text-center">{t('refreshing')}</p>
+            )}
+
+            {showMappingModal && (
+                <DataHubModal
+                    title={editingMapping ? t('edit_mapping') : t('create_mapping')}
+                    subtitle={t('mapping_modal_desc')}
+                    onClose={() => setShowMappingModal(false)}
+                    maxWidth="max-w-md"
+                    footer={
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => setShowMappingModal(false)}
+                                className={BTN_SECONDARY}
+                            >
+                                {t('cancel')}
+                            </button>
+                            {editingMapping && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleDisableMapping(editingMapping)}
+                                    className={BTN_OUTLINE_RED}
+                                    disabled={wg(disableMappingMutation.isPending).disabled}
+                                    title={wg(disableMappingMutation.isPending).title}
+                                >
+                                    {t('disable_mapping')}
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                disabled={wg(
+                                    createMappingMutation.isPending ||
+                                        updateMappingMutation.isPending ||
+                                        !mappingForm.source_id ||
+                                        !mappingForm.publisher_id,
+                                ).disabled}
+                                title={wg(createMappingMutation.isPending || updateMappingMutation.isPending).title}
+                                onClick={handleMappingSubmit}
+                                className={BTN_PRIMARY}
+                            >
+                                {t('save_mapping')}
+                            </button>
+                        </>
+                    }
+                >
+                    <div className="space-y-3">
+                        <select
+                            value={mappingForm.source_id}
+                            onChange={e => setMappingForm(f => ({ ...f, source_id: e.target.value }))}
+                            className={SELECT_CLASS}
+                        >
+                            <option value="">{t('select_source')}</option>
+                            {telegramSources.map(source => (
+                                <option key={source.id} value={source.id}>
+                                    {source.name}
+                                </option>
+                            ))}
+                        </select>
+                        <select
+                            value={mappingForm.publisher_id}
+                            onChange={e => setMappingForm(f => ({ ...f, publisher_id: e.target.value }))}
+                            className={SELECT_CLASS}
+                        >
+                            <option value="">{t('select_publisher_channel')}</option>
+                            {publishers.map(pub => (
+                                <option key={pub.id} value={pub.id}>
+                                    {pub.name}
+                                </option>
+                            ))}
+                        </select>
+                        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <input
+                                type="checkbox"
+                                checked={mappingForm.is_enabled}
+                                onChange={e => setMappingForm(f => ({ ...f, is_enabled: e.target.checked }))}
+                                className="rounded"
+                            />
+                            {t('mapping_enabled')}
+                        </label>
+                        <DataHubAlert variant="warning" message={t('mapping_policy_note')} />
+                    </div>
+                </DataHubModal>
             )}
 
             {showCreateModal && (

@@ -62,11 +62,20 @@ export const publisherListResponseSchema = z.object({
 export const publisherHistoryItemSchema = z.object({
   id: z.string().uuid(),
   publisher_id: z.string().uuid(),
+  publisher_name: z.string().nullable().optional(),
+  source_id: z.string().uuid().nullable().optional(),
+  source_name: z.string().nullable().optional(),
+  data_type: z.string().nullable().optional(),
   content_type: z.string().nullable().optional(),
   content_summary: z.string().nullable().optional(),
   status: z.string(),
   telegram_message_id: z.string().nullable().optional(),
   error_message: z.string().nullable().optional(),
+  error_code: z.string().nullable().optional(),
+  delivery_mode: z.string().nullable().optional(),
+  created_by: z.string().uuid().nullable().optional(),
+  created_by_email: z.string().nullable().optional(),
+  metadata: z.record(z.any()).optional(),
   created_at: z.string(),
 });
 
@@ -92,6 +101,7 @@ export const publishPublisherSchema = z.object({
   data_type: z.string().max(100).optional(),
   title: z.string().optional(),
   content: z.string().optional(),
+  allow_temporary_publish: z.boolean().optional().default(false),
 });
 
 export const publishResultSchema = z.object({
@@ -117,3 +127,42 @@ export const publisherHistoryQuerySchema = z.object({
     .optional()
     .default('0'),
 });
+
+export const publisherMappingSchema = z.object({
+  id: z.string().uuid(),
+  source_id: z.string().uuid(),
+  source_name: z.string(),
+  source_type: z.string(),
+  publisher_id: z.string().uuid(),
+  publisher_name: z.string(),
+  publisher_channel_id: z.string(),
+  publisher_channel_username: z.string().nullable().optional(),
+  is_enabled: z.boolean(),
+  template_id: z.string().uuid().nullable().optional(),
+  last_activity_at: z.string().nullable().optional(),
+  last_status: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const publisherMappingsListSchema = z.object({
+  mappings: z.array(publisherMappingSchema),
+});
+
+export const createPublisherMappingSchema = z.object({
+  source_id: z.string().uuid(),
+  publisher_id: z.string().uuid(),
+  is_enabled: z.boolean().optional().default(true),
+  template_id: z.string().uuid().nullable().optional(),
+});
+
+export const updatePublisherMappingSchema = z
+  .object({
+    source_id: z.string().uuid().optional(),
+    publisher_id: z.string().uuid().optional(),
+    is_enabled: z.boolean().optional(),
+    template_id: z.string().uuid().nullable().optional(),
+  })
+  .refine(data => Object.keys(data).length > 0, {
+    message: 'At least one field must be provided for update',
+  });
