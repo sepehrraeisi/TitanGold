@@ -178,3 +178,70 @@ The new endpoints use notification preference/history/publisher tables only and 
 - Add retention/cleanup policy for notification history.
 - Optionally move remaining legacy local notification helper APIs out of `services/api.ts` once no callers depend on compatibility wrappers.
 - Review non-notification Telegram fetcher and legacy trading notifications separately; they are outside Settings -> Notifications P2 and do not send through the new UI.
+
+## Human QA Repair — Not Found UI Bug
+
+Human QA rejected the first P2 verdict because Settings -> Notifications displayed raw `Not Found` above Channels, Preferences, and History, and Channels had no visible channel cards.
+
+Repair RCA:
+
+- `docs/ssot_v3/DH-NOTIFICATIONS-P2-NOTFOUND-REPAIR.md`
+
+Root cause:
+
+- The notification API routes were mounted correctly, but runtime backend port `5002` could be down after PM2 reload when dirty duplicate-appended backend files caused startup/import failures. In that state nginx returned HTML `404 Not Found` for `/api/v1/notifications/*`.
+- `components/settings/NotificationsSettings.tsx` displayed `error.message` through a global `statusMessage`, so the raw `Not Found` appeared above every tab.
+- Channels depended on nullable `channels`, so a load failure hid all channel cards.
+
+Fixed files:
+
+- `components/settings/NotificationsSettings.tsx`
+- `src/__tests__/NotificationsSettings.test.tsx`
+- `docs/ssot_v3/DH-NOTIFICATIONS-P2-NOTFOUND-REPAIR.md`
+- `docs/ssot_v3/notifications-p2-repair-browser-report.json`
+- `docs/ssot_v3/screenshots/notifications-p2-repair-channels.png`
+- `docs/ssot_v3/screenshots/notifications-p2-repair-preferences.png`
+- `docs/ssot_v3/screenshots/notifications-p2-repair-history.png`
+
+Route/runtime table:
+
+Endpoint | nginx status | backend status | result
+--- | ---: | ---: | ---
+`GET /api/v1/notifications/preferences` | 200, 118.8ms | 200, 11.4ms | PASS
+`GET /api/v1/notifications/channels` | 200, 68.6ms | 200, 16.9ms | PASS
+`GET /api/v1/notifications/history` | 200, 84.5ms | 200, 25.0ms | PASS
+`POST /api/v1/notifications/test` | 200 dry-run | 200 dry-run | SAFE
+`POST /api/v1/user-preferences/telegram/test` | 200 dry-run | 200 dry-run | SAFE
+`POST /api/v1/email/send` | 200 dry-run | 200 dry-run | SAFE
+`POST /api/v1/notifications/broadcast` | 200 dry-run | 200 dry-run | SAFE
+
+Browser verification:
+
+- Channels screenshot: `docs/ssot_v3/screenshots/notifications-p2-repair-channels.png`
+- Preferences screenshot: `docs/ssot_v3/screenshots/notifications-p2-repair-preferences.png`
+- History screenshot: `docs/ssot_v3/screenshots/notifications-p2-repair-history.png`
+- Full report: `docs/ssot_v3/notifications-p2-repair-browser-report.json`
+
+Browser results:
+
+- No raw `Not Found` in Channels, Preferences, or History.
+- Channels cards visible: Telegram, Browser, Email.
+- Preferences save works and persists after reload (`frequency_level: normal`).
+- History loads with filters and backend rows/empty state.
+- `/api/v1/notifications/preferences`, `/channels`, and `/history` returned 200 in browser runtime.
+- No browser request to `api.telegram.org`.
+- No notification-related console errors. Existing console errors are unrelated MEXC market 404s.
+
+Security grep result:
+
+- No direct frontend Telegram Bot API calls in current source.
+- No Bot Token, Chat ID, BotFather, or Add Channel control in Notifications UI.
+- No frontend `sendMessage` in Notifications/settings code.
+
+Test/build result:
+
+- `npm run test:run -- src/__tests__/NotificationsSettings.test.tsx`: 5 passed.
+- `cd backend && npm test -- --runInBand backend/__tests__/unit/notificationService.test.js backend/__tests__/unit/notificationRoutes.test.js`: 14 passed.
+- `npm run build`: passed.
+
+Final repair verdict: REAL WORKING.

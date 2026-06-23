@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import NotificationsSettings from '../../components/settings/NotificationsSettings';
+import {
+  fetchNotificationChannels,
+  fetchNotificationPreferences,
+  fetchUnifiedNotificationHistory,
+  updateNotificationPreferences,
+} from '../../services/api.ts';
 
 vi.mock('../../context/LanguageContext.tsx', () => ({
   useLanguage: () => ({
@@ -20,6 +26,8 @@ vi.mock('../../context/LanguageContext.tsx', () => ({
       notification_history_empty: 'No notification history yet',
       notification_status_dry_run: 'Dry-run',
       email_coming_soon: 'Email notifications are coming soon',
+      save_changes: 'Save changes',
+      settings_saved: 'Settings saved',
       personal_notifications_explanation: 'Personal notifications manage your own alerts and preferences.',
       publisher_delivery_explanation:
         'Personal Telegram notifications use the configured Telegram Publisher delivery layer.',
@@ -66,6 +74,44 @@ vi.mock('../../services/api.ts', () => ({
 describe('NotificationsSettings unified center', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchNotificationPreferences).mockResolvedValue({
+      telegram_enabled: false,
+      browser_enabled: false,
+      email_enabled: false,
+      quiet_hours_enabled: false,
+      quiet_hours_start: '22:00',
+      quiet_hours_end: '08:00',
+      do_not_disturb_enabled: false,
+      frequency_level: 'normal',
+    });
+    vi.mocked(updateNotificationPreferences).mockImplementation(async preferences => ({
+      telegram_enabled: false,
+      browser_enabled: false,
+      email_enabled: false,
+      quiet_hours_enabled: false,
+      quiet_hours_start: '22:00',
+      quiet_hours_end: '08:00',
+      do_not_disturb_enabled: false,
+      frequency_level: 'normal',
+      ...preferences,
+    }));
+    vi.mocked(fetchNotificationChannels).mockResolvedValue({
+      telegram: {
+        status: 'configured',
+        provider: 'telegram_publisher',
+        configured: true,
+        enabled: false,
+        publisherId: 'pub-1',
+        publisherName: 'Safe Publisher',
+        destinationMasked: '@cha***',
+      },
+      browser: { status: 'disabled', configured: true, enabled: false },
+      email: { status: 'coming_soon', configured: false, enabled: false },
+    });
+    vi.mocked(fetchUnifiedNotificationHistory).mockResolvedValue({
+      notifications: [],
+      total: 0,
+    });
   });
 
   it('renders the new Channels / Preferences / History tabs', async () => {
@@ -91,5 +137,47 @@ describe('NotificationsSettings unified center', () => {
     expect(screen.queryByText(/Retry Policy/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Messages Per Minute/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Parse Mode/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render raw Not Found when channels endpoint fails', async () => {
+    vi.mocked(fetchNotificationChannels).mockRejectedValueOnce(new Error('Not Found'));
+
+    render(<NotificationsSettings />);
+
+    expect(await screen.findByText('Telegram')).toBeInTheDocument();
+    expect(screen.getByText('Browser')).toBeInTheDocument();
+    expect(screen.getByText('Email')).toBeInTheDocument();
+    expect(screen.getByText('Notification channels could not be loaded.')).toBeInTheDocument();
+    expect(screen.queryByText(/^Not Found$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Telegram delivery not configured/i)).toBeInTheDocument();
+  });
+
+  it('saves preferences through the backend API', async () => {
+    render(<NotificationsSettings />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Preferences' }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'high' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+    await waitFor(() =>
+      expect(updateNotificationPreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ frequency_level: 'high' }),
+      ),
+    );
+    expect(await screen.findByText(/Settings saved/i)).toBeInTheDocument();
+  });
+
+  it('renders backend-backed history empty state and filters', async () => {
+    render(<NotificationsSettings />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+
+    expect(screen.getByRole('button', { name: 'all' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'sent' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'failed' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'blocked' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'dry run' })).toBeInTheDocument();
+    expect(screen.getByText(/No notification history yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Not Found$/i)).not.toBeInTheDocument();
   });
 });

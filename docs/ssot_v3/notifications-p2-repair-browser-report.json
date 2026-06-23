@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-06-23T14:05:17.971Z",
+  "uniqueNotificationResponses": [
+    {
+      "url": "https://titan.zala.ir/api/v1/notifications/preferences",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "url": "https://titan.zala.ir/api/v1/notifications/channels",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "url": "https://titan.zala.ir/api/v1/notifications/history",
+      "status": 200,
+      "ok": true
+    }
+  ],
+  "noNotFound": true,
+  "channelsCardsVisible": true,
+  "preferencesVisible": true,
+  "historyVisible": true,
+  "preferenceSaveStatus": 200,
+  "savedFrequency": "normal",
+  "persistedFrequency": "normal",
+  "consoleIssues": [
+    {
+      "type": "error",
+      "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}"
+    },
+    {
+      "type": "error",
+      "text": "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-D9P-zB_e.js:21:166595)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-D9P-zB_e.js:138:29675)"
+    },
+    {
+      "type": "error",
+      "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}"
+    },
+    {
+      "type": "error",
+      "text": "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-D9P-zB_e.js:21:166595)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-D9P-zB_e.js:138:29675)"
+    },
+    {
+      "type": "error",
+      "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}"
+    },
+    {
+      "type": "error",
+      "text": "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-D9P-zB_e.js:21:166595)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-D9P-zB_e.js:138:29675)"
+    },
+    {
+      "type": "error",
+      "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}"
+    },
+    {
+      "type": "error",
+      "text": "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-D9P-zB_e.js:21:166595)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-D9P-zB_e.js:138:29675)"
+    }
+  ],
+  "telegramApiRequests": [],
+  "screenshots": {
+    "channels": "docs/ssot_v3/screenshots/notifications-p2-repair-channels.png",
+    "preferences": "docs/ssot_v3/screenshots/notifications-p2-repair-preferences.png",
+    "history": "docs/ssot_v3/screenshots/notifications-p2-repair-history.png"
+  }
+}

@@ -25,6 +25,34 @@ const DEFAULT_PREFERENCES: UnifiedNotificationPreferences = {
   frequency_level: 'normal',
 };
 
+const DEFAULT_CHANNELS: UnifiedNotificationChannels = {
+  telegram: {
+    status: 'not_configured',
+    provider: 'telegram_publisher',
+    configured: false,
+    enabled: false,
+    publisherId: null,
+    publisherName: null,
+    destinationMasked: null,
+  },
+  browser: {
+    status: 'disabled',
+    configured: true,
+    enabled: false,
+  },
+  email: {
+    status: 'coming_soon',
+    configured: false,
+    enabled: false,
+  },
+};
+
+const sectionErrorMessage = {
+  channels: 'Notification channels could not be loaded.',
+  preferences: 'Notification preferences could not be loaded.',
+  history: 'Notification history could not be loaded.',
+};
+
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const color =
     status === 'configured' || status === 'enabled' || status === 'sent'
@@ -82,9 +110,12 @@ const NotificationsSettings: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+  const [channelsError, setChannelsError] = useState('');
+  const [preferencesError, setPreferencesError] = useState('');
+  const [historyError, setHistoryError] = useState('');
   const [preferences, setPreferences] = useState<UnifiedNotificationPreferences>(DEFAULT_PREFERENCES);
-  const [channels, setChannels] = useState<UnifiedNotificationChannels | null>(null);
+  const [channels, setChannels] = useState<UnifiedNotificationChannels>(DEFAULT_CHANNELS);
   const [history, setHistory] = useState<UnifiedNotificationHistoryItem[]>([]);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
 
@@ -97,39 +128,76 @@ const NotificationsSettings: React.FC = () => {
     [t],
   );
 
-  const loadAll = async () => {
-    setLoading(true);
+  const logNotificationLoadError = (section: ActiveTab, error: unknown) => {
+    if (import.meta.env.DEV) {
+      console.warn(`[notifications] ${section} load failed`, error);
+    }
+  };
+
+  const loadPreferences = async () => {
+    setPreferencesError('');
     try {
-      const [nextPreferences, nextChannels, nextHistory] = await Promise.all([
-        fetchNotificationPreferences(),
-        fetchNotificationChannels(),
-        fetchUnifiedNotificationHistory(historyFilter),
-      ]);
+      const nextPreferences = await fetchNotificationPreferences();
       setPreferences({ ...DEFAULT_PREFERENCES, ...nextPreferences });
-      setChannels(nextChannels);
+    } catch (error) {
+      logNotificationLoadError('preferences', error);
+      setPreferencesError(sectionErrorMessage.preferences);
+      setPreferences(prev => ({ ...DEFAULT_PREFERENCES, ...prev }));
+    }
+  };
+
+  const loadChannels = async () => {
+    setChannelsError('');
+    try {
+      const nextChannels = await fetchNotificationChannels();
+      setChannels({ ...DEFAULT_CHANNELS, ...nextChannels });
+    } catch (error) {
+      logNotificationLoadError('channels', error);
+      setChannelsError(sectionErrorMessage.channels);
+      setChannels(DEFAULT_CHANNELS);
+    }
+  };
+
+  const loadHistory = async () => {
+    setHistoryError('');
+    try {
+      const nextHistory = await fetchUnifiedNotificationHistory(historyFilter);
       setHistory(nextHistory.notifications);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to load notification settings');
-    } finally {
-      setLoading(false);
+      logNotificationLoadError('history', error);
+      setHistoryError(sectionErrorMessage.history);
+      setHistory([]);
     }
+  };
+
+  const loadAll = async () => {
+    setLoading(true);
+    await Promise.allSettled([loadPreferences(), loadChannels(), loadHistory()]);
+    setLoading(false);
   };
 
   useEffect(() => {
     loadAll();
   }, [historyFilter]);
 
+  useEffect(() => {
+    setActionMessage('');
+  }, [activeTab]);
+
   const savePreferences = async () => {
     setSaving(true);
-    setStatusMessage('');
+    setActionMessage('');
+    setPreferencesError('');
     try {
       const saved = await updateNotificationPreferences(preferences);
       setPreferences(saved);
-      const nextChannels = await fetchNotificationChannels();
-      setChannels(nextChannels);
-      setStatusMessage(t('settings_saved') || 'Settings saved');
+      await loadChannels();
+      setActionMessage(t('settings_saved') || 'Settings saved');
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to save settings');
+      if (import.meta.env.DEV) {
+        console.warn('[notifications] preferences save failed', error);
+      }
+      setPreferencesError('Notification preferences could not be saved.');
     } finally {
       setSaving(false);
     }
@@ -137,18 +205,20 @@ const NotificationsSettings: React.FC = () => {
 
   const runDryRunTest = async (channel: 'telegram' | 'browser' | 'email') => {
     setTesting(channel);
-    setStatusMessage('');
+    setActionMessage('');
     try {
       const result = await testNotificationChannel({ channel, dry_run: true, confirm_live: false });
-      setStatusMessage(
+      setActionMessage(
         result.success
           ? `${t('notification_status_dry_run') || 'Dry-run'}: ${channel}`
-          : result.error || result.code || 'Dry-run test failed',
+          : 'Dry-run test could not be completed.',
       );
-      const nextHistory = await fetchUnifiedNotificationHistory(historyFilter);
-      setHistory(nextHistory.notifications);
+      await loadHistory();
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'Dry-run test failed');
+      if (import.meta.env.DEV) {
+        console.warn('[notifications] dry-run test failed', error);
+      }
+      setActionMessage('Dry-run test could not be completed.');
     } finally {
       setTesting(null);
     }
@@ -156,29 +226,29 @@ const NotificationsSettings: React.FC = () => {
 
   const runBrowserPreview = () => {
     if (!('Notification' in window)) {
-      setStatusMessage('Browser notifications are not supported here.');
+      setActionMessage('Browser notifications are not supported here.');
       return;
     }
     if (Notification.permission !== 'granted') {
-      setStatusMessage('Enable browser notification permission first.');
+      setActionMessage('Enable browser notification permission first.');
       return;
     }
     new Notification('TitanGold', {
       body: t('local_browser_preview') || 'Local browser preview',
       icon: '/vite.svg',
     });
-    setStatusMessage(t('local_browser_preview') || 'Local browser preview');
+    setActionMessage(t('local_browser_preview') || 'Local browser preview');
   };
 
   const enableBrowserNotifications = async () => {
     if (!('Notification' in window)) {
-      setStatusMessage('Browser notifications are not supported here.');
+      setActionMessage('Browser notifications are not supported here.');
       return;
     }
     const permission = await Notification.requestPermission();
     const enabled = permission === 'granted';
     setPreferences(prev => ({ ...prev, browser_enabled: enabled }));
-    setStatusMessage(enabled ? 'Browser notifications enabled locally.' : 'Browser permission was not granted.');
+    setActionMessage(enabled ? 'Browser notifications enabled locally.' : 'Browser permission was not granted.');
   };
 
   if (loading) {
@@ -215,13 +285,19 @@ const NotificationsSettings: React.FC = () => {
         ))}
       </div>
 
-      {statusMessage && (
+      {actionMessage && (
         <div className="rounded-md border border-gray-700 bg-[#0D111C] p-3 text-sm text-gray-200">
-          {statusMessage}
+          {actionMessage}
         </div>
       )}
 
-      {activeTab === 'channels' && channels && (
+      {activeTab === 'channels' && (
+        <div className="space-y-4">
+          {channelsError && (
+            <div className="rounded-md border border-yellow-700/50 bg-yellow-900/20 p-3 text-sm text-yellow-200">
+              {channelsError}
+            </div>
+          )}
         <div className="grid gap-4 lg:grid-cols-3">
           <Card
             title="Telegram"
@@ -236,13 +312,14 @@ const NotificationsSettings: React.FC = () => {
                 ? `${t('telegram_delivery_configured') || 'Configured'}: ${channels.telegram.publisherName}`
                 : t('telegram_delivery_not_configured') || 'Not configured'}
             </p>
+            <p className="text-xs text-gray-500">Provider: Telegram Publisher</p>
             {channels.telegram.destinationMasked && (
               <p className="text-xs text-gray-500">Destination: {channels.telegram.destinationMasked}</p>
             )}
             <div className="flex flex-wrap gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setStatusMessage('Open DataHub -> Advanced Features -> Telegram Publisher.')}
+                onClick={() => setActionMessage('Open DataHub -> Advanced Features -> Telegram Publisher.')}
                 className="rounded-md bg-gray-700 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-600"
               >
                 {t('configure_in_telegram_publisher') || 'Configure in Telegram Publisher'}
@@ -250,7 +327,7 @@ const NotificationsSettings: React.FC = () => {
               <button
                 type="button"
                 onClick={() => runDryRunTest('telegram')}
-                disabled={testing === 'telegram'}
+                disabled={!channels.telegram.configured || testing === 'telegram'}
                 className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 {testing === 'telegram' ? 'Testing...' : t('dry_run_test') || 'Dry-run test'}
@@ -301,10 +378,16 @@ const NotificationsSettings: React.FC = () => {
             </button>
           </Card>
         </div>
+        </div>
       )}
 
       {activeTab === 'preferences' && (
         <Card title={t('notifications_preferences') || 'Preferences'}>
+          {preferencesError && (
+            <div className="rounded-md border border-yellow-700/50 bg-yellow-900/20 p-3 text-sm text-yellow-200">
+              {preferencesError}
+            </div>
+          )}
           <Toggle
             label={t('quiet_hours') || 'Quiet Hours'}
             checked={preferences.quiet_hours_enabled}
@@ -373,6 +456,11 @@ const NotificationsSettings: React.FC = () => {
 
       {activeTab === 'history' && (
         <Card title={t('notifications_history') || 'History'}>
+          {historyError && (
+            <div className="rounded-md border border-yellow-700/50 bg-yellow-900/20 p-3 text-sm text-yellow-200">
+              {historyError}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             {(['all', 'sent', 'failed', 'blocked', 'dry_run'] as HistoryFilter[]).map(filter => (
               <button
