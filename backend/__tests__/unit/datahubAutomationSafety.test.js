@@ -105,8 +105,12 @@ function mockDb() {
                     record_id: '22222222-2222-4222-8222-222222222222',
                     agent_id: null,
                     payload_preview: 'Automation safety candidate',
+                    metadata: { error_code: 'AUTOMATION_ERROR' },
                 }],
             };
+        }
+        if (text.includes('SELECT id FROM collected_data WHERE id = $1')) {
+            return { rows: [{ id: '22222222-2222-4222-8222-222222222222' }] };
         }
         if (text.includes('FROM datahub_automation_executions e')) {
             return { rows: [] };

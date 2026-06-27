@@ -4515,6 +4515,14 @@ export interface AgentTopicRoute {
   lastEvaluated?: string;
   lastPublishedAt?: string;
   stats?: AgentTopicRouteStats;
+  validity?: {
+    status: 'valid' | 'disabled_publisher' | 'missing_mapping' | 'disabled' | 'no_candidates';
+    valid: boolean;
+    reasons: string[];
+    repairActions?: string[];
+    matchingCandidates?: number;
+    canEnqueue?: boolean;
+  };
 }
 
 export interface AutomationPublisherTargetStatus {

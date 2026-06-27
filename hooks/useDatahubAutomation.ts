@@ -11,6 +11,7 @@ import {
     failQueueItemApi,
     retryAutomationExecutionApi,
     runAutomationTestApi,
+    validateAutomationTopicApi,
 } from '../services/datahubAutomationApi';
 import { AgentTopicFormValues, AutomationScheduleConfig } from '../types';
 import { DATA_HUB_KEYS } from './useDataHubState';
@@ -113,5 +114,13 @@ export function useAutomationTestRunMutation() {
         mutationFn: (options?: { topic_id?: string; dry_run?: boolean; confirm_live?: boolean }) =>
             runAutomationTestApi(options),
         onSettled: () => qc.invalidateQueries({ queryKey: AUTOMATION_KEYS.overview() }),
+    });
+}
+
+export function useValidateAutomationTopicMutation() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => validateAutomationTopicApi(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: AUTOMATION_KEYS.overview() }),
     });
 }

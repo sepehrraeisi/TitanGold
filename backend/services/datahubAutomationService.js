@@ -8,6 +8,15 @@ import {
   RUNTIME_AGENT_KEYS,
 } from '../middleware/accessControlGateway.js';
 import { enforcePublishingPolicy, isFilterRuleBlockedError } from './filterRulesGateway.js';
+import {
+  getAutomationErrorLabel,
+  isRetryAllowedForExecution,
+} from './automationErrorLabels.js';
+import {
+  computeAutomationHealth,
+  evaluateTopicValidity,
+  loadPublisherValidityMaps,
+} from './automationTopicValidity.js';
 
 const PRIORITY_TO_NUM = { low: 1, medium: 2, high: 3, critical: 4 };
 const NUM_TO_PRIORITY = { 1: 'low', 2: 'medium', 3: 'high', 4: 'critical' };
@@ -249,9 +258,22 @@ export async function listAutomationTopics() {
   } catch (e) {
     logger.warn('Automation topics: lightweight stats skipped', e.message);
   }
+
+  const allPublisherIds = [
+    ...new Set(
+      result.rows.flatMap(row => {
+        const targets = row.publish_targets?.publisherIds;
+        return Array.isArray(targets) ? targets : [];
+      }),
+    ),
+  ];
+  const validityContext = await loadPublisherValidityMaps(allPublisherIds);
+
   return result.rows.map(row => {
     const ui = mapTopicRowToUi(row);
-    return { ...ui, stats: computeTopicStats(ui, statsByTopicId) };
+    const stats = computeTopicStats(ui, statsByTopicId);
+    const validity = evaluateTopicValidity(ui, validityContext);
+    return { ...ui, stats, validity };
   });
 }
 
@@ -456,24 +478,43 @@ export async function listAutomationExecutions({ limit = 50, offset = 0 } = {}) 
      LIMIT $1 OFFSET $2`,
     [limit, offset],
   );
-  return result.rows.map(row => ({
-    id: row.id,
-    queueId: row.queue_item_id,
-    recordId: row.record_id,
-    topicId: row.topic_id,
-    publisherId: row.publisher_id,
-    agentId: row.agent_id,
-    status: row.status,
-    dryRun: row.dry_run,
-    sentAt: new Date(row.created_at).toISOString(),
-    latencyMs: row.latency_ms,
-    payloadPreview: row.payload_preview,
-    errorMessage: row.error_message,
-    errorCode: row.metadata?.error_code || null,
-    deliveryMode: row.metadata?.delivery_mode || (row.dry_run ? 'dry_run' : 'live'),
-    topicName: row.topic_name,
-    publisherName: row.publisher_name,
-  }));
+
+  const recordIds = [...new Set(result.rows.map(r => r.record_id).filter(Boolean))];
+  let existingRecords = new Set();
+  if (recordIds.length > 0) {
+    const exists = await query(
+      `SELECT id FROM collected_data WHERE id = ANY($1::uuid[])`,
+      [recordIds],
+    );
+    existingRecords = new Set(exists.rows.map(r => String(r.id)));
+  }
+
+  return result.rows.map(row => {
+    const errorCode = row.metadata?.error_code || null;
+    const recordExists = row.record_id ? existingRecords.has(String(row.record_id)) : null;
+    return {
+      id: row.id,
+      queueId: row.queue_item_id,
+      recordId: row.record_id,
+      topicId: row.topic_id,
+      publisherId: row.publisher_id,
+      agentId: row.agent_id,
+      status: row.status,
+      dryRun: row.dry_run,
+      sentAt: new Date(row.created_at).toISOString(),
+      latencyMs: row.latency_ms,
+      payloadPreview: row.payload_preview,
+      errorMessage: row.error_message,
+      errorCode,
+      errorLabel: getAutomationErrorLabel(errorCode, row.error_message),
+      retryAllowed: isRetryAllowedForExecution(row, recordExists),
+      recordExists,
+      deliveryMode: row.metadata?.delivery_mode || (row.dry_run ? 'dry_run' : 'live'),
+      topicName: row.topic_name,
+      publisherName: row.publisher_name,
+      isStale: errorCode === 'SOURCE_RECORD_NOT_FOUND' || recordExists === false,
+    };
+  });
 }
 
 function recordMatchesTopic(record, topic, categoryNameById) {
@@ -565,7 +606,14 @@ export async function refreshAutomationQueue({ topicId } = {}) {
     topics = topics.filter(t => t.id === topicId);
   }
   if (topics.length === 0) {
-    return { added: 0, queue: await listAutomationQueue() };
+    return {
+      added: 0,
+      skipped: 0,
+      blocked: 0,
+      candidates: 0,
+      summary: { candidates: 0, queued: 0, skipped: 0, blocked: 0, reasons: {} },
+      queue: await listAutomationQueue(),
+    };
   }
 
   const [normalizedRecords, categoryNameById] = await Promise.all([
@@ -587,21 +635,31 @@ export async function refreshAutomationQueue({ topicId } = {}) {
   const MAX_PER_PAIR = 3;
   let added = 0;
   let skipped = 0;
+  let blocked = 0;
+  let candidates = 0;
+  const reasonCounts = {};
+
+  const bumpReason = code => {
+    if (!code) return;
+    reasonCounts[code] = (reasonCounts[code] || 0) + 1;
+  };
 
   for (const topic of topics) {
     for (const publisherId of topic.publisherTargets) {
       const publisher = publishersById.get(String(publisherId));
       if (!publisher || publisher.is_active !== true) {
+        const code = publisher ? 'PUBLISHER_DISABLED' : 'PUBLISHER_NOT_FOUND';
         await recordAutomationAuditEvent({
           topicId: topic.id,
           publisherId,
           agentId: topic.agentId,
           status: 'skipped',
-          errorCode: publisher ? 'PUBLISHER_DISABLED' : 'PUBLISHER_NOT_FOUND',
+          errorCode: code,
           errorMessage: publisher ? 'Publisher target is disabled' : 'Publisher target not found',
           metadata: { mode: 'enqueue', reason: 'publisher_unavailable' },
         });
         skipped += 1;
+        bumpReason(code);
         continue;
       }
 
@@ -627,6 +685,8 @@ export async function refreshAutomationQueue({ topicId } = {}) {
         );
         if (exists.rows.length > 0) continue;
         if (!recordMatchesTopic(record, topic, categoryNameById)) continue;
+
+        candidates += 1;
 
         const payloadPreview =
           record.payload?.title ||
@@ -655,7 +715,8 @@ export async function refreshAutomationQueue({ topicId } = {}) {
               payloadPreview,
               metadata: { mode: 'enqueue', actor: 'topic_agent' },
             });
-            skipped += 1;
+            blocked += 1;
+            bumpReason('SOURCE_ACCESS_DENIED');
             continue;
           }
         }
@@ -678,7 +739,8 @@ export async function refreshAutomationQueue({ topicId } = {}) {
             payloadPreview,
             metadata: { mode: 'enqueue', actor: 'publisher' },
           });
-          skipped += 1;
+          blocked += 1;
+          bumpReason('SOURCE_ACCESS_DENIED');
           continue;
         }
 
@@ -706,7 +768,8 @@ export async function refreshAutomationQueue({ topicId } = {}) {
               payloadPreview,
               metadata: { mode: 'enqueue', reason: error.reason, rule: error.rule },
             });
-            skipped += 1;
+            blocked += 1;
+            bumpReason('FILTER_RULE_BLOCKED');
             continue;
           }
           throw error;
@@ -725,6 +788,7 @@ export async function refreshAutomationQueue({ topicId } = {}) {
             metadata: { mode: 'enqueue', source_id: record.sourceId },
           });
           skipped += 1;
+          bumpReason('PUBLISHER_MAPPING_REQUIRED');
           continue;
         }
 
@@ -753,7 +817,26 @@ export async function refreshAutomationQueue({ topicId } = {}) {
     }
   }
 
-  return { added, skipped, queue: await listAutomationQueue() };
+  const summaryPayload = {
+    candidates,
+    queued: added,
+    skipped,
+    blocked,
+    reasons: Object.entries(reasonCounts).map(([code, count]) => ({
+      code,
+      count,
+      label: getAutomationErrorLabel(code),
+    })),
+  };
+
+  return {
+    added,
+    skipped,
+    blocked,
+    candidates,
+    summary: summaryPayload,
+    queue: await listAutomationQueue(),
+  };
 }
 
 async function loadRecordPayload(recordId) {
@@ -1070,6 +1153,24 @@ export async function retryAutomationExecution(
     throw err;
   }
   const row = exec.rows[0];
+  const errorCode = row.metadata?.error_code;
+  if (errorCode === 'SOURCE_RECORD_NOT_FOUND') {
+    throw createAutomationError(
+      'Cannot retry: original source record is no longer available',
+      { status: 400, code: 'SOURCE_RECORD_NOT_FOUND' },
+    );
+  }
+  if (row.record_id) {
+    const recordExists = await query('SELECT id FROM collected_data WHERE id = $1', [
+      row.record_id,
+    ]);
+    if (recordExists.rows.length === 0) {
+      throw createAutomationError(
+        'Cannot retry: original source record is no longer available',
+        { status: 400, code: 'SOURCE_RECORD_NOT_FOUND' },
+      );
+    }
+  }
   const retryCount = await query(
     `SELECT COUNT(*)::int AS c
      FROM datahub_automation_executions
@@ -1258,6 +1359,40 @@ export async function runAutomationTest(
   };
 }
 
+export async function validateAutomationTopic(topicId) {
+  const topic = await getAutomationTopic(topicId);
+  const validityContext = await loadPublisherValidityMaps(topic.publisherTargets || []);
+  let validity = evaluateTopicValidity(topic, validityContext);
+
+  if (validity.valid) {
+    const [records, categoryNameById] = await Promise.all([
+      loadAutomationCandidateRecords({ limit: 75 }),
+      loadCategoryNameLookup(),
+    ]);
+    const matchingCandidates = records.filter(record =>
+      recordMatchesTopic(record, topic, categoryNameById),
+    ).length;
+    if (matchingCandidates === 0) {
+      validity = {
+        ...validity,
+        status: 'no_candidates',
+        valid: false,
+        reasons: [
+          'No processed records matched this topic in the last 7 days. Adjust filters or wait for new pipeline data.',
+        ],
+        repairActions: ['validate', 'refresh_queue'],
+        matchingCandidates: 0,
+      };
+    } else {
+      validity = { ...validity, matchingCandidates, canEnqueue: true };
+    }
+  } else {
+    validity = { ...validity, matchingCandidates: 0, canEnqueue: false };
+  }
+
+  return { topic, validity };
+}
+
 export async function getAutomationOverview() {
   const [topics, schedule, queue, executions] = await Promise.all([
     listAutomationTopics(),
@@ -1265,21 +1400,37 @@ export async function getAutomationOverview() {
     listAutomationQueue({ limit: 100 }),
     listAutomationExecutions({ limit: 50 }),
   ]);
+
+  const validTopics = topics.filter(t => t.validity?.valid).length;
+  const invalidTopics = topics.filter(t => t.enabled && !t.validity?.valid).length;
+  const pendingQueue = queue.filter(q => q.status === 'pending');
+  const lastDryRun = executions.find(e => e.status === 'dry_run' || e.dryRun);
+  const lastBlocked = executions.find(e => e.status === 'blocked' || e.status === 'skipped');
+  const health = computeAutomationHealth({ topics, queue, schedule });
+
+  const passRates = topics
+    .map(t => t.stats?.last24h?.passRate ?? 0)
+    .filter(rate => rate > 0);
+  const avgPassRate =
+    passRates.length > 0
+      ? Math.round(passRates.reduce((a, b) => a + b, 0) / passRates.length)
+      : 0;
+
   return {
     topics,
     schedule,
     queue,
     executions,
+    health,
     summary: {
       totalTopics: topics.length,
       enabledTopics: topics.filter(t => t.enabled).length,
-      queueSize: queue.filter(q => q.status === 'pending').length,
-      avgPassRate:
-        topics.length > 0
-          ? Math.round(
-              topics.reduce((acc, t) => acc + (t.stats?.last24h?.passRate || 0), 0) / topics.length,
-            )
-          : 0,
+      validTopics,
+      invalidTopics,
+      queueSize: pendingQueue.length,
+      avgPassRate,
+      lastDryRunAt: lastDryRun?.sentAt || null,
+      lastBlockedReason: lastBlocked?.errorLabel || lastBlocked?.errorCode || null,
     },
   };
 }

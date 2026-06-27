@@ -30,6 +30,7 @@ import {
   runAutomationTest,
   listAutomationExecutions,
   getAutomationOverview,
+  validateAutomationTopic,
 } from '../services/datahubAutomationService.js';
 
 const router = express.Router();
@@ -52,6 +53,21 @@ router.get('/topics', authenticate, readRateLimiter, async (req, res) => {
     res.status(500).json({ error: 'Failed to list automation topics' });
   }
 });
+
+router.post(
+  '/topics/:id/validate',
+  ...writeAuth,
+  validateParams(uuidParamSchema),
+  async (req, res) => {
+    try {
+      res.json(await validateAutomationTopic(req.params.id));
+    } catch (error) {
+      logger.error('Validate automation topic failed:', error);
+      const status = error.status || 500;
+      res.status(status).json({ error: error.message || 'Failed to validate topic', code: error.code });
+    }
+  },
+);
 
 router.post(
   '/topics',
