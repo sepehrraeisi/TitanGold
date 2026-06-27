@@ -58,8 +58,8 @@ function sanitizePreferences(preferences = {}) {
 }
 
 function mapPreferencesRow(row) {
-  if (!row) return { ...DEFAULT_PREFERENCES, is_default: true };
-  return {
+  if (!row) return withBrowserPreferenceView({ ...DEFAULT_PREFERENCES, is_default: true });
+  return withBrowserPreferenceView({
     telegram_enabled: row.telegram_enabled === true,
     browser_enabled: row.browser_enabled === true,
     email_enabled: row.email_enabled === true,
@@ -70,7 +70,31 @@ function mapPreferencesRow(row) {
     frequency_level: row.frequency_level || DEFAULT_PREFERENCES.frequency_level,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : null,
     is_default: false,
+  });
+}
+
+function buildBrowserPreferenceView(preferences) {
+  return {
+    enabled: preferences.browser_enabled === true,
+    updated_at: preferences.updated_at || null,
   };
+}
+
+export function withBrowserPreferenceView(preferences) {
+  return {
+    ...preferences,
+    browser: buildBrowserPreferenceView(preferences),
+  };
+}
+
+function normalizePreferenceInput(preferences = {}) {
+  const normalized = { ...preferences };
+  if (normalized.browser && typeof normalized.browser === 'object') {
+    if (normalized.browser.enabled !== undefined) {
+      normalized.browser_enabled = normalized.browser.enabled;
+    }
+  }
+  return normalized;
 }
 
 function maskDestination(destination) {
@@ -248,7 +272,7 @@ export async function getNotificationPreferences(userId) {
 }
 
 export async function updateNotificationPreferences(userId, preferences) {
-  const safe = sanitizePreferences(preferences);
+  const safe = sanitizePreferences(normalizePreferenceInput(preferences));
   const result = await query(
     `INSERT INTO notification_preferences (
        user_id, telegram_enabled, browser_enabled, email_enabled,

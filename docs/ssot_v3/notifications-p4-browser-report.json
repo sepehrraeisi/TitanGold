@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-06-27T12:06:00.000Z",
+  "task": "DH-NOTIFICATIONS-P4-BROWSER-CHANNEL-PERSISTENCE-FIX",
+  "environment": {
+    "frontend": "http://localhost:3000",
+    "backend": "http://localhost:5002",
+    "user": "p4verify2@test.local (browser MCP) + p4shot* (Playwright screenshots)"
+  },
+  "screenshots": [
+    "docs/ssot_v3/screenshots/notifications-p4-browser-before.png",
+    "docs/ssot_v3/screenshots/notifications-p4-browser-after-enable.png",
+    "docs/ssot_v3/screenshots/notifications-p4-browser-after-tab-switch.png",
+    "docs/ssot_v3/screenshots/notifications-p4-browser-after-refresh.png"
+  ],
+  "network": [
+    {
+      "method": "PUT",
+      "url": "/api/v1/notifications/preferences",
+      "status": 200,
+      "note": "Called when user clicks Enable Browser Notifications with permission granted",
+      "payload_sample": {
+        "browser_enabled": true
+      },
+      "response_sample": {
+        "success": true,
+        "preferences": {
+          "browser_enabled": true,
+          "browser": {
+            "enabled": true,
+            "updated_at": "2026-06-27T11:58:37.817Z"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "url": "/api/v1/notifications/preferences",
+      "status": 200,
+      "response_sample": {
+        "success": true,
+        "preferences": {
+          "browser_enabled": true,
+          "browser": {
+            "enabled": true,
+            "updated_at": "2026-06-27T11:58:37.817Z"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "url": "/api/v1/notifications/channels",
+      "status": 200,
+      "response_sample": {
+        "success": true,
+        "channels": {
+          "browser": {
+            "status": "enabled",
+            "configured": true,
+            "enabled": true
+          }
+        }
+      }
+    }
+  ],
+  "browser_verification": {
+    "before": "Browser badge disabled, Permission granted, backend browser_enabled false",
+    "after_enable": "Badge enabled, success message 'Browser notifications enabled on this device.', Active channels 2/3",
+    "after_tab_switch": "Badge still enabled after Preferences -> Channels",
+    "after_refresh": "Badge still enabled after full page reload"
+  },
+  "console_errors_notifications": []
+}

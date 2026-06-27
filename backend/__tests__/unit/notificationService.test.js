@@ -38,6 +38,7 @@ jest.unstable_mockModule('../../services/logger.js', () => ({
 const {
   getNotificationPreferences,
   updateNotificationPreferences,
+  getNotificationChannels,
   testNotificationChannel,
   createNotificationEvent,
 } = await import('../../services/notificationService.js');
@@ -135,6 +136,7 @@ describe('notificationService safety', () => {
     const preferences = await updateNotificationPreferences('user-1', {
       telegram_enabled: true,
       browser_enabled: true,
+      browser: { enabled: true },
       email_enabled: true,
       quiet_hours_enabled: true,
       quiet_hours_start: '21:00',
@@ -145,10 +147,63 @@ describe('notificationService safety', () => {
     });
 
     expect(preferences.frequency_level).toBe('normal');
+    expect(preferences.browser_enabled).toBe(true);
+    expect(preferences.browser).toEqual({
+      enabled: true,
+      updated_at: '2026-06-20T00:00:00.000Z',
+    });
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO notification_preferences'),
       expect.not.arrayContaining(['secret']),
     );
+  });
+
+  test('GET preferences returns browser preference view', async () => {
+    mockQuery.mockImplementationOnce(async () => ({
+      rows: [{
+        telegram_enabled: false,
+        browser_enabled: true,
+        email_enabled: false,
+        quiet_hours_enabled: false,
+        quiet_hours_start: '22:00:00',
+        quiet_hours_end: '08:00:00',
+        do_not_disturb_enabled: false,
+        frequency_level: 'normal',
+        updated_at: new Date('2026-06-20T00:00:00Z'),
+      }],
+    }));
+
+    const preferences = await getNotificationPreferences('user-1');
+
+    expect(preferences.browser_enabled).toBe(true);
+    expect(preferences.browser).toEqual({
+      enabled: true,
+      updated_at: '2026-06-20T00:00:00.000Z',
+    });
+  });
+
+  test('GET channels returns persisted browser preference state', async () => {
+    mockQuery.mockImplementationOnce(async () => ({
+      rows: [{
+        telegram_enabled: false,
+        browser_enabled: true,
+        email_enabled: false,
+        quiet_hours_enabled: false,
+        quiet_hours_start: '22:00:00',
+        quiet_hours_end: '08:00:00',
+        do_not_disturb_enabled: false,
+        frequency_level: 'normal',
+        updated_at: new Date('2026-06-20T00:00:00Z'),
+      }],
+    }));
+
+    const channels = await getNotificationChannels('user-1');
+
+    expect(channels.browser).toEqual({
+      status: 'enabled',
+      configured: true,
+      enabled: true,
+    });
   });
 
   test('Telegram test defaults to dry-run and writes notification history', async () => {

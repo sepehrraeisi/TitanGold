@@ -15369,6 +15369,10 @@ export interface UnifiedNotificationPreferences {
     do_not_disturb_enabled: boolean;
     frequency_level: 'low' | 'normal' | 'high';
     updated_at?: string | null;
+    browser?: {
+        enabled: boolean;
+        updated_at?: string | null;
+    };
 }
 
 export interface UnifiedNotificationChannels {
@@ -15418,6 +15422,16 @@ const notificationAuthHeaders = (): HeadersInit => {
     };
 };
 
+const expireNotificationAuthSession = () => {
+    localStorage.removeItem('titan_token');
+    localStorage.removeItem('titan_user');
+    sessionStorage.removeItem('titan_token');
+    sessionStorage.removeItem('titan_user');
+    window.dispatchEvent(new CustomEvent('titan_auth_expired', {
+        detail: { source: 'notifications' },
+    }));
+};
+
 async function notificationRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`/api/v1/notifications${path}`, {
         ...init,
@@ -15428,6 +15442,13 @@ async function notificationRequest<T>(path: string, init: RequestInit = {}): Pro
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+            expireNotificationAuthSession();
+            const authError = new Error('AUTH_EXPIRED');
+            (authError as Error & { code?: string; status?: number }).code = 'AUTH_EXPIRED';
+            (authError as Error & { code?: string; status?: number }).status = response.status;
+            throw authError;
+        }
         throw new Error(data.error || data.message || `Notification API failed (${response.status})`);
     }
     return data as T;

@@ -147,9 +147,27 @@ describe('NotificationsSettings unified center', () => {
     expect(await screen.findByText('Telegram')).toBeInTheDocument();
     expect(screen.getByText('Browser')).toBeInTheDocument();
     expect(screen.getByText('Email')).toBeInTheDocument();
-    expect(screen.getByText('Notification channels could not be loaded.')).toBeInTheDocument();
+    expect(screen.getByText('Channel data is temporarily unavailable. Showing safe defaults.')).toBeInTheDocument();
+    expect(screen.queryByText('Notification channels could not be loaded.')).not.toBeInTheDocument();
     expect(screen.queryByText(/^Not Found$/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Telegram delivery not configured/i)).toBeInTheDocument();
+  });
+
+  it('does not turn expired auth into per-tab warning banners', async () => {
+    vi.mocked(fetchNotificationPreferences).mockRejectedValueOnce(new Error('AUTH_EXPIRED'));
+    vi.mocked(fetchNotificationChannels).mockRejectedValueOnce(new Error('AUTH_EXPIRED'));
+    vi.mocked(fetchUnifiedNotificationHistory).mockRejectedValueOnce(new Error('AUTH_EXPIRED'));
+
+    render(<NotificationsSettings />);
+
+    expect(await screen.findByText('Telegram')).toBeInTheDocument();
+    expect(screen.queryByText('Notification channels could not be loaded.')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+    expect(screen.queryByText('Preference data is temporarily unavailable. Saved values are unchanged.')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    expect(screen.queryByText('History data is temporarily unavailable. Try refresh after connectivity recovers.')).not.toBeInTheDocument();
   });
 
   it('saves preferences through the backend API', async () => {
@@ -179,5 +197,163 @@ describe('NotificationsSettings unified center', () => {
     expect(screen.getByRole('button', { name: 'dry run' })).toBeInTheDocument();
     expect(screen.getByText(/No notification history yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/^Not Found$/i)).not.toBeInTheDocument();
+  });
+
+  describe('browser channel persistence', () => {
+    const mockNotificationPermission = (permission: NotificationPermission) => {
+      Object.defineProperty(window, 'Notification', {
+        configurable: true,
+        writable: true,
+        value: {
+          permission,
+          requestPermission: vi.fn(async () => permission),
+        },
+      });
+    };
+
+    beforeEach(() => {
+      mockNotificationPermission('default');
+    });
+
+    it('calls Notification.requestPermission when enabling browser notifications', async () => {
+      render(<NotificationsSettings />);
+      await screen.findByText('Browser');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enable Browser Notifications' }));
+
+      await waitFor(() =>
+        expect(window.Notification.requestPermission).toHaveBeenCalled(),
+      );
+    });
+
+    it('persists browser_enabled=true when permission is granted', async () => {
+      mockNotificationPermission('granted');
+      vi.mocked(window.Notification.requestPermission).mockResolvedValue('granted');
+
+      render(<NotificationsSettings />);
+      await screen.findByText('Browser');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enable Browser Notifications' }));
+
+      await waitFor(() =>
+        expect(updateNotificationPreferences).toHaveBeenCalledWith(
+          expect.objectContaining({ browser_enabled: true }),
+        ),
+      );
+      expect(await screen.findByText('Browser notifications enabled on this device.')).toBeInTheDocument();
+      expect(screen.getByText('enabled')).toBeInTheDocument();
+    });
+
+    it('persists browser_enabled=false when permission is denied', async () => {
+      vi.mocked(window.Notification.requestPermission).mockResolvedValue('denied');
+
+      render(<NotificationsSettings />);
+      await screen.findByText('Browser');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enable Browser Notifications' }));
+
+      await waitFor(() =>
+        expect(updateNotificationPreferences).toHaveBeenCalledWith(
+          expect.objectContaining({ browser_enabled: false }),
+        ),
+      );
+      expect(await screen.findByText('Browser notification permission was denied.')).toBeInTheDocument();
+      expect(screen.getAllByText('disabled').length).toBeGreaterThan(0);
+    });
+
+    it('does not persist when permission stays default', async () => {
+      vi.mocked(window.Notification.requestPermission).mockResolvedValue('default');
+
+      render(<NotificationsSettings />);
+      await screen.findByText('Browser');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enable Browser Notifications' }));
+
+      await waitFor(() =>
+        expect(screen.getByText('Browser notification permission was not granted.')).toBeInTheDocument(),
+      );
+      expect(updateNotificationPreferences).not.toHaveBeenCalled();
+    });
+
+    it('shows enabled badge after reload when backend preference and permission are granted', async () => {
+      mockNotificationPermission('granted');
+      vi.mocked(fetchNotificationPreferences).mockResolvedValue({
+        telegram_enabled: false,
+        browser_enabled: true,
+        email_enabled: false,
+        quiet_hours_enabled: false,
+        quiet_hours_start: '22:00',
+        quiet_hours_end: '08:00',
+        do_not_disturb_enabled: false,
+        frequency_level: 'normal',
+        browser: { enabled: true, updated_at: '2026-06-20T00:00:00.000Z' },
+      });
+      vi.mocked(fetchNotificationChannels).mockResolvedValue({
+        telegram: {
+          status: 'configured',
+          provider: 'telegram_publisher',
+          configured: true,
+          enabled: false,
+          publisherId: 'pub-1',
+          publisherName: 'Safe Publisher',
+          destinationMasked: '@cha***',
+        },
+        browser: { status: 'enabled', configured: true, enabled: true },
+        email: { status: 'coming_soon', configured: false, enabled: false },
+      });
+
+      const { unmount } = render(<NotificationsSettings />);
+      await screen.findByText('Browser');
+      expect(screen.getByText('enabled')).toBeInTheDocument();
+
+      unmount();
+      render(<NotificationsSettings />);
+      await screen.findByText('Browser');
+      expect(screen.getByText('enabled')).toBeInTheDocument();
+      expect(updateNotificationPreferences).not.toHaveBeenCalled();
+    });
+
+    it('does not show fake enabled state without granted permission', async () => {
+      mockNotificationPermission('default');
+      vi.mocked(fetchNotificationPreferences).mockResolvedValue({
+        telegram_enabled: false,
+        browser_enabled: true,
+        email_enabled: false,
+        quiet_hours_enabled: false,
+        quiet_hours_start: '22:00',
+        quiet_hours_end: '08:00',
+        do_not_disturb_enabled: false,
+        frequency_level: 'normal',
+      });
+
+      render(<NotificationsSettings />);
+      await screen.findByText('Browser');
+
+      expect(screen.queryByText('enabled')).not.toBeInTheDocument();
+      expect(screen.getAllByText('disabled').length).toBeGreaterThan(0);
+    });
+
+    it('keeps browser enabled badge when switching notification tabs', async () => {
+      mockNotificationPermission('granted');
+      vi.mocked(fetchNotificationPreferences).mockResolvedValue({
+        telegram_enabled: false,
+        browser_enabled: true,
+        email_enabled: false,
+        quiet_hours_enabled: false,
+        quiet_hours_start: '22:00',
+        quiet_hours_end: '08:00',
+        do_not_disturb_enabled: false,
+        frequency_level: 'normal',
+      });
+
+      render(<NotificationsSettings />);
+      await screen.findByText('Browser');
+      expect(screen.getByText('enabled')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Channels' }));
+
+      expect(screen.getByText('enabled')).toBeInTheDocument();
+    });
   });
 });

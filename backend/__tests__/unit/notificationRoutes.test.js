@@ -89,14 +89,34 @@ describe('notification routes safety', () => {
   });
 
   test('new preferences/channels/history/test endpoints are wired and safe', async () => {
-    await request(app()).get('/api/v1/notifications/preferences').expect(200);
+    mockGetPreferences.mockResolvedValue({
+      telegram_enabled: false,
+      browser_enabled: true,
+      frequency_level: 'normal',
+      browser: { enabled: true, updated_at: '2026-06-20T00:00:00.000Z' },
+    });
+    mockUpdatePreferences.mockResolvedValue({
+      telegram_enabled: true,
+      browser_enabled: true,
+      frequency_level: 'normal',
+      browser: { enabled: true, updated_at: '2026-06-20T00:00:00.000Z' },
+    });
+
+    const preferencesResult = await request(app()).get('/api/v1/notifications/preferences').expect(200);
     await request(app()).put('/api/v1/notifications/preferences').send({ bot_token: 'secret' }).expect(200);
+    await request(app()).put('/api/v1/notifications/preferences').send({ browser_enabled: true }).expect(200);
     await request(app()).get('/api/v1/notifications/channels').expect(200);
     await request(app()).get('/api/v1/notifications/history').expect(200);
     const testResult = await request(app()).post('/api/v1/notifications/test').send({ channel: 'telegram' }).expect(200);
 
+    expect(preferencesResult.body.preferences.browser_enabled).toBe(true);
+    expect(preferencesResult.body.preferences.browser).toEqual({
+      enabled: true,
+      updated_at: '2026-06-20T00:00:00.000Z',
+    });
     expect(testResult.body.status).toBe('dry_run');
     expect(mockUpdatePreferences).toHaveBeenCalledWith('user-1', { bot_token: 'secret' });
+    expect(mockUpdatePreferences).toHaveBeenCalledWith('user-1', { browser_enabled: true });
     expect(mockTestChannel).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'user-1', channel: 'telegram', dryRun: true, confirmLive: false }),
     );
