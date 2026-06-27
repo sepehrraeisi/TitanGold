@@ -4,7 +4,7 @@ Date: 2026-06-27
 Task: `DH-AUTOMATION-ROUTING-P4-PRODUCTION-REPAIR-AND-OPERATIONAL-VERIFY`  
 Prior phase: [`DH-AUTOMATION-ROUTING-P3-END-TO-END-FIX-AND-REDESIGN.md`](./DH-AUTOMATION-ROUTING-P3-END-TO-END-FIX-AND-REDESIGN.md) (implementation REAL WORKING; production config **PENDING**)
 
-Environment: **dev DB on server** (`ubuntu`, branch `feat/gap-008-sources-backend-wiring`, commit `0fd7d36` + uncommitted P4 changes)
+Environment: **dev DB on server** (`ubuntu`, branch `feat/gap-008-sources-backend-wiring`, commit **`f558e26`**)
 
 ---
 
