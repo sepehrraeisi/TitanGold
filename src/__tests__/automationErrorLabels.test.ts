@@ -18,7 +18,9 @@ describe('automationErrorLabels', () => {
   });
 
   it('topicValidityLabel returns disabled publisher label', () => {
-    expect(topicValidityLabel('disabled_publisher', t)).toBe('automation_disabled_publisher');
+    const tWithLocale = (key: string) =>
+      key === 'automation_disabled_publisher' ? 'Disabled publisher' : key;
+    expect(topicValidityLabel('disabled_publisher', tWithLocale)).toBe('Disabled publisher');
   });
 
   it('topicValidityVariant marks invalid topics as error/warning', () => {
@@ -28,9 +30,13 @@ describe('automationErrorLabels', () => {
   });
 
   it('queueEmptyMessage explains disabled publisher skip', () => {
+    const tWithLocale = (key: string) =>
+      key === 'automation_queue_empty_disabled_publisher'
+        ? 'Queue is empty because routing topics target disabled publishers.'
+        : key;
     const msg = queueEmptyMessage(undefined, {
       reasons: [{ code: 'PUBLISHER_DISABLED', label: 'disabled', count: 3 }],
-    }, t);
-    expect(msg).toBe('automation_queue_empty_disabled_publisher');
+    }, tWithLocale);
+    expect(msg).toMatch(/disabled publisher/i);
   });
 });
