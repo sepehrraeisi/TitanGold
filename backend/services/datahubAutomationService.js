@@ -582,10 +582,7 @@ async function loadAutomationCandidateRecords({ limit = 50 } = {}) {
      LEFT JOIN data_categories dc ON dc.name = ds.category
      WHERE cd.status = 'processed'
        AND cd.normalized_data IS NOT NULL
-       AND (
-         cd.processed_at > NOW() - INTERVAL '7 days'
-         OR cd.collected_at > NOW() - INTERVAL '7 days'
-       )
+       AND COALESCE(cd.processed_at, cd.collected_at) > NOW() - INTERVAL '7 days'
      ORDER BY cd.processed_at DESC NULLS LAST, cd.collected_at DESC
      LIMIT $1`,
     [limit],
@@ -629,6 +626,23 @@ export async function refreshAutomationQueue({ topicId } = {}) {
   );
   const deliveredKeys = new Set(
     delivered.rows.map(r => `${r.record_id}:${r.publisher_id}`),
+  );
+
+  const pendingQueue = await query(
+    `SELECT record_id::text, publisher_id::text FROM datahub_automation_queue
+     WHERE status IN ('pending', 'processing')`,
+  );
+  const pendingQueueKeys = new Set(
+    pendingQueue.rows.map(r => `${r.record_id}:${r.publisher_id}`),
+  );
+
+  const mappingPairs = await query(
+    `SELECT source_id::text, publisher_id::text FROM datahub_publisher_source_mappings
+     WHERE publisher_id = ANY($1::uuid[]) AND is_enabled = true`,
+    [publisherIds],
+  );
+  const enabledMappingKeys = new Set(
+    mappingPairs.rows.map(r => `${r.source_id}:${r.publisher_id}`),
   );
 
   const MAX_QUEUE = 25;
@@ -677,13 +691,7 @@ export async function refreshAutomationQueue({ topicId } = {}) {
         const key = `${record.id}:${publisherId}`;
         if (deliveredKeys.has(key)) continue;
 
-        const exists = await query(
-          `SELECT id FROM datahub_automation_queue
-           WHERE record_id = $1 AND publisher_id = $2 AND status IN ('pending', 'processing')
-           LIMIT 1`,
-          [record.id, publisherId],
-        );
-        if (exists.rows.length > 0) continue;
+        if (pendingQueueKeys.has(key)) continue;
         if (!recordMatchesTopic(record, topic, categoryNameById)) continue;
 
         candidates += 1;
@@ -775,7 +783,7 @@ export async function refreshAutomationQueue({ topicId } = {}) {
           throw error;
         }
 
-        if (!(await hasEnabledPublisherMapping(record.sourceId, publisherId))) {
+        if (!enabledMappingKeys.has(`${record.sourceId}:${publisherId}`)) {
           await recordAutomationAuditEvent({
             topicId: topic.id,
             publisherId,
@@ -811,6 +819,7 @@ export async function refreshAutomationQueue({ topicId } = {}) {
           ],
         );
         deliveredKeys.add(key);
+        pendingQueueKeys.add(key);
         perCount += 1;
         added += 1;
       }

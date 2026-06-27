@@ -1,0 +1,44 @@
+{
+  "capturedAt": "2026-06-27T16:02:03.134Z",
+  "baselineMs": {
+    "overview": 6874,
+    "refresh": 6874
+  },
+  "endpoints": [
+    {
+      "path": "/api/v1/data-hub/automation/overview",
+      "status": 200,
+      "ms": 364,
+      "ok": true,
+      "bodySize": 43837
+    },
+    {
+      "path": "/api/v1/data-hub/automation/topics",
+      "status": 200,
+      "ms": 56,
+      "ok": true,
+      "bodySize": 2194
+    },
+    {
+      "path": "/api/v1/data-hub/automation/queue",
+      "status": 200,
+      "ms": 35,
+      "ok": true,
+      "bodySize": 4472
+    },
+    {
+      "path": "/api/v1/data-hub/automation/executions?limit=20",
+      "status": 200,
+      "ms": 38,
+      "ok": true,
+      "bodySize": 14476
+    },
+    {
+      "path": "/api/v1/data-hub/automation/queue/refresh",
+      "status": 200,
+      "ms": 138,
+      "ok": true,
+      "bodySize": 4596
+    }
+  ]
+}

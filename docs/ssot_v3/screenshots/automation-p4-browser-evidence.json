@@ -1,0 +1,115 @@
+{
+  "capturedAt": "2026-06-27T16:08:11.818Z",
+  "network": [
+    {
+      "path": "/api/v1/data-hub/automation/overview",
+      "method": "GET",
+      "status": 200,
+      "ms": 86
+    },
+    {
+      "path": "/api/v1/data-hub/automation/topics",
+      "method": "GET",
+      "status": 200,
+      "ms": 20
+    },
+    {
+      "path": "/api/v1/data-hub/automation/queue",
+      "method": "GET",
+      "status": 200,
+      "ms": 14
+    },
+    {
+      "path": "/api/v1/data-hub/automation/executions?limit=20",
+      "method": "GET",
+      "status": 200,
+      "ms": 18
+    },
+    {
+      "path": "/api/v1/data-hub/automation/queue/refresh",
+      "method": "POST",
+      "status": 200,
+      "ms": 146
+    }
+  ],
+  "networkAll200": true,
+  "summary": {
+    "totalTopics": 3,
+    "enabledTopics": 3,
+    "validTopics": 3,
+    "invalidTopics": 0,
+    "queueSize": 9,
+    "avgPassRate": 45,
+    "lastDryRunAt": "2026-06-27T16:08:11.762Z",
+    "lastBlockedReason": "No enabled source→publisher mapping exists. Create a mapping in Telegram Publisher before routing."
+  },
+  "health": {
+    "banner": "healthy",
+    "label": "Ready to dispatch",
+    "message": "9 item(s) pending. Use dry-run dispatch to preview delivery without sending live Telegram messages."
+  },
+  "topics": [
+    {
+      "id": "70b6affe-2f54-49f6-ad86-8283254552d4",
+      "title": "Demo Topic 1779636651973",
+      "validity": {
+        "status": "valid",
+        "valid": true,
+        "reasons": [],
+        "repairActions": [
+          "validate",
+          "test_dry_run"
+        ]
+      }
+    },
+    {
+      "id": "7ffb5473-cc05-43b1-bfa9-05cd5870b3e6",
+      "title": "Demo Topic 1779636779020",
+      "validity": {
+        "status": "valid",
+        "valid": true,
+        "reasons": [],
+        "repairActions": [
+          "validate",
+          "test_dry_run"
+        ]
+      }
+    },
+    {
+      "id": "bc6c5f1b-4df1-4e11-a324-3f94efc55e0e",
+      "title": "سیگنال",
+      "validity": {
+        "status": "valid",
+        "valid": true,
+        "reasons": [],
+        "repairActions": [
+          "validate",
+          "test_dry_run"
+        ]
+      }
+    }
+  ],
+  "queueCount": 9,
+  "rawKeys": [],
+  "consoleErrors": [],
+  "screenshots": [],
+  "mcpBrowserVerified": {
+    "method": "cursor-ide-browser",
+    "user": "p4verify2@test.local",
+    "at": "2026-06-27T16:01:00Z",
+    "ui": {
+      "validTopics": "3",
+      "invalidTopics": "0",
+      "queueSize": "9",
+      "agentTopics": "3",
+      "dryRunToggle": true,
+      "healthLabel": "Ready to dispatch",
+      "hasDeliveryHistory": true,
+      "hasAutomationEventRecorded": true,
+      "notFound": false,
+      "rawKeys": []
+    },
+    "note": "Interactive browser session on localhost:3000/?view=ai → Data Hub → Advanced Features → Automation Routing"
+  },
+  "playwrightError": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'Manager' })\n"
+}
