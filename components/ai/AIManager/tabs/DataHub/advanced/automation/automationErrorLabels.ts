@@ -49,6 +49,25 @@ export function topicValidityVariant(
   return 'neutral';
 }
 
+export function formatLastBlockedSummary(
+  reason: string | null | undefined,
+  code: string | null | undefined,
+  t: (k: string) => string,
+): string {
+  const normalizedCode =
+    code ||
+    (reason && Object.keys(AUTOMATION_ERROR_LABELS).find(k => AUTOMATION_ERROR_LABELS[k] === reason)) ||
+    (reason?.toLowerCase().includes('mapping') ? 'PUBLISHER_MAPPING_REQUIRED' : null);
+
+  if (normalizedCode === 'PUBLISHER_MAPPING_REQUIRED') {
+    return t('automation_last_blocked_mapping');
+  }
+  if (reason || code) {
+    return t('automation_last_blocked_unknown');
+  }
+  return '—';
+}
+
 export function queueEmptyMessage(
   healthBanner: string | undefined,
   refreshSummary: { reasons?: Array<{ code: string; label: string; count: number }> } | null,

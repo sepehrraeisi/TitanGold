@@ -40,7 +40,7 @@ import {
 } from '../dataHubUi';
 import { formatDataHubQueryError } from '../dataHubI18n';
 import { useDataHubPermissions } from '../hooks/useDataHubPermissions';
-import { queueEmptyMessage } from './automation/automationErrorLabels';
+import { formatLastBlockedSummary, queueEmptyMessage } from './automation/automationErrorLabels';
 
 interface AutomationTopicsProps {
     categories: DataCategory[];
@@ -386,8 +386,12 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                             />
                             <MetricCard
                                 label={t('automation_last_blocked') || 'Last blocked'}
-                                value={summary.lastBlockedReason ? '!' : '—'}
-                                color={summary.lastBlockedReason ? 'amber' : 'blue'}
+                                value={formatLastBlockedSummary(
+                                    summary.lastBlockedReason,
+                                    summary.lastBlockedCode,
+                                    t,
+                                )}
+                                color={summary.lastBlockedReason || summary.lastBlockedCode ? 'amber' : 'blue'}
                             />
                         </div>
                     )}
@@ -404,6 +408,7 @@ const AutomationTopics: React.FC<AutomationTopicsProps> = ({
                             onToggle={handleToggleSchedule}
                             onUpdateInterval={handleUpdateScheduleInterval}
                             canWrite={canWrite}
+                            automationWorkerActive={false}
                             t={t}
                         />
                     )}

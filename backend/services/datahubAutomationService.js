@@ -1439,6 +1439,7 @@ export async function getAutomationOverview() {
       queueSize: pendingQueue.length,
       avgPassRate,
       lastDryRunAt: lastDryRun?.sentAt || null,
+      lastBlockedCode: lastBlocked?.errorCode || null,
       lastBlockedReason: lastBlocked?.errorLabel || lastBlocked?.errorCode || null,
     },
   };

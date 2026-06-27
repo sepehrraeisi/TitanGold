@@ -268,3 +268,25 @@ Total automation-related: 12/12 PASS
 - [x] SSOT P4 complete
 
 **Verdict: Production Operational (Dry-run)** — ready for operator dry-run dispatch on real topics; live publish remains gated.
+
+---
+
+## 12. Human QA Final Polish (2026-06-27)
+
+Human QA found two UI issues after P4 closeout commits `f558e26` / `2753d1d`. Scoped polish applied:
+
+| Issue | Fix |
+|-------|-----|
+| Last blocked reason showed only `!` | `formatLastBlockedSummary()` maps `PUBLISHER_MAPPING_REQUIRED` → **Missing publisher mapping** / **نگاشت ناشر وجود ندارد**; other reasons → **See delivery history** / **جزئیات در تاریخچه ارسال** |
+| Schedule panel implied auto dispatch while worker absent | Badge **Manual only**; notice text clarifies config is saved but no background worker runs; toggle label **Config enabled** (not **Enabled**) when worker inactive |
+
+**Files:** `AutomationTopics.tsx`, `AutomationSchedulePanel.tsx`, `automationErrorLabels.ts`, locale keys (blue/green en/fa), `lastBlockedCode` on overview summary.
+
+**Verify after polish:**
+- Build PASS
+- `automationLastBlockedLabel.test.ts` + `automationRoutingI18n.test.ts` — 12/12 PASS
+- Overview API returns `lastBlockedCode: PUBLISHER_MAPPING_REQUIRED` with human label in UI
+- No raw i18n keys; no punctuation-only status values
+- Live Telegram **not** claimed — dry-run operational only
+
+**Polish commit:** `76a7161`

@@ -86,6 +86,7 @@ export type AutomationOverview = {
         queueSize: number;
         avgPassRate: number;
         lastDryRunAt?: string | null;
+        lastBlockedCode?: string | null;
         lastBlockedReason?: string | null;
     };
 };
