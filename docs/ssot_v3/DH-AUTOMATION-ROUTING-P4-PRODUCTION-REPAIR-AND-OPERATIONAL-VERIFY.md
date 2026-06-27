@@ -289,4 +289,4 @@ Human QA found two UI issues after P4 closeout commits `f558e26` / `2753d1d`. Sc
 - No raw i18n keys; no punctuation-only status values
 - Live Telegram **not** claimed — dry-run operational only
 
-**Polish commit:** `76a7161`
+**Polish commit:** `84c8f9e`
