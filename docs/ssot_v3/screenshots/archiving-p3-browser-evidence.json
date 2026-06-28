@@ -1,0 +1,36 @@
+{
+  "capturedAt": "2026-06-28T12:00:55.550Z",
+  "appUrl": "https://titan.zala.ir",
+  "after_fixture_test": true,
+  "metrics": {
+    "activeRecords": "12",
+    "archivedRecords": "0",
+    "pendingArchive": "4",
+    "hasArchive2024": true,
+    "hasRestoreEmptyState": true,
+    "hasArchiveCompleted": true,
+    "hasRestoreCompleted": true
+  },
+  "forbiddenInBody": [],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()"
+  ],
+  "network": [
+    {
+      "url": "/api/v1/data-hub/archiving/records?limit=50&offset=0",
+      "status": 200
+    },
+    {
+      "url": "/api/v1/data-hub/archiving/stats?limit=20",
+      "status": 200
+    }
+  ],
+  "networkAll200": true,
+  "screenshot": "archiving-p3-browser-after-fixture.png",
+  "expected_counts": {
+    "active": "12",
+    "archived": "0",
+    "pending": "4"
+  }
+}
