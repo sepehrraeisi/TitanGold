@@ -6,7 +6,9 @@ import {
     formatCollectorSafeError,
     containsRawHtmlError,
     type CollectorSafeError,
+    type DiagnoseCollectorCheck,
 } from '../../../../../../services/telegramCollectorErrors.ts';
+import { formatDiagnoseSummary } from '../telegram/telegramCollectorLabels';
 import {
     ArtemisState,
     DataHubState,
@@ -312,73 +314,23 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const handleDiagnoseCollector = async () => {
         setIsLoadingCollector(true);
         setCollectorError(null);
+        setDiagnoseChecks(null);
         try {
             const result = await api.diagnoseTelegramCollector();
-            const parts: string[] = [];
-            const translateKey = (key: string) => {
-                switch (key) {
-                    case 'health':
-                        return t('collector_health') || 'Health';
-                    case 'session':
-                        return t('collector_session') || 'Session';
-                    case 'accounts':
-                        return t('collector_accounts') || 'Accounts';
-                    case 'channels':
-                        return t('collector_channels') || 'Channels';
-                    case 'loginStart':
-                        return t('collector_login_start') || 'Login /start';
-                    case 'loginConfirm':
-                        return t('collector_login_confirm') || 'Login /confirm';
-                    default:
-                        return key;
-                }
-            };
-
-            for (const check of result.checks) {
-                const label = translateKey(check.key);
-                const latency =
-                    check.latencyMs != null ? `${check.latencyMs}ms` : '—';
-                const kind = check.responseKind || 'unknown';
-                if (check.ok) {
-                    parts.push(`${label}: OK (${check.status ?? 200}, ${latency}, ${kind})`);
-                } else {
-                    const errMsg = check.errorKey
-                        ? formatCollectorSafeError(
-                              {
-                                  kind: 'unknown',
-                                  messageKey: check.errorKey,
-                                  status: check.status,
-                              },
-                              t,
-                          )
-                        : check.safeError || t('collector_diag_check_failed') || 'Endpoint issue';
-                    const upstreamHint =
-                        kind === 'html'
-                            ? t('collector_upstream_nginx_hint') ||
-                              'Check nginx upstream and collector process'
-                            : '';
-                    parts.push(
-                        `${label}: ${errMsg} (status=${check.status ?? 'n/a'}, ${kind}, ${latency}${upstreamHint ? `, ${upstreamHint}` : ''})`,
-                    );
-                }
-            }
-
+            setDiagnoseChecks(result.checks);
+            const summary = formatDiagnoseSummary(result.checks, t);
             if (result.ok) {
                 setCollectorMessage(
-                    `${t('collector_diag_all_good') || 'All Telegram Collector endpoints are reachable.'} ` +
-                        parts.join(' | '),
+                    `${t('collector_diag_all_good') || 'All Telegram Collector endpoints are reachable.'} ${summary}`,
                 );
             } else {
                 setCollectorError(
-                    `${t('collector_diag_has_issues') || 'Some Telegram Collector endpoints are not accessible.'} ` +
-                        parts.join(' | '),
+                    `${t('collector_diag_has_issues') || 'Some Telegram Collector endpoints are not accessible.'} ${summary}`,
                 );
             }
         } catch (e: unknown) {
             console.error('Failed to diagnose collector:', e);
-            setCollectorError(
-                resolveCollectorMessage(e, 'collector_diag_failed'),
-            );
+            setCollectorError(resolveCollectorMessage(e, 'collector_diag_failed'));
         } finally {
             setIsLoadingCollector(false);
         }
@@ -781,6 +733,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const [isLoadingCollector, setIsLoadingCollector] = useState(false);
     const [collectorMessage, setCollectorMessage] = useState<string | null>(null);
+    const [diagnoseChecks, setDiagnoseChecks] = useState<DiagnoseCollectorCheck[] | null>(null);
     const [collectorError, setCollectorError] = useState<string | null>(null);
 
     const [collectorForm, setCollectorForm] = useState({
@@ -854,6 +807,8 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setCollectorError,
         collectorMessage,
         setCollectorMessage,
+        diagnoseChecks,
+        setDiagnoseChecks,
         categoriesError: categoriesApiError instanceof Error ? categoriesApiError.message : null,
         setCategoriesError: () => { },
         accessLogs,

@@ -133,6 +133,7 @@ app.get('/health', rateLimitHybrid_1.rateLimiters.lenient, async (req, res) => {
 });
 // Session Management Endpoints
 app.get('/api/telegram-collector/session/status', rateLimitHybrid_1.rateLimiters.lenient, async (req, res) => {
+    const { sanitizeSessionStatusForApi } = require('../utils/accountApiSanitizer');
     try {
         const dbSession = await (0, sessionManager_1.getSessionFromDB)('telegram-collector');
         if (!dbSession) {
@@ -142,7 +143,7 @@ app.get('/api/telegram-collector/session/status', rateLimitHybrid_1.rateLimiters
                 fallback_to_env: !!process.env.TELEGRAM_SESSION_STRING
             });
         }
-        res.json({
+        res.json(sanitizeSessionStatusForApi({
             stored_in_db: true,
             service_name: dbSession.serviceName,
             phone_number: dbSession.phoneNumber,
@@ -150,7 +151,7 @@ app.get('/api/telegram-collector/session/status', rateLimitHybrid_1.rateLimiters
             last_used_at: dbSession.lastUsedAt,
             created_at: dbSession.createdAt,
             has_env_fallback: !!process.env.TELEGRAM_SESSION_STRING
-        });
+        }));
     }
     catch (error) {
         console.error('❌ Error checking session status:', error);
@@ -264,6 +265,7 @@ app.post('/api/telegram-collector/session/force-rotation', rateLimitHybrid_1.rat
     }
 });
 app.get('/api/telegram-collector/health', rateLimitHybrid_1.rateLimiters.lenient, async (req, res) => {
+    const { sanitizeHealthSessionForApi } = require('../utils/accountApiSanitizer');
     let sessionStats = null;
     try {
         sessionStats = await (0, sessionManager_1.getSessionStats)('telegram-collector');
@@ -287,12 +289,12 @@ app.get('/api/telegram-collector/health', rateLimitHybrid_1.rateLimiters.lenient
             globalTokens: rateLimitHybrid_1.globalRateLimiter.getAvailableTokens(),
             stats: (0, rateLimitHybrid_1.getRateLimiterStats)()
         },
-        session: {
+        session: sanitizeHealthSessionForApi({
             in_database: sessionStats?.inDatabase || false,
             last_used: sessionStats?.lastUsed || null,
             created_at: sessionStats?.createdAt || null,
             phone_number: sessionStats?.phoneNumber || null
-        }
+        })
     });
 });
 // Start login flow - send verification code (multi-account aware)
@@ -345,13 +347,13 @@ app.post('/api/telegram-collector/login/start', rateLimitHybrid_1.rateLimiters.a
         console.log('✅ Verification code sent to:', phoneNumber);
         // Record successful login start
         metricsCollector_1.default.recordLoginAttempt(true, false);
-        res.json({
+        res.json(sanitizeLoginStartForApi({
             success: true,
             authId,
             message: 'Verification code sent successfully',
             phoneNumber,
             phoneCodeHash: result.phoneCodeHash
-        });
+        }));
     }
     catch (error) {
         console.error('❌ Login start error:', error);
@@ -414,9 +416,10 @@ app.post('/api/telegram-collector/login/confirm', rateLimitHybrid_1.rateLimiters
         // Get session string
         const sessionString = client.session.save();
         // Persist per-account session in telegram_accounts
+        let savedAccount = null;
         try {
-            const account = await (0, accountManager_1.upsertAccountSession)(phoneNumber, sessionString, {});
-            console.log('✅ Account session saved to telegram_accounts:', account?.id);
+            savedAccount = await (0, accountManager_1.upsertAccountSession)(phoneNumber, sessionString, {});
+            console.log('✅ Account session saved to telegram_accounts:', savedAccount?.id);
         }
         catch (dbError) {
             console.error('⚠️  Failed to save account session in telegram_accounts:', dbError);
@@ -446,12 +449,14 @@ app.post('/api/telegram-collector/login/confirm', rateLimitHybrid_1.rateLimiters
         console.log('✅ Login confirmed successfully');
         // Record successful login
         metricsCollector_1.default.recordLoginAttempt(true, false);
-        res.json({
+        const { sanitizeLoginConfirmForApi } = require('../utils/accountApiSanitizer');
+        res.json(sanitizeLoginConfirmForApi({
             success: true,
             message: 'Login confirmed successfully',
             session: sessionString,
-            phoneNumber
-        });
+            phoneNumber,
+            account: savedAccount
+        }));
     }
     catch (error) {
         console.error('❌ Login confirm error:', error);
@@ -484,7 +489,7 @@ app.post('/api/telegram-collector/login/confirm', rateLimitHybrid_1.rateLimiters
     }
 });
 // Cancel login
-app.post('/api/telegram-collector/login/cancel', async (req, res) => {
+app.post('/api/telegram-collector/login/cancel', rateLimitHybrid_1.rateLimiters.auth, async (req, res) => {
     try {
         const { authId } = req.body;
         if (authId && authSessions.has(authId)) {
@@ -592,9 +597,10 @@ app.post('/api/telegram-collector/accounts/:id/logout', rateLimitHybrid_1.rateLi
                 error: 'Account not found'
             });
         }
+        const { sanitizeAccountForApi } = require('../utils/accountApiSanitizer');
         res.json({
             success: true,
-            account,
+            account: sanitizeAccountForApi(account),
             message: 'Account logged out and disabled'
         });
     }
