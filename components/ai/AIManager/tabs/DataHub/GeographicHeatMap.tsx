@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { formatDataHubQueryError } from './dataHubI18n';
+import { DataHubApiError } from '../../../../../services/dataSourcesApi';
+import { DataHubAlert, DataHubEmpty } from './dataHubUi';
 import { ComposableMap, Geographies, Geography, ZoomableGroup } from 'react-simple-maps';
 import { scaleLinear } from 'd3-scale';
 // Bundled TopoJSON – no external URL; map loads even when GitHub is blocked
@@ -172,7 +175,7 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
     setError(null);
     try {
       // Fetch events and aggregate by region
-      let url = `/api/v1/telegram/events/recent?timeRange=${timeRange}&limit=250`;
+      let url = `/api/v1/telegram/events/geographic-summary?timeRange=${timeRange}&limit=200`;
       if (categoryFilter) {
         url += `&categories=${categoryFilter}`;
       }
@@ -215,12 +218,18 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
 
         setData(Array.from(regionMap.values()));
       }
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.message ||
-          t('geographic_error') ||
-          'Failed to fetch geographic data',
-      );
+    } catch (err: unknown) {
+      const queryErr =
+        err instanceof DataHubApiError
+          ? err
+          : new DataHubApiError(
+                (err as { response?: { status?: number } })?.response?.status || 0,
+                (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+                    ?.message ||
+                    (err as Error)?.message ||
+                    t('geographic_error'),
+            );
+      setError(formatDataHubQueryError(t, queryErr)?.message || t('datahub_error_generic'));
     } finally {
       setIsLoading(false);
     }
@@ -285,9 +294,12 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
     <div className="space-y-6">
       {/* Error Message */}
       {error && (
-        <Card className="bg-gradient-to-r from-red-950/70 via-rose-900/60 to-orange-900/50 border border-red-500/40 shadow-md">
-          <p className="text-sm text-red-200">{error}</p>
-        </Card>
+        <DataHubAlert
+          variant="error"
+          message={error}
+          onRetry={fetchLocationData}
+          retryLabel={t('retry') || 'Retry'}
+        />
       )}
 
       {/* Controls */}

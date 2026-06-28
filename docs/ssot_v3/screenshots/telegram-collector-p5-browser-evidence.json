@@ -1,0 +1,31 @@
+{
+  "capturedAt": "2026-06-28T18:17:34.542Z",
+  "tabChecks": {
+    "overview": {
+      "loaded": true,
+      "hasResourceNotFound": false,
+      "hasRequestFailed": false
+    },
+    "inbox": {
+      "loaded": true,
+      "hasResourceNotFound": false,
+      "hasRequestFailed": false
+    },
+    "categories": {
+      "loaded": true,
+      "hasResourceNotFound": false,
+      "hasRequestFailed": false
+    },
+    "breaking": {
+      "loaded": true,
+      "hasResourceNotFound": false,
+      "hasRequestFailed": false
+    },
+    "geographic": {
+      "loaded": true,
+      "hasResourceNotFound": false,
+      "hasRequestFailed": false
+    }
+  },
+  "verdict": "REAL WORKING"
+}
