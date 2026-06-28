@@ -1,0 +1,633 @@
+{
+  "capturedAt": "2026-06-28T09:02:00.508Z",
+  "destructiveRoutesCalled": false,
+  "getEndpoints": [
+    {
+      "path": "/api/v1/data-hub/archiving/stats",
+      "status": 200,
+      "ms": 233,
+      "ok": true,
+      "body": {
+        "health": {
+          "status_code": "warning_stale_archive",
+          "status_message": "WARNING: Archive not run in >30 days",
+          "active_records": 12,
+          "archived_records": 0,
+          "oldest_active_date": "2026-02-10T14:52:45.710Z",
+          "last_archive_date": "2026-05-11",
+          "last_archive_success": true,
+          "days_since_last_archive": 48,
+          "records_pending_archive": 4
+        },
+        "partitions": [
+          {
+            "year": 2024,
+            "label": "Archive 2024",
+            "start_date": "2024-01-01 00:00:00+00",
+            "end_date": "2025-01-01 00:00:00+00",
+            "row_count": 0,
+            "size": "0 bytes"
+          },
+          {
+            "year": 2025,
+            "label": "Archive 2025",
+            "start_date": "2025-01-01 00:00:00+00",
+            "end_date": "2026-01-01 00:00:00+00",
+            "row_count": 0,
+            "size": "0 bytes"
+          },
+          {
+            "year": 2026,
+            "label": "Archive 2026",
+            "start_date": "2026-01-01 00:00:00+00",
+            "end_date": "2027-01-01 00:00:00+00",
+            "row_count": 0,
+            "size": "0 bytes"
+          }
+        ],
+        "sql_stats": [
+          {
+            "id": 31,
+            "archive_date": "2026-05-11T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 19,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-05-11T12:29:10.475Z"
+          },
+          {
+            "id": 30,
+            "archive_date": "2026-05-10T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 14,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-05-10T12:29:10.481Z"
+          },
+          {
+            "id": 29,
+            "archive_date": "2026-05-09T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 17,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-05-09T12:29:10.515Z"
+          },
+          {
+            "id": 28,
+            "archive_date": "2026-05-08T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 16,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-05-08T12:29:10.467Z"
+          },
+          {
+            "id": 27,
+            "archive_date": "2026-05-07T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 21,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-05-07T12:29:10.478Z"
+          },
+          {
+            "id": 26,
+            "archive_date": "2026-05-06T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 25,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-05-06T12:29:10.523Z"
+          },
+          {
+            "id": 25,
+            "archive_date": "2026-05-05T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 6,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-05-05T12:29:42.482Z"
+          },
+          {
+            "id": 24,
+            "archive_date": "2026-03-05T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 10,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-03-05T20:25:08.794Z"
+          },
+          {
+            "id": 23,
+            "archive_date": "2026-03-04T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 10,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-03-04T20:25:11.778Z"
+          },
+          {
+            "id": 22,
+            "archive_date": "2026-03-02T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 10,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-03-02T20:25:08.228Z"
+          },
+          {
+            "id": 21,
+            "archive_date": "2026-03-01T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 12,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-03-01T20:25:08.546Z"
+          },
+          {
+            "id": 20,
+            "archive_date": "2026-02-28T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 5,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-02-28T20:25:08.937Z"
+          },
+          {
+            "id": 19,
+            "archive_date": "2026-02-27T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 5,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-02-27T20:25:07.237Z"
+          },
+          {
+            "id": 18,
+            "archive_date": "2026-02-26T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 3,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-02-26T20:25:04.632Z"
+          },
+          {
+            "id": 17,
+            "archive_date": "2026-02-25T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 2,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-02-25T20:25:05.201Z"
+          },
+          {
+            "id": 16,
+            "archive_date": "2026-02-24T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 2,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-02-24T20:25:06.563Z"
+          },
+          {
+            "id": 15,
+            "archive_date": "2026-02-23T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 2,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-02-23T20:25:33.814Z"
+          },
+          {
+            "id": 14,
+            "archive_date": "2026-02-23T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 5,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-02-23T10:07:54.964Z"
+          },
+          {
+            "id": 13,
+            "archive_date": "2026-02-21T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 18,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-02-21T14:44:43.761Z"
+          },
+          {
+            "id": 12,
+            "archive_date": "2026-02-20T00:00:00.000Z",
+            "records_archived": 0,
+            "oldest_record_date": null,
+            "newest_record_date": null,
+            "execution_time_ms": 46,
+            "success": true,
+            "error_message": null,
+            "created_at": "2026-02-20T14:44:45.972Z"
+          }
+        ],
+        "recent_operations": [
+          {
+            "id": "a5d207b8-b038-401d-94b8-2227cda26973",
+            "operation_type": "preview_archive",
+            "dry_run": true,
+            "request_payload": {
+              "days_old": 90
+            },
+            "result_payload": {
+              "dry_run": true,
+              "days_old": 90,
+              "cutoff_date": "2026-03-29T17:30:58.927Z",
+              "newest_date": "2026-02-24T15:40:19.552Z",
+              "oldest_date": "2026-02-10T14:52:45.710Z",
+              "pending_count": 4
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-06-27T17:30:58.913Z",
+            "completed_at": "2026-06-27T17:30:58.928Z",
+            "operation_label": "Archive preview"
+          },
+          {
+            "id": "21a38fc9-9222-4aca-8072-524ae76069d0",
+            "operation_type": "preview_purge",
+            "dry_run": true,
+            "request_payload": {
+              "end_date": null,
+              "start_date": null
+            },
+            "result_payload": {
+              "dry_run": true,
+              "message": "v3.0 does not support purge apply; preview count only",
+              "end_date": null,
+              "start_date": null,
+              "would_purge_count": 0,
+              "purge_apply_available": false
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-06-01T17:33:08.442Z",
+            "completed_at": "2026-06-01T17:33:08.453Z",
+            "operation_label": "Purge preview"
+          },
+          {
+            "id": "be34e047-7871-4b33-af63-0ca7be2c532d",
+            "operation_type": "preview_purge",
+            "dry_run": true,
+            "request_payload": {
+              "end_date": "2026-05-30T17:29:58.333Z",
+              "start_date": "2026-04-30T17:29:58.333Z"
+            },
+            "result_payload": {
+              "dry_run": true,
+              "message": "v3.0 does not support purge apply; preview count only",
+              "end_date": "2026-05-30T17:29:58.333Z",
+              "start_date": "2026-04-30T17:29:58.333Z",
+              "would_purge_count": 0,
+              "purge_apply_available": false
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-05-30T17:29:58.355Z",
+            "completed_at": "2026-05-30T17:29:58.358Z",
+            "operation_label": "Purge preview"
+          },
+          {
+            "id": "63904aee-511f-4b9d-9f4b-35ff33801451",
+            "operation_type": "preview_restore",
+            "dry_run": true,
+            "request_payload": {
+              "end_date": "2026-05-30T17:29:58.333Z",
+              "start_date": "2026-04-30T17:29:58.333Z"
+            },
+            "result_payload": {
+              "dry_run": true,
+              "end_date": "2026-05-30T17:29:58.333Z",
+              "start_date": "2026-04-30T17:29:58.333Z",
+              "newest_date": null,
+              "oldest_date": null,
+              "pending_count": 0
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-05-30T17:29:58.342Z",
+            "completed_at": "2026-05-30T17:29:58.345Z",
+            "operation_label": "Restore preview"
+          },
+          {
+            "id": "7b4a6f3f-4455-4f04-b57a-1ea843ac76a3",
+            "operation_type": "preview_archive",
+            "dry_run": true,
+            "request_payload": {
+              "days_old": 90
+            },
+            "result_payload": {
+              "dry_run": true,
+              "days_old": 90,
+              "cutoff_date": "2026-03-01T17:29:58.330Z",
+              "newest_date": "2026-02-24T15:40:19.552Z",
+              "oldest_date": "2026-02-10T14:52:45.710Z",
+              "pending_count": 4
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-05-30T17:29:58.314Z",
+            "completed_at": "2026-05-30T17:29:58.330Z",
+            "operation_label": "Archive preview"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/data-hub/archiving/health",
+      "status": 200,
+      "ms": 54,
+      "ok": true,
+      "body": {
+        "status_code": "warning_stale_archive",
+        "status_message": "WARNING: Archive not run in >30 days",
+        "active_records": 12,
+        "archived_records": 0,
+        "oldest_active_date": "2026-02-10T14:52:45.710Z",
+        "last_archive_date": "2026-05-11",
+        "last_archive_success": true,
+        "days_since_last_archive": 48,
+        "records_pending_archive": 4
+      }
+    },
+    {
+      "path": "/api/v1/data-hub/archiving/partitions",
+      "status": 200,
+      "ms": 27,
+      "ok": true,
+      "body": {
+        "partitions": [
+          {
+            "year": 2024,
+            "label": "Archive 2024",
+            "start_date": "2024-01-01 00:00:00+00",
+            "end_date": "2025-01-01 00:00:00+00",
+            "row_count": 0,
+            "size": "0 bytes"
+          },
+          {
+            "year": 2025,
+            "label": "Archive 2025",
+            "start_date": "2025-01-01 00:00:00+00",
+            "end_date": "2026-01-01 00:00:00+00",
+            "row_count": 0,
+            "size": "0 bytes"
+          },
+          {
+            "year": 2026,
+            "label": "Archive 2026",
+            "start_date": "2026-01-01 00:00:00+00",
+            "end_date": "2027-01-01 00:00:00+00",
+            "row_count": 0,
+            "size": "0 bytes"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/data-hub/archiving/records?limit=50&offset=0",
+      "status": 200,
+      "ms": 15,
+      "ok": true,
+      "body": {
+        "records": [],
+        "total": 0,
+        "limit": 50,
+        "offset": 0
+      }
+    },
+    {
+      "path": "/api/v1/data-hub/archiving/operations?limit=20",
+      "status": 200,
+      "ms": 75,
+      "ok": true,
+      "body": {
+        "operations": [
+          {
+            "id": "a5d207b8-b038-401d-94b8-2227cda26973",
+            "operation_type": "preview_archive",
+            "dry_run": true,
+            "request_payload": {
+              "days_old": 90
+            },
+            "result_payload": {
+              "dry_run": true,
+              "days_old": 90,
+              "cutoff_date": "2026-03-29T17:30:58.927Z",
+              "newest_date": "2026-02-24T15:40:19.552Z",
+              "oldest_date": "2026-02-10T14:52:45.710Z",
+              "pending_count": 4
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-06-27T17:30:58.913Z",
+            "completed_at": "2026-06-27T17:30:58.928Z",
+            "operation_label": "Archive preview"
+          },
+          {
+            "id": "21a38fc9-9222-4aca-8072-524ae76069d0",
+            "operation_type": "preview_purge",
+            "dry_run": true,
+            "request_payload": {
+              "end_date": null,
+              "start_date": null
+            },
+            "result_payload": {
+              "dry_run": true,
+              "message": "v3.0 does not support purge apply; preview count only",
+              "end_date": null,
+              "start_date": null,
+              "would_purge_count": 0,
+              "purge_apply_available": false
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-06-01T17:33:08.442Z",
+            "completed_at": "2026-06-01T17:33:08.453Z",
+            "operation_label": "Purge preview"
+          },
+          {
+            "id": "be34e047-7871-4b33-af63-0ca7be2c532d",
+            "operation_type": "preview_purge",
+            "dry_run": true,
+            "request_payload": {
+              "end_date": "2026-05-30T17:29:58.333Z",
+              "start_date": "2026-04-30T17:29:58.333Z"
+            },
+            "result_payload": {
+              "dry_run": true,
+              "message": "v3.0 does not support purge apply; preview count only",
+              "end_date": "2026-05-30T17:29:58.333Z",
+              "start_date": "2026-04-30T17:29:58.333Z",
+              "would_purge_count": 0,
+              "purge_apply_available": false
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-05-30T17:29:58.355Z",
+            "completed_at": "2026-05-30T17:29:58.358Z",
+            "operation_label": "Purge preview"
+          },
+          {
+            "id": "63904aee-511f-4b9d-9f4b-35ff33801451",
+            "operation_type": "preview_restore",
+            "dry_run": true,
+            "request_payload": {
+              "end_date": "2026-05-30T17:29:58.333Z",
+              "start_date": "2026-04-30T17:29:58.333Z"
+            },
+            "result_payload": {
+              "dry_run": true,
+              "end_date": "2026-05-30T17:29:58.333Z",
+              "start_date": "2026-04-30T17:29:58.333Z",
+              "newest_date": null,
+              "oldest_date": null,
+              "pending_count": 0
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-05-30T17:29:58.342Z",
+            "completed_at": "2026-05-30T17:29:58.345Z",
+            "operation_label": "Restore preview"
+          },
+          {
+            "id": "7b4a6f3f-4455-4f04-b57a-1ea843ac76a3",
+            "operation_type": "preview_archive",
+            "dry_run": true,
+            "request_payload": {
+              "days_old": 90
+            },
+            "result_payload": {
+              "dry_run": true,
+              "days_old": 90,
+              "cutoff_date": "2026-03-01T17:29:58.330Z",
+              "newest_date": "2026-02-24T15:40:19.552Z",
+              "oldest_date": "2026-02-10T14:52:45.710Z",
+              "pending_count": 4
+            },
+            "status": "success",
+            "error_summary": null,
+            "triggered_by": "e134c7b1-b183-4e21-9acf-e3d53b9806d6",
+            "started_at": "2026-05-30T17:29:58.314Z",
+            "completed_at": "2026-05-30T17:29:58.330Z",
+            "operation_label": "Archive preview"
+          }
+        ]
+      }
+    }
+  ],
+  "rbac": {
+    "previewArchiveAdmin": {
+      "path": "/api/v1/data-hub/archiving/archive/preview",
+      "status": 200,
+      "ms": 173,
+      "ok": true,
+      "body": {
+        "dry_run": true,
+        "days_old": 90,
+        "pending_count": 4,
+        "oldest_date": "2026-02-10T14:52:45.710Z",
+        "newest_date": "2026-02-24T15:40:19.552Z",
+        "cutoff_date": "2026-03-30T09:02:01.105Z"
+      }
+    },
+    "previewArchiveReadonly": {
+      "path": "/api/v1/data-hub/archiving/archive/preview",
+      "status": 500,
+      "ms": 56,
+      "ok": false,
+      "body": {
+        "error": "insert or update on table \"datahub_archiving_operations\" violates foreign key constraint \"datahub_archiving_operations_triggered_by_fkey\"",
+        "code": "23503"
+      }
+    },
+    "archiveWithoutConfirm": {
+      "path": "/api/v1/data-hub/archiving/archive",
+      "status": 400,
+      "ms": 12,
+      "ok": false,
+      "body": {
+        "error": "Archive requires explicit confirmation",
+        "code": "CONFIRM_ARCHIVE_REQUIRED"
+      }
+    },
+    "purgePreview": {
+      "path": "/api/v1/data-hub/archiving/purge/preview",
+      "status": 200,
+      "ms": 74,
+      "ok": true,
+      "body": {
+        "dry_run": true,
+        "purge_apply_available": false,
+        "would_purge_count": 0,
+        "start_date": null,
+        "end_date": null,
+        "message": "v3.0 does not support purge apply; preview count only"
+      }
+    }
+  },
+  "performanceTargetMs": 500,
+  "healthStatusCode": "warning_stale_archive",
+  "partitionLabels": [
+    "Archive 2024",
+    "Archive 2025",
+    "Archive 2026"
+  ],
+  "allGetUnder500ms": true,
+  "noDestructiveApply": true
+}

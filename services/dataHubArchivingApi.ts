@@ -4,6 +4,8 @@ const BASE = '/api/v1/data-hub/archiving';
 
 export type ArchiveHealth = {
     status: string;
+    status_code?: 'healthy' | 'warning_stale_archive' | 'warning_pending' | 'no_archives' | 'error';
+    status_label_key?: string;
     active_records: number;
     archived_records: number;
     oldest_active_date?: string | null;
@@ -14,7 +16,9 @@ export type ArchiveHealth = {
 };
 
 export type ArchivePartition = {
-    partition_name: string;
+    partition_name?: string;
+    label: string;
+    year?: number | null;
     start_date: string;
     end_date: string;
     row_count: number;
@@ -36,6 +40,7 @@ export type ArchivedRecord = {
 export type ArchivingOperation = {
     id: string;
     operation_type: string;
+    operation_label?: string;
     dry_run: boolean;
     request_payload: Record<string, unknown>;
     result_payload: Record<string, unknown>;
