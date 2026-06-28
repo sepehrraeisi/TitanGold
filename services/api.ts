@@ -1,4 +1,5 @@
 import { fetchCollectorJson, diagnoseCollectorEndpoint } from './telegramCollectorErrors.ts';
+import { getCollectorAuthHeaders } from './collectorAuth.ts';
 import { _data } from './_data.ts';
 import { generateDemoChartData } from './chartDataGenerator.ts';
 import { DEFAULT_ARTEMIS_STATE } from '../components/ai/defaults.ts';
@@ -21173,66 +21174,39 @@ export const refreshTelegramCollectorChannels = async (): Promise<TelegramCollec
     const dataHub = await fetchDataHubState();
     const collector = ensureTelegramCollectorState(dataHub);
     const now = Date.now();
-    const existingChannelsByHandle = new Map(
-        collector.channels.map(channel => [channel.handle?.toLowerCase() || channel.id.toLowerCase(), channel]),
-    );
 
     try {
-        // Try to fetch real channels from telegram-collector service
         const baseUrl = resolveTelegramCollectorBaseUrl();
-        const response = await fetch(`${baseUrl}/api/telegram-collector/channels`);
-        
+        const response = await fetch(`${baseUrl}/api/telegram-collector/collector-channels`);
+
         if (response.ok) {
             const data = await response.json();
-            
-            // Convert real Telegram channels to our format
             if (data.channels && Array.isArray(data.channels)) {
-                const refreshedChannels = data.channels.map((ch: any, index: number) => {
-                    const handle = (ch.username || `channel_${index}`).toLowerCase();
-                    const existingChannel = existingChannelsByHandle.get(handle);
-                    const baseChannel = {
-                    id: `real-${ch.id}`,
-                    title: ch.title,
-                    handle: ch.username || `channel_${index}`,
-                        status: 'idle' as TelegramCollectorChannelStatus,
-                        enabled: existingChannel?.enabled ?? true,
+                collector.channels = data.channels.map((ch: any) => ({
+                    id: String(ch.id),
+                    title: ch.title || ch.username || String(ch.channelId),
+                    handle: ch.username || String(ch.channelId),
+                    status: ch.isActive ? 'idle' : 'paused',
+                    enabled: ch.isActive !== false,
                     usingCollector: true,
-                        category: existingChannel?.category || 'telegram',
-                        sourceId: existingChannel?.sourceId || `telegram-${ch.username || ch.id}`,
-                        lastSyncAt: existingChannel?.lastSyncAt || new Date(now - 1000 * 60 * (5 + Math.random() * 30)).toISOString(),
-                        lastMessageAt: existingChannel?.lastMessageAt || new Date(now - 1000 * 60 * (2 + Math.random() * 20)).toISOString(),
-                        messageCount24h: existingChannel?.messageCount24h ?? Math.floor(10 + Math.random() * 50),
-                        fetchLatencyMs: existingChannel?.fetchLatencyMs ?? Math.round(300 + Math.random() * 400),
-                        createdAt: existingChannel?.createdAt || new Date(now - 1000 * 60 * 60 * 24 * 7).toISOString(),
+                    category: ch.category || 'telegram',
+                    sourceId: ch.username ? `telegram-${ch.username}` : `telegram-${ch.channelId}`,
+                    lastSyncAt: ch.lastSyncedAt || null,
+                    lastMessageAt: ch.lastSyncedAt || null,
+                    messageCount24h: 0,
+                    fetchLatencyMs: 0,
+                    createdAt: ch.lastSyncedAt || new Date(now).toISOString(),
                     updatedAt: new Date(now).toISOString(),
-                        lastError: existingChannel?.lastError,
-                        lastTestAt: existingChannel?.lastTestAt,
-                        lastTestStatus: existingChannel?.lastTestStatus,
-                    };
-                    return baseChannel;
-                });
-                collector.channels = refreshedChannels;
+                    lastError: ch.lastError || undefined,
+                }));
                 collector.status = 'online';
             }
         } else {
-            // If service is not available, keep existing channels
             collector.status = 'offline';
-            collector.channels = collector.channels.map(channel => ({
-                ...channel,
-                status: 'paused',
-                updatedAt: new Date(now).toISOString(),
-            }));
         }
     } catch (error) {
-        console.warn('Failed to fetch real channels, keeping existing:', error);
-        // Keep existing channels but update timestamps
-        collector.channels = collector.channels.map(channel => ({
-            ...channel,
-            status: channel.enabled ? 'idle' : 'paused',
-            updatedAt: new Date(now).toISOString(),
-            lastSyncAt: channel.lastSyncAt || new Date(now - 1000 * 60 * 15).toISOString(),
-            fetchLatencyMs: channel.fetchLatencyMs || Math.round(250 + Math.random() * 400),
-        }));
+        console.warn('Failed to refresh collector channels from DB:', error);
+        collector.status = collector.channels.length > 0 ? 'idle' : 'offline';
     }
 
     collector.lastRefreshAt = new Date(now).toISOString();
@@ -22133,6 +22107,7 @@ export {
     isHtmlLikeResponse,
     maskPhoneForDisplay,
 } from './telegramCollectorErrors.js';
+export { getCollectorAuthHeaders, mergeCollectorAuthInit } from './collectorAuth.ts';
 
 export const diagnoseTelegramCollector = async (): Promise<{
     ok: boolean;
@@ -22163,9 +22138,7 @@ export const startTelegramCollectorLogin = async (payload: StartCollectorLoginIn
     const baseUrl = resolveTelegramCollectorBaseUrl();
     const response = await fetch(`${baseUrl}/api/telegram-collector/login/start`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getCollectorAuthHeaders(),
         body: JSON.stringify(payload),
     });
     const data = await response.json();
@@ -22185,9 +22158,7 @@ export const confirmTelegramCollectorLogin = async (payload: ConfirmCollectorLog
     const baseUrl = resolveTelegramCollectorBaseUrl();
     const response = await fetch(`${baseUrl}/api/telegram-collector/login/confirm`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getCollectorAuthHeaders(),
         body: JSON.stringify(payload),
     });
     const data = await response.json();
@@ -22202,9 +22173,7 @@ export const cancelTelegramCollectorLogin = async (authId: string) => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
     const response = await fetch(`${baseUrl}/api/telegram-collector/login/cancel`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getCollectorAuthHeaders(),
         body: JSON.stringify({ authId }),
     });
     const data = await response.json();

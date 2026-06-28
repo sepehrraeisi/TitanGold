@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { formatDataHubQueryError } from './dataHubI18n';
+import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 import {
     PieChart,
     Pie,
@@ -98,7 +100,7 @@ const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
     const [data, setData] = useState<CategoryData[]>([]);
     const [timeline, setTimeline] = useState<TimelineData[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-    const [timeRange, setTimeRange] = useState(168); // 7 days
+    const [timeRange, setTimeRange] = useState(24);
     const [isLoading, setIsLoading] = useState(false);
     const [isTimelineLoading, setIsTimelineLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -138,8 +140,18 @@ const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
                 setData(response.data.categories);
                 setTotals(response.data.totals || null);
             }
-        } catch (err: any) {
-            setError(err?.response?.data?.message || 'Failed to fetch category data');
+        } catch (err: unknown) {
+            const queryErr =
+                err instanceof DataHubApiError
+                    ? err
+                    : new DataHubApiError(
+                          (err as { response?: { status?: number } })?.response?.status || 0,
+                          (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+                              ?.message ||
+                              (err as Error)?.message ||
+                              'Failed to fetch category data',
+                      );
+            setError(formatDataHubQueryError(t, queryErr)?.message || t('datahub_error_generic'));
         } finally {
             setIsLoading(false);
         }

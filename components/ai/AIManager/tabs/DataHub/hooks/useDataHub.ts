@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DATA_HUB_KEYS } from '../../../../../../hooks/useDataHubState.ts';
 import * as api from '../../../../../../services/api.ts';
+import { getCollectorAuthHeaders } from '../../../../../../services/collectorAuth.ts';
 import {
     formatCollectorSafeError,
     containsRawHtmlError,
@@ -502,12 +503,20 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const handleRefreshCollectorChannels = async () => {
         setIsRefreshingChannels(true);
+        setCollectorError(null);
         try {
             const url = api.buildCollectorUrl('/api/telegram-collector/channels/refresh');
-            const response = await fetch(url, { method: 'POST', credentials: 'include' });
+            const response = await fetch(url, {
+                method: 'POST',
+                credentials: 'include',
+                headers: getCollectorAuthHeaders(),
+            });
             const data = await response.json();
             if (data.success) {
-                setCollectorMessage(t('channels_refreshed') || 'Channels refreshed');
+                const refreshed = data.refreshed ?? 0;
+                setCollectorMessage(
+                    `${t('channels_refreshed') || 'Channels refreshed'} (${refreshed} ${t('updated') || 'updated'})`,
+                );
                 setChannelsRefreshTrigger((n) => n + 1);
                 await loadDataHub();
             } else {
@@ -582,7 +591,11 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setChannelTestPreview(null);
         try {
             const url = api.buildCollectorUrl(`/api/telegram-collector/channels/${channelId}/test`);
-            const response = await fetch(url, { method: 'POST', credentials: 'include' });
+            const response = await fetch(url, {
+                method: 'POST',
+                credentials: 'include',
+                headers: getCollectorAuthHeaders(),
+            });
             const data = await response.json();
             if (!response.ok) {
                 setCollectorError(data?.error || data?.message || (t('channel_test_failed') || 'Channel test failed'));

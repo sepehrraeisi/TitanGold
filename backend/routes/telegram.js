@@ -8,6 +8,31 @@ import { readRateLimiter, writeRateLimiter } from '../middleware/rateLimiter.js'
 const router = express.Router();
 const readAuth = [telegramReadAuth, readRateLimiter];
 
+const readCache = new Map();
+const CACHE_TTL_MS = 60_000;
+
+function buildCacheKey(path, query) {
+    const sorted = Object.keys(query || {})
+        .sort()
+        .map(k => `${k}=${query[k]}`)
+        .join('&');
+    return `${path}?${sorted}`;
+}
+
+function getCached(key) {
+    const entry = readCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.at > CACHE_TTL_MS) {
+        readCache.delete(key);
+        return null;
+    }
+    return entry.data;
+}
+
+function setCached(key, data) {
+    readCache.set(key, { at: Date.now(), data });
+}
+
 // Debug log
 logger.info('📡 Telegram API routes module loaded');
 
@@ -21,13 +46,19 @@ logger.info('📡 Telegram API routes module loaded');
  */
 router.get('/health', ...readAuth, async (req, res) => {
     try {
+        const cacheKey = buildCacheKey('/health', {});
+        const cached = getCached(cacheKey);
+        if (cached) {
+            return res.json(cached);
+        }
+
         // Check database connection
         const dbCheck = await query('SELECT COUNT(*) as count FROM telegram_messages');
         
         // Pipeline stats from view (same as before Geographic Map changes)
         const stats = await query('SELECT * FROM telegram_pipeline_stats');
         
-        return res.json({
+        const payload = {
             success: true,
             status: 'healthy',
             timestamp: new Date().toISOString(),
@@ -36,7 +67,9 @@ router.get('/health', ...readAuth, async (req, res) => {
                 totalMessages: parseInt(dbCheck.rows[0].count)
             },
             pipeline: stats.rows[0] || {}
-        });
+        };
+        setCached(cacheKey, payload);
+        return res.json(payload);
     } catch (error) {
         logger.error('Telegram health check failed:', error);
         return res.status(503).json({
@@ -186,6 +219,11 @@ router.get('/agents/:agentKey/feed', ...readAuth, async (req, res) => {
 router.get('/agents/summary', ...readAuth, async (req, res) => {
     try {
         const hours = Math.min(720, Math.max(1, parseInt(req.query.timeRange, 10) || 24));
+        const cacheKey = buildCacheKey('/agents/summary', { timeRange: hours });
+        const cached = getCached(cacheKey);
+        if (cached) {
+            return res.json(cached);
+        }
 
         // Agents list: use same time range as user selection (24h / 2d / 7d), not fixed 24h view
         const agentsSql = `
@@ -198,36 +236,35 @@ router.get('/agents/summary', ...readAuth, async (req, res) => {
                 COUNT(*) FILTER (WHERE ai.priority_level = 'high')::text AS high_count,
                 AVG(ai.impact_score) AS average_impact,
                 MAX(ai.created_at) AS last_message_at,
-                array_agg(DISTINCT pm.event_category) FILTER (WHERE pm.event_category IS NOT NULL) AS top_event_categories,
-                array_agg(DISTINCT pm.news_category) FILTER (WHERE pm.news_category IS NOT NULL) AS top_news_categories
+                ARRAY[]::text[] AS top_event_categories,
+                ARRAY[]::text[] AS top_news_categories
             FROM telegram_agent_impacts ai
-            JOIN processed_telegram_messages pm ON ai.processed_message_id = pm.id
             WHERE ai.created_at >= NOW() - INTERVAL '1 hour' * $1
             GROUP BY ai.agent_key, ai.agent_name
             ORDER BY COUNT(*) DESC
+            LIMIT 15
         `;
         const agentsResult = await query(agentsSql, [hours]);
 
         const statsSql = `
             SELECT 
-                COUNT(DISTINCT pm.id)::text AS total_processed_messages,
-                COUNT(DISTINCT ai.id)::text AS total_agent_impacts,
-                COUNT(DISTINCT pm.channel_id)::text AS active_channels,
-                AVG(ai.impact_score)::text AS avg_impact_score,
-                COUNT(CASE WHEN ai.requires_action THEN 1 END)::text AS total_actions_required,
-                MAX(pm.created_at) AS last_processed_at
-            FROM processed_telegram_messages pm
-            INNER JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
-            WHERE pm.created_at >= NOW() - INTERVAL '1 hour' * $1
+                (SELECT COUNT(*)::text FROM processed_telegram_messages WHERE created_at >= NOW() - INTERVAL '1 hour' * $1) AS total_processed_messages,
+                (SELECT COUNT(*)::text FROM telegram_agent_impacts WHERE created_at >= NOW() - INTERVAL '1 hour' * $1) AS total_agent_impacts,
+                (SELECT COUNT(DISTINCT channel_id)::text FROM processed_telegram_messages WHERE created_at >= NOW() - INTERVAL '1 hour' * $1) AS active_channels,
+                (SELECT COALESCE(AVG(impact_score), 0)::text FROM telegram_agent_impacts WHERE created_at >= NOW() - INTERVAL '1 hour' * $1) AS avg_impact_score,
+                (SELECT COUNT(*)::text FROM telegram_agent_impacts WHERE created_at >= NOW() - INTERVAL '1 hour' * $1 AND requires_action = true) AS total_actions_required,
+                (SELECT MAX(created_at) FROM processed_telegram_messages WHERE created_at >= NOW() - INTERVAL '1 hour' * $1) AS last_processed_at
         `;
         const statsResult = await query(statsSql, [hours]);
 
-        return res.json({
+        const payload = {
             success: true,
             timeRange: hours,
             agents: agentsResult.rows,
             systemStats: statsResult.rows[0]
-        });
+        };
+        setCached(cacheKey, payload);
+        return res.json(payload);
 
     } catch (error) {
         logger.error('Error fetching agents summary:', error);
@@ -421,19 +458,17 @@ router.get('/events/recent', ...readAuth, async (req, res) => {
                 pm.sentiment,
                 COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
                 tc.title as channel_title,
-                COUNT(ai.id) as affected_agents_count
+                0 as affected_agents_count
             FROM telegram_news_events ne
             INNER JOIN processed_telegram_messages pm ON ne.processed_message_id = pm.id
             LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
             INNER JOIN telegram_channels tc ON pm.channel_id = tc.id
-            LEFT JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
             WHERE ${whereConditions.join(' AND ')}
-            GROUP BY ne.id, pm.id, tm.telegram_created_at, tc.title
             ORDER BY COALESCE(tm.telegram_created_at, pm.created_at) DESC
             LIMIT $${paramIndex}
         `;
 
-        params.push(Math.min(parseInt(limit), 1000));
+        params.push(Math.min(parseInt(limit, 10) || 50, 250));
 
         const result = await query(sql, params);
 
@@ -483,7 +518,12 @@ router.get('/events/recent', ...readAuth, async (req, res) => {
  */
 router.get('/categories/summary', ...readAuth, async (req, res) => {
     try {
-        const { timeRange = 24 } = req.query;
+        const hours = Math.min(720, Math.max(1, parseInt(req.query.timeRange, 10) || 24));
+        const cacheKey = buildCacheKey('/categories/summary', { timeRange: hours });
+        const cached = getCached(cacheKey);
+        if (cached) {
+            return res.json(cached);
+        }
 
         const sql = `
             SELECT 
@@ -495,37 +535,38 @@ router.get('/categories/summary', ...readAuth, async (req, res) => {
                 COUNT(CASE WHEN ne.is_breaking = true THEN 1 END) as breaking_count,
                 AVG(ne.source_reliability) as avg_reliability,
                 COUNT(DISTINCT pm.channel_id) as channel_count,
-                COUNT(DISTINCT ai.agent_key) as affected_agents_count,
                 MAX(pm.created_at) as latest_message_at
             FROM telegram_news_events ne
             INNER JOIN processed_telegram_messages pm ON ne.processed_message_id = pm.id
-            LEFT JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
-            WHERE pm.created_at >= NOW() - INTERVAL '${parseInt(timeRange)} hours'
+            WHERE pm.created_at >= NOW() - INTERVAL '1 hour' * $1
             GROUP BY ne.primary_category
             ORDER BY message_count DESC
         `;
 
-        const result = await query(sql);
+        const result = await query(sql, [hours]);
 
-        // Get total stats
         const totalSql = `
             SELECT 
                 COUNT(DISTINCT pm.id) as total_messages,
-                COUNT(DISTINCT pm.channel_id) as total_channels,
-                COUNT(DISTINCT ai.agent_key) as total_agents_affected
+                COUNT(DISTINCT pm.channel_id) as total_channels
             FROM processed_telegram_messages pm
-            LEFT JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
-            WHERE pm.created_at >= NOW() - INTERVAL '${parseInt(timeRange)} hours'
+            INNER JOIN telegram_news_events ne ON ne.processed_message_id = pm.id
+            WHERE pm.created_at >= NOW() - INTERVAL '1 hour' * $1
         `;
 
-        const totalResult = await query(totalSql);
+        const totalResult = await query(totalSql, [hours]);
 
-        return res.json({
+        const payload = {
             success: true,
-            timeRange: parseInt(timeRange),
+            timeRange: hours,
             categories: result.rows,
-            totals: totalResult.rows[0]
-        });
+            totals: {
+                ...totalResult.rows[0],
+                total_agents_affected: '0',
+            }
+        };
+        setCached(cacheKey, payload);
+        return res.json(payload);
 
     } catch (error) {
         logger.error('Error fetching categories summary:', error);

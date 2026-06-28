@@ -69,7 +69,7 @@ function sanitizeLoginConfirmForApi(payload) {
 function sanitizeErrorMessage(message) {
     const raw = String(message || '').trim();
     if (!raw) return undefined;
-    if (raw.includes('<html') || raw.includes('404 Not Found')) return 'Request failed';
+    if (raw.includes('<html') || raw.includes('404 Not Found')) return 'Collector service unavailable';
     return raw.slice(0, 120);
 }
 

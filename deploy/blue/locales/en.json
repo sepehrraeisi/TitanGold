@@ -3324,6 +3324,7 @@
   "load_channels": "Load channels",
   "register_selected": "Register selected",
   "force_sync_success": "Force sync completed.",
+  "force_sync_zero_saved_hint": "0 saved because messages were already processed.",
   "force_sync_failed": "Force sync failed.",
   "force_sync_tooltip": "Fetch latest messages immediately (high priority channels)",
   "syncing": "Syncing",

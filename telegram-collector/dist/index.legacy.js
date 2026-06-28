@@ -50,6 +50,7 @@ const accountManager_1 = require("./utils/accountManager");
 const sessionRotationService_1 = __importDefault(require("./services/sessionRotationService"));
 const channelPollingService_1 = __importDefault(require("./services/channelPollingService"));
 const metricsCollector_1 = __importDefault(require("./utils/metricsCollector"));
+const collectorAuth_1 = require("../middleware/collectorAuth");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3002;
@@ -161,7 +162,7 @@ app.get('/api/telegram-collector/session/status', rateLimitHybrid_1.rateLimiters
         });
     }
 });
-app.post('/api/telegram-collector/session/rotate', rateLimitHybrid_1.rateLimiters.strict, async (req, res) => {
+app.post('/api/telegram-collector/session/rotate', rateLimitHybrid_1.rateLimiters.strict, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const { new_session_string } = req.body;
         if (!new_session_string) {
@@ -214,7 +215,7 @@ app.get('/api/telegram-collector/session/health', rateLimitHybrid_1.rateLimiters
  * POST /api/telegram-collector/session/check-health
  * Trigger manual health check
  */
-app.post('/api/telegram-collector/session/check-health', rateLimitHybrid_1.rateLimiters.strict, async (req, res) => {
+app.post('/api/telegram-collector/session/check-health', rateLimitHybrid_1.rateLimiters.strict, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         console.log('🏥 Manual health check triggered via API');
         const health = await sessionRotationService_1.default.checkSessionHealth();
@@ -236,7 +237,7 @@ app.post('/api/telegram-collector/session/check-health', rateLimitHybrid_1.rateL
  * POST /api/telegram-collector/session/force-rotation
  * Force immediate session rotation
  */
-app.post('/api/telegram-collector/session/force-rotation', rateLimitHybrid_1.rateLimiters.strict, async (req, res) => {
+app.post('/api/telegram-collector/session/force-rotation', rateLimitHybrid_1.rateLimiters.strict, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         console.log('🔄 Manual session rotation triggered via API');
         const result = await sessionRotationService_1.default.forceRotation();
@@ -298,7 +299,7 @@ app.get('/api/telegram-collector/health', rateLimitHybrid_1.rateLimiters.lenient
     });
 });
 // Start login flow - send verification code (multi-account aware)
-app.post('/api/telegram-collector/login/start', rateLimitHybrid_1.rateLimiters.auth, async (req, res) => {
+app.post('/api/telegram-collector/login/start', rateLimitHybrid_1.rateLimiters.auth, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const { phoneNumber } = req.body;
         if (!phoneNumber) {
@@ -383,7 +384,7 @@ app.post('/api/telegram-collector/login/start', rateLimitHybrid_1.rateLimiters.a
     }
 });
 // Confirm login - verify code (multi-account aware)
-app.post('/api/telegram-collector/login/confirm', rateLimitHybrid_1.rateLimiters.auth, async (req, res) => {
+app.post('/api/telegram-collector/login/confirm', rateLimitHybrid_1.rateLimiters.auth, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const { authId, code, password } = req.body;
         if (!authId || !code) {
@@ -489,7 +490,7 @@ app.post('/api/telegram-collector/login/confirm', rateLimitHybrid_1.rateLimiters
     }
 });
 // Cancel login
-app.post('/api/telegram-collector/login/cancel', rateLimitHybrid_1.rateLimiters.auth, async (req, res) => {
+app.post('/api/telegram-collector/login/cancel', rateLimitHybrid_1.rateLimiters.auth, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const { authId } = req.body;
         if (authId && authSessions.has(authId)) {
@@ -534,7 +535,7 @@ app.get('/api/telegram-collector/accounts', rateLimitHybrid_1.rateLimiters.lenie
     }
 });
 // Update account (label, status, is_primary)
-app.patch('/api/telegram-collector/accounts/:id', rateLimitHybrid_1.rateLimiters.strict, async (req, res) => {
+app.patch('/api/telegram-collector/accounts/:id', rateLimitHybrid_1.rateLimiters.strict, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const { sanitizeAccountForApi } = require('../utils/accountApiSanitizer');
         const { id } = req.params;
@@ -587,7 +588,7 @@ app.patch('/api/telegram-collector/accounts/:id', rateLimitHybrid_1.rateLimiters
     }
 });
 // Logout / disable a specific account
-app.post('/api/telegram-collector/accounts/:id/logout', rateLimitHybrid_1.rateLimiters.strict, async (req, res) => {
+app.post('/api/telegram-collector/accounts/:id/logout', rateLimitHybrid_1.rateLimiters.strict, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const { id } = req.params;
         const account = await (0, accountManager_1.logoutAccount)(id);
@@ -839,7 +840,7 @@ app.get('/api/telegram-collector/channels', rateLimitHybrid_1.rateLimiters.moder
     }
 });
 // Test channel (multi-account aware)
-app.post('/api/telegram-collector/channels/:channelId/test', rateLimitHybrid_1.rateLimiters.moderate, async (req, res) => {
+app.post('/api/telegram-collector/channels/:channelId/test', rateLimitHybrid_1.rateLimiters.moderate, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const { channelId } = req.params;
         let sessionString = null;
@@ -1002,7 +1003,7 @@ app.get('/api/telegram-collector/channels/:channelId/messages', rateLimitHybrid_
  * POST /api/telegram-collector/channels/:id/force-sync
  * Force immediate sync of a specific channel (on-demand polling)
  */
-app.post('/api/telegram-collector/channels/:id/force-sync', rateLimitHybrid_1.rateLimiters.moderate, async (req, res) => {
+app.post('/api/telegram-collector/channels/:id/force-sync', rateLimitHybrid_1.rateLimiters.moderate, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const channelId = req.params.id;
         const pg = await Promise.resolve().then(() => __importStar(require('pg')));
@@ -1158,11 +1159,45 @@ app.post('/api/telegram-collector/channels/:id/force-sync', rateLimitHybrid_1.ra
 });
 /**
  * POST /api/telegram-collector/channels/refresh
- * Refresh channels list from Telegram (optional sync). Returns success for UI.
+ * Refresh channel metadata from collector DB (last_synced_at from telegram_messages).
  */
-app.post('/api/telegram-collector/channels/refresh', rateLimitHybrid_1.rateLimiters.moderate, async (req, res) => {
+app.post('/api/telegram-collector/channels/refresh', rateLimitHybrid_1.rateLimiters.moderate, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
-        res.json({ success: true, message: 'Channels refresh requested' });
+        const pg = await Promise.resolve().then(() => __importStar(require('pg')));
+        const pool = new pg.Pool({
+            host: process.env.DB_HOST || 'localhost',
+            port: parseInt(process.env.DB_PORT || '5433'),
+            database: process.env.DB_NAME || 'titangold_db',
+            user: process.env.DB_USER || 'postgres',
+            password: process.env.DB_PASSWORD || ''
+        });
+        const refreshResult = await pool.query(`
+            UPDATE telegram_channels tc
+            SET updated_at = NOW(),
+                last_synced_at = COALESCE(sub.last_msg_at, tc.last_synced_at)
+            FROM (
+                SELECT channel_id::text AS ch_id, MAX(created_at) AS last_msg_at
+                FROM telegram_messages
+                GROUP BY channel_id
+            ) sub
+            WHERE tc.channel_id::text = sub.ch_id
+            RETURNING tc.id
+        `);
+        const countResult = await pool.query(`
+            SELECT
+                COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active
+            FROM telegram_channels
+        `);
+        await pool.end();
+        const totals = countResult.rows[0] || { total: 0, active: 0 };
+        res.json({
+            success: true,
+            refreshed: refreshResult.rowCount || 0,
+            totalChannels: totals.total,
+            activeChannels: totals.active,
+            message: `Refreshed ${refreshResult.rowCount || 0} channels from database`,
+        });
     }
     catch (error) {
         console.error('❌ Channels refresh error:', error);
@@ -1176,7 +1211,7 @@ app.post('/api/telegram-collector/channels/refresh', rateLimitHybrid_1.rateLimit
  * POST /api/telegram-collector/channels/register
  * Register a channel in database for polling
  */
-app.post('/api/telegram-collector/channels/register', rateLimitHybrid_1.rateLimiters.moderate, async (req, res) => {
+app.post('/api/telegram-collector/channels/register', rateLimitHybrid_1.rateLimiters.moderate, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const { channel_id, username, title, description, category, config } = req.body;
         if (!channel_id) {
@@ -1321,7 +1356,7 @@ app.get('/api/telegram-collector/collector-channels', rateLimitHybrid_1.rateLimi
  * PATCH /api/telegram-collector/collector-channels/:id
  * Update per-channel settings (is_active, account_id)
  */
-app.patch('/api/telegram-collector/collector-channels/:id', rateLimitHybrid_1.rateLimiters.moderate, async (req, res) => {
+app.patch('/api/telegram-collector/collector-channels/:id', rateLimitHybrid_1.rateLimiters.moderate, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         const { id } = req.params;
         const { is_active, account_id, priority } = req.body || {};
@@ -1452,13 +1487,13 @@ const handlePollingTrigger = async (req, res) => {
         });
     }
 };
-app.get('/api/telegram-collector/polling/trigger', rateLimitHybrid_1.rateLimiters.strict, handlePollingTrigger);
-app.post('/api/telegram-collector/polling/trigger', rateLimitHybrid_1.rateLimiters.strict, handlePollingTrigger);
+app.get('/api/telegram-collector/polling/trigger', rateLimitHybrid_1.rateLimiters.strict, collectorAuth_1.requireCollectorWrite, handlePollingTrigger);
+app.post('/api/telegram-collector/polling/trigger', rateLimitHybrid_1.rateLimiters.strict, collectorAuth_1.requireCollectorWrite, handlePollingTrigger);
 /**
  * POST /api/telegram-collector/polling/start
  * Start polling service
  */
-app.post('/api/telegram-collector/polling/start', rateLimitHybrid_1.rateLimiters.strict, async (req, res) => {
+app.post('/api/telegram-collector/polling/start', rateLimitHybrid_1.rateLimiters.strict, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         channelPollingService_1.default.start();
         res.json({
@@ -1478,7 +1513,7 @@ app.post('/api/telegram-collector/polling/start', rateLimitHybrid_1.rateLimiters
  * POST /api/telegram-collector/polling/stop
  * Stop polling service
  */
-app.post('/api/telegram-collector/polling/stop', rateLimitHybrid_1.rateLimiters.strict, async (req, res) => {
+app.post('/api/telegram-collector/polling/stop', rateLimitHybrid_1.rateLimiters.strict, collectorAuth_1.requireCollectorWrite, async (req, res) => {
     try {
         channelPollingService_1.default.stop();
         res.json({

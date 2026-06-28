@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DataSource, TelegramCollectorState } from '../../../../../types.ts';
 import { buildCollectorUrl, fetchCollectorJson } from '../../../../../services/api.ts';
+import { getCollectorAuthHeaders } from '../../../../../services/collectorAuth.ts';
 import {
     formatCollectorSafeError,
     containsRawHtmlError,
@@ -276,28 +277,31 @@ const TelegramPanel: React.FC<Props> = (props) => {
         }
     };
 
-    // Force sync a channel (on-demand polling)
     const handleForceSync = async (channel: CollectorChannel) => {
         setSyncingChannelId(channel.id);
         setCollectorError(null);
-        setCollectorMessage(null);
+        setChannelsError(null);
         try {
             const response = await fetch(
                 buildCollectorUrl(`/api/telegram-collector/channels/${channel.id}/force-sync`),
                 {
                     method: 'POST',
                     credentials: 'include',
-                }
+                    headers: getCollectorAuthHeaders(),
+                },
             );
             const data = await response.json();
             if (!response.ok || data?.success === false) {
                 throw new Error(data?.error || data?.message || `Failed to sync channel (${response.status})`);
             }
+            const zeroSavedNote =
+                data.messagesSaved === 0
+                    ? ` ${t('force_sync_zero_saved_hint') || '(0 saved — messages were already processed)'}`
+                    : '';
             setCollectorMessage(
-                `✅ ${t('force_sync_success') || 'Force-sync completed'}: ${data.messagesFetched || 0} ${t('messages_fetched') || 'messages fetched'}, ${data.messagesSaved || 0} ${t('saved') || 'saved'} (${data.latency}ms)`
+                `✅ ${t('force_sync_success') || 'Force-sync completed'}: ${data.messagesFetched || 0} ${t('messages_fetched') || 'messages fetched'}, ${data.messagesSaved || 0} ${t('saved') || 'saved'} (${data.latency}ms).${zeroSavedNote}`,
             );
-            // Refresh channels list to update last_synced_at
-            await loadCollectorChannels();
+            loadCollectorChannels().catch(() => undefined);
         } catch (error: any) {
             console.error('Failed to force-sync channel:', error);
             setCollectorError(
@@ -381,7 +385,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 if (!ch) continue;
                 const res = await fetch(base, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getCollectorAuthHeaders(),
                     credentials: 'include',
                     body: JSON.stringify({
                         channel_id: String(ch.id),
@@ -535,7 +539,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
         try {
             const response = await fetch(buildCollectorUrl(`/api/telegram-collector/accounts/${id}`), {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getCollectorAuthHeaders(),
+                credentials: 'include',
                 body: JSON.stringify(updates),
             });
             const data = await response.json();
@@ -553,6 +558,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
         try {
             const response = await fetch(buildCollectorUrl(`/api/telegram-collector/accounts/${id}/logout`), {
                 method: 'POST',
+                credentials: 'include',
+                headers: getCollectorAuthHeaders(),
             });
             const data = await response.json();
             if (!response.ok || data?.success === false) {
@@ -599,7 +606,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 buildCollectorUrl(`/api/telegram-collector/collector-channels/${channel.id}`),
                 {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getCollectorAuthHeaders(),
+                    credentials: 'include',
                     body: JSON.stringify({ is_active: !channel.isActive }),
                 },
             );
@@ -620,7 +628,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 buildCollectorUrl(`/api/telegram-collector/collector-channels/${channel.id}`),
                 {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getCollectorAuthHeaders(),
+                    credentials: 'include',
                     body: JSON.stringify({ account_id: accountId }),
                 },
             );
@@ -641,7 +650,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 buildCollectorUrl(`/api/telegram-collector/collector-channels/${channel.id}`),
                 {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getCollectorAuthHeaders(),
+                    credentials: 'include',
                     body: JSON.stringify({ priority }),
                 },
             );

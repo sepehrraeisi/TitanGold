@@ -151,8 +151,15 @@ export async function diagnoseCollectorEndpoint(
     }
 }
 
+import { mergeCollectorAuthInit } from './collectorAuth.ts';
+
 export async function fetchCollectorJson<T>(url: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(url, { ...init, credentials: init?.credentials ?? 'include' });
+    const method = (init?.method || 'GET').toUpperCase();
+    const merged =
+        method === 'GET' || method === 'HEAD'
+            ? { ...init, credentials: init?.credentials ?? 'include' }
+            : mergeCollectorAuthInit(init);
+    const res = await fetch(url, merged);
     const contentType = res.headers.get('content-type');
     const text = await res.text();
 

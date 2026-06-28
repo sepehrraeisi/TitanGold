@@ -172,7 +172,7 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
     setError(null);
     try {
       // Fetch events and aggregate by region
-      let url = `/api/v1/telegram/events/recent?timeRange=${timeRange}&limit=1000`;
+      let url = `/api/v1/telegram/events/recent?timeRange=${timeRange}&limit=250`;
       if (categoryFilter) {
         url += `&categories=${categoryFilter}`;
       }
