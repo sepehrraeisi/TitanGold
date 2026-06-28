@@ -1,6 +1,6 @@
 # DH-DATA-ARCHIVING-P2 — Functional Fix, Safety Redesign
 
-Date: 2026-06-28  
+Date: 2026-06-28 (Human QA polish: 2026-06-28)  
 Task: `DH-DATA-ARCHIVING-P2-FUNCTIONAL-FIX-SAFETY-REDESIGN`  
 Branch: `feat/gap-008-sources-backend-wiring`  
 P1 reference: [`DH-DATA-ARCHIVING-P1-COMPREHENSIVE-RCA.md`](./DH-DATA-ARCHIVING-P1-COMPREHENSIVE-RCA.md)  
@@ -12,13 +12,47 @@ Design reference: [`DESIGN_SYSTEM_DATAHUB.md`](../../DESIGN_SYSTEM_DATAHUB.md)
 
 ### **FUNCTIONAL + REDESIGNED + SAFE PREVIEW**
 
+Human QA round 2 defects addressed (see below). Interim status was **PARTIAL** until restore explanations, partition fallback, and operation i18n were fixed.
+
 | Layer | Assessment |
 |-------|------------|
 | Backend API + SQL | **Functional** — enriched health/partition/operation metadata; migration 043 applied |
-| UI/UX | **Redesigned** — design-system layout; friendly labels; no raw DB/enum strings in UI |
+| UI/UX | **Redesigned** — design-system layout; friendly labels; explicit restore block reasons |
 | Safety | **Hardened** — RBAC on preview POST; confirm gates; batch limit; advisory lock; restore duplicate guard |
 | Archive/restore apply | **Not verified on production data** — dry-run/preview only in runtime verification |
 | Scheduler | **Manual only** — no dedicated archive worker; maintenance may run if enabled (GAP-033) |
+
+---
+
+## Human QA Round 2 — Fixes
+
+| Defect | Root cause | Fix |
+|--------|------------|-----|
+| Restore panel silently disabled | `archived_records === 0` + missing dates combined with no explanation | `getRestoreBlockReason()` — explicit messages: empty archive, RBAC, or select dates; empty state hides controls when no archived rows |
+| Partitions table empty | Client relied on stats-only; legacy rows without `label`/`year` rendered blank | `normalizePartition()` fallback from `partition_name`; `useArchivePartitionsQuery` when stats partitions empty; backend preserves `partition_name` |
+| Raw operation enums in UI | `operationLabel()` returned backend `operation_label` or fell back to `operation_type` | Always resolve via i18n from `operation_type`; legacy types (`archive_old_decisions`, `restore_from_archive`) mapped |
+| Restore UX generic inputs | `datetime-local` without design-system styling | `type="date"` + `INPUT_CLASS`; From/To labels; helper text; emerald panel styling |
+| Confusing disabled controls | Tooltip-only RBAC gate | Inline `DataHubAlert` + visible reason text on every blocked restore state |
+
+### Restore block reasons (UI)
+
+| Condition | User-visible message |
+|-----------|---------------------|
+| `archived_records === 0` | "No archived decisions are available yet." — empty state, no date inputs |
+| Read-only user | "Restore requires administrator or trader permission." |
+| Dates missing/invalid | "Select an archive date range." |
+
+### Operation labels (i18n — never raw enum)
+
+| operation_type | UI label |
+|----------------|----------|
+| `preview_archive` | Archive Preview |
+| `archive` / `archive_old_decisions` | Archive Completed |
+| `preview_restore` | Restore Preview |
+| `restore` / `restore_from_archive` | Restore Completed |
+| `preview_purge` | Purge Preview |
+
+Dry-run badge shown separately via `archiving_dry_run_badge`.
 
 ---
 
@@ -92,8 +126,9 @@ UI copy (P2 i18n):
 |-------|------|--------|
 | Backend unit | `backend/__tests__/unit/datahubArchivingP2.test.js` | 11 passed |
 | Frontend i18n | `src/__tests__/archivingRoutingI18n.test.ts` | 14 passed |
+| Human QA regressions | `src/__tests__/archivingHumanQa.test.ts` | 8 passed |
 
-Coverage includes: health codes, partition enrich, operation labels, confirm gates, purge count-only, RBAC route contract, no raw UI strings.
+Coverage includes: health codes, partition enrich + fallback, operation labels (no raw enum), restore block reasons, confirm gates, purge count-only, RBAC route contract.
 
 ---
 
@@ -137,6 +172,8 @@ Screenshots:
 |-------|--------|
 | Raw partition names in body | **None** |
 | Raw operation enums in body | **None** |
+| Archive 2024/2025/2026 visible | **Yes** (`hasArchive2024: true`) |
+| Restore empty-state copy | **Yes** (when `archived_records === 0`) |
 | `preview_purge` visible | **No** |
 | `Not Found` on archiving panel | **No** |
 | Archiving network 200 | **Yes** (`/stats`, `/records`) |
@@ -181,7 +218,7 @@ Target: GET &lt; 500 ms — **met**.
 | Frontend UI | `components/.../Archiving.tsx`, `archiving/archivingLabels.ts` |
 | API types | `services/dataHubArchivingApi.ts` |
 | i18n | `deploy/blue|green/locales/en.json`, `fa.json` |
-| Tests | `backend/__tests__/unit/datahubArchivingP2.test.js`, `src/__tests__/archivingRoutingI18n.test.ts` |
+| Tests | `backend/__tests__/unit/datahubArchivingP2.test.js`, `src/__tests__/archivingRoutingI18n.test.ts`, `src/__tests__/archivingHumanQa.test.ts` |
 | Verify scripts | `backend/scripts/archiving-p2-*.mjs` |
 
 **Out of scope (unchanged):** `collected_data`, Pipeline, Telegram, Automation.

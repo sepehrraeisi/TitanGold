@@ -123,7 +123,7 @@ describe('Data Archiving P2 i18n', () => {
             started_at: new Date().toISOString(),
         };
         const label = operationLabel(op, mockT);
-        expect(label).toBe('Purge preview');
+        expect(label).toBe('Purge Preview');
         expect(isRawArchivingLabel(label)).toBe(false);
     });
 

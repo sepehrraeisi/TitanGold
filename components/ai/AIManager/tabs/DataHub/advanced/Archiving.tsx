@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi';
 import {
     useArchiveStatsQuery,
+    useArchivePartitionsQuery,
     useArchivedRecordsQuery,
     usePreviewArchiveMutation,
     useExecuteArchiveMutation,
@@ -17,6 +18,7 @@ import {
     BTN_SECONDARY,
     DataHubAlert,
     DataHubEmpty,
+    INPUT_CLASS,
     MetricCard,
     StatusPill,
     dataHubWriteGate,
@@ -26,8 +28,12 @@ import {
     archiveHealthLabel,
     archiveHealthVariant,
     formatLastArchiveRun,
+    formatPartitionDateRange,
+    getRestoreBlockReason,
+    normalizePartition,
     operationLabel,
     partitionDisplayLabel,
+    restoreBlockMessage,
 } from './archiving/archivingLabels';
 
 interface ArchivingProps {
@@ -36,8 +42,16 @@ interface ArchivingProps {
 
 const Archiving: React.FC<ArchivingProps> = ({ t }) => {
     const { canWrite } = useDataHubPermissions();
-    const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
+    const wg = (extraDisabled = false, reason?: string) => ({
+        ...dataHubWriteGate(canWrite, t, extraDisabled),
+        reason: !canWrite ? t('archiving_restore_rbac') : reason,
+    });
     const { data: dashboard, isLoading, error: statsError, refetch } = useArchiveStatsQuery();
+    const statsPartitions = dashboard?.partitions ?? [];
+    const needPartitionFallback = !isLoading && statsPartitions.length === 0;
+    const { data: fallbackPartitions = [], isLoading: partitionsLoading } = useArchivePartitionsQuery(
+        needPartitionFallback,
+    );
     const { data: recordsPage, isLoading: recordsLoading } = useArchivedRecordsQuery(0, 50);
 
     const previewArchiveMut = usePreviewArchiveMutation();
@@ -58,9 +72,13 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
     const [purgePreview, setPurgePreview] = useState<Record<string, unknown> | null>(null);
 
     const health = dashboard?.health;
-    const partitions = dashboard?.partitions || [];
     const operations = dashboard?.recent_operations || [];
     const records = recordsPage?.records || [];
+
+    const partitions = useMemo(() => {
+        const raw = statsPartitions.length > 0 ? statsPartitions : fallbackPartitions;
+        return raw.map(normalizePartition);
+    }, [statsPartitions, fallbackPartitions]);
 
     const apiError = [
         previewArchiveMut.error,
@@ -92,7 +110,17 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
         previewRestoreMut.isPending ||
         executeRestoreMut.isPending;
 
-    const restoreDatesValid = Boolean(restoreStart && restoreEnd && new Date(restoreStart) < new Date(restoreEnd));
+    const restoreBlock = getRestoreBlockReason({
+        archivedCount: summary.archived,
+        canWrite,
+        restoreStart,
+        restoreEnd,
+        isLoading,
+    });
+    const restoreReady = restoreBlock === null;
+    const restoreDatesInvalid = Boolean(restoreStart || restoreEnd) && restoreBlock === 'dates_required';
+
+    const partitionsBusy = isLoading || (needPartitionFallback && partitionsLoading);
 
     const skeleton = (w = 'w-12') => (
         <span className={`inline-block h-4 ${w} rounded bg-slate-800/80 animate-pulse`} />
@@ -216,60 +244,86 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                 </div>
 
                 {/* Restore panel */}
-                <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 space-y-3">
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
                     <h4 className="text-sm font-semibold">{t('archiving_restore')}</h4>
-                    <label className="text-[10px] text-muted-foreground block">
-                        {t('archiving_restore_start')}
-                        <input
-                            type="datetime-local"
-                            value={restoreStart}
-                            onChange={e => setRestoreStart(e.target.value)}
-                            className="w-full text-[11px] bg-slate-950/80 border border-slate-700 rounded-lg px-2 py-1.5 mt-1"
-                        />
-                    </label>
-                    <label className="text-[10px] text-muted-foreground block">
-                        {t('archiving_restore_end')}
-                        <input
-                            type="datetime-local"
-                            value={restoreEnd}
-                            onChange={e => setRestoreEnd(e.target.value)}
-                            className="w-full text-[11px] bg-slate-950/80 border border-slate-700 rounded-lg px-2 py-1.5 mt-1"
-                        />
-                    </label>
-                    {!restoreDatesValid && (restoreStart || restoreEnd) ? (
-                        <p className="text-[10px] text-amber-300">{t('archiving_restore_date_invalid')}</p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            type="button"
-                            disabled={wg(busy || !restoreDatesValid).disabled}
-                            title={wg(busy || !restoreDatesValid).title}
-                            onClick={async () => {
-                                const r = await previewRestoreMut.mutateAsync({
-                                    start_date: new Date(restoreStart).toISOString(),
-                                    end_date: new Date(restoreEnd).toISOString(),
-                                });
-                                setRestorePreview(r as Record<string, unknown>);
-                            }}
-                            className={`${BTN_SECONDARY} disabled:opacity-50`}
-                        >
-                            {t('archiving_dry_run')}
-                        </button>
-                        <button
-                            type="button"
-                            disabled={wg(busy || !restoreDatesValid).disabled}
-                            title={wg(busy || !restoreDatesValid).title}
-                            onClick={() => setShowRestoreConfirm(true)}
-                            className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
-                        >
-                            {t('restore')}
-                        </button>
-                    </div>
-                    {restorePreview ? (
-                        <p className="text-[11px] text-muted-foreground">
-                            {t('archiving_preview_result')}: {String(restorePreview.pending_count ?? 0)}
-                        </p>
-                    ) : null}
+
+                    {restoreBlock === 'no_archived' ? (
+                        <DataHubEmpty message={t('archiving_restore_empty')} />
+                    ) : (
+                        <>
+                            <p className="text-[10px] text-muted-foreground">{t('archiving_restore_helper')}</p>
+
+                            {restoreBlock === 'rbac' ? (
+                                <DataHubAlert variant="warning" message={t('archiving_restore_rbac')} />
+                            ) : null}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <label className="text-[11px] text-muted-foreground block">
+                                    <span className="font-medium text-foreground/90">{t('archiving_restore_from')}</span>
+                                    <input
+                                        type="date"
+                                        value={restoreStart}
+                                        onChange={e => setRestoreStart(e.target.value)}
+                                        disabled={!canWrite}
+                                        className={`${INPUT_CLASS} mt-1 disabled:opacity-50`}
+                                    />
+                                </label>
+                                <label className="text-[11px] text-muted-foreground block">
+                                    <span className="font-medium text-foreground/90">{t('archiving_restore_to')}</span>
+                                    <input
+                                        type="date"
+                                        value={restoreEnd}
+                                        onChange={e => setRestoreEnd(e.target.value)}
+                                        disabled={!canWrite}
+                                        className={`${INPUT_CLASS} mt-1 disabled:opacity-50`}
+                                    />
+                                </label>
+                            </div>
+
+                            {restoreDatesInvalid ? (
+                                <p className="text-[10px] text-amber-300">{t('archiving_restore_date_invalid')}</p>
+                            ) : restoreBlock === 'dates_required' ? (
+                                <p className="text-[10px] text-muted-foreground">{t('archiving_restore_select_dates')}</p>
+                            ) : null}
+
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    disabled={wg(busy || !restoreReady).disabled}
+                                    title={wg(busy || !restoreReady, restoreBlockMessage(restoreBlock, t)).title ?? restoreBlockMessage(restoreBlock, t)}
+                                    onClick={async () => {
+                                        const r = await previewRestoreMut.mutateAsync({
+                                            start_date: new Date(`${restoreStart}T00:00:00`).toISOString(),
+                                            end_date: new Date(`${restoreEnd}T23:59:59`).toISOString(),
+                                        });
+                                        setRestorePreview(r as Record<string, unknown>);
+                                    }}
+                                    className={`${BTN_SECONDARY} disabled:opacity-50`}
+                                >
+                                    {t('archiving_dry_run')}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={wg(busy || !restoreReady).disabled}
+                                    title={wg(busy || !restoreReady, restoreBlockMessage(restoreBlock, t)).title ?? restoreBlockMessage(restoreBlock, t)}
+                                    onClick={() => setShowRestoreConfirm(true)}
+                                    className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {t('restore')}
+                                </button>
+                            </div>
+
+                            {!restoreReady && restoreBlock !== 'dates_required' ? (
+                                <p className="text-[10px] text-amber-200/90">{restoreBlockMessage(restoreBlock, t)}</p>
+                            ) : null}
+
+                            {restorePreview ? (
+                                <p className="text-[11px] text-muted-foreground">
+                                    {t('archiving_preview_result')}: {String(restorePreview.pending_count ?? 0)}
+                                </p>
+                            ) : null}
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -314,7 +368,7 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {isLoading ? (
+                            {partitionsBusy ? (
                                 <tr>
                                     <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
                                         {t('loading')}
@@ -328,14 +382,19 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                                 </tr>
                             ) : (
                                 partitions.map(p => (
-                                    <tr key={p.label} className="border-b border-slate-900/60">
-                                        <td className="px-3 py-2 text-[11px]">{partitionDisplayLabel(p)}</td>
+                                    <tr
+                                        key={p.partition_name || `${p.year}-${p.start_date}`}
+                                        className="border-b border-slate-900/60"
+                                    >
+                                        <td className="px-3 py-2 text-[11px] font-medium">
+                                            {partitionDisplayLabel(p)}
+                                        </td>
                                         <td className="px-3 py-2">{p.year ?? '—'}</td>
                                         <td className="px-3 py-2 text-[10px] text-muted-foreground">
-                                            {p.start_date?.slice(0, 10)} → {p.end_date?.slice(0, 10)}
+                                            {formatPartitionDateRange(p.start_date, p.end_date)}
                                         </td>
-                                        <td className="px-3 py-2">{p.row_count}</td>
-                                        <td className="px-3 py-2">{p.size}</td>
+                                        <td className="px-3 py-2">{p.row_count ?? 0}</td>
+                                        <td className="px-3 py-2">{p.size ?? '—'}</td>
                                     </tr>
                                 ))
                             )}
@@ -455,8 +514,8 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                                 title={wg(executeRestoreMut.isPending).title}
                                 onClick={async () => {
                                     await executeRestoreMut.mutateAsync({
-                                        start_date: new Date(restoreStart).toISOString(),
-                                        end_date: new Date(restoreEnd).toISOString(),
+                                        start_date: new Date(`${restoreStart}T00:00:00`).toISOString(),
+                                        end_date: new Date(`${restoreEnd}T23:59:59`).toISOString(),
                                         confirm_restore: true,
                                     });
                                     setShowRestoreConfirm(false);

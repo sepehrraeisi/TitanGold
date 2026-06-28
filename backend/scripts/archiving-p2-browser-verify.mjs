@@ -58,6 +58,8 @@ async function main() {
     }, { user, token });
     await page.reload({ waitUntil: 'networkidle' });
     await page.getByRole('button', { name: 'Skip' }).click({ timeout: 5000 }).catch(() => {});
+    await page.getByRole('button', { name: 'Migrate Now' }).click({ timeout: 2000 }).catch(() => {});
+    await page.keyboard.press('Escape').catch(() => {});
 
     await page.getByRole('button', { name: 'Manager', exact: true }).click({ timeout: 15000 });
     await page.getByText('Artemis Central', { exact: false }).waitFor({ timeout: 60000 });

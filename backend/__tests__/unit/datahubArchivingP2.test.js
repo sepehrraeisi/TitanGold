@@ -35,7 +35,7 @@ describe('datahubArchivingLabels P2', () => {
         expect(labels.mapArchiveHealthCode({ status: 'ERROR', last_archive_success: false })).toBe('error');
     });
 
-    it('enriches partitions with friendly labels (no raw table names)', () => {
+    it('enriches partitions with partition_name preserved for client fallback', () => {
         const row = labels.enrichPartitionRow({
             partition_name: 'ai_decisions_archive_2025',
             start_date: '2025-01-01',
@@ -44,8 +44,8 @@ describe('datahubArchivingLabels P2', () => {
             size: '128 kB',
         });
         expect(row.label).toBe('Archive 2025');
-        expect(row.year).toBe(2025);
-        expect(row.label).not.toMatch(/^ai_decisions_archive_/);
+        expect(row.partition_name).toBe('ai_decisions_archive_2025');
+        expect(row.row_count).toBe(42);
     });
 
     it('maps operation types to human labels', () => {
@@ -156,6 +156,8 @@ describe('datahubArchivingService P2 safety', () => {
         const ops = await listArchivingOperations({ limit: 5, offset: 0 });
         expect(ops[0].operation_label).toBe('Purge preview');
         expect(ops[0].operation_type).toBe('preview_purge');
+        expect(labels.operationTypeLabel('archive_old_decisions')).toBe('Archive applied');
+        expect(labels.operationTypeLabel('restore_from_archive')).toBe('Restore applied');
     });
 });
 

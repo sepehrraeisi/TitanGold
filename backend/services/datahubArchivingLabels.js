@@ -82,19 +82,26 @@ export function enrichHealthRow(row) {
 export function enrichPartitionRow(row) {
     const year = partitionYear(row.partition_name);
     return {
+        partition_name: row.partition_name,
         year,
         label: year ? `Archive ${year}` : partitionFriendlyLabel(row.partition_name),
         start_date: row.start_date,
         end_date: row.end_date,
-        row_count: row.row_count,
+        row_count: Number(row.row_count || 0),
         size: row.size,
     };
 }
 
 export function enrichOperationRow(row) {
+    const normalized = row.operation_type === 'archive_old_decisions'
+        ? 'archive'
+        : row.operation_type === 'restore_from_archive'
+          ? 'restore'
+          : row.operation_type;
     return {
         ...row,
-        operation_label: ARCHIVE_OPERATION_LABELS[row.operation_type] || row.operation_type,
+        operation_type: String(row.operation_type),
+        operation_label: ARCHIVE_OPERATION_LABELS[normalized] || ARCHIVE_OPERATION_LABELS[row.operation_type] || null,
     };
 }
 

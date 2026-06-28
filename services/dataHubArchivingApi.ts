@@ -17,12 +17,12 @@ export type ArchiveHealth = {
 
 export type ArchivePartition = {
     partition_name?: string;
-    label: string;
+    label?: string;
     year?: number | null;
-    start_date: string;
-    end_date: string;
-    row_count: number;
-    size: string;
+    start_date?: string;
+    end_date?: string;
+    row_count?: number;
+    size?: string;
 };
 
 export type ArchivedRecord = {
@@ -92,6 +92,10 @@ export function fetchArchiveStats(limit = 20) {
         sql_stats: unknown[];
         recent_operations: ArchivingOperation[];
     }>(`/stats?limit=${limit}`);
+}
+
+export function fetchArchivePartitions() {
+    return request<{ partitions: ArchivePartition[] }>('/partitions');
 }
 
 export function fetchArchivedRecords(params: { limit?: number; offset?: number; agent_id?: string }) {
