@@ -1,6 +1,25 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { formatDistanceToNow } from 'date-fns';
+import {
+    DATAHUB_SHELL,
+    DATAHUB_INNER_LIST,
+    DataHubAlert,
+    DataHubEmpty,
+    DataHubModal,
+    DataHubSectionHeader,
+    DataHubSegmentedControl,
+    DataHubToolbar,
+    DataHubFilterBar,
+    DataHubToggle,
+    DataHubLoadingSpinner,
+    MetricCard,
+    PrimaryButton,
+    SecondaryButton,
+    StatusPill,
+    severityVariant,
+    sentimentVariant,
+} from './dataHubUi';
 
 interface BreakingNews {
   id: string;
@@ -41,20 +60,20 @@ interface BreakingNewsMonitorProps {
 
 const SEVERITY_CONFIG = {
   high: {
-    color: 'red',
     icon: '🚨',
-    label: 'CRITICAL'
+    label: 'CRITICAL',
+    border: 'border-l-red-500',
   },
   medium: {
-    color: 'yellow',
     icon: '⚠️',
-    label: 'WARNING'
+    label: 'WARNING',
+    border: 'border-l-amber-500',
   },
   low: {
-    color: 'green',
     icon: 'ℹ️',
-    label: 'INFO'
-  }
+    label: 'INFO',
+    border: 'border-l-emerald-500',
+  },
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -244,23 +263,27 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
     return SEVERITY_CONFIG[level as keyof typeof SEVERITY_CONFIG] || SEVERITY_CONFIG.low;
   };
 
-  // Get unique categories from news
   const categories = Array.from(new Set(news.map(item => item.primary_category)));
+
+  const severityCounts = useMemo(() => ({
+    high: news.filter(n => n.market_impact_level === 'high').length,
+    medium: news.filter(n => n.market_impact_level === 'medium').length,
+    low: news.filter(n => n.market_impact_level === 'low').length,
+  }), [news]);
 
   return (
     <div className="space-y-6">
-      {/* Audio Alert */}
       <audio ref={audioRef} src="/sounds/alert.mp3" preload="auto" />
 
-      {/* Controls */}
-      <Card className="bg-slate-950/70 border border-white/5 shadow-lg">
-        <div className="space-y-4">
-          {/* Breaking News Monitor - Updated Design */}
-          {/* Top Controls */}
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            {/* Impact Slider */}
+      <Card className={DATAHUB_SHELL}>
+        <DataHubSectionHeader
+          title={t('telegram_data_tab_breaking') || 'Breaking News Monitor'}
+          subtitle={t('breaking_news_desc') || 'Real-time high-impact Telegram events with severity filtering.'}
+        />
+        <DataHubToolbar className="mb-4">
+          <DataHubFilterBar>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground">
                 {t('min_impact') || 'Min Impact'}:
               </span>
               <input
@@ -270,165 +293,109 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                 step="0.1"
                 value={minImpact}
                 onChange={(e) => setMinImpact(parseFloat(e.target.value))}
-                className="w-32"
+                className="w-32 accent-purple-500"
+                aria-label={t('min_impact') || 'Minimum impact'}
               />
-              <span className="text-sm font-medium">{(minImpact * 100).toFixed(0)}%</span>
+              <span className="text-[11px] font-medium">{(minImpact * 100).toFixed(0)}%</span>
             </div>
+            <DataHubToggle
+              id="breaking-sound"
+              checked={soundEnabled}
+              onChange={setSoundEnabled}
+              label={soundEnabled ? (t('breaking_sound_on') || 'Sound On') : (t('breaking_sound_off') || 'Sound Off')}
+            />
+            <DataHubToggle
+              id="breaking-auto-refresh"
+              checked={autoRefresh}
+              onChange={setAutoRefresh}
+              label={autoRefresh ? (t('breaking_auto_refresh_on') || 'Auto-refresh On') : (t('breaking_auto_refresh_off') || 'Auto-refresh Off')}
+            />
+          </DataHubFilterBar>
+          <PrimaryButton type="button" onClick={fetchNews} disabled={isLoading}>
+            {isLoading ? t('loading') || 'Loading…' : `🔄 ${t('refresh') || 'Refresh'}`}
+          </PrimaryButton>
+        </DataHubToolbar>
 
-            {/* Sound Toggle */}
-            <button
-              type="button"
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className={`px-3 py-1 text-xs md:text-sm rounded-full border transition-colors ${
-                soundEnabled
-                  ? 'bg-emerald-600 border-emerald-500 text-white'
-                  : 'bg-slate-950/60 border-slate-700 text-muted-foreground hover:bg-slate-900'
-              }`}
-            >
-              {soundEnabled
-                ? t('breaking_sound_on') || '🔔 Sound On'
-                : t('breaking_sound_off') || '🔕 Sound Off'}
-            </button>
-
-            {/* Auto-refresh Toggle */}
-            <button
-              type="button"
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`px-3 py-1 text-xs md:text-sm rounded-full border transition-colors ${
-                autoRefresh
-                  ? 'bg-purple-600 border-purple-500 text-white'
-                  : 'bg-slate-950/60 border-slate-700 text-muted-foreground hover:bg-slate-900'
-              }`}
-            >
-              {autoRefresh
-                ? t('breaking_auto_refresh_on') || '🔄 Auto-refresh On'
-                : t('breaking_auto_refresh_off') || '⏸️ Auto-refresh Off'}
-            </button>
-
-            {/* Manual Refresh */}
-            <button
-              type="button"
-              onClick={fetchNews}
-              disabled={isLoading}
-              className="inline-flex items-center justify-center px-4 py-1.5 text-xs md:text-sm rounded-full font-medium bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white shadow-sm transition-colors"
-            >
-              {isLoading ? t('loading') || '⏳ Loading...' : `🔄 ${t('refresh') || 'Refresh'}`}
-            </button>
-          </div>
-
-          {/* Filters */}
-          <div className="flex items-center gap-4 flex-wrap">
-            {/* Severity Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {t('breaking_severity') || 'Severity'}:
+        <DataHubFilterBar className="mb-3">
+          <span className="text-[11px] text-muted-foreground">
+            {t('breaking_severity') || 'Severity'}:
+          </span>
+          <DataHubSegmentedControl
+            ariaLabel={t('breaking_severity') || 'Severity filter'}
+            value={severityFilter ?? 'all'}
+            onChange={v => setSeverityFilter(v === 'all' ? null : v)}
+            options={[
+              { value: 'all', label: t('all') || 'All' },
+              ...Object.entries(SEVERITY_CONFIG).map(([key, config]) => ({
+                value: key,
+                label: `${config.icon} ${config.label}`,
+              })),
+            ]}
+          />
+          {categories.length > 0 && (
+            <>
+              <span className="text-[11px] text-muted-foreground">
+                {t('category') || 'Category'}:
               </span>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => setSeverityFilter(null)}
-                  className={`px-2 py-1 text-xs rounded-full border ${
-                    !severityFilter
-                      ? 'bg-purple-600 border-purple-500 text-white'
-                      : 'bg-slate-950/60 border-slate-700 text-muted-foreground hover:bg-slate-900'
-                  }`}
-                >
-                  {t('all') || 'All'}
-                </button>
-                {Object.entries(SEVERITY_CONFIG).map(([key, config]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setSeverityFilter(key)}
-                    className={`px-2 py-1 text-xs rounded-full border ${
-                      severityFilter === key
-                        ? `bg-${config.color}-500 border-${config.color}-400 text-white`
-                        : 'bg-slate-950/60 border-slate-700 text-muted-foreground hover:bg-slate-900'
-                    }`}
-                  >
-                    {config.icon} {config.label}
-                  </button>
+              <select
+                value={categoryFilter || ''}
+                onChange={(e) => setCategoryFilter(e.target.value || null)}
+                className="text-[11px] bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-1.5 text-foreground"
+                aria-label={t('category') || 'Category filter'}
+              >
+                <option value="">{t('all_categories') || 'All Categories'}</option>
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {CATEGORY_ICONS[cat]} {cat}
+                  </option>
                 ))}
-              </div>
-            </div>
+              </select>
+            </>
+          )}
+        </DataHubFilterBar>
 
-            {/* Category Filter */}
-            {categories.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {t('category') || 'Category'}:
-                </span>
-                <select
-                  value={categoryFilter || ''}
-                  onChange={(e) => setCategoryFilter(e.target.value || null)}
-                  className="px-2 py-1 text-xs md:text-sm bg-slate-950/60 border border-slate-700 rounded-full text-foreground"
-                >
-                  <option value="">{t('all_categories') || 'All Categories'}</option>
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {CATEGORY_ICONS[cat]} {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* Last Update */}
-          <div className="text-xs text-muted-foreground">
-            {t('last_updated') || 'Last updated'}:{' '}
-            {formatDistanceToNow(lastFetchTime, { addSuffix: true })}
-          </div>
-        </div>
+        <p className="text-[11px] text-muted-foreground">
+          {t('last_updated') || 'Last updated'}:{' '}
+          {formatDistanceToNow(lastFetchTime, { addSuffix: true })}
+        </p>
       </Card>
 
-      {/* New Items Banner */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+        <MetricCard label={t('total') || 'Total'} value={news.length} color="blue" />
+        <MetricCard label="Critical" value={severityCounts.high} color="red" />
+        <MetricCard label="Warning" value={severityCounts.medium} color="amber" />
+        <MetricCard label={t('filtered') || 'Filtered'} value={filteredNews.length} color="purple" />
+      </div>
+
       {newCount > 0 && (
-        <div className="bg-red-500/15 border border-red-500/60 rounded-xl p-3 md:p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-red-300 text-xs md:text-sm font-semibold">
-              🚨{' '}
-              {t('breaking_new_items', { count: newCount }) ||
-                `${newCount} new breaking news items`}
-            </p>
-            <button
-              type="button"
-              onClick={clearNewCount}
-              className="px-3 py-1 text-xs md:text-sm rounded-full bg-red-600 hover:bg-red-500 text-white"
-            >
-              {t('acknowledge') || 'Acknowledge'}
-            </button>
-          </div>
-        </div>
+        <DataHubAlert
+          variant="warning"
+          message={
+            t('breaking_new_items', { count: newCount }) ||
+            `${newCount} new breaking news items`
+          }
+          onRetry={clearNewCount}
+          retryLabel={t('acknowledge') || 'Acknowledge'}
+        />
       )}
 
-      {/* Error Message */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-          <p className="text-sm font-medium text-red-200 mb-1">
-            {t('breaking_news_error_title') || 'Breaking news error'}
-          </p>
-          <p className="text-[11px] text-red-300">{error}</p>
-        </div>
+        <DataHubAlert variant="error" message={error} onRetry={fetchNews} retryLabel={t('retry')} />
       )}
 
-      {/* Empty State */}
+      {isLoading && news.length === 0 && (
+        <DataHubLoadingSpinner message={t('loading') || 'Loading breaking news…'} />
+      )}
+
       {!isLoading && filteredNews.length === 0 && (
-        <Card className="bg-slate-950/80 border border-white/5">
-          <div className="text-center py-10">
-            <div className="text-5xl mb-3">📰</div>
-            <p className="text-sm md:text-base font-semibold mb-1 text-foreground">
-              {t('no_breaking_news') || 'No Breaking News'}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              {t('no_breaking_news_hint') ||
-                'No high-impact news items found with the current filters.'}
-            </p>
-          </div>
-        </Card>
+        <DataHubEmpty
+          message={
+            t('no_breaking_news_hint') ||
+            'No high-impact news items found with the current filters.'
+          }
+        />
       )}
 
-      {/* News Feed */}
       <div className="space-y-4">
         {filteredNews.map((item) => {
           const severity = getSeverityConfig(item.market_impact_level);
@@ -436,77 +403,53 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
           return (
             <Card
               key={item.id}
-              className={`bg-slate-950/80 border border-white/5 rounded-xl shadow-sm border-l-4 border-${severity.color}-500`}
+              className={`${DATAHUB_INNER_LIST} border-l-4 ${severity.border}`}
             >
               <div className="flex items-start gap-4">
-                {/* Severity Indicator */}
                 <div className="flex-shrink-0 flex flex-col items-center gap-2">
-                  <div className="text-2xl md:text-3xl">
+                  <div className="text-2xl md:text-3xl" aria-hidden>
                     {severity.icon}
                   </div>
-                  <span className={`text-xs font-bold text-${severity.color}-400`}>
-                    {severity.label}
-                  </span>
+                  <StatusPill
+                    label={severity.label}
+                    variant={severityVariant(item.market_impact_level)}
+                  />
                 </div>
 
-                {/* Content */}
-                  <div className="flex-1">
-                    {/* Header */}
+                <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {/* Category Badge */}
-                      <span className="px-2 py-1 text-[11px] bg-purple-500/20 text-purple-300 rounded-full flex items-center gap-1">
-                        {CATEGORY_ICONS[item.primary_category] || '📰'}
-                        {item.primary_category}
-                      </span>
-                      
-                      {/* Source */}
-                      <span className="px-2 py-1 text-[11px] bg-blue-500/20 text-blue-300 rounded-full">
-                        📢 {item.channel_title}
-                      </span>
-                      
-                      {/* Sentiment */}
-                      <span
-                        className={`px-2 py-1 text-[11px] rounded-full ${
-                        item.sentiment === 'positive' ? 'bg-green-500/20 text-green-300' :
-                        item.sentiment === 'negative' ? 'bg-red-500/20 text-red-300' :
-                        'bg-gray-500/20 text-gray-300'
-                        }`}
-                      >
-                        {item.sentiment === 'positive' ? '😊' : item.sentiment === 'negative' ? '😟' : '😐'} {item.sentiment}
-                      </span>
+                      <StatusPill
+                        label={`${CATEGORY_ICONS[item.primary_category] || '📰'} ${item.primary_category}`}
+                        variant="primary"
+                      />
+                      <StatusPill label={`📢 ${item.channel_title}`} variant="info" />
+                      <StatusPill
+                        label={item.sentiment}
+                        variant={sentimentVariant(item.sentiment)}
+                      />
                     </div>
 
-                    {/* Timestamp */}
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                       🕐 {formatDistanceToNow(new Date(item.telegram_created_at), { addSuffix: true })}
                     </span>
                   </div>
 
-                  {/* News Text */}
                   <p className="text-sm text-foreground leading-relaxed mb-3">
                     {item.cleaned_text}
                   </p>
 
-                  {/* Assets */}
                   {item.mentioned_assets && item.mentioned_assets.length > 0 && (
                     <div className="mb-3">
                       <span className="text-[11px] text-muted-foreground mr-2">
                         {t('assets') || 'Assets'}:
                       </span>
                       {item.mentioned_assets.map((asset, i) => (
-                        // eslint-disable-next-line react/no-array-index-key
-                        <span
-                          key={i}
-                          className="px-2 py-0.5 text-[11px] bg-yellow-500/20 text-yellow-300 rounded-full mr-1"
-                        >
-                          💰 {asset}
-                        </span>
+                        <StatusPill key={asset + i} label={`💰 ${asset}`} variant="warning" className="mr-1" />
                       ))}
                     </div>
                   )}
 
-                  {/* Affected Agents */}
                   {item.top_affected_agents && item.top_affected_agents.length > 0 && (
                     <div className="mb-3">
                       <span className="text-[11px] text-muted-foreground mb-1 block">
@@ -514,25 +457,16 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {item.top_affected_agents.map((agent, i) => (
-                          // eslint-disable-next-line react/no-array-index-key
-                          <span
-                            key={i}
-                            className={`px-2 py-1 text-[11px] rounded-full ${
-                              agent.requires_action
-                                ? 'bg-red-500/20 text-red-300 border border-red-500/50'
-                                : 'bg-blue-500/20 text-blue-300'
-                            }`}
-                          >
-                            {agent.agent_key} ({(parseFloat(agent.impact_score) * 100).toFixed(0)}%)
-                            {agent.requires_action &&
-                              ` ⚠️ ${t('action_required') || 'ACTION REQUIRED'}`}
-                          </span>
+                          <StatusPill
+                            key={agent.agent_key + i}
+                            label={`${agent.agent_key} (${(parseFloat(agent.impact_score) * 100).toFixed(0)}%)${agent.requires_action ? ` ⚠️ ${t('action_required') || 'ACTION'}` : ''}`}
+                            variant={agent.requires_action ? 'error' : 'info'}
+                          />
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Metadata */}
                   <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
                     {item.regions && item.regions.length > 0 && (
                       <span>🌍 {item.regions.join(', ')}</span>
@@ -545,33 +479,23 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                     )}
                   </div>
 
-                  {/* Actions */}
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="px-3 py-1 text-xs md:text-sm rounded-full bg-purple-600 hover:bg-purple-500 text-white font-medium shadow-sm transition-colors"
-                      onClick={() => setSelectedNews(item)}
-                      >
+                    <PrimaryButton type="button" onClick={() => setSelectedNews(item)}>
                       📋 {t('view_details') || 'View Details'}
-                    </button>
-                    <button
-                      type="button"
-                      className="px-3 py-1 text-xs md:text-sm rounded-full bg-slate-950/60 hover:bg-slate-900 border border-slate-700 text-muted-foreground transition-colors"
-                      onClick={() => handleDismiss(item.id)}
-                      >
+                    </PrimaryButton>
+                    <SecondaryButton type="button" onClick={() => handleDismiss(item.id)}>
                       ✕ {t('dismiss') || 'Dismiss'}
-                    </button>
-                    <button
+                    </SecondaryButton>
+                    <SecondaryButton
                       type="button"
-                      className="px-3 py-1 text-xs md:text-sm rounded-full bg-slate-950/60 hover:bg-slate-900 border border-slate-700 text-muted-foreground transition-colors"
                       onClick={() => {
                         if (typeof navigator !== 'undefined' && navigator.clipboard) {
                           navigator.clipboard.writeText(item.cleaned_text);
                         }
                       }}
-                      >
+                    >
                       📋 {t('copy') || 'Copy'}
-                    </button>
+                    </SecondaryButton>
                   </div>
                 </div>
               </div>
@@ -580,97 +504,60 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
         })}
       </div>
 
-      {/* View Details Modal */}
       {selectedNews && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          onClick={() => setSelectedNews(null)}
-        >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div
-            className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col rounded-2xl border border-white/10 bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-start justify-between px-5 py-3 border-b border-white/10">
-              <div className="flex items-start gap-3">
-                <div className="text-3xl md:text-4xl">
-                  {getSeverityConfig(selectedNews.market_impact_level).icon}
-                </div>
-                <div>
-                  <p className="text-[11px] text-purple-300/80 mb-0.5">
-                    {t('breaking_news') || 'Breaking News'} –{' '}
-                    {getSeverityConfig(selectedNews.market_impact_level).label}
-                  </p>
-                  <h3 className="text-sm md:text-base font-semibold text-foreground">
-                    {selectedNews.channel_title || 'Unknown channel'}
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    ID: <span className="font-mono">{selectedNews.message_id}</span> •{' '}
-                    {formatDistanceToNow(new Date(selectedNews.telegram_created_at), {
-                      addSuffix: true,
-                    })}
-                  </p>
-                </div>
-              </div>
-              <button
+        <DataHubModal
+          title={selectedNews.channel_title || 'Unknown channel'}
+          subtitle={`${t('breaking_news') || 'Breaking News'} – ${getSeverityConfig(selectedNews.market_impact_level).label} • ID ${selectedNews.message_id}`}
+          onClose={() => setSelectedNews(null)}
+          maxWidth="max-w-4xl"
+          footer={
+            <>
+              <SecondaryButton type="button" onClick={() => setSelectedNews(null)}>
+                {t('close') || 'Close'}
+              </SecondaryButton>
+              <SecondaryButton
                 type="button"
-                onClick={() => setSelectedNews(null)}
-                className="text-slate-400 hover:text-slate-100 text-lg"
+                onClick={() => {
+                  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                    navigator.clipboard.writeText(selectedNews.cleaned_text);
+                  }
+                }}
               >
-                ×
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-              {/* Badges row */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`px-2 py-1 text-[11px] rounded-full text-white ${
-                    selectedNews.market_impact_level === 'high'
-                      ? 'bg-red-500'
-                      : selectedNews.market_impact_level === 'medium'
-                        ? 'bg-yellow-500'
-                        : 'bg-green-500'
-                  }`}
-                >
-                  {getSeverityConfig(selectedNews.market_impact_level).label}
-                </span>
-                <span className="px-2 py-1 text-[11px] rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/50">
-                  {CATEGORY_ICONS[selectedNews.primary_category] || '📰'}{' '}
-                  {selectedNews.primary_category}
-                </span>
+                📋 {t('copy') || 'Copy'}
+              </SecondaryButton>
+              <PrimaryButton
+                type="button"
+                onClick={() => {
+                  handleDismiss(selectedNews.id);
+                  setSelectedNews(null);
+                }}
+              >
+                ✕ {t('dismiss') || 'Dismiss'}
+              </PrimaryButton>
+            </>
+          }
+        >
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <StatusPill
+                  label={getSeverityConfig(selectedNews.market_impact_level).label}
+                  variant={severityVariant(selectedNews.market_impact_level)}
+                />
+                <StatusPill
+                  label={`${CATEGORY_ICONS[selectedNews.primary_category] || '📰'} ${selectedNews.primary_category}`}
+                  variant="primary"
+                />
                 {selectedNews.sub_category && (
-                  <span className="px-2 py-1 text-[11px] rounded-full bg-slate-900 border border-slate-700 text-slate-300">
-                    {selectedNews.sub_category}
-                  </span>
+                  <StatusPill label={selectedNews.sub_category} variant="neutral" />
                 )}
-                <span
-                  className={`px-2 py-1 text-[11px] rounded-full ${
-                    selectedNews.sentiment === 'positive'
-                      ? 'bg-green-500/20 text-green-300'
-                      : selectedNews.sentiment === 'negative'
-                        ? 'bg-red-500/20 text-red-300'
-                        : 'bg-gray-500/20 text-gray-300'
-                  }`}
-                >
-                  {selectedNews.sentiment === 'positive'
-                    ? '😊'
-                    : selectedNews.sentiment === 'negative'
-                      ? '😟'
-                      : '😐'}{' '}
-                  {selectedNews.sentiment}
-                </span>
+                <StatusPill
+                  label={selectedNews.sentiment}
+                  variant={sentimentVariant(selectedNews.sentiment)}
+                />
                 {selectedNews.importance_level && (
-                  <span className="px-2 py-1 text-[11px] rounded-full bg-amber-500/20 text-amber-200 border border-amber-500/50">
-                    Importance: {selectedNews.importance_level}
-                  </span>
+                  <StatusPill label={`Importance: ${selectedNews.importance_level}`} variant="warning" />
                 )}
                 {selectedNews.event_urgency && (
-                  <span className="px-2 py-1 text-[11px] rounded-full bg-orange-500/20 text-orange-200 border border-orange-500/50">
-                    Urgency: {selectedNews.event_urgency}
-                  </span>
+                  <StatusPill label={`Urgency: ${selectedNews.event_urgency}`} variant="warning" />
                 )}
               </div>
 
@@ -846,43 +733,8 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Footer actions */}
-            <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => setSelectedNews(null)}
-                className="px-3 py-1.5 text-xs md:text-sm rounded-full bg-slate-700 hover:bg-slate-600 text-white"
-              >
-                {t('close') || 'Close'}
-              </button>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                      navigator.clipboard.writeText(selectedNews.cleaned_text);
-                    }
-                  }}
-                  className="px-3 py-1.5 text-xs md:text-sm rounded-full bg-slate-700 hover:bg-slate-600 text-white"
-                >
-                  📋 {t('copy') || 'Copy'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleDismiss(selectedNews.id);
-                    setSelectedNews(null);
-                  }}
-                  className="px-3 py-1.5 text-xs md:text-sm rounded-full bg-red-600 hover:bg-red-500 text-white font-medium"
-                >
-                  ✕ {t('dismiss') || 'Dismiss'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        </DataHubModal>
       )}
     </div>
   );

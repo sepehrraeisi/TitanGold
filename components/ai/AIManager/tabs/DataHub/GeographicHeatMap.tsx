@@ -2,7 +2,23 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { formatDataHubQueryError } from './dataHubI18n';
 import { DataHubApiError } from '../../../../../services/dataSourcesApi';
-import { DataHubAlert, DataHubEmpty } from './dataHubUi';
+import {
+    DATAHUB_SHELL,
+    SELECT_CLASS,
+    DataHubAlert,
+    DataHubEmpty,
+    DataHubSectionHeader,
+    DataHubSegmentedControl,
+    DataHubToolbar,
+    DataHubFilterBar,
+    DataHubLoadingSpinner,
+    MetricCard,
+    PrimaryButton,
+    SecondaryButton,
+    StatusPill,
+    formatTimeRangeLabel,
+    TIME_RANGE_OPTIONS,
+} from './dataHubUi';
 import { ComposableMap, Geographies, Geography, ZoomableGroup } from 'react-simple-maps';
 import { scaleLinear } from 'd3-scale';
 // Bundled TopoJSON – no external URL; map loads even when GitHub is blocked
@@ -279,13 +295,8 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
 
   if (isLoading && data.length === 0) {
     return (
-      <Card className="bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg">
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto" />
-          <p className="mt-4 text-sm text-muted-foreground">
-            {t('loading_geographic_data') || 'Loading geographic data...'}
-          </p>
-        </div>
+      <Card className={DATAHUB_SHELL}>
+        <DataHubLoadingSpinner message={t('loading_geographic_data') || 'Loading geographic data…'} size="lg" />
       </Card>
     );
   }
@@ -302,115 +313,58 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
         />
       )}
 
-      {/* Controls */}
-      <Card className="bg-slate-950/70 border border-white/5 shadow-lg">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          {/* Time Range */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs md:text-sm text-muted-foreground">
+      <Card className={DATAHUB_SHELL}>
+        <DataHubToolbar>
+          <DataHubFilterBar>
+            <span className="text-[11px] text-muted-foreground">
               {t('time_range') || 'Time Range'}:
             </span>
-            {[24, 48, 168, 720].map((hours) => (
-              <button
-                key={hours}
-                type="button"
-                onClick={() => setTimeRange(hours)}
-                className={`px-3 py-1 text-xs md:text-sm rounded-full border transition-colors ${
-                  timeRange === hours
-                    ? 'bg-purple-600/90 border-purple-400/80 text-white shadow-sm'
-                    : 'bg-slate-950/60 border-white/10 hover:border-purple-500/60 text-muted-foreground'
-                }`}
+            <DataHubSegmentedControl
+              ariaLabel={t('time_range') || 'Time range'}
+              value={timeRange}
+              onChange={setTimeRange}
+              options={TIME_RANGE_OPTIONS.map(hours => ({
+                value: hours,
+                label: formatTimeRangeLabel(hours),
+              }))}
+            />
+            {categories.length > 0 && (
+              <select
+                value={categoryFilter || ''}
+                onChange={(e) => setCategoryFilter(e.target.value || null)}
+                className={SELECT_CLASS}
+                aria-label={t('all_categories') || 'Category filter'}
               >
-                {hours === 24 ? '24h' : hours === 48 ? '2d' : hours === 168 ? '7d' : '30d'}
-              </button>
-            ))}
-          </div>
-
-          {/* Category Filter */}
-          {categories.length > 0 && (
-            <select
-              value={categoryFilter || ''}
-              onChange={(e) => setCategoryFilter(e.target.value || null)}
-              className="px-3 py-1 text-xs md:text-sm bg-slate-950/60 border border-white/10 rounded-full text-foreground"
-            >
-              <option value="">{t('all_categories') || 'All Categories'}</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* Refresh */}
-          <button
-            type="button"
-            onClick={fetchLocationData}
-            className="inline-flex items-center gap-1 px-4 py-1 text-xs md:text-sm rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white shadow-sm border border-white/10 transition-colors"
-          >
-            <span>🔄</span>
-            <span>{t('refresh') || 'Refresh'}</span>
-          </button>
-        </div>
+                <option value="">{t('all_categories') || 'All Categories'}</option>
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            )}
+          </DataHubFilterBar>
+          <PrimaryButton type="button" onClick={fetchLocationData} disabled={isLoading}>
+            🔄 {t('refresh') || 'Refresh'}
+          </PrimaryButton>
+        </DataHubToolbar>
       </Card>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-slate-900/60 border border-emerald-500/30 shadow-sm">
-          <div className="text-center">
-            <p className="text-[11px] md:text-xs text-emerald-200/80 mb-1 uppercase tracking-wide">
-              {t('total_events') || 'Total Events'}
-            </p>
-            <p className="text-xl md:text-2xl font-semibold text-emerald-300">
-              {stats.totalEvents}
-            </p>
-          </div>
-        </Card>
-        <Card className="bg-gradient-to-br from-rose-500/15 via-rose-500/5 to-slate-900/60 border border-rose-500/40 shadow-sm">
-          <div className="text-center">
-            <p className="text-[11px] md:text-xs text-rose-200/90 mb-1 uppercase tracking-wide">
-              {t('high_impact_events') || 'High Impact Events'}
-            </p>
-            <p className="text-xl md:text-2xl font-semibold text-rose-300">
-              {stats.highImpact}
-            </p>
-          </div>
-        </Card>
-        <Card className="bg-gradient-to-br from-indigo-500/15 via-indigo-500/5 to-slate-900/60 border border-indigo-500/40 shadow-sm">
-          <div className="text-center">
-            <p className="text-[11px] md:text-xs text-indigo-200/90 mb-1 uppercase tracking-wide">
-              {t('active_regions') || 'Active Regions'}
-            </p>
-            <p className="text-xl md:text-2xl font-semibold text-indigo-300">
-              {stats.regions}
-            </p>
-          </div>
-        </Card>
-        <Card className="bg-gradient-to-br from-amber-500/15 via-amber-500/5 to-slate-900/60 border border-amber-500/40 shadow-sm">
-          <div className="text-center">
-            <p className="text-[11px] md:text-xs text-amber-200/90 mb-1 uppercase tracking-wide">
-              {t('hotspots') || 'Hotspots'}
-            </p>
-            <p className="text-xl md:text-2xl font-semibold text-amber-300">
-              {stats.hotspots}
-            </p>
-          </div>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+        <MetricCard label={t('total_events') || 'Total Events'} value={stats.totalEvents} color="emerald" />
+        <MetricCard label={t('high_impact_events') || 'High Impact Events'} value={stats.highImpact} color="red" />
+        <MetricCard label={t('active_regions') || 'Active Regions'} value={stats.regions} color="blue" />
+        <MetricCard label={t('hotspots') || 'Hotspots'} value={stats.hotspots} color="amber" />
       </div>
 
-      {/* Map */}
-      <Card className="bg-gradient-to-br from-slate-950/90 via-slate-950/85 to-slate-900/80 border border-white/5 shadow-xl">
-        <div className="flex items-center justify-between mb-4 gap-3">
-          <div>
-            <h3 className="text-lg font-semibold">
-              {t('geographic_map') || 'Global Event Distribution'}
-            </h3>
-            <p className="text-[11px] md:text-xs text-muted-foreground mt-1">
-              {t('geographic_map_hint') ||
-                'Country color shows event activity. Click a country to see details.'}
-            </p>
-          </div>
-        </div>
+      <Card className={DATAHUB_SHELL}>
+        <DataHubSectionHeader
+          title={t('geographic_map') || 'Global Event Distribution'}
+          subtitle={
+            t('geographic_map_hint') ||
+            'Country color shows event activity. Click a country to see details.'
+          }
+        />
 
         <div className="relative rounded-2xl overflow-hidden border border-slate-800/80" style={{ height: '500px', backgroundColor: '#020617' }}>
           <ComposableMap
@@ -480,67 +434,42 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
         </div>
       </Card>
 
-      {/* Selected Region Details */}
       {selectedRegion && (
-        <Card className="bg-gradient-to-br from-purple-900/70 via-slate-950/90 to-slate-900/80 border border-purple-500/60 shadow-lg">
+        <Card className={`${DATAHUB_SHELL} border-sky-500/40`}>
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h3 className="text-xl font-bold mb-4">
-                🌍 {selectedRegion.region}
-              </h3>
-
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="bg-slate-900/70 rounded-xl p-3 border border-white/5">
-                  <p className="text-[11px] md:text-xs text-muted-foreground mb-1 uppercase tracking-wide">
-                    {t('total_events') || 'Total Events'}
-                  </p>
-                  <p className="text-xl md:text-2xl font-semibold text-foreground">
-                    {selectedRegion.count}
-                  </p>
-                </div>
-                <div className="bg-slate-900/70 rounded-xl p-3 border border-rose-500/40">
-                  <p className="text-[11px] md:text-xs text-rose-200 mb-1 uppercase tracking-wide">
-                    {t('high_impact_events') || 'High Impact Events'}
-                  </p>
-                  <p className="text-xl md:text-2xl font-semibold text-rose-300">
-                    {selectedRegion.high_impact_count}
-                  </p>
-                </div>
+              <DataHubSectionHeader
+                className="mb-4"
+                title={`🌍 ${selectedRegion.region}`}
+              />
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <MetricCard label={t('total_events') || 'Total Events'} value={selectedRegion.count} color="blue" />
+                <MetricCard
+                  label={t('high_impact_events') || 'High Impact Events'}
+                  value={selectedRegion.high_impact_count}
+                  color="red"
+                />
               </div>
-
               <div>
-                <p className="text-sm text-muted-foreground mb-2">
+                <p className="text-[11px] text-muted-foreground mb-2">
                   {t('active_categories') || 'Active Categories'}:
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {selectedRegion.categories.map((cat) => (
-                    <span
-                      key={cat}
-                      className="px-3 py-1 text-xs md:text-sm rounded-full bg-purple-500/20 text-purple-200 border border-purple-400/40"
-                    >
-                      {cat}
-                    </span>
+                    <StatusPill key={cat} label={cat} variant="primary" />
                   ))}
                 </div>
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setSelectedRegion(null)}
-              className="ml-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
-            >
+            <SecondaryButton type="button" onClick={() => setSelectedRegion(null)} aria-label={t('close') || 'Close'}>
               ✕
-            </button>
+            </SecondaryButton>
           </div>
         </Card>
       )}
 
-      {/* Region List */}
-      <Card className="bg-slate-950/75 border border-white/5 shadow-lg">
-        <h3 className="text-lg font-semibold mb-4">
-          {t('regions') || 'Regions'}
-        </h3>
+      <Card className={DATAHUB_SHELL}>
+        <DataHubSectionHeader title={t('regions') || 'Regions'} />
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>

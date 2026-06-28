@@ -1,6 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { formatDistanceToNow } from 'date-fns';
+import {
+    DATAHUB_SHELL,
+    DATAHUB_INNER_LIST,
+    SELECT_CLASS,
+    DataHubAlert,
+    DataHubEmpty,
+    DataHubSectionHeader,
+    DataHubSegmentedControl,
+    DataHubToolbar,
+    DataHubFilterBar,
+    DataHubLoadingSpinner,
+    MetricCard,
+    PrimaryButton,
+    SecondaryButton,
+    StatusPill,
+    priorityVariant,
+    sentimentVariant,
+    formatTimeRangeLabel,
+    TIME_RANGE_OPTIONS,
+} from './dataHubUi';
 
 interface AgentMessage {
   id: string;
@@ -199,113 +219,65 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <Card className="bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="text-3xl md:text-4xl">{AGENT_ICONS[agentKey] || '🤖'}</div>
-            <div>
-              <h2 className="text-lg md:text-2xl font-bold text-foreground">{agentName}</h2>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Agent Key: <span className="font-mono">{agentKey}</span>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs md:text-sm rounded-full border border-slate-700 text-slate-100 bg-slate-900/70 hover:border-purple-400 hover:text-purple-200 transition-colors"
-          >
-            ← Back to agents
-          </button>
-        </div>
+      <Card className={DATAHUB_SHELL}>
+        <DataHubSectionHeader
+          title={agentName}
+          subtitle={`Agent Key: ${agentKey}`}
+          actions={
+            <SecondaryButton type="button" onClick={onClose}>
+              ← {t('back') || 'Back to agents'}
+            </SecondaryButton>
+          }
+        />
       </Card>
 
-      {/* Statistics */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <Card className="bg-slate-900/60 border border-white/5 rounded-lg">
-            <div className="text-center p-3">
-              <p className="text-[11px] text-muted-foreground mb-1">Total Messages</p>
-              <p className="text-lg md:text-2xl font-semibold text-foreground">{stats.total_messages}</p>
-            </div>
-          </Card>
-          <Card className="bg-slate-900/60 border border-white/5 rounded-lg">
-            <div className="text-center p-3">
-              <p className="text-[11px] text-muted-foreground mb-1">Action Required</p>
-              <p className="text-lg md:text-2xl font-semibold text-red-300">
-                {stats.action_required_count}
-              </p>
-            </div>
-          </Card>
-          <Card className="bg-slate-900/60 border border-white/5 rounded-lg">
-            <div className="text-center p-3">
-              <p className="text-[11px] text-muted-foreground mb-1">Avg Impact</p>
-              <p
-                className={`text-lg md:text-2xl font-semibold ${getImpactColor(
-                  stats.avg_impact_score.toString(),
-                )}`}
-              >
-                {(stats.avg_impact_score * 100).toFixed(0)}%
-              </p>
-            </div>
-          </Card>
-          <Card className="bg-slate-900/60 border border-white/5 rounded-lg">
-            <div className="text-center p-3">
-              <p className="text-[11px] text-muted-foreground mb-1">High Priority</p>
-              <p className="text-lg md:text-2xl font-semibold text-orange-300">
-                {stats.high_priority_count}
-              </p>
-            </div>
-          </Card>
-          <Card className="bg-slate-900/60 border border-white/5 rounded-lg">
-            <div className="text-center p-3">
-              <p className="text-[11px] text-muted-foreground mb-1">Last Activity</p>
-              <p className="text-xs font-mono text-slate-200">
-                {stats.last_activity
-                  ? formatDistanceToNow(new Date(stats.last_activity), { addSuffix: true })
-                  : 'N/A'}
-              </p>
-            </div>
-          </Card>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3">
+          <MetricCard label="Total Messages" value={stats.total_messages} color="blue" />
+          <MetricCard label="Action Required" value={stats.action_required_count} color="red" />
+          <MetricCard
+            label="Avg Impact"
+            value={`${(stats.avg_impact_score * 100).toFixed(0)}%`}
+            color="purple"
+          />
+          <MetricCard label="High Priority" value={stats.high_priority_count} color="amber" />
+          <MetricCard
+            label="Last Activity"
+            value={
+              stats.last_activity
+                ? formatDistanceToNow(new Date(stats.last_activity), { addSuffix: true })
+                : 'N/A'
+            }
+            color="emerald"
+          />
         </div>
       )}
 
-      {/* Filters */}
-      <Card className="bg-slate-950/70 border border-white/5">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          {/* Time Range */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Time:</span>
-            {[24, 48, 168, 720].map((hours) => (
-              <button
-                key={hours}
-                type="button"
-                onClick={() => {
-                  setTimeRange(hours);
-                  setPage(1);
-                }}
-                className={`px-3 py-1 text-xs md:text-sm rounded-full border border-slate-700 transition-colors ${
-                  timeRange === hours
-                    ? 'bg-purple-600 text-white border-purple-500'
-                    : 'bg-slate-950/60 text-muted-foreground hover:bg-slate-900'
-                }`}
-              >
-                {hours === 24 ? '24h' : hours === 48 ? '2d' : hours === 168 ? '7d' : '30d'}
-              </button>
-            ))}
-          </div>
-
-          {/* Priority Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Priority:</span>
+      <Card className={DATAHUB_SHELL}>
+        <DataHubToolbar>
+          <DataHubFilterBar>
+            <span className="text-[11px] text-muted-foreground">Time:</span>
+            <DataHubSegmentedControl
+              ariaLabel="Time range"
+              value={timeRange}
+              onChange={hours => {
+                setTimeRange(hours);
+                setPage(1);
+              }}
+              options={TIME_RANGE_OPTIONS.map(hours => ({
+                value: hours,
+                label: formatTimeRangeLabel(hours),
+              }))}
+            />
+            <span className="text-[11px] text-muted-foreground">Priority:</span>
             <select
               value={priorityFilter || ''}
               onChange={(e) => {
                 setPriorityFilter(e.target.value || null);
                 setPage(1);
               }}
-              className="px-2 py-1 text-xs md:text-sm bg-slate-900 border border-slate-700 rounded text-foreground"
+              className={SELECT_CLASS}
+              aria-label="Priority filter"
             >
               <option value="">All</option>
               <option value="critical">Critical</option>
@@ -313,11 +285,7 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
               <option value="medium">Medium</option>
               <option value="low">Low</option>
             </select>
-          </div>
-
-          {/* Action Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Action:</span>
+            <span className="text-[11px] text-muted-foreground">Action:</span>
             <select
               value={actionFilter === null ? '' : actionFilter.toString()}
               onChange={(e) => {
@@ -325,97 +293,61 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                 setActionFilter(val === '' ? null : val === 'true');
                 setPage(1);
               }}
-              className="px-2 py-1 text-xs md:text-sm bg-slate-900 border border-slate-700 rounded text-foreground"
+              className={SELECT_CLASS}
+              aria-label="Action filter"
             >
               <option value="">All</option>
               <option value="true">Required</option>
               <option value="false">Not Required</option>
             </select>
-          </div>
-
-          {/* Reset Filters */}
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="px-3 py-1 text-xs md:text-sm rounded-full border border-slate-700 text-slate-100 bg-slate-900/70 hover:border-purple-400 hover:text-purple-200 transition-colors"
-          >
+          </DataHubFilterBar>
+          <SecondaryButton type="button" onClick={resetFilters}>
             🔄 Reset Filters
-          </button>
-        </div>
+          </SecondaryButton>
+        </DataHubToolbar>
       </Card>
 
-      {/* Error */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-          <p className="text-sm font-medium text-red-200 mb-1">Agent feed error</p>
-          <p className="text-[11px] text-red-300">{error}</p>
-        </div>
-      )}
+      {error && <DataHubAlert variant="error" message={error} onRetry={fetchAgentData} retryLabel={t('retry')} />}
 
-      {/* Messages Feed */}
       <div className="space-y-4">
+        {isLoading && messages.length === 0 && (
+          <DataHubLoadingSpinner message={t('loading') || 'Loading messages…'} />
+        )}
+        {!isLoading && messages.length === 0 && !error && (
+          <DataHubEmpty message={t('no_messages') || 'No messages found for this agent.'} />
+        )}
         {messages.map((msg) => (
           <Card
             key={msg.id}
-            className={`bg-slate-950/80 border border-white/5 rounded-xl shadow-sm ${
-              msg.requires_action ? 'border-l-4 border-red-500/80' : ''
-            }`}
+            className={`${DATAHUB_INNER_LIST} ${msg.requires_action ? 'border-l-4 border-l-red-500/80' : ''}`}
           >
             <div className="space-y-3">
-              {/* Header */}
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {/* Priority Badge */}
-                  <span
-                    className={`px-2 py-1 text-xs rounded text-white ${getPriorityColor(
-                      msg.priority_level,
-                    )}`}
-                  >
-                    {msg.priority_level.toUpperCase()}
-                  </span>
-
-                  {/* Impact Score */}
-                  <span
-                    className={`px-2 py-1 text-xs rounded bg-card border border-border ${getImpactColor(
-                      msg.impact_score,
-                    )}`}
-                  >
-                    Impact: {(parseFloat(msg.impact_score) * 100).toFixed(0)}%
-                  </span>
-
-                  {/* Confidence */}
-                  <span className="px-2 py-1 text-xs rounded bg-card border border-border text-blue-300">
-                    Confidence: {(parseFloat(msg.confidence) * 100).toFixed(0)}%
-                  </span>
-
-                  {/* Sentiment */}
-                  <span
-                    className={`px-2 py-1 text-xs rounded ${
-                      msg.sentiment === 'positive'
-                        ? 'bg-green-500/20 text-green-300'
-                        : msg.sentiment === 'negative'
-                          ? 'bg-red-500/20 text-red-300'
-                          : 'bg-gray-500/20 text-gray-300'
-                    }`}
-                  >
-                    {msg.sentiment === 'positive'
-                      ? '😊'
-                      : msg.sentiment === 'negative'
-                        ? '😟'
-                        : '😐'}{' '}
-                    {msg.sentiment}
-                  </span>
-
-                  {/* Action Required */}
+                  <StatusPill
+                    label={msg.priority_level.toUpperCase()}
+                    variant={priorityVariant(msg.priority_level)}
+                  />
+                  <StatusPill
+                    label={`Impact: ${(parseFloat(msg.impact_score) * 100).toFixed(0)}%`}
+                    variant={
+                      parseFloat(msg.impact_score) >= 0.7
+                        ? 'error'
+                        : parseFloat(msg.impact_score) >= 0.5
+                          ? 'warning'
+                          : 'success'
+                    }
+                  />
+                  <StatusPill
+                    label={`Confidence: ${(parseFloat(msg.confidence) * 100).toFixed(0)}%`}
+                    variant="info"
+                  />
+                  <StatusPill label={msg.sentiment} variant={sentimentVariant(msg.sentiment)} />
                   {msg.requires_action && (
-                    <span className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-300 border border-red-500/50">
-                      ⚠️ ACTION REQUIRED
-                    </span>
+                    <StatusPill label={`⚠️ ${t('action_required') || 'ACTION REQUIRED'}`} variant="error" />
                   )}
                 </div>
-
-                {/* Time */}
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                   {formatDistanceToNow(new Date(msg.telegram_created_at), { addSuffix: true })}
                 </span>
               </div>
@@ -445,35 +377,22 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => handleMarkProcessed(msg.id)}
-                  className="px-3 py-1 text-xs md:text-sm rounded-full bg-green-600 hover:bg-green-500 text-white font-medium shadow-sm transition-colors"
-                >
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-white/10">
+                <PrimaryButton type="button" onClick={() => handleMarkProcessed(msg.id)}>
                   ✓ Mark Processed
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedMessage(msg)}
-                  className="px-3 py-1 text-xs md:text-sm rounded-full bg-purple-600 hover:bg-purple-500 text-white font-medium shadow-sm transition-colors"
-                >
+                </PrimaryButton>
+                <SecondaryButton type="button" onClick={() => setSelectedMessage(msg)}>
                   📋 View Details
-                </button>
+                </SecondaryButton>
                 {msg.requires_action && msg.action_type && (
-                  <button
+                  <SecondaryButton
                     type="button"
                     onClick={() => {
-                      // Execute action
-                      // Placeholder for future expansion
-                      // eslint-disable-next-line no-console
                       console.log('Execute action:', msg.action_type);
                     }}
-                    className="px-3 py-1 text-xs md:text-sm rounded-full bg-red-600 hover:bg-red-500 text-white font-medium shadow-sm transition-colors"
                   >
                     🎯 Execute: {msg.action_type}
-                  </button>
+                  </SecondaryButton>
                 )}
               </div>
             </div>
@@ -481,39 +400,16 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         ))}
       </div>
 
-      {/* Load More */}
       {hasMore && !isLoading && messages.length > 0 && (
         <div className="text-center">
-          <button
-            type="button"
-            onClick={handleLoadMore}
-            className="inline-flex items-center justify-center px-6 py-2 text-xs md:text-sm rounded-full bg-purple-600 hover:bg-purple-500 text-white shadow-sm transition-colors"
-          >
+          <PrimaryButton type="button" onClick={handleLoadMore}>
             Load More Messages
-          </button>
+          </PrimaryButton>
         </div>
       )}
 
-      {/* Loading Indicator */}
-      {isLoading && (
-        <div className="text-center py-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto" />
-        </div>
-      )}
-
-      {/* No Messages */}
-      {!isLoading && messages.length === 0 && !error && (
-        <Card className="bg-slate-950/80 border border-white/5">
-          <div className="text-center py-10">
-            <div className="text-5xl mb-3">{AGENT_ICONS[agentKey] || '🤖'}</div>
-            <p className="text-sm md:text-base font-semibold mb-1 text-foreground">
-              No Messages Found
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              Try adjusting your filters or time range once this agent starts receiving data.
-            </p>
-          </div>
-        </Card>
+      {isLoading && messages.length > 0 && (
+        <DataHubLoadingSpinner message={t('loading') || 'Loading…'} size="sm" />
       )}
 
       {/* View Details Modal */}

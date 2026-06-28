@@ -3,6 +3,22 @@ import axios from 'axios';
 import { formatDataHubQueryError } from './dataHubI18n';
 import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 import {
+    DATAHUB_SHELL,
+    DATAHUB_INNER_LIST,
+    DataHubAlert,
+    DataHubEmpty,
+    DataHubSectionHeader,
+    DataHubSegmentedControl,
+    DataHubToolbar,
+    DataHubFilterBar,
+    DataHubLoadingSpinner,
+    MetricCard,
+    PrimaryButton,
+    SecondaryButton,
+    formatTimeRangeLabel,
+    TIME_RANGE_OPTIONS,
+} from './dataHubUi';
+import {
     PieChart,
     Pie,
     Cell,
@@ -228,142 +244,74 @@ const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
 
     if (isLoading && data.length === 0) {
         return (
-            <Card className="bg-slate-950/80 border border-white/5 shadow-lg">
-                <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto" />
-                    <p className="mt-4 text-muted-foreground text-sm">
-                        {t('loading') || 'Loading category data...'}
-                    </p>
-                </div>
+            <Card className={DATAHUB_SHELL}>
+                <DataHubLoadingSpinner message={t('loading') || 'Loading category data…'} size="lg" />
             </Card>
         );
     }
 
     return (
         <div className="space-y-6">
-            {error && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-                    <p className="text-sm font-medium text-red-200 mb-1">{t('error') || 'Error'}</p>
-                    <p className="text-[11px] text-red-300">{error}</p>
-                </div>
-            )}
+            {error && <DataHubAlert variant="error" message={error} onRetry={fetchCategoryData} retryLabel={t('retry')} />}
 
-            {/* Controls */}
-            <Card className="bg-slate-950/70 border border-white/5 shadow-lg">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">
+            <Card className={DATAHUB_SHELL}>
+                <DataHubToolbar>
+                    <DataHubFilterBar>
+                        <span className="text-[11px] text-muted-foreground">
                             {t('time_range') || 'Time Range'}:
                         </span>
-                        <div className="flex gap-2">
-                            {[24, 48, 168, 720].map((hours) => (
-                                <button
-                                    key={hours}
-                                    type="button"
-                                    onClick={() => setTimeRange(hours)}
-                                    className={`px-3 py-1 text-xs md:text-sm rounded-full border border-slate-700 transition-colors ${
-                                        timeRange === hours
-                                            ? 'bg-purple-600 text-white border-purple-500'
-                                            : 'bg-slate-950/60 text-muted-foreground hover:bg-slate-900'
-                                    }`}
-                                >
-                                    {hours === 24 ? '24h' : hours === 48 ? '2d' : hours === 168 ? '7d' : '30d'}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">
+                        <DataHubSegmentedControl
+                            ariaLabel={t('time_range') || 'Time range'}
+                            value={timeRange}
+                            onChange={setTimeRange}
+                            options={TIME_RANGE_OPTIONS.map(hours => ({
+                                value: hours,
+                                label: formatTimeRangeLabel(hours),
+                            }))}
+                        />
+                        <span className="text-[11px] text-muted-foreground">
                             {t('view_mode') || 'View'}:
                         </span>
-                        {(['pie', 'bar', 'area'] as const).map((type) => (
-                            <button
-                                key={type}
-                                type="button"
-                                onClick={() => setChartType(type)}
-                                className={`px-3 py-1 text-xs md:text-sm rounded-full border border-slate-700 transition-colors capitalize ${
-                                    chartType === type
-                                        ? 'bg-purple-600 text-white border-purple-500'
-                                        : 'bg-slate-950/60 text-muted-foreground hover:bg-slate-900'
-                                }`}
-                            >
-                                {type}
-                            </button>
-                        ))}
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={fetchCategoryData}
-                        className="ml-auto inline-flex items-center justify-center px-4 py-1.5 text-xs md:text-sm rounded-full font-medium bg-purple-600 hover:bg-purple-500 text-white shadow-sm transition-colors"
-                    >
+                        <DataHubSegmentedControl
+                            ariaLabel={t('view_mode') || 'Chart view'}
+                            value={chartType}
+                            onChange={setChartType}
+                            options={(['pie', 'bar', 'area'] as const).map(type => ({
+                                value: type,
+                                label: type.charAt(0).toUpperCase() + type.slice(1),
+                            }))}
+                        />
+                    </DataHubFilterBar>
+                    <PrimaryButton type="button" onClick={fetchCategoryData}>
                         🔄 {t('refresh') || 'Refresh'}
-                    </button>
-                </div>
+                    </PrimaryButton>
+                </DataHubToolbar>
             </Card>
 
-            {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-                <Card className="rounded-xl border border-white/5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent backdrop-blur-sm">
-                    <div className="text-center p-3">
-                        <p className="text-[11px] text-emerald-300/80 mb-1">
-                            {t('total_messages') || 'Categorized Messages'}
-                        </p>
-                        <p className="text-sm md:text-lg font-semibold text-emerald-100">
-                            {stats.total.toLocaleString()}
-                        </p>
-                    </div>
-                </Card>
-                <Card className="rounded-xl border border-white/5 bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent backdrop-blur-sm">
-                    <div className="text-center p-3">
-                        <p className="text-[11px] text-red-300/80 mb-1">
-                            {t('high_impact') || 'High Impact'}
-                        </p>
-                        <p className="text-sm md:text-lg font-semibold text-red-200">
-                            {stats.highImpact.toLocaleString()}
-                        </p>
-                    </div>
-                </Card>
-                <Card className="rounded-xl border border-white/5 bg-gradient-to-br from-yellow-500/10 via-yellow-500/5 to-transparent backdrop-blur-sm">
-                    <div className="text-center p-3">
-                        <p className="text-[11px] text-yellow-300/80 mb-1">
-                            {t('breaking_news') || 'Breaking'}
-                        </p>
-                        <p className="text-sm md:text-lg font-semibold text-yellow-200">
-                            {stats.breaking.toLocaleString()}
-                        </p>
-                    </div>
-                </Card>
-                <Card className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent backdrop-blur-sm">
-                    <div className="text-center p-3">
-                        <p className="text-[11px] text-purple-300/80 mb-1">
-                            {t('categories') || 'Categories'}
-                        </p>
-                        <p className="text-sm md:text-lg font-semibold text-purple-200">{stats.categories}</p>
-                    </div>
-                </Card>
+                <MetricCard
+                    label={t('total_messages') || 'Categorized Messages'}
+                    value={stats.total.toLocaleString()}
+                    color="emerald"
+                />
+                <MetricCard
+                    label={t('high_impact') || 'High Impact'}
+                    value={stats.highImpact.toLocaleString()}
+                    color="red"
+                />
+                <MetricCard
+                    label={t('breaking_news') || 'Breaking'}
+                    value={stats.breaking.toLocaleString()}
+                    color="amber"
+                />
+                <MetricCard label={t('categories') || 'Categories'} value={stats.categories} color="purple" />
             </div>
 
-            {/* Main chart */}
-            <Card className="bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-                    <div>
-                        <h3 className="text-sm md:text-base font-semibold text-foreground">
-                            {t('category_distribution') || 'Category Distribution'} –{' '}
-                            {timeRange === 24
-                                ? 'Last 24 Hours'
-                                : timeRange === 48
-                                ? 'Last 2 Days'
-                                : timeRange === 168
-                                ? 'Last 7 Days'
-                                : 'Last 30 Days'}
-                        </h3>
-                        <p className="text-[11px] text-muted-foreground mt-1">
-                            Click any slice or bar to focus on that category’s timeline below.
-                        </p>
-                    </div>
-                </div>
+            <Card className={DATAHUB_SHELL}>
+                <DataHubSectionHeader
+                    title={`${t('category_distribution') || 'Category Distribution'} – ${formatTimeRangeLabel(timeRange)}`}
+                    subtitle="Click any slice or bar to focus on that category’s timeline below."
+                />
                 {chartType === 'pie' && (
                     <ResponsiveContainer width="100%" height={320}>
                         <PieChart>
@@ -470,15 +418,14 @@ const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
                 )}
             </Card>
 
-            {/* Category cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {data.map((category) => (
+                {data.map(category => (
                     <Card
                         key={category.primary_category}
-                        className={`cursor-pointer transition-all ${
+                        className={`${DATAHUB_INNER_LIST} cursor-pointer transition-all ${
                             selectedCategory === category.primary_category
-                                ? 'ring-2 ring-purple-500'
-                                : 'hover:ring-1 hover:ring-purple-400'
+                                ? 'ring-2 ring-sky-500/60'
+                                : 'hover:ring-1 hover:ring-sky-400/40'
                         }`}
                         onClick={() => handleCategoryClick(category.primary_category)}
                     >
@@ -530,60 +477,35 @@ const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
                 ))}
             </div>
 
-            {/* Timeline for selected category */}
             {selectedCategory && (
-                <Card className="bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg">
+                <Card className={DATAHUB_SHELL}>
                     <div className="flex items-start justify-between mb-4 gap-3">
-                        <div>
-                            <h3 className="text-sm md:text-base font-semibold text-foreground">
-                                {CATEGORY_LABELS[selectedCategory] || selectedCategory} –{' '}
-                                {t('timeline') || 'Timeline'}
-                            </h3>
-                            <p className="text-[11px] text-muted-foreground mt-1">
-                                {t('timeline_hint') ||
-                                    'Secure, time-bucketed history for this category. Requires an active session to load.'}
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => setSelectedCategory(null)}
-                            className="px-3 py-1.5 text-xs md:text-sm rounded-full border border-slate-700 text-slate-100 bg-slate-900/70 hover:border-purple-400 hover:text-purple-200 transition-colors"
-                        >
+                        <DataHubSectionHeader
+                            className="mb-0 flex-1"
+                            title={`${CATEGORY_LABELS[selectedCategory] || selectedCategory} – ${t('timeline') || 'Timeline'}`}
+                            subtitle={
+                                t('timeline_hint') ||
+                                'Secure, time-bucketed history for this category. Requires an active session to load.'
+                            }
+                        />
+                        <SecondaryButton type="button" onClick={() => setSelectedCategory(null)}>
                             ✕ {t('close') || 'Close'}
-                        </button>
+                        </SecondaryButton>
                     </div>
 
                     {timelineError && (
-                        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4">
-                            <p className="text-sm font-medium text-red-200 mb-1">
-                                {t('timeline_error') || 'Timeline error'}
-                            </p>
-                            <p className="text-[11px] text-red-300">{timelineError}</p>
-                        </div>
+                        <DataHubAlert variant="error" message={timelineError} />
                     )}
 
                     {isTimelineLoading ? (
-                        <div className="py-8 flex flex-col items-center justify-center gap-3">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
-                            <p className="text-xs text-muted-foreground">
-                                {t('loading_timeline') || 'Loading timeline…'}
-                            </p>
-                        </div>
+                        <DataHubLoadingSpinner message={t('loading_timeline') || 'Loading timeline…'} />
                     ) : timelineData.length === 0 ? (
-                        <div className="py-10 text-center">
-                            <div className="text-4xl mb-2">
-                                {splitEmojiAndText(
-                                    CATEGORY_LABELS[selectedCategory] || selectedCategory,
-                                ).emoji}
-                            </div>
-                            <p className="text-sm font-semibold text-foreground mb-1">
-                                {t('no_timeline_data') || 'No timeline data yet'}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                                {t('no_timeline_data_hint') ||
-                                    'Once more categorized events arrive for this bucket, their history will show up here.'}
-                            </p>
-                        </div>
+                        <DataHubEmpty
+                            message={
+                                t('no_timeline_data') ||
+                                'No timeline data yet. Once more categorized events arrive, history will show here.'
+                            }
+                        />
                     ) : (
                         <ResponsiveContainer width="100%" height={320}>
                             <LineChart data={timelineData}>
