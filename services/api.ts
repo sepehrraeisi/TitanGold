@@ -1,3 +1,4 @@
+import { fetchCollectorJson, diagnoseCollectorEndpoint } from './telegramCollectorErrors.ts';
 import { _data } from './_data.ts';
 import { generateDemoChartData } from './chartDataGenerator.ts';
 import { DEFAULT_ARTEMIS_STATE } from '../components/ai/defaults.ts';
@@ -22117,14 +22118,21 @@ export const buildCollectorUrl = (path: string): string => {
 
 export const getTelegramCollectorHealth = async () => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
-    const response = await fetch(`${baseUrl}/api/telegram-collector/health`);
-    if (!response.ok) {
-        throw new Error(`Collector health request failed with ${response.status}`);
-    }
-    return response.json();
+    const url = `${baseUrl}/api/telegram-collector/health`;
+    return fetchCollectorJson<Record<string, unknown>>(url);
 };
 
-export type DiagnoseCollectorCheck = { key: string; ok: boolean; status?: number; error?: string };
+export type DiagnoseCollectorCheck = import('./telegramCollectorErrors.js').DiagnoseCollectorCheck;
+
+export {
+    buildCollectorSafeError,
+    containsRawHtmlError,
+    diagnoseCollectorEndpoint,
+    fetchCollectorJson,
+    formatCollectorSafeError,
+    isHtmlLikeResponse,
+    maskPhoneForDisplay,
+} from './telegramCollectorErrors.js';
 
 export const diagnoseTelegramCollector = async (): Promise<{
     ok: boolean;
@@ -22132,29 +22140,17 @@ export const diagnoseTelegramCollector = async (): Promise<{
 }> => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
     const prefix = baseUrl ? `${baseUrl}` : '';
-    const checks: DiagnoseCollectorCheck[] = [];
-
-    const endpoints: { key: string; url: string; method?: string }[] = [
+    const endpoints: { key: string; url: string }[] = [
         { key: 'health', url: `${prefix}/api/telegram-collector/health` },
         { key: 'session', url: `${prefix}/api/telegram-collector/session/status` },
+        { key: 'accounts', url: `${prefix}/api/telegram-collector/accounts` },
+        { key: 'channels', url: `${prefix}/api/telegram-collector/collector-channels` },
     ];
 
-    for (const ep of endpoints) {
-        try {
-            const res = await fetch(ep.url, { method: ep.method || 'GET' });
-            checks.push({
-                key: ep.key,
-                ok: res.ok,
-                status: res.status,
-                error: res.ok ? undefined : (await res.text()).slice(0, 80),
-            });
-        } catch (err: any) {
-            checks.push({ key: ep.key, ok: false, error: err?.message || 'Network error' });
-        }
-    }
-
-    const ok = checks.every(c => c.ok);
-    return { ok, checks };
+    const checks = await Promise.all(
+        endpoints.map(ep => diagnoseCollectorEndpoint(ep.key, ep.url)),
+    );
+    return { ok: checks.every(c => c.ok), checks };
 };
 
 type StartCollectorLoginInput = {

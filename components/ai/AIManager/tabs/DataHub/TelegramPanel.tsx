@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DataSource, TelegramCollectorState } from '../../../../../types.ts';
-import { buildCollectorUrl } from '../../../../../services/api.ts';
+import { buildCollectorUrl, fetchCollectorJson } from '../../../../../services/api.ts';
+import {
+    formatCollectorSafeError,
+    containsRawHtmlError,
+    type CollectorSafeError,
+} from '../../../../../services/telegramCollectorErrors.ts';
 
 type Props = {
     t: (key: string) => string;
@@ -140,19 +145,35 @@ const TelegramPanel: React.FC<Props> = (props) => {
     // Data loading helpers
     // ------------------------------------------------------------------------
 
+    const resolveLoadError = (error: unknown, fallbackKey: string): string => {
+        const err = error as Error & { collectorError?: CollectorSafeError };
+        if (err?.collectorError) {
+            return formatCollectorSafeError(err.collectorError, t);
+        }
+        const raw = err?.message || t(fallbackKey) || fallbackKey;
+        if (containsRawHtmlError(raw)) {
+            return t('collector_proxy_unreachable') || 'Telegram Collector proxy is unreachable.';
+        }
+        return raw;
+    };
+
+    const stripSensitiveAccountFields = (row: Record<string, unknown>) => {
+        const { session_string: _s, api_hash: _h, api_id: _i, ...safe } = row;
+        return safe as TelegramAccount;
+    };
+
     const loadAccounts = async () => {
         setIsLoadingAccounts(true);
         setAccountsError(null);
         try {
-            const response = await fetch(buildCollectorUrl('/api/telegram-collector/accounts'));
-            if (!response.ok) {
-                throw new Error(`Failed to load accounts (${response.status})`);
-            }
-            const data = await response.json();
-            setAccounts(Array.isArray(data.accounts) ? data.accounts : []);
-        } catch (error: any) {
+            const data = await fetchCollectorJson<{ accounts?: TelegramAccount[] }>(
+                buildCollectorUrl('/api/telegram-collector/accounts'),
+            );
+            const rows = Array.isArray(data.accounts) ? data.accounts : [];
+            setAccounts(rows.map(row => stripSensitiveAccountFields(row as Record<string, unknown>)));
+        } catch (error: unknown) {
             console.error('Failed to load telegram accounts:', error);
-            setAccountsError(error?.message || t('failed_to_load_accounts') || 'Failed to load accounts');
+            setAccountsError(resolveLoadError(error, 'failed_to_load_accounts'));
         } finally {
             setIsLoadingAccounts(false);
         }
@@ -169,15 +190,11 @@ const TelegramPanel: React.FC<Props> = (props) => {
             if (statusFilter !== 'all') {
                 url.searchParams.set('status', statusFilter);
             }
-            const response = await fetch(url.toString());
-            if (!response.ok) {
-                throw new Error(`Failed to load channels (${response.status})`);
-            }
-            const data = await response.json();
+            const data = await fetchCollectorJson<{ channels?: CollectorChannel[] }>(url.toString());
             setCollectorChannels(Array.isArray(data.channels) ? data.channels : []);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to load collector channels:', error);
-            setChannelsError(error?.message || t('failed_to_load_channels') || 'Failed to load channels');
+            setChannelsError(resolveLoadError(error, 'failed_to_load_channels'));
         } finally {
             setIsLoadingCollectorChannels(false);
         }
@@ -639,22 +656,26 @@ const TelegramPanel: React.FC<Props> = (props) => {
         const errorChannels = channels.filter((ch: any) => ch.lastError || ch.errorCount > 0).length;
         const avgLatency = telegramCollectorState.healthSummary?.avgLatencyMs;
         
-        // Calculate degraded status (Phase 4.2)
+        const routeBroken = Boolean(accountsError || channelsError);
         const totalChannels = collectorChannels.length;
         const channelsWithErrors = collectorChannels.filter(ch => (ch.errorCount || 0) > 0).length;
         const criticalErrorChannels = collectorChannels.filter(ch => (ch.errorCount || 0) >= 3).length;
         const syncedChannels = collectorChannels.filter(ch => ch.lastSyncedAt).length;
-        const syncRate = totalChannels > 0 ? (syncedChannels / totalChannels) * 100 : 0;
+        const syncRate = totalChannels > 0 ? (syncedChannels / totalChannels) * 100 : 100;
         
         let collectorStatus = 'healthy';
         let statusColor = 'emerald';
         let statusIcon = '✓';
         
-        if (criticalErrorChannels > 0 || syncRate < 30) {
+        if (routeBroken) {
+            collectorStatus = 'degraded';
+            statusColor = 'amber';
+            statusIcon = '⚠';
+        } else if (totalChannels > 0 && (criticalErrorChannels > 0 || syncRate < 30)) {
             collectorStatus = 'critical';
             statusColor = 'red';
             statusIcon = '✗';
-        } else if (channelsWithErrors > 0 || syncRate < 70) {
+        } else if (totalChannels > 0 && (channelsWithErrors > 0 || syncRate < 70)) {
             collectorStatus = 'degraded';
             statusColor = 'amber';
             statusIcon = '⚠';
@@ -765,7 +786,9 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 )}
                 {collectorError && (
                     <div className="mt-3 p-2 rounded border border-red-500/30 bg-red-500/10 text-[11px] text-red-100">
-                        {collectorError}
+                        {containsRawHtmlError(collectorError)
+                            ? t('collector_proxy_unreachable') || 'Telegram Collector proxy is unreachable.'
+                            : collectorError}
                     </div>
                 )}
 

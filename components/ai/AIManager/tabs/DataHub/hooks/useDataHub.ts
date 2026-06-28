@@ -3,6 +3,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DATA_HUB_KEYS } from '../../../../../../hooks/useDataHubState.ts';
 import * as api from '../../../../../../services/api.ts';
 import {
+    formatCollectorSafeError,
+    containsRawHtmlError,
+    type CollectorSafeError,
+} from '../../../../../../services/telegramCollectorErrors.ts';
+import {
     ArtemisState,
     DataHubState,
     DataSource,
@@ -279,14 +284,26 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         }
     };
 
+    const resolveCollectorMessage = (error: unknown, fallbackKey: string): string => {
+        const err = error as Error & { collectorError?: CollectorSafeError };
+        if (err?.collectorError) {
+            return formatCollectorSafeError(err.collectorError, t);
+        }
+        const raw = err?.message || t(fallbackKey) || fallbackKey;
+        if (containsRawHtmlError(raw)) {
+            return t('collector_proxy_unreachable') || 'Telegram Collector proxy is unreachable.';
+        }
+        return t(raw) || raw;
+    };
+
     const handleCollectorHealth = async () => {
         setIsLoadingCollector(true);
         setCollectorError(null);
         try {
             const data = await api.getTelegramCollectorHealth();
-            setCollectorMessage(`Collector Status: ${data.status}`);
-        } catch (error: any) {
-            setCollectorError(error?.message || (t('collector_connect_failed') || 'Failed to connect to Telegram Collector'));
+            setCollectorMessage(`Collector Status: ${data.status ?? 'ok'}`);
+        } catch (error: unknown) {
+            setCollectorError(resolveCollectorMessage(error, 'collector_connect_failed'));
         } finally {
             setIsLoadingCollector(false);
         }
@@ -302,6 +319,12 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
                 switch (key) {
                     case 'health':
                         return t('collector_health') || 'Health';
+                    case 'session':
+                        return t('collector_session') || 'Session';
+                    case 'accounts':
+                        return t('collector_accounts') || 'Accounts';
+                    case 'channels':
+                        return t('collector_channels') || 'Channels';
                     case 'loginStart':
                         return t('collector_login_start') || 'Login /start';
                     case 'loginConfirm':
@@ -313,33 +336,48 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
             for (const check of result.checks) {
                 const label = translateKey(check.key);
+                const latency =
+                    check.latencyMs != null ? `${check.latencyMs}ms` : '—';
+                const kind = check.responseKind || 'unknown';
                 if (check.ok) {
-                    parts.push(`${label}: OK (${check.status ?? 200})`);
+                    parts.push(`${label}: OK (${check.status ?? 200}, ${latency}, ${kind})`);
                 } else {
-                    const failMsg = t('collector_diag_check_failed') || 'Endpoint issue';
+                    const errMsg = check.errorKey
+                        ? formatCollectorSafeError(
+                              {
+                                  kind: 'unknown',
+                                  messageKey: check.errorKey,
+                                  status: check.status,
+                              },
+                              t,
+                          )
+                        : check.safeError || t('collector_diag_check_failed') || 'Endpoint issue';
+                    const upstreamHint =
+                        kind === 'html'
+                            ? t('collector_upstream_nginx_hint') ||
+                              'Check nginx upstream and collector process'
+                            : '';
                     parts.push(
-                        `${label}: ${failMsg} (status=${check.status ?? 'n/a'}${check.error ? `, ${check.error}` : ''})`,
+                        `${label}: ${errMsg} (status=${check.status ?? 'n/a'}, ${kind}, ${latency}${upstreamHint ? `, ${upstreamHint}` : ''})`,
                     );
                 }
             }
 
             if (result.ok) {
                 setCollectorMessage(
-                    `${t('collector_diag_all_good') || 'تمام مسیرهای اصلی Telegram Collector در دسترس هستند.'} ` +
+                    `${t('collector_diag_all_good') || 'All Telegram Collector endpoints are reachable.'} ` +
                         parts.join(' | '),
                 );
             } else {
                 setCollectorError(
-                    `${t('collector_diag_has_issues') || 'برخی از مسیرهای Telegram Collector به درستی در دسترس نیستند.'} ` +
+                    `${t('collector_diag_has_issues') || 'Some Telegram Collector endpoints are not accessible.'} ` +
                         parts.join(' | '),
                 );
             }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('Failed to diagnose collector:', e);
             setCollectorError(
-                e?.message ||
-                    t('collector_diag_failed') ||
-                    'تشخیص وضعیت Telegram Collector با خطا مواجه شد.',
+                resolveCollectorMessage(e, 'collector_diag_failed'),
             );
         } finally {
             setIsLoadingCollector(false);

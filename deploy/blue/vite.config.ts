@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
         proxy: {
           // Specific external API proxies (must come first)
           '/api/telegram-collector': {
-            target: 'http://localhost:3002',
+            target: 'http://localhost:5003',
             changeOrigin: true,
             secure: false,
           },

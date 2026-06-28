@@ -511,11 +511,12 @@ app.post('/api/telegram-collector/login/cancel', async (req, res) => {
 // List all Telegram MTProto accounts
 app.get('/api/telegram-collector/accounts', rateLimitHybrid_1.rateLimiters.lenient, async (req, res) => {
     try {
+        const { sanitizeAccountsForApi, sanitizeAccountForApi } = require('../utils/accountApiSanitizer');
         const accounts = await (0, accountManager_1.getAllAccounts)();
         res.json({
             success: true,
             count: accounts.length,
-            accounts
+            accounts: sanitizeAccountsForApi(accounts)
         });
     }
     catch (error) {
@@ -530,6 +531,7 @@ app.get('/api/telegram-collector/accounts', rateLimitHybrid_1.rateLimiters.lenie
 // Update account (label, status, is_primary)
 app.patch('/api/telegram-collector/accounts/:id', rateLimitHybrid_1.rateLimiters.strict, async (req, res) => {
     try {
+        const { sanitizeAccountForApi } = require('../utils/accountApiSanitizer');
         const { id } = req.params;
         const { label, status, is_primary } = req.body || {};
         const updates = {};
@@ -567,7 +569,7 @@ app.patch('/api/telegram-collector/accounts/:id', rateLimitHybrid_1.rateLimiters
         }
         res.json({
             success: true,
-            account
+            account: sanitizeAccountForApi(account)
         });
     }
     catch (error) {
