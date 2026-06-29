@@ -20,6 +20,7 @@ describe('telegramAnalyticsCache P5', () => {
     it('defines TTLs for all analytics endpoints', () => {
         expect(TELEGRAM_CACHE_TTL.health).toBeGreaterThan(0);
         expect(TELEGRAM_CACHE_TTL.agentsSummary).toBe(60_000);
+        expect(TELEGRAM_CACHE_TTL.agentFeed).toBe(60_000);
         expect(TELEGRAM_CACHE_TTL.geographicSummary).toBeGreaterThan(0);
     });
 });

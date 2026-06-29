@@ -480,6 +480,7 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
                                                 <button
                                                     key={agent.agent_key}
                                                     type="button"
+                                                    data-agent-key={agent.agent_key}
                                                     className={`${DATAHUB_INNER_LIST} w-full text-left cursor-pointer hover:border-sky-500/50 hover:bg-slate-900/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60`}
                                                     onClick={() =>
                                                         setSelectedAgent({

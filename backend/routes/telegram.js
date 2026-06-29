@@ -8,6 +8,7 @@ import {
     getTelegramAnalyticsCached,
     TELEGRAM_CACHE_TTL,
 } from '../services/telegramAnalyticsCache.js';
+import { loadAgentFeed, VALID_AGENT_KEYS } from '../services/telegramAgentFeed.js';
 
 const router = express.Router();
 const readAuth = [telegramReadAuth, readRateLimiter];
@@ -130,11 +131,7 @@ router.get('/agents/:agentKey/feed', ...readAuth, async (req, res) => {
             priority,
         } = req.query;
 
-        const validAgentKeys = [
-            'technical', 'risk', 'sentiment', 'pattern', 'price_prediction',
-            'arbitrage', 'portfolio', 'liquidity', 'trend', 'optimization',
-            'order', 'fundamental', 'market_intelligence', 'volume', 'timing',
-        ];
+        const validAgentKeys = VALID_AGENT_KEYS;
 
         if (!validAgentKeys.includes(agentKey)) {
             return res.status(400).json({
@@ -145,9 +142,11 @@ router.get('/agents/:agentKey/feed', ...readAuth, async (req, res) => {
         }
 
         const hours = parseHours(timeRange, 24);
-        const pageLimit = parseLimit(limit, 50, 200);
+        const pageLimit = parseLimit(limit, 20, 200);
         const pageOffset = Math.max(0, parseInt(offset, 10) || 0);
         const minImpactNum = parseFloat(minImpact) || 0;
+        const requiresActionFilter =
+            requiresAction === 'true' ? true : requiresAction === 'false' ? false : undefined;
 
         const payload = await getTelegramAnalyticsCached(
             'agents/feed',
@@ -160,60 +159,16 @@ router.get('/agents/:agentKey/feed', ...readAuth, async (req, res) => {
                 requiresAction: requiresAction ?? '',
                 priority: priority ?? '',
             },
-            async () => {
-                const params = [agentKey, minImpactNum];
-                let extraFilters = '';
-
-                if (requiresAction !== undefined && requiresAction !== '') {
-                    params.push(requiresAction === 'true');
-                    extraFilters += ` AND ai.requires_action = $${params.length}`;
-                }
-
-                if (priority) {
-                    params.push(priority);
-                    extraFilters += ` AND ai.priority_level = $${params.length}`;
-                }
-
-                params.push(pageLimit, pageOffset);
-
-                const sql = `
-                    SELECT 
-                        pm.id,
-                        tm.message_id,
-                        COALESCE(tc.title, tc.username, pm.channel_id::text) as channel_title,
-                        pm.cleaned_text,
-                        pm.sentiment,
-                        pm.importance_level,
-                        COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
-                        ai.impact_score,
-                        ai.impact_type,
-                        ai.confidence as confidence,
-                        ai.relevance_reasons,
-                        ai.requires_action,
-                        ai.action_type,
-                        ai.priority_level,
-                        ai.created_at as processed_at
-                    FROM telegram_agent_impacts ai
-                    INNER JOIN processed_telegram_messages pm ON pm.id::text = ai.processed_message_id::text
-                    LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
-                    LEFT JOIN telegram_channels tc 
-                        ON pm.channel_id::text = tc.id::text
-                        OR pm.channel_id::text = tc.channel_id::text
-                    WHERE ai.agent_key = $1
-                      AND ai.impact_score >= $2
-                      AND pm.created_at >= NOW() - INTERVAL '${hours} hours'
-                      ${extraFilters}
-                    ORDER BY pm.created_at DESC, ai.impact_score DESC
-                    LIMIT $${params.length - 1} OFFSET $${params.length}
-                `;
-
-                const result = await query(sql, params);
-
-                return {
-                    data: result.rows,
-                    hasMore: result.rows.length === pageLimit,
-                };
-            },
+            () =>
+                loadAgentFeed({
+                    agentKey,
+                    hours,
+                    limit: pageLimit,
+                    offset: pageOffset,
+                    minImpact: minImpactNum,
+                    requiresAction: requiresActionFilter,
+                    priority: priority || null,
+                }),
             TELEGRAM_CACHE_TTL.agentFeed,
         );
 
@@ -225,14 +180,19 @@ router.get('/agents/:agentKey/feed', ...readAuth, async (req, res) => {
                 limit: pageLimit,
                 offset: pageOffset,
                 hasMore: payload.hasMore,
+                nextCursor: payload.nextCursor,
             },
             filters: {
                 minImpact: minImpactNum,
                 categories: categories || null,
                 timeRange: hours,
-                requiresAction: requiresAction === 'true' ? true : requiresAction === 'false' ? false : null,
+                requiresAction: requiresActionFilter ?? null,
                 priority: priority || null,
             },
+            message:
+                payload.data.length === 0
+                    ? 'No feed items for this agent and filter.'
+                    : undefined,
         });
     } catch (error) {
         logger.error('Error fetching agent feed:', error);

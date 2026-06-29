@@ -14,7 +14,7 @@ export const TELEGRAM_CACHE_TTL = {
     breakingNews: 45_000,
     eventsRecent: 45_000,
     geographicSummary: 45_000,
-    agentFeed: 30_000,
+    agentFeed: 60_000,
 };
 
 /**

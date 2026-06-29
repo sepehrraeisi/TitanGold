@@ -94,9 +94,10 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<AgentMessage | null>(null);
-  const [feedNotConfigured, setFeedNotConfigured] = useState(false);
+  const [feedErrorKind, setFeedErrorKind] = useState<'none' | 'load' | 'timeout'>('none');
 
   const LIMIT = 20;
+  const FEED_TIMEOUT_MS = 15000;
 
   const getAuthHeaders = () => {
     const token =
@@ -114,10 +115,9 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
   const fetchAgentData = async () => {
     setIsLoading(true);
     setError(null);
-    setFeedNotConfigured(false);
+    setFeedErrorKind('none');
 
     try {
-      // Build query parameters
       let url = `/api/v1/telegram/agents/${agentKey}/feed?timeRange=${timeRange}&limit=${LIMIT}&offset=${
         (page - 1) * LIMIT
       }`;
@@ -130,50 +130,47 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         url += `&requiresAction=${actionFilter}`;
       }
 
-      // Attach auth token similar to other secured endpoints
       const response = await axios.get(url, {
         withCredentials: true,
         headers: getAuthHeaders(),
-        timeout: 90000,
+        timeout: FEED_TIMEOUT_MS,
       });
 
       if (response.data.success) {
-        const newMessages = response.data.data;
+        const newMessages = response.data.data as AgentMessage[];
 
-        // Update messages (append for pagination)
         if (page === 1) {
           setMessages(newMessages);
         } else {
-          setMessages((prev) => [...prev, ...newMessages]);
+          setMessages(prev => [...prev, ...newMessages]);
         }
 
-        // Check if there are more
-        setHasMore(newMessages.length === LIMIT);
+        setHasMore(Boolean(response.data.pagination?.hasMore));
 
-        // Update stats
         if (response.data.stats) {
           setStats(response.data.stats);
         }
       } else {
-        setError(response.data.message || 'Failed to fetch agent data');
+        setFeedErrorKind('load');
+        setError(t('telegram_agent_feed_load_error'));
         setHasMore(false);
       }
     } catch (err: any) {
-      const status = err.response?.status;
-      if (status === 404 || status === 504 || err.code === 'ECONNABORTED') {
-        setFeedNotConfigured(true);
-        setHasMore(false);
-        setMessages([]);
-        setStats(null);
-        setError(null);
+      const isTimeout =
+        err.code === 'ECONNABORTED' ||
+        err.message?.includes('timeout') ||
+        err.response?.status === 504;
+      if (isTimeout) {
+        setFeedErrorKind('timeout');
+        setError(t('telegram_agent_feed_timeout'));
       } else {
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          t('datahub_error_generic');
-        setError(msg);
-        setHasMore(false);
+        setFeedErrorKind('load');
+        setError(t('telegram_agent_feed_load_error'));
       }
+      if (page === 1) {
+        setMessages([]);
+      }
+      setHasMore(false);
     } finally {
       setIsLoading(false);
     }
@@ -312,20 +309,16 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         </DataHubToolbar>
       </Card>
 
-      {error && !feedNotConfigured && (
+      {error && feedErrorKind !== 'none' && (
         <DataHubAlert variant="error" message={error} onRetry={fetchAgentData} retryLabel={t('retry')} />
       )}
 
-      {feedNotConfigured && (
-        <DataHubEmpty message={t('telegram_agent_feed_not_configured')} />
-      )}
-
       <div className="space-y-4">
-        {isLoading && messages.length === 0 && !feedNotConfigured && (
-          <DataHubLoadingSpinner message={t('loading')} />
+        {isLoading && messages.length === 0 && (
+          <DataHubLoadingSpinner message={t('telegram_agent_feed_loading')} />
         )}
-        {!isLoading && !feedNotConfigured && messages.length === 0 && !error && (
-          <DataHubEmpty message={t('telegram_agent_feed_empty')} />
+        {!isLoading && messages.length === 0 && feedErrorKind === 'none' && (
+          <DataHubEmpty message={t('telegram_agent_feed_empty_filter')} />
         )}
         {messages.map((msg) => (
           <Card

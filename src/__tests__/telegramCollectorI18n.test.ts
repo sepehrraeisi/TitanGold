@@ -29,7 +29,10 @@ const REQUIRED_KEYS = [
     'actions_required',
     'last_processed',
     'telegram_ai_inbox_desc',
-    'telegram_agent_feed_not_configured',
+    'telegram_agent_feed_empty_filter',
+    'telegram_agent_feed_load_error',
+    'telegram_agent_feed_timeout',
+    'telegram_agent_feed_loading',
     'breaking_news_desc',
     'telegram_horizon_medium_term',
     'telegram_category_SANCTIONS_EMBARGO',
@@ -75,5 +78,8 @@ describe('Telegram Collector i18n', () => {
     it('AgentDetailPanel does not contain raw API unavailable message', () => {
         const src = readFileSync(join(ROOT, 'components/ai/AIManager/tabs/DataHub/AgentDetailPanel.tsx'), 'utf8');
         expect(src).not.toContain('Agent feed API is not available yet');
+        expect(src).not.toContain('feedNotConfigured');
+        expect(src).toContain('telegram_agent_feed_load_error');
+        expect(src).toContain('telegram_agent_feed_timeout');
     });
 });
