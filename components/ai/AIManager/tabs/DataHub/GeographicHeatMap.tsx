@@ -19,6 +19,10 @@ import {
     formatTimeRangeLabel,
     TIME_RANGE_OPTIONS,
 } from './dataHubUi';
+import {
+    formatNewsCategoryLabel,
+    formatRegionLabel,
+} from './telegramCollectorLabels';
 import { ComposableMap, Geographies, Geography, ZoomableGroup } from 'react-simple-maps';
 import { scaleLinear } from 'd3-scale';
 // Bundled TopoJSON – no external URL; map loads even when GitHub is blocked
@@ -338,7 +342,7 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
                 <option value="">{t('all_categories') || 'All Categories'}</option>
                 {categories.map((cat) => (
                   <option key={cat} value={cat}>
-                    {cat}
+                    {formatNewsCategoryLabel(cat, t)}
                   </option>
                 ))}
               </select>
@@ -440,7 +444,7 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
             <div className="flex-1">
               <DataHubSectionHeader
                 className="mb-4"
-                title={`🌍 ${selectedRegion.region}`}
+                title={`🌍 ${formatRegionLabel(selectedRegion.region, t)}`}
               />
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <MetricCard label={t('total_events') || 'Total Events'} value={selectedRegion.count} color="blue" />
@@ -456,7 +460,7 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {selectedRegion.categories.map((cat) => (
-                    <StatusPill key={cat} label={cat} variant="primary" />
+                    <StatusPill key={cat} label={formatNewsCategoryLabel(cat, t)} variant="primary" />
                   ))}
                 </div>
               </div>
@@ -501,7 +505,7 @@ const GeographicHeatMap: React.FC<GeographicHeatMapProps> = ({ t, Card }) => {
                     onClick={() => setSelectedRegion(selectedRegion?.region === location.region ? null : location)}
                   >
                     <td className="py-2 px-3 text-sm font-medium">
-                      {location.region}
+                      {formatRegionLabel(location.region, t)}
                     </td>
                     <td className="py-2 px-3 text-sm text-right">
                       {location.count}

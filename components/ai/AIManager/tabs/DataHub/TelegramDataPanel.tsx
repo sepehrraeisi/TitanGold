@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense, useMemo } from 'react';
 import axios from 'axios';
 import CategoryBreakdown from './CategoryBreakdown';
 import BreakingNewsMonitor from './BreakingNewsMonitor';
@@ -6,12 +6,15 @@ import AgentDetailPanel from './AgentDetailPanel';
 import ErrorBoundary from '../../../../common/ErrorBoundary';
 import {
     DATAHUB_SHELL,
+    DATAHUB_INNER_LIST,
     DataHubSubTabBar,
     DataHubAlert,
     DataHubEmpty,
     DataHubSectionHeader,
     DataHubSegmentedControl,
     DataHubToolbar,
+    DataHubFilterBar,
+    DataHubSearchInput,
     DataHubLoadingSpinner,
     MetricCard,
     PrimaryButton,
@@ -19,6 +22,10 @@ import {
     formatTimeRangeLabel,
     TIME_RANGE_OPTIONS_SHORT,
 } from './dataHubUi';
+import {
+    formatNewsCategoryLabel,
+    formatAgentKeyLabel,
+} from './telegramCollectorLabels';
 import { formatDataHubQueryError } from './dataHubI18n';
 import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 
@@ -94,6 +101,24 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
     const [agents, setAgents] = useState<AgentSummary[]>([]);
     const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
     const [timeRange, setTimeRange] = useState(24);
+    const [agentSearch, setAgentSearch] = useState('');
+
+    const filteredAgents = useMemo(() => {
+        const q = agentSearch.trim().toLowerCase();
+        if (!q) return agents;
+        return agents.filter(
+            a =>
+                a.agent_name.toLowerCase().includes(q) ||
+                a.agent_key.toLowerCase().includes(q),
+        );
+    }, [agents, agentSearch]);
+
+    const inboxSummary = useMemo(() => {
+        const totalMessages = agents.reduce((sum, a) => sum + parseInt(a.total_messages, 10), 0);
+        const totalActions = agents.reduce((sum, a) => sum + parseInt(a.action_required_count, 10), 0);
+        const totalHigh = agents.reduce((sum, a) => sum + parseInt(a.high_count || '0', 10), 0);
+        return { totalMessages, totalActions, totalHigh, count: agents.length };
+    }, [agents]);
 
     const toQueryError = (err: unknown): Error => {
         const axiosErr = err as {
@@ -352,40 +377,37 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
                     ) : (
                         <Card className={DATAHUB_SHELL}>
                             <DataHubSectionHeader
-                                title={t('telegram_data_tab_overview') || 'System Overview'}
-                                subtitle={
-                                    t('telegram_data_overview_desc') ||
-                                    'High-level summary of processed Telegram events and agent activity.'
-                                }
+                                title={t('telegram_data_tab_overview')}
+                                subtitle={t('telegram_data_overview_desc')}
                             />
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <MetricCard
-                                    label={t('processed_messages') || 'Processed Messages'}
+                                    label={t('processed_messages')}
                                     value={formatNumber(systemStats.total_processed_messages)}
                                     color="blue"
                                 />
                                 <MetricCard
-                                    label={t('agent_impacts') || 'Agent Impacts'}
+                                    label={t('agent_impacts')}
                                     value={formatNumber(systemStats.total_agent_impacts)}
                                     color="purple"
                                 />
                                 <MetricCard
-                                    label={t('active_channels') || 'Active Channels'}
+                                    label={t('active_channels')}
                                     value={systemStats.active_channels}
                                     color="blue"
                                 />
                                 <MetricCard
-                                    label={t('avg_impact_score') || 'Avg Impact Score'}
+                                    label={t('avg_impact_score')}
                                     value={formatImpact(systemStats.avg_impact_score)}
                                     color="purple"
                                 />
                                 <MetricCard
-                                    label={t('actions_required') || 'Actions Required'}
+                                    label={t('actions_required')}
                                     value={systemStats.total_actions_required}
                                     color="amber"
                                 />
                                 <MetricCard
-                                    label={t('last_processed') || 'Last Processed'}
+                                    label={t('last_processed')}
                                     value={
                                         systemStats.last_processed_at
                                             ? new Date(systemStats.last_processed_at).toLocaleString()
@@ -408,133 +430,139 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
                                 Card={Card}
                             />
                         ) : (
-                            <Card className={DATAHUB_SHELL}>
-                                <DataHubSectionHeader
-                                    title={t('telegram_data_tab_agents') || 'Telegram AI Inbox'}
-                                    subtitle={
-                                        t('telegram_ai_inbox_desc') ||
-                                        'Curated Telegram news feed per agent – impact, workload, and priorities ready for review.'
-                                    }
-                                    actions={
-                                        agents.length > 0 ? (
-                                            <span className="text-[11px] text-muted-foreground">
-                                                {agents.length} agents •{' '}
-                                                {formatNumber(
-                                                    agents.reduce(
-                                                        (sum, a) => sum + parseInt(a.total_messages, 10),
-                                                        0,
-                                                    ),
-                                                )}{' '}
-                                                messages
-                                            </span>
-                                        ) : undefined
-                                    }
-                                />
-
-                                {isLoading ? (
-                                    <DataHubLoadingSpinner message={t('loading') || 'Loading agents…'} />
-                                ) : agents.length === 0 ? (
-                                    <DataHubEmpty
-                                        message={
-                                            t('telegram_ai_inbox_empty') ||
-                                            'No agent data available. Once the pipeline processes messages, metrics will appear here.'
-                                        }
+                            <div className="space-y-4">
+                                <Card className={DATAHUB_SHELL}>
+                                    <DataHubSectionHeader
+                                        title={t('telegram_data_tab_agents')}
+                                        subtitle={t('telegram_ai_inbox_desc')}
                                     />
-                                ) : (
-                                    <div className="space-y-3">
-                                        {agents.map(agent => (
-                                            <button
-                                                key={agent.agent_key}
-                                                type="button"
-                                                className="w-full text-left cursor-pointer rounded-xl border border-white/5 bg-slate-900/70 hover:border-sky-500/50 hover:bg-slate-900/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
-                                                onClick={() =>
-                                                    setSelectedAgent({
-                                                        key: agent.agent_key,
-                                                        name: agent.agent_name,
-                                                    })
-                                                }
-                                            >
-                                                <div className="flex items-start gap-4 px-3 py-3">
-                                                    <div className="text-3xl md:text-4xl" aria-hidden>
-                                                        {AGENT_ICONS[agent.agent_key] || '🤖'}
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-start justify-between gap-2">
-                                                            <div>
-                                                                <h4 className="text-sm md:text-base font-semibold text-foreground">
-                                                                    {agent.agent_name}
-                                                                </h4>
-                                                                <p className="text-[11px] text-muted-foreground">
-                                                                    {agent.agent_key}
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right shrink-0">
-                                                                <p className="text-lg md:text-2xl font-bold text-foreground">
-                                                                    {formatNumber(agent.total_messages)}
-                                                                </p>
-                                                                <p className="text-[11px] text-muted-foreground">
-                                                                    messages
-                                                                </p>
-                                                            </div>
+                                    {agents.length > 0 && (
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
+                                            <MetricCard
+                                                label={t('telegram_ai_inbox_summary_agents')}
+                                                value={inboxSummary.count}
+                                                color="blue"
+                                            />
+                                            <MetricCard
+                                                label={t('telegram_ai_inbox_summary_messages')}
+                                                value={formatNumber(inboxSummary.totalMessages)}
+                                                color="emerald"
+                                            />
+                                            <MetricCard
+                                                label={t('telegram_ai_inbox_summary_actions')}
+                                                value={formatNumber(inboxSummary.totalActions)}
+                                                color="amber"
+                                            />
+                                            <MetricCard
+                                                label={t('telegram_ai_inbox_summary_high_priority')}
+                                                value={formatNumber(inboxSummary.totalHigh)}
+                                                color="red"
+                                            />
+                                        </div>
+                                    )}
+                                    <DataHubFilterBar className="mb-4">
+                                        <DataHubSearchInput
+                                            value={agentSearch}
+                                            onChange={setAgentSearch}
+                                            placeholder={t('telegram_ai_inbox_search')}
+                                            ariaLabel={t('telegram_ai_inbox_search')}
+                                        />
+                                    </DataHubFilterBar>
+                                    {isLoading ? (
+                                        <DataHubLoadingSpinner message={t('loading')} />
+                                    ) : agents.length === 0 ? (
+                                        <DataHubEmpty message={t('telegram_ai_inbox_empty')} />
+                                    ) : filteredAgents.length === 0 ? (
+                                        <DataHubEmpty message={t('telegram_ai_inbox_search')} />
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {filteredAgents.map(agent => (
+                                                <button
+                                                    key={agent.agent_key}
+                                                    type="button"
+                                                    className={`${DATAHUB_INNER_LIST} w-full text-left cursor-pointer hover:border-sky-500/50 hover:bg-slate-900/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60`}
+                                                    onClick={() =>
+                                                        setSelectedAgent({
+                                                            key: agent.agent_key,
+                                                            name: agent.agent_name,
+                                                        })
+                                                    }
+                                                >
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="text-2xl md:text-3xl shrink-0" aria-hidden>
+                                                            {AGENT_ICONS[agent.agent_key] || '🤖'}
                                                         </div>
-
-                                                        <div className="grid grid-cols-3 gap-3 mt-3">
-                                                            <div>
-                                                                <p className="text-[11px] text-muted-foreground mb-0.5">
-                                                                    Avg Impact
-                                                                </p>
-                                                                <p
-                                                                    className={`text-sm font-medium ${getImpactColor(
-                                                                        agent.average_impact,
-                                                                    )}`}
-                                                                >
-                                                                    {formatImpact(agent.average_impact)}
-                                                                </p>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <div>
+                                                                    <h4 className="text-sm font-semibold text-foreground">
+                                                                        {agent.agent_name}
+                                                                    </h4>
+                                                                    <p className="text-[11px] text-muted-foreground">
+                                                                        {formatAgentKeyLabel(agent.agent_key, t)}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="text-right shrink-0">
+                                                                    <p className="text-lg font-bold text-foreground">
+                                                                        {formatNumber(agent.total_messages)}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-muted-foreground">
+                                                                        {t('telegram_ai_inbox_messages')}
+                                                                    </p>
+                                                                </div>
                                                             </div>
-                                                            <div>
-                                                                <p className="text-[11px] text-muted-foreground mb-0.5">
-                                                                    Action Required
-                                                                </p>
-                                                                <p className="text-sm font-medium text-yellow-400">
-                                                                    {agent.action_required_count}
-                                                                </p>
+                                                            <div className="grid grid-cols-3 gap-2 mt-3">
+                                                                <div>
+                                                                    <p className="text-[10px] text-muted-foreground">
+                                                                        {t('telegram_ai_inbox_avg_impact')}
+                                                                    </p>
+                                                                    <p
+                                                                        className={`text-xs font-medium ${getImpactColor(agent.average_impact)}`}
+                                                                    >
+                                                                        {formatImpact(agent.average_impact)}
+                                                                    </p>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-[10px] text-muted-foreground">
+                                                                        {t('telegram_ai_inbox_action_required')}
+                                                                    </p>
+                                                                    <p className="text-xs font-medium text-yellow-400">
+                                                                        {agent.action_required_count}
+                                                                    </p>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-[10px] text-muted-foreground">
+                                                                        {t('telegram_ai_inbox_high_priority')}
+                                                                    </p>
+                                                                    <p className="text-xs font-medium text-red-400">
+                                                                        {agent.high_count || '0'}
+                                                                    </p>
+                                                                </div>
                                                             </div>
-                                                            <div>
-                                                                <p className="text-[11px] text-muted-foreground mb-0.5">
-                                                                    High Priority
-                                                                </p>
-                                                                <p className="text-sm font-medium text-red-400">
-                                                                    {agent.high_count || '0'}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-
-                                                        {agent.top_event_categories &&
-                                                            agent.top_event_categories.length > 0 && (
-                                                                <div className="mt-3">
-                                                                    <p className="text-[11px] text-muted-foreground mb-1">
-                                                                        Top Categories
+                                                            {agent.top_event_categories?.length > 0 && (
+                                                                <div className="mt-2">
+                                                                    <p className="text-[10px] text-muted-foreground mb-1">
+                                                                        {t('telegram_ai_inbox_top_categories')}
                                                                     </p>
                                                                     <div className="flex flex-wrap gap-1">
-                                                                        {agent.top_event_categories
-                                                                            .slice(0, 5)
-                                                                            .map((cat, i) => (
-                                                                                <StatusPill
-                                                                                    key={cat + i}
-                                                                                    label={cat}
-                                                                                    variant="primary"
-                                                                                />
-                                                                            ))}
+                                                                        {agent.top_event_categories.slice(0, 4).map((cat, i) => (
+                                                                            <StatusPill
+                                                                                key={cat + i}
+                                                                                label={formatNewsCategoryLabel(cat, t)}
+                                                                                variant="primary"
+                                                                            />
+                                                                        ))}
                                                                     </div>
                                                                 </div>
                                                             )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </Card>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </Card>
+                            </div>
                         )}
                     </div>
                 )}

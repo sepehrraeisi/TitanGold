@@ -20,6 +20,15 @@ import {
     severityVariant,
     sentimentVariant,
 } from './dataHubUi';
+import {
+    formatNewsCategoryLabel,
+    formatRegionLabel,
+    formatTimeHorizonLabel,
+    formatSeverityLabel,
+    formatTopicLabel,
+    formatAgentKeyLabel,
+    humanizeEnum,
+} from './telegramCollectorLabels';
 
 interface BreakingNews {
   id: string;
@@ -61,17 +70,17 @@ interface BreakingNewsMonitorProps {
 const SEVERITY_CONFIG = {
   high: {
     icon: '🚨',
-    label: 'CRITICAL',
+    labelKey: 'telegram_severity_high',
     border: 'border-l-red-500',
   },
   medium: {
     icon: '⚠️',
-    label: 'WARNING',
+    labelKey: 'telegram_severity_medium',
     border: 'border-l-amber-500',
   },
   low: {
     icon: 'ℹ️',
-    label: 'INFO',
+    labelKey: 'telegram_severity_low',
     border: 'border-l-emerald-500',
   },
 };
@@ -263,6 +272,9 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
     return SEVERITY_CONFIG[level as keyof typeof SEVERITY_CONFIG] || SEVERITY_CONFIG.low;
   };
 
+  const severityLabel = (level: string) =>
+    formatSeverityLabel(level, t) || t(getSeverityConfig(level).labelKey);
+
   const categories = Array.from(new Set(news.map(item => item.primary_category)));
 
   const severityCounts = useMemo(() => ({
@@ -326,9 +338,9 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
             onChange={v => setSeverityFilter(v === 'all' ? null : v)}
             options={[
               { value: 'all', label: t('all') || 'All' },
-              ...Object.entries(SEVERITY_CONFIG).map(([key, config]) => ({
+              ...Object.entries(SEVERITY_CONFIG).map(([key]) => ({
                 value: key,
-                label: `${config.icon} ${config.label}`,
+                label: `${getSeverityConfig(key).icon} ${severityLabel(key)}`,
               })),
             ]}
           />
@@ -346,7 +358,7 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                 <option value="">{t('all_categories') || 'All Categories'}</option>
                 {categories.map((cat) => (
                   <option key={cat} value={cat}>
-                    {CATEGORY_ICONS[cat]} {cat}
+                    {formatNewsCategoryLabel(cat, t, true)}
                   </option>
                 ))}
               </select>
@@ -411,7 +423,7 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                     {severity.icon}
                   </div>
                   <StatusPill
-                    label={severity.label}
+                    label={severityLabel(item.market_impact_level)}
                     variant={severityVariant(item.market_impact_level)}
                   />
                 </div>
@@ -420,7 +432,7 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                     <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <StatusPill
-                        label={`${CATEGORY_ICONS[item.primary_category] || '📰'} ${item.primary_category}`}
+                        label={formatNewsCategoryLabel(item.primary_category, t, true)}
                         variant="primary"
                       />
                       <StatusPill label={`📢 ${item.channel_title}`} variant="info" />
@@ -445,7 +457,7 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                         {t('assets') || 'Assets'}:
                       </span>
                       {item.mentioned_assets.map((asset, i) => (
-                        <StatusPill key={asset + i} label={`💰 ${asset}`} variant="warning" className="mr-1" />
+                        <StatusPill key={asset + i} label={`💰 ${formatTopicLabel(asset, t) || humanizeEnum(asset)}`} variant="warning" className="mr-1" />
                       ))}
                     </div>
                   )}
@@ -459,7 +471,7 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                         {item.top_affected_agents.map((agent, i) => (
                           <StatusPill
                             key={agent.agent_key + i}
-                            label={`${agent.agent_key} (${(parseFloat(agent.impact_score) * 100).toFixed(0)}%)${agent.requires_action ? ` ⚠️ ${t('action_required') || 'ACTION'}` : ''}`}
+                            label={`${formatAgentKeyLabel(agent.agent_key, t)} (${(parseFloat(agent.impact_score) * 100).toFixed(0)}%)${agent.requires_action ? ` ⚠️ ${t('action_required') || 'ACTION'}` : ''}`}
                             variant={agent.requires_action ? 'error' : 'info'}
                           />
                         ))}
@@ -469,7 +481,7 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
 
                   <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
                     {item.regions && item.regions.length > 0 && (
-                      <span>🌍 {item.regions.join(', ')}</span>
+                      <span>🌍 {item.regions.map(r => formatRegionLabel(r, t)).join(', ')}</span>
                     )}
                     {item.source_reliability && (
                       <span>
@@ -507,7 +519,7 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
       {selectedNews && (
         <DataHubModal
           title={selectedNews.channel_title || 'Unknown channel'}
-          subtitle={`${t('breaking_news') || 'Breaking News'} – ${getSeverityConfig(selectedNews.market_impact_level).label} • ID ${selectedNews.message_id}`}
+          subtitle={`${t('breaking_news')} – ${severityLabel(selectedNews.market_impact_level)} • ID ${selectedNews.message_id}`}
           onClose={() => setSelectedNews(null)}
           maxWidth="max-w-4xl"
           footer={
@@ -539,25 +551,28 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
         >
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 <StatusPill
-                  label={getSeverityConfig(selectedNews.market_impact_level).label}
+                  label={severityLabel(selectedNews.market_impact_level)}
                   variant={severityVariant(selectedNews.market_impact_level)}
                 />
                 <StatusPill
-                  label={`${CATEGORY_ICONS[selectedNews.primary_category] || '📰'} ${selectedNews.primary_category}`}
+                  label={formatNewsCategoryLabel(selectedNews.primary_category, t, true)}
                   variant="primary"
                 />
                 {selectedNews.sub_category && (
-                  <StatusPill label={selectedNews.sub_category} variant="neutral" />
+                  <StatusPill label={formatTopicLabel(selectedNews.sub_category, t)} variant="neutral" />
                 )}
                 <StatusPill
                   label={selectedNews.sentiment}
                   variant={sentimentVariant(selectedNews.sentiment)}
                 />
                 {selectedNews.importance_level && (
-                  <StatusPill label={`Importance: ${selectedNews.importance_level}`} variant="warning" />
+                  <StatusPill label={`${t('importance')}: ${formatTopicLabel(selectedNews.importance_level, t)}`} variant="warning" />
                 )}
                 {selectedNews.event_urgency && (
-                  <StatusPill label={`Urgency: ${selectedNews.event_urgency}`} variant="warning" />
+                  <StatusPill label={`${t('urgency')}: ${formatTimeHorizonLabel(selectedNews.event_urgency, t)}`} variant="warning" />
+                )}
+                {selectedNews.news_type && (
+                  <StatusPill label={formatTopicLabel(selectedNews.news_type, t)} variant="info" />
                 )}
               </div>
 
@@ -665,12 +680,11 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                       </p>
                       <div className="flex flex-wrap gap-1">
                         {selectedNews.regions.map((region, i) => (
-                          <span
+                          <StatusPill
                             key={region + i}
-                            className="px-2 py-0.5 text-[11px] bg-indigo-500/20 text-indigo-300 rounded-full"
-                          >
-                            🌍 {region}
-                          </span>
+                            label={`🌍 ${formatRegionLabel(region, t)}`}
+                            variant="info"
+                          />
                         ))}
                       </div>
                     </div>
@@ -686,7 +700,7 @@ const BreakingNewsMonitor: React.FC<BreakingNewsMonitorProps> = ({ t, Card }) =>
                             key={entity + i}
                             className="px-2 py-0.5 text-[11px] bg-purple-500/20 text-purple-300 rounded-full"
                           >
-                            {entity}
+                            {formatTopicLabel(entity, t) || humanizeEnum(entity)}
                           </span>
                         ))}
                       </div>

@@ -21,6 +21,7 @@ import {
     formatTimeRangeLabel,
     TIME_RANGE_OPTIONS,
 } from './dataHubUi';
+import { formatTopicLabel, humanizeEnum } from './telegramCollectorLabels';
 
 interface AgentMessage {
   id: string;
@@ -93,6 +94,7 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<AgentMessage | null>(null);
+  const [feedNotConfigured, setFeedNotConfigured] = useState(false);
 
   const LIMIT = 20;
 
@@ -112,6 +114,7 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
   const fetchAgentData = async () => {
     setIsLoading(true);
     setError(null);
+    setFeedNotConfigured(false);
 
     try {
       // Build query parameters
@@ -131,6 +134,7 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
       const response = await axios.get(url, {
         withCredentials: true,
         headers: getAuthHeaders(),
+        timeout: 90000,
       });
 
       if (response.data.success) {
@@ -155,17 +159,18 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         setHasMore(false);
       }
     } catch (err: any) {
-      // Graceful handling for not-yet-implemented backend
-      if (err.response?.status === 404) {
-        setError('Agent feed API is not available yet for this environment.');
+      const status = err.response?.status;
+      if (status === 404 || status === 504 || err.code === 'ECONNABORTED') {
+        setFeedNotConfigured(true);
         setHasMore(false);
         setMessages([]);
         setStats(null);
+        setError(null);
       } else {
         const msg =
           err.response?.data?.message ||
           err.message ||
-          'Agent feed is currently not available.';
+          t('datahub_error_generic');
         setError(msg);
         setHasMore(false);
       }
@@ -307,14 +312,20 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         </DataHubToolbar>
       </Card>
 
-      {error && <DataHubAlert variant="error" message={error} onRetry={fetchAgentData} retryLabel={t('retry')} />}
+      {error && !feedNotConfigured && (
+        <DataHubAlert variant="error" message={error} onRetry={fetchAgentData} retryLabel={t('retry')} />
+      )}
+
+      {feedNotConfigured && (
+        <DataHubEmpty message={t('telegram_agent_feed_not_configured')} />
+      )}
 
       <div className="space-y-4">
-        {isLoading && messages.length === 0 && (
-          <DataHubLoadingSpinner message={t('loading') || 'Loading messages…'} />
+        {isLoading && messages.length === 0 && !feedNotConfigured && (
+          <DataHubLoadingSpinner message={t('loading')} />
         )}
-        {!isLoading && messages.length === 0 && !error && (
-          <DataHubEmpty message={t('no_messages') || 'No messages found for this agent.'} />
+        {!isLoading && !feedNotConfigured && messages.length === 0 && !error && (
+          <DataHubEmpty message={t('telegram_agent_feed_empty')} />
         )}
         {messages.map((msg) => (
           <Card
@@ -354,7 +365,7 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
               {/* Source */}
               <div className="text-xs text-muted-foreground">
-                📢 {msg.channel_title} • {msg.impact_type || 'General'}
+                📢 {msg.channel_title} • {formatTopicLabel(msg.impact_type, t) || 'General'}
               </div>
 
               {/* Message Text */}
@@ -370,7 +381,7 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                         key={reason + i}
                         className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-300 rounded"
                       >
-                        • {reason}
+                        • {formatTopicLabel(reason, t) || humanizeEnum(reason)}
                       </span>
                     ))}
                   </div>
@@ -391,7 +402,7 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                       console.log('Execute action:', msg.action_type);
                     }}
                   >
-                    🎯 Execute: {msg.action_type}
+                    🎯 Execute: {formatTopicLabel(msg.action_type, t) || humanizeEnum(msg.action_type || '')}
                   </SecondaryButton>
                 )}
               </div>
@@ -517,7 +528,7 @@ const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                           key={reason + i}
                           className="px-2 py-0.5 text-[11px] bg-purple-500/20 text-purple-300 rounded-full"
                         >
-                          • {reason}
+                          • {formatTopicLabel(reason, t) || humanizeEnum(reason)}
                         </span>
                       ))}
                     </div>

@@ -36,6 +36,9 @@ import {
     AreaChart,
 } from 'recharts';
 import { format } from 'date-fns';
+import {
+    formatNewsCategoryLabel,
+} from './telegramCollectorLabels';
 
 interface CategoryData {
     primary_category: string;
@@ -86,31 +89,17 @@ const COLORS = [
     '#3B82F6',
 ];
 
-const CATEGORY_LABELS: Record<string, string> = {
-    MARKET_DATA: '📊 Market Data',
-    ECONOMIC_INDICATORS: '📈 Economic Indicators',
-    GEOPOLITICAL: '🌍 Geopolitical',
-    POLITICAL: '🏛️ Political',
-    SANCTIONS_EMBARGO: '⛔ Sanctions & Embargo',
-    ENERGY_COMMODITIES: '⚡ Energy & Commodities',
-    CRYPTO_BLOCKCHAIN: '₿ Crypto & Blockchain',
-    FOREX_CURRENCY: '💱 Forex & Currency',
-    PRECIOUS_METALS: '🥇 Precious Metals',
-    SOCIAL_UNREST: '⚠️ Social Unrest',
-    NATURAL_DISASTERS: '🌪️ Natural Disasters',
-    CORPORATE_BUSINESS: '🏢 Corporate & Business',
-    TECHNOLOGY: '💻 Technology',
-    FINANCIAL_CRISIS: '💥 Financial Crisis',
-    TRADE_COMMERCE: '🚢 Trade & Commerce',
-};
-
-const getCategoryLabel = (categoryKey: string) => CATEGORY_LABELS[categoryKey] || categoryKey;
+const getCategoryLabel = (categoryKey: string, tr: (k: string) => string) =>
+    formatNewsCategoryLabel(categoryKey, tr, true);
 
 const splitEmojiAndText = (label: string) => {
     const parts = label.trim().split(' ');
     if (parts.length <= 1) return { emoji: '📰', text: label };
     return { emoji: parts[0], text: parts.slice(1).join(' ') };
 };
+
+const categoryEmoji = (categoryKey: string, tr: (k: string) => string) =>
+    splitEmojiAndText(getCategoryLabel(categoryKey, tr)).emoji;
 
 const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
     const [data, setData] = useState<CategoryData[]>([]);
@@ -200,7 +189,7 @@ const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
     const pieData = useMemo(
         () =>
             data.map((item) => ({
-                name: CATEGORY_LABELS[item.primary_category] || item.primary_category,
+                name: getCategoryLabel(item.primary_category, t),
                 value: parseInt(item.message_count, 10),
                 category: item.primary_category,
             })),
@@ -210,7 +199,7 @@ const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
     const barData = useMemo(
         () =>
             data.map((item) => ({
-                category: splitEmojiAndText(getCategoryLabel(item.primary_category)).text,
+                category: splitEmojiAndText(getCategoryLabel(item.primary_category, t)).text,
                 high: parseInt(item.high_impact_count, 10),
                 medium: parseInt(item.medium_impact_count, 10),
                 low: parseInt(item.low_impact_count, 10),
@@ -431,11 +420,11 @@ const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
                     >
                         <div className="flex items-start gap-3">
                             <div className="text-3xl">
-                                {CATEGORY_LABELS[category.primary_category]?.split(' ')[0] || '📰'}
+                                {categoryEmoji(category.primary_category, t)}
                             </div>
                             <div className="flex-1">
                                 <h4 className="font-semibold text-sm">
-                                    {CATEGORY_LABELS[category.primary_category] || category.primary_category}
+                                    {getCategoryLabel(category.primary_category, t)}
                                 </h4>
                                 <div className="mt-2 space-y-1 text-xs">
                                     <div className="flex justify-between">
@@ -482,7 +471,7 @@ const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ t, Card }) => {
                     <div className="flex items-start justify-between mb-4 gap-3">
                         <DataHubSectionHeader
                             className="mb-0 flex-1"
-                            title={`${CATEGORY_LABELS[selectedCategory] || selectedCategory} – ${t('timeline') || 'Timeline'}`}
+                            title={`${getCategoryLabel(selectedCategory, t)} – ${t('timeline')}`}
                             subtitle={
                                 t('timeline_hint') ||
                                 'Secure, time-bucketed history for this category. Requires an active session to load.'

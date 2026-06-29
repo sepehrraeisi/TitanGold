@@ -126,109 +126,120 @@ router.get('/agents/:agentKey/feed', ...readAuth, async (req, res) => {
             minImpact = 0,
             categories,
             timeRange = 24,
-            requiresAction
+            requiresAction,
+            priority,
         } = req.query;
 
-        // Validate agent key
         const validAgentKeys = [
             'technical', 'risk', 'sentiment', 'pattern', 'price_prediction',
             'arbitrage', 'portfolio', 'liquidity', 'trend', 'optimization',
-            'order', 'fundamental', 'market_intelligence', 'volume', 'timing'
+            'order', 'fundamental', 'market_intelligence', 'volume', 'timing',
         ];
 
         if (!validAgentKeys.includes(agentKey)) {
             return res.status(400).json({
                 success: false,
                 error: 'Invalid agent key',
-                validKeys: validAgentKeys
+                validKeys: validAgentKeys,
             });
         }
 
-        // Build query
-        let whereConditions = [
-            `ai.agent_key = $1`,
-            `ai.impact_score >= $2`,
-            `pm.created_at >= NOW() - INTERVAL '${parseInt(timeRange)} hours'`
-        ];
-        let params = [agentKey, parseFloat(minImpact)];
-        let paramIndex = 3;
+        const hours = parseHours(timeRange, 24);
+        const pageLimit = parseLimit(limit, 50, 200);
+        const pageOffset = Math.max(0, parseInt(offset, 10) || 0);
+        const minImpactNum = parseFloat(minImpact) || 0;
 
-        // Filter by categories
-        // NOTE: schema differs across environments; agent impacts may not have event_category.
-        // We ignore this filter here to avoid column-not-found errors.
+        const payload = await getTelegramAnalyticsCached(
+            'agents/feed',
+            {
+                agentKey,
+                limit: pageLimit,
+                offset: pageOffset,
+                minImpact: minImpactNum,
+                timeRange: hours,
+                requiresAction: requiresAction ?? '',
+                priority: priority ?? '',
+            },
+            async () => {
+                const params = [agentKey, minImpactNum];
+                let extraFilters = '';
 
-        // Filter by action requirement
-        if (requiresAction !== undefined) {
-            whereConditions.push(`ai.requires_action = $${paramIndex}`);
-            params.push(requiresAction === 'true');
-            paramIndex++;
-        }
+                if (requiresAction !== undefined && requiresAction !== '') {
+                    params.push(requiresAction === 'true');
+                    extraFilters += ` AND ai.requires_action = $${params.length}`;
+                }
 
-        const sql = `
-            SELECT 
-                pm.id,
-                tm.message_id,
-                COALESCE(tc.title, tc.username, pm.channel_id::text) as channel_title,
-                pm.cleaned_text,
-                pm.sentiment,
-                pm.importance_level,
-                COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
-                ai.impact_score,
-                ai.impact_type,
-                ai.confidence as confidence,
-                ai.relevance_reasons,
-                ai.requires_action,
-                ai.action_type,
-                ai.priority_level,
-                ai.created_at as processed_at
-            FROM telegram_agent_impacts ai
-            INNER JOIN processed_telegram_messages pm ON pm.id::text = ai.processed_message_id::text
-            LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
-            LEFT JOIN telegram_channels tc 
-                ON pm.channel_id::text = tc.id::text
-                OR pm.channel_id::text = tc.channel_id::text
-            WHERE ${whereConditions.join(' AND ')}
-            ORDER BY COALESCE(tm.telegram_created_at, pm.created_at) DESC, ai.impact_score DESC
-            LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-        `;
+                if (priority) {
+                    params.push(priority);
+                    extraFilters += ` AND ai.priority_level = $${params.length}`;
+                }
 
-        params.push(Math.min(parseInt(limit), 200), parseInt(offset));
+                params.push(pageLimit, pageOffset);
 
-        const result = await query(sql, params);
+                const sql = `
+                    SELECT 
+                        pm.id,
+                        tm.message_id,
+                        COALESCE(tc.title, tc.username, pm.channel_id::text) as channel_title,
+                        pm.cleaned_text,
+                        pm.sentiment,
+                        pm.importance_level,
+                        COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
+                        ai.impact_score,
+                        ai.impact_type,
+                        ai.confidence as confidence,
+                        ai.relevance_reasons,
+                        ai.requires_action,
+                        ai.action_type,
+                        ai.priority_level,
+                        ai.created_at as processed_at
+                    FROM telegram_agent_impacts ai
+                    INNER JOIN processed_telegram_messages pm ON pm.id::text = ai.processed_message_id::text
+                    LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
+                    LEFT JOIN telegram_channels tc 
+                        ON pm.channel_id::text = tc.id::text
+                        OR pm.channel_id::text = tc.channel_id::text
+                    WHERE ai.agent_key = $1
+                      AND ai.impact_score >= $2
+                      AND pm.created_at >= NOW() - INTERVAL '${hours} hours'
+                      ${extraFilters}
+                    ORDER BY pm.created_at DESC, ai.impact_score DESC
+                    LIMIT $${params.length - 1} OFFSET $${params.length}
+                `;
 
-        // Get total count for pagination
-        const countSql = `
-            SELECT COUNT(*) as total
-            FROM telegram_agent_impacts ai
-            INNER JOIN processed_telegram_messages pm ON pm.id::text = ai.processed_message_id::text
-            WHERE ${whereConditions.join(' AND ')}
-        `;
-        const countResult = await query(countSql, params.slice(0, -2));
+                const result = await query(sql, params);
+
+                return {
+                    data: result.rows,
+                    hasMore: result.rows.length === pageLimit,
+                };
+            },
+            TELEGRAM_CACHE_TTL.agentFeed,
+        );
 
         return res.json({
             success: true,
             agent: agentKey,
-            data: result.rows,
+            data: payload.data,
             pagination: {
-                total: parseInt(countResult.rows[0].total),
-                limit: parseInt(limit),
-                offset: parseInt(offset),
-                hasMore: parseInt(offset) + result.rows.length < parseInt(countResult.rows[0].total)
+                limit: pageLimit,
+                offset: pageOffset,
+                hasMore: payload.hasMore,
             },
             filters: {
-                minImpact: parseFloat(minImpact),
-                categories: null,
-                timeRange: parseInt(timeRange),
-                requiresAction: requiresAction === 'true' ? true : requiresAction === 'false' ? false : null
-            }
+                minImpact: minImpactNum,
+                categories: categories || null,
+                timeRange: hours,
+                requiresAction: requiresAction === 'true' ? true : requiresAction === 'false' ? false : null,
+                priority: priority || null,
+            },
         });
-
     } catch (error) {
         logger.error('Error fetching agent feed:', error);
         return res.status(500).json({
             success: false,
             error: 'Failed to fetch agent feed',
-            message: error.message
+            message: error.message,
         });
     }
 });

@@ -1,8 +1,8 @@
 # DH-TELEGRAM-COLLECTOR-P6 — Design System Polish
 
 **Phase:** P6 (UI/UX only)  
-**Status:** COMPLETE  
-**Scope:** Telegram Collector analytics UI — no backend, DB, ingestion, or API contract changes.
+**Status:** COMPLETE (Human QA repair verified 2026-06-29)  
+**Scope:** Telegram Collector analytics UI — i18n, enum labels, AI Inbox polish, production deploy verification.
 
 ---
 
@@ -196,3 +196,88 @@ Bring the entire Telegram Collector analytics UI to the same design quality as A
 | Broken dynamic severity borders | Explicit `border-l-red/amber/emerald-500` |
 | Custom modal markup | `DataHubModal` |
 | Per-component spinners | `DataHubLoadingSpinner` |
+| Custom modal markup | `DataHubModal` |
+
+---
+
+## Human QA Repair — i18n, enum labels, AI Inbox, production deploy
+
+### Human QA rejection (initial P6)
+
+Human QA rejected the first P6 pass as **PARTIAL**:
+
+| Issue | Symptom |
+|-------|---------|
+| Missing i18n | Raw keys on Overview / AI Inbox (`telegram_data_overview_desc`, `processed_messages`, …) |
+| AI Inbox | Incomplete redesign; raw `telegram_ai_inbox_desc`; technical agent-feed error |
+| Breaking News | Raw enums (`medium_term`, `SANCTIONS_EMBARGO`, `FOREX_CURRENCY`) |
+| Geographic Map | Raw region/category enums (`MIDDLE_EAST`, `PRECIOUS_METALS`, …) |
+| Evidence | Pre-deploy screenshots — not acceptable for final sign-off |
+
+### Root cause
+
+1. Locale keys added to some files but not all four active locale bundles (`deploy/blue|green/locales/en|fa.json`).
+2. Backend enum values rendered directly without a shared label helper.
+3. Agent feed endpoint timed out at nginx (30s) → UI showed raw API-unavailable string.
+4. Production bundle not rebuilt/re-verified after locale/UI changes.
+
+### Fixes
+
+| Area | Change |
+|------|--------|
+| **i18n** | Added all missing Telegram Collector keys to 4 locale files; `telegramCollectorI18n.test.ts` scans components |
+| **Labels** | New `telegramCollectorLabels.ts` — `formatNewsCategoryLabel`, `formatRegionLabel`, `formatTimeHorizonLabel`, `formatSeverityLabel`, `formatTopicLabel`, `formatAgentKeyLabel`, `humanizeEnum` |
+| **Overview** | Removed `\|\|` fallbacks that masked missing keys; metrics use `t()` only |
+| **AI Inbox** | Full DataHub shell: `MetricCard` summary, `DataHubSearchInput`, agent grid, detail panel |
+| **Agent feed** | Removed `"Agent feed API is not available yet…"`; `DataHubEmpty` with `telegram_agent_feed_not_configured`; backend feed route cached + nginx 180s timeout for `/api/v1/telegram/agents/` |
+| **Breaking News** | StatusPill + label helpers for category, region, horizon, assets, agents |
+| **Geographic Map** | Region/category labels via helpers in filters, table, detail |
+| **Categories** | Replaced static `CATEGORY_LABELS` with `formatNewsCategoryLabel` |
+
+### Production deploy proof
+
+| Check | Result |
+|-------|--------|
+| `npm run build` | ✅ Pass |
+| Bundle hash (post-repair) | `DataHubTab-ChaCRDHu.js` (was `DataHubTab-BREOI89i.js` pre-repair) |
+| nginx root | `/home/ubuntu/webapp/TitanGold/dist` |
+| Hard-refresh audit | `backend/scripts/telegram-collector-p6-repair-audit.mjs` |
+
+### Browser evidence (post-deploy)
+
+**Script:** `backend/scripts/telegram-collector-p6-repair-audit.mjs`  
+**Evidence:** `docs/ssot_v3/screenshots/telegram-collector-p6-repair-browser-evidence.json`  
+**Captured:** 2026-06-29T11:08:41Z @ https://titan.zala.ir
+
+| Tab | rawKeys | rawEnums | forbiddenTexts |
+|-----|---------|----------|----------------|
+| Overview | [] | [] | [] |
+| AI Inbox | [] | [] | [] |
+| Categories | [] | [] | [] |
+| Breaking News | [] | [] | [] |
+| Geographic Map | [] | [] | [] |
+
+**Screenshots:**
+
+| Tab | File |
+|-----|------|
+| Overview | `telegram-collector-p6-repair-overview.png` |
+| AI Inbox | `telegram-collector-p6-repair-ai-inbox.png` |
+| Categories | `telegram-collector-p6-repair-categories.png` |
+| Breaking News | `telegram-collector-p6-repair-breaking-news.png` |
+| Geographic Map | `telegram-collector-p6-repair-geographic-map.png` |
+
+All Telegram API calls returned **200** during audit.
+
+### Tests / build
+
+```
+vitest: telegramCollectorI18n, telegramCollectorLabels (+ P3/P4/errors) — 36 passed
+npm run build — pass
+```
+
+### Final verdict
+
+**P6 COMPLETE** — all five tabs pass post-deploy browser verification; no raw i18n keys or Human QA enum strings; AI Inbox redesigned; agent-feed error replaced with designed empty state; production bundle verified.
+
+**Commit:** `fix(datahub): complete telegram collector i18n and design polish`
