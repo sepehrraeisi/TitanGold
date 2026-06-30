@@ -270,7 +270,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     return (
         <div className={DATAHUB_SHELL}>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
-                <div>
+                    <div>
                     <h3 className="text-sm md:text-base font-semibold text-foreground">{t('data_preparation')}</h3>
                     <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">{t('data_preparation_desc')}</p>
                     {activeSnapshot?.lastRefreshed && (
@@ -278,37 +278,37 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             {t('pipeline_last_refreshed')}: {formatTimeAgo(activeSnapshot.lastRefreshed)}
                         </p>
                     )}
-                </div>
+                    </div>
                 <div className="flex flex-wrap items-end gap-2">
-                    {pipelineHistory.length > 0 && (
+                        {pipelineHistory.length > 0 && (
                         <div>
                             <label className="block text-[10px] text-muted-foreground mb-1">
                                 {t('snapshot_history')}
-                            </label>
-                            <select
-                                value={selectedSnapshotId}
-                                onChange={e => setSelectedSnapshotId(e.target.value)}
+                                </label>
+                                <select
+                                    value={selectedSnapshotId}
+                                    onChange={e => setSelectedSnapshotId(e.target.value)}
                                 className={SELECT_CLASS}
-                            >
+                                >
                                 <option value="latest">{t('snapshot_latest')}</option>
-                                {pipelineHistory.map(entry => (
-                                    <option key={entry.id} value={entry.id}>
-                                        {new Date(entry.generatedAt).toLocaleString()}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-                    <button
+                                    {pipelineHistory.map(entry => (
+                                        <option key={entry.id} value={entry.id}>
+                                            {new Date(entry.generatedAt).toLocaleString()}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        <button
                         type="button"
-                        onClick={handleRefreshPipelineSnapshot}
-                        disabled={isLoadingPipeline}
+                            onClick={handleRefreshPipelineSnapshot}
+                            disabled={isLoadingPipeline}
                         className={BTN_PRIMARY}
-                    >
+                        >
                         {isLoadingPipeline ? t('refreshing') : t('refresh_pipeline')}
-                    </button>
+                        </button>
+                    </div>
                 </div>
-            </div>
 
             {queryError && (
                 <DataHubAlert
@@ -343,6 +343,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             label={t('pipeline_metric_requests')}
                             value={activeSnapshot.totalRequests24h || 0}
                             color="emerald"
+                            hint={t('pipeline_metric_requests_hint')}
                         />
                         <MetricCard
                             label={t('pipeline_metric_passed')}
@@ -361,21 +362,28 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                         />
                     </div>
 
+                    <p
+                        className="text-[10px] text-muted-foreground/90 mb-5 -mt-2"
+                        title={t('pipeline_telegram_comparison_hint')}
+                    >
+                        {t('pipeline_telegram_comparison_hint')}
+                    </p>
+
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-5">
-                        <input
-                            value={categorySearch}
-                            onChange={e => setCategorySearch(e.target.value)}
+                    <input
+                        value={categorySearch}
+                        onChange={e => setCategorySearch(e.target.value)}
                             placeholder={t('category_filter_placeholder')}
                             className={INPUT_CLASS}
-                        />
-                        <input
-                            value={sourceSearch}
-                            onChange={e => setSourceSearch(e.target.value)}
+                    />
+                    <input
+                        value={sourceSearch}
+                        onChange={e => setSourceSearch(e.target.value)}
                             placeholder={t('source_filter_placeholder')}
                             className={INPUT_CLASS}
-                        />
-                        <select
-                            value={sourceStatusFilter}
+                    />
+                    <select
+                        value={sourceStatusFilter}
                             onChange={e =>
                                 setSourceStatusFilter(e.target.value as typeof sourceStatusFilter)
                             }
@@ -400,8 +408,8 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             <option value="backlog">{t('pipeline_sort_backlog')}</option>
                             <option value="eta">{t('pipeline_sort_eta')}</option>
                             <option value="rank">{t('pipeline_sort_rank')}</option>
-                        </select>
-                    </div>
+                    </select>
+                </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
                         <div className={DATAHUB_INNER_LIST}>
@@ -409,7 +417,11 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                 {t('category_screening')}
                             </h4>
                             {filteredCategories.length === 0 ? (
-                                <p className="text-[11px] text-muted-foreground">{t('pipeline_no_categories')}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                    {activeSnapshot.categories.length === 0
+                                        ? t('pipeline_category_screening_not_loaded')
+                                        : t('no_categories_match')}
+                                </p>
                             ) : (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-[11px]">
@@ -593,9 +605,9 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                         ))}
                                     </tbody>
                                 </table>
-                            </div>
-                        </div>
-                    )}
+                    </div>
+                    </div>
+                )}
                 </>
             )}
         </div>
