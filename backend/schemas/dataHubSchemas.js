@@ -510,6 +510,11 @@ const pipelineGlobalTelegramBacklogSchema = z.object({
   newestUnprocessed: z.string().optional(),
 });
 
+const pipelineTelegramIngestMetricsSchema = z.object({
+  incoming24h: z.number().int().nonnegative(),
+  transferredToCollectedData24h: z.number().int().nonnegative(),
+});
+
 export const dataPipelineSnapshotSchema = z.object({
     lastRefreshed: z.string(),
     totalRequests24h: z.number().int().nonnegative(),
@@ -546,11 +551,32 @@ export const pipelineQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => v === 'true'),
+  includeCategoryScreening: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+  includeNormalizationSummary: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+  includeDuplicateAnalysis: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+  includeTelegramBacklog: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+  includeRecentPreview: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 export const dataPipelineBacklogResponseSchema = z.object({
   transferThroughput: pipelineTransferThroughputSchema,
   globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema,
+  ingestMetrics: pipelineTelegramIngestMetricsSchema,
   backlogBySourceId: z.record(pipelineCollectorBacklogSchema),
 });
 

@@ -309,3 +309,14 @@ npm run build
 - `pipeline_category_screening_loading`
 - `pipeline_category_screening_slow_hint`
 - `pipeline_category_screening_load_error`
+
+---
+
+## 15. Category screening replaced by Telegram Transfer Health
+
+**Date:** 2026-06-27  
+**Supersedes:** §13–§14 category screening UX (removed from UI)
+
+Category Screening table and on-demand load flow **removed**. Pipeline tab left column now shows **Telegram Transfer Health** — operational backlog/throughput dashboard fed by `/pipeline/backlog` (`transferThroughput`, `globalTelegramBacklog`, new `ingestMetrics`).
+
+See `DH-DATA-PIPELINE-CATEGORY-SCREENING-UX-AUDIT.md` §12 for metric definitions and verification commands.

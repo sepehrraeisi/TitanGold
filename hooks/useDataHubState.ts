@@ -19,7 +19,6 @@ export const DATA_HUB_KEYS = {
     categories: () => [...DATA_HUB_KEYS.all, 'categories'] as const,
     pipeline: () => [...DATA_HUB_KEYS.all, 'pipeline'] as const,
     pipelineBacklog: () => [...DATA_HUB_KEYS.all, 'pipelineBacklog'] as const,
-    pipelineCategoryScreening: () => [...DATA_HUB_KEYS.all, 'pipelineCategoryScreening'] as const,
     sourcesHealth: () => [...DATA_HUB_KEYS.all, 'sourcesHealth'] as const,
     sourcesStats: () => [...DATA_HUB_KEYS.all, 'sourcesStats'] as const,
     sourcesState: () => [...DATA_HUB_KEYS.all, 'sourcesState'] as const,
@@ -70,16 +69,6 @@ export const usePipelineBacklogQuery = (options?: { enabled?: boolean }) => {
         queryFn: api.fetchDataPipelineBacklog,
         staleTime: 60 * 1000,
         enabled: options?.enabled ?? true,
-    });
-};
-
-export const usePipelineCategoryScreeningQuery = (options?: { enabled?: boolean }) => {
-    return useQuery({
-        queryKey: DATA_HUB_KEYS.pipelineCategoryScreening(),
-        queryFn: api.fetchDataPipelineCategoryScreening,
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
-        enabled: options?.enabled ?? false,
     });
 };
 

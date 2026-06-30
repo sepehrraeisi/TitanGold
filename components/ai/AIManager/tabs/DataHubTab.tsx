@@ -50,12 +50,9 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         setSelectedSnapshotId,
         isLoadingPipeline,
         isLoadingPipelineBacklog,
+        pipelineBacklogError,
+        handleRetryPipelineBacklog,
         pipelineApiError,
-        categoryScreeningCategories,
-        categoryScreeningLoaded,
-        isLoadingCategoryScreening,
-        categoryScreeningError,
-        handleLoadCategoryScreening,
         agents,
         isLoadingAgents,
         isLoadingCollector,
@@ -291,16 +288,13 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             handleRefreshPipelineSnapshot={handleRefreshPipelineSnapshot}
                             isLoadingPipeline={isLoadingPipeline}
                             isLoadingPipelineBacklog={isLoadingPipelineBacklog}
+                            pipelineBacklogError={pipelineBacklogError}
+                            onRetryPipelineBacklog={handleRetryPipelineBacklog}
                             pipelineApiError={pipelineApiError}
                             setPipelineError={setPipelineError}
                             formatTimeAgo={formatTimeAgo}
                             selectedSnapshotId={selectedSnapshotId}
                             setSelectedSnapshotId={setSelectedSnapshotId}
-                            categoryScreeningCategories={categoryScreeningCategories}
-                            categoryScreeningLoaded={categoryScreeningLoaded}
-                            isLoadingCategoryScreening={isLoadingCategoryScreening}
-                            categoryScreeningError={categoryScreeningError}
-                            onLoadCategoryScreening={handleLoadCategoryScreening}
                         />
                     )}
 

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { DataPipelineSnapshot, DataPipelineSourceSnapshot, DataPipelineCategorySnapshot, DataNormalizationSummary, NormalizedDataRecord, PipelineSourceQualityStatus } from '../../../../../types';
+import { DataPipelineSnapshot, DataPipelineSourceSnapshot, DataNormalizationSummary, NormalizedDataRecord, PipelineSourceQualityStatus } from '../../../../../types';
 import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 import {
     DATAHUB_SHELL,
@@ -13,6 +13,7 @@ import {
     MetricCard,
     StatusPill,
 } from './dataHubUi';
+import TelegramTransferHealth from './TelegramTransferHealth';
 import { formatDataHubQueryError } from './dataHubI18n';
 import { dataHubSourceStatusLabel } from '../../../../../services/dataSourcesApi';
 import type { DataSource } from '../../../../../types';
@@ -26,16 +27,13 @@ interface PipelinePanelProps {
     handleRefreshPipelineSnapshot: () => void;
     isLoadingPipeline: boolean;
     isLoadingPipelineBacklog?: boolean;
+    pipelineBacklogError?: string | null;
+    onRetryPipelineBacklog?: () => void;
     pipelineApiError?: DataHubApiError | Error | null;
     setPipelineError: (err: string | null) => void;
     formatTimeAgo: (date: string | Date | undefined) => string;
     selectedSnapshotId: string;
     setSelectedSnapshotId: (id: string) => void;
-    categoryScreeningCategories?: DataPipelineCategorySnapshot[];
-    categoryScreeningLoaded?: boolean;
-    isLoadingCategoryScreening?: boolean;
-    categoryScreeningError?: string | null;
-    onLoadCategoryScreening?: () => void;
 }
 
 function statusVariant(status: string): 'success' | 'error' | 'warning' | 'info' | 'neutral' {
@@ -202,20 +200,16 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     handleRefreshPipelineSnapshot,
     isLoadingPipeline,
     isLoadingPipelineBacklog = false,
+    pipelineBacklogError = null,
+    onRetryPipelineBacklog,
     pipelineApiError = null,
     setPipelineError,
     formatTimeAgo,
     selectedSnapshotId,
     setSelectedSnapshotId,
-    categoryScreeningCategories = [],
-    categoryScreeningLoaded = false,
-    isLoadingCategoryScreening = false,
-    categoryScreeningError = null,
-    onLoadCategoryScreening,
 }) => {
     const queryError = formatDataHubQueryError(t, pipelineApiError);
 
-    const [categorySearch, setCategorySearch] = useState('');
     const [sourceSearch, setSourceSearch] = useState('');
     const [sourceStatusFilter, setSourceStatusFilter] = useState<SourceStatusFilter>('all');
     const [sourceSortBy, setSourceSortBy] = useState<SourceSortBy>('name');
@@ -230,20 +224,6 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
         const entry = pipelineHistory.find(item => item.id === selectedSnapshotId);
         return entry?.snapshot || latestSnapshot;
     }, [selectedSnapshotId, latestSnapshot, pipelineHistory]);
-
-    const screeningCategories = useMemo(() => {
-        if (categoryScreeningLoaded) {
-            return categoryScreeningCategories;
-        }
-        return activeSnapshot?.categories ?? [];
-    }, [activeSnapshot?.categories, categoryScreeningCategories, categoryScreeningLoaded]);
-
-    const filteredCategories = useMemo(() => {
-        const query = categorySearch.trim().toLowerCase();
-        return screeningCategories.filter(
-            category => !query || category.name.toLowerCase().includes(query),
-        );
-    }, [screeningCategories, categorySearch]);
 
     const filteredSources = useMemo(() => {
         if (!activeSnapshot) return [];
@@ -385,13 +365,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                         {t('pipeline_telegram_comparison_hint')}
                     </p>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-5">
-                    <input
-                        value={categorySearch}
-                        onChange={e => setCategorySearch(e.target.value)}
-                            placeholder={t('category_filter_placeholder')}
-                            className={INPUT_CLASS}
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-5">
                     <input
                         value={sourceSearch}
                         onChange={e => setSourceSearch(e.target.value)}
@@ -428,87 +402,15 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                 </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
-                        <div className={DATAHUB_INNER_LIST}>
-                            <h4 className="text-[11px] font-semibold text-foreground mb-3">
-                                {t('category_screening')}
-                            </h4>
-                            {filteredCategories.length === 0 ? (
-                                <div className="space-y-2">
-                                    {isLoadingCategoryScreening ? (
-                                        <>
-                                            <p className="text-[11px] text-muted-foreground">
-                                                {t('pipeline_category_screening_loading')}
-                                            </p>
-                                            <p className="text-[10px] text-muted-foreground/80">
-                                                {t('pipeline_category_screening_slow_hint')}
-                                            </p>
-                                        </>
-                                    ) : categoryScreeningError ? (
-                                        <>
-                                            <DataHubAlert
-                                                variant="error"
-                                                message={t('pipeline_category_screening_load_error')}
-                                                onRetry={onLoadCategoryScreening}
-                                                retryLabel={t('retry')}
-                                            />
-                                            {categoryScreeningError !== t('pipeline_category_screening_load_error') && (
-                                                <p className="text-[10px] text-muted-foreground/80">
-                                                    {categoryScreeningError}
-                                                </p>
-                                            )}
-                                        </>
-                                    ) : !categoryScreeningLoaded ? (
-                                        <>
-                                            <p className="text-[11px] text-muted-foreground">
-                                                {t('pipeline_category_screening_not_loaded')}
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={onLoadCategoryScreening}
-                                                disabled={!onLoadCategoryScreening}
-                                                className={BTN_SECONDARY}
-                                            >
-                                                {t('pipeline_category_screening_load')}
-                                            </button>
-                                        </>
-                                    ) : screeningCategories.length === 0 ? (
-                                        <p className="text-[11px] text-muted-foreground">
-                                            {t('pipeline_no_categories')}
-                                        </p>
-                                    ) : (
-                                        <p className="text-[11px] text-muted-foreground">
-                                            {t('no_categories_match')}
-                                        </p>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-[11px]">
-                                        <thead>
-                                            <tr className="border-b border-slate-800 text-muted-foreground text-left">
-                                                <th className="py-2 pr-2">{t('name')}</th>
-                                                <th className="py-2 pr-2">{t('category_inflow')}</th>
-                                                <th className="py-2">{t('category_pass_rate')}</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredCategories.map(cat => (
-                                                <tr
-                                                    key={cat.categoryId}
-                                                    className="border-b border-slate-900/60 hover:bg-slate-900/40"
-                                                >
-                                                    <td className="py-2 pr-2 text-foreground">{cat.name}</td>
-                                                    <td className="py-2 pr-2">{cat.inflow}</td>
-                                                    <td className="py-2 text-emerald-300">
-                                                        {cat.passRate.toFixed(1)}%
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
+                        <TelegramTransferHealth
+                            t={t}
+                            snapshot={activeSnapshot}
+                            isLoading={isLoadingPipelineBacklog}
+                            isPipelineLoaded={Boolean(activeSnapshot)}
+                            error={pipelineBacklogError}
+                            onRetry={onRetryPipelineBacklog}
+                            formatTimeAgo={formatTimeAgo}
+                        />
 
                         <div className={DATAHUB_INNER_LIST}>
                             <div className="flex items-center justify-between gap-2 mb-3">

@@ -4293,6 +4293,13 @@ export interface PipelineGlobalTelegramBacklog {
   newestUnprocessed?: string;
 }
 
+export interface PipelineTelegramIngestMetrics {
+  incoming24h: number;
+  transferredToCollectedData24h: number;
+}
+
+export type TelegramTransferHealthStatus = 'healthy' | 'warning' | 'critical';
+
 export interface DataPipelineSourceSnapshot {
   sourceId: string;
   name: string;
@@ -4324,6 +4331,7 @@ export interface DataPipelineSnapshot {
   normalizedPercent: number;
   transferThroughput?: PipelineTransferThroughput;
   globalTelegramBacklog?: PipelineGlobalTelegramBacklog;
+  telegramIngestMetrics?: PipelineTelegramIngestMetrics;
   sources: DataPipelineSourceSnapshot[];
   categories: DataPipelineCategorySnapshot[];
 }

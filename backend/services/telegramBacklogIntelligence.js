@@ -1,4 +1,5 @@
 import { query } from '../database/db.js';
+import { ingestedAtSql } from './collectedDataTimestamps.js';
 
 /** Minimum assumed throughput when 24h observation is zero (read-only floor, not a scheduler change). */
 export const BACKLOG_THROUGHPUT_FLOOR_MSG_PER_HOUR = 1;
@@ -108,22 +109,63 @@ export async function batchCollectorBacklogIntelligence(collectorChannelUuids, t
 /**
  * Global backlog summary for pipeline snapshot metadata.
  */
-export async function fetchGlobalTelegramBacklogSummary() {
-  const result = await query(`
-    SELECT
-      COUNT(*) FILTER (WHERE is_processed = false)::int AS unprocessed_total,
-      MIN(telegram_created_at) FILTER (WHERE is_processed = false) AS oldest_unprocessed,
-      MAX(telegram_created_at) FILTER (WHERE is_processed = false) AS newest_unprocessed
-    FROM telegram_messages
-  `);
-  const row = result.rows[0] || {};
+/**
+ * Lightweight 24h ingest counters for Telegram transfer health (indexed time-range counts).
+ * @returns {Promise<{ incoming24h: number, transferredToCollectedData24h: number }>}
+ */
+export async function fetchTelegramIngestMetrics24h() {
+  const [incomingResult, transferredResult] = await Promise.all([
+    query(`
+      SELECT COUNT(*)::int AS incoming_24h
+      FROM telegram_messages
+      WHERE created_at > NOW() - INTERVAL '24 hours'
+    `),
+    query(`
+      SELECT COUNT(*)::int AS transferred_24h
+      FROM collected_data cd
+      INNER JOIN data_sources ds ON ds.id = cd.source_id
+      WHERE ds.type = 'telegram'
+        AND ${ingestedAtSql('cd')} > NOW() - INTERVAL '24 hours'
+    `),
+  ]);
   return {
-    unprocessedTotal: Number(row.unprocessed_total || 0),
-    oldestUnprocessed: row.oldest_unprocessed
-      ? new Date(row.oldest_unprocessed).toISOString()
+    incoming24h: Number(incomingResult.rows[0]?.incoming_24h || 0),
+    transferredToCollectedData24h: Number(transferredResult.rows[0]?.transferred_24h || 0),
+  };
+}
+
+export async function fetchGlobalTelegramBacklogSummary() {
+  const [estimateResult, oldestResult, newestResult] = await Promise.all([
+    query(`
+      SELECT GREATEST(COALESCE(reltuples, 0), 0)::bigint AS estimated_unprocessed
+      FROM pg_class
+      WHERE relname = 'idx_telegram_messages_unprocessed_created'
+    `),
+    query(`
+      SELECT telegram_created_at AS oldest_unprocessed
+      FROM telegram_messages
+      WHERE is_processed = false
+        AND telegram_created_at IS NOT NULL
+      ORDER BY telegram_created_at ASC, created_at ASC
+      LIMIT 1
+    `),
+    query(`
+      SELECT telegram_created_at AS newest_unprocessed
+      FROM telegram_messages
+      WHERE is_processed = false
+        AND telegram_created_at IS NOT NULL
+      ORDER BY telegram_created_at DESC, created_at DESC
+      LIMIT 1
+    `),
+  ]);
+  const estimate = Number(estimateResult.rows[0]?.estimated_unprocessed || 0);
+  return {
+    unprocessedTotal: Math.max(0, Math.round(estimate)),
+    oldestUnprocessed: oldestResult.rows[0]?.oldest_unprocessed
+      ? new Date(oldestResult.rows[0].oldest_unprocessed).toISOString()
       : undefined,
-    newestUnprocessed: row.newest_unprocessed
-      ? new Date(row.newest_unprocessed).toISOString()
+    newestUnprocessed: newestResult.rows[0]?.newest_unprocessed
+      ? new Date(newestResult.rows[0].newest_unprocessed).toISOString()
       : undefined,
   };
 }

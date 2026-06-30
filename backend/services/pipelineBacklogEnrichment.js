@@ -1,6 +1,7 @@
 import {
   batchCollectorBacklogIntelligence,
   fetchGlobalTelegramBacklogSummary,
+  fetchTelegramIngestMetrics24h,
   fetchTransferThroughput24h,
 } from './telegramBacklogIntelligence.js';
 import { batchTelegramCollectorEnrichment } from './telegramCollectorSourceStatus.js';
@@ -15,9 +16,10 @@ export async function buildPipelineBacklogEnrichment(sourcesRows) {
     { includeMessageStats: true },
   );
 
-  const [transferThroughput, globalTelegramBacklog] = await Promise.all([
+  const [transferThroughput, globalTelegramBacklog, ingestMetrics] = await Promise.all([
     fetchTransferThroughput24h(),
     fetchGlobalTelegramBacklogSummary(),
+    fetchTelegramIngestMetrics24h(),
   ]);
 
   const collectorChannelIds = [
@@ -45,6 +47,7 @@ export async function buildPipelineBacklogEnrichment(sourcesRows) {
   return {
     transferThroughput,
     globalTelegramBacklog,
+    ingestMetrics,
     backlogBySourceId,
   };
 }

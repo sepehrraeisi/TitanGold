@@ -20,7 +20,7 @@ const LOCALE_FILES = {
 const REQUIRED_KEYS = [
     'pipeline_metric_requests_hint',
     'pipeline_telegram_comparison_hint',
-    'pipeline_category_screening_not_loaded',
+    'telegram_transfer_health_title',
 ];
 
 function loadJson(path: string): Record<string, string> {
@@ -91,7 +91,7 @@ describe('Pipeline metrics UI clarification', () => {
         expect(screen.getByText(enLocale.pipeline_telegram_comparison_hint)).toBeTruthy();
     });
 
-    it('category screening empty state explains fast pipeline view and offers load action', () => {
+    it('shows Telegram Transfer Health widget instead of category screening', () => {
         const t = makeT(enLocale);
         render(
             React.createElement(PipelinePanel, {
@@ -106,24 +106,21 @@ describe('Pipeline metrics UI clarification', () => {
                 formatTimeAgo: () => 'just now',
                 selectedSnapshotId: 'latest',
                 setSelectedSnapshotId: () => {},
-                onLoadCategoryScreening: () => {},
             }),
         );
 
-        expect(screen.getByText(enLocale.pipeline_category_screening_not_loaded)).toBeTruthy();
-        expect(screen.getByRole('button', { name: enLocale.pipeline_category_screening_load })).toBeTruthy();
-        expect(screen.queryByText('No category samples yet.')).toBeNull();
-        expect(screen.queryByText('pipeline_category_screening_not_loaded')).toBeNull();
+        expect(screen.getByText(enLocale.telegram_transfer_health_title)).toBeTruthy();
+        expect(screen.queryByText('Category Screening')).toBeNull();
     });
 
-    it('PipelinePanel.tsx references clarification i18n keys', () => {
+    it('PipelinePanel.tsx references clarification i18n keys and delegates transfer health', () => {
         const src = readFileSync(
             join(ROOT, 'components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx'),
             'utf8',
         );
-        for (const key of REQUIRED_KEYS) {
-            expect(src).toContain(key);
-        }
+        expect(src).toContain('pipeline_metric_requests_hint');
+        expect(src).toContain('pipeline_telegram_comparison_hint');
+        expect(src).toContain('TelegramTransferHealth');
         expect(src).not.toContain('No category samples yet');
     });
 });
