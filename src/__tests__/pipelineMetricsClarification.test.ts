@@ -91,7 +91,7 @@ describe('Pipeline metrics UI clarification', () => {
         expect(screen.getByText(enLocale.pipeline_telegram_comparison_hint)).toBeTruthy();
     });
 
-    it('category screening empty state explains fast pipeline view instead of misleading copy', () => {
+    it('category screening empty state explains fast pipeline view and offers load action', () => {
         const t = makeT(enLocale);
         render(
             React.createElement(PipelinePanel, {
@@ -106,10 +106,12 @@ describe('Pipeline metrics UI clarification', () => {
                 formatTimeAgo: () => 'just now',
                 selectedSnapshotId: 'latest',
                 setSelectedSnapshotId: () => {},
+                onLoadCategoryScreening: () => {},
             }),
         );
 
         expect(screen.getByText(enLocale.pipeline_category_screening_not_loaded)).toBeTruthy();
+        expect(screen.getByRole('button', { name: enLocale.pipeline_category_screening_load })).toBeTruthy();
         expect(screen.queryByText('No category samples yet.')).toBeNull();
         expect(screen.queryByText('pipeline_category_screening_not_loaded')).toBeNull();
     });

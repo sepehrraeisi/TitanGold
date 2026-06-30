@@ -271,6 +271,41 @@ psql -c "SELECT COUNT(*) FROM telegram_messages WHERE created_at > NOW() - INTER
 ### Verification
 
 ```bash
-npm run test -- src/__tests__/pipelineMetricsClarification.test.ts
+npm run test -- src/__tests__/pipelineMetricsClarification.test.ts src/__tests__/pipelineCategoryScreening.test.ts
 npm run build
 ```
+
+---
+
+## 14. Category screening on-demand load (UX fix)
+
+**Date:** 2026-06-30  
+**Problem:** Section §13 added honest empty copy but no action — users could not enable detailed screening.
+
+**Solution:** Real **Load detailed screening** button inside Category Screening panel.
+
+| Behavior | Detail |
+|----------|--------|
+| Default pipeline | `includeCategoryScreening=false` — fast load unchanged |
+| User action | Button calls `fetchDataPipelineCategoryScreening()` → `GET /pipeline?includeBacklog=false&includeCategoryScreening=true` |
+| Loading | Spinner copy + slow-query hint (10–20s) |
+| Success | Category table populated; React Query cache (`staleTime` 5 min) |
+| Error | Localized error + Retry |
+| Pipeline refresh | Re-fetches screening only if user already loaded it |
+
+### Files touched
+
+- `services/dataPipelineApi.ts` — `fetchDataPipelineCategoryScreening`
+- `hooks/useDataHubState.ts` — `usePipelineCategoryScreeningQuery`
+- `components/ai/AIManager/tabs/DataHub/hooks/useDataHub.ts`
+- `components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx`
+- `components/ai/AIManager/tabs/DataHubTab.tsx`
+- Locale files (en/fa × blue/green)
+- `src/__tests__/pipelineCategoryScreening.test.ts`
+
+### i18n keys added
+
+- `pipeline_category_screening_load`
+- `pipeline_category_screening_loading`
+- `pipeline_category_screening_slow_hint`
+- `pipeline_category_screening_load_error`

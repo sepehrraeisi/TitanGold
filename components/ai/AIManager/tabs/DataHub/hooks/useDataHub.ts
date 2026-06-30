@@ -31,6 +31,7 @@ import {
     useDeleteCategoryMutation,
     usePipelineQuery,
     usePipelineBacklogQuery,
+    usePipelineCategoryScreeningQuery,
     useAccessLogsQuery,
 } from '../../../../../../hooks/useDataHubState.ts';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi.ts';
@@ -83,6 +84,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     // Pipeline State
     const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>('latest');
+    const [categoryScreeningRequested, setCategoryScreeningRequested] = useState(false);
 
     const pipelineEnabled = activeView === 'pipeline';
     const {
@@ -99,6 +101,15 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         isFetching: isFetchingPipelineBacklog,
         refetch: refetchPipelineBacklog,
     } = usePipelineBacklogQuery({ enabled: pipelineMainReady });
+    const {
+        data: categoryScreeningResult,
+        isLoading: isLoadingCategoryScreening,
+        isFetching: isFetchingCategoryScreening,
+        error: categoryScreeningErrorObj,
+        refetch: refetchCategoryScreening,
+    } = usePipelineCategoryScreeningQuery({
+        enabled: pipelineEnabled && categoryScreeningRequested,
+    });
     const logsEnabled = activeView === 'logs';
     const {
         data: accessLogsResult,
@@ -637,10 +648,31 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
             if (pipelineMainReady) {
                 await refetchPipelineBacklog();
             }
+            if (categoryScreeningRequested) {
+                await refetchCategoryScreening();
+            }
         } catch (error) {
             console.error('Failed to refresh pipeline:', error);
         }
     };
+
+    const handleLoadCategoryScreening = () => {
+        if (!categoryScreeningRequested) {
+            setCategoryScreeningRequested(true);
+            return;
+        }
+        void refetchCategoryScreening();
+    };
+
+    const categoryScreeningCategories = categoryScreeningResult?.categories ?? [];
+    const categoryScreeningLoaded =
+        categoryScreeningRequested && categoryScreeningResult !== undefined;
+    const categoryScreeningApiError =
+        categoryScreeningErrorObj instanceof DataHubApiError
+            ? categoryScreeningErrorObj
+            : categoryScreeningErrorObj instanceof Error
+              ? categoryScreeningErrorObj
+              : null;
 
     const pipelineSnapshotBase = pipelineView?.snapshot;
     const pipelineSnapshot = useMemo(() => {
@@ -707,16 +739,20 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     };
 
     const categoryMetricsById = useMemo(() => {
-        if (!pipelineSnapshot?.categories?.length) return {};
+        const categoriesForMetrics =
+            categoryScreeningCategories.length > 0
+                ? categoryScreeningCategories
+                : pipelineSnapshot?.categories ?? [];
+        if (!categoriesForMetrics.length) return {};
         const metrics: Record<string, { inflow: number; passRate: number }> = {};
-        pipelineSnapshot.categories.forEach(cat => {
+        categoriesForMetrics.forEach(cat => {
             metrics[cat.categoryId] = {
                 inflow: cat.inflow,
                 passRate: cat.passRate,
             };
         });
         return metrics;
-    }, [pipelineSnapshot]);
+    }, [categoryScreeningCategories, pipelineSnapshot?.categories]);
 
     const accessLogs = accessLogsResult?.data ?? [];
     const logStatusCounts = accessLogsResult?.statusCounts ?? {
@@ -810,6 +846,15 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         isFetchingPipeline,
         isLoadingPipeline: isLoadingPipeline || isFetchingPipeline,
         isLoadingPipelineBacklog: isLoadingPipelineBacklog || isFetchingPipelineBacklog,
+        categoryScreeningCategories,
+        categoryScreeningLoaded,
+        isLoadingCategoryScreening:
+            categoryScreeningRequested &&
+            (isLoadingCategoryScreening || isFetchingCategoryScreening) &&
+            categoryScreeningResult === undefined,
+        categoryScreeningError: categoryScreeningApiError?.message ?? null,
+        categoryScreeningApiError,
+        handleLoadCategoryScreening,
         pipelineError,
         setPipelineError,
         pipelineApiError,

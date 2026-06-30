@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { DataPipelineSnapshot, DataPipelineSourceSnapshot, DataNormalizationSummary, NormalizedDataRecord, PipelineSourceQualityStatus } from '../../../../../types';
+import { DataPipelineSnapshot, DataPipelineSourceSnapshot, DataPipelineCategorySnapshot, DataNormalizationSummary, NormalizedDataRecord, PipelineSourceQualityStatus } from '../../../../../types';
 import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 import {
     DATAHUB_SHELL,
@@ -31,6 +31,11 @@ interface PipelinePanelProps {
     formatTimeAgo: (date: string | Date | undefined) => string;
     selectedSnapshotId: string;
     setSelectedSnapshotId: (id: string) => void;
+    categoryScreeningCategories?: DataPipelineCategorySnapshot[];
+    categoryScreeningLoaded?: boolean;
+    isLoadingCategoryScreening?: boolean;
+    categoryScreeningError?: string | null;
+    onLoadCategoryScreening?: () => void;
 }
 
 function statusVariant(status: string): 'success' | 'error' | 'warning' | 'info' | 'neutral' {
@@ -202,6 +207,11 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     formatTimeAgo,
     selectedSnapshotId,
     setSelectedSnapshotId,
+    categoryScreeningCategories = [],
+    categoryScreeningLoaded = false,
+    isLoadingCategoryScreening = false,
+    categoryScreeningError = null,
+    onLoadCategoryScreening,
 }) => {
     const queryError = formatDataHubQueryError(t, pipelineApiError);
 
@@ -221,13 +231,19 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
         return entry?.snapshot || latestSnapshot;
     }, [selectedSnapshotId, latestSnapshot, pipelineHistory]);
 
+    const screeningCategories = useMemo(() => {
+        if (categoryScreeningLoaded) {
+            return categoryScreeningCategories;
+        }
+        return activeSnapshot?.categories ?? [];
+    }, [activeSnapshot?.categories, categoryScreeningCategories, categoryScreeningLoaded]);
+
     const filteredCategories = useMemo(() => {
-        if (!activeSnapshot) return [];
         const query = categorySearch.trim().toLowerCase();
-        return activeSnapshot.categories.filter(
+        return screeningCategories.filter(
             category => !query || category.name.toLowerCase().includes(query),
         );
-    }, [activeSnapshot, categorySearch]);
+    }, [screeningCategories, categorySearch]);
 
     const filteredSources = useMemo(() => {
         if (!activeSnapshot) return [];
@@ -417,11 +433,54 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                 {t('category_screening')}
                             </h4>
                             {filteredCategories.length === 0 ? (
-                                <p className="text-[11px] text-muted-foreground">
-                                    {activeSnapshot.categories.length === 0
-                                        ? t('pipeline_category_screening_not_loaded')
-                                        : t('no_categories_match')}
-                                </p>
+                                <div className="space-y-2">
+                                    {isLoadingCategoryScreening ? (
+                                        <>
+                                            <p className="text-[11px] text-muted-foreground">
+                                                {t('pipeline_category_screening_loading')}
+                                            </p>
+                                            <p className="text-[10px] text-muted-foreground/80">
+                                                {t('pipeline_category_screening_slow_hint')}
+                                            </p>
+                                        </>
+                                    ) : categoryScreeningError ? (
+                                        <>
+                                            <DataHubAlert
+                                                variant="error"
+                                                message={t('pipeline_category_screening_load_error')}
+                                                onRetry={onLoadCategoryScreening}
+                                                retryLabel={t('retry')}
+                                            />
+                                            {categoryScreeningError !== t('pipeline_category_screening_load_error') && (
+                                                <p className="text-[10px] text-muted-foreground/80">
+                                                    {categoryScreeningError}
+                                                </p>
+                                            )}
+                                        </>
+                                    ) : !categoryScreeningLoaded ? (
+                                        <>
+                                            <p className="text-[11px] text-muted-foreground">
+                                                {t('pipeline_category_screening_not_loaded')}
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={onLoadCategoryScreening}
+                                                disabled={!onLoadCategoryScreening}
+                                                className={BTN_SECONDARY}
+                                            >
+                                                {t('pipeline_category_screening_load')}
+                                            </button>
+                                        </>
+                                    ) : screeningCategories.length === 0 ? (
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {t('pipeline_no_categories')}
+                                        </p>
+                                    ) : (
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {t('no_categories_match')}
+                                        </p>
+                                    )}
+                                </div>
                             ) : (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-[11px]">

@@ -1,6 +1,7 @@
 import {
     DataPipelineSnapshot,
     DataPipelineHistoryEntry,
+    DataPipelineCategorySnapshot,
     DataNormalizationSummary,
     NormalizedDataRecord,
     DataPipelineSourceSnapshot,
@@ -20,6 +21,10 @@ export type DataPipelineBacklogEnrichment = {
     transferThroughput: NonNullable<DataPipelineSnapshot['transferThroughput']>;
     globalTelegramBacklog: NonNullable<DataPipelineSnapshot['globalTelegramBacklog']>;
     backlogBySourceId: Record<string, NonNullable<DataPipelineSourceSnapshot['collectorBacklog']>>;
+};
+
+export type DataPipelineCategoryScreening = {
+    categories: DataPipelineCategorySnapshot[];
 };
 
 function getAuthToken(): string | null {
@@ -64,6 +69,23 @@ export async function fetchDataPipelineView(options?: { includeBacklog?: boolean
         throw await parseErrorResponse(res);
     }
     return res.json() as Promise<DataPipelineView>;
+}
+
+/** Heavy category screening — lazy-loaded on user action (fast pipeline keeps this off). */
+export async function fetchDataPipelineCategoryScreening(): Promise<DataPipelineCategoryScreening> {
+    const params = new URLSearchParams({
+        includeBacklog: 'false',
+        includeCategoryScreening: 'true',
+    });
+    const res = await fetch(`${BASE}/pipeline?${params.toString()}`, {
+        method: 'GET',
+        headers: authHeaders(),
+    });
+    if (!res.ok) {
+        throw await parseErrorResponse(res);
+    }
+    const view = (await res.json()) as DataPipelineView;
+    return { categories: view.snapshot?.categories ?? [] };
 }
 
 /** Heavy Telegram backlog intelligence — lazy-loaded after main pipeline board. */

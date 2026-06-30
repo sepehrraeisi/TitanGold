@@ -21409,8 +21409,13 @@ export {
     fetchDataPipelineView,
     fetchDataPipelineSnapshot,
     fetchDataPipelineBacklog,
+    fetchDataPipelineCategoryScreening,
 } from './dataPipelineApi';
-export type { DataPipelineView, DataPipelineBacklogEnrichment } from './dataPipelineApi';
+export type {
+    DataPipelineView,
+    DataPipelineBacklogEnrichment,
+    DataPipelineCategoryScreening,
+} from './dataPipelineApi';
 
 export { fetchDataAccessLogs } from './dataAccessLogsApi';
 export type { AccessLogsListResult, AccessLogsStatusCounts } from './dataAccessLogsApi';

@@ -51,6 +51,11 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         isLoadingPipeline,
         isLoadingPipelineBacklog,
         pipelineApiError,
+        categoryScreeningCategories,
+        categoryScreeningLoaded,
+        isLoadingCategoryScreening,
+        categoryScreeningError,
+        handleLoadCategoryScreening,
         agents,
         isLoadingAgents,
         isLoadingCollector,
@@ -291,6 +296,11 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             formatTimeAgo={formatTimeAgo}
                             selectedSnapshotId={selectedSnapshotId}
                             setSelectedSnapshotId={setSelectedSnapshotId}
+                            categoryScreeningCategories={categoryScreeningCategories}
+                            categoryScreeningLoaded={categoryScreeningLoaded}
+                            isLoadingCategoryScreening={isLoadingCategoryScreening}
+                            categoryScreeningError={categoryScreeningError}
+                            onLoadCategoryScreening={handleLoadCategoryScreening}
                         />
                     )}
 
