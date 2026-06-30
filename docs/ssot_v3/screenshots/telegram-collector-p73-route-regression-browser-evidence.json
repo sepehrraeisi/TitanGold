@@ -1,0 +1,233 @@
+{
+  "capturedAt": "2026-06-30T09:58:59.822Z",
+  "phase": "P7.3-PROXY-ROUTE-REGRESSION-FIX",
+  "appUrl": "https://titan.zala.ir",
+  "sourceOfTruth": {
+    "collectorPort": 5003,
+    "nginxUpstream": "127.0.0.1:5003"
+  },
+  "nginxProbes": [
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/health",
+      "status": 200,
+      "latencyMs": 163,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"status\":\"healthy\",\"service\":\"telegram-collector\",\"version\":\"0.5.0\",\"timestamp\":\"2026-06-30T09:57:46.239Z\",\"configured\""
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/session/status",
+      "status": 200,
+      "latencyMs": 124,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"stored_in_db\":false,\"message\":\"No session found in database\",\"fallback_to_env\":true}"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/accounts",
+      "status": 200,
+      "latencyMs": 125,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":true,\"count\":2,\"accounts\":[{\"id\":\"7a8eae98-c2c9-45c7-a374-b00cf8b5538c\",\"label\":\"+989031395555\",\"status\":\"act"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/collector-channels",
+      "status": 200,
+      "latencyMs": 120,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":true,\"count\":45,\"channels\":[{\"id\":\"e4f01022-429c-49c9-aa8e-59a41d21e533\",\"channelId\":\"-1001326546349\",\"userna"
+    }
+  ],
+  "directPort5003": [
+    {
+      "url": "http://127.0.0.1:5003/api/telegram-collector/health",
+      "status": 200,
+      "latencyMs": 8,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"status\":\"healthy\",\"service\":\"telegram-collector\",\"version\":\"0.5.0\",\"timestamp\":\"2026-06-30T09:57:46.273Z\",\"configured\""
+    },
+    {
+      "url": "http://127.0.0.1:5003/api/telegram-collector/session/status",
+      "status": 200,
+      "latencyMs": 10,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"stored_in_db\":false,\"message\":\"No session found in database\",\"fallback_to_env\":true}"
+    },
+    {
+      "url": "http://127.0.0.1:5003/api/telegram-collector/accounts",
+      "status": 200,
+      "latencyMs": 11,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":true,\"count\":2,\"accounts\":[{\"id\":\"7a8eae98-c2c9-45c7-a374-b00cf8b5538c\",\"label\":\"+989031395555\",\"status\":\"act"
+    },
+    {
+      "url": "http://127.0.0.1:5003/api/telegram-collector/collector-channels",
+      "status": 200,
+      "latencyMs": 23,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":true,\"count\":45,\"channels\":[{\"id\":\"e4f01022-429c-49c9-aa8e-59a41d21e533\",\"channelId\":\"-1001326546349\",\"userna"
+    }
+  ],
+  "directPort3002": [
+    {
+      "url": "http://127.0.0.1:3002/api/telegram-collector/health",
+      "error": "fetch failed",
+      "latencyMs": 4
+    },
+    {
+      "url": "http://127.0.0.1:3002/api/telegram-collector/session/status",
+      "error": "fetch failed",
+      "latencyMs": 3
+    },
+    {
+      "url": "http://127.0.0.1:3002/api/telegram-collector/accounts",
+      "error": "fetch failed",
+      "latencyMs": 3
+    },
+    {
+      "url": "http://127.0.0.1:3002/api/telegram-collector/collector-channels",
+      "error": "fetch failed",
+      "latencyMs": 4
+    }
+  ],
+  "writeAuth": [
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/collector-channels/e4f01022-429c-49c9-aa8e-59a41d21e533",
+      "status": 200,
+      "latencyMs": 42,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":true,\"channel\":{\"id\":\"e4f01022-429c-49c9-aa8e-59a41d21e533\",\"channelId\":\"-1001326546349\",\"username\":\"Nerkhlan"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/collector-channels/e4f01022-429c-49c9-aa8e-59a41d21e533",
+      "status": 403,
+      "latencyMs": 26,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":false,\"error\":\"Insufficient permissions\"}"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/channels/refresh",
+      "status": 200,
+      "latencyMs": 1922,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":true,\"refreshed\":0,\"totalChannels\":45,\"activeChannels\":43,\"message\":\"Refreshed 0 channels from database\"}"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/channels/refresh",
+      "status": 401,
+      "latencyMs": 25,
+      "contentType": "application/json; charset=utf-8",
+      "responseKind": "json",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":false,\"error\":\"Authentication required\"}"
+    }
+  ],
+  "uiMetrics": {
+    "hasProxyUnreachable": false,
+    "hasHtml404": false,
+    "collectorStatusHealthy": true,
+    "collectorStatusDegraded": false,
+    "hasAverageLatency": true,
+    "hasLastProcessed": false,
+    "accountsLoaded": true,
+    "channelsLoaded": true
+  },
+  "tabsLoaded": [
+    {
+      "tab": "Overview|نمای کلی",
+      "ok": true
+    },
+    {
+      "tab": "AI Inbox|صندوق",
+      "ok": true
+    },
+    {
+      "tab": "Categories|دسته",
+      "ok": true
+    },
+    {
+      "tab": "Breaking|خبر",
+      "ok": true
+    },
+    {
+      "tab": "Geographic|جغراف",
+      "ok": true
+    }
+  ],
+  "feedResults": [
+    {
+      "agentKey": "trend",
+      "loadMs": 227,
+      "feedStatus": 200
+    },
+    {
+      "agentKey": "sentiment",
+      "loadMs": 291,
+      "feedStatus": 200
+    },
+    {
+      "agentKey": "technical",
+      "loadMs": 297,
+      "feedStatus": 200
+    },
+    {
+      "agentKey": "price_prediction",
+      "loadMs": 294,
+      "feedStatus": 200
+    },
+    {
+      "agentKey": "fundamental",
+      "loadMs": 232,
+      "feedStatus": 200
+    }
+  ],
+  "browserNetwork": [
+    {
+      "url": "/api/telegram-collector/accounts",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "url": "/api/telegram-collector/collector-channels",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "url": "/api/telegram-collector/collector-channels",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "url": "/api/telegram-collector/collector-channels",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "url": "/api/telegram-collector/collector-channels",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8"
+    }
+  ],
+  "navigationError": null,
+  "verdict": "REAL WORKING"
+}

@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../.env') });
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-const BASE = process.env.COLLECTOR_BASE || 'http://127.0.0.1:3002';
+const BASE = process.env.COLLECTOR_BASE || 'http://127.0.0.1:5003';
 const OUT = path.resolve(__dirname, '../../docs/ssot_v3/screenshots/telegram-collector-p72-write-auth-evidence.json');
 const ADMIN_ID = 'e134c7b1-b183-4e21-9acf-e3d53b9806d6';
 
