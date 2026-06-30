@@ -4225,8 +4225,6 @@
   "telegram_ai_inbox_high_priority": "اولویت بالا",
   "telegram_ai_inbox_messages": "پیام",
   "telegram_ai_inbox_top_categories": "دسته‌های برتر",
-  "telegram_agent_feed_not_configured": "فید ایجنت هنوز پیکربندی نشده است. معیارهای خلاصه در بالا در دسترس هستند.",
-  "telegram_agent_feed_empty": "پیامی با فیلترهای فعلی برای این ایجنت یافت نشد.",
   "telegram_agent_feed_empty_filter": "موردی با این فیلتر در فید یافت نشد.",
   "telegram_agent_feed_load_error": "بارگذاری فید ایجنت ناموفق بود. دوباره تلاش کنید.",
   "telegram_agent_feed_timeout": "فید ایجنت بیش از حد طول کشید. بازه زمانی کوتاه‌تری انتخاب کنید.",

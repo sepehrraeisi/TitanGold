@@ -171,9 +171,102 @@ Removed `feedNotConfigured` fake empty state (no longer masks slow backend).
 - Local backend direct p95 mostly **< 200ms**.
 - **No timeouts.**
 
-### nginx 180s timeout note
+### nginx timeout (P7.1 cleanup)
 
-The P6 workaround (`location ^~ /api/v1/telegram/agents/` with 180s) is **no longer required** for normal feed use. It can remain harmlessly or be reverted to 30s — queries complete in sub-second.
+| Location | Timeout | Reason |
+|----------|---------|--------|
+| `/api/v1/data-sources/pipeline` | **180s** | Heavy pipeline snapshot query (DH-PIPELINE-P1) — legitimate |
+| `/api/` (general, includes agent feed) | **30s** | Project standard |
+| ~~`/api/v1/telegram/agents/`~~ | ~~180s~~ | **Removed P7.1** — was P6 workaround for slow feed; no longer needed |
+
+Agent feed verified **200** through general `/api/` block after removal (sub-second).
+
+---
+
+## Agent Feed Architecture (final)
+
+```mermaid
+flowchart LR
+    UI[AgentDetailPanel] -->|GET /agents/:key/feed| Route[telegram.js route]
+    Route --> Cache[getTelegramAnalyticsCached]
+    Cache --> Redis[(Redis tg:analytics:v1)]
+    Cache --> Loader[telegramAgentFeed.loadAgentFeed]
+    Loader --> SQL[(telegram_agent_impacts LIMIT first)]
+    SQL --> Join[processed_telegram_messages + channels]
+    Join --> JSON[JSON response]
+```
+
+**Single source of truth:** `backend/services/telegramAgentFeed.js` (query) + `backend/routes/telegram.js` (HTTP).
+
+---
+
+## Agent Feed Endpoint Contract
+
+**`GET /api/v1/telegram/agents/:agentKey/feed`**
+
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| `timeRange` | hours | 24 | 1–720 |
+| `limit` | int | 20 | max 200 |
+| `offset` | int | 0 | pagination |
+| `minImpact` | float | 0 | 0.0–1.0 |
+| `requiresAction` | bool | — | optional filter |
+| `priority` | string | — | critical/high/medium/low |
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "agent": "trend",
+  "data": [{ "id", "channel_title", "cleaned_text", "impact_score", ... }],
+  "pagination": { "limit", "offset", "hasMore", "nextCursor" },
+  "filters": { "timeRange", "minImpact", ... },
+  "message": "No feed items for this agent and filter."
+}
+```
+
+`cleaned_text` truncated to **500 chars** in list view.
+
+---
+
+## P7.1 Final Cleanup
+
+- Removed nginx `location ^~ /api/v1/telegram/agents/` 180s block (2026-06-30).
+- Removed unused i18n: `telegram_agent_feed_not_configured`, `telegram_agent_feed_empty`.
+- Removed dead `invalidateTelegramAnalyticsCache()` stub.
+- Confirmed no duplicate feed query implementations.
+
+---
+
+## Telegram Collector Closed — Final Checklist
+
+| Area | Status |
+|------|--------|
+| ✓ Backend | Agent feed optimized; single loader service |
+| ✓ Frontend | DataHub design system; honest feed UX states |
+| ✓ Database | Migration 045 indexes applied |
+| ✓ Redis | Shared analytics cache, 60s agent feed TTL |
+| ✓ DevOps | nginx 30s standard; pipeline 180s documented |
+| ✓ Security | `telegramReadAuth` on all read routes |
+| ✓ Performance | p95 < 500ms warm; browser verified |
+| ✓ Human QA | P6 i18n/enums repair accepted |
+| ✓ Browser QA | P7 feed clicks 200, < 540ms |
+| ✓ Tests | 36 frontend + 6 backend telegram tests pass |
+| ✓ Build | `npm run build` pass |
+| ✓ Documentation | P6, P7, P7.1 SSOT complete |
+
+**Module status:** Telegram Collector **PERMANENTLY CLOSED**
+
+**Commit:** `chore(datahub): cleanup telegram collector after P7 completion`
+
+---
+
+## Final Verdict
+
+**REAL WORKING** — Agent feed endpoint responds in **< 1s** (typically **< 500ms**) for all verified agents; browser + nginx evidence confirms; no minute-long waits; no fake empty state; tests/build pass; nginx workaround removed.
+
+**Commits:** `fix(datahub): optimize telegram collector agent feed performance` · `chore(datahub): cleanup telegram collector after P7 completion`
 
 ---
 
@@ -192,10 +285,10 @@ The P6 workaround (`location ^~ /api/v1/telegram/agents/` with 180s) is **no lon
 
 ```
 backend: telegramAgentFeed.test.js — 4 passed
-frontend: telegramCollectorI18n.test.ts — 6 passed
+frontend: telegramCollectorI18n.test.ts — 6 passed (36 total telegram collector)
 npm run build — pass
-pm2 titan-backend — restarted
 migration 045 — applied
+nginx P7.1 — agent feed 200 @ 285ms via 30s block
 ```
 
 ---
@@ -205,11 +298,3 @@ migration 045 — applied
 - Planner may still choose `idx_agent_impacts_created` + filter on `agent_key` for some plans; execution remains sub-ms.
 - Rate limiter (429) can appear under rapid automated benchmark bursts — not a query performance issue.
 - Full message text truncated to 500 chars in feed list (detail endpoint can be added later if needed).
-
----
-
-## Final Verdict
-
-**REAL WORKING** — Agent feed endpoint responds in **< 1s** (typically **< 500ms**) for all verified agents; browser + nginx evidence confirms; no minute-long waits; no fake empty state; tests/build pass.
-
-**Commit:** `fix(datahub): optimize telegram collector agent feed performance`

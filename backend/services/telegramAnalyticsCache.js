@@ -46,7 +46,3 @@ export async function getTelegramAnalyticsCached(endpoint, params, loader, ttlMs
     const key = buildTelegramCacheKey(endpoint, params);
     return getOrLoadCached(key, loader, ttlMs);
 }
-
-export function invalidateTelegramAnalyticsCache() {
-    // Keys use tg:analytics prefix; pipeline cache invalidation is separate.
-}
