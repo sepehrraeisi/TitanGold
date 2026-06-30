@@ -25,6 +25,7 @@ import TelegramCollectorMetrics from './telegram/TelegramCollectorMetrics';
 import CollectorDiagnoseCards from './telegram/CollectorDiagnoseCards';
 import TelegramLoginWizard from './TelegramLoginWizard';
 import { accountStatusLabel, accountStatusVariant } from './telegram/telegramCollectorLabels';
+import { useCollectorHealthQuery } from '../../../../../hooks/useTelegramCollector';
 
 type Props = {
     t: (key: string) => string;
@@ -137,6 +138,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
 
     const { canWrite } = useDataHubPermissions();
     const writeGate = (extra = false) => dataHubWriteGate(canWrite, t, extra);
+    const { data: collectorHealthData } = useCollectorHealthQuery();
 
     const [accounts, setAccounts] = useState<TelegramAccount[]>([]);
     const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
@@ -689,11 +691,19 @@ const TelegramPanel: React.FC<Props> = (props) => {
         const channelsWithErrors = collectorChannels.filter(ch => (ch.errorCount || 0) > 0).length;
         const criticalErrorChannels = collectorChannels.filter(ch => (ch.errorCount || 0) >= 3).length;
         const syncedChannels = collectorChannels.filter(ch => ch.lastSyncedAt).length;
-        const avgLatency = telegramCollectorState?.healthSummary?.avgLatencyMs;
+        const avgLatency =
+            typeof collectorHealthData?.averageLatencyMs === 'number'
+                ? collectorHealthData.averageLatencyMs
+                : telegramCollectorState?.healthSummary?.avgLatencyMs;
+        const lastProcessedAt =
+            typeof collectorHealthData?.lastProcessedAt === 'string'
+                ? collectorHealthData.lastProcessedAt
+                : null;
 
         return (
             <TelegramCollectorMetrics
                 t={t}
+                formatTimeAgo={formatTimeAgo}
                 metrics={{
                     routeBroken,
                     totalChannels,
@@ -701,6 +711,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
                     channelsWithErrors,
                     criticalErrorChannels,
                     avgLatencyMs: avgLatency,
+                    lastProcessedAt,
                 }}
             />
         );

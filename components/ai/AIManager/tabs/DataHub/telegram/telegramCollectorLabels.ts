@@ -9,7 +9,65 @@ export type CollectorMetricsInput = {
     channelsWithErrors: number;
     criticalErrorChannels: number;
     avgLatencyMs?: number | null;
+    lastProcessedAt?: string | null;
 };
+
+export type CollectorMetricDisplay = {
+    display: string;
+    available: boolean;
+    hint: string;
+};
+
+const BARE_DASH_PATTERN = /^[\s—\-–]+$/;
+
+export function isBareDash(value: unknown): boolean {
+    if (value == null) return true;
+    if (typeof value === 'string') {
+        return value.trim() === '' || BARE_DASH_PATTERN.test(value.trim());
+    }
+    return false;
+}
+
+export function formatCollectorAvgLatency(
+    ms: number | null | undefined,
+    t: (k: string) => string,
+): CollectorMetricDisplay {
+    if (ms != null && Number.isFinite(ms) && ms > 0) {
+        return {
+            display: `${Math.round(ms)} ms`,
+            available: true,
+            hint: t('collector_avg_latency_hint') || 'Average channel sync / processing latency from collector metrics.',
+        };
+    }
+    return {
+        display: t('collector_no_recent_sync_latency') || 'No recent sync latency',
+        available: false,
+        hint: t('collector_no_recent_sync_latency_hint') || 'No channel sync latency recorded yet. Latency appears after the next successful poll or force-sync.',
+    };
+}
+
+export function formatCollectorLastProcessed(
+    at: string | null | undefined,
+    t: (k: string) => string,
+    formatTime?: (iso: string) => string,
+): CollectorMetricDisplay {
+    if (at && !isBareDash(at)) {
+        const parsed = new Date(at);
+        if (!Number.isNaN(parsed.getTime())) {
+            const display = formatTime ? formatTime(at) : parsed.toLocaleString();
+            return {
+                display,
+                available: true,
+                hint: t('collector_last_processed_hint') || 'Timestamp of the most recently processed Telegram message.',
+            };
+        }
+    }
+    return {
+        display: t('collector_no_recent_processed_message') || 'No recent processed message',
+        available: false,
+        hint: t('collector_no_recent_processed_hint') || 'Waiting for the next processed event from the ingestion pipeline.',
+    };
+}
 
 export function computeCollectorHealthLevel(input: CollectorMetricsInput): CollectorHealthLevel {
     const { routeBroken, totalChannels, syncedChannels, channelsWithErrors, criticalErrorChannels } = input;
@@ -83,7 +141,10 @@ export function formatDiagnoseSummary(checks: DiagnoseCollectorCheck[], t: (k: s
     return checks
         .map(check => {
             const label = diagnoseCheckLabel(check.key, t);
-            const latency = check.latencyMs != null ? `${check.latencyMs}ms` : '—';
+            const latency =
+                check.latencyMs != null
+                    ? `${check.latencyMs}ms`
+                    : t('collector_diag_latency_na') || 'n/a';
             const kind = check.responseKind || 'unknown';
             if (check.ok) return `${label}: OK (${check.status ?? 200}, ${latency}, ${kind})`;
             const err = check.errorKey ? t(check.errorKey) || check.errorKey : check.safeError || t('collector_diag_check_failed');

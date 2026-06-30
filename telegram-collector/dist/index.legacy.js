@@ -267,12 +267,26 @@ app.post('/api/telegram-collector/session/force-rotation', rateLimitHybrid_1.rat
 });
 app.get('/api/telegram-collector/health', rateLimitHybrid_1.rateLimiters.lenient, async (req, res) => {
     const { sanitizeHealthSessionForApi } = require('../utils/accountApiSanitizer');
+    const { loadRuntimeMetrics } = require('./utils/runtimeMetrics');
     let sessionStats = null;
     try {
         sessionStats = await (0, sessionManager_1.getSessionStats)('telegram-collector');
     }
     catch (error) {
         console.error('⚠️  Could not fetch session stats:', error);
+    }
+    let runtimeMetrics = {
+        averageLatencyMs: null,
+        averageLatencySource: null,
+        lastProcessedAt: null,
+        lastProcessedLabel: null,
+        lastProcessedSource: null,
+    };
+    try {
+        runtimeMetrics = await loadRuntimeMetrics();
+    }
+    catch (error) {
+        console.error('⚠️  Could not load runtime metrics:', error);
     }
     res.json({
         status: 'healthy',
@@ -295,7 +309,12 @@ app.get('/api/telegram-collector/health', rateLimitHybrid_1.rateLimiters.lenient
             last_used: sessionStats?.lastUsed || null,
             created_at: sessionStats?.createdAt || null,
             phone_number: sessionStats?.phoneNumber || null
-        })
+        }),
+        averageLatencyMs: runtimeMetrics.averageLatencyMs,
+        averageLatencySource: runtimeMetrics.averageLatencySource,
+        lastProcessedAt: runtimeMetrics.lastProcessedAt,
+        lastProcessedLabel: runtimeMetrics.lastProcessedLabel,
+        lastProcessedSource: runtimeMetrics.lastProcessedSource,
     });
 });
 // Start login flow - send verification code (multi-account aware)

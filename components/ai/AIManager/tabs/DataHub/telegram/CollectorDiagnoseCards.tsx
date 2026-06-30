@@ -28,7 +28,8 @@ const CollectorDiagnoseCards: React.FC<Props> = ({ t, checks }) => {
                         />
                     </div>
                     <p className="text-[10px] text-muted-foreground">
-                        HTTP {check.status ?? '—'} · {check.latencyMs != null ? `${check.latencyMs}ms` : '—'} ·{' '}
+                        HTTP {(check.status ?? t('collector_diag_latency_na')) || 'n/a'} ·{' '}
+                        {check.latencyMs != null ? `${check.latencyMs}ms` : (t('collector_diag_latency_na') || 'n/a')} ·{' '}
                         {check.responseKind || 'unknown'}
                     </p>
                     {!check.ok && (

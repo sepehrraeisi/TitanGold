@@ -1,25 +1,30 @@
 import React from 'react';
-import { MetricCard } from '../dataHubUi';
+import { MetricCard, StatusPill } from '../dataHubUi';
 import {
     computeCollectorHealthLevel,
     computeSyncRate,
     collectorHealthLabel,
     collectorHealthMetricColor,
+    formatCollectorAvgLatency,
+    formatCollectorLastProcessed,
     type CollectorMetricsInput,
 } from './telegramCollectorLabels';
 
 type Props = {
     t: (key: string) => string;
     metrics: CollectorMetricsInput;
+    formatTimeAgo?: (timestamp?: string) => string;
 };
 
-const TelegramCollectorMetrics: React.FC<Props> = ({ t, metrics }) => {
+const TelegramCollectorMetrics: React.FC<Props> = ({ t, metrics, formatTimeAgo }) => {
     const level = computeCollectorHealthLevel(metrics);
     const color = collectorHealthMetricColor(level);
     const syncRate = computeSyncRate(metrics.totalChannels, metrics.syncedChannels);
+    const avgLatency = formatCollectorAvgLatency(metrics.avgLatencyMs, t);
+    const lastProcessed = formatCollectorLastProcessed(metrics.lastProcessedAt, t, formatTimeAgo);
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 md:gap-3">
             <MetricCard
                 label={t('collector_status')}
                 color={color}
@@ -32,8 +37,27 @@ const TelegramCollectorMetrics: React.FC<Props> = ({ t, metrics }) => {
             />
             <MetricCard
                 label={t('collector_avg_latency')}
-                color="purple"
-                value={metrics.avgLatencyMs ? `${Math.round(metrics.avgLatencyMs)} ms` : '—'}
+                color={avgLatency.available ? 'purple' : 'blue'}
+                value={
+                    avgLatency.available ? (
+                        avgLatency.display
+                    ) : (
+                        <StatusPill variant="neutral" label={avgLatency.display} />
+                    )
+                }
+                hint={avgLatency.hint}
+            />
+            <MetricCard
+                label={t('last_processed')}
+                color={lastProcessed.available ? 'emerald' : 'blue'}
+                value={
+                    lastProcessed.available ? (
+                        lastProcessed.display
+                    ) : (
+                        <StatusPill variant="neutral" label={lastProcessed.display} />
+                    )
+                }
+                hint={lastProcessed.hint}
             />
             <MetricCard
                 label={t('collector_channels_with_errors')}

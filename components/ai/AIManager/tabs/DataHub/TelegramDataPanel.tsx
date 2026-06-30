@@ -26,6 +26,7 @@ import {
     formatNewsCategoryLabel,
     formatAgentKeyLabel,
 } from './telegramCollectorLabels';
+import { formatCollectorLastProcessed } from './telegram/telegramCollectorLabels';
 import { formatDataHubQueryError } from './dataHubI18n';
 import { DataHubApiError } from '../../../../../services/dataSourcesApi';
 
@@ -408,12 +409,23 @@ const TelegramDataPanel: React.FC<TelegramDataPanelProps> = ({ t, Card, onRefres
                                 />
                                 <MetricCard
                                     label={t('last_processed')}
-                                    value={
-                                        systemStats.last_processed_at
-                                            ? new Date(systemStats.last_processed_at).toLocaleString()
-                                            : '-'
+                                    color={
+                                        formatCollectorLastProcessed(systemStats.last_processed_at, t).available
+                                            ? 'emerald'
+                                            : 'blue'
                                     }
-                                    color="emerald"
+                                    value={(() => {
+                                        const formatted = formatCollectorLastProcessed(
+                                            systemStats.last_processed_at,
+                                            t,
+                                        );
+                                        return formatted.available ? (
+                                            formatted.display
+                                        ) : (
+                                            <StatusPill variant="neutral" label={formatted.display} />
+                                        );
+                                    })()}
+                                    hint={formatCollectorLastProcessed(systemStats.last_processed_at, t).hint}
                                 />
                             </div>
                         </Card>
