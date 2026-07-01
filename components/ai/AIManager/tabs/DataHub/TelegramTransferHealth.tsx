@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import SkeletonLoader from '../../../../common/SkeletonLoader';
-import type { DataPipelineSnapshot } from '../../../../../types';
+import type { DataPipelineSnapshot, TransferHealthMetricKey } from '../../../../../types';
 import {
     DATAHUB_INNER_LIST,
     DataHubAlert,
@@ -10,13 +10,15 @@ import {
 } from './dataHubUi';
 import { safeT } from './dataHubI18n';
 import {
+    buildPartialWarningMessage,
     computeTelegramTransferHealth,
     formatCatchUpHours,
-    formatCount,
     formatDrainRatio,
+    formatMetricValue,
     formatOldestAge,
     formatRatePerHour,
     hasTelegramTransferCoreMetrics,
+    isMetricUnavailable,
     transferHealthStatusVariant,
 } from './telegramTransferHealthFormat';
 
@@ -27,6 +29,7 @@ interface TelegramTransferHealthProps {
     isPipelineLoaded: boolean;
     error?: string | null;
     partial?: boolean;
+    unavailableMetrics?: TransferHealthMetricKey[];
     onRetry?: () => void;
     formatTimeAgo: (date: string | Date | undefined) => string;
 }
@@ -42,6 +45,7 @@ const TelegramTransferHealth: React.FC<TelegramTransferHealthProps> = ({
     isPipelineLoaded,
     error = null,
     partial = false,
+    unavailableMetrics = [],
     onRetry,
     formatTimeAgo,
 }) => {
@@ -51,14 +55,59 @@ const TelegramTransferHealth: React.FC<TelegramTransferHealthProps> = ({
                 ingestMetrics: snapshot?.telegramIngestMetrics,
                 transferThroughput: snapshot?.transferThroughput,
                 globalTelegramBacklog: snapshot?.globalTelegramBacklog,
+                unavailableMetrics,
             }),
-        [snapshot],
+        [snapshot, unavailableMetrics],
     );
 
-    const hasCoreMetrics = hasTelegramTransferCoreMetrics(snapshot);
+    const hasCoreMetrics = hasTelegramTransferCoreMetrics(snapshot, unavailableMetrics);
     const showFatalError = Boolean(error) && !hasCoreMetrics && !isLoading;
-    const showPartialNotice = partial && hasCoreMetrics && !isLoading;
+    const partialWarning = buildPartialWarningMessage(t, derived.unavailableMetrics);
+    const showPartialNotice = partial && hasCoreMetrics && !isLoading && Boolean(partialWarning);
     const statusVariant = transferHealthStatusVariant(derived.status);
+
+    const incomingDisplay = formatMetricValue(
+        derived.incoming24h,
+        isMetricUnavailable('incoming24h', unavailableMetrics) || derived.incoming24h == null,
+        t,
+    );
+    const transferredDisplay = formatMetricValue(
+        derived.transferredToCollectedData24h,
+        isMetricUnavailable('transferred24h', unavailableMetrics) ||
+            derived.transferredToCollectedData24h == null,
+        t,
+    );
+    const processedDisplay = formatMetricValue(
+        derived.processed24h,
+        isMetricUnavailable('processed24h', unavailableMetrics) || derived.processed24h == null,
+        t,
+    );
+    const backlogDisplay = formatMetricValue(
+        derived.backlogTotal,
+        isMetricUnavailable('backlogTotal', unavailableMetrics) || derived.backlogTotal == null,
+        t,
+    );
+    const oldestDisplay = formatOldestAge(
+        derived.oldestUnprocessedAgeHours,
+        isMetricUnavailable('oldestUnprocessedAge', unavailableMetrics),
+        formatTimeAgo,
+        snapshot?.globalTelegramBacklog?.oldestUnprocessed,
+        t,
+    );
+    const rateDisplay = formatRatePerHour(
+        derived.processingRatePerHour,
+        isMetricUnavailable('processingRate', unavailableMetrics) ||
+            derived.processingRatePerHour == null,
+        t,
+    );
+    const drainUnavailable =
+        isMetricUnavailable('drainRatio', unavailableMetrics) || derived.drainRatio == null;
+    const drainDisplay = formatDrainRatio(derived.drainRatio, drainUnavailable, t);
+    const catchUpDisplay = formatCatchUpHours(
+        derived.catchUpHours,
+        isMetricUnavailable('catchUp', unavailableMetrics) || derived.catchUpHours == null,
+        t,
+    );
 
     return (
         <div className={DATAHUB_INNER_LIST}>
@@ -94,11 +143,8 @@ const TelegramTransferHealth: React.FC<TelegramTransferHealthProps> = ({
                 />
             )}
 
-            {showPartialNotice && (
-                <DataHubAlert
-                    variant="warning"
-                    message={safeT(t, 'telegram_transfer_health_partial')}
-                />
+            {showPartialNotice && partialWarning && (
+                <DataHubAlert variant="warning" message={partialWarning} />
             )}
 
             {!isPipelineLoaded && !isLoading && !showFatalError && (
@@ -123,70 +169,85 @@ const TelegramTransferHealth: React.FC<TelegramTransferHealthProps> = ({
                     <MetricCard
                         label={safeT(t, 'telegram_transfer_health_incoming_24h')}
                         color="blue"
-                        value={formatCount(derived.incoming24h)}
+                        value={incomingDisplay.text}
+                        valueState={incomingDisplay.state}
                         hint={safeT(t, 'telegram_transfer_health_incoming_hint')}
                     />
                     <MetricCard
                         label={safeT(t, 'telegram_transfer_health_transferred_24h')}
                         color="purple"
-                        value={formatCount(derived.transferredToCollectedData24h)}
+                        value={transferredDisplay.text}
+                        valueState={transferredDisplay.state}
                         hint={safeT(t, 'telegram_transfer_health_transferred_hint')}
                     />
                     <MetricCard
                         label={safeT(t, 'telegram_transfer_health_processed_24h')}
                         color="emerald"
-                        value={formatCount(derived.processed24h)}
+                        value={processedDisplay.text}
+                        valueState={processedDisplay.state}
                         hint={safeT(t, 'telegram_transfer_health_processed_hint')}
                     />
                     <MetricCard
                         label={safeT(t, 'telegram_transfer_health_backlog')}
-                        color={derived.backlogTotal > 0 ? 'amber' : 'emerald'}
-                        value={formatCount(derived.backlogTotal)}
+                        color={
+                            backlogDisplay.state === 'loaded' && derived.backlogTotal != null && derived.backlogTotal > 0
+                                ? 'amber'
+                                : 'emerald'
+                        }
+                        value={backlogDisplay.text}
+                        valueState={backlogDisplay.state}
                         hint={safeT(t, 'telegram_transfer_health_backlog_hint')}
                     />
                     <MetricCard
                         label={safeT(t, 'telegram_transfer_health_oldest_age')}
                         color={
+                            oldestDisplay.state === 'loaded' &&
                             derived.oldestUnprocessedAgeHours != null &&
                             derived.oldestUnprocessedAgeHours >= 7 * 24
                                 ? 'red'
                                 : 'blue'
                         }
-                        value={formatOldestAge(
-                            derived.oldestUnprocessedAgeHours,
-                            formatTimeAgo,
-                            snapshot?.globalTelegramBacklog?.oldestUnprocessed,
-                        )}
+                        value={oldestDisplay.text}
+                        valueState={oldestDisplay.state}
                         hint={safeT(t, 'telegram_transfer_health_oldest_hint')}
                     />
                     <MetricCard
                         label={safeT(t, 'telegram_transfer_health_processing_rate')}
                         color="emerald"
-                        value={formatRatePerHour(derived.processingRatePerHour)}
+                        value={rateDisplay.text}
+                        valueState={rateDisplay.state}
                         hint={safeT(t, 'telegram_transfer_health_rate_hint')}
                     />
                     <MetricCard
                         label={safeT(t, 'telegram_transfer_health_drain_ratio')}
                         color={
-                            derived.drainRatio == null
+                            drainDisplay.state === 'unavailable'
                                 ? 'blue'
-                                : derived.drainRatio >= 1
+                                : derived.drainRatio != null && derived.drainRatio >= 1
                                   ? 'emerald'
-                                  : derived.drainRatio >= 0.5
+                                  : derived.drainRatio != null && derived.drainRatio >= 0.5
                                     ? 'amber'
                                     : 'red'
                         }
-                        value={formatDrainRatio(derived.drainRatio)}
-                        hint={safeT(t, 'telegram_transfer_health_drain_hint')}
+                        value={drainDisplay.text}
+                        valueState={drainDisplay.state}
+                        hint={
+                            drainUnavailable
+                                ? safeT(t, 'telegram_transfer_health_drain_unavailable_hint')
+                                : safeT(t, 'telegram_transfer_health_drain_hint')
+                        }
                     />
                     <MetricCard
                         label={safeT(t, 'telegram_transfer_health_catch_up')}
                         color={
-                            derived.catchUpHours != null && derived.catchUpHours > 7 * 24
+                            catchUpDisplay.state === 'loaded' &&
+                            derived.catchUpHours != null &&
+                            derived.catchUpHours > 7 * 24
                                 ? 'amber'
                                 : 'blue'
                         }
-                        value={formatCatchUpHours(derived.catchUpHours, t)}
+                        value={catchUpDisplay.text}
+                        valueState={catchUpDisplay.state}
                         hint={safeT(t, 'telegram_transfer_health_catch_up_hint')}
                     />
                 </div>

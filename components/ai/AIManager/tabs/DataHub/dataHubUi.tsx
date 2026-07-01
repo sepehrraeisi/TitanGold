@@ -105,19 +105,25 @@ export function MetricCard({
     value,
     color = 'blue',
     hint,
+    valueState = 'loaded',
 }: {
     label: string;
     value: React.ReactNode;
     color?: MetricColor;
     hint?: string;
+    valueState?: 'loaded' | 'zero' | 'unavailable';
 }) {
+    const valueTone =
+        valueState === 'unavailable'
+            ? 'text-muted-foreground font-medium'
+            : METRIC_TEXT[color].split(' ')[1];
     return (
         <div
             className={`rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[color]} to-transparent p-3 backdrop-blur-sm`}
             title={hint}
         >
             <p className={`text-[11px] mb-1 ${METRIC_TEXT[color].split(' ')[0]}`}>{label}</p>
-            <p className={`text-sm font-semibold ${METRIC_TEXT[color].split(' ')[1]}`}>{value}</p>
+            <p className={`text-sm font-semibold ${valueTone}`}>{value}</p>
             {hint ? (
                 <p className="text-[10px] text-muted-foreground/80 mt-1 line-clamp-2">{hint}</p>
             ) : null}

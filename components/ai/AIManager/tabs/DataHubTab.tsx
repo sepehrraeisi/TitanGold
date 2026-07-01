@@ -52,6 +52,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         isLoadingPipelineBacklog,
         pipelineBacklogError,
         pipelineBacklogPartial,
+        pipelineBacklogUnavailableMetrics,
         handleRetryPipelineBacklog,
         pipelineApiError,
         agents,
@@ -291,6 +292,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             isLoadingPipelineBacklog={isLoadingPipelineBacklog}
                             pipelineBacklogError={pipelineBacklogError}
                             pipelineBacklogPartial={pipelineBacklogPartial}
+                            pipelineBacklogUnavailableMetrics={pipelineBacklogUnavailableMetrics}
                             onRetryPipelineBacklog={handleRetryPipelineBacklog}
                             pipelineApiError={pipelineApiError}
                             setPipelineError={setPipelineError}

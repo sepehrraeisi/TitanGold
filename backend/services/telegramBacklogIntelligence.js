@@ -1,5 +1,4 @@
 import { query } from '../database/db.js';
-import { ingestedAtSql } from './collectedDataTimestamps.js';
 
 /** Minimum assumed throughput when 24h observation is zero (read-only floor, not a scheduler change). */
 export const BACKLOG_THROUGHPUT_FLOOR_MSG_PER_HOUR = 1;
@@ -110,28 +109,45 @@ export async function batchCollectorBacklogIntelligence(collectorChannelUuids, t
  * Global backlog summary for pipeline snapshot metadata.
  */
 /**
- * Lightweight 24h ingest counters for Telegram transfer health (indexed time-range counts).
- * @returns {Promise<{ incoming24h: number, transferredToCollectedData24h: number }>}
+ * Lightweight 24h incoming Telegram message count.
  */
-export async function fetchTelegramIngestMetrics24h() {
-  const [incomingResult, transferredResult] = await Promise.all([
-    query(`
-      SELECT COUNT(*)::int AS incoming_24h
-      FROM telegram_messages
-      WHERE created_at > NOW() - INTERVAL '24 hours'
-    `),
-    query(`
-      SELECT COUNT(*)::int AS transferred_24h
-      FROM collected_data cd
-      INNER JOIN data_sources ds ON ds.id = cd.source_id
-      WHERE ds.type = 'telegram'
-        AND ${ingestedAtSql('cd')} > NOW() - INTERVAL '24 hours'
-    `),
+export async function fetchTelegramIncoming24h() {
+  const result = await query(`
+    SELECT COUNT(*)::int AS incoming_24h
+    FROM telegram_messages
+    WHERE created_at > NOW() - INTERVAL '24 hours'
+  `);
+  return Number(result.rows[0]?.incoming_24h || 0);
+}
+
+/**
+ * Lightweight 24h telegram rows written to collected_data.
+ * @param {string[]} telegramSourceIds
+ */
+export async function fetchTelegramTransferred24h(telegramSourceIds) {
+  let sourceIds = telegramSourceIds;
+  if (!Array.isArray(sourceIds)) {
+    const sourcesResult = await query(`SELECT id FROM data_sources WHERE type = 'telegram'`);
+    sourceIds = sourcesResult.rows.map((row) => row.id);
+  }
+  if (sourceIds.length === 0) return 0;
+  const result = await query(
+    `SELECT COUNT(*)::int AS transferred_24h
+     FROM collected_data
+     WHERE collected_at > NOW() - INTERVAL '24 hours'
+       AND source_id = ANY($1::uuid[])`,
+    [sourceIds],
+  );
+  return Number(result.rows[0]?.transferred_24h || 0);
+}
+
+/** @deprecated Use fetchTelegramIncoming24h + fetchTelegramTransferred24h */
+export async function fetchTelegramIngestMetrics24h(telegramSourceIds) {
+  const [incoming24h, transferredToCollectedData24h] = await Promise.all([
+    fetchTelegramIncoming24h(),
+    fetchTelegramTransferred24h(telegramSourceIds),
   ]);
-  return {
-    incoming24h: Number(incomingResult.rows[0]?.incoming_24h || 0),
-    transferredToCollectedData24h: Number(transferredResult.rows[0]?.transferred_24h || 0),
-  };
+  return { incoming24h, transferredToCollectedData24h };
 }
 
 export async function fetchGlobalTelegramBacklogSummary() {

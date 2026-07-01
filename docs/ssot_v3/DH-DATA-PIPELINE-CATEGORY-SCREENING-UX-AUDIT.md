@@ -369,3 +369,43 @@ cd backend && npm test -- __tests__/unit/pipelineBacklogSafe.test.js
 ### Production verification status
 
 **Pending Human QA** — automated tests/build pass; browser on dev confirmed auth-dependent empty state. Re-verify production Data Pipeline after backend deploy + PM2 restart.
+
+---
+
+## 14. Human QA polish — partial metrics clarity (DH-DATA-PIPELINE-PX-TRANSFER-HEALTH-HUMAN-QA-POLISH)
+
+**Date:** 2026-06-27  
+**Human QA rejection:** Widget no longer crashes, but labels were raw English in FA locale, ingest metrics showed fake `0`, drain ratio showed `—`, and partial warning was generic.
+
+### Issues fixed
+
+| Issue | Fix |
+|-------|-----|
+| Raw English labels/hints | All widget copy via `telegram_transfer_health_*` keys in en/fa × blue/green; FA hints no longer expose raw table names |
+| Fake zero on failed ingest | Backend returns `null` for failed metrics; `meta.unavailableMetrics` lists exact keys (`incoming24h`, `transferred24h`, …) |
+| Drain ratio dash | Client shows localized **Unavailable** + helper when incoming/processed missing or incoming is zero |
+| Generic partial warning | `buildPartialWarningMessage()` lists unavailable metric names: *Some metrics are unavailable: Incoming messages, …* |
+| Zero vs unavailable | `MetricDisplay` state (`loaded` / `zero` / `unavailable`); unavailable values use muted styling |
+
+### Backend
+
+- `fetchTelegramIncoming24h()` / `fetchTelegramTransferred24h()` split from combined helper
+- `loadMetricSafely()` returns `{ available, value?, error? }` — no silent zero fallback
+- `normalizePipelineBacklogResponse()` marks per-field null ingest as unavailable
+- `meta.unavailableMetrics` + `meta.warnings` include canonical metric keys
+
+### Frontend
+
+- `TelegramTransferHealth` receives `unavailableMetrics` from `pipelineBacklog.meta`
+- `telegramTransferHealthFormat.ts` — `formatMetricValue`, `buildPartialWarningMessage`, drain/catch-up unavailable handling
+- `MetricCard` — optional `valueState` for unavailable styling
+
+### Verification
+
+```bash
+npm run test -- src/__tests__/telegramTransferHealth.test.ts
+cd backend && npm test -- __tests__/unit/pipelineBacklogSafe.test.js
+npm run build
+```
+
+Production Data Pipeline: no untranslated text, no raw dash, no fake zero when metric unavailable, partial warning names missing fields.

@@ -511,8 +511,8 @@ const pipelineGlobalTelegramBacklogSchema = z.object({
 });
 
 const pipelineTelegramIngestMetricsSchema = z.object({
-  incoming24h: z.number().int().nonnegative(),
-  transferredToCollectedData24h: z.number().int().nonnegative(),
+  incoming24h: z.number().int().nonnegative().nullable().optional(),
+  transferredToCollectedData24h: z.number().int().nonnegative().nullable().optional(),
 });
 
 export const dataPipelineSnapshotSchema = z.object({
@@ -574,14 +574,15 @@ export const pipelineQuerySchema = z.object({
 });
 
 export const dataPipelineBacklogResponseSchema = z.object({
-  transferThroughput: pipelineTransferThroughputSchema,
-  globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema,
-  ingestMetrics: pipelineTelegramIngestMetricsSchema,
+  transferThroughput: pipelineTransferThroughputSchema.nullable().optional(),
+  globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema.nullable().optional(),
+  ingestMetrics: pipelineTelegramIngestMetricsSchema.nullable().optional(),
   backlogBySourceId: z.record(pipelineCollectorBacklogSchema),
   meta: z
     .object({
       partial: z.boolean().optional(),
       warnings: z.array(z.string()).optional(),
+      unavailableMetrics: z.array(z.string()).optional(),
       fetchedAt: z.string().optional(),
       error: z.string().optional(),
     })

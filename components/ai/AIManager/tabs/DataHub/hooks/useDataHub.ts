@@ -820,6 +820,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         isLoadingPipeline: isLoadingPipeline || isFetchingPipeline,
         isLoadingPipelineBacklog: isLoadingPipelineBacklog || isFetchingPipelineBacklog,
         pipelineBacklogPartial: pipelineBacklog?.meta?.partial === true,
+        pipelineBacklogUnavailableMetrics: pipelineBacklog?.meta?.unavailableMetrics ?? [],
         pipelineBacklogError:
             pipelineBacklogApiError?.message && !pipelineBacklog
                 ? pipelineBacklogApiError.message

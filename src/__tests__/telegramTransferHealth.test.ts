@@ -6,8 +6,10 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import TelegramTransferHealth from '../../components/ai/AIManager/tabs/DataHub/TelegramTransferHealth';
 import {
+    buildPartialWarningMessage,
     computeTelegramTransferHealth,
     formatDrainRatio,
+    formatMetricValue,
     hasTelegramTransferCoreMetrics,
 } from '../../components/ai/AIManager/tabs/DataHub/telegramTransferHealthFormat';
 import type { DataPipelineSnapshot } from '../../types';
@@ -35,8 +37,14 @@ const REQUIRED_KEYS = [
     'telegram_transfer_health_drain_ratio',
     'telegram_transfer_health_load_error',
     'telegram_transfer_health_partial',
+    'telegram_transfer_health_partial_list',
     'telegram_transfer_health_loading',
     'telegram_transfer_health_not_loaded',
+    'telegram_transfer_health_unavailable',
+    'telegram_transfer_health_drain_unavailable_hint',
+    'telegram_transfer_health_metric_incoming24h',
+    'telegram_transfer_health_metric_transferred24h',
+    'telegram_transfer_health_metric_drain_ratio',
     'pipeline_backlog_loading',
 ];
 
@@ -92,7 +100,7 @@ describe('Telegram Transfer Health', () => {
         });
         expect(derived.drainRatio).toBe(1.2);
         expect(derived.status).toBe('healthy');
-        expect(formatDrainRatio(derived.drainRatio)).toBe('120%');
+        expect(formatDrainRatio(derived.drainRatio, false, makeT(enLocale)).text).toBe('120%');
     });
 
     it('computeTelegramTransferHealth marks critical when drain ratio is low', () => {
@@ -110,6 +118,35 @@ describe('Telegram Transfer Health', () => {
             },
         });
         expect(derived.status).toBe('critical');
+    });
+
+    it('formatMetricValue does not render unavailable metrics as zero', () => {
+        const t = makeT(enLocale);
+        const unavailable = formatMetricValue(null, true, t);
+        expect(unavailable.text).toBe(enLocale.telegram_transfer_health_unavailable);
+        expect(unavailable.state).toBe('unavailable');
+        expect(unavailable.text).not.toBe('0');
+
+        const realZero = formatMetricValue(0, false, t);
+        expect(realZero.text).toBe('0');
+        expect(realZero.state).toBe('zero');
+    });
+
+    it('formatDrainRatio shows unavailable instead of raw dash', () => {
+        const t = makeT(enLocale);
+        const display = formatDrainRatio(null, true, t);
+        expect(display.text).toBe(enLocale.telegram_transfer_health_unavailable);
+        expect(display.text).not.toBe('—');
+        expect(display.text).not.toBe('-');
+    });
+
+    it('buildPartialWarningMessage lists missing metrics by name', () => {
+        const t = makeT(enLocale);
+        const message = buildPartialWarningMessage(t, ['incoming24h', 'transferred24h', 'drainRatio']);
+        expect(message).toContain(enLocale.telegram_transfer_health_metric_incoming24h);
+        expect(message).toContain(enLocale.telegram_transfer_health_metric_transferred24h);
+        expect(message).toContain(enLocale.telegram_transfer_health_metric_drain_ratio);
+        expect(message).toMatch(/Some metrics are unavailable:/);
     });
 
     it('renders operational dashboard with status pill and metrics', () => {
@@ -131,10 +168,10 @@ describe('Telegram Transfer Health', () => {
         expect(screen.getByText('120%')).toBeTruthy();
     });
 
-    it('renders partial metrics without fatal error when ingest metrics missing', () => {
+    it('renders partial metrics with named warning when ingest metrics unavailable', () => {
         const partialSnapshot: DataPipelineSnapshot = {
             ...healthySnapshot,
-            telegramIngestMetrics: undefined,
+            telegramIngestMetrics: { incoming24h: null, transferredToCollectedData24h: null },
             globalTelegramBacklog: { unprocessedTotal: 720000 },
         };
         expect(hasTelegramTransferCoreMetrics(partialSnapshot)).toBe(true);
@@ -146,11 +183,25 @@ describe('Telegram Transfer Health', () => {
                 isLoading: false,
                 isPipelineLoaded: true,
                 partial: true,
+                unavailableMetrics: ['incoming24h', 'transferred24h', 'drainRatio'],
                 error: 'Failed to fetch pipeline backlog enrichment',
                 formatTimeAgo: () => '2d ago',
             }),
         );
-        expect(screen.getByText(enLocale.telegram_transfer_health_partial)).toBeTruthy();
+        expect(
+            screen.getByText(
+                enLocale.telegram_transfer_health_partial_list.replace(
+                    '{{metrics}}',
+                    [
+                        enLocale.telegram_transfer_health_metric_incoming24h,
+                        enLocale.telegram_transfer_health_metric_transferred24h,
+                        enLocale.telegram_transfer_health_metric_drain_ratio,
+                    ].join(', '),
+                ),
+            ),
+        ).toBeTruthy();
+        expect(screen.getAllByText(enLocale.telegram_transfer_health_unavailable).length).toBeGreaterThan(0);
+        expect(screen.queryByText('0')).toBeNull();
         expect(screen.queryByText(enLocale.telegram_transfer_health_load_error)).toBeNull();
         expect(screen.queryByText('pipeline_backlog_loading')).toBeNull();
     });
@@ -170,6 +221,17 @@ describe('Telegram Transfer Health', () => {
         expect(screen.getByText(enLocale.telegram_transfer_health_load_error)).toBeTruthy();
     });
 
+    it('TelegramTransferHealth component has no raw English metric label literals', () => {
+        const src = readFileSync(
+            join(ROOT, 'components/ai/AIManager/tabs/DataHub/TelegramTransferHealth.tsx'),
+            'utf8',
+        );
+        expect(src).not.toMatch(/label=\{['"]Incoming messages/);
+        expect(src).not.toMatch(/label=\{['"]Processed messages/);
+        expect(src).not.toMatch(/label=\{['"]Drain ratio/);
+        expect(src).toContain("safeT(t, 'telegram_transfer_health_incoming_24h')");
+    });
+
     it('PipelinePanel uses safeT for pipeline_backlog_loading', () => {
         const src = readFileSync(
             join(ROOT, 'components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx'),
@@ -177,6 +239,14 @@ describe('Telegram Transfer Health', () => {
         );
         expect(src).toContain("safeT(t, 'pipeline_backlog_loading')");
         expect(src).not.toContain("{t('pipeline_backlog_loading')}");
+    });
+
+    it('PipelinePanel passes unavailableMetrics to TelegramTransferHealth', () => {
+        const src = readFileSync(
+            join(ROOT, 'components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx'),
+            'utf8',
+        );
+        expect(src).toContain('unavailableMetrics={pipelineBacklogUnavailableMetrics}');
     });
 
     it('PipelinePanel uses TelegramTransferHealth instead of category screening', () => {

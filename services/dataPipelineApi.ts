@@ -17,16 +17,11 @@ export type DataPipelineView = {
 };
 
 export type DataPipelineBacklogEnrichment = {
-    transferThroughput: NonNullable<DataPipelineSnapshot['transferThroughput']>;
-    globalTelegramBacklog: NonNullable<DataPipelineSnapshot['globalTelegramBacklog']>;
-    ingestMetrics: NonNullable<DataPipelineSnapshot['telegramIngestMetrics']>;
+    transferThroughput: DataPipelineSnapshot['transferThroughput'] | null;
+    globalTelegramBacklog: DataPipelineSnapshot['globalTelegramBacklog'] | null;
+    ingestMetrics: DataPipelineSnapshot['telegramIngestMetrics'] | null;
     backlogBySourceId: Record<string, NonNullable<DataPipelineSourceSnapshot['collectorBacklog']>>;
-    meta?: {
-        partial?: boolean;
-        warnings?: string[];
-        fetchedAt?: string;
-        error?: string;
-    };
+    meta?: import('../types').PipelineBacklogMeta;
 };
 
 function getAuthToken(): string | null {

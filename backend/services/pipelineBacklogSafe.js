@@ -4,31 +4,26 @@ export const PIPELINE_BACKLOG_METRIC_TIMEOUT_MS = Number(
   process.env.PIPELINE_BACKLOG_METRIC_TIMEOUT_MS || 12_000,
 );
 
-export const DEFAULT_TRANSFER_THROUGHPUT = {
-  processed24h: 0,
-  messagesPerHour: 1,
-  messagesPerDay: 0,
-  observedWindowHours: 24,
-};
-
-export const DEFAULT_GLOBAL_TELEGRAM_BACKLOG = {
-  unprocessedTotal: 0,
-};
-
-export const DEFAULT_INGEST_METRICS = {
-  incoming24h: 0,
-  transferredToCollectedData24h: 0,
-};
+/** Canonical metric keys surfaced in meta.unavailableMetrics */
+export const TRANSFER_HEALTH_METRIC_KEYS = [
+  'incoming24h',
+  'transferred24h',
+  'processed24h',
+  'backlogTotal',
+  'oldestUnprocessedAge',
+  'processingRate',
+  'drainRatio',
+  'catchUp',
+];
 
 /**
  * @template T
  * @param {string} label
  * @param {() => Promise<T>} fn
- * @param {T} fallback
  * @param {number} [timeoutMs]
- * @returns {Promise<{ value: T, error?: string, timedOut?: boolean }>}
+ * @returns {Promise<{ value?: T, error?: string, timedOut?: boolean, available: boolean }>}
  */
-export async function loadMetricSafely(label, fn, fallback, timeoutMs = PIPELINE_BACKLOG_METRIC_TIMEOUT_MS) {
+export async function loadMetricSafely(label, fn, timeoutMs = PIPELINE_BACKLOG_METRIC_TIMEOUT_MS) {
   let timer;
   try {
     const value = await Promise.race([
@@ -37,7 +32,7 @@ export async function loadMetricSafely(label, fn, fallback, timeoutMs = PIPELINE
         timer = setTimeout(() => reject(new Error(`${label}_timeout`)), timeoutMs);
       }),
     ]);
-    return { value };
+    return { value, available: true };
   } catch (error) {
     const timedOut = error?.message === `${label}_timeout`;
     logger.warn('PIPELINE_BACKLOG_METRIC_FAILED', {
@@ -46,13 +41,17 @@ export async function loadMetricSafely(label, fn, fallback, timeoutMs = PIPELINE
       error: error?.message || String(error),
     });
     return {
-      value: fallback,
       error: timedOut ? `${label}_timeout` : error?.message || `${label}_failed`,
       timedOut,
+      available: false,
     };
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+function uniqueWarnings(warnings) {
+  return [...new Set(warnings.filter(Boolean))];
 }
 
 /**
@@ -60,18 +59,42 @@ export async function loadMetricSafely(label, fn, fallback, timeoutMs = PIPELINE
  * @returns {object}
  */
 export function normalizePipelineBacklogResponse(payload = {}) {
-  const warnings = Array.isArray(payload.meta?.warnings) ? [...payload.meta.warnings] : [];
-  const transferThroughput = payload.transferThroughput || DEFAULT_TRANSFER_THROUGHPUT;
-  const globalTelegramBacklog = payload.globalTelegramBacklog || DEFAULT_GLOBAL_TELEGRAM_BACKLOG;
-  const ingestMetrics = payload.ingestMetrics || DEFAULT_INGEST_METRICS;
+  const warnings = uniqueWarnings([
+    ...(Array.isArray(payload.meta?.warnings) ? payload.meta.warnings : []),
+    ...(Array.isArray(payload.meta?.unavailableMetrics) ? payload.meta.unavailableMetrics : []),
+  ]);
+
+  const unavailableMetrics = uniqueWarnings([
+    ...(Array.isArray(payload.meta?.unavailableMetrics) ? payload.meta.unavailableMetrics : []),
+  ]);
+
+  const transferThroughput = payload.transferThroughput ?? null;
+  const globalTelegramBacklog = payload.globalTelegramBacklog ?? null;
+  const ingestMetrics = payload.ingestMetrics ?? null;
   const backlogBySourceId =
     payload.backlogBySourceId && typeof payload.backlogBySourceId === 'object'
       ? payload.backlogBySourceId
       : {};
 
-  if (!payload.transferThroughput) warnings.push('transfer_throughput_unavailable');
-  if (!payload.globalTelegramBacklog) warnings.push('global_backlog_unavailable');
-  if (!payload.ingestMetrics) warnings.push('ingest_metrics_unavailable');
+  if (!transferThroughput) {
+    unavailableMetrics.push('processed24h', 'processingRate', 'drainRatio', 'catchUp');
+  }
+  if (!globalTelegramBacklog) {
+    unavailableMetrics.push('backlogTotal', 'oldestUnprocessedAge', 'catchUp');
+  }
+  if (!ingestMetrics) {
+    unavailableMetrics.push('incoming24h', 'transferred24h', 'drainRatio');
+  } else {
+    if (ingestMetrics.incoming24h == null) {
+      unavailableMetrics.push('incoming24h', 'drainRatio');
+    }
+    if (ingestMetrics.transferredToCollectedData24h == null) {
+      unavailableMetrics.push('transferred24h');
+    }
+  }
+
+  const mergedUnavailable = uniqueWarnings(unavailableMetrics);
+  const mergedWarnings = uniqueWarnings([...warnings, ...mergedUnavailable]);
 
   return {
     transferThroughput,
@@ -79,8 +102,9 @@ export function normalizePipelineBacklogResponse(payload = {}) {
     ingestMetrics,
     backlogBySourceId,
     meta: {
-      partial: payload.meta?.partial === true || warnings.length > 0,
-      warnings: [...new Set(warnings)],
+      partial: payload.meta?.partial === true || mergedWarnings.length > 0,
+      warnings: mergedWarnings,
+      unavailableMetrics: mergedUnavailable,
       fetchedAt: payload.meta?.fetchedAt || new Date().toISOString(),
       error: payload.meta?.error || undefined,
     },
@@ -89,13 +113,14 @@ export function normalizePipelineBacklogResponse(payload = {}) {
 
 export function buildEmptyPipelineBacklogResponse(errorMessage) {
   return normalizePipelineBacklogResponse({
-    transferThroughput: DEFAULT_TRANSFER_THROUGHPUT,
-    globalTelegramBacklog: DEFAULT_GLOBAL_TELEGRAM_BACKLOG,
-    ingestMetrics: DEFAULT_INGEST_METRICS,
+    transferThroughput: null,
+    globalTelegramBacklog: null,
+    ingestMetrics: null,
     backlogBySourceId: {},
     meta: {
       partial: true,
       warnings: ['backlog_enrichment_failed'],
+      unavailableMetrics: [...TRANSFER_HEALTH_METRIC_KEYS],
       fetchedAt: new Date().toISOString(),
       error: errorMessage,
     },

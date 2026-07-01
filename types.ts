@@ -4294,8 +4294,26 @@ export interface PipelineGlobalTelegramBacklog {
 }
 
 export interface PipelineTelegramIngestMetrics {
-  incoming24h: number;
-  transferredToCollectedData24h: number;
+  incoming24h?: number | null;
+  transferredToCollectedData24h?: number | null;
+}
+
+export type TransferHealthMetricKey =
+  | 'incoming24h'
+  | 'transferred24h'
+  | 'processed24h'
+  | 'backlogTotal'
+  | 'oldestUnprocessedAge'
+  | 'processingRate'
+  | 'drainRatio'
+  | 'catchUp';
+
+export interface PipelineBacklogMeta {
+  partial?: boolean;
+  warnings?: string[];
+  unavailableMetrics?: TransferHealthMetricKey[];
+  fetchedAt?: string;
+  error?: string;
 }
 
 export type TelegramTransferHealthStatus = 'healthy' | 'warning' | 'critical';

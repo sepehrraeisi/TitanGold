@@ -29,6 +29,7 @@ interface PipelinePanelProps {
     isLoadingPipelineBacklog?: boolean;
     pipelineBacklogError?: string | null;
     pipelineBacklogPartial?: boolean;
+    pipelineBacklogUnavailableMetrics?: import('../../../../../types').TransferHealthMetricKey[];
     onRetryPipelineBacklog?: () => void;
     pipelineApiError?: DataHubApiError | Error | null;
     setPipelineError: (err: string | null) => void;
@@ -203,6 +204,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     isLoadingPipelineBacklog = false,
     pipelineBacklogError = null,
     pipelineBacklogPartial = false,
+    pipelineBacklogUnavailableMetrics = [],
     onRetryPipelineBacklog,
     pipelineApiError = null,
     setPipelineError,
@@ -411,6 +413,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             isPipelineLoaded={Boolean(activeSnapshot)}
                             error={pipelineBacklogError}
                             partial={pipelineBacklogPartial}
+                            unavailableMetrics={pipelineBacklogUnavailableMetrics}
                             onRetry={onRetryPipelineBacklog}
                             formatTimeAgo={formatTimeAgo}
                         />
