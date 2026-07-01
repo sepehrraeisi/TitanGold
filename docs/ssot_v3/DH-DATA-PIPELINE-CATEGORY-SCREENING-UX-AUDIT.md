@@ -339,4 +339,33 @@ cat docs/ssot_v3/screenshots/category-screening-ux-audit-evidence.json
 ```bash
 npm run test -- src/__tests__/telegramTransferHealth.test.ts src/__tests__/pipelineMetricsClarification.test.ts
 npm run build
+cd backend && npm test -- __tests__/unit/pipelineBacklogSafe.test.js
 ```
+
+---
+
+## 13. Runtime repair — transfer health + backlog i18n (DH-DATA-PIPELINE-PX)
+
+**Date:** 2026-07-01  
+**Human QA rejection:** Widget showed `Failed to load Telegram transfer health metrics` and raw key `pipeline_backlog_loading`.
+
+### RCA
+
+| Finding | Detail |
+|---------|--------|
+| **Failing request** | `GET /api/v1/data-sources/pipeline/backlog` |
+| **Root cause** | Committed route returned **HTTP 500** when enrichment threw or timed out; no safe defaults. Collector + ingest queries can exceed 20s on production volume. |
+| **i18n gap** | `pipeline_backlog_loading` used in `PipelinePanel` but missing from all locale files → raw key in Source Quality Board header. |
+| **Frontend** | Widget treated any React Query backlog error as fatal even when partial snapshot metrics could render; required all three metric objects before display. |
+
+### Fix
+
+1. **`pipelineBacklogSafe.js`** — per-metric timeouts, defaults, `normalizePipelineBacklogResponse`, `buildEmptyPipelineBacklogResponse`
+2. **Route always 200** — normalize response; cache key bumped to `pipeline:backlog:enrichment:v2`
+3. **Schema** — optional `meta.partial` / `meta.warnings`
+4. **Frontend** — partial metrics render with warning banner; fatal error only when no core metrics; `safeT` for backlog loading label
+5. **i18n** — `pipeline_backlog_loading`, `telegram_transfer_health_partial` in en/fa × blue/green
+
+### Production verification status
+
+**Pending Human QA** — automated tests/build pass; browser on dev confirmed auth-dependent empty state. Re-verify production Data Pipeline after backend deploy + PM2 restart.

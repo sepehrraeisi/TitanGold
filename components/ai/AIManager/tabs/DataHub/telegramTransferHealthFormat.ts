@@ -1,4 +1,5 @@
 import type {
+    DataPipelineSnapshot,
     PipelineGlobalTelegramBacklog,
     PipelineTelegramIngestMetrics,
     PipelineTransferThroughput,
@@ -29,6 +30,17 @@ const WARNING_CATCH_UP_HOURS = 7 * 24;
 const CRITICAL_CATCH_UP_HOURS = 30 * 24;
 const WARNING_OLDEST_HOURS = 7 * 24;
 const CRITICAL_OLDEST_HOURS = 30 * 24;
+
+export function hasTelegramTransferCoreMetrics(
+    snapshot: DataPipelineSnapshot | undefined,
+): boolean {
+    if (!snapshot) return false;
+    return Boolean(
+        snapshot.transferThroughput ||
+            snapshot.globalTelegramBacklog ||
+            snapshot.telegramIngestMetrics,
+    );
+}
 
 export function computeTelegramTransferHealth(
     input: TelegramTransferHealthInput,

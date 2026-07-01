@@ -8,6 +8,7 @@ import TelegramTransferHealth from '../../components/ai/AIManager/tabs/DataHub/T
 import {
     computeTelegramTransferHealth,
     formatDrainRatio,
+    hasTelegramTransferCoreMetrics,
 } from '../../components/ai/AIManager/tabs/DataHub/telegramTransferHealthFormat';
 import type { DataPipelineSnapshot } from '../../types';
 
@@ -33,8 +34,10 @@ const REQUIRED_KEYS = [
     'telegram_transfer_health_backlog',
     'telegram_transfer_health_drain_ratio',
     'telegram_transfer_health_load_error',
+    'telegram_transfer_health_partial',
     'telegram_transfer_health_loading',
     'telegram_transfer_health_not_loaded',
+    'pipeline_backlog_loading',
 ];
 
 function loadJson(path: string): Record<string, string> {
@@ -126,6 +129,54 @@ describe('Telegram Transfer Health', () => {
         expect(screen.getByText(enLocale.telegram_transfer_health_status_healthy)).toBeTruthy();
         expect(screen.getByText('1,000')).toBeTruthy();
         expect(screen.getByText('120%')).toBeTruthy();
+    });
+
+    it('renders partial metrics without fatal error when ingest metrics missing', () => {
+        const partialSnapshot: DataPipelineSnapshot = {
+            ...healthySnapshot,
+            telegramIngestMetrics: undefined,
+            globalTelegramBacklog: { unprocessedTotal: 720000 },
+        };
+        expect(hasTelegramTransferCoreMetrics(partialSnapshot)).toBe(true);
+        const t = makeT(enLocale);
+        render(
+            React.createElement(TelegramTransferHealth, {
+                t,
+                snapshot: partialSnapshot,
+                isLoading: false,
+                isPipelineLoaded: true,
+                partial: true,
+                error: 'Failed to fetch pipeline backlog enrichment',
+                formatTimeAgo: () => '2d ago',
+            }),
+        );
+        expect(screen.getByText(enLocale.telegram_transfer_health_partial)).toBeTruthy();
+        expect(screen.queryByText(enLocale.telegram_transfer_health_load_error)).toBeNull();
+        expect(screen.queryByText('pipeline_backlog_loading')).toBeNull();
+    });
+
+    it('shows fatal error only when no core metrics are available', () => {
+        const t = makeT(enLocale);
+        render(
+            React.createElement(TelegramTransferHealth, {
+                t,
+                snapshot: undefined,
+                isLoading: false,
+                isPipelineLoaded: true,
+                error: 'network',
+                formatTimeAgo: () => '2d ago',
+            }),
+        );
+        expect(screen.getByText(enLocale.telegram_transfer_health_load_error)).toBeTruthy();
+    });
+
+    it('PipelinePanel uses safeT for pipeline_backlog_loading', () => {
+        const src = readFileSync(
+            join(ROOT, 'components/ai/AIManager/tabs/DataHub/PipelinePanel.tsx'),
+            'utf8',
+        );
+        expect(src).toContain("safeT(t, 'pipeline_backlog_loading')");
+        expect(src).not.toContain("{t('pipeline_backlog_loading')}");
     });
 
     it('PipelinePanel uses TelegramTransferHealth instead of category screening', () => {

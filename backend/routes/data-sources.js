@@ -33,6 +33,10 @@ import {
 } from '../services/dataSourceUrlDuplicateService.js';
 import { buildDataPipelineView } from '../services/dataPipelineSnapshot.js';
 import { buildPipelineBacklogEnrichment } from '../services/pipelineBacklogEnrichment.js';
+import {
+  buildEmptyPipelineBacklogResponse,
+  normalizePipelineBacklogResponse,
+} from '../services/pipelineBacklogSafe.js';
 import { getOrLoadCached } from '../services/pipelineSnapshotCache.js';
 import { listDataHubAccessLogs } from '../services/dataHubAccessLogs.js';
 import { tryInsertDataHubAccessLog } from '../services/dataHubAccessLogWriter.js';
@@ -803,16 +807,22 @@ router.get('/access-logs', authenticate, readRateLimiter, validateQuery(accessLo
 // Pipeline backlog enrichment (heavy — lazy-loaded by UI, DH-PIPELINE-P2)
 router.get('/pipeline/backlog', authenticate, readRateLimiter, validateResponse(dataPipelineBacklogResponseSchema), async (req, res) => {
   try {
-    const enrichment = await getOrLoadCached('pipeline:backlog:enrichment', async () => {
-      const sourcesRows = await query(
-        `SELECT id AS source_id, type FROM data_sources WHERE type = 'telegram'`,
-      );
-      return buildPipelineBacklogEnrichment(sourcesRows.rows);
-    });
-    res.json(enrichment);
+    let enrichment;
+    try {
+      enrichment = await getOrLoadCached('pipeline:backlog:enrichment:v2', async () => {
+        const sourcesRows = await query(
+          `SELECT id AS source_id, type FROM data_sources WHERE type = 'telegram'`,
+        );
+        return buildPipelineBacklogEnrichment(sourcesRows.rows);
+      });
+    } catch (loadError) {
+      logger.error('Failed to load DataHub pipeline backlog enrichment:', loadError);
+      enrichment = buildEmptyPipelineBacklogResponse(loadError.message);
+    }
+    res.json(normalizePipelineBacklogResponse(enrichment));
   } catch (error) {
     logger.error('Failed to fetch DataHub pipeline backlog enrichment:', error);
-    res.status(500).json({ error: 'Failed to fetch pipeline backlog enrichment' });
+    res.json(buildEmptyPipelineBacklogResponse(error.message));
   }
 });
 

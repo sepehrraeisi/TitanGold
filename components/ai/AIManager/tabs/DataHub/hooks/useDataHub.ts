@@ -819,7 +819,11 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         isFetchingPipeline,
         isLoadingPipeline: isLoadingPipeline || isFetchingPipeline,
         isLoadingPipelineBacklog: isLoadingPipelineBacklog || isFetchingPipelineBacklog,
-        pipelineBacklogError: pipelineBacklogApiError?.message ?? null,
+        pipelineBacklogPartial: pipelineBacklog?.meta?.partial === true,
+        pipelineBacklogError:
+            pipelineBacklogApiError?.message && !pipelineBacklog
+                ? pipelineBacklogApiError.message
+                : null,
         handleRetryPipelineBacklog: () => {
             void refetchPipelineBacklog();
         },

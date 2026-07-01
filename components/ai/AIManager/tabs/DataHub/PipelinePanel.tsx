@@ -14,7 +14,7 @@ import {
     StatusPill,
 } from './dataHubUi';
 import TelegramTransferHealth from './TelegramTransferHealth';
-import { formatDataHubQueryError } from './dataHubI18n';
+import { formatDataHubQueryError, safeT } from './dataHubI18n';
 import { dataHubSourceStatusLabel } from '../../../../../services/dataSourcesApi';
 import type { DataSource } from '../../../../../types';
 
@@ -28,6 +28,7 @@ interface PipelinePanelProps {
     isLoadingPipeline: boolean;
     isLoadingPipelineBacklog?: boolean;
     pipelineBacklogError?: string | null;
+    pipelineBacklogPartial?: boolean;
     onRetryPipelineBacklog?: () => void;
     pipelineApiError?: DataHubApiError | Error | null;
     setPipelineError: (err: string | null) => void;
@@ -201,6 +202,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     isLoadingPipeline,
     isLoadingPipelineBacklog = false,
     pipelineBacklogError = null,
+    pipelineBacklogPartial = false,
     onRetryPipelineBacklog,
     pipelineApiError = null,
     setPipelineError,
@@ -408,6 +410,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             isLoading={isLoadingPipelineBacklog}
                             isPipelineLoaded={Boolean(activeSnapshot)}
                             error={pipelineBacklogError}
+                            partial={pipelineBacklogPartial}
                             onRetry={onRetryPipelineBacklog}
                             formatTimeAgo={formatTimeAgo}
                         />
@@ -419,7 +422,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                 </h4>
                                 {isLoadingPipelineBacklog && (
                                     <span className="text-[10px] text-muted-foreground">
-                                        {t('pipeline_backlog_loading')}
+                                        {safeT(t, 'pipeline_backlog_loading')}
                                     </span>
                                 )}
                             </div>

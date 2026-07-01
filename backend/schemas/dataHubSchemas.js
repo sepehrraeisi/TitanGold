@@ -578,6 +578,14 @@ export const dataPipelineBacklogResponseSchema = z.object({
   globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema,
   ingestMetrics: pipelineTelegramIngestMetricsSchema,
   backlogBySourceId: z.record(pipelineCollectorBacklogSchema),
+  meta: z
+    .object({
+      partial: z.boolean().optional(),
+      warnings: z.array(z.string()).optional(),
+      fetchedAt: z.string().optional(),
+      error: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const accessLogsQuerySchema = z.object({

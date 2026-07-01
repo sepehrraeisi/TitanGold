@@ -21,6 +21,12 @@ export type DataPipelineBacklogEnrichment = {
     globalTelegramBacklog: NonNullable<DataPipelineSnapshot['globalTelegramBacklog']>;
     ingestMetrics: NonNullable<DataPipelineSnapshot['telegramIngestMetrics']>;
     backlogBySourceId: Record<string, NonNullable<DataPipelineSourceSnapshot['collectorBacklog']>>;
+    meta?: {
+        partial?: boolean;
+        warnings?: string[];
+        fetchedAt?: string;
+        error?: string;
+    };
 };
 
 function getAuthToken(): string | null {
