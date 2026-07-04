@@ -548,6 +548,56 @@ export async function fetchDataHubSourcesHealth(): Promise<DataHubSourcesHealth>
     return dataSourcesRequest<DataHubSourcesHealth>('/health');
 }
 
+/** GET /api/v1/data-sources/health/monitoring — consolidated health dashboard */
+export type HealthMonitoringPipelineActivity = {
+    ingested: number | null;
+    normalized: number | null;
+    telegramIntake: number | null;
+    accessLogEvents: number | null;
+    meta: {
+        partial: boolean;
+        unavailableMetrics: string[];
+        window: string;
+    };
+};
+
+export type HealthMonitoringResponse = {
+    status: 'healthy' | 'degraded' | 'unhealthy';
+    lastCheckAt: string;
+    database: 'connected' | 'disconnected';
+    sources: {
+        total: number;
+        active: number;
+        byType: { telegram: number; rss: number; api: number };
+    };
+    pipelineActivity1h: HealthMonitoringPipelineActivity;
+    dataQuality: {
+        duplicateUrlGroups: number | null;
+        highRiskDuplicateGroups: number | null;
+        ignoredDuplicateGroups: number | null;
+        meta: { partial: boolean; unavailableMetrics: string[] };
+    };
+    performance: {
+        avgResponseMs: number | null;
+        cacheHitRate: number | null;
+        cacheHitRateTracked: boolean;
+        meta: { avgResponseWindow: string; cacheHitRateWindow: string };
+    };
+    telegramCollector: {
+        status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+        activeChannels: number | null;
+        totalChannels: number | null;
+        avgLatencyMs: number | null;
+        loggedErrors: number | null;
+        lastProcessedAt: string | null;
+        loaded: boolean;
+    };
+};
+
+export async function fetchHealthMonitoring(): Promise<HealthMonitoringResponse> {
+    return dataSourcesRequest<HealthMonitoringResponse>('/health/monitoring');
+}
+
 /** GET /api/v1/data-sources/stats — active/total source counts */
 export type DataHubSourcesStats = {
     total_sources?: number | string;

@@ -19,6 +19,7 @@ import {
   dataPipelineBacklogResponseSchema,
   pipelineNormalizationSummaryResponseSchema,
   pipelineCapacityResponseSchema,
+  healthMonitoringResponseSchema,
   accessLogsQuerySchema,
   accessLogsListResponseSchema,
   checkDuplicateUrlQuerySchema,
@@ -31,12 +32,14 @@ import {
   findDuplicateUrlSources,
   listDuplicateUrlGroups,
   getDuplicateUrlDashboard,
+  getDuplicateUrlSummaryForHealth,
   setSourceDuplicateUrlIgnore,
 } from '../services/dataSourceUrlDuplicateService.js';
 import { buildDataPipelineView } from '../services/dataPipelineSnapshot.js';
 import { buildPipelineBacklogEnrichment } from '../services/pipelineBacklogEnrichment.js';
 import { buildPipelineNormalizationSummary } from '../services/pipelineNormalizationSummary.js';
 import { buildPipelineCapacityView } from '../services/pipelineCapacity.js';
+import { buildHealthMonitoringView, queryHealthActivityMetrics } from '../services/healthMonitoring.js';
 import {
   buildEmptyPipelineBacklogResponse,
   normalizePipelineBacklogResponse,
@@ -704,12 +707,27 @@ router.get('/state', authenticate, readRateLimiter, validateResponse(dataHubStat
   }
 });
 
+// DataHub health monitoring — pipeline activity, performance, collector snapshot
+router.get('/health/monitoring', authenticate, readRateLimiter, validateResponse(healthMonitoringResponseSchema), async (req, res) => {
+  try {
+    res.json(await buildHealthMonitoringView());
+  } catch (error) {
+    logger.error('DataHub health monitoring failed:', error);
+    res.status(503).json({
+      status: 'unhealthy',
+      lastCheckAt: new Date().toISOString(),
+      database: 'disconnected',
+      error: error.message,
+    });
+  }
+});
+
 // DataHub health check
 router.get('/health', authenticate, async (req, res) => {
   try {
     await query('SELECT 1');
 
-    const [sourceCounts, collectorHealth, publisherHealth, queueHealth] = await Promise.all([
+    const [sourceCounts, collectorHealth, publisherHealth, queueHealth, activityMetrics, duplicateSummary] = await Promise.all([
       query(
         `SELECT
           COUNT(*)::int AS total_sources,
@@ -737,6 +755,13 @@ router.get('/health', authenticate, async (req, res) => {
           COUNT(*) FILTER (WHERE status = 'failed')::int AS failed_queue
          FROM datahub_automation_queue`,
       ),
+      queryHealthActivityMetrics(),
+      getDuplicateUrlSummaryForHealth().catch(() => ({
+        duplicateUrlGroups: null,
+        highRiskDuplicateGroups: null,
+        ignoredDuplicateGroups: null,
+        skipped: true,
+      })),
     ]);
 
     const sourceRow = sourceCounts.rows[0] || {};
@@ -771,19 +796,19 @@ router.get('/health', authenticate, async (req, res) => {
         pending: parseInt(queueRow.pending_queue, 10) || 0,
         failed: parseInt(queueRow.failed_queue, 10) || 0,
       },
-      accessLogEvents1h: 0,
-      pipelineIngested1h: 0,
-      pipelineNormalized1h: 0,
-      telegramCreated1h: 0,
+      accessLogEvents1h: activityMetrics.accessLogEvents,
+      pipelineIngested1h: activityMetrics.ingested,
+      pipelineNormalized1h: activityMetrics.normalized,
+      telegramCreated1h: activityMetrics.telegramIntake,
       healthLastCheckedAt,
       dataQuality: {
-        duplicateUrlGroups: 0,
-        highRiskDuplicateGroups: 0,
-        ignoredDuplicateGroups: 0,
-        skipped: true,
+        duplicateUrlGroups: duplicateSummary.duplicateUrlGroups ?? 0,
+        highRiskDuplicateGroups: duplicateSummary.highRiskDuplicateGroups ?? 0,
+        ignoredDuplicateGroups: duplicateSummary.ignoredDuplicateGroups ?? 0,
+        skipped: duplicateSummary.skipped === true || duplicateSummary.duplicateUrlGroups == null,
       },
       /** @deprecated use pipelineIngested1h — kept for backward compatibility */
-      recentActivity: 0,
+      recentActivity: activityMetrics.ingested ?? 0,
       timestamp: healthLastCheckedAt,
     });
   } catch (error) {
@@ -859,7 +884,7 @@ router.get('/pipeline/normalization-summary', authenticate, readRateLimiter, val
 // Pipeline capacity — read-only throughput configuration (DH-DATA-PIPELINE-PX)
 router.get('/pipeline/capacity', authenticate, readRateLimiter, validateResponse(pipelineCapacityResponseSchema), async (req, res) => {
   try {
-    res.json(buildPipelineCapacityView());
+    res.json(await buildPipelineCapacityView());
   } catch (error) {
     logger.error('Failed to fetch pipeline capacity view:', error);
     res.status(500).json({ error: 'Failed to fetch pipeline capacity' });

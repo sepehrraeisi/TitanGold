@@ -1,0 +1,61 @@
+{
+  "capturedAt": "2026-07-04T09:39:58.897Z",
+  "task": "DH-HEALTH-MONITORING-P1-PIPELINE-SYNC-UPDATE",
+  "api": {
+    "status": 200,
+    "pipelineActivity1h": {
+      "ingested": 1800,
+      "normalized": 1900,
+      "telegramIntake": 2319,
+      "accessLogEvents": 177,
+      "meta": {
+        "partial": false,
+        "unavailableMetrics": [],
+        "window": "1h"
+      }
+    },
+    "performance": {
+      "avgResponseMs": 388,
+      "cacheHitRate": 0,
+      "cacheHitRateTracked": true,
+      "meta": {
+        "avgResponseWindow": "1h",
+        "cacheHitRateWindow": "24h"
+      }
+    },
+    "telegramCollector": {
+      "status": "unknown",
+      "activeChannels": null,
+      "totalChannels": null,
+      "avgLatencyMs": null,
+      "loggedErrors": null,
+      "lastProcessedAt": null,
+      "loaded": false
+    }
+  },
+  "browserQaChecklist": {
+    "apiReturns200": true,
+    "pipelineIngestedNotHardcodedZero": true,
+    "pipelineNormalizedNotHardcodedZero": true,
+    "telegramIntakeNotHardcodedZero": true,
+    "cacheHitNotFake": true,
+    "avgResponseHonest": true,
+    "noRawI18nKeys": true,
+    "domChecksPass": true
+  },
+  "browserQaPass": true,
+  "domChecks": {
+    "hasPipelineActivitySection": true,
+    "hasCacheHitLabel": true,
+    "noFakeZeroGrid": true,
+    "hasUnavailableOrRealCounts": true,
+    "telegramCollectorSection": true,
+    "noRawNa": true
+  },
+  "rawI18nKeysFound": [],
+  "screenshots": [
+    "health-monitoring-p1-full.png",
+    "health-monitoring-p1-pipeline-activity.png"
+  ],
+  "verdict": "REAL WORKING"
+}

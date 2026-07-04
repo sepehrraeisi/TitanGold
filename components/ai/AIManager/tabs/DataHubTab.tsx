@@ -319,11 +319,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     )}
 
                     {activeView === 'health' && (
-                        <HealthPanel
-                            t={t}
-                            formatTimeAgo={formatTimeAgo}
-                            telegramCollector={dataHub.telegramCollector || null}
-                        />
+                        <HealthPanel t={t} formatTimeAgo={formatTimeAgo} />
                     )}
 
                     {activeView === 'advanced' && (

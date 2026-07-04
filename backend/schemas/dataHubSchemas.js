@@ -651,6 +651,66 @@ export const pipelineCapacityResponseSchema = z.object({
   }),
 });
 
+export const healthMonitoringResponseSchema = z.object({
+  status: z.enum(['healthy', 'degraded', 'unhealthy']),
+  lastCheckAt: z.string(),
+  database: z.enum(['connected', 'disconnected']),
+  sources: z.object({
+    total: z.number().int().nonnegative(),
+    active: z.number().int().nonnegative(),
+    byType: z.object({
+      telegram: z.number().int().nonnegative(),
+      rss: z.number().int().nonnegative(),
+      api: z.number().int().nonnegative(),
+    }),
+  }),
+  pipelineActivity1h: z.object({
+    ingested: z.number().int().nonnegative().nullable(),
+    normalized: z.number().int().nonnegative().nullable(),
+    telegramIntake: z.number().int().nonnegative().nullable(),
+    accessLogEvents: z.number().int().nonnegative().nullable(),
+    meta: z.object({
+      partial: z.boolean(),
+      unavailableMetrics: z.array(z.string()),
+      window: z.string(),
+    }),
+  }),
+  dataQuality: z.object({
+    duplicateUrlGroups: z.number().int().nonnegative().nullable(),
+    highRiskDuplicateGroups: z.number().int().nonnegative().nullable(),
+    ignoredDuplicateGroups: z.number().int().nonnegative().nullable(),
+    meta: z.object({
+      partial: z.boolean(),
+      unavailableMetrics: z.array(z.string()),
+    }),
+  }),
+  performance: z.object({
+    avgResponseMs: z.number().int().nonnegative().nullable(),
+    cacheHitRate: z.number().min(0).max(1).nullable(),
+    cacheHitRateTracked: z.boolean(),
+    meta: z.object({
+      avgResponseWindow: z.string(),
+      cacheHitRateWindow: z.string(),
+    }),
+  }),
+  telegramCollector: z.object({
+    status: z.enum(['healthy', 'degraded', 'unhealthy', 'unknown']),
+    activeChannels: z.number().int().nonnegative().nullable(),
+    totalChannels: z.number().int().nonnegative().nullable(),
+    avgLatencyMs: z.number().nonnegative().nullable(),
+    loggedErrors: z.number().int().nonnegative().nullable(),
+    lastProcessedAt: z.string().nullable(),
+    loaded: z.boolean(),
+  }),
+  activeSources: z.number().int().nonnegative().optional(),
+  accessLogEvents1h: z.number().int().nonnegative().nullable().optional(),
+  pipelineIngested1h: z.number().int().nonnegative().nullable().optional(),
+  pipelineNormalized1h: z.number().int().nonnegative().nullable().optional(),
+  telegramCreated1h: z.number().int().nonnegative().nullable().optional(),
+  healthLastCheckedAt: z.string().optional(),
+  timestamp: z.string().optional(),
+});
+
 export const accessLogsQuerySchema = z.object({
     limit: z.string().regex(/^\d+$/).transform(val => Math.min(parseInt(val, 10), 500)).optional().default('100'),
     offset: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).optional().default('0'),
