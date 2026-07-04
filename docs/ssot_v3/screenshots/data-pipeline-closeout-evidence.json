@@ -1,0 +1,106 @@
+{
+  "capturedAt": "2026-07-04T08:22:34.703Z",
+  "task": "DH-DATA-PIPELINE-FINAL-CLOSEOUT",
+  "commit": "6fa9158",
+  "commitMessage": "feat(datahub): final product polish for pipeline operations dashboard",
+  "environment": {
+    "frontend": "http://localhost:3000",
+    "backend": "http://127.0.0.1:5002",
+    "auth": "JWT admin (localStorage inject)"
+  },
+  "path": "AI → Manager → Data Hub → Data Pipeline",
+  "browserQaChecklist": {
+    "dataPipelineLoads": true,
+    "noRawI18nKeys": true,
+    "noRawDash": true,
+    "noFakeZeros": true,
+    "noBalancedFakeMode": true,
+    "schedulerStatusVisible": true,
+    "backlogSeverityVisible": true,
+    "backlogTrendHonest": true,
+    "refreshNormalizationIsolated": true,
+    "sourceQualityBoardWorks": true,
+    "telegramTransferHealthWorks": true
+  },
+  "browserQaPass": true,
+  "domChecks": {
+    "telegramTransferHealth": true,
+    "sourceQualityBoard": true,
+    "normalizationSummary": true,
+    "pipelineCapacity": true,
+    "configurationOnly": true,
+    "schedulerStopped": true,
+    "backlogCritical": true,
+    "backlogTrend": true,
+    "backlogTrendUnavailable": true,
+    "refreshNormalizationButton": true,
+    "configOnlyBanner": true
+  },
+  "rawI18nKeysFound": [],
+  "refreshNormalizationNetwork": {
+    "requests": [
+      {
+        "url": "/api/v1/data-sources/pipeline/normalization-summary",
+        "kind": "normalization-summary"
+      },
+      {
+        "url": "/api/v1/data-sources/pipeline/normalization-summary",
+        "kind": "normalization-summary"
+      }
+    ],
+    "onlyNormalizationSummary": true,
+    "noPipelineFast": true,
+    "noBacklog": true,
+    "noCapacity": true
+  },
+  "initialPipelineRequests": [
+    {
+      "phase": "load",
+      "url": "/api/v1/data-sources/pipeline?includeBacklog=false",
+      "kind": "pipeline-fast"
+    },
+    {
+      "phase": "load",
+      "url": "/api/v1/data-sources/pipeline/backlog",
+      "kind": "backlog"
+    },
+    {
+      "phase": "load",
+      "url": "/api/v1/data-sources/pipeline/normalization-summary",
+      "kind": "normalization-summary"
+    },
+    {
+      "phase": "load",
+      "url": "/api/v1/data-sources/pipeline/capacity",
+      "kind": "capacity"
+    }
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11077:13)\n    at async Promise.all (index 1)\n    at async loadBalance (http://localhost:3000/components/Header.tsx:994:40)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11077:13)\n    at async Promise.all (index 0)\n    at async loadBalance (http://localhost:3000/components/Header.tsx:994:40)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11077:13)\n    at async Promise.all (index 0)\n    at async loadBalance (http://localhost:3000/components/Header.tsx:994:40)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11077:13)\n    at async Promise.all (index 1)\n    at async loadBalance (http://localhost:3000/components/Header.tsx:994:40)",
+    "In HTML, %s cannot be a descendant of <%s>.\nThis will cause a hydration error.%s <div> p \n\n  ...\n    <div className=\"mt-6\">\n      <Suspense fallback={<div>}>\n        <DataHubTabWithErrorBoundary artemis={{id:\"artemi...\", ...}} t={function} onRefresh={function refreshArtemis} ...>\n          <ErrorBoundary>\n            <DataHubTab artemis={{id:\"artemi...\", ...}} t={function} onRefresh={function refreshArtemis} ...>\n              <ApiWrapper error={null} setError={function setError} isLoading={true}>\n                <div className={\"relative \"}>\n                  <div>\n                  <div className=\"opacity-50...\">\n                    <div className=\"space-y-6\">\n                      <DataHubSummaryCards t={function}>\n                        <div className=\"bg-gradien...\">\n                          <div className=\"grid grid-...\">\n                            <MetricCard label=\"Total Sources\" color=\"blue\" value={<SkeletonLoader>}>\n                              <div className=\"rounded-xl...\" title={undefined}>\n                                <div>\n>                               <p className=\"text-sm font-semibold text-blue-100\" title={undefined}>\n                                  <SkeletonLoader width=\"40px\" height=\"1.5rem\">\n                                    <div className={\"animate-...\"} style={{width:\"40px\", ...}}>\n>                                     <div\n>                                       className=\"absolute inset-0 bg-gradient-to-r from-transparent via-secondary/20...\"\n>                                     >\n                            ...\n                          ...\n                      ...\n",
+    "<%s> cannot contain a nested %s.\nSee this log for the ancestor stack trace. p <div>",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11077:13)\n    at async Promise.all (index 0)\n    at async loadBalance (http://localhost:3000/components/Header.tsx:994:40)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11077:13)\n    at async Promise.all (index 1)\n    at async loadBalance (http://localhost:3000/components/Header.tsx:994:40)"
+  ],
+  "screenshots": [
+    "data-pipeline-closeout-full.png",
+    "data-pipeline-closeout-panels.png",
+    "data-pipeline-closeout-source-quality.png"
+  ],
+  "verdict": "REAL WORKING / CLOSED"
+}

@@ -181,3 +181,67 @@ No new heavy queries on fast `/pipeline`. Backlog trend computed during existing
 ### Suggested commit
 
 `feat(datahub): final product polish for pipeline operations dashboard`
+
+---
+
+## Final Closeout (2026-07-04)
+
+> **Task:** DH-DATA-PIPELINE-FINAL-CLOSEOUT  
+> **Polish commit:** `6fa9158` — `feat(datahub): final product polish for pipeline operations dashboard`  
+> **Closeout QA commit:** refresh refetch + Source Quality dash fix + evidence (see git log)
+
+### Production browser QA (post build/deploy)
+
+Path: **AI → Manager → Data Hub → Data Pipeline** (admin JWT, Playwright headless against `localhost:3000`)
+
+| Check | Result |
+|-------|--------|
+| Data Pipeline loads | ✅ |
+| No raw i18n keys | ✅ |
+| No raw dash (pipeline panels) | ✅ |
+| No fake zeros (Normalization Summary) | ✅ |
+| No fake "Balanced" mode | ✅ — **Configuration only** |
+| Scheduler status visible | ✅ — **Stopped** (honest PM2 cluster read) |
+| Backlog severity visible | ✅ — **Critical** badge |
+| Backlog trend honest | ✅ — **Unavailable** (no fabricated trend) |
+| Refresh normalization isolated | ✅ — only `GET /pipeline/normalization-summary` |
+| Source Quality Board | ✅ |
+| Telegram Transfer Health | ✅ — Warning + partial unavailable metrics |
+
+### Closeout fixes (post-polish)
+
+| Fix | Why |
+|-----|-----|
+| `handleRetryPipelineNormalization` uses `fetchQuery` with `staleTime: 0` | Explicit refresh must refetch; prior 60s stale window skipped network |
+| Source Quality score null → `pipeline_response_unavailable` | Removed last raw em-dash in pipeline tab |
+
+### Evidence
+
+| Artifact | Path |
+|----------|------|
+| Checklist + network isolation JSON | [`data-pipeline-closeout-evidence.json`](./screenshots/data-pipeline-closeout-evidence.json) |
+| Full page screenshot | [`data-pipeline-closeout-full.png`](./screenshots/data-pipeline-closeout-full.png) |
+| Panels screenshot | [`data-pipeline-closeout-panels.png`](./screenshots/data-pipeline-closeout-panels.png) |
+| Source Quality screenshot | [`data-pipeline-closeout-source-quality.png`](./screenshots/data-pipeline-closeout-source-quality.png) |
+| Repro script | `backend/scripts/data-pipeline-closeout-browser-verify.mjs` |
+
+### Tests (unchanged, all pass)
+
+```bash
+npm test -- --run src/__tests__/pipelineOperationalMetrics.test.ts src/__tests__/pipelineNormalizationCapacity.test.ts
+cd backend && npm test -- __tests__/unit/pipelineBacklogTrend.test.js __tests__/unit/pipelineNormalizationCapacity.test.js
+npm run build
+node backend/scripts/data-pipeline-closeout-browser-verify.mjs
+```
+
+### Final verdict
+
+**Data Pipeline — REAL WORKING / CLOSED**
+
+- ✅ Lazy normalization summary (no fake zeros)
+- ✅ Read-only pipeline capacity (config-only, scheduler status)
+- ✅ Backlog severity + honest trend unavailable
+- ✅ Refresh normalization network-isolated
+- ✅ Telegram Transfer Health + Source Quality Board operational
+- ✅ Browser QA pass (2026-07-04, production stack via PM2)
+- ⚠️ P2: remove legacy `emptyNormalizationSummary()` from fast `/pipeline` response; runtime capacity presets; warnings rollup optimization

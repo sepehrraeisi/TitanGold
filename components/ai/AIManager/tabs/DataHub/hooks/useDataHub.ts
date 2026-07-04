@@ -875,6 +875,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
             void queryClient.fetchQuery({
                 queryKey: DATA_HUB_KEYS.pipelineNormalizationSummary(),
                 queryFn: fetchPipelineNormalizationSummary,
+                staleTime: 0,
             });
         },
         pipelineCapacity,

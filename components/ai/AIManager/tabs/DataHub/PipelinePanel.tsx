@@ -590,7 +590,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                                   {row.qualityScore}
                                                               </span>
                                                             )
-                                                          : '—'}
+                                                          : t('pipeline_response_unavailable')}
                                                 </td>
                                                 <td className="py-2">
                                                     <StatusPill
