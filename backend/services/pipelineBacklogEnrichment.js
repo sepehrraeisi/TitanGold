@@ -7,6 +7,7 @@ import {
 } from './telegramBacklogIntelligence.js';
 import { batchTelegramCollectorEnrichment } from './telegramCollectorSourceStatus.js';
 import { loadMetricSafely, normalizePipelineBacklogResponse } from './pipelineBacklogSafe.js';
+import { buildBacklogTrend, recordBacklogSnapshot } from './pipelineBacklogTrend.js';
 
 /**
  * Heavy Telegram backlog enrichment for pipeline board (lazy-loaded).
@@ -88,6 +89,19 @@ export async function buildPipelineBacklogEnrichment(sourcesRows) {
         }
       : null;
 
+  const currentBacklog = backlogResult.available
+    ? backlogResult.value?.unprocessedTotal ?? null
+    : null;
+  if (currentBacklog != null) {
+    void recordBacklogSnapshot(currentBacklog);
+  }
+
+  const backlogTrend = await buildBacklogTrend({
+    currentBacklog,
+    incoming24h: ingestMetrics?.incoming24h ?? null,
+    processed24h: transferThroughput?.processed24h ?? null,
+  });
+
   return normalizePipelineBacklogResponse({
     transferThroughput,
     globalTelegramBacklog: backlogResult.available ? backlogResult.value : null,
@@ -98,6 +112,7 @@ export async function buildPipelineBacklogEnrichment(sourcesRows) {
       warnings,
       unavailableMetrics,
       fetchedAt: new Date().toISOString(),
+      backlogTrend,
     },
   });
 }

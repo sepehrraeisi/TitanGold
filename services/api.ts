@@ -21409,10 +21409,14 @@ export {
     fetchDataPipelineView,
     fetchDataPipelineSnapshot,
     fetchDataPipelineBacklog,
+    fetchPipelineNormalizationSummary,
+    fetchPipelineCapacity,
 } from './dataPipelineApi';
 export type {
     DataPipelineView,
     DataPipelineBacklogEnrichment,
+    PipelineNormalizationSummaryResponse,
+    PipelineCapacityResponse,
 } from './dataPipelineApi';
 
 export { fetchDataAccessLogs } from './dataAccessLogsApi';

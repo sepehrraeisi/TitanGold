@@ -31,11 +31,14 @@ import {
     useDeleteCategoryMutation,
     usePipelineQuery,
     usePipelineBacklogQuery,
+    usePipelineNormalizationSummaryQuery,
+    usePipelineCapacityQuery,
     useAccessLogsQuery,
 } from '../../../../../../hooks/useDataHubState.ts';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi.ts';
 import { useAsync } from '../../../../../../hooks/useAsync';
 import { createTelegramDataSource, isChannelLinked, type TelegramChannel } from '../utils/telegramIntegration';
+import { fetchPipelineNormalizationSummary } from '../../../../../../services/dataPipelineApi.ts';
 import { handleDataHubError, DataHubError, shouldNotifyUser } from '../utils/errorHandler';
 
 export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key: string) => string) => {
@@ -100,6 +103,20 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         error: pipelineBacklogErrorObj,
         refetch: refetchPipelineBacklog,
     } = usePipelineBacklogQuery({ enabled: pipelineMainReady });
+    const {
+        data: pipelineNormalizationSummary,
+        isLoading: isLoadingPipelineNormalization,
+        isFetching: isFetchingPipelineNormalization,
+        error: pipelineNormalizationErrorObj,
+        refetch: refetchPipelineNormalization,
+    } = usePipelineNormalizationSummaryQuery({ enabled: pipelineMainReady });
+    const {
+        data: pipelineCapacity,
+        isLoading: isLoadingPipelineCapacity,
+        isFetching: isFetchingPipelineCapacity,
+        error: pipelineCapacityErrorObj,
+        refetch: refetchPipelineCapacity,
+    } = usePipelineCapacityQuery({ enabled: pipelineMainReady });
     const logsEnabled = activeView === 'logs';
     const {
         data: accessLogsResult,
@@ -636,7 +653,11 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         try {
             await refetchPipeline();
             if (pipelineMainReady) {
-                await refetchPipelineBacklog();
+                await Promise.all([
+                    refetchPipelineBacklog(),
+                    refetchPipelineNormalization(),
+                    refetchPipelineCapacity(),
+                ]);
             }
         } catch (error) {
             console.error('Failed to refresh pipeline:', error);
@@ -681,6 +702,20 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
             ? pipelineBacklogErrorObj
             : pipelineBacklogErrorObj instanceof Error
               ? pipelineBacklogErrorObj
+              : null;
+
+    const pipelineNormalizationApiError =
+        pipelineNormalizationErrorObj instanceof DataHubApiError
+            ? pipelineNormalizationErrorObj
+            : pipelineNormalizationErrorObj instanceof Error
+              ? pipelineNormalizationErrorObj
+              : null;
+
+    const pipelineCapacityApiError =
+        pipelineCapacityErrorObj instanceof DataHubApiError
+            ? pipelineCapacityErrorObj
+            : pipelineCapacityErrorObj instanceof Error
+              ? pipelineCapacityErrorObj
               : null;
 
     const formatTimeAgo = (timestamp?: string): string => {
@@ -821,6 +856,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         isLoadingPipelineBacklog: isLoadingPipelineBacklog || isFetchingPipelineBacklog,
         pipelineBacklogPartial: pipelineBacklog?.meta?.partial === true,
         pipelineBacklogUnavailableMetrics: pipelineBacklog?.meta?.unavailableMetrics ?? [],
+        pipelineBacklogTrend: pipelineBacklog?.meta?.backlogTrend ?? null,
         pipelineBacklogError:
             pipelineBacklogApiError?.message && !pipelineBacklog
                 ? pipelineBacklogApiError.message
@@ -828,6 +864,25 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         handleRetryPipelineBacklog: () => {
             void refetchPipelineBacklog();
         },
+        pipelineNormalizationSummary,
+        isLoadingPipelineNormalization:
+            isLoadingPipelineNormalization || isFetchingPipelineNormalization,
+        pipelineNormalizationError:
+            pipelineNormalizationApiError?.message && !pipelineNormalizationSummary
+                ? pipelineNormalizationApiError.message
+                : null,
+        handleRetryPipelineNormalization: () => {
+            void queryClient.fetchQuery({
+                queryKey: DATA_HUB_KEYS.pipelineNormalizationSummary(),
+                queryFn: fetchPipelineNormalizationSummary,
+            });
+        },
+        pipelineCapacity,
+        isLoadingPipelineCapacity: isLoadingPipelineCapacity || isFetchingPipelineCapacity,
+        pipelineCapacityError:
+            pipelineCapacityApiError?.message && !pipelineCapacity
+                ? pipelineCapacityApiError.message
+                : null,
         pipelineError,
         setPipelineError,
         pipelineApiError,

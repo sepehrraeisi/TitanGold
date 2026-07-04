@@ -19,6 +19,8 @@ export const DATA_HUB_KEYS = {
     categories: () => [...DATA_HUB_KEYS.all, 'categories'] as const,
     pipeline: () => [...DATA_HUB_KEYS.all, 'pipeline'] as const,
     pipelineBacklog: () => [...DATA_HUB_KEYS.all, 'pipelineBacklog'] as const,
+    pipelineNormalizationSummary: () => [...DATA_HUB_KEYS.all, 'pipelineNormalizationSummary'] as const,
+    pipelineCapacity: () => [...DATA_HUB_KEYS.all, 'pipelineCapacity'] as const,
     sourcesHealth: () => [...DATA_HUB_KEYS.all, 'sourcesHealth'] as const,
     sourcesStats: () => [...DATA_HUB_KEYS.all, 'sourcesStats'] as const,
     sourcesState: () => [...DATA_HUB_KEYS.all, 'sourcesState'] as const,
@@ -67,6 +69,24 @@ export const usePipelineBacklogQuery = (options?: { enabled?: boolean }) => {
     return useQuery({
         queryKey: DATA_HUB_KEYS.pipelineBacklog(),
         queryFn: api.fetchDataPipelineBacklog,
+        staleTime: 60 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const usePipelineNormalizationSummaryQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.pipelineNormalizationSummary(),
+        queryFn: api.fetchPipelineNormalizationSummary,
+        staleTime: 60 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const usePipelineCapacityQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.pipelineCapacity(),
+        queryFn: api.fetchPipelineCapacity,
         staleTime: 60 * 1000,
         enabled: options?.enabled ?? true,
     });

@@ -24,6 +24,8 @@ export type DataPipelineBacklogEnrichment = {
     meta?: import('../types').PipelineBacklogMeta;
 };
 
+export type { PipelineNormalizationSummaryResponse, PipelineCapacityResponse } from '../types';
+
 function getAuthToken(): string | null {
     return localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
 }
@@ -78,6 +80,30 @@ export async function fetchDataPipelineBacklog(): Promise<DataPipelineBacklogEnr
         throw await parseErrorResponse(res);
     }
     return res.json() as Promise<DataPipelineBacklogEnrichment>;
+}
+
+/** Lazy 24h normalization summary — not included in fast pipeline snapshot. */
+export async function fetchPipelineNormalizationSummary(): Promise<import('../types').PipelineNormalizationSummaryResponse> {
+    const res = await fetch(`${BASE}/pipeline/normalization-summary`, {
+        method: 'GET',
+        headers: authHeaders(),
+    });
+    if (!res.ok) {
+        throw await parseErrorResponse(res);
+    }
+    return res.json() as Promise<import('../types').PipelineNormalizationSummaryResponse>;
+}
+
+/** Read-only pipeline throughput configuration. */
+export async function fetchPipelineCapacity(): Promise<import('../types').PipelineCapacityResponse> {
+    const res = await fetch(`${BASE}/pipeline/capacity`, {
+        method: 'GET',
+        headers: authHeaders(),
+    });
+    if (!res.ok) {
+        throw await parseErrorResponse(res);
+    }
+    return res.json() as Promise<import('../types').PipelineCapacityResponse>;
 }
 
 /** @deprecated Use fetchDataPipelineView — kept for callers expecting snapshot only */

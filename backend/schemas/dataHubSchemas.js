@@ -573,6 +573,16 @@ export const pipelineQuerySchema = z.object({
     .transform((v) => v === 'true'),
 });
 
+export const pipelineBacklogTrendSchema = z.object({
+  loaded: z.boolean(),
+  direction: z.enum(['up', 'down', 'stable']).nullable(),
+  percentChange: z.number().nullable(),
+  display: z.string().nullable(),
+  previousBacklog: z.number().int().nonnegative().nullable(),
+  source: z.enum(['redis_history', 'flow_balance_estimate']).nullable(),
+  unavailableReason: z.string().nullable(),
+});
+
 export const dataPipelineBacklogResponseSchema = z.object({
   transferThroughput: pipelineTransferThroughputSchema.nullable().optional(),
   globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema.nullable().optional(),
@@ -585,8 +595,60 @@ export const dataPipelineBacklogResponseSchema = z.object({
       unavailableMetrics: z.array(z.string()).optional(),
       fetchedAt: z.string().optional(),
       error: z.string().optional(),
+      backlogTrend: pipelineBacklogTrendSchema.optional(),
     })
     .optional(),
+});
+
+export const pipelineNormalizationSummaryResponseSchema = z.object({
+  windowHours: z.number().int().positive(),
+  totalProcessed: z.number().int().nonnegative().nullable(),
+  passed: z.number().int().nonnegative().nullable(),
+  warnings: z.number().int().nonnegative().nullable(),
+  rejected: z.number().int().nonnegative().nullable(),
+  passRate: z.number().min(0).max(1).nullable(),
+  lastProcessedAt: z.string().nullable(),
+  meta: z.object({
+    loaded: z.boolean(),
+    cachedAt: z.string().nullable(),
+    queryMs: z.number().nullable(),
+    partial: z.boolean(),
+    unavailableReason: z.string().nullable(),
+  }),
+});
+
+export const pipelineCapacityResponseSchema = z.object({
+  mode: z.enum(['config_only']),
+  modeLabel: z.string(),
+  schedulerStatus: z.enum(['running', 'paused', 'stopped', 'unknown']),
+  transfer: z.object({
+    batchSize: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+    intervalMinutes: z.number().int().positive().nullable(),
+    runtimeAdjustable: z.union([z.boolean(), z.literal('partial')]),
+    source: z.string(),
+  }),
+  normalization: z.object({
+    batchSize: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+    intervalMinutes: z.number().int().positive().nullable(),
+    runtimeAdjustable: z.union([z.boolean(), z.literal('partial')]),
+    source: z.string(),
+  }),
+  lastNormalizationRun: z.string().nullable(),
+  lastNormalizationStats: z
+    .object({
+      processed: z.number().int().nonnegative().nullable(),
+      errors: z.number().int().nonnegative().nullable(),
+      durationMs: z.number().int().nonnegative().nullable(),
+    })
+    .nullable(),
+  meta: z.object({
+    loaded: z.boolean(),
+    readOnly: z.boolean(),
+    writeControlsAvailable: z.boolean(),
+    notes: z.array(z.string()),
+  }),
 });
 
 export const accessLogsQuerySchema = z.object({

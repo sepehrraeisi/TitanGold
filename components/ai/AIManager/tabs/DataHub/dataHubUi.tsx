@@ -106,24 +106,36 @@ export function MetricCard({
     color = 'blue',
     hint,
     valueState = 'loaded',
+    emphasis = 'default',
+    valueTooltip,
+    badge,
 }: {
     label: string;
     value: React.ReactNode;
     color?: MetricColor;
     hint?: string;
     valueState?: 'loaded' | 'zero' | 'unavailable';
+    emphasis?: 'default' | 'primary';
+    valueTooltip?: string;
+    badge?: React.ReactNode;
 }) {
     const valueTone =
         valueState === 'unavailable'
             ? 'text-muted-foreground font-medium'
             : METRIC_TEXT[color].split(' ')[1];
+    const valueSize = emphasis === 'primary' ? 'text-lg font-bold' : 'text-sm font-semibold';
     return (
         <div
             className={`rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[color]} to-transparent p-3 backdrop-blur-sm`}
             title={hint}
         >
-            <p className={`text-[11px] mb-1 ${METRIC_TEXT[color].split(' ')[0]}`}>{label}</p>
-            <p className={`text-sm font-semibold ${valueTone}`}>{value}</p>
+            <div className="flex items-center justify-between gap-1 mb-1">
+                <p className={`text-[11px] ${METRIC_TEXT[color].split(' ')[0]}`}>{label}</p>
+                {badge}
+            </div>
+            <p className={`${valueSize} ${valueTone}`} title={valueTooltip}>
+                {value}
+            </p>
             {hint ? (
                 <p className="text-[10px] text-muted-foreground/80 mt-1 line-clamp-2">{hint}</p>
             ) : null}

@@ -1,0 +1,90 @@
+{
+  "capturedAt": "2026-07-01T18:26:01.463Z",
+  "task": "DH-DATA-PIPELINE-PX-NORMALIZATION-SUMMARY-AND-CAPACITY-IMPLEMENT",
+  "environment": {
+    "backend": "http://127.0.0.1:5002",
+    "frontend": "http://127.0.0.1:3000",
+    "auth": "JWT admin (curl-auth + browser localStorage inject)"
+  },
+  "dbIndex": {
+    "name": "idx_collected_data_norm_summary_24h",
+    "present": true
+  },
+  "latencyMs": {
+    "pipelineFast": 1745,
+    "normalizationFirst": 20110,
+    "normalizationCached": 26,
+    "capacity": 11,
+    "backlog": 24085
+  },
+  "pipelineFast": {
+    "note": "Fast snapshot still includes legacy emptyNormalizationSummary placeholder for backward compat; UI no longer renders it.",
+    "placeholderZerosInResponse": true
+  },
+  "normalizationSummary": {
+    "endpoint": "GET /api/v1/data-sources/pipeline/normalization-summary",
+    "loaded": true,
+    "totalProcessed": 144759,
+    "passed": 144486,
+    "warnings": null,
+    "rejected": 273,
+    "passRate": 0.9981,
+    "partial": true,
+    "queryMs": 20027,
+    "noFakeZerosOnFailure": true
+  },
+  "capacity": {
+    "endpoint": "GET /api/v1/data-sources/pipeline/capacity",
+    "mode": "config_only",
+    "readOnly": true,
+    "writeControlsAvailable": false,
+    "transferBatch": 700,
+    "transferIntervalMin": 5,
+    "normBatch": 150,
+    "normIntervalMin": 1
+  },
+  "browserQa": {
+    "path": "AI → Manager → Data Hub → Data Pipeline",
+    "telegramTransferHealth": {
+      "visible": true,
+      "incoming24h": 76128,
+      "backlog": 743569,
+      "processingRate": "6,038/h",
+      "status": "Warning"
+    },
+    "pipelineCapacity": {
+      "visible": true,
+      "modeLabel": "Config-only / Balanced",
+      "configOnlyBanner": true,
+      "fakeThroughputButtons": false,
+      "transferBatch": 700,
+      "transferInterval": "5 min",
+      "normalizationBatch": 150,
+      "normalizationInterval": "1 min",
+      "status": "Normal"
+    },
+    "normalizationSummaryUi": {
+      "visible": true,
+      "fakeZerosBeforeLoad": false,
+      "processed24h": 145009,
+      "passed24h": 144739,
+      "warnings24h": "Temporarily unavailable",
+      "rejected24h": 270,
+      "passRate": "99.8%",
+      "lastNormalized": "7m ago",
+      "refreshNormalizationButton": true,
+      "rawI18nKeys": false,
+      "rawDash": false
+    },
+    "sourceQualityBoard": {
+      "visible": true
+    },
+    "refreshPipelineRegression": "Refresh Pipeline completes without breaking lazy sections"
+  },
+  "tests": {
+    "frontend": "src/__tests__/pipelineNormalizationCapacity.test.ts — 11 passed",
+    "backend": "backend/__tests__/unit/pipelineNormalizationCapacity.test.js — 5 passed",
+    "build": "npm run build — passed"
+  },
+  "verdict": "REAL WORKING"
+}

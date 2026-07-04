@@ -14,7 +14,14 @@ import {
     StatusPill,
 } from './dataHubUi';
 import TelegramTransferHealth from './TelegramTransferHealth';
+import PipelineNormalizationSummary from './PipelineNormalizationSummary';
+import PipelineCapacityPanel from './PipelineCapacityPanel';
 import { formatDataHubQueryError, safeT } from './dataHubI18n';
+import {
+    classifyResponseTimeSeverity,
+    responseTimeSeverityClass,
+    responseTimeSeverityLabel,
+} from './pipelineOperationalMetrics';
 import { dataHubSourceStatusLabel } from '../../../../../services/dataSourcesApi';
 import type { DataSource } from '../../../../../types';
 
@@ -30,7 +37,15 @@ interface PipelinePanelProps {
     pipelineBacklogError?: string | null;
     pipelineBacklogPartial?: boolean;
     pipelineBacklogUnavailableMetrics?: import('../../../../../types').TransferHealthMetricKey[];
+    pipelineBacklogTrend?: import('../../../../../types').PipelineBacklogTrend | null;
     onRetryPipelineBacklog?: () => void;
+    pipelineNormalizationSummary?: import('../../../../../types').PipelineNormalizationSummaryResponse;
+    isLoadingPipelineNormalization?: boolean;
+    pipelineNormalizationError?: string | null;
+    onRetryPipelineNormalization?: () => void;
+    pipelineCapacity?: import('../../../../../types').PipelineCapacityResponse;
+    isLoadingPipelineCapacity?: boolean;
+    pipelineCapacityError?: string | null;
     pipelineApiError?: DataHubApiError | Error | null;
     setPipelineError: (err: string | null) => void;
     formatTimeAgo: (date: string | Date | undefined) => string;
@@ -205,7 +220,15 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     pipelineBacklogError = null,
     pipelineBacklogPartial = false,
     pipelineBacklogUnavailableMetrics = [],
+    pipelineBacklogTrend = null,
     onRetryPipelineBacklog,
+    pipelineNormalizationSummary,
+    isLoadingPipelineNormalization = false,
+    pipelineNormalizationError = null,
+    onRetryPipelineNormalization,
+    pipelineCapacity,
+    isLoadingPipelineCapacity = false,
+    pipelineCapacityError = null,
     pipelineApiError = null,
     setPipelineError,
     formatTimeAgo,
@@ -414,21 +437,43 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             error={pipelineBacklogError}
                             partial={pipelineBacklogPartial}
                             unavailableMetrics={pipelineBacklogUnavailableMetrics}
+                            backlogTrend={pipelineBacklogTrend}
                             onRetry={onRetryPipelineBacklog}
                             formatTimeAgo={formatTimeAgo}
                         />
 
-                        <div className={DATAHUB_INNER_LIST}>
-                            <div className="flex items-center justify-between gap-2 mb-3">
-                                <h4 className="text-[11px] font-semibold text-foreground">
-                                    {t('source_quality_board')}
-                                </h4>
-                                {isLoadingPipelineBacklog && (
-                                    <span className="text-[10px] text-muted-foreground">
-                                        {safeT(t, 'pipeline_backlog_loading')}
-                                    </span>
-                                )}
-                            </div>
+                        <PipelineCapacityPanel
+                            t={t}
+                            capacity={pipelineCapacity}
+                            isLoading={isLoadingPipelineCapacity}
+                            error={pipelineCapacityError}
+                            snapshot={activeSnapshot}
+                            unavailableMetrics={pipelineBacklogUnavailableMetrics}
+                        />
+                    </div>
+
+                    <div className="mb-5">
+                        <PipelineNormalizationSummary
+                            t={t}
+                            summary={pipelineNormalizationSummary}
+                            isLoading={isLoadingPipelineNormalization}
+                            error={pipelineNormalizationError}
+                            onRetry={onRetryPipelineNormalization}
+                            formatTimeAgo={formatTimeAgo}
+                        />
+                    </div>
+
+                    <div className={`${DATAHUB_INNER_LIST} mb-5`}>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                            <h4 className="text-[11px] font-semibold text-foreground">
+                                {t('source_quality_board')}
+                            </h4>
+                            {isLoadingPipelineBacklog && (
+                                <span className="text-[10px] text-muted-foreground">
+                                    {safeT(t, 'pipeline_backlog_loading')}
+                                </span>
+                            )}
+                        </div>
                             {filteredSources.length === 0 ? (
                                 <p className="text-[11px] text-muted-foreground">{t('pipeline_no_sources')}</p>
                             ) : (
@@ -470,9 +515,25 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                         {renderCollectorBacklogDetails(t, src, formatTimeAgo)}
                                                     </td>
                                                     <td className="py-2">
-                                                        {src.lastResponseTime != null
-                                                            ? `${src.lastResponseTime}ms`
-                                                            : '—'}
+                                                        {src.lastResponseTime != null ? (
+                                                            (() => {
+                                                                const severity = classifyResponseTimeSeverity(
+                                                                    src.lastResponseTime,
+                                                                );
+                                                                const label = responseTimeSeverityLabel(t, severity);
+                                                                return (
+                                                                    <span
+                                                                        className={responseTimeSeverityClass(severity)}
+                                                                        title={label ?? undefined}
+                                                                    >
+                                                                        {src.lastResponseTime}ms
+                                                                        {label ? ` · ${label}` : ''}
+                                                                    </span>
+                                                                );
+                                                            })()
+                                                        ) : (
+                                                            safeT(t, 'pipeline_response_unavailable')
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -480,38 +541,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                     </table>
                                 </div>
                             )}
-                        </div>
                     </div>
-
-                    {normalizationSummary && (
-                        <div className={`${DATAHUB_INNER_LIST} mb-5`}>
-                            <h4 className="text-[11px] font-semibold text-foreground mb-3">
-                                {t('normalization_summary')}
-                            </h4>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                <MetricCard
-                                    label={t('normalization_processed')}
-                                    value={normalizationSummary.totalProcessed}
-                                    color="blue"
-                                />
-                                <MetricCard
-                                    label={t('normalization_passed')}
-                                    value={normalizationSummary.passed}
-                                    color="emerald"
-                                />
-                                <MetricCard
-                                    label={t('normalization_warnings')}
-                                    value={normalizationSummary.warnings}
-                                    color="amber"
-                                />
-                                <MetricCard
-                                    label={t('normalization_rejected')}
-                                    value={normalizationSummary.rejected}
-                                    color="red"
-                                />
-                            </div>
-                        </div>
-                    )}
 
                     {previewNormalized.length > 0 && (
                         <div className={DATAHUB_INNER_LIST}>

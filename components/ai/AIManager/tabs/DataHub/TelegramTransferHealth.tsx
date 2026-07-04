@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import SkeletonLoader from '../../../../common/SkeletonLoader';
-import type { DataPipelineSnapshot, TransferHealthMetricKey } from '../../../../../types';
+import type { DataPipelineSnapshot, PipelineBacklogTrend, TransferHealthMetricKey } from '../../../../../types';
 import {
     DATAHUB_INNER_LIST,
     DataHubAlert,
@@ -21,6 +21,12 @@ import {
     isMetricUnavailable,
     transferHealthStatusVariant,
 } from './telegramTransferHealthFormat';
+import {
+    backlogSeverityLabel,
+    backlogSeverityVariant,
+    classifyBacklogSeverity,
+    formatBacklogTrendDisplay,
+} from './pipelineOperationalMetrics';
 
 interface TelegramTransferHealthProps {
     t: (key: string) => string;
@@ -30,6 +36,7 @@ interface TelegramTransferHealthProps {
     error?: string | null;
     partial?: boolean;
     unavailableMetrics?: TransferHealthMetricKey[];
+    backlogTrend?: PipelineBacklogTrend | null;
     onRetry?: () => void;
     formatTimeAgo: (date: string | Date | undefined) => string;
 }
@@ -46,6 +53,7 @@ const TelegramTransferHealth: React.FC<TelegramTransferHealthProps> = ({
     error = null,
     partial = false,
     unavailableMetrics = [],
+    backlogTrend = null,
     onRetry,
     formatTimeAgo,
 }) => {
@@ -108,6 +116,18 @@ const TelegramTransferHealth: React.FC<TelegramTransferHealthProps> = ({
         isMetricUnavailable('catchUp', unavailableMetrics) || derived.catchUpHours == null,
         t,
     );
+
+    const backlogSeverity = classifyBacklogSeverity(derived.backlogTotal);
+    const backlogBadge =
+        backlogSeverity && backlogDisplay.state === 'loaded' ? (
+            <StatusPill
+                label={backlogSeverityLabel(t, backlogSeverity) ?? backlogSeverity}
+                variant={backlogSeverityVariant(backlogSeverity)}
+                title={safeT(t, 'pipeline_backlog_severity_hint')}
+            />
+        ) : null;
+
+    const trendDisplay = formatBacklogTrendDisplay(t, backlogTrend ?? undefined);
 
     return (
         <div className={DATAHUB_INNER_LIST}>
@@ -197,6 +217,20 @@ const TelegramTransferHealth: React.FC<TelegramTransferHealthProps> = ({
                         value={backlogDisplay.text}
                         valueState={backlogDisplay.state}
                         hint={safeT(t, 'telegram_transfer_health_backlog_hint')}
+                        badge={backlogBadge}
+                    />
+                    <MetricCard
+                        label={safeT(t, 'pipeline_backlog_trend_title')}
+                        color={
+                            trendDisplay.state === 'loaded' && backlogTrend?.direction === 'up'
+                                ? 'amber'
+                                : trendDisplay.state === 'loaded' && backlogTrend?.direction === 'down'
+                                  ? 'emerald'
+                                  : 'blue'
+                        }
+                        value={trendDisplay.text}
+                        valueState={trendDisplay.state}
+                        hint={safeT(t, 'pipeline_backlog_trend_hint')}
                     />
                     <MetricCard
                         label={safeT(t, 'telegram_transfer_health_oldest_age')}

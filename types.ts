@@ -4314,6 +4314,19 @@ export interface PipelineBacklogMeta {
   unavailableMetrics?: TransferHealthMetricKey[];
   fetchedAt?: string;
   error?: string;
+  backlogTrend?: PipelineBacklogTrend;
+}
+
+export type PipelineSchedulerStatus = 'running' | 'paused' | 'stopped' | 'unknown';
+
+export interface PipelineBacklogTrend {
+  loaded: boolean;
+  direction: 'up' | 'down' | 'stable' | null;
+  percentChange: number | null;
+  display: string | null;
+  previousBacklog: number | null;
+  source: 'redis_history' | 'flow_balance_estimate' | null;
+  unavailableReason: string | null;
 }
 
 export type TelegramTransferHealthStatus = 'healthy' | 'warning' | 'critical';
@@ -4401,6 +4414,57 @@ export interface DataNormalizationSummary {
   warnings: number;
   rejected: number;
   lastProcessedAt?: string;
+}
+
+export interface PipelineNormalizationSummaryMeta {
+  loaded: boolean;
+  cachedAt: string | null;
+  queryMs: number | null;
+  partial: boolean;
+  unavailableReason: string | null;
+}
+
+export interface PipelineNormalizationSummaryResponse {
+  windowHours: number;
+  totalProcessed: number | null;
+  passed: number | null;
+  warnings: number | null;
+  rejected: number | null;
+  passRate: number | null;
+  lastProcessedAt: string | null;
+  meta: PipelineNormalizationSummaryMeta;
+}
+
+export interface PipelineCapacityResponse {
+  mode: 'config_only';
+  modeLabel: string;
+  schedulerStatus: PipelineSchedulerStatus;
+  transfer: {
+    batchSize: number;
+    intervalMs: number;
+    intervalMinutes: number | null;
+    runtimeAdjustable: boolean | 'partial';
+    source: string;
+  };
+  normalization: {
+    batchSize: number;
+    intervalMs: number;
+    intervalMinutes: number | null;
+    runtimeAdjustable: boolean | 'partial';
+    source: string;
+  };
+  lastNormalizationRun: string | null;
+  lastNormalizationStats: {
+    processed: number | null;
+    errors: number | null;
+    durationMs: number | null;
+  } | null;
+  meta: {
+    loaded: boolean;
+    readOnly: boolean;
+    writeControlsAvailable: boolean;
+    notes: string[];
+  };
 }
 
 export interface DataRequest {

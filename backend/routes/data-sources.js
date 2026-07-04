@@ -17,6 +17,8 @@ import {
   dataPipelineViewResponseSchema,
   pipelineQuerySchema,
   dataPipelineBacklogResponseSchema,
+  pipelineNormalizationSummaryResponseSchema,
+  pipelineCapacityResponseSchema,
   accessLogsQuerySchema,
   accessLogsListResponseSchema,
   checkDuplicateUrlQuerySchema,
@@ -33,6 +35,8 @@ import {
 } from '../services/dataSourceUrlDuplicateService.js';
 import { buildDataPipelineView } from '../services/dataPipelineSnapshot.js';
 import { buildPipelineBacklogEnrichment } from '../services/pipelineBacklogEnrichment.js';
+import { buildPipelineNormalizationSummary } from '../services/pipelineNormalizationSummary.js';
+import { buildPipelineCapacityView } from '../services/pipelineCapacity.js';
 import {
   buildEmptyPipelineBacklogResponse,
   normalizePipelineBacklogResponse,
@@ -823,6 +827,42 @@ router.get('/pipeline/backlog', authenticate, readRateLimiter, validateResponse(
   } catch (error) {
     logger.error('Failed to fetch DataHub pipeline backlog enrichment:', error);
     res.json(buildEmptyPipelineBacklogResponse(error.message));
+  }
+});
+
+// Pipeline normalization summary — lazy-loaded 24h counts (DH-DATA-PIPELINE-PX)
+router.get('/pipeline/normalization-summary', authenticate, readRateLimiter, validateResponse(pipelineNormalizationSummaryResponseSchema), async (req, res) => {
+  try {
+    const summary = await buildPipelineNormalizationSummary();
+    res.json(summary);
+  } catch (error) {
+    logger.error('Failed to fetch pipeline normalization summary:', error);
+    res.json({
+      windowHours: 24,
+      totalProcessed: null,
+      passed: null,
+      warnings: null,
+      rejected: null,
+      passRate: null,
+      lastProcessedAt: null,
+      meta: {
+        loaded: false,
+        cachedAt: null,
+        queryMs: null,
+        partial: true,
+        unavailableReason: error?.message || 'summary_failed',
+      },
+    });
+  }
+});
+
+// Pipeline capacity — read-only throughput configuration (DH-DATA-PIPELINE-PX)
+router.get('/pipeline/capacity', authenticate, readRateLimiter, validateResponse(pipelineCapacityResponseSchema), async (req, res) => {
+  try {
+    res.json(buildPipelineCapacityView());
+  } catch (error) {
+    logger.error('Failed to fetch pipeline capacity view:', error);
+    res.status(500).json({ error: 'Failed to fetch pipeline capacity' });
   }
 });
 
