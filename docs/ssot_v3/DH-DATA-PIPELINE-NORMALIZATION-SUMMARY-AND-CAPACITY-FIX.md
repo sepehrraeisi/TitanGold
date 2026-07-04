@@ -188,7 +188,7 @@ No new heavy queries on fast `/pipeline`. Backlog trend computed during existing
 
 > **Task:** DH-DATA-PIPELINE-FINAL-CLOSEOUT  
 > **Polish commit:** `6fa9158` — `feat(datahub): final product polish for pipeline operations dashboard`  
-> **Closeout QA commit:** refresh refetch + Source Quality dash fix + evidence (see git log)
+> **Closeout QA commit:** `8a2597a` — refresh refetch + Source Quality dash fix + browser evidence
 
 ### Production browser QA (post build/deploy)
 

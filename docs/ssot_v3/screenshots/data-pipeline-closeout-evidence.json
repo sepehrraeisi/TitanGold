@@ -2,6 +2,7 @@
   "capturedAt": "2026-07-04T08:22:34.703Z",
   "task": "DH-DATA-PIPELINE-FINAL-CLOSEOUT",
   "commit": "6fa9158",
+  "closeoutCommit": "8a2597a",
   "commitMessage": "feat(datahub): final product polish for pipeline operations dashboard",
   "environment": {
     "frontend": "http://localhost:3000",
