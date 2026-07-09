@@ -2,6 +2,7 @@
 
 > **Task:** DH-TELEGRAM-PUBLISHER-P1-SAFE-RCA-AND-TEST-DELIVERY  
 > **Date:** 2026-07-09  
+> **Commit:** `9421d2b` — `docs(datahub): telegram publisher P1 safe RCA and delivery evidence`  
 > **Mode:** Read-only RCA → safe dry-run tests → browser QA (no blind fixes)  
 > **Verdict:** **REAL WORKING / CLOSED** (dry-run operational; live disabled by production safety gate)
 
