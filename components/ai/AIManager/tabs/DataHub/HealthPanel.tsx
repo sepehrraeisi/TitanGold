@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import SkeletonLoader from '../../../../common/SkeletonLoader';
 import {
+    useDataHubHealthDataQualityQuery,
     useDataHubHealthLogCountsQuery,
     useDataHubHealthMonitoringQuery,
 } from '../../../../../hooks/useDataHubState';
@@ -61,21 +62,22 @@ function unavailableLabel(t: (key: string) => string): string {
 
 const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
     const monitoringQuery = useDataHubHealthMonitoringQuery();
+    const dataQualityQuery = useDataHubHealthDataQualityQuery();
     const logCountsQuery = useDataHubHealthLogCountsQuery();
     const collectorHealthQuery = useCollectorHealthQuery();
     const collectorChannelsQuery = useCollectorChannelsQuery({}, true);
 
-    const isLoading =
-        monitoringQuery.isLoading ||
-        logCountsQuery.isLoading ||
-        collectorHealthQuery.isLoading ||
-        collectorChannelsQuery.isLoading;
-    const hasError =
-        monitoringQuery.isError ||
-        logCountsQuery.isError ||
-        collectorHealthQuery.isError;
+    const coreLoading = monitoringQuery.isLoading && !monitoringQuery.data;
+    const dataQualityLoading = dataQualityQuery.isLoading && !dataQualityQuery.data;
+    const collectorLoading =
+        (collectorHealthQuery.isLoading && !collectorHealthQuery.data) ||
+        (collectorChannelsQuery.isLoading && !collectorChannelsQuery.data);
+
+    const hasCoreError = monitoringQuery.isError;
+    const hasDataQualityError = dataQualityQuery.isError && !dataQualityQuery.data;
 
     const monitoring = monitoringQuery.data;
+    const dataQuality = dataQualityQuery.data;
     const unavailable = unavailableLabel(t);
 
     const systemStatus = useMemo(
@@ -135,9 +137,8 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
     );
 
     const duplicateGroups = useMemo(
-        () =>
-            formatHealthMetricValue(monitoring?.dataQuality?.duplicateUrlGroups, unavailable),
-        [monitoring?.dataQuality?.duplicateUrlGroups, unavailable],
+        () => formatHealthMetricValue(dataQuality?.duplicateUrlGroups, unavailable),
+        [dataQuality?.duplicateUrlGroups, unavailable],
     );
 
     const sourcesByType = monitoring?.sources?.byType;
@@ -148,11 +149,8 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
         const activeChannels = channels.filter(ch => ch.isActive).length;
         const errorChannels = channels.filter(ch => ch.lastError).length;
 
-        const backendCollector = monitoring?.telegramCollector;
         const statusRaw =
-            (typeof liveHealth?.status === 'string' ? liveHealth.status : null) ??
-            backendCollector?.status ??
-            'unknown';
+            typeof liveHealth?.status === 'string' ? liveHealth.status : 'unknown';
         let status = formatSystemStatus(statusRaw);
 
         if (errorChannels > 0 && status === 'healthy') {
@@ -162,43 +160,33 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
         const avgLatencyMs =
             typeof liveHealth?.averageLatencyMs === 'number'
                 ? liveHealth.averageLatencyMs
-                : backendCollector?.avgLatencyMs ?? null;
+                : null;
 
         const loggedErrors =
             typeof liveHealth?.loggedErrors === 'number'
                 ? liveHealth.loggedErrors
                 : typeof liveHealth?.errorCount === 'number'
                   ? liveHealth.errorCount
-                  : backendCollector?.loggedErrors ?? errorChannels;
-
-        const totalChannels =
-            channels.length > 0
-                ? channels.length
-                : backendCollector?.totalChannels ?? null;
-        const activeCount =
-            channels.length > 0
-                ? activeChannels
-                : backendCollector?.activeChannels ?? null;
-
-        const hasFloodRisk = channels.some(
-            ch =>
-                ch.lastError &&
-                (ch.lastError.includes('FLOOD') || ch.lastError.includes('Flood')),
-        );
+                  : errorChannels;
 
         return {
             status,
-            activeChannels: activeCount,
-            totalChannels,
+            activeChannels: channels.length > 0 ? activeChannels : null,
+            totalChannels: channels.length > 0 ? channels.length : null,
             errorChannels: loggedErrors,
-            hasFloodRisk,
+            hasFloodRisk: channels.some(
+                ch =>
+                    ch.lastError &&
+                    (ch.lastError.includes('FLOOD') || ch.lastError.includes('Flood')),
+            ),
             avgLatency: formatAvgLatency(avgLatencyMs),
-            loaded: Boolean(liveHealth) || backendCollector?.loaded === true || channels.length > 0,
+            loaded: Boolean(liveHealth) || channels.length > 0,
         };
-    }, [collectorHealthQuery.data, collectorChannelsQuery.data, monitoring?.telegramCollector]);
+    }, [collectorHealthQuery.data, collectorChannelsQuery.data]);
 
     const refetchAll = () => {
         void monitoringQuery.refetch();
+        void dataQualityQuery.refetch();
         void logCountsQuery.refetch();
         void collectorHealthQuery.refetch();
         void collectorChannelsQuery.refetch();
@@ -206,6 +194,11 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
 
     const statusI18n = statusLabel(t, systemStatus);
     const showPipelinePartial = pipelineActivity?.meta?.partial === true;
+    const dataQualityUnavailable =
+        !dataQualityLoading &&
+        (hasDataQualityError ||
+            dataQuality?.loaded === false ||
+            dataQuality?.meta?.reason === 'timeout');
 
     return (
         <div className={DATAHUB_SHELL}>
@@ -224,14 +217,14 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                 <button
                     type="button"
                     onClick={refetchAll}
-                    disabled={isLoading}
+                    disabled={coreLoading}
                     className={BTN_PRIMARY}
                 >
-                    {isLoading ? t('checking') : t('datahub_health_refresh')}
+                    {coreLoading ? t('checking') : t('datahub_health_refresh')}
                 </button>
             </div>
 
-            {hasError && !isLoading && (
+            {hasCoreError && !coreLoading && (
                 <div className="mb-4">
                     <DataHubAlert
                         variant="error"
@@ -242,7 +235,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                 </div>
             )}
 
-            {showPipelinePartial && !isLoading && (
+            {showPipelinePartial && !coreLoading && (
                 <div className="mb-4">
                     <DataHubAlert
                         variant="warning"
@@ -264,7 +257,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                                 : 'blue'
                     }
                     value={
-                        isLoading ? (
+                        coreLoading ? (
                             <SkeletonLoader width="72px" height="1.25rem" />
                         ) : (
                             <span className={systemStatusTextClass(systemStatus)}>{statusI18n}</span>
@@ -275,7 +268,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                     label={t('active_sources')}
                     color="emerald"
                     value={
-                        isLoading ? (
+                        coreLoading ? (
                             <SkeletonLoader width="32px" height="1.25rem" />
                         ) : (
                             formatCountDisplay(activeSources)
@@ -286,7 +279,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                     label={t('total_sources')}
                     color="blue"
                     value={
-                        isLoading ? (
+                        coreLoading ? (
                             <SkeletonLoader width="32px" height="1.25rem" />
                         ) : (
                             formatCountDisplay(totalSources)
@@ -297,7 +290,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                     label={t('datahub_health_recent_errors')}
                     color="red"
                     value={
-                        isLoading ? (
+                        logCountsQuery.isLoading && !logCountsQuery.data ? (
                             <SkeletonLoader width="32px" height="1.25rem" />
                         ) : recentErrors != null ? (
                             formatCountDisplay(recentErrors)
@@ -311,7 +304,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                     label={t('datahub_health_last_check')}
                     color="purple"
                     value={
-                        isLoading ? (
+                        coreLoading ? (
                             <SkeletonLoader width="64px" height="1.25rem" />
                         ) : (
                             lastCheckLabel
@@ -322,7 +315,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                     label={t('avg_response_time')}
                     color="blue"
                     value={
-                        isLoading ? (
+                        coreLoading ? (
                             <SkeletonLoader width="40px" height="1.25rem" />
                         ) : avgResponse.available ? (
                             avgResponse.display
@@ -336,7 +329,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                     label={t('cache_hit_rate')}
                     color="purple"
                     value={
-                        isLoading ? (
+                        coreLoading ? (
                             <SkeletonLoader width="40px" height="1.25rem" />
                         ) : (
                             <span title={t('datahub_health_cache_hit_not_tracked_hint')}>
@@ -353,25 +346,37 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
             </div>
 
             <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 mb-5">
-                <p className="text-[11px] text-muted-foreground mb-3">{t('datahub_health_data_quality')}</p>
+                <p className="text-[11px] text-muted-foreground mb-1">{t('datahub_health_data_quality')}</p>
+                <p className="text-[10px] text-muted-foreground mb-3">
+                    {dataQualityLoading
+                        ? t('datahub_health_duplicate_loading_separate')
+                        : t('datahub_health_duplicate_lazy_hint')}
+                </p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <MetricCard
                         label={t('datahub_health_duplicate_url_groups')}
                         color={
                             duplicateGroups.available &&
-                            parseFiniteCount(monitoring?.dataQuality?.duplicateUrlGroups)! > 0
+                            parseFiniteCount(dataQuality?.duplicateUrlGroups)! > 0
                                 ? 'amber'
                                 : 'emerald'
                         }
                         value={
-                            isLoading ? (
+                            dataQualityLoading ? (
                                 <SkeletonLoader width="32px" height="1.25rem" />
+                            ) : dataQualityUnavailable ? (
+                                unavailable
                             ) : (
                                 duplicateGroups.display
                             )
                         }
                     />
                 </div>
+                {dataQualityUnavailable && !dataQualityLoading && (
+                    <p className="text-[10px] text-amber-300/90 mt-2">
+                        {t('datahub_health_duplicate_unavailable')}
+                    </p>
+                )}
             </div>
 
             <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 mb-5">
@@ -383,7 +388,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                         label={t('datahub_health_pipeline_ingested_1h')}
                         color="amber"
                         value={
-                            isLoading ? (
+                            coreLoading ? (
                                 <SkeletonLoader width="48px" height="1.25rem" />
                             ) : (
                                 pipelineIngested1h.display
@@ -394,7 +399,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                         label={t('datahub_health_pipeline_normalized_1h')}
                         color="emerald"
                         value={
-                            isLoading ? (
+                            coreLoading ? (
                                 <SkeletonLoader width="48px" height="1.25rem" />
                             ) : (
                                 pipelineNormalized1h.display
@@ -405,7 +410,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                         label={t('datahub_health_telegram_intake_1h')}
                         color="blue"
                         value={
-                            isLoading ? (
+                            coreLoading ? (
                                 <SkeletonLoader width="48px" height="1.25rem" />
                             ) : (
                                 telegramCreated1h.display
@@ -416,7 +421,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                         label={t('datahub_health_access_log_events_1h')}
                         color="purple"
                         value={
-                            isLoading ? (
+                            coreLoading ? (
                                 <SkeletonLoader width="32px" height="1.25rem" />
                             ) : (
                                 accessLogEvents1h.display
@@ -428,7 +433,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
 
             <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 mb-5">
                 <p className="text-[11px] text-muted-foreground mb-3">{t('datahub_health_sources_by_type')}</p>
-                {isLoading ? (
+                {coreLoading ? (
                     <SkeletonLoader width="100%" height="2rem" />
                 ) : (
                     <div className="grid grid-cols-3 gap-3">
@@ -449,7 +454,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                         />
                     </div>
                 )}
-                {!isLoading && monitoring?.database && (
+                {!coreLoading && monitoring?.database && (
                     <p className="text-[10px] text-muted-foreground mt-3">
                         {t('datahub_health_database')}: {databaseLabel(t, monitoring.database)}
                     </p>
@@ -478,7 +483,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                         </span>
                     )}
                 </div>
-                {!telegramHealth.loaded && !isLoading && (
+                {!telegramHealth.loaded && !collectorLoading && (
                     <p className="text-[10px] text-muted-foreground mb-3">
                         {t('datahub_health_collector_unavailable')}
                     </p>
@@ -493,42 +498,60 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo }) => {
                                   ? 'amber'
                                   : 'red'
                         }
-                        value={statusLabel(t, telegramHealth.status)}
+                        value={
+                            collectorLoading ? (
+                                <SkeletonLoader width="64px" height="1.25rem" />
+                            ) : (
+                                statusLabel(t, telegramHealth.status)
+                            )
+                        }
                     />
                     <MetricCard
                         label={t('active_channels')}
                         color="blue"
                         value={
-                            telegramHealth.totalChannels != null &&
-                            telegramHealth.activeChannels != null
-                                ? `${formatCountDisplay(telegramHealth.activeChannels)} / ${formatCountDisplay(telegramHealth.totalChannels)}`
-                                : unavailable
+                            collectorLoading ? (
+                                <SkeletonLoader width="48px" height="1.25rem" />
+                            ) : telegramHealth.totalChannels != null &&
+                              telegramHealth.activeChannels != null ? (
+                                `${formatCountDisplay(telegramHealth.activeChannels)} / ${formatCountDisplay(telegramHealth.totalChannels)}`
+                            ) : (
+                                unavailable
+                            )
                         }
                     />
                     <MetricCard
                         label={t('avg_latency')}
                         color="purple"
                         value={
-                            <span
-                                title={
-                                    telegramHealth.avgLatency.available
-                                        ? undefined
-                                        : t('pipeline_latency_not_available')
-                                }
-                            >
-                                {telegramHealth.avgLatency.display === 'N/A'
-                                    ? unavailable
-                                    : telegramHealth.avgLatency.display}
-                            </span>
+                            collectorLoading ? (
+                                <SkeletonLoader width="40px" height="1.25rem" />
+                            ) : (
+                                <span
+                                    title={
+                                        telegramHealth.avgLatency.available
+                                            ? undefined
+                                            : t('pipeline_latency_not_available')
+                                    }
+                                >
+                                    {telegramHealth.avgLatency.display === 'N/A'
+                                        ? unavailable
+                                        : telegramHealth.avgLatency.display}
+                                </span>
+                            )
                         }
                     />
                     <MetricCard
                         label={t('datahub_health_recent_errors')}
                         color="red"
                         value={
-                            telegramHealth.errorChannels != null
-                                ? formatCountDisplay(telegramHealth.errorChannels)
-                                : unavailable
+                            collectorLoading ? (
+                                <SkeletonLoader width="32px" height="1.25rem" />
+                            ) : telegramHealth.errorChannels != null ? (
+                                formatCountDisplay(telegramHealth.errorChannels)
+                            ) : (
+                                unavailable
+                            )
                         }
                     />
                 </div>

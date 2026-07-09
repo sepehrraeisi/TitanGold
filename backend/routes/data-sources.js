@@ -20,6 +20,7 @@ import {
   pipelineNormalizationSummaryResponseSchema,
   pipelineCapacityResponseSchema,
   healthMonitoringResponseSchema,
+  healthDataQualityResponseSchema,
   accessLogsQuerySchema,
   accessLogsListResponseSchema,
   checkDuplicateUrlQuerySchema,
@@ -32,14 +33,13 @@ import {
   findDuplicateUrlSources,
   listDuplicateUrlGroups,
   getDuplicateUrlDashboard,
-  getDuplicateUrlSummaryForHealth,
   setSourceDuplicateUrlIgnore,
 } from '../services/dataSourceUrlDuplicateService.js';
 import { buildDataPipelineView } from '../services/dataPipelineSnapshot.js';
 import { buildPipelineBacklogEnrichment } from '../services/pipelineBacklogEnrichment.js';
 import { buildPipelineNormalizationSummary } from '../services/pipelineNormalizationSummary.js';
 import { buildPipelineCapacityView } from '../services/pipelineCapacity.js';
-import { buildHealthMonitoringView, queryHealthActivityMetrics } from '../services/healthMonitoring.js';
+import { buildHealthMonitoringView, buildHealthDataQualityView, queryHealthActivityMetrics, emptyDuplicateSummaryForLegacyHealth } from '../services/healthMonitoring.js';
 import {
   buildEmptyPipelineBacklogResponse,
   normalizePipelineBacklogResponse,
@@ -707,7 +707,28 @@ router.get('/state', authenticate, readRateLimiter, validateResponse(dataHubStat
   }
 });
 
-// DataHub health monitoring — pipeline activity, performance, collector snapshot
+// Lazy data quality — duplicate URL analysis (slow; must not block core health)
+router.get('/health/data-quality', authenticate, readRateLimiter, validateResponse(healthDataQualityResponseSchema), async (req, res) => {
+  try {
+    res.json(await buildHealthDataQualityView());
+  } catch (error) {
+    logger.error('DataHub health data-quality failed:', error);
+    res.json({
+      lastCheckAt: new Date().toISOString(),
+      loaded: false,
+      duplicateUrlGroups: null,
+      highRiskDuplicateGroups: null,
+      ignoredDuplicateGroups: null,
+      meta: {
+        partial: true,
+        unavailableMetrics: ['duplicateUrlGroups'],
+        reason: 'error',
+      },
+    });
+  }
+});
+
+// DataHub health monitoring — fast core metrics only
 router.get('/health/monitoring', authenticate, readRateLimiter, validateResponse(healthMonitoringResponseSchema), async (req, res) => {
   try {
     res.json(await buildHealthMonitoringView());
@@ -727,7 +748,7 @@ router.get('/health', authenticate, async (req, res) => {
   try {
     await query('SELECT 1');
 
-    const [sourceCounts, collectorHealth, publisherHealth, queueHealth, activityMetrics, duplicateSummary] = await Promise.all([
+    const [sourceCounts, collectorHealth, publisherHealth, queueHealth, activityMetrics] = await Promise.all([
       query(
         `SELECT
           COUNT(*)::int AS total_sources,
@@ -756,13 +777,9 @@ router.get('/health', authenticate, async (req, res) => {
          FROM datahub_automation_queue`,
       ),
       queryHealthActivityMetrics(),
-      getDuplicateUrlSummaryForHealth().catch(() => ({
-        duplicateUrlGroups: null,
-        highRiskDuplicateGroups: null,
-        ignoredDuplicateGroups: null,
-        skipped: true,
-      })),
     ]);
+
+    const duplicateSummary = emptyDuplicateSummaryForLegacyHealth();
 
     const sourceRow = sourceCounts.rows[0] || {};
     const collectorRow = collectorHealth.rows[0] || {};
@@ -802,10 +819,10 @@ router.get('/health', authenticate, async (req, res) => {
       telegramCreated1h: activityMetrics.telegramIntake,
       healthLastCheckedAt,
       dataQuality: {
-        duplicateUrlGroups: duplicateSummary.duplicateUrlGroups ?? 0,
-        highRiskDuplicateGroups: duplicateSummary.highRiskDuplicateGroups ?? 0,
-        ignoredDuplicateGroups: duplicateSummary.ignoredDuplicateGroups ?? 0,
-        skipped: duplicateSummary.skipped === true || duplicateSummary.duplicateUrlGroups == null,
+        duplicateUrlGroups: duplicateSummary.duplicateUrlGroups,
+        highRiskDuplicateGroups: duplicateSummary.highRiskDuplicateGroups,
+        ignoredDuplicateGroups: duplicateSummary.ignoredDuplicateGroups,
+        skipped: true,
       },
       /** @deprecated use pipelineIngested1h — kept for backward compatibility */
       recentActivity: activityMetrics.ingested ?? 0,

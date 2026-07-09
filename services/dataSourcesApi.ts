@@ -571,12 +571,6 @@ export type HealthMonitoringResponse = {
         byType: { telegram: number; rss: number; api: number };
     };
     pipelineActivity1h: HealthMonitoringPipelineActivity;
-    dataQuality: {
-        duplicateUrlGroups: number | null;
-        highRiskDuplicateGroups: number | null;
-        ignoredDuplicateGroups: number | null;
-        meta: { partial: boolean; unavailableMetrics: string[] };
-    };
     performance: {
         avgResponseMs: number | null;
         cacheHitRate: number | null;
@@ -592,10 +586,33 @@ export type HealthMonitoringResponse = {
         lastProcessedAt: string | null;
         loaded: boolean;
     };
+    meta: {
+        queryMs: number;
+        dataQualityDeferred: boolean;
+    };
+};
+
+export type HealthDataQualityResponse = {
+    lastCheckAt: string;
+    loaded: boolean;
+    duplicateUrlGroups: number | null;
+    highRiskDuplicateGroups: number | null;
+    ignoredDuplicateGroups: number | null;
+    meta: {
+        partial: boolean;
+        unavailableMetrics: string[];
+        reason: string | null;
+        queryMs?: number;
+        source?: string;
+    };
 };
 
 export async function fetchHealthMonitoring(): Promise<HealthMonitoringResponse> {
     return dataSourcesRequest<HealthMonitoringResponse>('/health/monitoring');
+}
+
+export async function fetchHealthDataQuality(): Promise<HealthDataQualityResponse> {
+    return dataSourcesRequest<HealthDataQualityResponse>('/health/data-quality');
 }
 
 /** GET /api/v1/data-sources/stats — active/total source counts */

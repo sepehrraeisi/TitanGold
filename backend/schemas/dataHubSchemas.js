@@ -675,15 +675,6 @@ export const healthMonitoringResponseSchema = z.object({
       window: z.string(),
     }),
   }),
-  dataQuality: z.object({
-    duplicateUrlGroups: z.number().int().nonnegative().nullable(),
-    highRiskDuplicateGroups: z.number().int().nonnegative().nullable(),
-    ignoredDuplicateGroups: z.number().int().nonnegative().nullable(),
-    meta: z.object({
-      partial: z.boolean(),
-      unavailableMetrics: z.array(z.string()),
-    }),
-  }),
   performance: z.object({
     avgResponseMs: z.number().int().nonnegative().nullable(),
     cacheHitRate: z.number().min(0).max(1).nullable(),
@@ -702,6 +693,10 @@ export const healthMonitoringResponseSchema = z.object({
     lastProcessedAt: z.string().nullable(),
     loaded: z.boolean(),
   }),
+  meta: z.object({
+    queryMs: z.number().nonnegative(),
+    dataQualityDeferred: z.boolean(),
+  }),
   activeSources: z.number().int().nonnegative().optional(),
   accessLogEvents1h: z.number().int().nonnegative().nullable().optional(),
   pipelineIngested1h: z.number().int().nonnegative().nullable().optional(),
@@ -709,6 +704,21 @@ export const healthMonitoringResponseSchema = z.object({
   telegramCreated1h: z.number().int().nonnegative().nullable().optional(),
   healthLastCheckedAt: z.string().optional(),
   timestamp: z.string().optional(),
+});
+
+export const healthDataQualityResponseSchema = z.object({
+  lastCheckAt: z.string(),
+  loaded: z.boolean(),
+  duplicateUrlGroups: z.number().int().nonnegative().nullable(),
+  highRiskDuplicateGroups: z.number().int().nonnegative().nullable(),
+  ignoredDuplicateGroups: z.number().int().nonnegative().nullable(),
+  meta: z.object({
+    partial: z.boolean(),
+    unavailableMetrics: z.array(z.string()),
+    reason: z.string().nullable(),
+    queryMs: z.number().nonnegative().optional(),
+    source: z.string().optional(),
+  }),
 });
 
 export const accessLogsQuerySchema = z.object({

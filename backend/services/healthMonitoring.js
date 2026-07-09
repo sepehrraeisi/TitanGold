@@ -1,18 +1,30 @@
 import { query } from '../database/db.js';
 import { logger } from './logger.js';
 import { getOrLoadCached } from './pipelineSnapshotCache.js';
-import { getDuplicateUrlSummaryForHealth } from './dataSourceUrlDuplicateService.js';
+import { getDuplicateUrlSummaryForHealthMonitoring } from './dataSourceUrlDuplicateService.js';
 
-const CACHE_KEY = 'datahub:health:monitoring:v1';
-const CACHE_TTL_MS = 45_000;
-const COLLECTOR_HEALTH_TIMEOUT_MS = 2500;
+const CORE_CACHE_KEY = 'datahub:health:monitoring:v3';
+const CORE_CACHE_TTL_MS = 45_000;
+const PIPELINE_ACTIVITY_CACHE_KEY = 'datahub:health:pipeline-activity-1h:v1';
+const PIPELINE_ACTIVITY_CACHE_TTL_MS = 60_000;
+const PERFORMANCE_CACHE_KEY = 'datahub:health:performance:v1';
+const PERFORMANCE_CACHE_TTL_MS = 60_000;
+const DATA_QUALITY_CACHE_KEY = 'datahub:health:data-quality:v1';
+const DATA_QUALITY_CACHE_TTL_MS = 10 * 60 * 1000;
+const DATA_QUALITY_COMPUTE_TIMEOUT_MS = 2000;
+const METRIC_QUERY_TIMEOUT_MS = 2000;
+const PERFORMANCE_QUERY_TIMEOUT_MS = 1500;
 
-function collectorBaseUrl() {
-  return (
-    process.env.TELEGRAM_COLLECTOR_INTERNAL_URL ||
-    process.env.TELEGRAM_COLLECTOR_URL ||
-    'http://127.0.0.1:5003'
-  ).replace(/\/$/, '');
+/** @type {Promise<unknown>|null} */
+let dataQualityBackgroundRefresh = null;
+
+function raceWithTimeout(promise, timeoutMs, label = 'operation') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label}_timeout`)), timeoutMs);
+    }),
+  ]);
 }
 
 /**
@@ -24,68 +36,94 @@ function collectorBaseUrl() {
  *   unavailableMetrics: string[]
  * }>}
  */
-export async function queryPipelineActivity1h() {
-  const unavailableMetrics = [];
+async function queryScalarCountWithTimeout(sql, label) {
   try {
-    const result = await query(`
-      SELECT
-        (SELECT COUNT(*)::int FROM collected_data
-          WHERE collected_at > NOW() - INTERVAL '1 hour') AS ingested,
-        (SELECT COUNT(*)::int FROM collected_data
-          WHERE processed_at > NOW() - INTERVAL '1 hour'
-            AND status IN ('processed', 'error')) AS normalized,
-        (SELECT COUNT(*)::int FROM telegram_messages
-          WHERE created_at > NOW() - INTERVAL '1 hour') AS telegram_intake,
-        (SELECT COUNT(*)::int FROM data_hub_logs
-          WHERE created_at > NOW() - INTERVAL '1 hour') AS access_log_events
-    `);
+    const result = await raceWithTimeout(query(sql), METRIC_QUERY_TIMEOUT_MS, label);
     const row = result.rows[0] || {};
-    return {
-      ingested: row.ingested ?? null,
-      normalized: row.normalized ?? null,
-      telegramIntake: row.telegram_intake ?? null,
-      accessLogEvents: row.access_log_events ?? null,
-      unavailableMetrics,
-    };
+    const value = Object.values(row)[0];
+    return { value: value ?? null, unavailable: false };
   } catch (error) {
-    logger.warn('HEALTH_MONITORING_PIPELINE_ACTIVITY_FAILED', { error: error.message });
-    unavailableMetrics.push(
-      'ingested',
-      'normalized',
-      'telegramIntake',
-      'accessLogEvents',
-    );
-    return {
-      ingested: null,
-      normalized: null,
-      telegramIntake: null,
-      accessLogEvents: null,
-      unavailableMetrics,
-    };
+    logger.warn('HEALTH_MONITORING_METRIC_TIMEOUT', { label, error: error.message });
+    return { value: null, unavailable: true };
   }
+}
+
+async function queryPipelineActivity1hUncached() {
+  const unavailableMetrics = [];
+  const [ingested, normalized, telegramIntake, accessLogEvents] = await Promise.all([
+    queryScalarCountWithTimeout(
+      `SELECT COUNT(*)::int AS v FROM collected_data
+        WHERE collected_at > NOW() - INTERVAL '1 hour'`,
+      'ingested_1h',
+    ),
+    queryScalarCountWithTimeout(
+      `SELECT COUNT(*)::int AS v FROM collected_data
+        WHERE processed_at > NOW() - INTERVAL '1 hour'
+          AND status IN ('processed', 'error')`,
+      'normalized_1h',
+    ),
+    queryScalarCountWithTimeout(
+      `SELECT COUNT(*)::int AS v FROM telegram_messages
+        WHERE created_at > NOW() - INTERVAL '1 hour'`,
+      'telegram_intake_1h',
+    ),
+    queryScalarCountWithTimeout(
+      `SELECT COUNT(*)::int AS v FROM data_hub_logs
+        WHERE created_at > NOW() - INTERVAL '1 hour'`,
+      'access_log_1h',
+    ),
+  ]);
+
+  if (ingested.unavailable) unavailableMetrics.push('ingested');
+  if (normalized.unavailable) unavailableMetrics.push('normalized');
+  if (telegramIntake.unavailable) unavailableMetrics.push('telegramIntake');
+  if (accessLogEvents.unavailable) unavailableMetrics.push('accessLogEvents');
+
+  return {
+    ingested: ingested.value,
+    normalized: normalized.value,
+    telegramIntake: telegramIntake.value,
+    accessLogEvents: accessLogEvents.value,
+    unavailableMetrics,
+  };
+}
+
+export async function queryPipelineActivity1h() {
+  if (process.env.NODE_ENV === 'test') {
+    return queryPipelineActivity1hUncached();
+  }
+  return getOrLoadCached(
+    PIPELINE_ACTIVITY_CACHE_KEY,
+    queryPipelineActivity1hUncached,
+    PIPELINE_ACTIVITY_CACHE_TTL_MS,
+  );
 }
 
 /**
  * @returns {Promise<{ avgResponseMs: number|null, cacheHitRate: number|null, cacheHitRateTracked: boolean }>}
  */
-export async function queryPerformanceMetrics() {
+async function queryPerformanceMetricsUncached() {
   try {
-    const result = await query(`
-      SELECT
-        ROUND(AVG(execution_time_ms) FILTER (
-          WHERE execution_time_ms IS NOT NULL
-            AND created_at > NOW() - INTERVAL '1 hour'
-        ))::int AS avg_response_ms,
-        COUNT(*) FILTER (
-          WHERE LOWER(status) = 'cached'
-            AND created_at > NOW() - INTERVAL '24 hours'
-        )::int AS cached_24h,
-        COUNT(*) FILTER (
-          WHERE LOWER(status) IN ('success', 'ok', 'cached')
-            AND created_at > NOW() - INTERVAL '24 hours'
-        )::int AS outcomes_24h
-      FROM data_hub_logs
-    `);
+    const result = await raceWithTimeout(
+      query(`
+        SELECT
+          ROUND(AVG(execution_time_ms) FILTER (
+            WHERE execution_time_ms IS NOT NULL
+              AND created_at > NOW() - INTERVAL '1 hour'
+          ))::int AS avg_response_ms,
+          COUNT(*) FILTER (
+            WHERE LOWER(status) = 'cached'
+              AND created_at > NOW() - INTERVAL '24 hours'
+          )::int AS cached_24h,
+          COUNT(*) FILTER (
+            WHERE LOWER(status) IN ('success', 'ok', 'cached')
+              AND created_at > NOW() - INTERVAL '24 hours'
+          )::int AS outcomes_24h
+        FROM data_hub_logs
+      `),
+      PERFORMANCE_QUERY_TIMEOUT_MS,
+      'performance_metrics',
+    );
     const row = result.rows[0] || {};
     const avgResponseMs =
       row.avg_response_ms != null ? Number(row.avg_response_ms) : null;
@@ -102,26 +140,15 @@ export async function queryPerformanceMetrics() {
   }
 }
 
-/**
- * @returns {Promise<object|null>}
- */
-async function fetchCollectorHealthSnapshot() {
-  if (process.env.NODE_ENV === 'test') return null;
-  const url = `${collectorBaseUrl()}/api/telegram-collector/health`;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), COLLECTOR_HEALTH_TIMEOUT_MS);
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (error) {
-    logger.warn('HEALTH_MONITORING_COLLECTOR_FETCH_SKIPPED', {
-      url,
-      error: error.message,
-    });
-    return null;
+export async function queryPerformanceMetrics() {
+  if (process.env.NODE_ENV === 'test') {
+    return queryPerformanceMetricsUncached();
   }
+  return getOrLoadCached(
+    PERFORMANCE_CACHE_KEY,
+    queryPerformanceMetricsUncached,
+    PERFORMANCE_CACHE_TTL_MS,
+  );
 }
 
 function mapCollectorStatus(raw) {
@@ -187,17 +214,16 @@ export function mapTelegramCollectorHealth(health) {
   };
 }
 
+function emptyTelegramCollectorPlaceholder() {
+  return mapTelegramCollectorHealth(null);
+}
+
+/** Core health view — fast path only; no duplicate URL analysis or collector HTTP. */
 async function buildHealthMonitoringUncached() {
   const healthLastCheckedAt = new Date().toISOString();
+  const started = Date.now();
 
-  const [
-    dbPing,
-    sourceCounts,
-    pipelineActivity,
-    performance,
-    duplicateSummary,
-    collectorRaw,
-  ] = await Promise.all([
+  const [dbPing, sourceCounts, pipelineActivity, performance] = await Promise.all([
     query('SELECT 1').then(() => true).catch(() => false),
     query(`
       SELECT
@@ -210,22 +236,12 @@ async function buildHealthMonitoringUncached() {
     `),
     queryPipelineActivity1h(),
     queryPerformanceMetrics(),
-    getDuplicateUrlSummaryForHealth().catch(() => ({
-      duplicateUrlGroups: null,
-      highRiskDuplicateGroups: null,
-      ignoredDuplicateGroups: null,
-    })),
-    fetchCollectorHealthSnapshot(),
   ]);
 
   const sourceRow = sourceCounts.rows[0] || {};
   const activeCount = Number(sourceRow.active_sources) || 0;
-  const telegramCollector = mapTelegramCollectorHealth(collectorRaw);
 
-  const dataQualityUnavailable =
-    duplicateSummary.duplicateUrlGroups == null ? ['duplicateUrlGroups'] : [];
-
-  return {
+  const view = {
     status: dbPing && activeCount > 0 ? 'healthy' : dbPing ? 'degraded' : 'unhealthy',
     lastCheckAt: healthLastCheckedAt,
     database: dbPing ? 'connected' : 'disconnected',
@@ -249,15 +265,6 @@ async function buildHealthMonitoringUncached() {
         window: '1h',
       },
     },
-    dataQuality: {
-      duplicateUrlGroups: duplicateSummary.duplicateUrlGroups,
-      highRiskDuplicateGroups: duplicateSummary.highRiskDuplicateGroups ?? null,
-      ignoredDuplicateGroups: duplicateSummary.ignoredDuplicateGroups ?? null,
-      meta: {
-        partial: dataQualityUnavailable.length > 0,
-        unavailableMetrics: dataQualityUnavailable,
-      },
-    },
     performance: {
       avgResponseMs: performance.avgResponseMs,
       cacheHitRate: performance.cacheHitRate,
@@ -267,8 +274,12 @@ async function buildHealthMonitoringUncached() {
         cacheHitRateWindow: '24h',
       },
     },
-    telegramCollector,
-    /** Backward-compatible flat fields for legacy /health consumers */
+    /** Placeholder — live collector metrics load via frontend useCollectorHealthQuery */
+    telegramCollector: emptyTelegramCollectorPlaceholder(),
+    meta: {
+      queryMs: Date.now() - started,
+      dataQualityDeferred: true,
+    },
     activeSources: activeCount,
     accessLogEvents1h: pipelineActivity.accessLogEvents,
     pipelineIngested1h: pipelineActivity.ingested,
@@ -277,16 +288,120 @@ async function buildHealthMonitoringUncached() {
     healthLastCheckedAt,
     timestamp: healthLastCheckedAt,
   };
+
+  logger.info('HEALTH_MONITORING_CORE_BUILT', { queryMs: view.meta.queryMs });
+  return view;
 }
 
 export async function buildHealthMonitoringView() {
   if (process.env.NODE_ENV === 'test') {
     return buildHealthMonitoringUncached();
   }
-  return getOrLoadCached(CACHE_KEY, buildHealthMonitoringUncached, CACHE_TTL_MS);
+  return getOrLoadCached(CORE_CACHE_KEY, buildHealthMonitoringUncached, CORE_CACHE_TTL_MS);
+}
+
+function scheduleDataQualityBackgroundRefresh() {
+  if (process.env.NODE_ENV === 'test') return;
+  if (dataQualityBackgroundRefresh) return;
+  dataQualityBackgroundRefresh = getDuplicateUrlSummaryForHealthMonitoring()
+    .then((summary) => {
+      const payload = {
+        lastCheckAt: new Date().toISOString(),
+        loaded: true,
+        duplicateUrlGroups: summary.duplicateUrlGroups,
+        highRiskDuplicateGroups: summary.highRiskDuplicateGroups ?? null,
+        ignoredDuplicateGroups: summary.ignoredDuplicateGroups ?? null,
+        meta: {
+          partial: false,
+          unavailableMetrics: [],
+          reason: null,
+          source: 'background_refresh',
+        },
+      };
+      return getOrLoadCached(
+        DATA_QUALITY_CACHE_KEY,
+        async () => payload,
+        DATA_QUALITY_CACHE_TTL_MS,
+      );
+    })
+    .catch((error) => {
+      logger.warn('HEALTH_DATA_QUALITY_BACKGROUND_FAILED', { error: error.message });
+    })
+    .finally(() => {
+      dataQualityBackgroundRefresh = null;
+    });
+}
+
+async function buildHealthDataQualityUncached() {
+  const lastCheckAt = new Date().toISOString();
+  const started = Date.now();
+  try {
+    const summary = await raceWithTimeout(
+      getDuplicateUrlSummaryForHealthMonitoring(),
+      DATA_QUALITY_COMPUTE_TIMEOUT_MS,
+      'duplicate_url_analysis',
+    );
+    const payload = {
+      lastCheckAt,
+      loaded: true,
+      duplicateUrlGroups: summary.duplicateUrlGroups,
+      highRiskDuplicateGroups: summary.highRiskDuplicateGroups ?? null,
+      ignoredDuplicateGroups: summary.ignoredDuplicateGroups ?? null,
+      meta: {
+        partial: false,
+        unavailableMetrics: [],
+        reason: null,
+        queryMs: Date.now() - started,
+        source: 'duplicate_analysis',
+      },
+    };
+    logger.info('HEALTH_DATA_QUALITY_BUILT', { queryMs: payload.meta.queryMs });
+    return payload;
+  } catch (error) {
+    scheduleDataQualityBackgroundRefresh();
+    logger.warn('HEALTH_DATA_QUALITY_TIMEOUT_OR_ERROR', {
+      error: error.message,
+      queryMs: Date.now() - started,
+    });
+    return {
+      lastCheckAt,
+      loaded: false,
+      duplicateUrlGroups: null,
+      highRiskDuplicateGroups: null,
+      ignoredDuplicateGroups: null,
+      meta: {
+        partial: true,
+        unavailableMetrics: ['duplicateUrlGroups', 'highRiskDuplicateGroups', 'ignoredDuplicateGroups'],
+        reason: String(error.message).includes('timeout') ? 'timeout' : 'error',
+        queryMs: Date.now() - started,
+        source: 'unavailable',
+      },
+    };
+  }
+}
+
+export async function buildHealthDataQualityView() {
+  if (process.env.NODE_ENV === 'test') {
+    return buildHealthDataQualityUncached();
+  }
+  return getOrLoadCached(
+    DATA_QUALITY_CACHE_KEY,
+    buildHealthDataQualityUncached,
+    DATA_QUALITY_CACHE_TTL_MS,
+  );
 }
 
 /** Activity slice reused by legacy GET /health */
 export async function queryHealthActivityMetrics() {
   return queryPipelineActivity1h();
+}
+
+/** Lightweight duplicate skip for legacy GET /health — never blocks on analysis. */
+export function emptyDuplicateSummaryForLegacyHealth() {
+  return {
+    duplicateUrlGroups: null,
+    highRiskDuplicateGroups: null,
+    ignoredDuplicateGroups: null,
+    skipped: true,
+  };
 }

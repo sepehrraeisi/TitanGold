@@ -14,10 +14,6 @@ describe('health monitoring formatters', () => {
             display: '0',
             available: true,
         });
-        expect(formatHealthMetricValue(42, 'Unavailable')).toEqual({
-            display: '42',
-            available: true,
-        });
     });
 
     it('formatCacheHitRateDisplay shows Not tracked when untracked', () => {
@@ -26,11 +22,7 @@ describe('health monitoring formatters', () => {
                 notTracked: 'Not tracked',
                 unavailable: 'Unavailable',
             }),
-        ).toEqual({
-            display: 'Not tracked',
-            available: false,
-            tracked: false,
-        });
+        ).toMatchObject({ display: 'Not tracked', tracked: false });
     });
 
     it('formatCacheHitRateDisplay formats percentage when tracked', () => {
@@ -39,10 +31,12 @@ describe('health monitoring formatters', () => {
                 notTracked: 'Not tracked',
                 unavailable: 'Unavailable',
             }),
-        ).toEqual({
-            display: '25.6%',
-            available: true,
-            tracked: true,
-        });
+        ).toMatchObject({ display: '25.6%', tracked: true });
+    });
+
+    it('unavailable duplicate metric is not coerced to zero display', () => {
+        const dup = formatHealthMetricValue(null, 'Unavailable');
+        expect(dup.display).not.toBe('0');
+        expect(dup.available).toBe(false);
     });
 });

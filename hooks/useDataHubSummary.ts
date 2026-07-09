@@ -56,7 +56,7 @@ export function useDataHubSummaryMetrics(): DataHubSummaryMetrics {
         systemStatus,
         totalSources,
         activeSources,
-        cacheHitDisplay: 'N/A',
+        cacheHitDisplay: 'Not tracked',
         cacheHitAvailable: false,
     };
 }

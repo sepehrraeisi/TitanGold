@@ -5,6 +5,7 @@ import {
     normalizeTelegramChannelIdentity,
     normalizeUrlForDuplicateCheck,
 } from '../utils/urlDuplicateNormalization.js';
+import { getOrLoadCached, invalidatePipelineSnapshotCache } from './pipelineSnapshotCache.js';
 
 export function parseSourceConfig(config) {
     if (!config) return {};
@@ -95,6 +96,29 @@ async function loadUrlBearingSourcesWithStats() {
             ...row,
             normalized_url,
             is_active: row.is_active === true,
+        };
+    });
+}
+
+async function loadUrlBearingSourcesForDuplicateKeys() {
+    const result = await query(
+        `SELECT id, name, type, url, config, is_active, created_at,
+                last_fetch_at, refresh_interval, fetch_count, error_count
+         FROM data_sources
+         WHERE type IN ('rss', 'web', 'api')
+           AND url IS NOT NULL
+           AND trim(url) <> ''
+         ORDER BY type ASC, name ASC`,
+    );
+
+    return result.rows.map(row => {
+        const normalized_url = normalizeUrlForDuplicateCheck(row.url);
+        return {
+            ...row,
+            normalized_url,
+            is_active: row.is_active === true,
+            collected_count: 0,
+            last_collected_at: null,
         };
     });
 }
@@ -193,7 +217,7 @@ export function summarizeDuplicateGroups(groups) {
     };
 }
 
-export async function getDuplicateUrlDashboard() {
+async function buildDuplicateUrlDashboardUncached() {
     const [sources, crawlerBySourceId] = await Promise.all([
         loadUrlBearingSourcesWithStats(),
         loadCrawlersBySourceId(),
@@ -203,6 +227,37 @@ export async function getDuplicateUrlDashboard() {
         summary: summarizeDuplicateGroups(duplicateGroups),
         groups: duplicateGroups,
     };
+}
+
+export async function getDuplicateUrlDashboard() {
+    if (process.env.NODE_ENV === 'test') {
+        return buildDuplicateUrlDashboardUncached();
+    }
+    return getOrLoadCached('pipeline:duplicate-analysis:dashboard', buildDuplicateUrlDashboardUncached, 600_000);
+}
+
+/** Health tab lazy data-quality — long TTL, separate from sources list refresh. */
+export async function getDuplicateUrlSummaryForHealthMonitoring() {
+    if (process.env.NODE_ENV === 'test') {
+        const dashboard = await buildDuplicateUrlDashboardUncached();
+        return {
+            duplicateUrlGroups: dashboard.summary.duplicateGroups,
+            highRiskDuplicateGroups: dashboard.summary.highRiskGroups,
+            ignoredDuplicateGroups: dashboard.summary.ignoredGroups,
+        };
+    }
+    return getOrLoadCached(
+        'datahub:health:data-quality:v1',
+        async () => {
+            const dashboard = await buildDuplicateUrlDashboardUncached();
+            return {
+                duplicateUrlGroups: dashboard.summary.duplicateGroups,
+                highRiskDuplicateGroups: dashboard.summary.highRiskGroups,
+                ignoredDuplicateGroups: dashboard.summary.ignoredGroups,
+            };
+        },
+        600_000,
+    );
 }
 
 export async function listDuplicateUrlGroups() {
@@ -219,13 +274,41 @@ export async function getDuplicateUrlSummaryForHealth() {
     };
 }
 
-export async function buildDuplicateEnrichmentBySourceId() {
+async function buildDuplicateEnrichmentBySourceIdUncached() {
     const [sources, crawlerBySourceId] = await Promise.all([
         loadUrlBearingSourcesWithStats(),
         loadCrawlersBySourceId(),
     ]);
     const { enrichmentBySourceId } = buildDuplicateIndexes(sources, crawlerBySourceId);
     return enrichmentBySourceId;
+}
+
+export async function buildDuplicateEnrichmentBySourceId() {
+    if (process.env.NODE_ENV === 'test') {
+        return buildDuplicateEnrichmentBySourceIdUncached();
+    }
+    return getOrLoadCached(
+        'pipeline:duplicate-analysis:enrichment',
+        buildDuplicateEnrichmentBySourceIdUncached,
+        60_000,
+    );
+}
+
+async function buildDuplicateEnrichmentBySourceIdLightweightUncached() {
+    const sources = await loadUrlBearingSourcesForDuplicateKeys();
+    const { enrichmentBySourceId } = buildDuplicateIndexes(sources, new Map());
+    return enrichmentBySourceId;
+}
+
+export async function buildDuplicateEnrichmentBySourceIdLightweight() {
+    if (process.env.NODE_ENV === 'test') {
+        return buildDuplicateEnrichmentBySourceIdLightweightUncached();
+    }
+    return getOrLoadCached(
+        'pipeline:duplicate-analysis:enrichment-lightweight',
+        buildDuplicateEnrichmentBySourceIdLightweightUncached,
+        60_000,
+    );
 }
 
 export function enrichSourceWithDuplicateFields(source, enrichmentBySourceId) {
@@ -271,6 +354,7 @@ export async function setSourceDuplicateUrlIgnore(sourceId, ignore, userId = nul
         `UPDATE data_sources SET config = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
         [sourceId, JSON.stringify(config)],
     );
+    invalidatePipelineSnapshotCache('pipeline:duplicate-analysis:');
 
     return result.rows[0];
 }
