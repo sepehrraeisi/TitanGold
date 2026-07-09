@@ -1,0 +1,69 @@
+{
+  "capturedAt": "2026-07-09T19:55:16.935Z",
+  "task": "DH-TELEGRAM-PUBLISHER-P1-SAFE-RCA-AND-TEST-DELIVERY",
+  "endpointTiming": {
+    "list": {
+      "ms": 182,
+      "dry_run_forced": true
+    },
+    "mappings": {
+      "ms": 283,
+      "count": 6
+    },
+    "history": {
+      "ms": 140
+    },
+    "dryRunTest": {
+      "ms": 87,
+      "status": 200,
+      "body": {
+        "success": true,
+        "dry_run": true,
+        "status": "dry_run",
+        "telegram_message_id": null,
+        "error": null,
+        "history_id": "ff6933a2-5306-44e4-bf37-53d4ecbfc3b8"
+      }
+    },
+    "publishDryRun": {
+      "ms": 155,
+      "status": 200,
+      "body": {
+        "success": true,
+        "dry_run": true,
+        "status": "dry_run",
+        "telegram_message_id": null,
+        "error": null,
+        "history_id": "5272f4d5-351d-4989-84b9-1731aafb12c4"
+      }
+    }
+  },
+  "dependencyAudit": {
+    "telegram_publisher_dry_run_env": "(from PM2)",
+    "notifications_own_credentials": true,
+    "collector_does_not_publish": true
+  },
+  "browserQaChecklist": {
+    "channelsLoadUnder500ms": true,
+    "mappingsLoadUnder500ms": true,
+    "historyLoadUnder500ms": true,
+    "dryRunForcedFlag": true,
+    "dryRunTestWorks": true,
+    "publishDryRunWorks": true,
+    "noTelegramMessageIdOnDryRun": true,
+    "uiShowsDryRunBanner": true,
+    "noRawI18n": true,
+    "noRawNa": true,
+    "noBrowserTelegramApi": true,
+    "channelsPresent": true,
+    "mappingsPresent": true
+  },
+  "browserQaPass": true,
+  "liveTestPerformed": false,
+  "liveTestReason": "TELEGRAM_PUBLISHER_DRY_RUN=true in production PM2 — live send intentionally disabled",
+  "screenshots": [
+    "telegram-publisher-p1-overview.png",
+    "telegram-publisher-p1-history.png"
+  ],
+  "verdict": "REAL WORKING / CLOSED (dry-run operational; live disabled by TELEGRAM_PUBLISHER_DRY_RUN)"
+}
