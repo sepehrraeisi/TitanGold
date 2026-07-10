@@ -49,6 +49,27 @@ export const publisherResponseSchema = z.object({
   updated_at: z.string(),
 });
 
+export const runtimeModeStatsSchema = z.object({
+  messagesSentToday: z.number().int(),
+  dryRunsToday: z.number().int(),
+  failedSendsToday: z.number().int(),
+  lastTelegramDeliveryAt: z.string().nullable().optional(),
+});
+
+export const runtimeModeViewSchema = z.object({
+  configuredMode: z.enum(['dry_run', 'live_test', 'live']),
+  effectiveMode: z.enum(['dry_run', 'live_test', 'live']),
+  serverSafetyOverride: z.boolean(),
+  liveTestExpiresAt: z.string().nullable().optional(),
+  liveTestRemainingSends: z.number().int(),
+  lastChangedBy: z.string().nullable().optional(),
+  lastChangedAt: z.string().nullable().optional(),
+  reason: z.string().nullable().optional(),
+  canChangeMode: z.boolean(),
+  warnings: z.array(z.string()),
+  stats: runtimeModeStatsSchema.optional(),
+});
+
 export const publisherListResponseSchema = z.object({
   publishers: z.array(publisherResponseSchema),
   metrics: z.object({
@@ -57,6 +78,13 @@ export const publisherListResponseSchema = z.object({
     failed24h: z.number().int(),
     successRate: z.number(),
   }),
+  system: z.object({
+    dry_run_forced: z.boolean(),
+    server_safety_override: z.boolean().optional(),
+    configured_mode: z.enum(['dry_run', 'live_test', 'live']).optional(),
+    effective_mode: z.enum(['dry_run', 'live_test', 'live']).optional(),
+  }).optional(),
+  runtimeMode: runtimeModeViewSchema.optional(),
 });
 
 export const publisherHistoryItemSchema = z.object({
@@ -111,6 +139,43 @@ export const publishResultSchema = z.object({
   telegram_message_id: z.string().nullable().optional(),
   error: z.string().nullable().optional(),
   history_id: z.string().uuid(),
+  configuredMode: z.enum(['dry_run', 'live_test', 'live']).optional(),
+  effectiveMode: z.enum(['dry_run', 'live_test', 'live']).optional(),
+  serverSafetyOverride: z.boolean().optional(),
+  liveTestConsumed: z.boolean().optional(),
+  runtimeModeReason: z.string().nullable().optional(),
+});
+
+export const setRuntimeModeSchema = z.object({
+  mode: z.enum(['dry_run', 'live_test', 'live']),
+  confirm_runtime_mode_change: z.literal(true),
+  reason: z.string().min(5).max(2000),
+  acknowledge_live_delivery_risk: z.literal(true).optional(),
+}).superRefine((data, ctx) => {
+  if ((data.mode === 'live' || data.mode === 'live_test') && !data.acknowledge_live_delivery_risk) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'acknowledge_live_delivery_risk must be true for live modes',
+      path: ['acknowledge_live_delivery_risk'],
+    });
+  }
+});
+
+export const runtimeModeAuditItemSchema = z.object({
+  id: z.string().uuid(),
+  oldMode: z.enum(['dry_run', 'live_test', 'live']).nullable().optional(),
+  newMode: z.enum(['dry_run', 'live_test', 'live']),
+  changedByUserId: z.string().uuid().nullable().optional(),
+  changedByEmail: z.string().nullable().optional(),
+  changedByName: z.string().nullable().optional(),
+  reason: z.string(),
+  eventType: z.string(),
+  metadata: z.record(z.any()).optional(),
+  createdAt: z.string(),
+});
+
+export const runtimeModeAuditListSchema = z.object({
+  audit: z.array(runtimeModeAuditItemSchema),
 });
 
 export const publisherHistoryQuerySchema = z.object({

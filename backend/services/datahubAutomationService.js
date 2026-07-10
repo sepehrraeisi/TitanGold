@@ -991,7 +991,9 @@ async function dispatchQueueItem(item, userId, { dryRun = false } = {}) {
         mode: 'dispatch',
         user_id: userId,
         error_code: publishResult.error_code || null,
-        delivery_mode: effectiveDryRun ? 'dry_run' : 'live',
+        delivery_mode: effectiveDryRun
+          ? 'dry_run'
+          : (publishResult.effectiveMode || 'live'),
       }),
     ],
   );

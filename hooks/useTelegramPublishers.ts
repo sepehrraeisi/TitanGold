@@ -11,8 +11,11 @@ import {
     disableTelegramPublisher,
     testTelegramPublisher,
     publishToTelegramPublisher,
+    fetchPublisherRuntimeMode,
+    setPublisherRuntimeMode,
     CreateTelegramPublisherPayload,
     CreatePublisherMappingPayload,
+    SetPublisherRuntimeModePayload,
 } from '../services/telegramPublishersApi';
 import { DATA_HUB_KEYS } from './useDataHubState';
 
@@ -21,7 +24,28 @@ export const TELEGRAM_PUBLISHER_KEYS = {
     list: () => [...TELEGRAM_PUBLISHER_KEYS.all, 'list'] as const,
     mappings: () => [...TELEGRAM_PUBLISHER_KEYS.all, 'mappings'] as const,
     history: (id: string) => [...TELEGRAM_PUBLISHER_KEYS.all, 'history', id] as const,
+    runtimeMode: () => [...TELEGRAM_PUBLISHER_KEYS.all, 'runtimeMode'] as const,
 };
+
+export function usePublisherRuntimeModeQuery(options?: { enabled?: boolean }) {
+    return useQuery({
+        queryKey: TELEGRAM_PUBLISHER_KEYS.runtimeMode(),
+        queryFn: fetchPublisherRuntimeMode,
+        staleTime: 15 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+}
+
+export function useSetPublisherRuntimeModeMutation() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: SetPublisherRuntimeModePayload) => setPublisherRuntimeMode(payload),
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: TELEGRAM_PUBLISHER_KEYS.runtimeMode() });
+            queryClient.invalidateQueries({ queryKey: TELEGRAM_PUBLISHER_KEYS.list() });
+        },
+    });
+}
 
 export function useTelegramPublishersQuery(options?: { enabled?: boolean }) {
     return useQuery({
@@ -135,6 +159,7 @@ export function useTestTelegramPublisherMutation() {
             testTelegramPublisher(id, message),
         onSettled: (_d, _e, vars) => {
             queryClient.invalidateQueries({ queryKey: TELEGRAM_PUBLISHER_KEYS.list() });
+            queryClient.invalidateQueries({ queryKey: TELEGRAM_PUBLISHER_KEYS.runtimeMode() });
             if (vars?.id) {
                 queryClient.invalidateQueries({ queryKey: TELEGRAM_PUBLISHER_KEYS.history(vars.id) });
             }
@@ -178,6 +203,7 @@ export function usePublishTelegramPublisherMutation() {
             }),
         onSettled: (_d, _e, vars) => {
             queryClient.invalidateQueries({ queryKey: TELEGRAM_PUBLISHER_KEYS.list() });
+            queryClient.invalidateQueries({ queryKey: TELEGRAM_PUBLISHER_KEYS.runtimeMode() });
             if (vars?.id) {
                 queryClient.invalidateQueries({ queryKey: TELEGRAM_PUBLISHER_KEYS.history(vars.id) });
             }

@@ -3,12 +3,15 @@ import { encryptSecret, decryptSecret, isEncrypted } from '../utils/crypto.js';
 import { logger } from './logger.js';
 import { assertAccessControlGateway } from '../middleware/accessControlGateway.js';
 import { enforcePublishingPolicy } from './filterRulesGateway.js';
+import {
+  isPublisherDryRunForced,
+  isServerSafetyOverrideActive,
+  resolvePublishDeliveryContext,
+  consumeLiveTestIfNeeded,
+  attachRuntimeFields,
+} from './telegramPublisherRuntimeModeService.js';
 
-export function isPublisherDryRunForced() {
-  if (process.env.TELEGRAM_PUBLISHER_DRY_RUN === 'true') return true;
-  if (process.env.TELEGRAM_PUBLISHER_DRY_RUN === 'false') return false;
-  return process.env.NODE_ENV !== 'production';
-}
+export { isPublisherDryRunForced, isServerSafetyOverrideActive };
 
 export function mapPublisherRow(row) {
   return {
@@ -287,6 +290,7 @@ export async function listPublisherMetrics() {
 }
 
 export async function runPublisherTest(publisherId, message, userId) {
+  const runtimeContext = await resolvePublishDeliveryContext();
   const row = await query('SELECT * FROM telegram_publishers WHERE id = $1', [publisherId]);
   if (row.rows.length === 0) {
     const err = new Error('Publisher not found');
@@ -300,7 +304,8 @@ export async function runPublisherTest(publisherId, message, userId) {
     throw err;
   }
 
-  const dryRun = isPublisherDryRunForced() || !publisher.bot_token_encrypted;
+  const dryRun = !runtimeContext.willSendLive || !publisher.bot_token_encrypted;
+  const deliveryMode = dryRun ? 'dry_run' : runtimeContext.deliveryMode;
   const text =
     formatMessageFromTemplate(publisher.template, { message, title: 'Test' }) ||
     message;
@@ -312,16 +317,23 @@ export async function runPublisherTest(publisherId, message, userId) {
       contentSummary: text.slice(0, 500),
       status: 'dry_run',
       userId,
-      metadata: { mode: 'test', user_id: userId, delivery_mode: 'dry_run' },
+      metadata: {
+        mode: 'test',
+        user_id: userId,
+        delivery_mode: 'dry_run',
+        configured_mode: runtimeContext.configuredMode,
+        effective_mode: runtimeContext.effectiveMode,
+        server_safety_override: runtimeContext.serverSafetyOverride,
+      },
     });
-    return {
+    return attachRuntimeFields({
       success: true,
       dry_run: true,
       status: 'dry_run',
       telegram_message_id: null,
       error: null,
       history_id: history.id,
-    };
+    }, runtimeContext);
   }
 
   let token;
@@ -340,14 +352,14 @@ export async function runPublisherTest(publisherId, message, userId) {
       userId,
       metadata: { mode: 'test', user_id: userId },
     });
-    return {
+    return attachRuntimeFields({
       success: false,
       dry_run: false,
       status: 'failed',
       telegram_message_id: null,
       error: history.error_message,
       history_id: history.id,
-    };
+    }, runtimeContext);
   }
 
   try {
@@ -356,19 +368,31 @@ export async function runPublisherTest(publisherId, message, userId) {
       publisherId,
       contentType: 'test',
       contentSummary: text.slice(0, 500),
-      status: 'test',
+      status: 'sent',
       telegramMessageId: messageId,
       userId,
-      metadata: { mode: 'test', user_id: userId, delivery_mode: 'live_test' },
+      metadata: {
+        mode: 'test',
+        user_id: userId,
+        delivery_mode: deliveryMode,
+        configured_mode: runtimeContext.configuredMode,
+        effective_mode: runtimeContext.effectiveMode,
+        server_safety_override: runtimeContext.serverSafetyOverride,
+      },
     });
-    return {
+    let liveTestConsumed = false;
+    if (deliveryMode === 'live_test') {
+      const consumed = await consumeLiveTestIfNeeded({ userId, historyId: history.id });
+      liveTestConsumed = consumed.consumed;
+    }
+    return attachRuntimeFields({
       success: true,
       dry_run: false,
-      status: 'test',
+      status: 'sent',
       telegram_message_id: messageId,
       error: null,
       history_id: history.id,
-    };
+    }, runtimeContext, { liveTestConsumed });
   } catch (e) {
     const history = await recordPublisherHistory({
       publisherId,
@@ -380,14 +404,14 @@ export async function runPublisherTest(publisherId, message, userId) {
       userId,
       metadata: { mode: 'test', user_id: userId },
     });
-    return {
+    return attachRuntimeFields({
       success: false,
       dry_run: false,
       status: 'failed',
       telegram_message_id: null,
       error: e.message,
       history_id: history.id,
-    };
+    }, runtimeContext);
   }
 }
 
@@ -481,11 +505,11 @@ export async function runPublisherPublish(
     throw e;
   }
 
+  const runtimeContext = await resolvePublishDeliveryContext();
   const hasToken = Boolean(publisher.bot_token_encrypted);
-  const forceDryRun = isPublisherDryRunForced();
   const requestedDryRun = Boolean(requestDryRun);
 
-  if (confirm_publish && !hasToken && !forceDryRun && !requestedDryRun) {
+  if (confirm_publish && !hasToken && runtimeContext.willSendLive && !requestedDryRun) {
     const history = await recordPublisherHistory({
       publisherId,
       contentType: content_type,
@@ -505,7 +529,8 @@ export async function runPublisherPublish(
     throw err;
   }
 
-  const dryRun = requestedDryRun || forceDryRun || (confirm_publish && !hasToken);
+  const dryRun = requestedDryRun || !runtimeContext.willSendLive || !hasToken;
+  const deliveryMode = dryRun ? 'dry_run' : runtimeContext.deliveryMode;
 
   if (dryRun) {
     const history = await recordPublisherHistory({
@@ -523,16 +548,19 @@ export async function runPublisherPublish(
         delivery_mode: 'dry_run',
         allow_temporary_publish: allowTemporaryPublish,
         request_dry_run: requestedDryRun,
+        configured_mode: runtimeContext.configuredMode,
+        effective_mode: runtimeContext.effectiveMode,
+        server_safety_override: runtimeContext.serverSafetyOverride,
       },
     });
-    return {
+    return attachRuntimeFields({
       success: true,
       dry_run: true,
       status: 'dry_run',
       telegram_message_id: null,
       error: null,
       history_id: history.id,
-    };
+    }, runtimeContext);
   }
 
   let token;
@@ -553,14 +581,14 @@ export async function runPublisherPublish(
       userId,
       metadata: { mode: 'publish', user_id: userId },
     });
-    return {
+    return attachRuntimeFields({
       success: false,
       dry_run: false,
       status: 'failed',
       telegram_message_id: null,
       error: history.error_message,
       history_id: history.id,
-    };
+    }, runtimeContext);
   }
 
   try {
@@ -583,18 +611,26 @@ export async function runPublisherPublish(
       metadata: {
         mode: 'publish',
         user_id: userId,
-        delivery_mode: 'live',
+        delivery_mode: deliveryMode,
         allow_temporary_publish: allowTemporaryPublish,
+        configured_mode: runtimeContext.configuredMode,
+        effective_mode: runtimeContext.effectiveMode,
+        server_safety_override: runtimeContext.serverSafetyOverride,
       },
     });
-    return {
+    let liveTestConsumed = false;
+    if (deliveryMode === 'live_test') {
+      const consumed = await consumeLiveTestIfNeeded({ userId, historyId: history.id });
+      liveTestConsumed = consumed.consumed;
+    }
+    return attachRuntimeFields({
       success: true,
       dry_run: false,
       status: 'sent',
       telegram_message_id: messageId,
       error: null,
       history_id: history.id,
-    };
+    }, runtimeContext, { liveTestConsumed });
   } catch (e) {
     const history = await recordPublisherHistory({
       publisherId,
@@ -608,14 +644,14 @@ export async function runPublisherPublish(
       userId,
       metadata: { mode: 'publish', user_id: userId },
     });
-    return {
+    return attachRuntimeFields({
       success: false,
       dry_run: false,
       status: 'failed',
       telegram_message_id: null,
       error: e.message,
       history_id: history.id,
-    };
+    }, runtimeContext);
   }
 }
 

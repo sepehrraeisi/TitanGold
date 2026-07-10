@@ -24,6 +24,9 @@ import {
   publisherMappingSchema,
   createPublisherMappingSchema,
   updatePublisherMappingSchema,
+  runtimeModeViewSchema,
+  setRuntimeModeSchema,
+  runtimeModeAuditListSchema,
 } from '../schemas/telegramPublisherSchemas.js';
 import {
   mapPublisherRow,
@@ -35,10 +38,17 @@ import {
   createPublisherMapping,
   updatePublisherMapping,
   disablePublisherMapping,
+  isPublisherDryRunForced,
 } from '../services/telegramPublisherService.js';
+import {
+  buildRuntimeModeView,
+  setRuntimeMode,
+  listRuntimeModeAudit,
+} from '../services/telegramPublisherRuntimeModeService.js';
 
 const router = express.Router();
 const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
+const adminAuth = [authenticate, authorize('admin'), writeRateLimiter];
 
 router.get(
   '/',
@@ -60,7 +70,18 @@ router.get(
       );
       const publishers = [...result.rows, ...inactive.rows].map(mapPublisherRow);
       const metrics = await listPublisherMetrics();
-      res.json({ publishers, metrics });
+      const runtimeMode = await buildRuntimeModeView(req.user);
+      res.json({
+        publishers,
+        metrics,
+        system: {
+          dry_run_forced: isPublisherDryRunForced(),
+          server_safety_override: runtimeMode.serverSafetyOverride,
+          configured_mode: runtimeMode.configuredMode,
+          effective_mode: runtimeMode.effectiveMode,
+        },
+        runtimeMode,
+      });
     } catch (error) {
       logger.error('Failed to list telegram publishers:', error);
       res.status(500).json({ error: 'Failed to list telegram publishers' });
@@ -100,6 +121,66 @@ router.post(
     } catch (error) {
       logger.error('Failed to create telegram publisher:', error);
       res.status(500).json({ error: 'Failed to create telegram publisher' });
+    }
+  },
+);
+
+router.get(
+  '/runtime-mode',
+  authenticate,
+  readRateLimiter,
+  validateResponse(runtimeModeViewSchema),
+  async (req, res) => {
+    try {
+      const view = await buildRuntimeModeView(req.user);
+      res.json(view);
+    } catch (error) {
+      logger.error('Failed to fetch publisher runtime mode:', error);
+      res.status(500).json({ error: 'Failed to fetch publisher runtime mode' });
+    }
+  },
+);
+
+router.put(
+  '/runtime-mode',
+  ...adminAuth,
+  validateBody(setRuntimeModeSchema),
+  validateResponse(runtimeModeViewSchema),
+  async (req, res) => {
+    try {
+      const body = req.validatedBody;
+      const view = await setRuntimeMode({
+        mode: body.mode,
+        reason: body.reason,
+        user: req.user,
+        acknowledgeLiveDeliveryRisk: body.acknowledge_live_delivery_risk,
+        confirmRuntimeModeChange: body.confirm_runtime_mode_change,
+      });
+      res.json(view);
+    } catch (error) {
+      const status = error.status || 500;
+      if (status >= 500) logger.error('Failed to set publisher runtime mode:', error);
+      res.status(status).json({
+        error: error.message || 'Failed to set publisher runtime mode',
+        code: error.code || undefined,
+      });
+    }
+  },
+);
+
+router.get(
+  '/runtime-mode/audit',
+  authenticate,
+  authorize('admin'),
+  readRateLimiter,
+  validateResponse(runtimeModeAuditListSchema),
+  async (req, res) => {
+    try {
+      const audit = await listRuntimeModeAudit({ limit: 20 });
+      res.json({ audit });
+    } catch (error) {
+      logger.error('Failed to fetch publisher runtime mode audit:', error);
+      res.status(500).json({ error: 'Failed to fetch publisher runtime mode audit' });
     }
   },
 );

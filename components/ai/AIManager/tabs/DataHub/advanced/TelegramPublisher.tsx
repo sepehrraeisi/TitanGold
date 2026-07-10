@@ -11,10 +11,14 @@ import {
     useCreatePublisherMappingMutation,
     useUpdatePublisherMappingMutation,
     useDisablePublisherMappingMutation,
+    usePublisherRuntimeModeQuery,
+    useSetPublisherRuntimeModeMutation,
 } from '../../../../../../hooks/useTelegramPublishers';
 import {
     formatPublisherApiError,
     PublisherMappingRecord,
+    PublisherRuntimeModeView,
+    PublishActionResult,
     TelegramPublisherRecord,
 } from '../../../../../../services/telegramPublishersApi';
 import {
@@ -52,8 +56,49 @@ _Source: Titan DataHub_`;
 
 const defaultPublishMessage = 'Dry-run DataHub publisher validation message.';
 
+type RuntimeModeChoice = 'dry_run' | 'live_test' | 'live';
+
+function formatLiveTestCountdown(expiresAt?: string | null): string | null {
+    if (!expiresAt) return null;
+    const remainingMs = new Date(expiresAt).getTime() - Date.now();
+    if (remainingMs <= 0) return '0';
+    return String(Math.max(1, Math.ceil(remainingMs / 60000)));
+}
+
+function resolveDeliveryActionLabels(
+    effectiveMode: RuntimeModeChoice,
+    t: (key: string) => string,
+) {
+    if (effectiveMode === 'live_test') {
+        return {
+            testLabel: t('publisher_btn_test_live_test'),
+            publishLabel: t('publisher_btn_publish_live_test'),
+            helper: t('publisher_delivery_helper_live_test'),
+        };
+    }
+    if (effectiveMode === 'live') {
+        return {
+            testLabel: t('publisher_btn_test_live'),
+            publishLabel: t('publisher_btn_publish_live'),
+            helper: t('publisher_delivery_helper_live'),
+        };
+    }
+    return {
+        testLabel: t('publisher_btn_test_dry_run'),
+        publishLabel: t('publisher_btn_publish_dry_run'),
+        helper: t('publisher_delivery_helper_dry_run'),
+    };
+}
+
+function resolvePublishSuccessMessage(result: PublishActionResult, t: (key: string) => string): string {
+    if (result.liveTestConsumed) return t('publisher_success_live_test_consumed');
+    if (result.dry_run || result.effectiveMode === 'dry_run') return t('publisher_success_dry_run');
+    if (result.effectiveMode === 'live_test') return t('publisher_success_live_test');
+    return t('publisher_success_live');
+}
+
 const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSources }) => {
-    const { canWrite } = useDataHubPermissions();
+    const { canWrite, role } = useDataHubPermissions();
     const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const [activeTab, setActiveTab] = useState<'channels' | 'history' | 'templates'>('channels');
     const [selectedPublisherId, setSelectedPublisherId] = useState<string | null>(null);
@@ -71,6 +116,10 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
         publisher_id: '',
         is_enabled: true,
     });
+    const [showModeModal, setShowModeModal] = useState(false);
+    const [pendingMode, setPendingMode] = useState<RuntimeModeChoice | null>(null);
+    const [modeReason, setModeReason] = useState('');
+    const [modeAcknowledged, setModeAcknowledged] = useState(false);
 
     const [form, setForm] = useState({
         name: '',
@@ -84,10 +133,24 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
 
     const { data: listData, isLoading, error: listError, refetch, isFetching } =
         useTelegramPublishersQuery({ enabled: true });
+    const { data: runtimeModeData, refetch: refetchRuntimeMode } =
+        usePublisherRuntimeModeQuery({ enabled: true });
     const { data: mappingData, isLoading: isLoadingMappings } =
         usePublisherMappingsQuery({ enabled: true });
 
     const publishers = listData?.publishers ?? [];
+    const runtimeMode: PublisherRuntimeModeView = runtimeModeData ||
+        listData?.runtimeMode || {
+            configuredMode: 'dry_run',
+            effectiveMode: 'dry_run',
+            serverSafetyOverride: listData?.system?.dry_run_forced ?? false,
+            liveTestRemainingSends: 0,
+            canChangeMode: false,
+            warnings: [],
+        };
+    const effectiveMode = runtimeMode.effectiveMode;
+    const deliveryLabels = resolveDeliveryActionLabels(effectiveMode, t);
+    const isAdmin = role === 'admin';
     const metrics = listData?.metrics ?? {
         totalChannels: 0,
         delivered24h: 0,
@@ -119,6 +182,7 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
     const createMappingMutation = useCreatePublisherMappingMutation();
     const updateMappingMutation = useUpdatePublisherMappingMutation();
     const disableMappingMutation = useDisablePublisherMappingMutation();
+    const setRuntimeModeMutation = useSetPublisherRuntimeModeMutation();
 
     const mappings = mappingData?.mappings ?? [];
 
@@ -131,7 +195,8 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
             publishMutation.error ||
             createMappingMutation.error ||
             updateMappingMutation.error ||
-            disableMappingMutation.error,
+            disableMappingMutation.error ||
+            setRuntimeModeMutation.error,
     );
 
     const selectedPublisher = publishers.find(p => p.id === selectedPublisherId);
@@ -182,14 +247,13 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                 id: pub.id,
                 message: t('publisher_test_message_default'),
             });
-            const label = result.dry_run
-                ? t('publisher_test_dry_run')
-                : result.success
-                  ? t('publisher_test_ok')
-                  : t('publisher_test_failed');
+            const label = result.success
+                ? resolvePublishSuccessMessage(result, t)
+                : t('publisher_test_failed');
             setActionMessage(`${label}${result.error ? `: ${result.error}` : ''}`);
             setSelectedPublisherId(pub.id);
             await refetch();
+            await refetchRuntimeMode();
         } catch (e: unknown) {
             setActionError(
                 formatDataHubQueryError(t, e instanceof Error ? e : new Error(t('publisher_test_failed')))
@@ -225,14 +289,13 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                 content: publishMessage.trim(),
                 allow_temporary_publish: allowTemporaryPublish,
             });
-            const label = result.dry_run
-                ? t('publisher_publish_dry_run')
-                : result.success
-                  ? t('publisher_publish_ok')
-                  : t('publisher_publish_failed');
+            const label = result.success
+                ? resolvePublishSuccessMessage(result, t)
+                : t('publisher_publish_failed');
             setActionMessage(`${label}${result.error ? `: ${result.error}` : ''}`);
             setSelectedPublisherId(pub.id);
             await refetch();
+            await refetchRuntimeMode();
         } catch (e: unknown) {
             setActionError(formatPublisherApiError(e) || t('publisher_publish_failed'));
         }
@@ -301,6 +364,42 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
         }
     };
 
+    const openModeModal = (mode: RuntimeModeChoice) => {
+        setPendingMode(mode);
+        setModeReason('');
+        setModeAcknowledged(false);
+        setShowModeModal(true);
+    };
+
+    const handleModeChange = async () => {
+        if (!pendingMode) return;
+        if (modeReason.trim().length < 5) {
+            setActionError(t('publisher_mode_reason_required'));
+            return;
+        }
+        if ((pendingMode === 'live' || pendingMode === 'live_test') && !modeAcknowledged) {
+            setActionError(t('publisher_mode_ack_required'));
+            return;
+        }
+        setActionError(null);
+        try {
+            await setRuntimeModeMutation.mutateAsync({
+                mode: pendingMode,
+                confirm_runtime_mode_change: true,
+                reason: modeReason.trim(),
+                ...(pendingMode === 'live' || pendingMode === 'live_test'
+                    ? { acknowledge_live_delivery_risk: true as const }
+                    : {}),
+            });
+            setShowModeModal(false);
+            setActionMessage(t(`publisher_mode_enabled_${pendingMode}`));
+            await refetch();
+            await refetchRuntimeMode();
+        } catch (e: unknown) {
+            setActionError(formatPublisherApiError(e) || t('publisher_mode_change_failed'));
+        }
+    };
+
     const handleDisable = async (pub: TelegramPublisherRecord) => {
         if (!window.confirm(t('publisher_disable_confirm'))) return;
         try {
@@ -357,6 +456,172 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                     retryLabel={t('retry')}
                 />
             )}
+
+            {runtimeMode.serverSafetyOverride && (
+                <div className="mb-4">
+                    <DataHubAlert
+                        variant="warning"
+                        message={t('publisher_server_override_banner')}
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                        {t('publisher_server_override_hint')}
+                    </p>
+                </div>
+            )}
+
+            <div className={`${DATAHUB_INNER_LIST} mb-5`}>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                        <h4 className="text-[11px] font-semibold text-foreground">
+                            {t('publisher_delivery_mode_title')}
+                        </h4>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                            {deliveryLabels.helper}
+                        </p>
+                    </div>
+                    <StatusPill
+                        label={t(`publisher_mode_${runtimeMode.configuredMode}`)}
+                        variant={
+                            runtimeMode.effectiveMode === 'live'
+                                ? 'error'
+                                : runtimeMode.effectiveMode === 'live_test'
+                                  ? 'warning'
+                                  : 'neutral'
+                        }
+                    />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] mb-3">
+                    <div>
+                        <p className="text-muted-foreground">{t('publisher_mode_configured')}</p>
+                        <p className="font-semibold text-foreground">
+                            {t(`publisher_mode_${runtimeMode.configuredMode}`)}
+                        </p>
+                    </div>
+                    <div>
+                        <p className="text-muted-foreground">{t('publisher_mode_effective')}</p>
+                        <p className="font-semibold text-foreground">
+                            {runtimeMode.serverSafetyOverride
+                                ? t('publisher_mode_effective_override')
+                                : runtimeMode.effectiveMode === 'live_test' &&
+                                    runtimeMode.liveTestExpiresAt
+                                  ? `${t('publisher_mode_live_test')} · ${formatLiveTestCountdown(runtimeMode.liveTestExpiresAt)} ${t('publisher_minutes_remaining')}`
+                                  : t(`publisher_mode_${runtimeMode.effectiveMode}`)}
+                        </p>
+                    </div>
+                    <div>
+                        <p className="text-muted-foreground">{t('publisher_server_override_label')}</p>
+                        <p className="font-semibold text-foreground">
+                            {runtimeMode.serverSafetyOverride
+                                ? t('publisher_server_override_active')
+                                : t('publisher_server_override_inactive')}
+                        </p>
+                    </div>
+                    <div>
+                        <p className="text-muted-foreground">{t('publisher_mode_last_changed')}</p>
+                        <p className="font-semibold text-foreground">
+                            {runtimeMode.lastChangedBy || t('unknown')}
+                            {runtimeMode.lastChangedAt
+                                ? ` · ${new Date(runtimeMode.lastChangedAt).toLocaleString()}`
+                                : ''}
+                        </p>
+                    </div>
+                    {runtimeMode.reason && (
+                        <div className="md:col-span-2">
+                            <p className="text-muted-foreground">{t('publisher_mode_reason_label')}</p>
+                            <p className="text-foreground">{runtimeMode.reason}</p>
+                        </div>
+                    )}
+                    {runtimeMode.effectiveMode === 'live_test' && (
+                        <>
+                            <div>
+                                <p className="text-muted-foreground">{t('publisher_live_test_remaining')}</p>
+                                <p className="font-semibold text-foreground">
+                                    {runtimeMode.liveTestRemainingSends}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-muted-foreground">{t('publisher_live_test_expires')}</p>
+                                <p className="font-semibold text-foreground">
+                                    {runtimeMode.liveTestExpiresAt
+                                        ? new Date(runtimeMode.liveTestExpiresAt).toLocaleString()
+                                        : t('unknown')}
+                                </p>
+                            </div>
+                        </>
+                    )}
+                </div>
+                {runtimeMode.stats && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                        <MetricCard
+                            label={t('publisher_stats_sent_today')}
+                            value={runtimeMode.stats.messagesSentToday}
+                            color="emerald"
+                        />
+                        <MetricCard
+                            label={t('publisher_stats_dry_runs_today')}
+                            value={runtimeMode.stats.dryRunsToday}
+                            color="blue"
+                        />
+                        <MetricCard
+                            label={t('publisher_stats_failed_today')}
+                            value={runtimeMode.stats.failedSendsToday}
+                            color={runtimeMode.stats.failedSendsToday > 0 ? 'red' : 'emerald'}
+                        />
+                        <MetricCard
+                            label={t('publisher_stats_last_delivery')}
+                            value={
+                                runtimeMode.stats.lastTelegramDeliveryAt
+                                    ? new Date(runtimeMode.stats.lastTelegramDeliveryAt).toLocaleTimeString()
+                                    : t('none')
+                            }
+                            color="purple"
+                        />
+                    </div>
+                )}
+                {isAdmin && (
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            className={BTN_OUTLINE_SLATE}
+                            disabled={wg(setRuntimeModeMutation.isPending).disabled}
+                            title={wg(setRuntimeModeMutation.isPending).title}
+                            onClick={() => openModeModal('dry_run')}
+                        >
+                            {t('publisher_enable_dry_run')}
+                        </button>
+                        <button
+                            type="button"
+                            className={BTN_OUTLINE_EMERALD}
+                            disabled={
+                                wg(
+                                    setRuntimeModeMutation.isPending ||
+                                        runtimeMode.serverSafetyOverride ||
+                                        !runtimeMode.canChangeMode,
+                                ).disabled
+                            }
+                            title={wg(setRuntimeModeMutation.isPending).title}
+                            onClick={() => openModeModal('live_test')}
+                        >
+                            {t('publisher_enable_live_test')}
+                        </button>
+                        <button
+                            type="button"
+                            className={BTN_OUTLINE_RED}
+                            disabled={
+                                wg(
+                                    setRuntimeModeMutation.isPending ||
+                                        runtimeMode.serverSafetyOverride ||
+                                        !runtimeMode.canChangeMode,
+                                ).disabled
+                            }
+                            title={wg(setRuntimeModeMutation.isPending).title}
+                            onClick={() => openModeModal('live')}
+                        >
+                            {t('publisher_enable_live')}
+                        </button>
+                    </div>
+                )}
+            </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
                 <MetricCard label={t('active_channels')} value={metrics.totalChannels} color="blue" />
@@ -521,7 +786,7 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                                             onClick={() => selectedPublisher && handlePublish(selectedPublisher)}
                                             className={BTN_OUTLINE_PURPLE}
                                         >
-                                            {t('publish_dry_run_safe')}
+                                            {deliveryLabels.publishLabel}
                                         </button>
                                     </div>
                                 </div>
@@ -579,7 +844,7 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                                                         onClick={() => handleTest(pub)}
                                                         className={BTN_OUTLINE_EMERALD}
                                                     >
-                                                        {t('test')}
+                                                        {deliveryLabels.testLabel}
                                                     </button>
                                                     <button
                                                         type="button"
@@ -588,7 +853,7 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                                                         onClick={() => handlePublish(pub)}
                                                         className={BTN_OUTLINE_PURPLE}
                                                     >
-                                                        {t('publish')}
+                                                        {deliveryLabels.publishLabel}
                                                     </button>
                                                     <button
                                                         type="button"
@@ -640,9 +905,11 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                                                     <StatusPill
                                                         label={t(`publisher_status_${item.status}`)}
                                                         variant={
-                                                            item.status === 'sent' || item.status === 'dry_run' || item.status === 'test'
+                                                            item.status === 'sent' || item.status === 'test'
                                                                 ? 'success'
-                                                                : 'error'
+                                                                : item.status === 'dry_run'
+                                                                  ? 'warning'
+                                                                  : 'error'
                                                         }
                                                     />
                                                     {item.delivery_mode && (
@@ -776,6 +1043,59 @@ const TelegramPublisher: React.FC<TelegramPublisherProps> = ({ t, telegramSource
                             {t('mapping_enabled')}
                         </label>
                         <DataHubAlert variant="warning" message={t('mapping_policy_note')} />
+                    </div>
+                </DataHubModal>
+            )}
+
+            {showModeModal && pendingMode && (
+                <DataHubModal
+                    title={t(`publisher_mode_modal_title_${pendingMode}`)}
+                    subtitle={t(`publisher_mode_modal_desc_${pendingMode}`)}
+                    onClose={() => setShowModeModal(false)}
+                    maxWidth="max-w-md"
+                    footer={
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => setShowModeModal(false)}
+                                className={BTN_SECONDARY}
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                disabled={wg(setRuntimeModeMutation.isPending).disabled}
+                                title={wg(setRuntimeModeMutation.isPending).title}
+                                onClick={handleModeChange}
+                                className={pendingMode === 'live' ? BTN_OUTLINE_RED : BTN_PRIMARY}
+                            >
+                                {t(`publisher_mode_confirm_${pendingMode}`)}
+                            </button>
+                        </>
+                    }
+                >
+                    <div className="space-y-3">
+                        <textarea
+                            value={modeReason}
+                            onChange={e => setModeReason(e.target.value)}
+                            rows={3}
+                            className={`${INPUT_CLASS} resize-none`}
+                            placeholder={t('publisher_mode_reason_placeholder')}
+                        />
+                        {(pendingMode === 'live' || pendingMode === 'live_test') && (
+                            <label className="flex items-start gap-2 text-[11px] text-muted-foreground">
+                                <input
+                                    type="checkbox"
+                                    checked={modeAcknowledged}
+                                    onChange={e => setModeAcknowledged(e.target.checked)}
+                                    className="rounded mt-0.5"
+                                />
+                                <span>{t(`publisher_mode_ack_${pendingMode}`)}</span>
+                            </label>
+                        )}
+                        {pendingMode === 'live' && (
+                            <DataHubAlert variant="error" message={t('publisher_mode_live_warning')} />
+                        )}
                     </div>
                 </DataHubModal>
             )}

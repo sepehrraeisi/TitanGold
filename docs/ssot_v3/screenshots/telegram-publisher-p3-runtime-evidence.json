@@ -1,0 +1,172 @@
+{
+  "phase": "DH-TELEGRAM-PUBLISHER-P3",
+  "timestamp": "2026-07-09T22:54:52.040Z",
+  "publisher_id": "887495e6-0b47-4450-88ef-35dd43477f9a",
+  "initialMode": {
+    "configuredMode": "dry_run",
+    "effectiveMode": "dry_run",
+    "serverSafetyOverride": false,
+    "liveTestExpiresAt": null,
+    "liveTestRemainingSends": 0,
+    "lastChangedBy": "user@example.com",
+    "lastChangedAt": "2026-07-09T22:54:52.334Z",
+    "reason": "P3 browser QA reset to dry-run baseline",
+    "canChangeMode": true,
+    "warnings": [],
+    "stats": {
+      "messagesSentToday": 4,
+      "dryRunsToday": 26,
+      "failedSendsToday": 0,
+      "lastTelegramDeliveryAt": "2026-07-09T22:49:57.947Z"
+    }
+  },
+  "dryRunTest": {
+    "success": true,
+    "dry_run": true,
+    "status": "dry_run",
+    "telegram_message_id": null,
+    "error": null,
+    "history_id": "a12e8191-a33a-40fe-bd02-f4b1fef9f7c9",
+    "configuredMode": "dry_run",
+    "effectiveMode": "dry_run",
+    "serverSafetyOverride": false,
+    "dryRun": true,
+    "liveTestConsumed": false,
+    "runtimeModeReason": "P3 browser QA reset to dry-run baseline"
+  },
+  "enableLiveTest": {
+    "configuredMode": "live_test",
+    "effectiveMode": "live_test",
+    "serverSafetyOverride": false,
+    "liveTestExpiresAt": "2026-07-09T23:04:53.337Z",
+    "liveTestRemainingSends": 1,
+    "lastChangedBy": "user@example.com",
+    "lastChangedAt": "2026-07-09T22:54:53.337Z",
+    "reason": "P3 browser QA live_test window",
+    "canChangeMode": true,
+    "warnings": [],
+    "stats": {
+      "messagesSentToday": 4,
+      "dryRunsToday": 27,
+      "failedSendsToday": 0,
+      "lastTelegramDeliveryAt": "2026-07-09T22:49:57.947Z"
+    }
+  },
+  "liveTestSend": {
+    "success": true,
+    "dry_run": false,
+    "status": "sent",
+    "telegram_message_id": "209",
+    "error": null,
+    "history_id": "ef9a4beb-8d18-4916-805d-0a13212ca680",
+    "configuredMode": "live_test",
+    "effectiveMode": "live_test",
+    "serverSafetyOverride": false,
+    "dryRun": false,
+    "liveTestConsumed": true,
+    "runtimeModeReason": "P3 browser QA live_test window"
+  },
+  "afterLiveTestMode": {
+    "configuredMode": "dry_run",
+    "effectiveMode": "dry_run",
+    "serverSafetyOverride": false,
+    "liveTestExpiresAt": null,
+    "liveTestRemainingSends": 0,
+    "lastChangedBy": "user@example.com",
+    "lastChangedAt": "2026-07-09T22:54:53.734Z",
+    "reason": "Live test consumed after successful Telegram delivery",
+    "canChangeMode": true,
+    "warnings": [],
+    "stats": {
+      "messagesSentToday": 5,
+      "dryRunsToday": 27,
+      "failedSendsToday": 0,
+      "lastTelegramDeliveryAt": "2026-07-09T22:54:53.720Z"
+    }
+  },
+  "enableLive": {
+    "configuredMode": "live",
+    "effectiveMode": "live",
+    "serverSafetyOverride": false,
+    "liveTestExpiresAt": null,
+    "liveTestRemainingSends": 0,
+    "lastChangedBy": "user@example.com",
+    "lastChangedAt": "2026-07-09T22:54:53.761Z",
+    "reason": "P3 browser QA permanent live verification",
+    "canChangeMode": true,
+    "warnings": [],
+    "stats": {
+      "messagesSentToday": 5,
+      "dryRunsToday": 27,
+      "failedSendsToday": 0,
+      "lastTelegramDeliveryAt": "2026-07-09T22:54:53.720Z"
+    }
+  },
+  "liveSend": {
+    "success": true,
+    "dry_run": false,
+    "status": "sent",
+    "telegram_message_id": "210",
+    "error": null,
+    "history_id": "bc5ccc09-2891-4971-adfe-904bdd861934",
+    "configuredMode": "live",
+    "effectiveMode": "live",
+    "serverSafetyOverride": false,
+    "dryRun": false,
+    "liveTestConsumed": false,
+    "runtimeModeReason": "P3 browser QA permanent live verification"
+  },
+  "afterLiveMode": {
+    "configuredMode": "live",
+    "effectiveMode": "live",
+    "serverSafetyOverride": false,
+    "liveTestExpiresAt": null,
+    "liveTestRemainingSends": 0,
+    "lastChangedBy": "user@example.com",
+    "lastChangedAt": "2026-07-09T22:54:53.761Z",
+    "reason": "P3 browser QA permanent live verification",
+    "canChangeMode": true,
+    "warnings": [],
+    "stats": {
+      "messagesSentToday": 6,
+      "dryRunsToday": 27,
+      "failedSendsToday": 0,
+      "lastTelegramDeliveryAt": "2026-07-09T22:54:54.326Z"
+    }
+  },
+  "restoreDryRun": {
+    "configuredMode": "dry_run",
+    "effectiveMode": "dry_run",
+    "serverSafetyOverride": false,
+    "liveTestExpiresAt": null,
+    "liveTestRemainingSends": 0,
+    "lastChangedBy": "user@example.com",
+    "lastChangedAt": "2026-07-09T22:54:54.369Z",
+    "reason": "P3 browser QA rollback to safe dry-run",
+    "canChangeMode": true,
+    "warnings": [],
+    "stats": {
+      "messagesSentToday": 6,
+      "dryRunsToday": 27,
+      "failedSendsToday": 0,
+      "lastTelegramDeliveryAt": "2026-07-09T22:54:54.326Z"
+    }
+  },
+  "browser": {
+    "modeCardVisible": true,
+    "noDirectTelegramApiCalls": true,
+    "telegramApiCalls": []
+  },
+  "checklist": {
+    "initialEffectiveDryRun": true,
+    "dryRunTestNoMessageId": true,
+    "liveTestEnabled": true,
+    "liveTestSent": true,
+    "liveTestConsumed": true,
+    "revertedAfterLiveTest": true,
+    "liveModePersists": true,
+    "liveSendOk": true,
+    "rollbackDryRun": true
+  },
+  "verdict": "REAL WORKING / CLOSED"
+}

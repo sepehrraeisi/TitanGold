@@ -27,9 +27,35 @@ export type PublisherMetrics = {
     successRate: number;
 };
 
+export type PublisherRuntimeModeView = {
+    configuredMode: 'dry_run' | 'live_test' | 'live';
+    effectiveMode: 'dry_run' | 'live_test' | 'live';
+    serverSafetyOverride: boolean;
+    liveTestExpiresAt?: string | null;
+    liveTestRemainingSends: number;
+    lastChangedBy?: string | null;
+    lastChangedAt?: string | null;
+    reason?: string | null;
+    canChangeMode: boolean;
+    warnings: string[];
+    stats?: {
+        messagesSentToday: number;
+        dryRunsToday: number;
+        failedSendsToday: number;
+        lastTelegramDeliveryAt?: string | null;
+    };
+};
+
 export type TelegramPublishersListResult = {
     publishers: TelegramPublisherRecord[];
     metrics: PublisherMetrics;
+    system?: {
+        dry_run_forced: boolean;
+        server_safety_override?: boolean;
+        configured_mode?: 'dry_run' | 'live_test' | 'live';
+        effective_mode?: 'dry_run' | 'live_test' | 'live';
+    };
+    runtimeMode?: PublisherRuntimeModeView;
 };
 
 export type PublisherHistoryRecord = {
@@ -76,6 +102,18 @@ export type PublishActionResult = {
     telegram_message_id?: string | null;
     error?: string | null;
     history_id: string;
+    configuredMode?: 'dry_run' | 'live_test' | 'live';
+    effectiveMode?: 'dry_run' | 'live_test' | 'live';
+    serverSafetyOverride?: boolean;
+    liveTestConsumed?: boolean;
+    runtimeModeReason?: string | null;
+};
+
+export type SetPublisherRuntimeModePayload = {
+    mode: 'dry_run' | 'live_test' | 'live';
+    confirm_runtime_mode_change: true;
+    reason: string;
+    acknowledge_live_delivery_risk?: true;
 };
 
 function getAuthToken(): string | null {
@@ -144,6 +182,19 @@ export function mapHistoryToUiItem(
         payloadPreview:
             `${errorLabel}${row.content_summary || row.error_message || row.status}${sourceLabel}`,
     };
+}
+
+export async function fetchPublisherRuntimeMode(): Promise<PublisherRuntimeModeView> {
+    return publishersRequest<PublisherRuntimeModeView>('/runtime-mode', { method: 'GET' });
+}
+
+export async function setPublisherRuntimeMode(
+    payload: SetPublisherRuntimeModePayload,
+): Promise<PublisherRuntimeModeView> {
+    return publishersRequest<PublisherRuntimeModeView>('/runtime-mode', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+    });
 }
 
 export async function fetchTelegramPublishers(): Promise<TelegramPublishersListResult> {
