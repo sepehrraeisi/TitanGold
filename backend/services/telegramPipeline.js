@@ -1,10 +1,12 @@
 import crypto from 'crypto';
 import { query, transaction } from '../database/db.js';
+import { getIngestionTimestampForInsert } from './collectedDataTimestamps.js';
 import { logger } from './logger.js';
 import { createIngestionFilterEvaluator } from './datahubFilterRulesService.js';
 
 /** Default messages per scheduler run (override via batchSize argument). */
-export const TELEGRAM_TRANSFER_DEFAULT_BATCH = 500;
+/** DH-PIPELINE-P1-CAPACITY: 700/5min ≈ 201k/day theoretical (Option A). */
+export const TELEGRAM_TRANSFER_DEFAULT_BATCH = 700;
 
 /** Max rows handled per DB transaction. */
 export const TELEGRAM_TRANSFER_SUB_BATCH = 100;
@@ -302,7 +304,7 @@ async function processSubBatch(messages, sourceMap, filterEvaluate) {
                         rawData,
                         normalizedData,
                         contentHash,
-                        message.telegram_created_at || message.created_at || new Date(),
+                        getIngestionTimestampForInsert(),
                         buildTransferMetadata(message, channelIdStr),
                     ],
                 );

@@ -310,7 +310,7 @@ FINAL_REPORT="${FINAL_REPORT}${OVERALL_EMOJI} Overall: ${OVERALL_STATUS}%0A%0A"
 FINAL_REPORT="${FINAL_REPORT}${REPORT#*%0A%0A}"
 
 # Add notes if there are issues
-if [ -n "$BACKUP_AGE_HOURS" ] && [ "$((BACKUP_AGE_HOURS))" -ge "$BACKUP_AGE_CRITICAL_HOURS" ]; then
+if [ -n "${BACKUP_AGE_HOURS:-}" ] && [ "${BACKUP_AGE_HOURS}" -ge "$BACKUP_AGE_CRITICAL_HOURS" ] 2>/dev/null; then
     FINAL_REPORT="${FINAL_REPORT}⚠️ Notes%0A"
     FINAL_REPORT="${FINAL_REPORT}- Latest backup is too old: ${BACKUP_AGE_HOURS}h%0A"
 fi

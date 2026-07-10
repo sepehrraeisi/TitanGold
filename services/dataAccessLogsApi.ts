@@ -5,8 +5,13 @@ const BASE = '/api/v1/data-sources';
 
 export type AccessLogsStatusCounts = {
     success: number;
-    error: number;
-    warning: number;
+    cached: number;
+    failed: number;
+    timeout: number;
+    /** @deprecated use failed */
+    error?: number;
+    /** @deprecated use timeout */
+    warning?: number;
 };
 
 export type AccessLogsListResult = {

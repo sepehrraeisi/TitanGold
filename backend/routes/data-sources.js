@@ -15,11 +15,26 @@ import {
   dataHubStatsSchema,
   dataHubStateSchema,
   dataPipelineViewResponseSchema,
+  pipelineQuerySchema,
+  dataPipelineBacklogResponseSchema,
   accessLogsQuerySchema,
-  accessLogsListResponseSchema
+  accessLogsListResponseSchema,
+  checkDuplicateUrlQuerySchema,
 } from '../schemas/dataHubSchemas.js';
+import {
+  buildDuplicateEnrichmentBySourceId,
+  enrichSourceWithDuplicateFields,
+  evaluateDuplicateUrlGuard,
+  findDuplicateUrlSources,
+  listDuplicateUrlGroups,
+  getDuplicateUrlDashboard,
+  getDuplicateUrlSummaryForHealth,
+  setSourceDuplicateUrlIgnore,
+} from '../services/dataSourceUrlDuplicateService.js';
 import { buildDataPipelineView } from '../services/dataPipelineSnapshot.js';
+import { buildPipelineBacklogEnrichment } from '../services/pipelineBacklogEnrichment.js';
 import { listDataHubAccessLogs } from '../services/dataHubAccessLogs.js';
+import { tryInsertDataHubAccessLog } from '../services/dataHubAccessLogWriter.js';
 
 import { telegramService } from '../services/telegram.js';
 import { syncTelegramChannelsToDataSources, syncChannelCategoryToDataSource } from '../services/telegramSync.js';
@@ -188,6 +203,71 @@ router.post(
   },
 );
 
+router.get(
+  '/duplicate-urls',
+  authenticate,
+  readRateLimiter,
+  async (req, res) => {
+    try {
+      const dashboard = await getDuplicateUrlDashboard();
+      res.json(dashboard);
+    } catch (error) {
+      logger.error('Failed to list duplicate URL groups:', error);
+      res.status(500).json({ error: 'Failed to list duplicate URL groups' });
+    }
+  },
+);
+
+router.post(
+  '/:id/duplicate-url/ignore',
+  ...writeAuth,
+  validateParams(uuidParamSchema),
+  async (req, res) => {
+    try {
+      const { id } = req.validatedParams;
+      const ignore = req.body?.ignore !== false;
+      await setSourceDuplicateUrlIgnore(id, ignore, req.user?.id);
+      const dashboard = await getDuplicateUrlDashboard();
+      res.json({
+        success: true,
+        ignore,
+        summary: dashboard.summary,
+      });
+    } catch (error) {
+      const status = error.status || 500;
+      res.status(status).json({ error: error.message || 'Failed to update duplicate ignore' });
+    }
+  },
+);
+
+router.get(
+  '/check-duplicate-url',
+  authenticate,
+  readRateLimiter,
+  validateQuery(checkDuplicateUrlQuerySchema),
+  async (req, res) => {
+    try {
+      const { type, url, exclude_source_id: excludeSourceId } = req.validatedQuery || req.query;
+      const result = await findDuplicateUrlSources({
+        type,
+        url,
+        excludeSourceId: excludeSourceId || null,
+        includeInactive: true,
+      });
+      const activeDuplicates = result.duplicates.filter(d => d.isActive);
+      res.json({
+        normalizedUrl: result.normalizedUrl,
+        duplicates: result.duplicates,
+        hasActiveDuplicate: activeDuplicates.length > 0,
+        hasInactiveDuplicate: result.duplicates.some(d => !d.isActive),
+      });
+    } catch (error) {
+      logger.error('Failed to check duplicate URL:', error);
+      res.status(500).json({ error: 'Failed to check duplicate URL' });
+    }
+  },
+);
+
 router.get('/', authenticate, readRateLimiter, validateResponse(dataSourcesListResponseSchema), async (req, res) => {
   try {
     const { page, limit } = req.query;
@@ -205,9 +285,10 @@ router.get('/', authenticate, readRateLimiter, validateResponse(dataSourcesListR
       [pagination.limit, pagination.offset]
     );
 
-    const [enrichmentById, categoryLookup] = await Promise.all([
+    const [enrichmentById, categoryLookup, duplicateEnrichmentById] = await Promise.all([
       batchTelegramCollectorEnrichment(result.rows),
       loadApprovedCategoryLookup(query),
+      buildDuplicateEnrichmentBySourceId(),
     ]);
 
     // Mask sensitive data; enrich category + collector-linked Telegram status
@@ -220,7 +301,8 @@ router.get('/', authenticate, readRateLimiter, validateResponse(dataSourcesListR
         },
         categoryLookup,
       );
-      return applyTelegramListEnrichment(base, enrichmentById.get(source.id));
+      const withTelegram = applyTelegramListEnrichment(base, enrichmentById.get(source.id));
+      return enrichSourceWithDuplicateFields(withTelegram, duplicateEnrichmentById);
     });
 
     res.json(formatPaginatedResponse(sources, pagination));
@@ -232,7 +314,34 @@ router.get('/', authenticate, readRateLimiter, validateResponse(dataSourcesListR
 
 router.post('/', ...writeAuth, validateBody(createDataSourceSchema), validateResponse(dataSourceResponseSchema), async (req, res) => {
   try {
-    const { name, type, url, category_id, category, method, refresh_interval, config, credentials } = req.validatedBody;
+    const {
+      name,
+      type,
+      url,
+      category_id,
+      category,
+      method,
+      refresh_interval,
+      config,
+      credentials,
+      is_active: isActive = true,
+      allow_duplicate_url: allowDuplicateUrl = false,
+    } = req.validatedBody;
+
+    const duplicateGuard = await evaluateDuplicateUrlGuard({
+      type,
+      url,
+      isActive: isActive !== false,
+      allowDuplicateUrl,
+    });
+    if (duplicateGuard.blocked) {
+      return res.status(409).json({
+        error: duplicateGuard.message,
+        code: duplicateGuard.code,
+        duplicates: duplicateGuard.duplicates,
+        normalizedUrl: duplicateGuard.normalizedUrl,
+      });
+    }
 
     // Encrypt credentials if provided
     let encryptedCredentials = '{}';
@@ -249,14 +358,34 @@ router.post('/', ...writeAuth, validateBody(createDataSourceSchema), validateRes
     const normalizedCategory = await resolveCategoryForWrite(category, query, { log: logger });
 
     const result = await query(
-      'INSERT INTO data_sources (name, type, url, category, refresh_interval, next_fetch_at, config, credentials) VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7) RETURNING *',
-      [name, type, url, normalizedCategory, refresh_interval, JSON.stringify(config || {}), encryptedCredentials]
+      'INSERT INTO data_sources (name, type, url, category, refresh_interval, next_fetch_at, config, credentials, is_active) VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7, $8) RETURNING *',
+      [name, type, url, normalizedCategory, refresh_interval, JSON.stringify(config || {}), encryptedCredentials, isActive !== false]
     );
 
     const source = result.rows[0];
     delete source.credentials;
 
-    res.status(201).json(source);
+    if (allowDuplicateUrl && duplicateGuard.warnings?.some(w => w.code === 'DUPLICATE_ACTIVE_URL_OVERRIDE')) {
+      await tryInsertDataHubAccessLog({
+        sourceId: source.id,
+        action: 'source_create_duplicate_override',
+        legacyLevel: 'warn',
+        message: 'Source created with duplicate active URL override',
+        metadata: {
+          normalized_url: duplicateGuard.normalizedUrl,
+          duplicates: duplicateGuard.duplicates,
+          created_by: req.user?.id,
+        },
+      });
+    }
+
+    const duplicateEnrichmentById = await buildDuplicateEnrichmentBySourceId();
+    const enriched = enrichSourceWithDuplicateFields(source, duplicateEnrichmentById);
+    if (duplicateGuard.warnings?.length) {
+      enriched.duplicate_url_warnings = duplicateGuard.warnings;
+    }
+
+    res.status(201).json(enriched);
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({ error: 'Data source with this name and type already exists' });
@@ -269,7 +398,17 @@ router.post('/', ...writeAuth, validateBody(createDataSourceSchema), validateRes
 router.put('/:id', ...writeAuth, validateParams(uuidParamSchema), validateBody(updateDataSourceSchema), validateResponse(dataSourceResponseSchema), async (req, res) => {
   try {
     const { id } = req.validatedParams;
-    const { name, type, url, category, refresh_interval, config, credentials, is_active } = req.validatedBody;
+    const {
+      name,
+      type,
+      url,
+      category,
+      refresh_interval,
+      config,
+      credentials,
+      is_active,
+      allow_duplicate_url: allowDuplicateUrl = false,
+    } = req.validatedBody;
 
     // Fetch existing source
     const existingResult = await query('SELECT * FROM data_sources WHERE id = $1', [id]);
@@ -295,6 +434,27 @@ router.put('/:id', ...writeAuth, validateParams(uuidParamSchema), validateBody(u
         ? await resolveCategoryForWrite(category, query, { log: logger })
         : existingSource.category;
 
+    const effectiveType = type || existingSource.type;
+    const effectiveUrl = url !== undefined ? url : existingSource.url;
+    const effectiveIsActive =
+      is_active !== undefined ? is_active : existingSource.is_active === true;
+
+    const duplicateGuard = await evaluateDuplicateUrlGuard({
+      type: effectiveType,
+      url: effectiveUrl,
+      isActive: effectiveIsActive,
+      excludeSourceId: id,
+      allowDuplicateUrl,
+    });
+    if (duplicateGuard.blocked) {
+      return res.status(409).json({
+        error: duplicateGuard.message,
+        code: duplicateGuard.code,
+        duplicates: duplicateGuard.duplicates,
+        normalizedUrl: duplicateGuard.normalizedUrl,
+      });
+    }
+
     const result = await query(
       `UPDATE data_sources 
        SET name = $1, type = $2, url = $3, category = $4, refresh_interval = $5, config = $6, credentials = $7, is_active = $8, updated_at = NOW(), updated_by = $9
@@ -313,21 +473,38 @@ router.put('/:id', ...writeAuth, validateParams(uuidParamSchema), validateBody(u
       ]
     );
 
-    // Log update
-    try {
-      await query(
-        'INSERT INTO data_hub_logs (source_id, level, message, metadata) VALUES ($1, $2, $3, $4)',
-        [id, 'info', 'Source updated', JSON.stringify({ updated_by: req.user.id, changes: req.body, timestamp: new Date().toISOString() })]
-      );
-    } catch (logError) {
-      // Don't fail request if logging fails, just log to console
-      logger.error('Failed to write to data_hub_logs:', logError);
-    }
+    await tryInsertDataHubAccessLog({
+      sourceId: id,
+      action: 'source_update',
+      legacyLevel: 'info',
+      message: 'Source updated',
+      metadata: { updated_by: req.user.id, changes: req.body, timestamp: new Date().toISOString() },
+    });
 
     const source = result.rows[0];
     delete source.credentials;
 
-    res.json(source);
+    if (allowDuplicateUrl && duplicateGuard.warnings?.some(w => w.code === 'DUPLICATE_ACTIVE_URL_OVERRIDE')) {
+      await tryInsertDataHubAccessLog({
+        sourceId: id,
+        action: 'source_create_duplicate_override',
+        legacyLevel: 'warn',
+        message: 'Source updated with duplicate active URL override',
+        metadata: {
+          normalized_url: duplicateGuard.normalizedUrl,
+          duplicates: duplicateGuard.duplicates,
+          updated_by: req.user?.id,
+        },
+      });
+    }
+
+    const duplicateEnrichmentById = await buildDuplicateEnrichmentBySourceId();
+    const enriched = enrichSourceWithDuplicateFields(source, duplicateEnrichmentById);
+    if (duplicateGuard.warnings?.length) {
+      enriched.duplicate_url_warnings = duplicateGuard.warnings;
+    }
+
+    res.json(enriched);
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({ error: 'Data source with this name and type already exists' });
@@ -352,15 +529,13 @@ router.delete('/:id', ...writeAuth, validateParams(uuidParamSchema), async (req,
       // Hard delete: Remove from database (cascades handled by DB constraints)
       await query('DELETE FROM data_sources WHERE id = $1', [id]);
 
-      // Log hard deletion
-      try {
-        await query(
-          'INSERT INTO data_hub_logs (source_id, level, message, metadata) VALUES ($1, $2, $3, $4)',
-          [id, 'warning', 'Source permanently deleted', JSON.stringify({ deleted_by: req.user.id, type: 'hard_delete', timestamp: new Date().toISOString() })]
-        );
-      } catch (logError) {
-        logger.error('Failed to log hard deletion:', logError);
-      }
+      await tryInsertDataHubAccessLog({
+        sourceId: id,
+        action: 'source_delete',
+        legacyLevel: 'warn',
+        message: 'Source permanently deleted',
+        metadata: { deleted_by: req.user.id, type: 'hard_delete', timestamp: new Date().toISOString() },
+      });
     } else {
       // Soft delete: Set is_active to false
       await query(
@@ -368,15 +543,13 @@ router.delete('/:id', ...writeAuth, validateParams(uuidParamSchema), async (req,
         [req.user.id, id]
       );
 
-      // Log soft deletion
-      try {
-        await query(
-          'INSERT INTO data_hub_logs (source_id, level, message, metadata) VALUES ($1, $2, $3, $4)',
-          [id, 'info', 'Source disabled (soft delete)', JSON.stringify({ deleted_by: req.user.id, type: 'soft_delete', timestamp: new Date().toISOString() })]
-        );
-      } catch (logError) {
-        logger.error('Failed to log soft deletion:', logError);
-      }
+      await tryInsertDataHubAccessLog({
+        sourceId: id,
+        action: 'source_delete',
+        legacyLevel: 'info',
+        message: 'Source disabled (soft delete)',
+        metadata: { deleted_by: req.user.id, type: 'soft_delete', timestamp: new Date().toISOString() },
+      });
     }
 
     res.status(204).send();
@@ -417,15 +590,13 @@ router.patch('/:id/restore', ...writeAuth, validateResponse(dataSourceResponseSc
       [req.user.id, id]
     );
 
-    // Log restoration
-    try {
-      await query(
-        'INSERT INTO data_hub_logs (source_id, level, message, metadata) VALUES ($1, $2, $3, $4)',
-        [id, 'info', 'Source restored', JSON.stringify({ restored_by: req.user.id, timestamp: new Date().toISOString() })]
-      );
-    } catch (logError) {
-      logger.error('Failed to log restoration:', logError);
-    }
+    await tryInsertDataHubAccessLog({
+      sourceId: id,
+      action: 'source_restore',
+      legacyLevel: 'info',
+      message: 'Source restored',
+      metadata: { restored_by: req.user.id, timestamp: new Date().toISOString() },
+    });
 
     const restoredSource = result.rows[0];
     delete restoredSource.credentials;
@@ -500,12 +671,24 @@ router.get('/health', authenticate, async (req, res) => {
     );
     const activeCount = parseInt(sourcesResult.rows[0]?.count) || 0;
 
-    // Check recent activity
-    const activityResult = await query(
-      `SELECT COUNT(*) as count FROM data_hub_logs 
-       WHERE created_at > NOW() - INTERVAL '1 hour'`
+    const metricsResult = await query(
+      `SELECT
+        (SELECT COUNT(*)::int FROM data_hub_logs
+          WHERE created_at > NOW() - INTERVAL '1 hour') AS access_log_events_1h,
+        (SELECT COUNT(*)::int FROM collected_data
+          WHERE collected_at > NOW() - INTERVAL '1 hour') AS pipeline_ingested_1h,
+        (SELECT COUNT(*)::int FROM collected_data
+          WHERE processed_at > NOW() - INTERVAL '1 hour' AND status = 'processed') AS pipeline_normalized_1h,
+        (SELECT COUNT(*)::int FROM telegram_messages
+          WHERE created_at > NOW() - INTERVAL '1 hour') AS telegram_created_1h`,
     );
-    const recentActivity = parseInt(activityResult.rows[0]?.count) || 0;
+    const m = metricsResult.rows[0] || {};
+    const accessLogEvents1h = parseInt(m.access_log_events_1h, 10) || 0;
+    const pipelineIngested1h = parseInt(m.pipeline_ingested_1h, 10) || 0;
+    const pipelineNormalized1h = parseInt(m.pipeline_normalized_1h, 10) || 0;
+    const telegramCreated1h = parseInt(m.telegram_created_1h, 10) || 0;
+    const healthLastCheckedAt = new Date().toISOString();
+    const duplicateSummary = await getDuplicateUrlSummaryForHealth();
 
     const isHealthy = activeCount > 0;
 
@@ -513,8 +696,19 @@ router.get('/health', authenticate, async (req, res) => {
       status: isHealthy ? 'healthy' : 'degraded',
       database: 'connected',
       activeSources: activeCount,
-      recentActivity,
-      timestamp: new Date().toISOString(),
+      accessLogEvents1h,
+      pipelineIngested1h,
+      pipelineNormalized1h,
+      telegramCreated1h,
+      healthLastCheckedAt,
+      dataQuality: {
+        duplicateUrlGroups: duplicateSummary.duplicateUrlGroups,
+        highRiskDuplicateGroups: duplicateSummary.highRiskDuplicateGroups,
+        ignoredDuplicateGroups: duplicateSummary.ignoredDuplicateGroups,
+      },
+      /** @deprecated use pipelineIngested1h — kept for backward compatibility */
+      recentActivity: pipelineIngested1h,
+      timestamp: healthLastCheckedAt,
     });
   } catch (error) {
     logger.error('DataHub health check failed:', error);
@@ -538,10 +732,25 @@ router.get('/access-logs', authenticate, readRateLimiter, validateQuery(accessLo
   }
 });
 
-// Pipeline view for DataHub Pipeline tab (GAP-012)
-router.get('/pipeline', authenticate, readRateLimiter, validateResponse(dataPipelineViewResponseSchema), async (req, res) => {
+// Pipeline backlog enrichment (heavy — lazy-loaded by UI, DH-PIPELINE-P2)
+router.get('/pipeline/backlog', authenticate, readRateLimiter, validateResponse(dataPipelineBacklogResponseSchema), async (req, res) => {
   try {
-    const view = await buildDataPipelineView();
+    const sourcesRows = await query(
+      `SELECT id AS source_id, type FROM data_sources WHERE type = 'telegram'`,
+    );
+    const enrichment = await buildPipelineBacklogEnrichment(sourcesRows.rows);
+    res.json(enrichment);
+  } catch (error) {
+    logger.error('Failed to fetch DataHub pipeline backlog enrichment:', error);
+    res.status(500).json({ error: 'Failed to fetch pipeline backlog enrichment' });
+  }
+});
+
+// Pipeline view for DataHub Pipeline tab (GAP-012)
+router.get('/pipeline', authenticate, readRateLimiter, validateQuery(pipelineQuerySchema), validateResponse(dataPipelineViewResponseSchema), async (req, res) => {
+  try {
+    const includeBacklog = req.validatedQuery?.includeBacklog === true;
+    const view = await buildDataPipelineView({ includeBacklog });
     res.json(view);
   } catch (error) {
     logger.error('Failed to fetch DataHub pipeline view:', error);

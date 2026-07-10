@@ -62,6 +62,7 @@ export const updateCrawlerSchema = crawlerBaseSchema
 
 export const runCrawlerSchema = z.object({
     dry_run: z.boolean().optional().default(false),
+    force_override: z.boolean().optional().default(false),
 });
 
 export const listRunsQuerySchema = z.object({

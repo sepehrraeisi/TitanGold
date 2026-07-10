@@ -1,10 +1,21 @@
 import { query } from '../database/db.js';
+import {
+  ingestedAtSql,
+  resolveIngestedAtIso,
+  resolvePublishedAtIso,
+} from './collectedDataTimestamps.js';
 import { coerceReadModel } from './normalizers/normalizedDataContract.js';
 import { batchTelegramCollectorEnrichment } from './telegramCollectorSourceStatus.js';
 import {
   PIPELINE_SOURCE_STATUS_HINTS,
   resolvePipelineSourceQualityStatus,
 } from './pipelineSourceQualityStatus.js';
+import {
+  batchCollectorBacklogIntelligence,
+  fetchGlobalTelegramBacklogSummary,
+  fetchTransferThroughput24h,
+} from './telegramBacklogIntelligence.js';
+import { getOrLoadCached } from './pipelineSnapshotCache.js';
 
 /** @deprecated import from normalizedDataContract — kept for tests */
 export function normalizeReadModel(normalized) {
@@ -73,6 +84,15 @@ function resolveQualityDisplay(row, status) {
       : row.metadata && typeof row.metadata === 'object'
         ? row.metadata
         : {};
+  if (metadata.quality_score_v2 != null && Number.isFinite(Number(metadata.quality_score_v2))) {
+    return {
+      qualityScore: Number(metadata.quality_score_v2),
+      qualityPending: false,
+      qualityReasonCodes: Array.isArray(metadata.quality_reason_codes)
+        ? metadata.quality_reason_codes
+        : undefined,
+    };
+  }
   if (metadata.quality_score != null && Number.isFinite(Number(metadata.quality_score))) {
     return { qualityScore: Number(metadata.quality_score), qualityPending: false };
   }
@@ -90,7 +110,7 @@ function mapToNormalizedRecord(row, categoryName) {
   const normalized = row.normalized_data || {};
   const metadata = read?.metadata || normalized.metadata || row.metadata || {};
   const status = resolveNormalizedPreviewStatus(row);
-  const { qualityScore, qualityPending } = resolveQualityDisplay(row, status);
+  const { qualityScore, qualityPending, qualityReasonCodes } = resolveQualityDisplay(row, status);
 
   const issues = [];
   if (row.error_message) issues.push(String(row.error_message).slice(0, 200));
@@ -115,17 +135,32 @@ function mapToNormalizedRecord(row, categoryName) {
     },
     qualityScore,
     qualityPending: qualityPending || undefined,
+    qualityReasonCodes: qualityReasonCodes?.length ? qualityReasonCodes : undefined,
     issues,
     status,
-    receivedAt: new Date(row.collected_at).toISOString(),
+    ingestedAt: resolveIngestedAtIso(row),
+    publishedAt: resolvePublishedAtIso(row),
+    receivedAt: resolveIngestedAtIso(row) || new Date(row.collected_at).toISOString(),
     normalizedAt: new Date(row.processed_at || row.collected_at).toISOString(),
   };
 }
 
 /**
  * Build pipeline view for DataHub Pipeline tab (GAP-012).
+ * @param {{ includeBacklog?: boolean, useCache?: boolean }} [options]
  */
-export async function buildDataPipelineView() {
+export async function buildDataPipelineView(options = {}) {
+  const { includeBacklog = false, useCache = true } = options;
+  const cacheKey = `pipeline:view:${includeBacklog ? 'full' : 'fast'}`;
+
+  const loader = () => buildDataPipelineViewUncached({ includeBacklog });
+  if (useCache) {
+    return getOrLoadCached(cacheKey, loader);
+  }
+  return loader();
+}
+
+async function buildDataPipelineViewUncached({ includeBacklog }) {
   const now = new Date();
 
   const [stats24h, totals, sourcesRows, categoriesRows, historyRows, summaryRow, recentRows] =
@@ -137,7 +172,7 @@ export async function buildDataPipelineView() {
           COUNT(*) FILTER (WHERE status = 'error')::int AS failed_24h,
           COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_24h
         FROM collected_data
-        WHERE collected_at > NOW() - INTERVAL '24 hours'
+        WHERE ${ingestedAtSql()} > NOW() - INTERVAL '24 hours'
       `),
       query(`
         SELECT
@@ -167,48 +202,61 @@ export async function buildDataPipelineView() {
           dhl.status AS log_status
         FROM data_sources ds
         LEFT JOIN data_categories dc ON dc.name = ds.category
-        LEFT JOIN LATERAL (
-          SELECT status, collected_at, normalized_data, metadata
+        LEFT JOIN (
+          SELECT DISTINCT ON (source_id)
+            source_id,
+            status,
+            collected_at,
+            normalized_data,
+            metadata
           FROM collected_data
-          WHERE source_id = ds.id
-          ORDER BY collected_at DESC
-          LIMIT 1
-        ) cd ON true
-        LEFT JOIN LATERAL (
-          SELECT execution_time_ms, metadata AS log_metadata, message, status
+          ORDER BY source_id, collected_at DESC
+        ) cd ON cd.source_id = ds.id
+        LEFT JOIN (
+          SELECT DISTINCT ON (source_id)
+            source_id,
+            execution_time_ms,
+            metadata AS log_metadata,
+            message,
+            status
           FROM data_hub_logs
-          WHERE source_id = ds.id
-          ORDER BY created_at DESC
-          LIMIT 1
-        ) dhl ON true
+          ORDER BY source_id, created_at DESC
+        ) dhl ON dhl.source_id = ds.id
         ORDER BY ds.name
       `),
       query(`
         SELECT
           dc.id AS category_id,
           dc.name,
-          COUNT(cd.id) FILTER (WHERE cd.collected_at > NOW() - INTERVAL '24 hours')::int AS inflow,
-          COUNT(cd.id) FILTER (
-            WHERE cd.collected_at > NOW() - INTERVAL '24 hours'
+          COALESCE((
+            SELECT COUNT(*)::int
+            FROM collected_data cd
+            INNER JOIN data_sources ds ON ds.id = cd.source_id
+            WHERE ds.category = dc.name
+              AND ${ingestedAtSql('cd')} > NOW() - INTERVAL '24 hours'
+          ), 0) AS inflow,
+          COALESCE((
+            SELECT COUNT(*)::int
+            FROM collected_data cd
+            INNER JOIN data_sources ds ON ds.id = cd.source_id
+            WHERE ds.category = dc.name
+              AND ${ingestedAtSql('cd')} > NOW() - INTERVAL '24 hours'
               AND cd.status = 'processed'
               AND cd.normalized_data IS NOT NULL
-          )::int AS passed_count
+          ), 0) AS passed_count
         FROM data_categories dc
-        LEFT JOIN data_sources ds ON ds.category = dc.name
-        LEFT JOIN collected_data cd ON cd.source_id = ds.id
-        GROUP BY dc.id, dc.name
         ORDER BY dc.name
       `),
       query(`
         SELECT
-          date_trunc('hour', collected_at) AS bucket,
+          date_trunc('hour', ${ingestedAtSql()}) AS bucket,
           COUNT(*)::int AS total_records,
           ROUND(
             100.0 * COUNT(*) FILTER (WHERE normalized_data IS NOT NULL) / NULLIF(COUNT(*), 0),
             1
           ) AS normalized_percent
         FROM collected_data
-        WHERE collected_at > NOW() - INTERVAL '24 hours'
+        WHERE ${ingestedAtSql()} > NOW() - INTERVAL '24 hours'
         GROUP BY 1
         ORDER BY 1 DESC
         LIMIT 12
@@ -238,7 +286,7 @@ export async function buildDataPipelineView() {
         FROM collected_data cd
         LEFT JOIN data_sources ds ON ds.id = cd.source_id
         LEFT JOIN data_categories dc ON dc.name = ds.category
-        ORDER BY cd.processed_at DESC NULLS LAST, cd.collected_at DESC
+        ORDER BY cd.processed_at DESC NULLS LAST, ${ingestedAtSql('cd')} DESC
         LIMIT 8
       `),
     ]);
@@ -252,11 +300,40 @@ export async function buildDataPipelineView() {
 
   const collectorEnrichment = await batchTelegramCollectorEnrichment(
     sourcesRows.rows.map((row) => ({ ...row, id: row.source_id })),
+    { includeMessageStats: includeBacklog },
   );
+
+  let transferThroughput;
+  let globalTelegramBacklog;
+  let backlogByChannel = new Map();
+
+  if (includeBacklog) {
+    [transferThroughput, globalTelegramBacklog] = await Promise.all([
+      fetchTransferThroughput24h(),
+      fetchGlobalTelegramBacklogSummary(),
+    ]);
+
+    const collectorChannelIds = [
+      ...new Set(
+        [...collectorEnrichment.values()]
+          .filter((e) => e.ingestion_mode === 'collector' && e.collector_channel_id)
+          .map((e) => e.collector_channel_id),
+      ),
+    ];
+    backlogByChannel = await batchCollectorBacklogIntelligence(
+      collectorChannelIds,
+      transferThroughput,
+    );
+  }
 
   const sources = sourcesRows.rows.map(row => {
     const enrichment = collectorEnrichment.get(row.source_id);
     const { lastStatus, operationalStatus, statusHint } = resolvePipelineSourceStatus(row, enrichment);
+
+    const collectorBacklog =
+      enrichment?.ingestion_mode === 'collector' && enrichment.collector_channel_id
+        ? backlogByChannel.get(enrichment.collector_channel_id)
+        : undefined;
 
     const issues = [];
     if (row.is_active === false) issues.push('inactive');
@@ -294,14 +371,13 @@ export async function buildDataPipelineView() {
       lastStatus,
       operationalStatus: operationalStatus || undefined,
       statusHint: statusHint || undefined,
+      collectorBacklog: collectorBacklog || undefined,
       lastResponseTime,
-      lastChecked: row.collected_at
-        ? new Date(row.collected_at).toISOString()
-        : collectorActivity
-          ? new Date(collectorActivity).toISOString()
-          : row.last_fetch_at
-            ? new Date(row.last_fetch_at).toISOString()
-            : undefined,
+      lastChecked:
+        resolveIngestedAtIso(row) ||
+        (row.collected_at ? new Date(row.collected_at).toISOString() : undefined) ||
+        (collectorActivity ? new Date(collectorActivity).toISOString() : undefined) ||
+        (row.last_fetch_at ? new Date(row.last_fetch_at).toISOString() : undefined),
       issues,
     };
   });
@@ -326,6 +402,8 @@ export async function buildDataPipelineView() {
     pending24h: parseInt(s24.pending_24h, 10) || 0,
     totalRecords,
     normalizedPercent,
+    transferThroughput: transferThroughput || undefined,
+    globalTelegramBacklog: globalTelegramBacklog || undefined,
     sources,
     categories,
   };

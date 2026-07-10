@@ -17,7 +17,9 @@ import {
     updateCrawler,
     softDeleteCrawler,
     listCrawlerRuns,
+    listCrawlerRecentOutputs,
     runCrawler,
+    syncCrawlersFromDataSources,
 } from '../services/datahubCrawlersService.js';
 
 const router = express.Router();
@@ -29,6 +31,16 @@ router.get('/', authenticate, readRateLimiter, async (req, res) => {
     } catch (error) {
         logger.error('List crawlers failed:', error);
         res.status(500).json({ error: 'Failed to list crawlers' });
+    }
+});
+
+router.post('/sync', ...writeAuth, async (req, res) => {
+    try {
+        const sync = await syncCrawlersFromDataSources();
+        res.json({ sync });
+    } catch (error) {
+        logger.error('Sync crawlers from data sources failed:', error);
+        res.status(500).json({ error: 'Failed to sync crawlers from data sources' });
     }
 });
 
@@ -49,6 +61,22 @@ router.get(
     },
 );
 
+router.get(
+    '/:id/recent-outputs',
+    authenticate,
+    readRateLimiter,
+    validateParams(uuidParamSchema),
+    async (req, res) => {
+        try {
+            const outputs = await listCrawlerRecentOutputs(req.params.id, { limit: 5 });
+            res.json({ outputs });
+        } catch (error) {
+            const status = error.status || 500;
+            res.status(status).json({ error: error.message || 'Failed to list recent outputs' });
+        }
+    },
+);
+
 router.post(
     '/:id/run',
     ...writeAuth,
@@ -58,6 +86,7 @@ router.post(
         try {
             const result = await runCrawler(req.params.id, {
                 dryRun: req.validatedBody?.dry_run,
+                forceOverride: req.validatedBody?.force_override,
                 triggerType: 'manual',
             });
             res.json(result);
@@ -66,7 +95,7 @@ router.post(
             const status = error.status || 500;
             res.status(status).json({
                 error: error.message || 'Failed to run crawler',
-                code: error.code,
+                code: error.code || undefined,
                 details: error.details,
             });
         }

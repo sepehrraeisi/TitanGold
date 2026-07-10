@@ -14,6 +14,8 @@ export type CrawlerScheduleInterval =
     | '1hour'
     | 'daily';
 
+export type CrawlerIngestionOwner = 'data_fetcher' | 'crawler';
+
 export type DataHubCrawler = {
     id: string;
     source_id: string;
@@ -35,6 +37,21 @@ export type DataHubCrawler = {
     next_run_at?: string | null;
     metadata: Record<string, unknown>;
     source_name?: string | null;
+    source_is_active?: boolean;
+    source_type?: string | null;
+    ingestion_owner?: CrawlerIngestionOwner;
+    duplicate_risk?: boolean;
+    real_run_blocked?: boolean;
+    run_mode?: 'data_sources_scheduler' | 'web_crawler';
+    synced_from_source?: boolean;
+    duplicate_url_severity?: 'high' | 'medium' | 'low' | null;
+    duplicate_url_count?: number;
+    duplicate_url_siblings?: Array<{
+        id: string;
+        name: string;
+        isActive: boolean;
+        collectedCount?: number;
+    }>;
     created_at: string;
     updated_at: string;
 };
@@ -51,8 +68,17 @@ export type CrawlerRun = {
     started_at?: string | null;
     finished_at?: string | null;
     error_message?: string | null;
+    duration_ms?: number | null;
     metadata: Record<string, unknown>;
     created_at: string;
+};
+
+export type CrawlerRecentOutput = {
+    id: string;
+    title: string;
+    collected_at: string;
+    status: string;
+    origin: 'crawler';
 };
 
 export type CreateCrawlerPayload = {
@@ -104,14 +130,26 @@ async function crawlersRequest<T>(path: string, init?: RequestInit): Promise<T> 
             (typeof body.error === 'string' && body.error) ||
             res.statusText ||
             'Request failed';
-        throw new DataHubApiError(res.status, message, body.details ?? body);
+        throw new DataHubApiError(res.status, message, body);
     }
     return res.json() as Promise<T>;
 }
 
 export async function fetchCrawlers(): Promise<{
     crawlers: DataHubCrawler[];
-    summary: { total: number; enabled: number; failed24h: number };
+    summary: {
+        total: number;
+        enabled: number;
+        failed24h: number;
+        avg_latency_ms?: number | null;
+        duplicate_risk_count?: number;
+    };
+    sync?: {
+        rss_web_sources: number;
+        created: number;
+        skipped: number;
+        total_crawlers: number;
+    };
 }> {
     return crawlersRequest('');
 }
@@ -144,12 +182,17 @@ export async function deleteCrawler(id: string): Promise<DataHubCrawler> {
 
 export async function runCrawler(
     id: string,
-    options?: { dry_run?: boolean },
+    options?: { dry_run?: boolean; force_override?: boolean },
 ): Promise<{ run: CrawlerRun; stats: { pages_fetched: number; items_ingested: number; items_blocked: number } }> {
     return crawlersRequest(`/${id}/run`, {
         method: 'POST',
         body: JSON.stringify(options || {}),
     });
+}
+
+export async function fetchCrawlerRecentOutputs(id: string): Promise<CrawlerRecentOutput[]> {
+    const data = await crawlersRequest<{ outputs: CrawlerRecentOutput[] }>(`/${id}/recent-outputs`);
+    return data.outputs;
 }
 
 export async function fetchCrawlerRuns(

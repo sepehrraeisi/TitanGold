@@ -25,6 +25,7 @@ interface PipelinePanelProps {
     normalizedData: NormalizedDataRecord[];
     handleRefreshPipelineSnapshot: () => void;
     isLoadingPipeline: boolean;
+    isLoadingPipelineBacklog?: boolean;
     pipelineApiError?: DataHubApiError | Error | null;
     setPipelineError: (err: string | null) => void;
     formatTimeAgo: (date: string | Date | undefined) => string;
@@ -109,6 +110,67 @@ function matchesSourceStatusFilter(
 }
 
 type SourceStatusFilter = 'all' | 'success' | 'pending' | 'issues' | PipelineSourceQualityStatus;
+type SourceSortBy = 'name' | 'backlog' | 'eta' | 'rank';
+
+function interpolateTemplate(template: string, vars: Record<string, string | number>): string {
+    return Object.entries(vars).reduce(
+        (text, [key, value]) => text.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value)),
+        template,
+    );
+}
+
+function formatCollectorEta(
+    t: (key: string) => string,
+    backlog: DataPipelineSourceSnapshot['collectorBacklog'],
+): string | null {
+    if (!backlog?.estimatedWaitHours) return null;
+    if (backlog.estimatedWaitHours < 1) {
+        return t('pipeline_backlog_eta_under_hour');
+    }
+    if ((backlog.estimatedWaitDays ?? 0) >= 1) {
+        return interpolateTemplate(t('pipeline_backlog_eta_days'), {
+            days: Number((backlog.estimatedWaitDays ?? 0).toFixed(1)),
+        });
+    }
+    return interpolateTemplate(t('pipeline_backlog_eta_hours'), {
+        hours: Math.max(1, Math.round(backlog.estimatedWaitHours)),
+    });
+}
+
+function renderCollectorBacklogDetails(
+    t: (key: string) => string,
+    src: DataPipelineSourceSnapshot,
+    formatTimeAgo: (date: string | Date | undefined) => string,
+): React.ReactNode {
+    const backlog = src.collectorBacklog;
+    if (!backlog || backlog.backlogCount <= 0) return null;
+
+    const eta = formatCollectorEta(t, backlog);
+    return (
+        <div className="mt-1 space-y-0.5 text-[10px] text-muted-foreground">
+            <div>
+                {interpolateTemplate(t('pipeline_backlog_queue'), {
+                    count: backlog.backlogCount.toLocaleString(),
+                })}
+            </div>
+            {backlog.oldestQueuedAt && (
+                <div>
+                    {interpolateTemplate(t('pipeline_backlog_oldest'), {
+                        time: formatTimeAgo(backlog.oldestQueuedAt),
+                    })}
+                </div>
+            )}
+            {eta && <div>{interpolateTemplate(t('pipeline_backlog_eta'), { eta })}</div>}
+            {backlog.queuePositionRank != null && (
+                <div>
+                    {interpolateTemplate(t('pipeline_backlog_rank'), {
+                        rank: backlog.queuePositionRank,
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
 
 function normStatusVariant(
     status: NormalizedDataRecord['status'],
@@ -134,6 +196,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     normalizedData,
     handleRefreshPipelineSnapshot,
     isLoadingPipeline,
+    isLoadingPipelineBacklog = false,
     pipelineApiError = null,
     setPipelineError,
     formatTimeAgo,
@@ -145,6 +208,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     const [categorySearch, setCategorySearch] = useState('');
     const [sourceSearch, setSourceSearch] = useState('');
     const [sourceStatusFilter, setSourceStatusFilter] = useState<SourceStatusFilter>('all');
+    const [sourceSortBy, setSourceSortBy] = useState<SourceSortBy>('name');
 
     const latestSnapshot = pipelineSnapshot || pipelineHistory[0]?.snapshot;
 
@@ -168,7 +232,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     const filteredSources = useMemo(() => {
         if (!activeSnapshot) return [];
         const query = sourceSearch.trim().toLowerCase();
-        return activeSnapshot.sources.filter(source => {
+        const filtered = activeSnapshot.sources.filter(source => {
             const matchesQuery =
                 !query ||
                 source.name.toLowerCase().includes(query) ||
@@ -177,7 +241,29 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
             const matchesStatus = matchesSourceStatusFilter(sourceStatusFilter, source.lastStatus);
             return matchesQuery && matchesStatus;
         });
-    }, [activeSnapshot, sourceSearch, sourceStatusFilter]);
+
+        return [...filtered].sort((a, b) => {
+            switch (sourceSortBy) {
+                case 'backlog':
+                    return (
+                        (b.collectorBacklog?.backlogCount ?? -1) -
+                        (a.collectorBacklog?.backlogCount ?? -1)
+                    );
+                case 'eta':
+                    return (
+                        (b.collectorBacklog?.estimatedWaitHours ?? -1) -
+                        (a.collectorBacklog?.estimatedWaitHours ?? -1)
+                    );
+                case 'rank': {
+                    const rankA = a.collectorBacklog?.queuePositionRank ?? Number.MAX_SAFE_INTEGER;
+                    const rankB = b.collectorBacklog?.queuePositionRank ?? Number.MAX_SAFE_INTEGER;
+                    return rankA - rankB;
+                }
+                default:
+                    return a.name.localeCompare(b.name);
+            }
+        });
+    }, [activeSnapshot, sourceSearch, sourceStatusFilter, sourceSortBy]);
 
     const previewNormalized = normalizedData.slice(0, 8);
 
@@ -275,7 +361,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                         />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-5">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-5">
                         <input
                             value={categorySearch}
                             onChange={e => setCategorySearch(e.target.value)}
@@ -303,6 +389,17 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             <option value="fetch_timeout">{t('pipeline_source_status_fetch_timeout')}</option>
                             <option value="inactive">{t('pipeline_source_status_inactive')}</option>
                             <option value="issues">{t('pipeline_filter_issues')}</option>
+                        </select>
+                        <select
+                            value={sourceSortBy}
+                            onChange={e => setSourceSortBy(e.target.value as SourceSortBy)}
+                            className={SELECT_CLASS}
+                            aria-label={t('pipeline_sort_label')}
+                        >
+                            <option value="name">{t('pipeline_sort_name')}</option>
+                            <option value="backlog">{t('pipeline_sort_backlog')}</option>
+                            <option value="eta">{t('pipeline_sort_eta')}</option>
+                            <option value="rank">{t('pipeline_sort_rank')}</option>
                         </select>
                     </div>
 
@@ -343,9 +440,16 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                         </div>
 
                         <div className={DATAHUB_INNER_LIST}>
-                            <h4 className="text-[11px] font-semibold text-foreground mb-3">
-                                {t('source_quality_board')}
-                            </h4>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                                <h4 className="text-[11px] font-semibold text-foreground">
+                                    {t('source_quality_board')}
+                                </h4>
+                                {isLoadingPipelineBacklog && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                        {t('pipeline_backlog_loading')}
+                                    </span>
+                                )}
+                            </div>
                             {filteredSources.length === 0 ? (
                                 <p className="text-[11px] text-muted-foreground">{t('pipeline_no_sources')}</p>
                             ) : (
@@ -384,6 +488,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                                     : undefined
                                                             }
                                                         />
+                                                        {renderCollectorBacklogDetails(t, src, formatTimeAgo)}
                                                     </td>
                                                     <td className="py-2">
                                                         {src.lastResponseTime != null
@@ -465,7 +570,17 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                     {row.qualityPending
                                                         ? t('pipeline_quality_pending')
                                                         : row.qualityScore != null
-                                                          ? row.qualityScore
+                                                          ? (
+                                                              <span
+                                                                  title={
+                                                                      row.qualityReasonCodes?.length
+                                                                          ? row.qualityReasonCodes.slice(0, 5).join(', ')
+                                                                          : undefined
+                                                                  }
+                                                              >
+                                                                  {row.qualityScore}
+                                                              </span>
+                                                            )
                                                           : '—'}
                                                 </td>
                                                 <td className="py-2">

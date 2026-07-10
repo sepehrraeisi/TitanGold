@@ -16,7 +16,6 @@ import {
 import {
     formatAvgLatency,
     formatCountDisplay,
-    formatNaDisplay,
     formatSystemStatus,
     parseFiniteCount,
     systemStatusTextClass,
@@ -96,16 +95,29 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo, telegramCol
         return parseFiniteCount(err) ?? 0;
     }, [logCountsQuery.data]);
 
-    const recentActivity = useMemo(() => {
-        return formatNaDisplay(healthQuery.data?.recentActivity);
-    }, [healthQuery.data?.recentActivity]);
+    const pipelineIngested1h = useMemo(
+        () => formatCountDisplay(healthQuery.data?.pipelineIngested1h ?? healthQuery.data?.recentActivity),
+        [healthQuery.data?.pipelineIngested1h, healthQuery.data?.recentActivity],
+    );
+    const pipelineNormalized1h = useMemo(
+        () => formatCountDisplay(healthQuery.data?.pipelineNormalized1h),
+        [healthQuery.data?.pipelineNormalized1h],
+    );
+    const telegramCreated1h = useMemo(
+        () => formatCountDisplay(healthQuery.data?.telegramCreated1h),
+        [healthQuery.data?.telegramCreated1h],
+    );
+    const accessLogEvents1h = useMemo(
+        () => formatCountDisplay(healthQuery.data?.accessLogEvents1h),
+        [healthQuery.data?.accessLogEvents1h],
+    );
 
     const lastCheckLabel = useMemo(() => {
-        const ts = healthQuery.data?.timestamp;
+        const ts = healthQuery.data?.healthLastCheckedAt ?? healthQuery.data?.timestamp;
         if (!ts) return 'N/A';
         const ago = formatTimeAgo(ts);
         return ago || 'N/A';
-    }, [healthQuery.data?.timestamp, formatTimeAgo]);
+    }, [healthQuery.data?.healthLastCheckedAt, healthQuery.data?.timestamp, formatTimeAgo]);
 
     const avgResponse = useMemo(() => formatAvgLatency(null), []);
     const cacheHit = useMemo(() => ({ display: 'N/A', available: false }), []);
@@ -244,17 +256,6 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo, telegramCol
                     }
                 />
                 <MetricCard
-                    label={t('datahub_health_recent_activity')}
-                    color="amber"
-                    value={
-                        isLoading ? (
-                            <SkeletonLoader width="32px" height="1.25rem" />
-                        ) : (
-                            recentActivity
-                        )
-                    }
-                />
-                <MetricCard
                     label={t('avg_response_time')}
                     color="blue"
                     value={
@@ -278,6 +279,75 @@ const HealthPanel: React.FC<HealthPanelProps> = ({ t, formatTimeAgo, telegramCol
                         )
                     }
                 />
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 mb-5">
+                <p className="text-[11px] text-muted-foreground mb-3">{t('datahub_health_data_quality')}</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <MetricCard
+                        label={t('datahub_health_duplicate_url_groups')}
+                        color={
+                            (healthQuery.data?.dataQuality?.duplicateUrlGroups ?? 0) > 0
+                                ? 'amber'
+                                : 'emerald'
+                        }
+                        value={formatCountDisplay(
+                            healthQuery.data?.dataQuality?.duplicateUrlGroups ?? 0,
+                        )}
+                    />
+                </div>
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 mb-5">
+                <p className="text-[11px] text-muted-foreground mb-3">
+                    {t('datahub_health_pipeline_activity_section')}
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <MetricCard
+                        label={t('datahub_health_pipeline_ingested_1h')}
+                        color="amber"
+                        value={
+                            isLoading ? (
+                                <SkeletonLoader width="48px" height="1.25rem" />
+                            ) : (
+                                pipelineIngested1h
+                            )
+                        }
+                    />
+                    <MetricCard
+                        label={t('datahub_health_pipeline_normalized_1h')}
+                        color="emerald"
+                        value={
+                            isLoading ? (
+                                <SkeletonLoader width="48px" height="1.25rem" />
+                            ) : (
+                                pipelineNormalized1h
+                            )
+                        }
+                    />
+                    <MetricCard
+                        label={t('datahub_health_telegram_intake_1h')}
+                        color="blue"
+                        value={
+                            isLoading ? (
+                                <SkeletonLoader width="48px" height="1.25rem" />
+                            ) : (
+                                telegramCreated1h
+                            )
+                        }
+                    />
+                    <MetricCard
+                        label={t('datahub_health_access_log_events_1h')}
+                        color="purple"
+                        value={
+                            isLoading ? (
+                                <SkeletonLoader width="32px" height="1.25rem" />
+                            ) : (
+                                accessLogEvents1h
+                            )
+                        }
+                    />
+                </div>
             </div>
 
             <div className="rounded-xl border border-white/5 bg-slate-950/70 p-4 mb-5">

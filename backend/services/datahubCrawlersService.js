@@ -4,6 +4,8 @@ import { webCrawlerService } from './webCrawler.js';
 import { fetchRssFeed } from './rssFetcher.js';
 import { evaluateFilterRules, enforceIngestionFilter } from './datahubFilterRulesService.js';
 import { resolveCategoryForWrite } from '../utils/categoryTaxonomy.js';
+import { normalizeWebSelectors } from './webCrawlerSourceConfig.js';
+import { buildDuplicateEnrichmentBySourceId } from './dataSourceUrlDuplicateService.js';
 
 const MAX_CONCURRENT_RUNS = 3;
 const INTERVAL_MINUTES = {
@@ -20,7 +22,66 @@ function renderJsAllowed() {
     return String(process.env.CRAWLER_RENDER_JS_ENABLED || '').toLowerCase() === 'true';
 }
 
-function mapCrawlerRow(row) {
+export function parseSourceConfig(config) {
+    if (!config) return {};
+    if (typeof config === 'string') {
+        try {
+            return JSON.parse(config);
+        } catch {
+            return {};
+        }
+    }
+    return config;
+}
+
+/** Who owns scheduled RSS ingestion for an active source (Phase 1 default: dataFetcher). */
+export function resolveRssIngestionOwner({ sourceType, sourceIsActive, sourceConfig }) {
+    if (sourceType !== 'rss') return 'crawler';
+    const mode = sourceConfig?.crawler_mode;
+    if (mode === 'crawler') return 'crawler';
+    if (sourceIsActive) return 'data_fetcher';
+    return 'data_fetcher';
+}
+
+export function isDuplicateRiskCrawler(crawler) {
+    return (
+        crawler.target_type === 'rss' &&
+        crawler.source_is_active === true &&
+        crawler.ingestion_owner === 'data_fetcher'
+    );
+}
+
+function enrichCrawlerRow(row) {
+    const sourceConfig = parseSourceConfig(row.source_config);
+    const sourceIsActive = row.source_is_active !== false && row.source_is_active !== null;
+    const sourceType = row.source_type || null;
+    const ingestionOwner = resolveRssIngestionOwner({
+        sourceType,
+        sourceIsActive,
+        sourceConfig,
+    });
+    const duplicateRisk = row.target_type === 'rss' && sourceIsActive && ingestionOwner === 'data_fetcher';
+    const runMode =
+        sourceType === 'rss' || row.target_type === 'rss'
+            ? 'data_sources_scheduler'
+            : 'web_crawler';
+    const metadata =
+        typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {};
+
+    return {
+        source_is_active: sourceIsActive,
+        source_type: sourceType,
+        ingestion_owner: ingestionOwner,
+        duplicate_risk: duplicateRisk,
+        real_run_blocked: duplicateRisk || !sourceIsActive,
+        run_mode: runMode,
+        synced_from_source: metadata.synced_from_source === true,
+    };
+}
+
+function mapCrawlerRow(row, duplicateEnrichmentById = null) {
+    const enrichment = enrichCrawlerRow(row);
+    const duplicateMeta = duplicateEnrichmentById?.get(row.source_id) || null;
     return {
         id: row.id,
         source_id: row.source_id,
@@ -44,12 +105,23 @@ function mapCrawlerRow(row) {
         metadata:
             typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {},
         source_name: row.source_name || null,
+        duplicate_url_severity: duplicateMeta?.duplicate_url_severity ?? null,
+        duplicate_url_count: duplicateMeta?.duplicate_url_count ?? 0,
+        duplicate_url_siblings: duplicateMeta?.duplicate_url_siblings ?? [],
+        ...enrichment,
         created_at: new Date(row.created_at).toISOString(),
         updated_at: new Date(row.updated_at).toISOString(),
     };
 }
 
 function mapRunRow(row) {
+    const started = row.started_at ? new Date(row.started_at).getTime() : null;
+    const finished = row.finished_at ? new Date(row.finished_at).getTime() : null;
+    const durationMs =
+        started != null && finished != null && finished >= started
+            ? Math.round(finished - started)
+            : null;
+
     return {
         id: row.id,
         crawler_id: row.crawler_id,
@@ -61,11 +133,194 @@ function mapRunRow(row) {
         items_blocked: Number(row.items_blocked),
         started_at: row.started_at ? new Date(row.started_at).toISOString() : null,
         finished_at: row.finished_at ? new Date(row.finished_at).toISOString() : null,
+        duration_ms: durationMs,
         error_message: row.error_message || null,
         metadata:
             typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {},
         created_at: new Date(row.created_at).toISOString(),
     };
+}
+
+const CRAWLER_SOURCE_JOIN = `
+    JOIN data_sources ds ON ds.id = c.source_id
+`;
+
+const CRAWLER_SOURCE_SELECT = `
+    c.*,
+    ds.name AS source_name,
+    ds.is_active AS source_is_active,
+    ds.type AS source_type,
+    ds.config AS source_config
+`;
+
+async function loadLinkedSource(sourceId) {
+    const result = await query(
+        `SELECT id, type, is_active, config FROM data_sources WHERE id = $1`,
+        [sourceId],
+    );
+    return result.rows[0] || null;
+}
+
+function mapRefreshToScheduleInterval(mins) {
+    const m = Number(mins) || 5;
+    if (m <= 1) return '1min';
+    if (m <= 5) return '5min';
+    if (m <= 15) return '15min';
+    if (m <= 30) return '30min';
+    if (m <= 60) return '1hour';
+    return 'daily';
+}
+
+/**
+ * Idempotent sync: ensure one datahub_crawlers row per rss/web data_source (DH-WEBCRAWLER-P4).
+ * Does not update or delete existing crawler rows.
+ */
+export async function syncCrawlersFromDataSources() {
+    const [sourcesResult, existingResult] = await Promise.all([
+        query(
+            `SELECT id, name, type, url, is_active, config, refresh_interval
+             FROM data_sources
+             WHERE type IN ('rss', 'web')
+             ORDER BY name ASC`,
+        ),
+        query(
+            `SELECT source_id, COUNT(*)::int AS crawler_count
+             FROM datahub_crawlers
+             WHERE deleted_at IS NULL
+             GROUP BY source_id`,
+        ),
+    ]);
+
+    const existingBySource = new Map(
+        existingResult.rows.map(row => [row.source_id, Number(row.crawler_count)]),
+    );
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const source of sourcesResult.rows) {
+        if ((existingBySource.get(source.id) || 0) > 0) {
+            skipped += 1;
+            continue;
+        }
+
+        const config = parseSourceConfig(source.config);
+        const isRss = source.type === 'rss';
+        const targetType = isRss ? 'rss' : 'website';
+        const scheduleInterval = mapRefreshToScheduleInterval(source.refresh_interval);
+        const nextRun = computeNextRunAt(scheduleInterval);
+
+        let maxDepth = 0;
+        let maxPages = 50;
+        let respectRobots = true;
+        let renderJs = false;
+        let selectors = {};
+
+        if (!isRss) {
+            const depthRaw = config.depth ?? config.maxDepth ?? 0;
+            maxDepth = Math.min(Math.max(0, Number(depthRaw) || 0), 5);
+            maxPages = Math.min(Math.max(1, Number(config.maxPages) || 50), 500);
+            respectRobots = config.respectRobots !== false && config.respect_robots !== false;
+            renderJs = config.renderJS === true || config.render_js === true;
+            selectors = normalizeWebSelectors(config);
+        } else {
+            maxPages = Math.min(
+                Math.max(1, Number(config.max_items ?? config.maxItems) || 50),
+                500,
+            );
+        }
+
+        await query(
+            `INSERT INTO datahub_crawlers (
+                source_id, name, target_type, start_url, max_depth, max_pages_per_run,
+                schedule_interval, respect_robots, render_js, selectors, timeout_ms,
+                is_enabled, next_run_at, metadata
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+            [
+                source.id,
+                source.name,
+                targetType,
+                source.url,
+                maxDepth,
+                maxPages,
+                scheduleInterval,
+                respectRobots,
+                renderJs,
+                JSON.stringify(selectors),
+                600000,
+                true,
+                nextRun,
+                JSON.stringify({
+                    synced_from_source: true,
+                    sync_version: 1,
+                    source_type: source.type,
+                }),
+            ],
+        );
+        created += 1;
+        existingBySource.set(source.id, 1);
+    }
+
+    const totalAfter = await query(
+        `SELECT COUNT(*)::int AS c FROM datahub_crawlers WHERE deleted_at IS NULL`,
+    );
+
+    const stats = {
+        rss_web_sources: sourcesResult.rows.length,
+        created,
+        skipped,
+        total_crawlers: totalAfter.rows[0]?.c ?? 0,
+    };
+
+    if (created > 0) {
+        logger.info('Synced datahub_crawlers from data_sources', stats);
+    }
+
+    return stats;
+}
+
+export async function assertCrawlerRunAllowed({ crawler, dryRun, forceOverride }) {
+    const source = await loadLinkedSource(crawler.source_id);
+    if (!source) {
+        const err = new Error('Linked data source not found');
+        err.status = 404;
+        err.code = 'SOURCE_NOT_FOUND';
+        throw err;
+    }
+
+    const sourceIsActive = source.is_active === true;
+    const sourceConfig = parseSourceConfig(source.config);
+    const ingestionOwner = resolveRssIngestionOwner({
+        sourceType: source.type,
+        sourceIsActive,
+        sourceConfig,
+    });
+
+    if (!sourceIsActive && !dryRun && !forceOverride) {
+        const err = new Error(
+            'Linked data source is disabled. Enable the source or use force override to run.',
+        );
+        err.status = 403;
+        err.code = 'SOURCE_INACTIVE';
+        throw err;
+    }
+
+    if (
+        crawler.target_type === 'rss' &&
+        !dryRun &&
+        !forceOverride &&
+        sourceIsActive &&
+        ingestionOwner === 'data_fetcher'
+    ) {
+        const err = new Error(
+            'RSS ingestion is handled by the Data Sources scheduler. Use dry run to test, set source config crawler_mode to "crawler", or pass force_override.',
+        );
+        err.status = 409;
+        err.code = 'RSS_DATAFETCHER_OWNS';
+        throw err;
+    }
+
+    return { source, ingestionOwner };
 }
 
 function computeNextRunAt(interval) {
@@ -142,27 +397,57 @@ async function resolveSourceId(body, userId) {
 }
 
 export async function listCrawlers() {
-    const result = await query(
-        `SELECT c.*, ds.name AS source_name
-         FROM datahub_crawlers c
-         JOIN data_sources ds ON ds.id = c.source_id
-         WHERE c.deleted_at IS NULL
-         ORDER BY c.name ASC`,
-    );
-    const crawlers = result.rows.map(mapCrawlerRow);
+    const sync = await syncCrawlersFromDataSources();
+
+    const [crawlerResult, metricsResult, duplicateEnrichmentById] = await Promise.all([
+        query(
+            `SELECT ${CRAWLER_SOURCE_SELECT}
+             FROM datahub_crawlers c
+             ${CRAWLER_SOURCE_JOIN}
+             WHERE c.deleted_at IS NULL
+             ORDER BY c.name ASC`,
+        ),
+        query(
+            `SELECT
+                COUNT(*) FILTER (
+                    WHERE r.status = 'failed'
+                    AND r.started_at >= NOW() - INTERVAL '24 hours'
+                )::int AS failed_24h,
+                AVG(
+                    EXTRACT(EPOCH FROM (r.finished_at - r.started_at)) * 1000
+                ) FILTER (
+                    WHERE r.status = 'success'
+                    AND r.finished_at IS NOT NULL
+                    AND r.started_at IS NOT NULL
+                    AND r.started_at >= NOW() - INTERVAL '24 hours'
+                ) AS avg_latency_ms
+             FROM datahub_crawler_runs r
+             JOIN datahub_crawlers c ON c.id = r.crawler_id AND c.deleted_at IS NULL`,
+        ),
+        buildDuplicateEnrichmentBySourceId(),
+    ]);
+    const crawlers = crawlerResult.rows.map(row => mapCrawlerRow(row, duplicateEnrichmentById));
+    const metrics = metricsResult.rows[0] || {};
+    const avgLatencyMs =
+        metrics.avg_latency_ms != null && Number.isFinite(Number(metrics.avg_latency_ms))
+            ? Math.round(Number(metrics.avg_latency_ms))
+            : null;
+
     const summary = {
         total: crawlers.length,
         enabled: crawlers.filter(c => c.is_enabled).length,
-        failed24h: crawlers.filter(c => c.last_error && c.last_run_at).length,
+        failed24h: parseInt(metrics.failed_24h, 10) || 0,
+        avg_latency_ms: avgLatencyMs,
+        duplicate_risk_count: crawlers.filter(c => c.duplicate_risk).length,
     };
-    return { crawlers, summary };
+    return { crawlers, summary, sync };
 }
 
 export async function getCrawler(id) {
     const result = await query(
-        `SELECT c.*, ds.name AS source_name
+        `SELECT ${CRAWLER_SOURCE_SELECT}
          FROM datahub_crawlers c
-         JOIN data_sources ds ON ds.id = c.source_id
+         ${CRAWLER_SOURCE_JOIN}
          WHERE c.id = $1 AND c.deleted_at IS NULL`,
         [id],
     );
@@ -206,10 +491,17 @@ export async function createCrawler(body, userId) {
     );
 
     const row = result.rows[0];
-    const mapped = mapCrawlerRow({ ...row, source_name: body.source?.name });
-    const src = await query(`SELECT name FROM data_sources WHERE id = $1`, [sourceId]);
-    mapped.source_name = src.rows[0]?.name || null;
-    return mapped;
+    const src = await query(
+        `SELECT name, is_active, type, config FROM data_sources WHERE id = $1`,
+        [sourceId],
+    );
+    return mapCrawlerRow({
+        ...row,
+        source_name: src.rows[0]?.name || body.source?.name || null,
+        source_is_active: src.rows[0]?.is_active,
+        source_type: src.rows[0]?.type,
+        source_config: src.rows[0]?.config,
+    });
 }
 
 export async function updateCrawler(id, body) {
@@ -252,8 +544,17 @@ export async function updateCrawler(id, body) {
          RETURNING *`,
         params,
     );
-    const src = await query(`SELECT name FROM data_sources WHERE id = $1`, [result.rows[0].source_id]);
-    return mapCrawlerRow({ ...result.rows[0], source_name: src.rows[0]?.name });
+    const src = await query(
+        `SELECT name, is_active, type, config FROM data_sources WHERE id = $1`,
+        [result.rows[0].source_id],
+    );
+    return mapCrawlerRow({
+        ...result.rows[0],
+        source_name: src.rows[0]?.name,
+        source_is_active: src.rows[0]?.is_active,
+        source_type: src.rows[0]?.type,
+        source_config: src.rows[0]?.config,
+    });
 }
 
 export async function softDeleteCrawler(id) {
@@ -282,6 +583,35 @@ export async function listCrawlerRuns(crawlerId, { limit = 20, offset = 0 } = {}
         [crawlerId, limit, offset],
     );
     return result.rows.map(mapRunRow);
+}
+
+export async function listCrawlerRecentOutputs(crawlerId, { limit = 5 } = {}) {
+    const crawler = await getCrawler(crawlerId);
+    const result = await query(
+        `SELECT
+            cd.id,
+            COALESCE(
+                cd.normalized_data->'metadata'->>'title',
+                cd.raw_data->>'title',
+                cd.metadata->>'url',
+                '—'
+            ) AS title,
+            cd.collected_at,
+            cd.status
+         FROM collected_data cd
+         WHERE cd.source_id = $1
+           AND cd.metadata->>'crawler_ingest' = 'true'
+         ORDER BY cd.collected_at DESC
+         LIMIT $2`,
+        [crawler.source_id, limit],
+    );
+    return result.rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        collected_at: new Date(row.collected_at).toISOString(),
+        status: row.status,
+        origin: 'crawler',
+    }));
 }
 
 async function assertConcurrentRuns() {
@@ -319,9 +649,13 @@ async function ingestItem({ source_id, item, dryRun }) {
         throw e;
     }
 
+    const sourcePublishedAt = item.published_at
+        ? new Date(item.published_at).toISOString()
+        : null;
     const normalized = {
         content: text,
         metadata: { url, title: item.title, published_at: item.published_at },
+        ...(sourcePublishedAt ? { publishedAt: sourcePublishedAt } : {}),
     };
     const raw = { ...item, fetched_at: new Date().toISOString() };
 
@@ -332,7 +666,11 @@ async function ingestItem({ source_id, item, dryRun }) {
             source_id,
             JSON.stringify(raw),
             JSON.stringify(normalized),
-            JSON.stringify({ url, crawler_ingest: true }),
+            JSON.stringify({
+                url,
+                crawler_ingest: true,
+                ...(sourcePublishedAt ? { source_published_at: sourcePublishedAt } : {}),
+            }),
         ],
     );
     return { ingested: true, blocked: false };
@@ -394,7 +732,10 @@ async function executeRssCrawl(crawler, { dryRun }) {
     };
 }
 
-export async function runCrawler(crawlerId, { dryRun = false, triggerType = 'manual' } = {}) {
+export async function runCrawler(
+    crawlerId,
+    { dryRun = false, triggerType = 'manual', forceOverride = false } = {},
+) {
     const crawler = await getCrawler(crawlerId);
     if (!crawler.is_enabled && triggerType === 'schedule') {
         const err = new Error('Crawler is disabled');
@@ -412,6 +753,8 @@ export async function runCrawler(crawlerId, { dryRun = false, triggerType = 'man
         err.status = 400;
         throw err;
     }
+
+    await assertCrawlerRunAllowed({ crawler, dryRun, forceOverride: forceOverride });
 
     await preCrawlFilterCheck({
         source_id: crawler.source_id,

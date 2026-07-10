@@ -5,7 +5,7 @@ function mapDbStatusToUi(status) {
   if (s === 'success' || s === 'ok') return 'success';
   if (s === 'cached') return 'cached';
   if (s === 'failure' || s === 'failed' || s === 'error') return 'failed';
-  if (s === 'pending' || s === 'timeout') return 'timeout';
+  if (s === 'pending' || s === 'timeout' || s === 'warning') return 'timeout';
   return 'success';
 }
 
@@ -37,14 +37,19 @@ function mapRowToAccessLog(row) {
       : row.metadata || {};
 
   const uiStatus = mapDbStatusToUi(row.status);
+  const action = row.action || meta.data_type || meta.dataType || 'unknown';
 
   return {
     id: row.id,
     timestamp: new Date(row.created_at).toISOString(),
     agentId: meta.agent_id || meta.agentId || 'system',
     sourceId: row.source_id || '',
-    dataType: row.action || meta.data_type || meta.dataType || 'unknown',
+    sourceName: row.source_name || meta.source_name || undefined,
+    action,
+    dataType: action,
     status: uiStatus,
+    message: row.message || undefined,
+    metadata: meta,
     responseTime:
       row.execution_time_ms != null ? Number(row.execution_time_ms) : undefined,
     error: uiStatus === 'failed' ? row.message || undefined : undefined,
@@ -66,37 +71,39 @@ export async function listDataHubAccessLogs({
   let paramIndex = 1;
 
   if (source_id) {
-    conditions.push(`source_id = $${paramIndex++}`);
+    conditions.push(`l.source_id = $${paramIndex++}`);
     params.push(source_id);
   }
 
   if (status) {
     const dbFilter = uiStatusToDbFilter(status);
     if (dbFilter) {
-      conditions.push(dbFilter[0]);
+      conditions.push(dbFilter[0].replace(/\bstatus\b/g, 'l.status'));
     }
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const countWhereClause = whereClause.replace(/\bl\./g, '');
 
   const [countResult, dataResult, countsResult] = await Promise.all([
-    query(`SELECT COUNT(*)::int AS total FROM data_hub_logs ${whereClause}`, params),
+    query(`SELECT COUNT(*)::int AS total FROM data_hub_logs ${countWhereClause}`, params),
     query(
-      `SELECT id, source_id, action, status, message, data_size, execution_time_ms, created_at, metadata
-       FROM data_hub_logs
+      `SELECT l.id, l.source_id, ds.name AS source_name, l.action, l.status, l.message,
+              l.data_size, l.execution_time_ms, l.created_at, l.metadata
+       FROM data_hub_logs l
+       LEFT JOIN data_sources ds ON ds.id = l.source_id
        ${whereClause}
-       ORDER BY created_at DESC
+       ORDER BY l.created_at DESC
        LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
       [...params, limit, offset],
     ),
     query(`
       SELECT
-        COUNT(*) FILTER (WHERE LOWER(status) IN ('success', 'ok', 'cached'))::int AS success,
-        COUNT(*) FILTER (WHERE LOWER(status) IN ('failure', 'failed', 'error'))::int AS error,
-        COUNT(*) FILTER (
-          WHERE LOWER(status) NOT IN ('success', 'ok', 'cached', 'failure', 'failed', 'error', 'pending', 'timeout')
-        )::int AS warning
-      FROM data_hub_logs
+        COUNT(*) FILTER (WHERE LOWER(status) IN ('success', 'ok'))::int AS success,
+        COUNT(*) FILTER (WHERE LOWER(status) = 'cached')::int AS cached,
+        COUNT(*) FILTER (WHERE LOWER(status) IN ('failure', 'failed', 'error'))::int AS failed,
+        COUNT(*) FILTER (WHERE LOWER(status) IN ('pending', 'timeout', 'warning'))::int AS timeout
+      FROM data_hub_logs l
       ${whereClause}`,
       params,
     ),
@@ -115,8 +122,13 @@ export async function listDataHubAccessLogs({
     },
     statusCounts: {
       success: parseInt(counts.success, 10) || 0,
-      error: parseInt(counts.error, 10) || 0,
-      warning: parseInt(counts.warning, 10) || 0,
+      cached: parseInt(counts.cached, 10) || 0,
+      failed: parseInt(counts.failed, 10) || 0,
+      timeout: parseInt(counts.timeout, 10) || 0,
+      /** @deprecated use failed */
+      error: parseInt(counts.failed, 10) || 0,
+      /** @deprecated use timeout */
+      warning: parseInt(counts.timeout, 10) || 0,
     },
   };
 }

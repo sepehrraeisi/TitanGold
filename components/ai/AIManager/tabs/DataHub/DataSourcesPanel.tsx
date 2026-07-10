@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { DataHubState, DataSource } from '../../../../../types';
 import {
     DataHubApiError,
@@ -23,9 +23,11 @@ import {
     sourceStatusVariant,
     priorityVariant,
     dataHubWriteGate,
+    DataHubSubTabBar,
 } from './dataHubUi';
 import { formatDataHubQueryError } from './dataHubI18n';
 import { useDataHubPermissions } from './hooks/useDataHubPermissions';
+import DuplicateUrlsPanel from './DuplicateUrlsPanel';
 
 type Props = {
     t: (key: string) => string;
@@ -38,6 +40,11 @@ type Props = {
     handleTestSource: (sourceId: string) => void | Promise<void>;
     handleDeleteSource: (sourceId: string, hard?: boolean) => void | Promise<void>;
     handleRestoreSource: (sourceId: string) => void | Promise<void>;
+    handleUpdateSource: (
+        id: string,
+        updates: Partial<DataSource>,
+        options?: { allowDuplicateUrl?: boolean },
+    ) => void | Promise<void>;
     dataHub: DataHubState;
     setActiveView?: (view: 'sources' | 'categories' | 'pipeline' | 'health' | 'logs' | 'advanced' | 'telegram') => void;
     pagination?: DataSourcesPagination;
@@ -58,6 +65,7 @@ const DataSourcesPanel: React.FC<Props> = ({
     handleTestSource,
     handleDeleteSource,
     handleRestoreSource,
+    handleUpdateSource,
     dataHub,
     setActiveView,
     pagination,
@@ -69,18 +77,27 @@ const DataSourcesPanel: React.FC<Props> = ({
     const { canWrite } = useDataHubPermissions();
     const wg = (extraDisabled = false) => dataHubWriteGate(canWrite, t, extraDisabled);
     const sources = dataHub.sources || [];
+    const [sourcesSubview, setSourcesSubview] = useState<'all' | 'duplicates'>('all');
+    const [duplicatesOnlyFilter, setDuplicatesOnlyFilter] = useState(false);
+
+    const displayedSources = useMemo(() => {
+        if (!duplicatesOnlyFilter) return sources;
+        return sources.filter(s => (s.duplicateUrlCount ?? 0) > 1);
+    }, [sources, duplicatesOnlyFilter]);
 
     const metrics = useMemo(() => {
-        const active = sources.filter(s => s.status === 'active').length;
-        const errors = sources.filter(s => s.status === 'error').length;
-        const telegram = sources.filter(s => s.type === 'telegram').length;
+        const active = displayedSources.filter(s => s.status === 'active').length;
+        const errors = displayedSources.filter(s => s.status === 'error').length;
+        const telegram = displayedSources.filter(s => s.type === 'telegram').length;
+        const duplicateUrl = displayedSources.filter(s => (s.duplicateUrlCount ?? 0) > 1).length;
         return {
-            total: pagination?.total ?? sources.length,
+            total: duplicatesOnlyFilter ? displayedSources.length : (pagination?.total ?? sources.length),
             active,
             errors,
             telegram,
+            duplicateUrl,
         };
-    }, [sources, pagination?.total]);
+    }, [displayedSources, sources.length, pagination?.total, duplicatesOnlyFilter]);
 
     const handleExport = () => {
         if (!sources.length) return;
@@ -95,6 +112,46 @@ const DataSourcesPanel: React.FC<Props> = ({
             .replace('{{page}}', String(pagination.page))
             .replace('{{shown}}', String(sources.length))
             .replace('{{total}}', String(pagination.total));
+
+    const handleViewSourceById = (sourceId: string) => {
+        const found = sources.find(s => s.id === sourceId);
+        if (found) {
+            setEditingSource(found);
+            setShowCreateSourceModal(true);
+        }
+    };
+
+    const handleDisableSourceById = async (sourceId: string) => {
+        if (!window.confirm(t('duplicate_disable_confirm'))) return;
+        await handleUpdateSource(sourceId, { status: 'inactive' });
+        onRefresh();
+    };
+
+    if (sourcesSubview === 'duplicates') {
+        return (
+            <div className={DATAHUB_SHELL}>
+                <DataHubSubTabBar
+                    activeId={sourcesSubview}
+                    onChange={id => setSourcesSubview(id as 'all' | 'duplicates')}
+                    items={[
+                        { id: 'all', label: t('sources_subtab_all') },
+                        { id: 'duplicates', label: t('sources_subtab_duplicate_urls'), activeVariant: 'warning' },
+                    ]}
+                    ariaLabel={t('sources_data_quality_nav')}
+                    className="mb-4"
+                />
+                <DuplicateUrlsPanel
+                    t={t}
+                    formatTimeAgo={formatTimeAgo}
+                    sources={sources}
+                    onRefresh={onRefresh}
+                    onViewSource={handleViewSourceById}
+                    onDisableSource={handleDisableSourceById}
+                    embedded
+                />
+            </div>
+        );
+    }
 
     return (
         <div className={DATAHUB_SHELL}>
@@ -133,6 +190,26 @@ const DataSourcesPanel: React.FC<Props> = ({
                 </div>
             </div>
 
+            <DataHubSubTabBar
+                activeId={sourcesSubview}
+                onChange={id => setSourcesSubview(id as 'all' | 'duplicates')}
+                items={[
+                    { id: 'all', label: t('sources_subtab_all') },
+                    { id: 'duplicates', label: t('sources_subtab_duplicate_urls'), activeVariant: 'warning' },
+                ]}
+                ariaLabel={t('sources_data_quality_nav')}
+                className="mb-4"
+            />
+
+            <label className="flex items-center gap-2 text-[11px] text-muted-foreground mb-4">
+                <input
+                    type="checkbox"
+                    checked={duplicatesOnlyFilter}
+                    onChange={e => setDuplicatesOnlyFilter(e.target.checked)}
+                />
+                {t('sources_filter_duplicates_only')}
+            </label>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
                 <MetricCard label={t('sources_metric_total')} value={metrics.total} color="blue" />
                 <MetricCard label={t('sources_metric_active')} value={metrics.active} color="emerald" />
@@ -150,13 +227,13 @@ const DataSourcesPanel: React.FC<Props> = ({
             )}
 
             <div className={DATAHUB_INNER_LIST}>
-                {isLoading && sources.length === 0 ? (
-                    <div className="py-12 text-center text-xs text-muted-foreground">{t('sources_loading')}</div>
-                ) : sources.length === 0 ? (
-                    <DataHubEmpty message={t('no_data_sources')} />
-                ) : (
-                    <div className="space-y-3">
-                        {sources.map(source => {
+            {isLoading && displayedSources.length === 0 ? (
+                <div className="py-12 text-center text-xs text-muted-foreground">{t('sources_loading')}</div>
+            ) : displayedSources.length === 0 ? (
+                <DataHubEmpty message={duplicatesOnlyFilter ? t('sources_no_duplicates_filter') : t('no_data_sources')} />
+            ) : (
+                <div className="space-y-3">
+                    {displayedSources.map(source => {
                             const isTelegram = source.type === 'telegram';
                             return (
                                 <div
@@ -170,6 +247,24 @@ const DataSourcesPanel: React.FC<Props> = ({
                                                 {isTelegram && (
                                                     <StatusPill label={t('telegram')} variant="info" />
                                                 )}
+                                                {source.duplicateUrlSeverity &&
+                                                (source.duplicateUrlCount ?? 0) > 1 ? (
+                                                    <span
+                                                        title={[
+                                                            t('source_duplicate_url_tooltip_intro'),
+                                                            ...(source.duplicateUrlSiblings || []).map(sib =>
+                                                                `${sib.name} (${sib.isActive ? t('active') : t('inactive')}${sib.collectedCount != null ? `, ${sib.collectedCount} ${t('records')}` : ''})`,
+                                                            ),
+                                                        ].join('\n')}
+                                                        className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                                            source.duplicateUrlSeverity === 'high'
+                                                                ? 'bg-red-500/15 text-red-300 border border-red-500/30'
+                                                                : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                                        }`}
+                                                    >
+                                                        {t('source_duplicate_url_badge')}
+                                                    </span>
+                                                ) : null}
                                             </div>
                                             <p className="text-[11px] text-muted-foreground">
                                                 {source.type} • {source.category}

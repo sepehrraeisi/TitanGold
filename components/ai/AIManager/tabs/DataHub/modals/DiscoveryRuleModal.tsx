@@ -64,7 +64,7 @@ const DiscoveryRuleModal: React.FC<{
                             <option value="website">{t('crawler_type_website')}</option>
                             <option value="rss">{t('crawler_type_rss')}</option>
                             <option value="telegram">{t('discovery_kind_telegram')}</option>
-                            <option value="api">API</option>
+                            <option value="api">{t('discovery_rule_kind_api')}</option>
                         </select>
                     </label>
                 </div>
