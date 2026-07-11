@@ -12,9 +12,9 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../backend/.env') });
 
-const APP = 'http://localhost:3000';
+const APP = process.env.APP || 'http://localhost:3000';
 const OUT = path.resolve(__dirname, '../../docs/ssot_v3/screenshots');
-const EVIDENCE = path.join(OUT, 'archiving-p2-browser-evidence.json');
+const EVIDENCE = path.join(OUT, process.env.EVIDENCE_FILE || 'archiving-p2-browser-evidence.json');
 const ADMIN_ID = 'e134c7b1-b183-4e21-9acf-e3d53b9806d6';
 
 const FORBIDDEN = [
@@ -88,8 +88,12 @@ async function main() {
             hasExplanation: text.includes('does not archive DataHub pipeline'),
             hasManualNote: text.includes('Manual only'),
             hasArchive2024: text.includes('Archive 2024'),
+            hasArchive2025: text.includes('Archive 2025'),
+            hasArchive2026: text.includes('Archive 2026'),
+            hasRestoreEmptyState: text.includes('No archived decisions are available yet'),
             hasCountOnly: text.includes('Count only'),
-            hasPurgePreviewLabel: text.includes('Purge preview'),
+            hasPurgePreviewLabel: text.includes('Purge preview') || text.includes('Purge Preview'),
+            hasArchivePreviewLabel: text.includes('Archive Preview'),
             notFound: text.includes('Not Found'),
             hasUndefined: text.includes('undefined') || text.includes('null'),
         };
@@ -103,6 +107,7 @@ async function main() {
 
     const evidence = {
         capturedAt: new Date().toISOString(),
+        appUrl: APP,
         path: 'DataHub → Advanced Features → Data Archiving',
         user: user.email,
         role: user.role,
