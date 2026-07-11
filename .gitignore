@@ -42,3 +42,9 @@ coverage/
 /playwright/.cache/
 /e2e/screenshots/*.png
 
+# Local consolidation / audit scratch (never commit)
+tmp-dh-quality-audit-output.txt
+scripts/*.final
+scripts/*.fixed
+backend/docs/ssot_v3/
+
