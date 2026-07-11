@@ -57,8 +57,8 @@ describe('pipelineNormalizationSummary', () => {
 });
 
 describe('pipelineCapacity', () => {
-  it('buildPipelineCapacityView is read-only with no write controls', () => {
-    const view = buildPipelineCapacityView();
+  it('buildPipelineCapacityView is read-only with no write controls', async () => {
+    const view = await buildPipelineCapacityView();
     expect(view.mode).toBe('config_only');
     expect(view.modeLabel).toBe('configuration_only');
     expect(view.schedulerStatus).toBeDefined();
@@ -69,8 +69,8 @@ describe('pipelineCapacity', () => {
     expect(pipelineCapacityResponseSchema.safeParse(view).success).toBe(true);
   });
 
-  it('capacity response does not expose POST/mode write fields', () => {
-    const view = buildPipelineCapacityView();
+  it('capacity response does not expose POST/mode write fields', async () => {
+    const view = await buildPipelineCapacityView();
     expect(view).not.toHaveProperty('confirm_capacity_change');
     expect(view).not.toHaveProperty('allowedModes');
     expect(view.meta.notes).toContain('runtime_mode_presets_planned');

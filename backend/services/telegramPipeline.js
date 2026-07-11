@@ -3,6 +3,7 @@ import { query, transaction } from '../database/db.js';
 import { getIngestionTimestampForInsert } from './collectedDataTimestamps.js';
 import { logger } from './logger.js';
 import { enforceIngestionPolicy, isFilterRuleBlockedError } from './filterRulesGateway.js';
+import { recordPipelineJobHeartbeat } from './pipelineSchedulerRuntime.js';
 
 /** Default messages per scheduler run (override via batchSize argument). */
 /** DH-PIPELINE-P1-CAPACITY: 700/5min ≈ 201k/day theoretical (Option A). */
@@ -444,5 +445,9 @@ export async function transferTelegramMessagesToPipeline(
     } finally {
         transferInProgress = false;
         await query('SELECT pg_advisory_unlock($1)', [TRANSFER_ADVISORY_LOCK_KEY]).catch(() => {});
+        if (!summary.skipped_run) {
+            summary.durationMs = summary.durationMs || Date.now() - started;
+            void recordPipelineJobHeartbeat('transfer', summary).catch(() => {});
+        }
     }
 }

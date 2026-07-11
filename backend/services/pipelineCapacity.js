@@ -1,7 +1,7 @@
 import { TELEGRAM_TRANSFER_DEFAULT_BATCH } from './telegramPipeline.js';
 import { NORMALIZATION_DEFAULT_BATCH } from './normalizationWorker.js';
-import { getNormalizationWorkerStats } from './normalizationWorker.js';
 import { scheduler } from '../engine/scheduler.js';
+import { resolveSchedulerRuntimeStatus } from './pipelineSchedulerRuntime.js';
 
 const DEFAULT_TRANSFER_INTERVAL_MS = Number(process.env.TELEGRAM_PIPELINE_INTERVAL_MS) || 5 * 60 * 1000;
 const DEFAULT_NORMALIZATION_INTERVAL_MS = 60 * 1000;
@@ -13,9 +13,10 @@ function msToMinutes(ms) {
 
 /**
  * Read-only pipeline throughput configuration for operator visibility.
- * @returns {object}
+ * Scheduler status is derived from Redis heartbeats + DB activity — not in-process flags.
+ * @returns {Promise<object>}
  */
-export function buildPipelineCapacityView() {
+export async function buildPipelineCapacityView() {
   let schedulerConfig = null;
   try {
     schedulerConfig = scheduler.getStatus()?.config ?? null;
@@ -30,24 +31,15 @@ export function buildPipelineCapacityView() {
   const normalizationBatch =
     schedulerConfig?.normalization?.batchSize ?? NORMALIZATION_DEFAULT_BATCH;
 
-  const normStats = getNormalizationWorkerStats();
-
-  let schedulerStatus = 'unknown';
-  try {
-    const status = scheduler.getStatus();
-    if (status?.isRunning === true) {
-      schedulerStatus = 'running';
-    } else if (status?.isRunning === false) {
-      schedulerStatus = 'stopped';
-    }
-  } catch {
-    schedulerStatus = 'unknown';
-  }
+  const runtime = await resolveSchedulerRuntimeStatus({
+    transferIntervalMs,
+    normalizationIntervalMs,
+  });
 
   return {
     mode: 'config_only',
     modeLabel: 'configuration_only',
-    schedulerStatus,
+    schedulerStatus: runtime.status,
     transfer: {
       batchSize: TELEGRAM_TRANSFER_DEFAULT_BATCH,
       intervalMs: transferIntervalMs,
@@ -62,14 +54,8 @@ export function buildPipelineCapacityView() {
       runtimeAdjustable: 'partial',
       source: schedulerConfig ? 'scheduler.config' : 'default',
     },
-    lastNormalizationRun: normStats?.at ?? null,
-    lastNormalizationStats: normStats
-      ? {
-          processed: normStats.processed ?? null,
-          errors: normStats.errors ?? null,
-          durationMs: normStats.durationMs ?? null,
-        }
-      : null,
+    lastNormalizationRun: runtime.lastNormalizationRun,
+    lastNormalizationStats: runtime.lastNormalizationStats,
     meta: {
       loaded: true,
       readOnly: true,
@@ -77,6 +63,7 @@ export function buildPipelineCapacityView() {
       notes: [
         'transfer_batch_requires_deploy',
         'runtime_mode_presets_planned',
+        'scheduler_status_from_heartbeat_and_db_activity',
       ],
     },
   };

@@ -4,6 +4,95 @@ import { logger } from '../services/logger.js';
 let redisClient = null;
 let isConnecting = false;
 
+function buildRedisOptions({ allowPassword = true } = {}) {
+  const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+  const redisPassword = process.env.REDIS_PASSWORD;
+  const parsedUrl = new URL(redisUrl);
+  if (!allowPassword) {
+    parsedUrl.username = '';
+    parsedUrl.password = '';
+  }
+
+  const clientOptions = {
+    url: parsedUrl.toString(),
+    socket: {
+      reconnectStrategy: (retries) => {
+        if (retries > 10) {
+          logger.error('❌ Redis: Max reconnection attempts reached');
+          return new Error('Max reconnection attempts reached');
+        }
+        return Math.min(retries * 50, 3000);
+      }
+    }
+  };
+
+  if (allowPassword && redisPassword && !redisUrl.includes('@')) {
+    clientOptions.password = redisPassword;
+  }
+
+  return clientOptions;
+}
+
+function redisEnvHasPassword() {
+  const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+  const parsedUrl = new URL(redisUrl);
+  return Boolean(process.env.REDIS_PASSWORD || parsedUrl.password);
+}
+
+function isAuthMismatch(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('auth') && (
+    message.includes('failed') ||
+    message.includes('client sent auth') ||
+    message.includes('no password')
+  );
+}
+
+async function acceptsUnauthenticatedRedis() {
+  if (!redisEnvHasPassword()) return false;
+  let probe = null;
+  try {
+    probe = createClient({
+      ...buildRedisOptions({ allowPassword: false }),
+      socket: {
+        reconnectStrategy: false,
+      },
+    });
+    await probe.connect();
+    await probe.ping();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (probe?.isOpen) {
+      await probe.quit();
+    }
+  }
+}
+
+async function connectRedisClient(clientOptions) {
+  const client = createClient(clientOptions);
+
+  client.on('error', (err) => {
+    logger.error('❌ Redis Client Error:', err.message);
+  });
+
+  client.on('connect', () => {
+    logger.info('🔗 Redis: Connected');
+  });
+
+  client.on('reconnecting', () => {
+    logger.info('🔄 Redis: Reconnecting...');
+  });
+
+  client.on('ready', () => {
+    logger.info('✅ Redis: Ready');
+  });
+
+  await client.connect();
+  return client;
+}
+
 /**
  * Get or create Redis client
  * @returns {Promise<RedisClient>}
@@ -22,52 +111,24 @@ export async function getRedisClient() {
   isConnecting = true;
 
   try {
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    const redisPassword = process.env.REDIS_PASSWORD;
-    
-    const clientOptions = {
-      url: redisUrl,
-      socket: {
-        reconnectStrategy: (retries) => {
-          if (retries > 10) {
-            logger.error('❌ Redis: Max reconnection attempts reached');
-            return new Error('Max reconnection attempts reached');
-          }
-          // Exponential backoff: 50ms, 100ms, 200ms, ...
-          return Math.min(retries * 50, 3000);
-        }
+    try {
+      if (await acceptsUnauthenticatedRedis()) {
+        logger.warn('⚠️ Redis password ignored because server accepts unauthenticated local connection');
+        redisClient = await connectRedisClient(buildRedisOptions({ allowPassword: false }));
+      } else {
+        redisClient = await connectRedisClient(buildRedisOptions());
       }
-    };
-
-    // Add password if provided (either in URL or separately)
-    if (redisPassword && !redisUrl.includes('@')) {
-      clientOptions.password = redisPassword;
+    } catch (error) {
+      if (!isAuthMismatch(error)) throw error;
+      logger.warn('⚠️ Redis auth failed; retrying without password for local unauthenticated Redis');
+      redisClient = await connectRedisClient(buildRedisOptions({ allowPassword: false }));
     }
-    
-    redisClient = createClient(clientOptions);
 
-    redisClient.on('error', (err) => {
-      logger.error('❌ Redis Client Error:', err.message);
-    });
-
-    redisClient.on('connect', () => {
-      logger.info('🔗 Redis: Connected');
-    });
-
-    redisClient.on('reconnecting', () => {
-      logger.info('🔄 Redis: Reconnecting...');
-    });
-
-    redisClient.on('ready', () => {
-      logger.info('✅ Redis: Ready');
-    });
-
-    await redisClient.connect();
-    
     isConnecting = false;
     return redisClient;
   } catch (error) {
     isConnecting = false;
+    redisClient = null;
     logger.error('❌ Redis connection failed:', error.message);
     throw error;
   }

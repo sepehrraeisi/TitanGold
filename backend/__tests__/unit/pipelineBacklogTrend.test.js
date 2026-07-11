@@ -75,8 +75,8 @@ describe('pipelineBacklogTrend', () => {
 });
 
 describe('pipelineCapacity polish', () => {
-  it('includes scheduler status and no balanced mode label', () => {
-    const view = buildPipelineCapacityView();
+  it('includes scheduler status and no balanced mode label', async () => {
+    const view = await buildPipelineCapacityView();
     expect(view.modeLabel).toBe('configuration_only');
     expect(view.modeLabel).not.toBe('balanced');
     expect(['running', 'stopped', 'unknown']).toContain(view.schedulerStatus);

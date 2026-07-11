@@ -36,11 +36,11 @@ export function telegramChannelKeys(source, config = null) {
  * Batch-resolve collector ingestion context for telegram sources on the current list page.
  * @param {Array<Record<string, unknown>>} sources
  * @param {Array<Record<string, unknown>>} sources
- * @param {{ includeMessageStats?: boolean }} [options] — skip full message scan on fast pipeline path
+ * @param {{ includeMessageStats?: boolean, includeCollectedStats?: boolean }} [options]
  * @returns {Promise<Map<string, object>>} source id → enrichment
  */
 export async function batchTelegramCollectorEnrichment(sources, options = {}) {
-    const { includeMessageStats = true } = options;
+    const { includeMessageStats = true, includeCollectedStats = true } = options;
     const telegramRows = sources.filter((s) => s.type === 'telegram');
     const map = new Map();
     if (telegramRows.length === 0) return map;
@@ -66,14 +66,16 @@ export async function batchTelegramCollectorEnrichment(sources, options = {}) {
          ORDER BY ds.id, tc.is_active DESC NULLS LAST, tc.updated_at DESC NULLS LAST`,
         [ids],
     );
-    const collectedPromise = query(
-        `SELECT source_id, COUNT(*)::int AS collected_count,
-                MAX(COALESCE((metadata->>'transferred_at')::timestamptz, collected_at)) AS latest_collected_at
-         FROM collected_data
-         WHERE source_id = ANY($1::uuid[])
-         GROUP BY source_id`,
-        [ids],
-    );
+    const collectedPromise = includeCollectedStats
+        ? query(
+            `SELECT source_id, COUNT(*)::int AS collected_count,
+                    MAX(COALESCE((metadata->>'transferred_at')::timestamptz, collected_at)) AS latest_collected_at
+             FROM collected_data
+             WHERE source_id = ANY($1::uuid[])
+             GROUP BY source_id`,
+            [ids],
+        )
+        : Promise.resolve({ rows: [] });
 
     let messageRows = { rows: [] };
     if (includeMessageStats) {

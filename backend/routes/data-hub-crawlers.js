@@ -27,7 +27,9 @@ const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter]
 
 router.get('/', authenticate, readRateLimiter, async (req, res) => {
     try {
-        res.json(await listCrawlers());
+        res.json(await listCrawlers({
+            includeDuplicateAnalysis: req.query?.includeDuplicateAnalysis === 'true',
+        }));
     } catch (error) {
         logger.error('List crawlers failed:', error);
         res.status(500).json({ error: 'Failed to list crawlers' });

@@ -396,7 +396,7 @@ async function resolveSourceId(body, userId) {
     throw err;
 }
 
-export async function listCrawlers() {
+export async function listCrawlers({ includeDuplicateAnalysis = false } = {}) {
     const sync = await syncCrawlersFromDataSources();
 
     const [crawlerResult, metricsResult, duplicateEnrichmentById] = await Promise.all([
@@ -424,7 +424,7 @@ export async function listCrawlers() {
              FROM datahub_crawler_runs r
              JOIN datahub_crawlers c ON c.id = r.crawler_id AND c.deleted_at IS NULL`,
         ),
-        buildDuplicateEnrichmentBySourceId(),
+        includeDuplicateAnalysis ? buildDuplicateEnrichmentBySourceId() : Promise.resolve(null),
     ]);
     const crawlers = crawlerResult.rows.map(row => mapCrawlerRow(row, duplicateEnrichmentById));
     const metrics = metricsResult.rows[0] || {};
@@ -438,7 +438,10 @@ export async function listCrawlers() {
         enabled: crawlers.filter(c => c.is_enabled).length,
         failed24h: parseInt(metrics.failed_24h, 10) || 0,
         avg_latency_ms: avgLatencyMs,
-        duplicate_risk_count: crawlers.filter(c => c.duplicate_risk).length,
+        duplicate_risk_count: includeDuplicateAnalysis
+            ? crawlers.filter(c => c.duplicate_url_count > 1).length
+            : 0,
+        duplicate_analysis_included: includeDuplicateAnalysis,
     };
     return { crawlers, summary, sync };
 }
