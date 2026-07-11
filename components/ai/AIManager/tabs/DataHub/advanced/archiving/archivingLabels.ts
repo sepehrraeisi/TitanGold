@@ -48,9 +48,28 @@ export function normalizeOperationType(operationType: string): string {
     return t;
 }
 
+export function mapHealthCodeFromApi(health: ArchiveHealth | undefined): ArchiveHealthCode {
+    const code = health?.status_code;
+    if (code && HEALTH_I18N[code as ArchiveHealthCode]) {
+        return code as ArchiveHealthCode;
+    }
+    const msg = String(health?.status || '');
+    if (msg.includes('ERROR') || health?.last_archive_success === false) return 'error';
+    if (msg.includes('>30 days')) return 'warning_stale_archive';
+    if (msg.includes('need archiving') || Number(health?.records_pending_archive || 0) > 0) {
+        return 'warning_pending';
+    }
+    if (Number(health?.archived_records || 0) > 0) return 'healthy';
+    return 'no_archives';
+}
+
 export function archiveHealthLabel(code: string | undefined, t: (k: string) => string): string {
-    const key = HEALTH_I18N[(code as ArchiveHealthCode) || 'no_archives'];
-    return t(key);
+    const normalized = (code && HEALTH_I18N[code as ArchiveHealthCode]
+        ? code
+        : 'no_archives') as ArchiveHealthCode;
+    const key = HEALTH_I18N[normalized] || HEALTH_I18N.no_archives;
+    const label = t(key);
+    return isRawArchivingLabel(label) ? t('archiving_status_no_archives') : label;
 }
 
 export function archiveHealthVariant(

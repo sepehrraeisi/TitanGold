@@ -30,6 +30,7 @@ import {
     formatLastArchiveRun,
     formatPartitionDateRange,
     getRestoreBlockReason,
+    mapHealthCodeFromApi,
     normalizePartition,
     operationLabel,
     partitionDisplayLabel,
@@ -91,7 +92,7 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
     const queryError = formatDataHubQueryError(t, statsError as Error | null);
     const mutationError = apiError ? formatDataHubQueryError(t, apiError) : null;
 
-    const statusCode = health?.status_code || health?.status || 'no_archives';
+    const statusCode = mapHealthCodeFromApi(health);
 
     const summary = useMemo(
         () => ({
@@ -169,8 +170,8 @@ const Archiving: React.FC<ArchivingProps> = ({ t }) => {
                         skeleton('w-20')
                     ) : (
                         <StatusPill
-                            label={archiveHealthLabel(String(statusCode), t)}
-                            variant={archiveHealthVariant(String(statusCode))}
+                            label={archiveHealthLabel(statusCode, t)}
+                            variant={archiveHealthVariant(statusCode)}
                         />
                     )}
                 </div>

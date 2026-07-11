@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+    archiveHealthLabel,
     getRestoreBlockReason,
     isRawArchivingLabel,
     isRawOperationType,
+    mapHealthCodeFromApi,
     normalizeOperationType,
     normalizePartition,
     operationLabel,
     partitionDisplayLabel,
     restoreBlockMessage,
 } from '../../components/ai/AIManager/tabs/DataHub/advanced/archiving/archivingLabels';
-import type { ArchivingOperation, ArchivePartition } from '../../services/dataHubArchivingApi';
+import type { ArchivingOperation, ArchiveHealth, ArchivePartition } from '../../services/dataHubArchivingApi';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -78,6 +80,17 @@ describe('Data Archiving Human QA regressions', () => {
         expect(isRawArchivingLabel(partitionDisplayLabel(legacy))).toBe(false);
     });
 
+    it('maps health status when status_code missing (legacy API)', () => {
+        const legacy: ArchiveHealth = {
+            status: 'Last archive >30 days ago',
+            active_records: 100,
+            archived_records: 0,
+            records_pending_archive: 0,
+        };
+        expect(mapHealthCodeFromApi(legacy)).toBe('warning_stale_archive');
+        expect(archiveHealthLabel(mapHealthCodeFromApi(legacy), mockT)).toBe('Archive overdue');
+    });
+
     it('restore empty archive shows no_archived reason', () => {
         expect(
             getRestoreBlockReason({
@@ -89,7 +102,7 @@ describe('Data Archiving Human QA regressions', () => {
             }),
         ).toBe('no_archived');
         expect(restoreBlockMessage('no_archived', mockT)).toBe(
-            'No archived decisions are available yet.',
+            'No archived decisions are available yet. Archive decisions first before restoring.',
         );
     });
 
