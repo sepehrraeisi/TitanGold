@@ -1,0 +1,68 @@
+{
+  "capturedAt": "2026-06-29T12:26:34.437Z",
+  "appUrl": "https://titan.zala.ir",
+  "phase": "P7-AGENT-FEED-PERFORMANCE",
+  "bundleHash": "X-IXCc4s",
+  "feedResults": [
+    {
+      "agentKey": "trend",
+      "loadMs": 295,
+      "feedStatus": 200,
+      "forbiddenTextsInBody": [],
+      "hasFeedOrEmpty": true
+    },
+    {
+      "agentKey": "sentiment",
+      "loadMs": 468,
+      "feedStatus": 200,
+      "forbiddenTextsInBody": [],
+      "hasFeedOrEmpty": true
+    },
+    {
+      "agentKey": "technical",
+      "loadMs": 492,
+      "feedStatus": 200,
+      "forbiddenTextsInBody": [],
+      "hasFeedOrEmpty": true
+    },
+    {
+      "agentKey": "price_prediction",
+      "loadMs": 461,
+      "feedStatus": 200,
+      "forbiddenTextsInBody": [],
+      "hasFeedOrEmpty": true
+    },
+    {
+      "agentKey": "fundamental",
+      "loadMs": 536,
+      "feedStatus": 200,
+      "forbiddenTextsInBody": [],
+      "hasFeedOrEmpty": true
+    }
+  ],
+  "forbiddenTextsInBody": [],
+  "networkStatuses": [
+    {
+      "url": "/api/v1/telegram/agents/trend/feed?timeRange=168&limit=20&offset=0",
+      "status": 200
+    },
+    {
+      "url": "/api/v1/telegram/agents/sentiment/feed?timeRange=168&limit=20&offset=0",
+      "status": 200
+    },
+    {
+      "url": "/api/v1/telegram/agents/technical/feed?timeRange=168&limit=20&offset=0",
+      "status": 200
+    },
+    {
+      "url": "/api/v1/telegram/agents/price_prediction/feed?timeRange=168&limit=20&offset=0",
+      "status": 200
+    },
+    {
+      "url": "/api/v1/telegram/agents/fundamental/feed?timeRange=168&limit=20&offset=0",
+      "status": 200
+    }
+  ],
+  "maxLoadMs": 536,
+  "verdict": "REAL WORKING"
+}

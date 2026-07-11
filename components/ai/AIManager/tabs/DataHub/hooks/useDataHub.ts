@@ -2,6 +2,14 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DATA_HUB_KEYS } from '../../../../../../hooks/useDataHubState.ts';
 import * as api from '../../../../../../services/api.ts';
+import { getCollectorAuthHeaders } from '../../../../../../services/collectorAuth.ts';
+import {
+    formatCollectorSafeError,
+    containsRawHtmlError,
+    type CollectorSafeError,
+    type DiagnoseCollectorCheck,
+} from '../../../../../../services/telegramCollectorErrors.ts';
+import { formatDiagnoseSummary } from '../telegram/telegramCollectorLabels';
 import {
     ArtemisState,
     DataHubState,
@@ -23,11 +31,14 @@ import {
     useDeleteCategoryMutation,
     usePipelineQuery,
     usePipelineBacklogQuery,
+    usePipelineNormalizationSummaryQuery,
+    usePipelineCapacityQuery,
     useAccessLogsQuery,
 } from '../../../../../../hooks/useDataHubState.ts';
 import { DataHubApiError } from '../../../../../../services/dataSourcesApi.ts';
 import { useAsync } from '../../../../../../hooks/useAsync';
 import { createTelegramDataSource, isChannelLinked, type TelegramChannel } from '../utils/telegramIntegration';
+import { fetchPipelineNormalizationSummary } from '../../../../../../services/dataPipelineApi.ts';
 import { handleDataHubError, DataHubError, shouldNotifyUser } from '../utils/errorHandler';
 
 export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key: string) => string) => {
@@ -89,8 +100,23 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         data: pipelineBacklog,
         isLoading: isLoadingPipelineBacklog,
         isFetching: isFetchingPipelineBacklog,
+        error: pipelineBacklogErrorObj,
         refetch: refetchPipelineBacklog,
     } = usePipelineBacklogQuery({ enabled: pipelineMainReady });
+    const {
+        data: pipelineNormalizationSummary,
+        isLoading: isLoadingPipelineNormalization,
+        isFetching: isFetchingPipelineNormalization,
+        error: pipelineNormalizationErrorObj,
+        refetch: refetchPipelineNormalization,
+    } = usePipelineNormalizationSummaryQuery({ enabled: pipelineMainReady });
+    const {
+        data: pipelineCapacity,
+        isLoading: isLoadingPipelineCapacity,
+        isFetching: isFetchingPipelineCapacity,
+        error: pipelineCapacityErrorObj,
+        refetch: refetchPipelineCapacity,
+    } = usePipelineCapacityQuery({ enabled: pipelineMainReady });
     const logsEnabled = activeView === 'logs';
     const {
         data: accessLogsResult,
@@ -279,14 +305,26 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         }
     };
 
+    const resolveCollectorMessage = (error: unknown, fallbackKey: string): string => {
+        const err = error as Error & { collectorError?: CollectorSafeError };
+        if (err?.collectorError) {
+            return formatCollectorSafeError(err.collectorError, t);
+        }
+        const raw = err?.message || t(fallbackKey) || fallbackKey;
+        if (containsRawHtmlError(raw)) {
+            return t('collector_proxy_unreachable') || 'Telegram Collector proxy is unreachable.';
+        }
+        return t(raw) || raw;
+    };
+
     const handleCollectorHealth = async () => {
         setIsLoadingCollector(true);
         setCollectorError(null);
         try {
             const data = await api.getTelegramCollectorHealth();
-            setCollectorMessage(`Collector Status: ${data.status}`);
-        } catch (error: any) {
-            setCollectorError(error?.message || (t('collector_connect_failed') || 'Failed to connect to Telegram Collector'));
+            setCollectorMessage(`Collector Status: ${data.status ?? 'ok'}`);
+        } catch (error: unknown) {
+            setCollectorError(resolveCollectorMessage(error, 'collector_connect_failed'));
         } finally {
             setIsLoadingCollector(false);
         }
@@ -295,52 +333,23 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     const handleDiagnoseCollector = async () => {
         setIsLoadingCollector(true);
         setCollectorError(null);
+        setDiagnoseChecks(null);
         try {
             const result = await api.diagnoseTelegramCollector();
-            const parts: string[] = [];
-            const translateKey = (key: string) => {
-                switch (key) {
-                    case 'health':
-                        return t('collector_health') || 'Health';
-                    case 'loginStart':
-                        return t('collector_login_start') || 'Login /start';
-                    case 'loginConfirm':
-                        return t('collector_login_confirm') || 'Login /confirm';
-                    default:
-                        return key;
-                }
-            };
-
-            for (const check of result.checks) {
-                const label = translateKey(check.key);
-                if (check.ok) {
-                    parts.push(`${label}: OK (${check.status ?? 200})`);
-                } else {
-                    const failMsg = t('collector_diag_check_failed') || 'Endpoint issue';
-                    parts.push(
-                        `${label}: ${failMsg} (status=${check.status ?? 'n/a'}${check.error ? `, ${check.error}` : ''})`,
-                    );
-                }
-            }
-
+            setDiagnoseChecks(result.checks);
+            const summary = formatDiagnoseSummary(result.checks, t);
             if (result.ok) {
                 setCollectorMessage(
-                    `${t('collector_diag_all_good') || 'تمام مسیرهای اصلی Telegram Collector در دسترس هستند.'} ` +
-                        parts.join(' | '),
+                    `${t('collector_diag_all_good') || 'All Telegram Collector endpoints are reachable.'} ${summary}`,
                 );
             } else {
                 setCollectorError(
-                    `${t('collector_diag_has_issues') || 'برخی از مسیرهای Telegram Collector به درستی در دسترس نیستند.'} ` +
-                        parts.join(' | '),
+                    `${t('collector_diag_has_issues') || 'Some Telegram Collector endpoints are not accessible.'} ${summary}`,
                 );
             }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('Failed to diagnose collector:', e);
-            setCollectorError(
-                e?.message ||
-                    t('collector_diag_failed') ||
-                    'تشخیص وضعیت Telegram Collector با خطا مواجه شد.',
-            );
+            setCollectorError(resolveCollectorMessage(e, 'collector_diag_failed'));
         } finally {
             setIsLoadingCollector(false);
         }
@@ -512,12 +521,20 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const handleRefreshCollectorChannels = async () => {
         setIsRefreshingChannels(true);
+        setCollectorError(null);
         try {
             const url = api.buildCollectorUrl('/api/telegram-collector/channels/refresh');
-            const response = await fetch(url, { method: 'POST', credentials: 'include' });
+            const response = await fetch(url, {
+                method: 'POST',
+                credentials: 'include',
+                headers: getCollectorAuthHeaders(),
+            });
             const data = await response.json();
             if (data.success) {
-                setCollectorMessage(t('channels_refreshed') || 'Channels refreshed');
+                const refreshed = data.refreshed ?? 0;
+                setCollectorMessage(
+                    `${t('channels_refreshed') || 'Channels refreshed'} (${refreshed} ${t('updated') || 'updated'})`,
+                );
                 setChannelsRefreshTrigger((n) => n + 1);
                 await loadDataHub();
             } else {
@@ -592,7 +609,11 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setChannelTestPreview(null);
         try {
             const url = api.buildCollectorUrl(`/api/telegram-collector/channels/${channelId}/test`);
-            const response = await fetch(url, { method: 'POST', credentials: 'include' });
+            const response = await fetch(url, {
+                method: 'POST',
+                credentials: 'include',
+                headers: getCollectorAuthHeaders(),
+            });
             const data = await response.json();
             if (!response.ok) {
                 setCollectorError(data?.error || data?.message || (t('channel_test_failed') || 'Channel test failed'));
@@ -632,7 +653,11 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         try {
             await refetchPipeline();
             if (pipelineMainReady) {
-                await refetchPipelineBacklog();
+                await Promise.all([
+                    refetchPipelineBacklog(),
+                    refetchPipelineNormalization(),
+                    refetchPipelineCapacity(),
+                ]);
             }
         } catch (error) {
             console.error('Failed to refresh pipeline:', error);
@@ -647,6 +672,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
             ...pipelineSnapshotBase,
             transferThroughput: pipelineBacklog.transferThroughput,
             globalTelegramBacklog: pipelineBacklog.globalTelegramBacklog,
+            telegramIngestMetrics: pipelineBacklog.ingestMetrics,
             sources: pipelineSnapshotBase.sources.map((src) => ({
                 ...src,
                 collectorBacklog:
@@ -671,7 +697,27 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         }
     };
 
-    // Utils
+    const pipelineBacklogApiError =
+        pipelineBacklogErrorObj instanceof DataHubApiError
+            ? pipelineBacklogErrorObj
+            : pipelineBacklogErrorObj instanceof Error
+              ? pipelineBacklogErrorObj
+              : null;
+
+    const pipelineNormalizationApiError =
+        pipelineNormalizationErrorObj instanceof DataHubApiError
+            ? pipelineNormalizationErrorObj
+            : pipelineNormalizationErrorObj instanceof Error
+              ? pipelineNormalizationErrorObj
+              : null;
+
+    const pipelineCapacityApiError =
+        pipelineCapacityErrorObj instanceof DataHubApiError
+            ? pipelineCapacityErrorObj
+            : pipelineCapacityErrorObj instanceof Error
+              ? pipelineCapacityErrorObj
+              : null;
+
     const formatTimeAgo = (timestamp?: string): string => {
         if (!timestamp) return t('never') || 'never';
         const date = new Date(timestamp);
@@ -704,16 +750,17 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
     };
 
     const categoryMetricsById = useMemo(() => {
-        if (!pipelineSnapshot?.categories?.length) return {};
+        const categoriesForMetrics = pipelineSnapshot?.categories ?? [];
+        if (!categoriesForMetrics.length) return {};
         const metrics: Record<string, { inflow: number; passRate: number }> = {};
-        pipelineSnapshot.categories.forEach(cat => {
+        categoriesForMetrics.forEach(cat => {
             metrics[cat.categoryId] = {
                 inflow: cat.inflow,
                 passRate: cat.passRate,
             };
         });
         return metrics;
-    }, [pipelineSnapshot]);
+    }, [pipelineSnapshot?.categories]);
 
     const accessLogs = accessLogsResult?.data ?? [];
     const logStatusCounts = accessLogsResult?.statusCounts ?? {
@@ -743,6 +790,7 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
 
     const [isLoadingCollector, setIsLoadingCollector] = useState(false);
     const [collectorMessage, setCollectorMessage] = useState<string | null>(null);
+    const [diagnoseChecks, setDiagnoseChecks] = useState<DiagnoseCollectorCheck[] | null>(null);
     const [collectorError, setCollectorError] = useState<string | null>(null);
 
     const [collectorForm, setCollectorForm] = useState({
@@ -806,6 +854,36 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         isFetchingPipeline,
         isLoadingPipeline: isLoadingPipeline || isFetchingPipeline,
         isLoadingPipelineBacklog: isLoadingPipelineBacklog || isFetchingPipelineBacklog,
+        pipelineBacklogPartial: pipelineBacklog?.meta?.partial === true,
+        pipelineBacklogUnavailableMetrics: pipelineBacklog?.meta?.unavailableMetrics ?? [],
+        pipelineBacklogTrend: pipelineBacklog?.meta?.backlogTrend ?? null,
+        pipelineBacklogError:
+            pipelineBacklogApiError?.message && !pipelineBacklog
+                ? pipelineBacklogApiError.message
+                : null,
+        handleRetryPipelineBacklog: () => {
+            void refetchPipelineBacklog();
+        },
+        pipelineNormalizationSummary,
+        isLoadingPipelineNormalization:
+            isLoadingPipelineNormalization || isFetchingPipelineNormalization,
+        pipelineNormalizationError:
+            pipelineNormalizationApiError?.message && !pipelineNormalizationSummary
+                ? pipelineNormalizationApiError.message
+                : null,
+        handleRetryPipelineNormalization: () => {
+            void queryClient.fetchQuery({
+                queryKey: DATA_HUB_KEYS.pipelineNormalizationSummary(),
+                queryFn: fetchPipelineNormalizationSummary,
+                staleTime: 0,
+            });
+        },
+        pipelineCapacity,
+        isLoadingPipelineCapacity: isLoadingPipelineCapacity || isFetchingPipelineCapacity,
+        pipelineCapacityError:
+            pipelineCapacityApiError?.message && !pipelineCapacity
+                ? pipelineCapacityApiError.message
+                : null,
         pipelineError,
         setPipelineError,
         pipelineApiError,
@@ -816,6 +894,8 @@ export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key
         setCollectorError,
         collectorMessage,
         setCollectorMessage,
+        diagnoseChecks,
+        setDiagnoseChecks,
         categoriesError: categoriesApiError instanceof Error ? categoriesApiError.message : null,
         setCategoriesError: () => { },
         accessLogs,

@@ -16,6 +16,8 @@ import {
   fetchTransferThroughput24h,
 } from './telegramBacklogIntelligence.js';
 import { getOrLoadCached } from './pipelineSnapshotCache.js';
+import { getDuplicateUrlDashboard } from './dataSourceUrlDuplicateService.js';
+import { logger } from './logger.js';
 
 /** @deprecated import from normalizedDataContract — kept for tests */
 export function normalizeReadModel(normalized) {
@@ -147,171 +149,257 @@ function mapToNormalizedRecord(row, categoryName) {
 
 /**
  * Build pipeline view for DataHub Pipeline tab (GAP-012).
- * @param {{ includeBacklog?: boolean, useCache?: boolean }} [options]
+ * Heavy sections are opt-in so summary endpoints and list pages stay responsive.
+ * @param {{
+ *   includeBacklog?: boolean,
+ *   includeTelegramBacklog?: boolean,
+ *   includeCategoryScreening?: boolean,
+ *   includeNormalizationSummary?: boolean,
+ *   includeDuplicateAnalysis?: boolean,
+ *   includeRecentPreview?: boolean,
+ *   useCache?: boolean
+ * }} [options]
  */
 export async function buildDataPipelineView(options = {}) {
-  const { includeBacklog = false, useCache = true } = options;
-  const cacheKey = `pipeline:view:${includeBacklog ? 'full' : 'fast'}`;
+  const {
+    includeBacklog = false,
+    includeTelegramBacklog = includeBacklog,
+    includeCategoryScreening = false,
+    includeNormalizationSummary = false,
+    includeDuplicateAnalysis = false,
+    includeRecentPreview = false,
+    useCache = true,
+  } = options;
+  const flags = {
+    includeTelegramBacklog,
+    includeCategoryScreening,
+    includeNormalizationSummary,
+    includeDuplicateAnalysis,
+    includeRecentPreview,
+  };
+  const cacheKey = `pipeline:view:${Object.entries(flags).map(([k, v]) => `${k}:${v ? 1 : 0}`).join('|')}`;
 
-  const loader = () => buildDataPipelineViewUncached({ includeBacklog });
+  const loader = () => buildDataPipelineViewUncached(flags);
   if (useCache) {
     return getOrLoadCached(cacheKey, loader);
   }
   return loader();
 }
 
-async function buildDataPipelineViewUncached({ includeBacklog }) {
+async function timedSection(section, fn) {
+  const start = Date.now();
+  try {
+    return await fn();
+  } finally {
+    logger.info('PIPELINE_TIMING', { section, duration_ms: Date.now() - start });
+  }
+}
+
+function emptyNormalizationSummary() {
+  return {
+    totalProcessed: 0,
+    passed: 0,
+    warnings: 0,
+    rejected: 0,
+    lastProcessedAt: undefined,
+  };
+}
+
+function estimateTotalRecords(row) {
+  const estimated = Number(row?.estimated_total_records || 0);
+  return Number.isFinite(estimated) && estimated > 0 ? Math.round(estimated) : 0;
+}
+
+async function loadHealthCards() {
+  const [stats24h, totals] = await Promise.all([
+    query(`
+      SELECT
+        COUNT(*)::int AS total_requests_24h,
+        COUNT(*) FILTER (WHERE status IN ('success', 'cached'))::int AS passed_24h,
+        COUNT(*) FILTER (WHERE status IN ('failed', 'timeout'))::int AS failed_24h,
+        0::int AS pending_24h
+      FROM data_hub_logs
+      WHERE created_at > NOW() - INTERVAL '24 hours'
+    `),
+    query(`
+      SELECT GREATEST(reltuples::bigint, 0)::bigint AS estimated_total_records
+      FROM pg_class
+      WHERE oid = 'collected_data'::regclass
+    `),
+  ]);
+  return { stats24h, totals };
+}
+
+async function loadSourceQualityRows() {
+  return query(`
+    SELECT
+      ds.id AS source_id,
+      NULL::text AS status,
+      NULL::timestamptz AS collected_at,
+      NULL::jsonb AS normalized_data,
+      '{}'::jsonb AS metadata,
+      ds.name,
+      ds.type,
+      ds.category,
+      ds.config,
+      ds.credentials,
+      ds.is_active,
+      ds.last_fetch_at,
+      ds.last_status AS ds_last_status,
+      dc.name AS category_name,
+      dhl.execution_time_ms AS log_execution_time_ms,
+      dhl.log_metadata,
+      dhl.message AS log_message,
+      dhl.status AS log_status
+    FROM data_sources ds
+    LEFT JOIN data_categories dc ON dc.name = ds.category
+    LEFT JOIN LATERAL (
+      SELECT
+        execution_time_ms,
+        metadata AS log_metadata,
+        message,
+        status
+      FROM data_hub_logs
+      WHERE source_id = ds.id
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) dhl ON true
+    ORDER BY ds.name
+  `);
+}
+
+async function loadCategoryScreening() {
+  return query(`
+    WITH category_counts AS (
+      SELECT
+        ds.category,
+        COUNT(*)::int AS inflow,
+        COUNT(*) FILTER (
+          WHERE cd.status = 'processed'
+            AND cd.normalized_data IS NOT NULL
+        )::int AS passed_count
+      FROM collected_data cd
+      INNER JOIN data_sources ds ON ds.id = cd.source_id
+      WHERE ${ingestedAtSql('cd')} > NOW() - INTERVAL '24 hours'
+      GROUP BY ds.category
+    )
+    SELECT
+      dc.id AS category_id,
+      dc.name,
+      COALESCE(cc.inflow, 0)::int AS inflow,
+      COALESCE(cc.passed_count, 0)::int AS passed_count
+    FROM data_categories dc
+    LEFT JOIN category_counts cc ON cc.category = dc.name
+    ORDER BY dc.name
+  `);
+}
+
+async function loadHistoryRows() {
+  return { rows: [] };
+}
+
+async function loadNormalizationSummary() {
+  return query(`
+    SELECT
+      COUNT(*) FILTER (WHERE status IN ('processed', 'error'))::int AS total_processed,
+      COUNT(*) FILTER (WHERE status = 'processed' AND normalized_data IS NOT NULL)::int AS passed,
+      COUNT(*) FILTER (
+        WHERE status = 'processed'
+          AND normalized_data IS NOT NULL
+          AND (
+            normalized_data->'metadata'->>'quality_warning' = 'true'
+            OR normalized_data->'metadata'->>'quality_band' IN ('weak', 'poor')
+          )
+      )::int AS warnings,
+      COUNT(*) FILTER (WHERE status = 'error')::int AS rejected,
+      MAX(processed_at) FILTER (WHERE status = 'processed') AS last_processed_at
+    FROM collected_data
+    WHERE processed_at > NOW() - INTERVAL '7 days'
+       OR ${ingestedAtSql()} > NOW() - INTERVAL '7 days'
+  `);
+}
+
+async function loadRecentPreview() {
+  return query(`
+    SELECT
+      cd.*,
+      ds.name AS source_name,
+      ds.type AS source_type,
+      COALESCE(ds.category, dc.name, 'uncategorized') AS category_name
+    FROM collected_data cd
+    LEFT JOIN data_sources ds ON ds.id = cd.source_id
+    LEFT JOIN data_categories dc ON dc.name = ds.category
+    WHERE cd.processed_at > NOW() - INTERVAL '7 days'
+       OR ${ingestedAtSql('cd')} > NOW() - INTERVAL '7 days'
+    ORDER BY cd.processed_at DESC NULLS LAST, ${ingestedAtSql('cd')} DESC
+    LIMIT 8
+  `);
+}
+
+async function buildDataPipelineViewUncached({
+  includeTelegramBacklog,
+  includeCategoryScreening,
+  includeNormalizationSummary,
+  includeDuplicateAnalysis,
+  includeRecentPreview,
+}) {
   const now = new Date();
 
-  const [stats24h, totals, sourcesRows, categoriesRows, historyRows, summaryRow, recentRows] =
-    await Promise.all([
-      query(`
-        SELECT
-          COUNT(*)::int AS total_requests_24h,
-          COUNT(*) FILTER (WHERE status = 'processed' AND normalized_data IS NOT NULL)::int AS passed_24h,
-          COUNT(*) FILTER (WHERE status = 'error')::int AS failed_24h,
-          COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_24h
-        FROM collected_data
-        WHERE ${ingestedAtSql()} > NOW() - INTERVAL '24 hours'
-      `),
-      query(`
-        SELECT
-          COUNT(*)::int AS total_records,
-          COUNT(*) FILTER (WHERE normalized_data IS NOT NULL)::int AS normalized_count
-        FROM collected_data
-      `),
-      query(`
-        SELECT
-          ds.id AS source_id,
-          cd.status,
-          cd.collected_at,
-          cd.normalized_data,
-          cd.metadata,
-          ds.name,
-          ds.type,
-          ds.category,
-          ds.config,
-          ds.credentials,
-          ds.is_active,
-          ds.last_fetch_at,
-          ds.last_status AS ds_last_status,
-          dc.name AS category_name,
-          dhl.execution_time_ms AS log_execution_time_ms,
-          dhl.log_metadata,
-          dhl.message AS log_message,
-          dhl.status AS log_status
-        FROM data_sources ds
-        LEFT JOIN data_categories dc ON dc.name = ds.category
-        LEFT JOIN (
-          SELECT DISTINCT ON (source_id)
-            source_id,
-            status,
-            collected_at,
-            normalized_data,
-            metadata
-          FROM collected_data
-          ORDER BY source_id, collected_at DESC
-        ) cd ON cd.source_id = ds.id
-        LEFT JOIN (
-          SELECT DISTINCT ON (source_id)
-            source_id,
-            execution_time_ms,
-            metadata AS log_metadata,
-            message,
-            status
-          FROM data_hub_logs
-          ORDER BY source_id, created_at DESC
-        ) dhl ON dhl.source_id = ds.id
-        ORDER BY ds.name
-      `),
-      query(`
-        SELECT
-          dc.id AS category_id,
-          dc.name,
-          COALESCE((
-            SELECT COUNT(*)::int
-            FROM collected_data cd
-            INNER JOIN data_sources ds ON ds.id = cd.source_id
-            WHERE ds.category = dc.name
-              AND ${ingestedAtSql('cd')} > NOW() - INTERVAL '24 hours'
-          ), 0) AS inflow,
-          COALESCE((
-            SELECT COUNT(*)::int
-            FROM collected_data cd
-            INNER JOIN data_sources ds ON ds.id = cd.source_id
-            WHERE ds.category = dc.name
-              AND ${ingestedAtSql('cd')} > NOW() - INTERVAL '24 hours'
-              AND cd.status = 'processed'
-              AND cd.normalized_data IS NOT NULL
-          ), 0) AS passed_count
-        FROM data_categories dc
-        ORDER BY dc.name
-      `),
-      query(`
-        SELECT
-          date_trunc('hour', ${ingestedAtSql()}) AS bucket,
-          COUNT(*)::int AS total_records,
-          ROUND(
-            100.0 * COUNT(*) FILTER (WHERE normalized_data IS NOT NULL) / NULLIF(COUNT(*), 0),
-            1
-          ) AS normalized_percent
-        FROM collected_data
-        WHERE ${ingestedAtSql()} > NOW() - INTERVAL '24 hours'
-        GROUP BY 1
-        ORDER BY 1 DESC
-        LIMIT 12
-      `),
-      query(`
-        SELECT
-          COUNT(*) FILTER (WHERE status IN ('processed', 'error'))::int AS total_processed,
-          COUNT(*) FILTER (WHERE status = 'processed' AND normalized_data IS NOT NULL)::int AS passed,
-          COUNT(*) FILTER (
-            WHERE status = 'processed'
-              AND normalized_data IS NOT NULL
-              AND (
-                normalized_data->'metadata'->>'quality_warning' = 'true'
-                OR normalized_data->'metadata'->>'quality_band' IN ('weak', 'poor')
-              )
-          )::int AS warnings,
-          COUNT(*) FILTER (WHERE status = 'error')::int AS rejected,
-          MAX(processed_at) FILTER (WHERE status = 'processed') AS last_processed_at
-        FROM collected_data
-      `),
-      query(`
-        SELECT
-          cd.*,
-          ds.name AS source_name,
-          ds.type AS source_type,
-          COALESCE(ds.category, dc.name, 'uncategorized') AS category_name
-        FROM collected_data cd
-        LEFT JOIN data_sources ds ON ds.id = cd.source_id
-        LEFT JOIN data_categories dc ON dc.name = ds.category
-        ORDER BY cd.processed_at DESC NULLS LAST, ${ingestedAtSql('cd')} DESC
-        LIMIT 8
-      `),
-    ]);
+  const [
+    healthCards,
+    sourcesRows,
+    categoriesRows,
+    historyRows,
+    summaryRow,
+    recentRows,
+    duplicateAnalysis,
+  ] = await Promise.all([
+    timedSection('health_cards', loadHealthCards),
+    timedSection('source_quality_board', loadSourceQualityRows),
+    includeCategoryScreening
+      ? timedSection('category_screening', loadCategoryScreening)
+      : Promise.resolve({ rows: [] }),
+    timedSection('history', loadHistoryRows),
+    includeNormalizationSummary
+      ? timedSection('normalization_summary', loadNormalizationSummary)
+      : Promise.resolve({ rows: [] }),
+    includeRecentPreview
+      ? timedSection('recent_preview', loadRecentPreview)
+      : Promise.resolve({ rows: [] }),
+    includeDuplicateAnalysis
+      ? timedSection('duplicate_analysis', getDuplicateUrlDashboard)
+      : Promise.resolve(null),
+  ]);
+  const { stats24h, totals } = healthCards;
 
   const s24 = stats24h.rows[0] || {};
   const tot = totals.rows[0] || {};
-  const totalRecords = parseInt(tot.total_records, 10) || 0;
-  const normalizedCount = parseInt(tot.normalized_count, 10) || 0;
-  const normalizedPercent =
-    totalRecords === 0 ? 0 : Number(((normalizedCount / totalRecords) * 100).toFixed(1));
+  const totalRecords = estimateTotalRecords(tot);
+  const normalizedPercent = 0;
 
-  const collectorEnrichment = await batchTelegramCollectorEnrichment(
-    sourcesRows.rows.map((row) => ({ ...row, id: row.source_id })),
-    { includeMessageStats: includeBacklog },
+  const collectorEnrichment = await timedSection(
+    'collector_enrichment',
+    () => batchTelegramCollectorEnrichment(
+      sourcesRows.rows.map((row) => ({ ...row, id: row.source_id })),
+      {
+        includeMessageStats: includeTelegramBacklog,
+        includeCollectedStats: includeTelegramBacklog,
+      },
+    ),
   );
 
   let transferThroughput;
   let globalTelegramBacklog;
   let backlogByChannel = new Map();
 
-  if (includeBacklog) {
-    [transferThroughput, globalTelegramBacklog] = await Promise.all([
-      fetchTransferThroughput24h(),
-      fetchGlobalTelegramBacklogSummary(),
-    ]);
+  if (includeTelegramBacklog) {
+    [transferThroughput, globalTelegramBacklog] = await timedSection(
+      'telegram_backlog',
+      () => Promise.all([
+        fetchTransferThroughput24h(),
+        fetchGlobalTelegramBacklogSummary(),
+      ]),
+    );
 
     const collectorChannelIds = [
       ...new Set(
@@ -430,15 +518,17 @@ async function buildDataPipelineViewUncached({ includeBacklog }) {
   });
 
   const sum = summaryRow.rows[0] || {};
-  const normalizationSummary = {
-    totalProcessed: parseInt(sum.total_processed, 10) || 0,
-    passed: parseInt(sum.passed, 10) || 0,
-    warnings: parseInt(sum.warnings, 10) || 0,
-    rejected: parseInt(sum.rejected, 10) || 0,
-    lastProcessedAt: sum.last_processed_at
-      ? new Date(sum.last_processed_at).toISOString()
-      : undefined,
-  };
+  const normalizationSummary = includeNormalizationSummary
+    ? {
+        totalProcessed: parseInt(sum.total_processed, 10) || 0,
+        passed: parseInt(sum.passed, 10) || 0,
+        warnings: parseInt(sum.warnings, 10) || 0,
+        rejected: parseInt(sum.rejected, 10) || 0,
+        lastProcessedAt: sum.last_processed_at
+          ? new Date(sum.last_processed_at).toISOString()
+          : undefined,
+      }
+    : emptyNormalizationSummary();
 
   const normalizedData = recentRows.rows.map(row =>
     mapToNormalizedRecord(row, row.category_name),
@@ -449,5 +539,6 @@ async function buildDataPipelineViewUncached({ includeBacklog }) {
     history,
     normalizationSummary,
     normalizedData,
+    duplicateAnalysis: duplicateAnalysis || undefined,
   };
 }

@@ -37,6 +37,7 @@ const RAW_HTTP_PATTERNS = [
     /^internal server error$/i,
     /^unauthorized$/i,
     /^forbidden$/i,
+    /^request failed$/i,
 ];
 
 function isNetworkLike(error: Error): boolean {

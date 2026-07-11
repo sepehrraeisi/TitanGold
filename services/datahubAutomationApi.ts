@@ -1,6 +1,29 @@
 import { AgentTopicFormValues, AgentTopicRoute, AutomationScheduleConfig, PublisherQueueItem } from '../types';
 import { DataHubApiError } from './dataSourcesApi';
 
+export type TopicValidity = {
+    status: 'valid' | 'disabled_publisher' | 'missing_mapping' | 'disabled' | 'no_candidates';
+    valid: boolean;
+    reasons: string[];
+    repairActions?: string[];
+    matchingCandidates?: number;
+    canEnqueue?: boolean;
+};
+
+export type AutomationRefreshSummary = {
+    candidates: number;
+    queued: number;
+    skipped: number;
+    blocked: number;
+    reasons: Array<{ code: string; count: number; label: string }>;
+};
+
+export type AutomationHealth = {
+    banner: string;
+    label: string;
+    message: string;
+};
+
 const BASE = '/api/v1/data-hub/automation';
 
 export type AutomationExecutionRecord = {
@@ -10,14 +33,43 @@ export type AutomationExecutionRecord = {
     topicId?: string;
     publisherId?: string;
     agentId?: string;
-    status: 'sent' | 'failed';
+    status: 'sent' | 'failed' | 'dry_run' | 'blocked' | 'skipped';
     dryRun?: boolean;
     sentAt: string;
     latencyMs?: number;
     payloadPreview?: string;
     errorMessage?: string;
+    errorCode?: string | null;
+    errorLabel?: string | null;
+    retryAllowed?: boolean;
+    recordExists?: boolean | null;
+    isStale?: boolean;
+    deliveryMode?: string | null;
     topicName?: string;
     publisherName?: string;
+};
+
+export type TopicValidity = {
+    status: 'valid' | 'disabled_publisher' | 'missing_mapping' | 'disabled' | 'no_candidates';
+    valid: boolean;
+    reasons: string[];
+    repairActions?: string[];
+    matchingCandidates?: number;
+    canEnqueue?: boolean;
+};
+
+export type AutomationRefreshSummary = {
+    candidates: number;
+    queued: number;
+    skipped: number;
+    blocked: number;
+    reasons: Array<{ code: string; count: number; label: string }>;
+};
+
+export type AutomationHealth = {
+    banner: string;
+    label: string;
+    message: string;
 };
 
 export type AutomationOverview = {
@@ -25,11 +77,17 @@ export type AutomationOverview = {
     schedule: AutomationScheduleConfig;
     queue: PublisherQueueItem[];
     executions: AutomationExecutionRecord[];
+    health?: AutomationHealth;
     summary: {
         totalTopics: number;
         enabledTopics: number;
+        validTopics?: number;
+        invalidTopics?: number;
         queueSize: number;
         avgPassRate: number;
+        lastDryRunAt?: string | null;
+        lastBlockedCode?: string | null;
+        lastBlockedReason?: string | null;
     };
 };
 
@@ -146,14 +204,25 @@ export async function updateAutomationScheduleApi(
 
 export async function refreshAutomationQueueApi(): Promise<{
     added: number;
+    skipped?: number;
+    blocked?: number;
+    candidates?: number;
+    summary?: AutomationRefreshSummary;
     queue: PublisherQueueItem[];
 }> {
     return automationRequest('/queue/refresh', { method: 'POST' });
 }
 
+export async function validateAutomationTopicApi(
+    id: string,
+): Promise<{ topic: AgentTopicRoute; validity: TopicValidity }> {
+    return automationRequest(`/topics/${id}/validate`, { method: 'POST' });
+}
+
 export async function dispatchAutomationQueueApi(options?: {
     limit?: number;
     dry_run?: boolean;
+    confirm_live?: boolean;
 }): Promise<{
     processed: number;
     queue: PublisherQueueItem[];
@@ -163,18 +232,20 @@ export async function dispatchAutomationQueueApi(options?: {
         method: 'POST',
         body: JSON.stringify({
             limit: options?.limit ?? 5,
-            dry_run: options?.dry_run ?? false,
+            dry_run: options?.dry_run ?? true,
+            confirm_live: options?.confirm_live ?? false,
         }),
     });
 }
 
 export async function dispatchQueueItemApi(
     id: string,
-    dry_run = false,
+    dry_run = true,
+    confirm_live = false,
 ): Promise<unknown> {
     return automationRequest(`/queue/${id}/dispatch`, {
         method: 'POST',
-        body: JSON.stringify({ dry_run }),
+        body: JSON.stringify({ dry_run, confirm_live }),
     });
 }
 
@@ -185,19 +256,30 @@ export async function failQueueItemApi(id: string, error_message?: string): Prom
     });
 }
 
-export async function retryAutomationExecutionApi(id: string): Promise<unknown> {
-    return automationRequest(`/executions/${id}/retry`, { method: 'POST' });
+export async function retryAutomationExecutionApi(
+    id: string,
+    options?: { dry_run?: boolean; confirm_live?: boolean },
+): Promise<unknown> {
+    return automationRequest(`/executions/${id}/retry`, {
+        method: 'POST',
+        body: JSON.stringify({
+            dry_run: options?.dry_run ?? true,
+            confirm_live: options?.confirm_live ?? false,
+        }),
+    });
 }
 
 export async function runAutomationTestApi(options?: {
     topic_id?: string;
     dry_run?: boolean;
+    confirm_live?: boolean;
 }): Promise<unknown> {
     return automationRequest('/test-run', {
         method: 'POST',
         body: JSON.stringify({
             topic_id: options?.topic_id,
             dry_run: options?.dry_run ?? true,
+            confirm_live: options?.confirm_live ?? false,
         }),
     });
 }

@@ -12,6 +12,7 @@ import {
     parseSourceConfig,
     telegramChannelKeys,
 } from './telegramCollectorSourceStatus.js';
+import { enforceIngestionPolicy, isFilterRuleBlockedError } from './filterRulesGateway.js';
 
 /**
  * Main service to coordinate data fetching across all sources
@@ -85,7 +86,7 @@ export class DataFetcherService {
             const rawData = await this.fetchRawData(source);
 
             // 3. Store in collected_data with deduplication
-            const saveResult = await this.saveFetchedData(source.id, rawData);
+            const saveResult = await this.saveFetchedData(source, rawData);
 
             // 4. Update source metadata and schedule next fetch
             const interval = source.refresh_interval || 60;
@@ -101,10 +102,18 @@ export class DataFetcherService {
 
             await this.logFetchSuccess(
                 source.id,
-                { newItems: saveResult.newItems, skipped: false },
+                {
+                    newItems: saveResult.newItems,
+                    skippedFiltered: saveResult.skippedFiltered,
+                    skipped: false,
+                },
                 Date.now() - startedAt,
             );
-            return { success: true, newItems: saveResult.newItems };
+            return {
+                success: true,
+                newItems: saveResult.newItems,
+                skippedFiltered: saveResult.skippedFiltered,
+            };
 
         } catch (error) {
             await this.logError(source?.id || sourceId, error.message, Date.now() - startedAt);
@@ -359,9 +368,15 @@ export class DataFetcherService {
     /**
      * Saves fetched data to the database with deduplication
      */
-    async saveFetchedData(sourceId, data) {
+    async saveFetchedData(sourceOrId, data) {
+        const source =
+            typeof sourceOrId === 'object' && sourceOrId !== null
+                ? sourceOrId
+                : { id: sourceOrId };
+        const sourceId = source.id;
         const dataToStore = Array.isArray(data) ? data : [data];
         let newItems = 0;
+        let skippedFiltered = 0;
         let lastHash = null;
 
         for (const item of dataToStore) {
@@ -375,6 +390,31 @@ export class DataFetcherService {
             );
 
             if (existing.rows.length === 0) {
+                try {
+                    await enforceIngestionPolicy({
+                        sourceId,
+                        url: item?.url || item?.link || source.url,
+                        text:
+                            item?.content ||
+                            item?.description ||
+                            item?.text ||
+                            item?.message ||
+                            item?.title,
+                        rawData: item,
+                        metadata: {
+                            source_url: source.url,
+                            source_type: source.type,
+                        },
+                        enforcementPath: 'data_fetcher',
+                    });
+                } catch (error) {
+                    if (isFilterRuleBlockedError(error)) {
+                        skippedFiltered++;
+                        continue;
+                    }
+                    throw error;
+                }
+
                 await query(
                     'INSERT INTO collected_data (source_id, raw_data, content_hash, collected_at, status) VALUES ($1, $2, $3, NOW(), $4)',
                     [sourceId, JSON.stringify(item), hash, 'pending']
@@ -383,13 +423,13 @@ export class DataFetcherService {
             }
         }
 
-        return { newItems, lastHash };
+        return { newItems, skippedFiltered, lastHash };
     }
 
     /**
      * Logs a successful fetch to data_hub_logs (one row per fetch, not per message).
      */
-    async logFetchSuccess(sourceId, { newItems = 0, skipped = false, reason }, executionTimeMs) {
+    async logFetchSuccess(sourceId, { newItems = 0, skipped = false, reason, skippedFiltered = 0 }, executionTimeMs) {
         const { tryInsertDataHubAccessLog } = await import('./dataHubAccessLogWriter.js');
         const message = skipped
             ? `Fetch skipped: ${reason}`
@@ -401,6 +441,7 @@ export class DataFetcherService {
             message,
             metadata: {
                 new_items: newItems,
+                skipped_filtered: skippedFiltered,
                 skipped,
                 reason: reason || null,
                 duration_ms: executionTimeMs,

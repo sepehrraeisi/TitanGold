@@ -1,0 +1,113 @@
+{
+  "capturedAt": "2026-06-28T12:47:45.474Z",
+  "appUrl": "https://titan.zala.ir",
+  "verdict_hint": "NGINX ROUTE BROKEN / BACKEND HEALTHY",
+  "metrics": {
+    "hasCriticalStatus": true,
+    "hasFailedAccounts": true,
+    "hasFailedChannels": false,
+    "hasEndpointIssue": false,
+    "hasHtml404": false,
+    "hasTelegramCollectorHeader": true,
+    "serviceUrlShown": "Service URL: https://titan.zala.ir"
+  },
+  "nginxProbes": [
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/health",
+      "status": 404,
+      "contentType": "text/html",
+      "isHtml": true,
+      "bodySnippet": "<html> <head><title>404 Not Found</title></head> <body> <center><h1>404 Not Found</h1></center> <hr><center>nginx</c"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/session/status",
+      "status": 404,
+      "contentType": "text/html",
+      "isHtml": true,
+      "bodySnippet": "<html> <head><title>404 Not Found</title></head> <body> <center><h1>404 Not Found</h1></center> <hr><center>nginx</c"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/accounts",
+      "status": 404,
+      "contentType": "text/html",
+      "isHtml": true,
+      "bodySnippet": "<html> <head><title>404 Not Found</title></head> <body> <center><h1>404 Not Found</h1></center> <hr><center>nginx</c"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/collector-channels",
+      "status": 404,
+      "contentType": "text/html",
+      "isHtml": true,
+      "bodySnippet": "<html> <head><title>404 Not Found</title></head> <body> <center><h1>404 Not Found</h1></center> <hr><center>nginx</c"
+    }
+  ],
+  "directPort3002": [
+    {
+      "url": "http://127.0.0.1:3002/api/telegram-collector/health",
+      "error": "fetch failed"
+    },
+    {
+      "url": "http://127.0.0.1:3002/api/telegram-collector/session/status",
+      "error": "fetch failed"
+    },
+    {
+      "url": "http://127.0.0.1:3002/api/telegram-collector/accounts",
+      "error": "fetch failed"
+    },
+    {
+      "url": "http://127.0.0.1:3002/api/telegram-collector/collector-channels",
+      "error": "fetch failed"
+    }
+  ],
+  "directPort5003": [
+    {
+      "url": "http://127.0.0.1:5003/api/telegram-collector/health",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "bodySnippet": "{\"status\":\"healthy\",\"service\":\"telegram-collector\",\"version\":\"0.5.0\",\"timestamp\":\"2026-06-28T12:47:18.995Z\",\"configured\""
+    },
+    {
+      "url": "http://127.0.0.1:5003/api/telegram-collector/session/status",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "bodySnippet": "{\"stored_in_db\":false,\"message\":\"No session found in database\",\"fallback_to_env\":true}"
+    },
+    {
+      "url": "http://127.0.0.1:5003/api/telegram-collector/accounts",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":true,\"count\":2,\"accounts\":[{\"id\":\"7a8eae98-c2c9-45c7-a374-b00cf8b5538c\",\"phone\":\"+989031395555\",\"label\":\"+989"
+    },
+    {
+      "url": "http://127.0.0.1:5003/api/telegram-collector/collector-channels",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "bodySnippet": "{\"success\":true,\"count\":45,\"channels\":[{\"id\":\"8c9b560c-eb0d-4b4f-872c-d312754fa9eb\",\"channelId\":\"-1001648796579\",\"userna"
+    }
+  ],
+  "browserNetwork": [
+    {
+      "url": "/api/telegram-collector/collector-channels",
+      "status": 404,
+      "contentType": "text/html"
+    },
+    {
+      "url": "/api/telegram-collector/accounts",
+      "status": 404,
+      "contentType": "text/html"
+    },
+    {
+      "url": "/api/telegram-collector/collector-channels",
+      "status": 404,
+      "contentType": "text/html"
+    }
+  ],
+  "notes": [
+    "Read-only audit — no login/import/sync clicked",
+    "Collector microservice responds on :5003; nginx proxies to :3002"
+  ]
+}

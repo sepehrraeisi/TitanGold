@@ -7,6 +7,7 @@ import {
     applyQualityToNormalized,
     scoreNormalizedRecord,
 } from './normalizationQualityScorer.js';
+import { recordPipelineJobHeartbeat } from './pipelineSchedulerRuntime.js';
 
 /** Rows per scheduler tick (override via argument). */
 /** DH-PIPELINE-P1-CAPACITY: 150/min ≈ 216k/day theoretical (Option A). */
@@ -295,5 +296,9 @@ export async function processNormalizationBatch(
         await query('SELECT pg_advisory_unlock($1)', [NORMALIZATION_ADVISORY_LOCK_KEY]).catch(
             () => {},
         );
+        if (!summary.skipped_run) {
+            summary.durationMs = summary.durationMs || Date.now() - started;
+            void recordPipelineJobHeartbeat('normalization', summary).catch(() => {});
+        }
     }
 }

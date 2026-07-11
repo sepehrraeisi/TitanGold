@@ -4,6 +4,8 @@ import {
     fetchDataHubSourcesHealth,
     fetchDataHubSourcesState,
     fetchDataHubSourcesStats,
+    fetchHealthMonitoring,
+    fetchHealthDataQuality,
     fetchDuplicateUrlDashboard,
     setDuplicateUrlIgnore,
 } from '../services/dataSourcesApi.ts';
@@ -19,7 +21,11 @@ export const DATA_HUB_KEYS = {
     categories: () => [...DATA_HUB_KEYS.all, 'categories'] as const,
     pipeline: () => [...DATA_HUB_KEYS.all, 'pipeline'] as const,
     pipelineBacklog: () => [...DATA_HUB_KEYS.all, 'pipelineBacklog'] as const,
+    pipelineNormalizationSummary: () => [...DATA_HUB_KEYS.all, 'pipelineNormalizationSummary'] as const,
+    pipelineCapacity: () => [...DATA_HUB_KEYS.all, 'pipelineCapacity'] as const,
     sourcesHealth: () => [...DATA_HUB_KEYS.all, 'sourcesHealth'] as const,
+    healthMonitoring: () => [...DATA_HUB_KEYS.all, 'healthMonitoring'] as const,
+    healthDataQuality: () => [...DATA_HUB_KEYS.all, 'healthDataQuality'] as const,
     sourcesStats: () => [...DATA_HUB_KEYS.all, 'sourcesStats'] as const,
     sourcesState: () => [...DATA_HUB_KEYS.all, 'sourcesState'] as const,
     healthLogCounts: () => [...DATA_HUB_KEYS.all, 'healthLogCounts'] as const,
@@ -72,11 +78,51 @@ export const usePipelineBacklogQuery = (options?: { enabled?: boolean }) => {
     });
 };
 
+export const usePipelineNormalizationSummaryQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.pipelineNormalizationSummary(),
+        queryFn: api.fetchPipelineNormalizationSummary,
+        staleTime: 60 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const usePipelineCapacityQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.pipelineCapacity(),
+        queryFn: api.fetchPipelineCapacity,
+        staleTime: 60 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
 export const useDataHubSourcesHealthQuery = (options?: { enabled?: boolean }) => {
     return useQuery({
         queryKey: DATA_HUB_KEYS.sourcesHealth(),
         queryFn: fetchDataHubSourcesHealth,
         staleTime: 30 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const useDataHubHealthMonitoringQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.healthMonitoring(),
+        queryFn: fetchHealthMonitoring,
+        staleTime: 30_000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+        enabled: options?.enabled ?? true,
+    });
+};
+
+export const useDataHubHealthDataQualityQuery = (options?: { enabled?: boolean }) => {
+    return useQuery({
+        queryKey: DATA_HUB_KEYS.healthDataQuality(),
+        queryFn: fetchHealthDataQuality,
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+        refetchOnWindowFocus: false,
         enabled: options?.enabled ?? true,
     });
 };

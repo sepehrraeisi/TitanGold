@@ -1,0 +1,287 @@
+{
+  "timestamp": "2026-06-23T15:32:10.101Z",
+  "screenshots": {
+    "before": [
+      "docs/ssot_v3/screenshots/notifications-p3-invalid-token-before-channels.png",
+      "docs/ssot_v3/screenshots/notifications-p3-invalid-token-before-preferences.png",
+      "docs/ssot_v3/screenshots/notifications-p3-invalid-token-before-history.png"
+    ],
+    "after": [
+      "docs/ssot_v3/screenshots/notifications-p3-after-channels.png",
+      "docs/ssot_v3/screenshots/notifications-p3-after-preferences.png",
+      "docs/ssot_v3/screenshots/notifications-p3-after-history.png",
+      "docs/ssot_v3/screenshots/notifications-p3-after-invalid-session.png"
+    ]
+  },
+  "cases": [
+    {
+      "name": "valid-token-after",
+      "responses": [
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/preferences",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"success\":true,\"preferences\":{\"telegram_enabled\":false,\"browser_enabled\":false,\"email_enabled\":false,\"quiet_hours_enabled\":true,\"quiet_hours_start\":\"21:15\",\"quiet_hours_end\":\"07:15\",\"do_not_disturb_enabled\":false,\"frequency_level\":\"normal\",\"updated_at\":\"2026-06-23T14:05:14.031Z\",\"is_default\":false}}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/channels",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"success\":true,\"channels\":{\"telegram\":{\"status\":\"configured\",\"provider\":\"telegram_publisher\",\"configured\":true,\"enabled\":false,\"publisherId\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"publisherName\":\"تایتان تست\",\"destinationMasked\":\"****5348\"},\"browser\":{\"status\":\"disabled\",\"configured\":true,\"enabled\":false},\"email\":{\"status\":\"coming_soon\",\"configured\":false,\"enabled\":false}}}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/history",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"notifications\":[{\"id\":24,\"user_id\":\"e134c7b1-b183-4e21-9acf-e3d53b9806d6\",\"channel\":\"telegram\",\"message_type\":\"test\",\"title\":\"Notification Test\",\"message_preview\":\"Notification channel test\",\"status\":\"dry_run\",\"dry_run\":true,\"source_id\":null,\"publisher_id\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"destination_masked\":\"****5348\",\"error_code\":null,\"error_message\":null,\"metadata\":{\"mode\":\"test\",\"provider\":\"telegram_publisher\",\"requested_at\":\"2026-06-23T15:04:37.736Z\",\"publisher_name\":\"تایتان تست\"},\"created_at\":\"2026-06-23T15:04:37.746Z\",\"read_at\":null},{\"id\":23,\"user_id\":\"e134c7b1-b183-4e21-9acf-e3d53b9806d6\",\"channel\":\"telegram\",\"message_type\":\"test\",\"title\":\"Notification Test\",\"message_preview\":\"Notification channel test\",\"status\":\"dry_run\",\"dry_run\":true,\"source_id\":null,\"publisher_id\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"destination_masked\":\"****5348\",\"error_code\":null,\"error_message"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/test",
+          "method": "POST",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"success\":true,\"status\":\"dry_run\",\"dry_run\":true,\"history\":{\"id\":25,\"user_id\":\"e134c7b1-b183-4e21-9acf-e3d53b9806d6\",\"channel\":\"telegram\",\"message_type\":\"test\",\"title\":\"Notification Test\",\"message_preview\":\"Notification channel test\",\"status\":\"dry_run\",\"dry_run\":true,\"source_id\":null,\"publisher_id\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"destination_masked\":\"****5348\",\"error_code\":null,\"error_message\":null,\"metadata\":{\"mode\":\"test\",\"provider\":\"telegram_publisher\",\"requested_at\":\"2026-06-23T15:32:26.059Z\",\"publisher_name\":\"تایتان تست\"},\"created_at\":\"2026-06-23T15:32:26.073Z\",\"read_at\":null}}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/history",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"notifications\":[{\"id\":25,\"user_id\":\"e134c7b1-b183-4e21-9acf-e3d53b9806d6\",\"channel\":\"telegram\",\"message_type\":\"test\",\"title\":\"Notification Test\",\"message_preview\":\"Notification channel test\",\"status\":\"dry_run\",\"dry_run\":true,\"source_id\":null,\"publisher_id\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"destination_masked\":\"****5348\",\"error_code\":null,\"error_message\":null,\"metadata\":{\"mode\":\"test\",\"provider\":\"telegram_publisher\",\"requested_at\":\"2026-06-23T15:32:26.059Z\",\"publisher_name\":\"تایتان تست\"},\"created_at\":\"2026-06-23T15:32:26.073Z\",\"read_at\":null},{\"id\":24,\"user_id\":\"e134c7b1-b183-4e21-9acf-e3d53b9806d6\",\"channel\":\"telegram\",\"message_type\":\"test\",\"title\":\"Notification Test\",\"message_preview\":\"Notification channel test\",\"status\":\"dry_run\",\"dry_run\":true,\"source_id\":null,\"publisher_id\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"destination_masked\":\"****5348\",\"error_code\":null,\"error_message"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/preferences",
+          "method": "PUT",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"success\":true,\"preferences\":{\"telegram_enabled\":false,\"browser_enabled\":false,\"email_enabled\":false,\"quiet_hours_enabled\":true,\"quiet_hours_start\":\"21:15\",\"quiet_hours_end\":\"07:15\",\"do_not_disturb_enabled\":false,\"frequency_level\":\"high\",\"updated_at\":\"2026-06-23T15:32:28.192Z\",\"is_default\":false}}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/channels",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"success\":true,\"channels\":{\"telegram\":{\"status\":\"configured\",\"provider\":\"telegram_publisher\",\"configured\":true,\"enabled\":false,\"publisherId\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"publisherName\":\"تایتان تست\",\"destinationMasked\":\"****5348\"},\"browser\":{\"status\":\"disabled\",\"configured\":true,\"enabled\":false},\"email\":{\"status\":\"coming_soon\",\"configured\":false,\"enabled\":false}}}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/history",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"notifications\":[{\"id\":25,\"user_id\":\"e134c7b1-b183-4e21-9acf-e3d53b9806d6\",\"channel\":\"telegram\",\"message_type\":\"test\",\"title\":\"Notification Test\",\"message_preview\":\"Notification channel test\",\"status\":\"dry_run\",\"dry_run\":true,\"source_id\":null,\"publisher_id\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"destination_masked\":\"****5348\",\"error_code\":null,\"error_message\":null,\"metadata\":{\"mode\":\"test\",\"provider\":\"telegram_publisher\",\"requested_at\":\"2026-06-23T15:32:26.059Z\",\"publisher_name\":\"تایتان تست\"},\"created_at\":\"2026-06-23T15:32:26.073Z\",\"read_at\":null},{\"id\":24,\"user_id\":\"e134c7b1-b183-4e21-9acf-e3d53b9806d6\",\"channel\":\"telegram\",\"message_type\":\"test\",\"title\":\"Notification Test\",\"message_preview\":\"Notification channel test\",\"status\":\"dry_run\",\"dry_run\":true,\"source_id\":null,\"publisher_id\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"destination_masked\":\"****5348\",\"error_code\":null,\"error_message"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/preferences",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"success\":true,\"preferences\":{\"telegram_enabled\":false,\"browser_enabled\":false,\"email_enabled\":false,\"quiet_hours_enabled\":true,\"quiet_hours_start\":\"21:15\",\"quiet_hours_end\":\"07:15\",\"do_not_disturb_enabled\":false,\"frequency_level\":\"high\",\"updated_at\":\"2026-06-23T15:32:28.192Z\",\"is_default\":false}}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/channels",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"success\":true,\"channels\":{\"telegram\":{\"status\":\"configured\",\"provider\":\"telegram_publisher\",\"configured\":true,\"enabled\":false,\"publisherId\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"publisherName\":\"تایتان تست\",\"destinationMasked\":\"****5348\"},\"browser\":{\"status\":\"disabled\",\"configured\":true,\"enabled\":false},\"email\":{\"status\":\"coming_soon\",\"configured\":false,\"enabled\":false}}}"
+        }
+      ],
+      "consoleMessages": [
+        {
+          "type": "warning",
+          "text": "⚠️ Failed to fetch Artemis state from backend, using fallback: TypeError: Failed to fetch\n    at Tn (https://titan.zala.ir/assets/index-CUhNveSl.js:36:32666)\n    at ic (https://titan.zala.ir/assets/index-CUhNveSl.js:69:14024)\n    at async https://titan.zala.ir/assets/index-CUhNveSl.js:69:20637"
+        },
+        {
+          "type": "log",
+          "text": "✅ MEXC connection settings loaded from backend"
+        },
+        {
+          "type": "log",
+          "text": "📡 Fetching MEXC ticker from: /api/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT"
+        },
+        {
+          "type": "log",
+          "text": "📡 Fetching MEXC ticker from: /api/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT"
+        },
+        {
+          "type": "log",
+          "text": "✅ MEXC connection settings loaded from backend"
+        },
+        {
+          "type": "error",
+          "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}"
+        },
+        {
+          "type": "error",
+          "text": "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-CUhNveSl.js:21:166619)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-CUhNveSl.js:138:29675)"
+        },
+        {
+          "type": "error",
+          "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}"
+        },
+        {
+          "type": "error",
+          "text": "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-CUhNveSl.js:21:166619)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-CUhNveSl.js:138:29675)"
+        },
+        {
+          "type": "log",
+          "text": "✅ MEXC connection settings loaded from backend"
+        },
+        {
+          "type": "log",
+          "text": "📡 Fetching MEXC ticker from: /api/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT"
+        },
+        {
+          "type": "log",
+          "text": "📡 Fetching MEXC ticker from: /api/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT"
+        },
+        {
+          "type": "log",
+          "text": "✅ MEXC connection settings loaded from backend"
+        },
+        {
+          "type": "error",
+          "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}"
+        },
+        {
+          "type": "error",
+          "text": "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-CUhNveSl.js:21:166619)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-CUhNveSl.js:138:29675)"
+        },
+        {
+          "type": "error",
+          "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}"
+        },
+        {
+          "type": "error",
+          "text": "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-CUhNveSl.js:21:166619)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-CUhNveSl.js:138:29675)"
+        }
+      ],
+      "persistedFrequency": "high",
+      "performance": {
+        "duration": 592,
+        "domContentLoaded": 591,
+        "load": 592,
+        "resources": 19
+      },
+      "banners": {
+        "channels": false,
+        "preferences": false,
+        "history": false
+      },
+      "hasRawNotFound": false,
+      "excerpts": {
+        "channels": [
+          "Email Configuration",
+          "Notification Center",
+          "Personal notifications manage your own alerts and preferences. Personal Telegram notifications use the configured Telegram Publisher delivery layer. Broadcast channels are managed in DataHub → Advanced Features → Telegram Publisher.",
+          "configured",
+          "Delivery mode",
+          "Personal only",
+          "Active channels",
+          "Delivery surfaces stay connected to existing providers; raw Telegram credentials are not accepted here.",
+          "Telegram",
+          "Personal Telegram notifications use the configured Telegram Publisher delivery layer. Broadcast channels are managed in DataHub → Advanced Features → Telegram Publisher.",
+          "configured",
+          "Telegram delivery configured: تایتان تست",
+          "Provider: Telegram Publisher",
+          "Configure in Telegram Publisher",
+          "Browser",
+          "Enable Browser Notifications",
+          "Email",
+          "Email notifications are coming soon",
+          "Email notifications are coming soon",
+          "Email notifications are coming soon"
+        ],
+        "preferences": [
+          "Preferences",
+          "Preferences",
+          "Control quiet hours, local browser alerts, and notification frequency for the current user.",
+          "Quiet Hours",
+          "Do Not Disturb",
+          "Notification frequency"
+        ],
+        "history": [
+          "Wallet",
+          "Personal notifications manage your own alerts and preferences. Personal Telegram notifications use the configured Telegram Publisher delivery layer. Broadcast channels are managed in DataHub → Advanced Features → Telegram Publisher.",
+          "History entries",
+          "Blocked or failed",
+          "History",
+          "History",
+          "all",
+          "sent",
+          "failed",
+          "blocked",
+          "dry run",
+          "DATE/TIME\tCHANNEL\tTYPE\tSTATUS\tDRY-RUN/LIVE\tRESULT\tSOURCE",
+          "6/23/2026, 3:32:26 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 3:04:37 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 2:05:59 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 2:05:59 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 2:05:59 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 2:05:59 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 1:04:32 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 1:04:31 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 8:27:57 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 8:27:56 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 8:27:56 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 8:27:56 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 2:21:12 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 2:21:09 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 1:21:17 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 1:21:17 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 1:21:17 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 1:21:17 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-"
+        ]
+      }
+    },
+    {
+      "name": "invalid-token-after",
+      "responses": [
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/preferences",
+          "method": "GET",
+          "status": 401,
+          "ok": false,
+          "payload": "{\"error\":\"Invalid token\"}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/history",
+          "method": "GET",
+          "status": 401,
+          "ok": false,
+          "payload": "{\"error\":\"Invalid token\"}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/channels",
+          "method": "GET",
+          "status": 401,
+          "ok": false,
+          "payload": "{\"error\":\"Invalid token\"}"
+        }
+      ],
+      "storage": {
+        "localToken": null,
+        "sessionToken": null,
+        "localUser": null,
+        "sessionUser": null
+      },
+      "banners": {
+        "channels": false,
+        "preferences": false,
+        "history": false
+      },
+      "loginVisible": true,
+      "excerpt": [
+        "Welcome to Titan",
+        "",
+        "Your personal AI trading autopilot. Please log in to continue.",
+        "",
+        "Username",
+        "Password",
+        "Login"
+      ]
+    }
+  ]
+}

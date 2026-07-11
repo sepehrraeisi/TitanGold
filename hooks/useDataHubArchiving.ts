@@ -3,6 +3,7 @@ import { DATA_HUB_KEYS } from './useDataHubState';
 import {
     fetchArchiveHealth,
     fetchArchiveStats,
+    fetchArchivePartitions,
     fetchArchivedRecords,
     previewArchive,
     executeArchive,
@@ -15,6 +16,7 @@ export const ARCHIVING_KEYS = {
     all: [...DATA_HUB_KEYS.all, 'archiving'] as const,
     health: () => [...ARCHIVING_KEYS.all, 'health'] as const,
     stats: () => [...ARCHIVING_KEYS.all, 'stats'] as const,
+    partitions: () => [...ARCHIVING_KEYS.all, 'partitions'] as const,
     records: (offset: number) => [...ARCHIVING_KEYS.all, 'records', offset] as const,
 };
 
@@ -31,6 +33,18 @@ export function useArchiveStatsQuery() {
         queryKey: ARCHIVING_KEYS.stats(),
         queryFn: () => fetchArchiveStats(20),
         staleTime: 30 * 1000,
+    });
+}
+
+export function useArchivePartitionsQuery(enabled = true) {
+    return useQuery({
+        queryKey: ARCHIVING_KEYS.partitions(),
+        queryFn: async () => {
+            const res = await fetchArchivePartitions();
+            return res.partitions;
+        },
+        staleTime: 30 * 1000,
+        enabled,
     });
 }
 

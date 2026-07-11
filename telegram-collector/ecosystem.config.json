@@ -1,0 +1,21 @@
+{
+  "apps": [
+    {
+      "name": "telegram-collector",
+      "script": "./dist/index.js",
+      "cwd": "/home/ubuntu/webapp/TitanGold/telegram-collector",
+      "instances": 1,
+      "exec_mode": "fork",
+      "env": {
+        "NODE_ENV": "production",
+        "PORT": "5003"
+      },
+      "env_file": "/home/ubuntu/webapp/TitanGold/backend/.env",
+      "error_file": "/home/ubuntu/.pm2/logs/telegram-collector-error.log",
+      "out_file": "/home/ubuntu/.pm2/logs/telegram-collector-out.log",
+      "autorestart": true,
+      "watch": false,
+      "max_memory_restart": "512M"
+    }
+  ]
+}

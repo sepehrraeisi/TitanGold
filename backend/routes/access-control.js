@@ -4,6 +4,11 @@ import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
 import { validateBody, validateParams, validateResponse } from '../middleware/validation.js';
 import { accessControlSchema, accessControlResponseSchema } from '../schemas/accessControlSchemas.js';
+import {
+    listRegistryAgents,
+    logSourceAccessConfigUpdated,
+    validateAgentKeys,
+} from '../middleware/accessControlGateway.js';
 import { z } from 'zod';
 
 const router = express.Router();
@@ -34,6 +39,27 @@ const listItemSchema = z.object({
 
 const listResponseSchema = z.object({
     rules: z.array(listItemSchema),
+});
+
+const agentsListResponseSchema = z.object({
+    agents: z.array(z.object({
+        agent_key: z.string(),
+        name: z.string(),
+        runtime: z.boolean().optional(),
+    })),
+});
+
+/**
+ * GET registry agents for ACL UI (ai_agents + runtime identities)
+ */
+router.get('/agents/registry', authenticate, validateResponse(agentsListResponseSchema), async (req, res) => {
+    try {
+        const agents = await listRegistryAgents();
+        res.json({ agents });
+    } catch (error) {
+        logger.error('Error listing ACL registry agents:', error);
+        res.status(500).json({ error: 'Failed to list registry agents' });
+    }
 });
 
 /**
@@ -143,6 +169,17 @@ router.post('/:sourceId', ...writeAuth, validateParams(sourceIdParamsSchema), va
             max_requests_per_day
         } = req.validatedBody;
 
+        const agentValidation = await validateAgentKeys([
+            ...allowed_agents,
+            ...blocked_agents,
+        ]);
+        if (!agentValidation.valid) {
+            return res.status(400).json({
+                error: 'Invalid agent keys',
+                invalid_keys: agentValidation.invalid,
+            });
+        }
+
         const result = await query(
             `INSERT INTO source_access_controls 
              (source_id, allowed_agents, blocked_agents, allowed_data_types, blocked_data_types, require_auth, max_requests_per_minute, max_requests_per_day, updated_by, updated_at)
@@ -171,6 +208,14 @@ router.post('/:sourceId', ...writeAuth, validateParams(sourceIdParamsSchema), va
             ]
         );
 
+        await logSourceAccessConfigUpdated({
+            sourceId,
+            userId: req.user.id,
+            allowedAgents: allowed_agents,
+            blockedAgents: blocked_agents,
+            action: 'upsert',
+        });
+
         res.status(200).json(result.rows[0]);
     } catch (error) {
         logger.error('Error updating ACL:', error);
@@ -193,6 +238,14 @@ router.delete('/:sourceId', ...writeAuth, validateParams(sourceIdParamsSchema), 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Access control rules not found for this source' });
         }
+
+        await logSourceAccessConfigUpdated({
+            sourceId,
+            userId: req.user.id,
+            allowedAgents: [],
+            blockedAgents: [],
+            action: 'delete',
+        });
 
         res.json({ message: 'Access control rules reset successfully', source_id: sourceId });
     } catch (error) {

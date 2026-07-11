@@ -50,6 +50,18 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         setSelectedSnapshotId,
         isLoadingPipeline,
         isLoadingPipelineBacklog,
+        pipelineBacklogError,
+        pipelineBacklogPartial,
+        pipelineBacklogUnavailableMetrics,
+        pipelineBacklogTrend,
+        handleRetryPipelineBacklog,
+        pipelineNormalizationSummary,
+        isLoadingPipelineNormalization,
+        pipelineNormalizationError,
+        handleRetryPipelineNormalization,
+        pipelineCapacity,
+        isLoadingPipelineCapacity,
+        pipelineCapacityError,
         pipelineApiError,
         agents,
         isLoadingAgents,
@@ -101,6 +113,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         combinedCollectorHealth,
         setCollectorError,
         setCollectorMessage,
+        diagnoseChecks,
+        setDiagnoseChecks,
         setPipelineError,
         categoriesError,
         setCategoriesError,
@@ -122,7 +136,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                 {/* Overview Stats Skeletons — DATAHUB_SHELL (DESIGN_SYSTEM_DATAHUB.md §5) */}
                 <div className={`${DATAHUB_SHELL} space-y-3`}>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {[1, 2, 3, 4].map((i) => (
+                    {[1, 2, 3, 4].map((i) => (
                             <div
                                 key={i}
                                 className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-500/10 via-slate-500/5 to-transparent p-3 backdrop-blur-sm"
@@ -134,7 +148,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                                     <SkeletonLoader width="40%" height="1.5rem" />
                                 </div>
                             </div>
-                        ))}
+                    ))}
                     </div>
                     <SkeletonLoader width="70%" height="0.625rem" />
                 </div>
@@ -284,6 +298,18 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                             handleRefreshPipelineSnapshot={handleRefreshPipelineSnapshot}
                             isLoadingPipeline={isLoadingPipeline}
                             isLoadingPipelineBacklog={isLoadingPipelineBacklog}
+                            pipelineBacklogError={pipelineBacklogError}
+                            pipelineBacklogPartial={pipelineBacklogPartial}
+                            pipelineBacklogUnavailableMetrics={pipelineBacklogUnavailableMetrics}
+                            pipelineBacklogTrend={pipelineBacklogTrend}
+                            onRetryPipelineBacklog={handleRetryPipelineBacklog}
+                            pipelineNormalizationSummary={pipelineNormalizationSummary}
+                            isLoadingPipelineNormalization={isLoadingPipelineNormalization}
+                            pipelineNormalizationError={pipelineNormalizationError}
+                            onRetryPipelineNormalization={handleRetryPipelineNormalization}
+                            pipelineCapacity={pipelineCapacity}
+                            isLoadingPipelineCapacity={isLoadingPipelineCapacity}
+                            pipelineCapacityError={pipelineCapacityError}
                             pipelineApiError={pipelineApiError}
                             setPipelineError={setPipelineError}
                             formatTimeAgo={formatTimeAgo}
@@ -293,11 +319,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                     )}
 
                     {activeView === 'health' && (
-                        <HealthPanel
-                            t={t}
-                            formatTimeAgo={formatTimeAgo}
-                            telegramCollector={dataHub.telegramCollector || null}
-                        />
+                        <HealthPanel t={t} formatTimeAgo={formatTimeAgo} />
                     )}
 
                     {activeView === 'advanced' && (
@@ -345,7 +367,8 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
                                 showLoginWizard={showLoginWizard}
                                 setShowLoginWizard={setShowLoginWizard}
                                 accountsRefreshTrigger={accountsRefreshTrigger}
-                                channelsRefreshTrigger={channelsRefreshTrigger}
+                                diagnoseChecks={diagnoseChecks}
+                                setDiagnoseChecks={setDiagnoseChecks}
                             />
 
                             <TelegramDataPanel

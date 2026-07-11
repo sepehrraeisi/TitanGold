@@ -1,3 +1,5 @@
+import { fetchCollectorJson, diagnoseCollectorEndpoint } from './telegramCollectorErrors.ts';
+import { getCollectorAuthHeaders } from './collectorAuth.ts';
 import { _data } from './_data.ts';
 import { generateDemoChartData } from './chartDataGenerator.ts';
 import { DEFAULT_ARTEMIS_STATE } from '../components/ai/defaults.ts';
@@ -3978,11 +3980,6 @@ const buildBreakoutAlerts = (
         };
     });
 };
-
-
-
-// Telegram API Service
-const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';
 
 
 
@@ -13305,13 +13302,10 @@ export const testAIIntegration = async (
             const { testVoiceConnection } = await import('./voiceService');
             return await testVoiceConnection();
         } else if (serviceId === 'com-telegram') {
-            // Telegram is already tested via sendTestTelegramMessage
-            // Return success if bot token exists
-            const settings = await fetchNotificationSettings();
-            if (settings.telegram.botToken) {
-                return { success: true, latency: 0 };
-            }
-            return { success: false, error: 'Telegram bot token not configured' };
+            const channels = await fetchNotificationChannels();
+            return channels.telegram.configured
+                ? { success: true, latency: 0 }
+                : { success: false, error: 'Telegram Publisher delivery is not configured' };
         } else if (serviceId === 'market-mexc') {
             // MEXC is already tested via fetchMexcTicker24hr
             try {
@@ -15367,6 +15361,146 @@ class TelegramRateLimiter {
 
 const telegramRateLimiter = new TelegramRateLimiter(20);
 
+export interface UnifiedNotificationPreferences {
+    telegram_enabled: boolean;
+    browser_enabled: boolean;
+    email_enabled: boolean;
+    quiet_hours_enabled: boolean;
+    quiet_hours_start: string;
+    quiet_hours_end: string;
+    do_not_disturb_enabled: boolean;
+    frequency_level: 'low' | 'normal' | 'high';
+    updated_at?: string | null;
+    browser?: {
+        enabled: boolean;
+        updated_at?: string | null;
+    };
+}
+
+export interface UnifiedNotificationChannels {
+    telegram: {
+        status: 'configured' | 'not_configured';
+        provider: 'telegram_publisher';
+        configured: boolean;
+        enabled: boolean;
+        publisherId: string | null;
+        publisherName: string | null;
+        destinationMasked: string | null;
+    };
+    browser: {
+        status: 'enabled' | 'disabled';
+        configured: boolean;
+        enabled: boolean;
+    };
+    email: {
+        status: 'coming_soon' | 'configured' | 'not_configured';
+        configured: boolean;
+        enabled: boolean;
+    };
+}
+
+export interface UnifiedNotificationHistoryItem {
+    id: number;
+    channel: 'telegram' | 'browser' | 'email' | 'system';
+    message_type: string;
+    title: string;
+    message_preview: string;
+    status: 'dry_run' | 'sent' | 'failed' | 'blocked' | 'skipped';
+    dry_run: boolean;
+    source_id: string | null;
+    publisher_id: string | null;
+    destination_masked: string | null;
+    error_code: string | null;
+    error_message: string | null;
+    metadata: Record<string, any>;
+    created_at: string;
+}
+
+const notificationAuthHeaders = (): HeadersInit => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    return {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+};
+
+const expireNotificationAuthSession = () => {
+    localStorage.removeItem('titan_token');
+    localStorage.removeItem('titan_user');
+    sessionStorage.removeItem('titan_token');
+    sessionStorage.removeItem('titan_user');
+    window.dispatchEvent(new CustomEvent('titan_auth_expired', {
+        detail: { source: 'notifications' },
+    }));
+};
+
+async function notificationRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const response = await fetch(`/api/v1/notifications${path}`, {
+        ...init,
+        headers: {
+            ...notificationAuthHeaders(),
+            ...(init.headers || {}),
+        },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+            expireNotificationAuthSession();
+            const authError = new Error('AUTH_EXPIRED');
+            (authError as Error & { code?: string; status?: number }).code = 'AUTH_EXPIRED';
+            (authError as Error & { code?: string; status?: number }).status = response.status;
+            throw authError;
+        }
+        throw new Error(data.error || data.message || `Notification API failed (${response.status})`);
+    }
+    return data as T;
+}
+
+export const fetchNotificationPreferences = async (): Promise<UnifiedNotificationPreferences> => {
+    const result = await notificationRequest<{ success: boolean; preferences: UnifiedNotificationPreferences }>('/preferences');
+    return result.preferences;
+};
+
+export const updateNotificationPreferences = async (
+    preferences: Partial<UnifiedNotificationPreferences>,
+): Promise<UnifiedNotificationPreferences> => {
+    const result = await notificationRequest<{ success: boolean; preferences: UnifiedNotificationPreferences }>('/preferences', {
+        method: 'PUT',
+        body: JSON.stringify(preferences),
+    });
+    return result.preferences;
+};
+
+export const fetchNotificationChannels = async (): Promise<UnifiedNotificationChannels> => {
+    const result = await notificationRequest<{ success: boolean; channels: UnifiedNotificationChannels }>('/channels');
+    return result.channels;
+};
+
+export const fetchUnifiedNotificationHistory = async (
+    status: string = 'all',
+): Promise<{ notifications: UnifiedNotificationHistoryItem[]; total: number }> => {
+    const params = new URLSearchParams();
+    if (status && status !== 'all') params.set('status', status);
+    const suffix = params.toString() ? `/history?${params.toString()}` : '/history';
+    const result = await notificationRequest<{ notifications: UnifiedNotificationHistoryItem[]; total: number }>(suffix);
+    return { notifications: result.notifications || [], total: result.total || 0 };
+};
+
+export const testNotificationChannel = async ({
+    channel,
+    dry_run = true,
+    confirm_live = false,
+}: {
+    channel: 'telegram' | 'browser' | 'email' | 'system';
+    dry_run?: boolean;
+    confirm_live?: boolean;
+}): Promise<any> => {
+    return notificationRequest('/test', {
+        method: 'POST',
+        body: JSON.stringify({ channel, dry_run, confirm_live }),
+    });
+};
+
 // Message Queue for Telegram
 interface QueuedMessage {
     id: string;
@@ -15445,6 +15579,17 @@ function formatMessage(template: string, data: Record<string, any>): string {
     return message;
 }
 
+function sanitizeLegacyNotificationSettings(settings: NotificationSettings): NotificationSettings {
+    return {
+        ...settings,
+        telegram: {
+            ...settings.telegram,
+            botToken: '',
+            channels: [],
+        },
+    };
+}
+
 // Fetch enhanced notification settings
 export const fetchNotificationSettings = async (): Promise<NotificationSettings> => {
     try {
@@ -15471,7 +15616,7 @@ export const fetchNotificationSettings = async (): Promise<NotificationSettings>
                     delete (saved.telegram as any).channelId;
                 }
             }
-            return saved;
+            return sanitizeLegacyNotificationSettings(saved);
         }
     } catch (e) {
         console.warn('Failed to load from IndexedDB:', e);
@@ -15502,7 +15647,7 @@ export const fetchNotificationSettings = async (): Promise<NotificationSettings>
                     delete parsed.telegram.channelId;
                 }
             }
-            return parsed;
+            return sanitizeLegacyNotificationSettings(parsed);
         }
     } catch (e) {
         console.warn('Failed to load from localStorage:', e);
@@ -15602,10 +15747,11 @@ export const fetchNotificationSettings = async (): Promise<NotificationSettings>
 
 // Save enhanced notification settings
 export const saveNotificationSettings = async (settings: NotificationSettings): Promise<void> => {
+    const safeSettings = sanitizeLegacyNotificationSettings(settings);
     try {
         await database.save('notificationSettings', {
             id: 'default',
-            ...settings,
+            ...safeSettings,
             updatedAt: new Date().toISOString()
         });
         console.log('✅ Notification settings saved to IndexedDB');
@@ -15614,7 +15760,7 @@ export const saveNotificationSettings = async (settings: NotificationSettings): 
     }
 
     try {
-        localStorage.setItem('titan_notification_settings', JSON.stringify(settings));
+        localStorage.setItem('titan_notification_settings', JSON.stringify(safeSettings));
         console.log('✅ Notification settings saved to localStorage');
     } catch (e) {
         console.error('Failed to save to localStorage:', e);
@@ -15675,296 +15821,46 @@ export const removeTelegramChannel = async (channelId: string): Promise<Notifica
     return settings;
 };
 
-// Get Telegram Bot Info
-export const getTelegramBotInfo = async (botToken: string): Promise<{ success: boolean; data?: any; message: string }> => {
-    if (!botToken || !/^\d+:[A-Za-z0-9_-]+$/.test(botToken.trim())) {
-        return { success: false, message: '❌ Invalid bot token format' };
-    }
-
-    try {
-        const apiUrl = import.meta.env.DEV
-            ? `/api/telegram/bot${botToken.trim()}/getMe`
-            : `${TELEGRAM_API_BASE}${botToken.trim()}/getMe`;
-
-        console.log('Telegram API URL:', apiUrl.replace(botToken, 'TOKEN_HIDDEN'));
-
-        const response = await fetch(apiUrl, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
+// Legacy compatibility: Telegram credentials are no longer accepted in the browser.
+export const getTelegramBotInfo = async (): Promise<{ success: boolean; data?: any; message: string }> => {
+    const channels = await fetchNotificationChannels();
+    return channels.telegram.configured
+        ? {
+            success: true,
+            data: {
+                provider: channels.telegram.provider,
+                publisherName: channels.telegram.publisherName,
+                destinationMasked: channels.telegram.destinationMasked,
             },
-        });
-
-        console.log('Telegram API Response status:', response.status);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Telegram API Error:', errorText);
-
-            let errorData: any = {};
-            try {
-                errorData = JSON.parse(errorText);
-            } catch (e) {
-                // Ignore parse error
-            }
-
-            return {
-                success: false,
-                message: `❌ ${errorData.description || `HTTP ${response.status}: ${errorText.substring(0, 100)}`}`
-            };
+            message: `✅ Telegram Publisher configured: ${channels.telegram.publisherName || 'Configured'}`
         }
-
-        const data = await response.json();
-        console.log('Telegram API Response data:', data);
-
-        if (data.ok) {
-            return {
-                success: true,
-                data: data.result,
-                message: `✅ Bot verified: @${data.result.username}`
-            };
-        }
-
-        return {
-            success: false,
-            message: `❌ ${data.description || 'Failed to get bot info'}`
-        };
-    } catch (error) {
-        console.error('Telegram API Network Error:', error);
-        return {
-            success: false,
-            message: `❌ Network error: ${error instanceof Error ? error.message : 'Unknown error'}. Check console for details.`
-        };
-    }
+        : { success: false, message: 'Telegram Publisher delivery is not configured' };
 };
 
-// Test Telegram Channel Access
-export const testTelegramChannel = async (botToken: string, channelId: string): Promise<{ success: boolean; message: string }> => {
-    if (!botToken || !channelId) {
-        return { success: false, message: '❌ Bot token and channel ID are required' };
-    }
-
-    if (!/^\d+:[A-Za-z0-9_-]+$/.test(botToken.trim())) {
-        return { success: false, message: '❌ Invalid bot token format' };
-    }
-
-    try {
-        let cleanChannelId = channelId.trim();
-        if (!/^-?\d+$/.test(cleanChannelId) && !cleanChannelId.startsWith('@')) {
-            cleanChannelId = `@${cleanChannelId}`;
-        }
-
-        const apiUrl = import.meta.env.DEV
-            ? `/api/telegram/bot${botToken.trim()}/getChat`
-            : `${TELEGRAM_API_BASE}${botToken.trim()}/getChat`;
-
-        console.log('Testing channel URL:', apiUrl.replace(botToken, 'TOKEN_HIDDEN'));
-        console.log('Channel ID:', cleanChannelId);
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: cleanChannelId }),
-        });
-
-        console.log('Channel test response status:', response.status);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Channel test error:', errorText);
-
-            let errorData: any = {};
-            try {
-                errorData = JSON.parse(errorText);
-            } catch (e) {
-                // Ignore parse error
-            }
-
-            let errorMessage = errorData.description || `HTTP ${response.status}`;
-
-            if (errorData.error_code === 400) {
-                errorMessage = 'Invalid channel ID format';
-            } else if (errorData.error_code === 403) {
-                errorMessage = 'Bot is not a member of this channel. Add bot as administrator.';
-            } else if (errorData.error_code === 404) {
-                errorMessage = 'Channel not found or bot not added';
-            }
-
-            return { success: false, message: `❌ ${errorMessage}` };
-        }
-
-        const data = await response.json();
-        console.log('Channel test response data:', data);
-
-        if (data.ok) {
-            return {
-                success: true,
-                message: `✅ Channel verified: ${data.result.title || data.result.username || cleanChannelId}`
-            };
-        }
-
-        return { success: false, message: `❌ ${data.description || 'Failed to verify channel'}` };
-    } catch (error) {
-        console.error('Channel test network error:', error);
-        return {
-            success: false,
-            message: `❌ Network error: ${error instanceof Error ? error.message : 'Unknown error'}. Check console for details.`
-        };
-    }
+export const testTelegramChannel = async (): Promise<{ success: boolean; message: string }> => {
+    const result = await testNotificationChannel({ channel: 'telegram', dry_run: true });
+    return {
+        success: Boolean(result.success),
+        message: result.success
+            ? '✅ Telegram dry-run completed without sending a message'
+            : result.error || result.code || 'Telegram dry-run could not be completed'
+    };
 };
 
 // Enhanced send Telegram message with retry and rate limiting
 export const sendTestTelegramMessage = async (
-    botToken: string,
-    channelId: string,
+    _botToken: string,
+    _channelId: string,
     options?: { parse_mode?: 'Markdown' | 'HTML'; disable_notification?: boolean }
 ): Promise<{ success: boolean; message: string; messageId?: number }> => {
-    if (!botToken || !channelId) {
-        return { success: false, message: 'Bot token and channel ID are required' };
-    }
-
-    if (!/^\d+:[A-Za-z0-9_-]+$/.test(botToken.trim())) {
-        return { success: false, message: '❌ Invalid bot token format' };
-    }
-
-    const settings = await fetchNotificationSettings();
-    const startTime = Date.now();
-
-    try {
-        // Check rate limiting
-        if (settings.telegram.rateLimit.enabled) {
-            await telegramRateLimiter.waitForSlot();
-        }
-
-        let cleanChannelId = channelId.trim();
-        if (!/^-?\d+$/.test(cleanChannelId) && !cleanChannelId.startsWith('@')) {
-            cleanChannelId = `@${cleanChannelId}`;
-        }
-
-        const apiUrl = import.meta.env.DEV
-            ? `/api/telegram/bot${botToken.trim()}/sendMessage`
-            : `${TELEGRAM_API_BASE}${botToken.trim()}/sendMessage`;
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: cleanChannelId,
-                text: '✅ *Titan Trading Bot Test*\n\nThis is a test message from your Titan Trading Autopilot system. Your Telegram notifications are working correctly!',
-                parse_mode: options?.parse_mode || settings.telegram.parseMode,
-                disable_notification: options?.disable_notification || settings.telegram.disableNotifications,
-            }),
-        });
-
-        const responseTime = Date.now() - startTime;
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            let errorMessage = `HTTP ${response.status}`;
-
-            try {
-                const errorData = JSON.parse(errorText);
-                if (errorData.description) {
-                    errorMessage = errorData.description;
-
-                    if (errorData.error_code === 400) {
-                        errorMessage = 'Bad Request: Check bot token and channel ID format';
-                    } else if (errorData.error_code === 401) {
-                        errorMessage = 'Unauthorized: Invalid bot token';
-                    } else if (errorData.error_code === 403) {
-                        errorMessage = 'Forbidden: Bot must be added to channel as administrator';
-                    } else if (errorData.error_code === 404) {
-                        errorMessage = 'Not Found: Invalid bot token or bot not in channel';
-                    }
-                }
-            } catch (e) {
-                errorMessage = errorText || `HTTP ${response.status}`;
-            }
-
-            // Update analytics
-            settings.analytics.telegram.totalFailed++;
-            await saveNotificationSettings(settings);
-
-            throw new Error(errorMessage);
-        }
-
-        const data = await response.json();
-
-        if (data.ok) {
-            // Update analytics
-            settings.analytics.telegram.totalSent++;
-            const total = settings.analytics.telegram.totalSent + settings.analytics.telegram.totalFailed;
-            settings.analytics.telegram.successRate = total > 0
-                ? Math.round((settings.analytics.telegram.totalSent / total) * 100 * 100) / 100
-                : 100;
-
-            const oldAvg = settings.analytics.telegram.averageResponseTime;
-            const count = settings.analytics.telegram.totalSent;
-            settings.analytics.telegram.averageResponseTime =
-                Math.round(((oldAvg * (count - 1)) + responseTime) / count);
-
-            // Update last 24h count
-            const last24h = settings.history.telegram.filter(h => {
-                const sentTime = new Date(h.sentAt).getTime();
-                return Date.now() - sentTime < 24 * 60 * 60 * 1000;
-            }).length;
-            settings.analytics.telegram.last24h = last24h;
-
-            // Save to history
-            settings.history.telegram.unshift({
-                id: `telegram-${Date.now()}`,
-                type: 'test',
-                message: 'Test message',
-                channelId: cleanChannelId,
-                sentAt: new Date().toISOString(),
-                status: 'success',
-            });
-
-            // Keep only last 100
-            if (settings.history.telegram.length > 100) {
-                settings.history.telegram = settings.history.telegram.slice(0, 100);
-            }
-
-            await saveNotificationSettings(settings);
-
-            return {
-                success: true,
-                message: '✅ Test message sent successfully!',
-                messageId: data.result.message_id
-            };
-        }
-
-        // Update analytics
-        settings.analytics.telegram.totalFailed++;
-        await saveNotificationSettings(settings);
-
-        return { success: false, message: `❌ ${data.description || 'Unknown error'}` };
-    } catch (error) {
-        // Save failed to history
-        const settings = await fetchNotificationSettings();
-        settings.history.telegram.unshift({
-            id: `telegram-${Date.now()}`,
-            type: 'test',
-            message: 'Test message',
-            channelId: channelId,
-            sentAt: new Date().toISOString(),
-            status: 'failed',
-            error: error instanceof Error ? error.message : 'Unknown error',
-        });
-
-        if (settings.history.telegram.length > 100) {
-            settings.history.telegram = settings.history.telegram.slice(0, 100);
-        }
-
-        // Update analytics
-        settings.analytics.telegram.totalFailed++;
-        await saveNotificationSettings(settings);
-
-        return {
-            success: false,
-            message: `❌ ${error instanceof Error ? error.message : 'Unknown error'}`
-        };
-    }
+    const result = await testNotificationChannel({ channel: 'telegram', dry_run: true });
+    return {
+        success: Boolean(result.success),
+        message: result.success
+            ? '✅ Telegram dry-run completed without sending a message!'
+            : `❌ ${result.error || result.code || 'Telegram dry-run failed'}`,
+        messageId: undefined,
+    };
 };
 
 // Send notification with type filtering, quiet hours, and priority
@@ -15973,126 +15869,13 @@ export const sendTelegramNotification = async (
     type: 'trades' | 'alerts' | 'news' | 'predictions' | 'errors',
     data?: Record<string, any>
 ): Promise<{ success: boolean; message: string; sentToChannels: number }> => {
-    const settings = await fetchNotificationSettings();
-
-    if (!settings.telegram.enabled || !settings.telegram.botToken) {
-        return { success: false, message: 'Telegram notifications not configured or disabled', sentToChannels: 0 };
-    }
-
-    // Check global quiet hours
-    if (settings.global.quietHours.enabled && isInQuietHours(settings.global.quietHours)) {
-        return { success: false, message: 'Quiet hours active', sentToChannels: 0 };
-    }
-
-    // Check Do Not Disturb
-    if (settings.global.doNotDisturb.enabled) {
-        if (settings.global.doNotDisturb.until) {
-            const until = new Date(settings.global.doNotDisturb.until);
-            if (new Date() < until) {
-                return { success: false, message: 'Do Not Disturb mode active', sentToChannels: 0 };
-            }
-        } else {
-            return { success: false, message: 'Do Not Disturb mode active', sentToChannels: 0 };
-        }
-    }
-
-    // Format message with template
-    const template = settings.telegram.messageTemplates[type] || '{message}';
-    const formattedMessage = formatMessage(template, { message, ...data });
-
-    // Get priority
-    const priorityMap = { low: 1, normal: 2, high: 3, urgent: 4 };
-
-    // Send to all enabled channels that have this notification type enabled
-    const enabledChannels = settings.telegram.channels.filter(channel =>
-        channel.enabled && channel.notificationTypes[type]
-    );
-
-    if (enabledChannels.length === 0) {
-        return { success: false, message: `No enabled channels for ${type} notifications`, sentToChannels: 0 };
-    }
-
-    let successCount = 0;
-    const errors: string[] = [];
-
-    for (const channel of enabledChannels) {
-        // Check channel quiet hours
-        if (channel.quietHours && isInQuietHours(channel.quietHours)) {
-            continue;
-        }
-
-        try {
-            // Add to queue with priority
-            const priority = priorityMap[channel.priority] || 2;
-
-            if (settings.telegram.rateLimit.enabled) {
-                await telegramRateLimiter.waitForSlot();
-            }
-
-            const result = await sendTestTelegramMessage(
-                settings.telegram.botToken,
-                channel.channelId,
-                {
-                    parse_mode: settings.telegram.parseMode,
-                    disable_notification: settings.telegram.disableNotifications,
-                }
-            );
-
-            if (result.success) {
-                successCount++;
-
-                // Update history
-                settings.history.telegram.unshift({
-                    id: `telegram-${Date.now()}-${channel.id}`,
-                    type,
-                    message: formattedMessage.substring(0, 100),
-                    channelId: channel.channelId,
-                    sentAt: new Date().toISOString(),
-                    status: 'success',
-                });
-            } else {
-                errors.push(`${channel.name}: ${result.message}`);
-            }
-        } catch (error) {
-            errors.push(`${channel.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-
-            // Save to history
-            settings.history.telegram.unshift({
-                id: `telegram-${Date.now()}-${channel.id}`,
-                type,
-                message: formattedMessage.substring(0, 100),
-                channelId: channel.channelId,
-                sentAt: new Date().toISOString(),
-                status: 'failed',
-                error: error instanceof Error ? error.message : 'Unknown error',
-            });
-        }
-
-        // Retry logic if enabled
-        if (settings.telegram.retryPolicy.enabled) {
-            // Retry logic would go here
-        }
-    }
-
-    // Keep history limited
-    if (settings.history.telegram.length > 100) {
-        settings.history.telegram = settings.history.telegram.slice(0, 100);
-    }
-
-    await saveNotificationSettings(settings);
-
-    if (successCount === 0) {
-        return {
-            success: false,
-            message: `Failed to send to all channels: ${errors.join('; ')}`,
-            sentToChannels: 0
-        };
-    }
-
+    const result = await testNotificationChannel({ channel: 'telegram', dry_run: true });
     return {
-        success: true,
-        message: `Sent to ${successCount}/${enabledChannels.length} channels`,
-        sentToChannels: successCount
+        success: Boolean(result.success),
+        message: result.success
+            ? `Telegram dry-run recorded for ${type}; no message was sent.`
+            : result.error || result.code || 'Telegram notification dry-run failed',
+        sentToChannels: result.success ? 1 : 0,
     };
 };
 
@@ -16233,7 +16016,8 @@ export const importNotificationSettings = async (jsonData: string): Promise<{ su
             ...imported,
             telegram: {
                 ...imported.telegram,
-                botToken: current.telegram.botToken, // Keep current token
+                botToken: '',
+                channels: [],
             },
         };
 
@@ -21022,52 +20806,12 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
         if (!cached) {
             // Handle Telegram sources specially
             if (source.type === 'telegram') {
-                // Try to get bot token from source credentials first, then from notification settings
-                let botToken = source.credentials?.token || source.credentials?.apiKey;
-
-                // If no token in source, try to get from notification settings
-                if (!botToken) {
-                    try {
-                        const notificationSettings = await fetchNotificationSettings();
-                        if (notificationSettings?.telegram?.botToken) {
-                            botToken = notificationSettings.telegram.botToken;
-                        }
-                    } catch (e) {
-                        console.warn('Failed to load notification settings for Telegram token:', e);
-                    }
-                }
-
-                // Try to get channel info from source or notification settings
+                // Frontend must never call Telegram Bot API directly. Public channels
+                // may be previewed through the existing public fetch path only.
                 let channelUsername = deriveTelegramChannelSlug(source);
                 let channelId: string | undefined = source.credentials?.channelId;
-
-                // If no channel info in source, try to find matching channel in notification settings
-                if (!channelUsername && !channelId) {
-                    try {
-                        const notificationSettings = await fetchNotificationSettings();
-                        if (notificationSettings?.telegram?.channels && notificationSettings.telegram.channels.length > 0) {
-                            // Try to match by URL or use first enabled channel
-                            const sourceUrl = source.url?.toLowerCase() || '';
-                            const matchingChannel = notificationSettings.telegram.channels.find(ch =>
-                                ch.enabled && (
-                                    ch.channelId?.toLowerCase().includes(sourceUrl) ||
-                                    ch.name?.toLowerCase().includes(channelUsername?.toLowerCase() || '')
-                                )
-                            ) || notificationSettings.telegram.channels.find(ch => ch.enabled);
-
-                            if (matchingChannel) {
-                                channelId = matchingChannel.channelId;
-                                if (!channelUsername && matchingChannel.name) {
-                                    // Try to extract username from channelId if it's a username format
-                                    if (matchingChannel.channelId.startsWith('@')) {
-                                        channelUsername = matchingChannel.channelId.replace('@', '');
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Failed to load notification settings for channel info:', e);
-                    }
+                if (!channelUsername && channelId?.startsWith('@')) {
+                    channelUsername = channelId.replace('@', '');
                 }
 
                 const fetchPublicChannelIfPossible = async () => {
@@ -21085,149 +20829,33 @@ export const requestData = async (request: DataRequest): Promise<DataResponse> =
                     return null;
                 };
 
-                if (!botToken) {
-                    const publicData = await fetchPublicChannelIfPossible();
-                    if (publicData) {
-                        // Convert to article format for agents
-                        data = {
-                            channel: publicData.channel,
-                            messages: publicData.messages,
-                            articles: publicData.articles,
-                            totalMessages: publicData.totalMessages,
-                            note: publicData.note,
-                            source: source.name,
-                            lastUpdated: new Date().toISOString(),
-                        };
-                    } else {
+                const publicData = await fetchPublicChannelIfPossible();
+                if (publicData) {
+                    // Convert to article format for agents
                     data = {
-                        message: 'Telegram Bot Token not found',
+                        channel: publicData.channel,
+                        messages: publicData.messages,
+                        articles: publicData.articles,
+                        totalMessages: publicData.totalMessages,
+                        note: publicData.note,
                         source: source.name,
-                        type: source.type,
-                        channel: channelUsername || 'Unknown',
-                            note: 'Telegram Bot Token not found in source settings or Configuration. Please configure Telegram Bot Token in Configuration > Communications and Alerts, یا لینک عمومی کانال باید قابل‌دسترسی باشد.',
-                        instructions: [
-                                'اگر کانال عمومی است اطمینان حاصل کنید که در مرورگر به https://t.me/s/<channel> دسترسی دارید.',
-                                'در غیر این صورت توکن ربات را در تنظیمات Communication -> Telegram وارد کنید یا مستقیم در منبع ذخیره نمایید.',
-                            ]
-                        };
-                    }
+                        lastUpdated: new Date().toISOString(),
+                    };
                 } else if (!channelUsername && !channelId) {
                     data = {
                         message: 'Telegram Channel not configured',
                         source: source.name,
                         type: source.type,
-                        note: 'Please configure the Telegram channel username (without @) or channel ID in the source settings, or add it in Configuration > Communications and Alerts.'
+                        note: 'Configure a public Telegram channel username in the source. Private bot-based fetches must run through backend collectors, not browser code.'
                     };
                 } else {
-                    // Try to fetch from Telegram API
-                    try {
-                        // Use getUpdates to get recent messages
-                        // Note: Telegram Bot API requires the bot to be a member of the channel for private channels
-                        const telegramApiUrl = `https://api.telegram.org/bot${botToken}/getUpdates?limit=100`;
-
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-                        const response = await fetch(telegramApiUrl, {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            signal: controller.signal,
-                        });
-
-                        clearTimeout(timeoutId);
-
-                        if (response.ok) {
-                            const telegramData = await response.json();
-
-                            if (telegramData.ok && telegramData.result) {
-                                // Filter messages from the specific channel
-                                const channelMessages = telegramData.result
-                                    .filter((update: any) => {
-                                        if (!update.message) return false;
-                                        const chat = update.message.chat;
-
-                                        // Match by username
-                                        if (channelUsername && chat.username) {
-                                            return chat.username.toLowerCase() === channelUsername.replace('@', '').toLowerCase();
-                                        }
-
-                                        // Match by channel ID
-                                        if (channelId) {
-                                            const chatIdStr = String(chat.id);
-                                            const channelIdStr = channelId.replace('@', '').replace('-100', '');
-                                            return chatIdStr === channelIdStr || chatIdStr.endsWith(channelIdStr);
-                                        }
-
-                                        // Match by title (partial match)
-                                        if (channelUsername && chat.title) {
-                                            return chat.title.toLowerCase().includes(channelUsername.toLowerCase());
-                                        }
-
-                                        return false;
-                                    })
-                                    .slice(-10) // Last 10 messages
-                                    .map((update: any) => ({
-                                        text: update.message.text || update.message.caption || '[Media message]',
-                                        timestamp: new Date(update.message.date * 1000).toISOString(),
-                                        messageId: update.message.message_id,
-                                        chat: update.message.chat?.title || update.message.chat?.username || channelUsername || channelId,
-                                    }));
-
-                                if (channelMessages.length > 0) {
-                                    // Convert bot API messages to article format
-                                    const articles = convertTelegramMessagesToArticles(
-                                        channelMessages.map((msg: any) => ({
-                                            text: msg.text,
-                                            timestamp: msg.timestamp,
-                                            link: `https://t.me/${channelUsername}/${msg.messageId}`,
-                                        })),
-                                        channelUsername
-                                    );
-                                    data = {
-                                        channel: channelUsername,
-                                        messages: channelMessages,
-                                        articles,
-                                        totalMessages: channelMessages.length,
-                                        note: channelMessages.length < 10 ?
-                                            `Showing ${channelMessages.length} recent messages. Make sure the bot is added to the channel.` :
-                                            'Showing last 10 messages from this channel.',
-                                        source: source.name,
-                                        lastUpdated: new Date().toISOString(),
-                                    };
-                                } else {
-                                    data = {
-                                        channel: channelUsername,
-                                        messages: [],
-                                        note: 'No messages found via bot. Trying public channel fetch...',
-                                        botInfo: telegramData.ok ? 'Bot is active' : 'Bot status unknown'
-                                    };
-                                }
-                            } else {
-                                throw new Error(telegramData.description || 'Failed to get Telegram updates');
-                            }
-                        } else {
-                            const errorText = await response.text();
-                            let errorData: any = {};
-                            try {
-                                errorData = JSON.parse(errorText);
-                            } catch { }
-
-                            throw new Error(errorData.description || `HTTP ${response.status}: ${response.statusText}`);
-                        }
-                    } catch (telegramError: any) {
-                        console.error('Telegram API error:', telegramError);
-                        data = {
-                            error: true,
-                            message: telegramError.message || 'Failed to fetch from Telegram API',
-                            source: source.name,
-                            channel: channelUsername || 'Unknown',
-                            details: telegramError.toString(),
-                            note: 'Make sure: 1) Bot token is valid, 2) Bot is added to the channel, 3) Channel username is correct',
-                            suggestion: 'Check the bot token and ensure the bot has access to the channel'
-                        };
-                    }
+                    data = {
+                        channel: channelUsername || channelId || 'Unknown',
+                        messages: [],
+                        articles: [],
+                        source: source.name,
+                        note: 'Browser Telegram Bot API access is disabled. Use a public channel URL or backend Telegram Collector.',
+                    };
                 }
 
                 if (
@@ -21546,66 +21174,39 @@ export const refreshTelegramCollectorChannels = async (): Promise<TelegramCollec
     const dataHub = await fetchDataHubState();
     const collector = ensureTelegramCollectorState(dataHub);
     const now = Date.now();
-    const existingChannelsByHandle = new Map(
-        collector.channels.map(channel => [channel.handle?.toLowerCase() || channel.id.toLowerCase(), channel]),
-    );
 
     try {
-        // Try to fetch real channels from telegram-collector service
         const baseUrl = resolveTelegramCollectorBaseUrl();
-        const response = await fetch(`${baseUrl}/api/telegram-collector/channels`);
-        
+        const response = await fetch(`${baseUrl}/api/telegram-collector/collector-channels`);
+
         if (response.ok) {
             const data = await response.json();
-            
-            // Convert real Telegram channels to our format
             if (data.channels && Array.isArray(data.channels)) {
-                const refreshedChannels = data.channels.map((ch: any, index: number) => {
-                    const handle = (ch.username || `channel_${index}`).toLowerCase();
-                    const existingChannel = existingChannelsByHandle.get(handle);
-                    const baseChannel = {
-                    id: `real-${ch.id}`,
-                    title: ch.title,
-                    handle: ch.username || `channel_${index}`,
-                        status: 'idle' as TelegramCollectorChannelStatus,
-                        enabled: existingChannel?.enabled ?? true,
+                collector.channels = data.channels.map((ch: any) => ({
+                    id: String(ch.id),
+                    title: ch.title || ch.username || String(ch.channelId),
+                    handle: ch.username || String(ch.channelId),
+                    status: ch.isActive ? 'idle' : 'paused',
+                    enabled: ch.isActive !== false,
                     usingCollector: true,
-                        category: existingChannel?.category || 'telegram',
-                        sourceId: existingChannel?.sourceId || `telegram-${ch.username || ch.id}`,
-                        lastSyncAt: existingChannel?.lastSyncAt || new Date(now - 1000 * 60 * (5 + Math.random() * 30)).toISOString(),
-                        lastMessageAt: existingChannel?.lastMessageAt || new Date(now - 1000 * 60 * (2 + Math.random() * 20)).toISOString(),
-                        messageCount24h: existingChannel?.messageCount24h ?? Math.floor(10 + Math.random() * 50),
-                        fetchLatencyMs: existingChannel?.fetchLatencyMs ?? Math.round(300 + Math.random() * 400),
-                        createdAt: existingChannel?.createdAt || new Date(now - 1000 * 60 * 60 * 24 * 7).toISOString(),
+                    category: ch.category || 'telegram',
+                    sourceId: ch.username ? `telegram-${ch.username}` : `telegram-${ch.channelId}`,
+                    lastSyncAt: ch.lastSyncedAt || null,
+                    lastMessageAt: ch.lastSyncedAt || null,
+                    messageCount24h: 0,
+                    fetchLatencyMs: 0,
+                    createdAt: ch.lastSyncedAt || new Date(now).toISOString(),
                     updatedAt: new Date(now).toISOString(),
-                        lastError: existingChannel?.lastError,
-                        lastTestAt: existingChannel?.lastTestAt,
-                        lastTestStatus: existingChannel?.lastTestStatus,
-                    };
-                    return baseChannel;
-                });
-                collector.channels = refreshedChannels;
+                    lastError: ch.lastError || undefined,
+                }));
                 collector.status = 'online';
             }
         } else {
-            // If service is not available, keep existing channels
             collector.status = 'offline';
-            collector.channels = collector.channels.map(channel => ({
-                ...channel,
-                status: 'paused',
-                updatedAt: new Date(now).toISOString(),
-            }));
         }
     } catch (error) {
-        console.warn('Failed to fetch real channels, keeping existing:', error);
-        // Keep existing channels but update timestamps
-        collector.channels = collector.channels.map(channel => ({
-            ...channel,
-            status: channel.enabled ? 'idle' : 'paused',
-            updatedAt: new Date(now).toISOString(),
-            lastSyncAt: channel.lastSyncAt || new Date(now - 1000 * 60 * 15).toISOString(),
-            fetchLatencyMs: channel.fetchLatencyMs || Math.round(250 + Math.random() * 400),
-        }));
+        console.warn('Failed to refresh collector channels from DB:', error);
+        collector.status = collector.channels.length > 0 ? 'idle' : 'offline';
     }
 
     collector.lastRefreshAt = new Date(now).toISOString();
@@ -21808,8 +21409,15 @@ export {
     fetchDataPipelineView,
     fetchDataPipelineSnapshot,
     fetchDataPipelineBacklog,
+    fetchPipelineNormalizationSummary,
+    fetchPipelineCapacity,
 } from './dataPipelineApi';
-export type { DataPipelineView, DataPipelineBacklogEnrichment } from './dataPipelineApi';
+export type {
+    DataPipelineView,
+    DataPipelineBacklogEnrichment,
+    PipelineNormalizationSummaryResponse,
+    PipelineCapacityResponse,
+} from './dataPipelineApi';
 
 export { fetchDataAccessLogs } from './dataAccessLogsApi';
 export type { AccessLogsListResult, AccessLogsStatusCounts } from './dataAccessLogsApi';
@@ -22491,14 +22099,22 @@ export const buildCollectorUrl = (path: string): string => {
 
 export const getTelegramCollectorHealth = async () => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
-    const response = await fetch(`${baseUrl}/api/telegram-collector/health`);
-    if (!response.ok) {
-        throw new Error(`Collector health request failed with ${response.status}`);
-    }
-    return response.json();
+    const url = `${baseUrl}/api/telegram-collector/health`;
+    return fetchCollectorJson<Record<string, unknown>>(url);
 };
 
-export type DiagnoseCollectorCheck = { key: string; ok: boolean; status?: number; error?: string };
+export type DiagnoseCollectorCheck = import('./telegramCollectorErrors.js').DiagnoseCollectorCheck;
+
+export {
+    buildCollectorSafeError,
+    containsRawHtmlError,
+    diagnoseCollectorEndpoint,
+    fetchCollectorJson,
+    formatCollectorSafeError,
+    isHtmlLikeResponse,
+    maskPhoneForDisplay,
+} from './telegramCollectorErrors.js';
+export { getCollectorAuthHeaders, mergeCollectorAuthInit } from './collectorAuth.ts';
 
 export const diagnoseTelegramCollector = async (): Promise<{
     ok: boolean;
@@ -22506,29 +22122,17 @@ export const diagnoseTelegramCollector = async (): Promise<{
 }> => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
     const prefix = baseUrl ? `${baseUrl}` : '';
-    const checks: DiagnoseCollectorCheck[] = [];
-
-    const endpoints: { key: string; url: string; method?: string }[] = [
+    const endpoints: { key: string; url: string }[] = [
         { key: 'health', url: `${prefix}/api/telegram-collector/health` },
         { key: 'session', url: `${prefix}/api/telegram-collector/session/status` },
+        { key: 'accounts', url: `${prefix}/api/telegram-collector/accounts` },
+        { key: 'channels', url: `${prefix}/api/telegram-collector/collector-channels` },
     ];
 
-    for (const ep of endpoints) {
-        try {
-            const res = await fetch(ep.url, { method: ep.method || 'GET' });
-            checks.push({
-                key: ep.key,
-                ok: res.ok,
-                status: res.status,
-                error: res.ok ? undefined : (await res.text()).slice(0, 80),
-            });
-        } catch (err: any) {
-            checks.push({ key: ep.key, ok: false, error: err?.message || 'Network error' });
-        }
-    }
-
-    const ok = checks.every(c => c.ok);
-    return { ok, checks };
+    const checks = await Promise.all(
+        endpoints.map(ep => diagnoseCollectorEndpoint(ep.key, ep.url)),
+    );
+    return { ok: checks.every(c => c.ok), checks };
 };
 
 type StartCollectorLoginInput = {
@@ -22541,9 +22145,7 @@ export const startTelegramCollectorLogin = async (payload: StartCollectorLoginIn
     const baseUrl = resolveTelegramCollectorBaseUrl();
     const response = await fetch(`${baseUrl}/api/telegram-collector/login/start`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getCollectorAuthHeaders(),
         body: JSON.stringify(payload),
     });
     const data = await response.json();
@@ -22563,9 +22165,7 @@ export const confirmTelegramCollectorLogin = async (payload: ConfirmCollectorLog
     const baseUrl = resolveTelegramCollectorBaseUrl();
     const response = await fetch(`${baseUrl}/api/telegram-collector/login/confirm`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getCollectorAuthHeaders(),
         body: JSON.stringify(payload),
     });
     const data = await response.json();
@@ -22580,9 +22180,7 @@ export const cancelTelegramCollectorLogin = async (authId: string) => {
     const baseUrl = resolveTelegramCollectorBaseUrl();
     const response = await fetch(`${baseUrl}/api/telegram-collector/login/cancel`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getCollectorAuthHeaders(),
         body: JSON.stringify({ authId }),
     });
     const data = await response.json();
@@ -23186,7 +22784,6 @@ const webhookHosts = [
     'hooks.slack.com',
     'discord.com',
     'maker.ifttt.com',
-    'api.telegram.org',
 ];
 
 const detectFromUrlStructure = (host: string, path: string, normalizedUrl: string) => {
@@ -24062,98 +23659,8 @@ export const deleteTelegramPublisher = async (publisherId: string): Promise<void
 };
 
 export const publishToTelegram = async (publisherId: string, data: any): Promise<boolean> => {
-    try {
-        const dataHub = await fetchDataHubState();
-        if (!dataHub.advanced) {
-            return false;
-        }
-
-        const publisher = dataHub.advanced.telegramPublishers.find(p => p.id === publisherId);
-        if (!publisher || !publisher.enabled || !publisher.botToken || !publisher.chatId) {
-            return false;
-        }
-
-        // Format message using template
-        let message = publisher.template;
-        
-        // Replace template variables
-        if (data.title) message = message.replace(/{title}/g, data.title);
-        if (data.content) message = message.replace(/{content}/g, data.content);
-        if (data.dataType) message = message.replace(/{dataType}/g, data.dataType);
-        if (data.category) message = message.replace(/{category}/g, data.category);
-        if (data.qualityScore !== undefined) message = message.replace(/{qualityScore}/g, String(data.qualityScore));
-        if (data.tags && Array.isArray(data.tags)) message = message.replace(/{tags}/g, data.tags.join(', '));
-        
-        // Fallback replacements
-        message = message.replace(/{data}/g, JSON.stringify(data, null, 2));
-        message = message.replace(/{timestamp}/g, new Date().toISOString());
-        message = message.replace(/{date}/g, new Date().toLocaleDateString());
-        message = message.replace(/{time}/g, new Date().toLocaleTimeString());
-
-        // Clean up any remaining template variables
-        message = message.replace(/{[^}]+}/g, '');
-
-        // Send via Telegram Bot API
-        const startTime = Date.now();
-        let cleanChannelId = publisher.chatId.trim();
-        if (!/^-?\d+$/.test(cleanChannelId) && !cleanChannelId.startsWith('@')) {
-            cleanChannelId = `@${cleanChannelId}`;
-        }
-
-        const apiUrl = import.meta.env.DEV
-            ? `/api/telegram/bot${publisher.botToken.trim()}/sendMessage`
-            : `${TELEGRAM_API_BASE}${publisher.botToken.trim()}/sendMessage`;
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: cleanChannelId,
-                text: message,
-                parse_mode: (publisher as any).parseMode || 'Markdown',
-                disable_notification: (publisher as any).disableNotifications || false,
-            }),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            let errorMessage = `HTTP ${response.status}`;
-            try {
-                const errorData = JSON.parse(errorText);
-                errorMessage = errorData.description || errorMessage;
-            } catch (e) {
-                // Ignore parse error
-            }
-            console.error('Telegram API error:', errorMessage);
-            return false;
-        }
-
-        const result = await response.json();
-        if (!result.ok) {
-            console.error('Telegram API returned error:', result.description);
-            return false;
-        }
-
-        const latencyMs = Date.now() - startTime;
-
-        // Update publisher stats
-        publisher.lastSent = new Date().toISOString();
-        publisher.sentCount = (publisher.sentCount || 0) + 1;
-
-        await persistDataHubState(dataHub);
-
-        console.log('Published to Telegram:', {
-            publisherId,
-            chatId: cleanChannelId,
-            messageId: result.result?.message_id,
-            latencyMs,
-        });
-
-        return true;
-    } catch (e) {
-        console.error('Failed to publish to Telegram:', e);
-        return false;
-    }
+    console.warn('publishToTelegram legacy frontend sender is disabled. Use /api/v1/data-hub/telegram-publishers/:id/publish.');
+    return false;
 };
 
 export const simulatePublisherDispatch = async (queueId: string, result: PublisherHistoryStatus): Promise<DataHubState> => {

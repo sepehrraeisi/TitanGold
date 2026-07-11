@@ -1,0 +1,2143 @@
+{
+  "capturedAt": "2026-06-28T16:12:40.425Z",
+  "appUrl": "https://titan.zala.ir",
+  "verdict_hint": "COLLECTOR READ PATHS VERIFIED — WRITE FLOWS REQUIRE HUMAN OTP",
+  "metrics": {
+    "collectorHealthy": true,
+    "hasCritical": false,
+    "hasHtml404": false,
+    "accountsVisible": true,
+    "channelsVisible": true,
+    "wizardLabel": true
+  },
+  "tabChecks": {
+    "overview": {
+      "loaded": true,
+      "hasHtml404": false,
+      "hasRawI18n": true
+    },
+    "inbox": {
+      "loaded": true,
+      "hasHtml404": false,
+      "hasRawI18n": true
+    },
+    "categories": {
+      "loaded": false
+    },
+    "breaking": {
+      "loaded": true,
+      "hasHtml404": false,
+      "hasRawI18n": true
+    },
+    "geographic": {
+      "loaded": true,
+      "hasHtml404": false,
+      "hasRawI18n": true
+    }
+  },
+  "security": {
+    "hasSessionString": false,
+    "hasPhoneCodeHash": null,
+    "hasLoginSession": null,
+    "hasApiHash": false,
+    "phoneIsMasked": true
+  },
+  "loginStartDry": {
+    "status": 400,
+    "expectsValidation": true
+  },
+  "collectorProbes": [
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/health",
+      "status": 200,
+      "latencyMs": 573,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "status": "healthy",
+        "service": "telegram-collector",
+        "version": "0.5.0",
+        "timestamp": "2026-06-28T16:11:22.892Z",
+        "configured": {
+          "apiId": true,
+          "apiHash": true,
+          "session": true
+        },
+        "mtproto": "enabled",
+        "circuitBreaker": {
+          "state": "CLOSED",
+          "failureCount": 0,
+          "successCount": 0,
+          "lastFailureTime": null
+        },
+        "rateLimit": {
+          "globalTokens": 1000,
+          "stats": {}
+        },
+        "session": {
+          "in_database": true,
+          "last_used": "2026-03-12T16:45:58.487Z",
+          "created_at": "2026-02-10T16:21:35.680Z",
+          "phone_masked": "+98***10"
+        }
+      },
+      "bodySnippet": "{\"status\":\"healthy\",\"service\":\"telegram-collector\",\"version\":\"0.5.0\",\"timestamp\":\"2026-06-28T16:11:2"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/session/status",
+      "status": 200,
+      "latencyMs": 467,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "stored_in_db": false,
+        "message": "No session found in database",
+        "fallback_to_env": true
+      },
+      "bodySnippet": "{\"stored_in_db\":false,\"message\":\"No session found in database\",\"fallback_to_env\":true}"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/accounts",
+      "status": 200,
+      "latencyMs": 544,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "success": true,
+        "count": 2,
+        "accounts": [
+          {
+            "id": "7a8eae98-c2c9-45c7-a374-b00cf8b5538c",
+            "label": "+989031395555",
+            "status": "active",
+            "last_login_at": "2026-02-13T18:46:56.494Z",
+            "last_used_at": "2026-02-16T14:09:20.125Z",
+            "last_flood_until": null,
+            "is_primary": false,
+            "metadata": {},
+            "created_at": "2026-02-13T18:46:56.494Z",
+            "updated_at": "2026-02-18T12:54:05.045Z",
+            "phone": "+98***55",
+            "phone_masked": "+98***55",
+            "has_session": false
+          },
+          {
+            "id": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "label": "+989384556010",
+            "status": "active",
+            "last_login_at": "2026-02-16T14:10:10.860Z",
+            "last_used_at": "2026-06-28T16:10:47.706Z",
+            "last_flood_until": null,
+            "is_primary": true,
+            "metadata": {},
+            "created_at": "2026-02-13T16:16:02.245Z",
+            "updated_at": "2026-06-28T16:10:47.706Z",
+            "phone": "+98***10",
+            "phone_masked": "+98***10",
+            "has_session": true
+          }
+        ]
+      },
+      "bodySnippet": "{\"success\":true,\"count\":2,\"accounts\":[{\"id\":\"7a8eae98-c2c9-45c7-a374-b00cf8b5538c\",\"label\":\"+9890313"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/collector-channels",
+      "status": 200,
+      "latencyMs": 441,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "success": true,
+        "count": 45,
+        "channels": [
+          {
+            "id": "8c9b560c-eb0d-4b4f-872c-d312754fa9eb",
+            "channelId": "-1001648796579",
+            "username": "iliaen",
+            "title": "ILIA HASHEMI",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T15:58:14.799Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "cce34c64-df3c-40cf-9271-73faf7958e40",
+            "channelId": "-1001491344050",
+            "username": "abshdh",
+            "title": "JUST IN TIME",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:02:27.693Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channelId": "-1001326546349",
+            "username": "Nerkhland",
+            "title": "NerkhLand",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:00:08.574Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "90c643f4-f9af-4e9f-b74a-9e5926f9ccb9",
+            "channelId": "-1001198538710",
+            "username": "ontimecrypt",
+            "title": "Ontime Bitcoin",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:07:09.671Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "340e09b8-86c3-45ac-8b88-69c59ab6502f",
+            "channelId": "-1001447247015",
+            "username": "Teamxry",
+            "title": "🥇Teamxry🥇",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:02:27.134Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "85d5cea5-372d-42c8-9ee6-c63de00797df",
+            "channelId": "-1001234567890",
+            "username": "@crypto_signals_test",
+            "title": "Test Crypto Signals",
+            "description": null,
+            "category": "signals",
+            "isActive": false,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": null,
+            "config": {
+              "keywords": [
+                "BUY",
+                "SELL",
+                "LONG",
+                "SHORT"
+              ]
+            },
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "ed27ee9e-8981-4427-8e03-60fe9fb597ec",
+            "channelId": "-1001782070438",
+            "username": null,
+            "title": "ZTE College",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:05:26.605Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "bf154b30-8977-4645-a5c0-9b93a9b448af",
+            "channelId": "-1001014795163",
+            "username": "Rokna_news",
+            "title": "آژانس خبری رکنا | Rokna NEWS Agency",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:00:08.558Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "3ff3711c-b056-4366-9e63-6bcdc445bec5",
+            "channelId": "-1001182333897",
+            "username": "mrgold995",
+            "title": "💲آکادمی Mr.GOLD 💲",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:00:08.585Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "87a1ea64-16f0-4a85-a795-14a75b40b3e3",
+            "channelId": "-1001189475422",
+            "username": "ontimeounce",
+            "title": "آن تايم انس",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:06.655Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "8ad4a119-a001-468f-8b4d-bb2f73ef0056",
+            "channelId": "-1002491045473",
+            "username": "ontime_khabar",
+            "title": "آن تایم خبر",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T15:58:14.734Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "867c37c6-4fb3-4c4c-8008-4d60119d15c9",
+            "channelId": "-1001326707283",
+            "username": "ztetradingltd",
+            "title": "بروکر جهانی ZTE-Trading",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:07:11.159Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "0040b726-42c2-46c4-8666-0911523c2644",
+            "channelId": "-1001195151621",
+            "username": "TradingUstad1",
+            "title": "تحلیل روزانه🥇",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:07:11.192Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "175e69bf-85a9-4046-9970-5da56b025992",
+            "channelId": "-1001391194725",
+            "username": null,
+            "title": "تقویم اقتصادی بروکر ZTE-Forex",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:05:26.542Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "1b641e6d-b59f-4b45-b19f-c9ea112d9d2b",
+            "channelId": "-1001347438018",
+            "username": "TehranMomentarily",
+            "title": "تهران لحظه ای",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:07:10.607Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "e9d1c4f6-4821-4101-9ddf-08f148aa8184",
+            "channelId": "-1001286915317",
+            "username": null,
+            "title": "تهران لحظه‌ ای VIP",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:07:10.978Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "257d1775-044a-4d19-873c-b0f0ebbf286f",
+            "channelId": "-1002263971249",
+            "username": "datacollector23",
+            "title": "جمع آوری داده",
+            "description": null,
+            "category": null,
+            "isActive": false,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-02-19T12:55:42.960Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "1ae85b7a-4fc0-43fd-b05f-c45221558e0f",
+            "channelId": "-1001615307040",
+            "username": "iran_efsha_news",
+            "title": "خبرفوری",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:07:11.069Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "7335f9fe-d88c-475b-b7c0-8186b8fb9e46",
+            "channelId": "-1001815491766",
+            "username": "time_news1",
+            "title": "خبر فوری | تایم نیوز",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:00:08.682Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "78c546b1-a618-4a4d-92e0-0b3f9cfb86cb",
+            "channelId": "-1001942289405",
+            "username": "rokhdad_news1",
+            "title": "خبر فوری | رخداد نیوز",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:00:08.740Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "9d81c7ff-e635-4334-8ce1-b15722589a2e",
+            "channelId": "-1001789032297",
+            "username": "DengiRojhelat",
+            "title": "دەنگی‌رۆژهەڵات",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": null,
+            "lastSyncedAt": "2026-06-28T16:02:27.950Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "87a8693f-89af-47ac-b472-6ab027418b4a",
+            "channelId": "-1001338766024",
+            "username": "DOLARRATE1",
+            "title": "صداقت نرخ دلار تهران (افشار)",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:02:27.066Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "9ac015fe-e8de-475b-b204-f91c83c15d7d",
+            "channelId": "-1001324990627",
+            "username": "GeymattOnline",
+            "title": "قیمت انلاین ارز،طلاوخودرو",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:05:26.599Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "83b222ac-2fb9-4dea-b730-06c6845eb45a",
+            "channelId": "-1001212127339",
+            "username": "dollar_tehran3bze",
+            "title": "قیمت لحظه‌ای دلار تهران",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:05:26.035Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "1fe01b26-890d-4159-ae99-943ccb2a136e",
+            "channelId": "-1001109614641",
+            "username": "tahran_sabza",
+            "title": "قیمت لحظه ای دلارتهران",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:07:10.718Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "50529251-81ae-4997-8190-4c402aefc76a",
+            "channelId": "-1001152483430",
+            "username": "sekkedollarrate",
+            "title": "قیمت لحظه ای دلار سکه",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:02:26.906Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "d7f158ec-53f2-459c-965d-e729c29daa4b",
+            "channelId": "-1001191994712",
+            "username": "dollar_sulaymaniyah",
+            "title": "قیمت لحظه ای دلار سلیمانیه",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:02:27.066Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "b051e817-5bed-41d0-b72c-e61c9233145a",
+            "channelId": "-1001328668052",
+            "username": "mazenebazar",
+            "title": "مظنـہ بازار |DAVIJAN",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:05:26.387Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "557aad55-4433-45c1-a05e-3e0995967662",
+            "channelId": "-1001989960821",
+            "username": "nabe_saman",
+            "title": "نابسامان (nabe saman)",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:05:26.598Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "e0d56fe1-d048-45c7-ad83-e2b68d7bdb7f",
+            "channelId": "-1001349319651",
+            "username": "SabzeMaidan",
+            "title": "نرخ دلار سبزه تهران",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:05:26.427Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "fed74dfc-987d-447d-a003-f644dc34b2e2",
+            "channelId": "-1001192530344",
+            "username": "Hareta_Dollar_Bloe",
+            "title": "💰هرات دلار آبی💰",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:00:08.404Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "0b768726-629e-4cbf-95bd-3fa67b59029f",
+            "channelId": "-1001415894887",
+            "username": "Euronaghdi_tehran",
+            "title": "یورو نقدی تهران",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:02:26.963Z",
+            "config": {},
+            "priority": "normal",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "485d4b10-235f-414e-a284-2132557d8de9",
+            "channelId": "-1001006430686",
+            "username": "bbcpersian",
+            "title": "BBCPersian",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:54.206Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 6
+          },
+          {
+            "id": "f0d13fd3-7e21-40eb-bc96-bf8f116ded7c",
+            "channelId": "-1001168217988",
+            "username": "Dirham_rate",
+            "title": "DIRHAM_RATE(U.A.E)",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:53.693Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "bbb5e2fa-0423-4d6c-a355-fe2da85dcd3c",
+            "channelId": "-1001367035239",
+            "username": "Indypersian",
+            "title": "IndyPersian",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:54.205Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "8c817dd2-bb41-4205-b3cd-1cf26815e1b5",
+            "channelId": "-1001140394567",
+            "username": "IranintlTV",
+            "title": "Iran International ایران اینترنشنال",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:53.885Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 1
+          },
+          {
+            "id": "ca148665-7ab2-40ca-9226-0707d52437d8",
+            "channelId": "-1001258849814",
+            "username": "MeltGold",
+            "title": "آبـشده جـهانی / 𝑱𝑼𝑺𝑻",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:17.011Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "ea3e2e4d-38c1-46c3-abcc-608fd076b062",
+            "channelId": "-1002253343701",
+            "username": "iranzamintala",
+            "title": "آبشده و سکه ایران زمین",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:54.019Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 1
+          },
+          {
+            "id": "19db5757-0507-4ad6-a821-43a6c8ef509e",
+            "channelId": "-1001007007698",
+            "username": "akharinkhabar",
+            "title": "آخرین خبر",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:53.314Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "5b8969d7-d3c0-44cd-a982-22a0b77fbc65",
+            "channelId": "-1001831452509",
+            "username": "PishbiniTalaa",
+            "title": "تحلیل دلار پیشبینی طلا آبشده",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:53.922Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "f1c52bbb-c9bd-4a3e-9dee-cea7bd9dacef",
+            "channelId": "-1001971507405",
+            "username": "DollarFerdowsii",
+            "title": "دلار فردوسی تهران",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:53.578Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "b031f5c0-2b09-4294-94b5-1c3556197fe1",
+            "channelId": "-1001235576208",
+            "username": "seke_kargosha",
+            "title": "دلار و سکه کارگشا",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:54.026Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "a59b502b-c1e7-4655-ae06-85341134adaf",
+            "channelId": "-1001025079350",
+            "username": "den_ir",
+            "title": "روزنامه دنیای اقتصاد",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:09:08.814Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "daf349ba-61ef-4b6b-bc04-18715e09dd34",
+            "channelId": "-1001237115904",
+            "username": "ounce_gold1",
+            "title": "⚡️📊قیمت دهی انس 🔔",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:11.409Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 0
+          },
+          {
+            "id": "81af86a2-5008-41f9-a7c8-f08ff765238f",
+            "channelId": "-1001399270659",
+            "username": "Narkuab",
+            "title": "🔖نوسانات پله آهنی 📊♻️",
+            "description": null,
+            "category": null,
+            "isActive": true,
+            "accountId": "00f3b777-9335-447d-b004-de012ff8dab5",
+            "lastSyncedAt": "2026-06-28T16:10:52.691Z",
+            "config": {},
+            "priority": "high",
+            "errorCount": 0,
+            "lastError": null,
+            "lastErrorAt": null,
+            "consecutiveSuccessCount": 1
+          }
+        ]
+      },
+      "bodySnippet": "{\"success\":true,\"count\":45,\"channels\":[{\"id\":\"8c9b560c-eb0d-4b4f-872c-d312754fa9eb\",\"channelId\":\"-10"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/polling/status",
+      "status": 200,
+      "latencyMs": 450,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "success": true,
+        "polling": {
+          "enabled": true,
+          "running": false,
+          "intervalMinutes": 1
+        }
+      },
+      "bodySnippet": "{\"success\":true,\"polling\":{\"enabled\":true,\"running\":false,\"intervalMinutes\":1}}"
+    },
+    {
+      "url": "https://titan.zala.ir/api/telegram-collector/metrics",
+      "status": 200,
+      "latencyMs": 460,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "success": true,
+        "metrics": {
+          "login": {
+            "totalAttempts": 0,
+            "successful": 0,
+            "failed": 0,
+            "floodWaitEvents": 0,
+            "lastAttempt": null,
+            "lastSuccess": null,
+            "lastFailure": null
+          },
+          "channels": [],
+          "rateLimitHits": 0,
+          "circuitBreakerOpens": 0,
+          "polling": {
+            "cycles": 1,
+            "messagesSaved": 12,
+            "lastCycle": "2026-06-28T16:10:54.272Z"
+          },
+          "summary": {
+            "totalChannels": 0,
+            "activeChannels": 0,
+            "avgSuccessRate": 0
+          },
+          "circuitBreaker": {
+            "state": "CLOSED",
+            "failureCount": 0,
+            "successCount": 0,
+            "lastFailureTime": null
+          },
+          "rateLimit": {}
+        },
+        "timestamp": "2026-06-28T16:11:22.889Z"
+      },
+      "bodySnippet": "{\"success\":true,\"metrics\":{\"login\":{\"totalAttempts\":0,\"successful\":0,\"failed\":0,\"floodWaitEvents\":0,"
+    }
+  ],
+  "feedProbes": [
+    {
+      "url": "https://titan.zala.ir/api/v1/telegram/health",
+      "status": 200,
+      "latencyMs": 15483,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "success": true,
+        "status": "healthy",
+        "timestamp": "2026-06-28T16:11:38.505Z",
+        "database": {
+          "connected": true,
+          "totalMessages": 5423654
+        },
+        "pipeline": {
+          "total_messages": "41864",
+          "processed_count": "41864",
+          "pending_count": "0",
+          "failed_count": "0",
+          "actionable_count": "2947",
+          "signal_count": "0",
+          "avg_processing_time_ms": "203.4430775845595261",
+          "channels_with_data": "40"
+        }
+      },
+      "bodySnippet": "{\"success\":true,\"status\":\"healthy\",\"timestamp\":\"2026-06-28T16:11:38.505Z\",\"database\":{\"connected\":tr"
+    },
+    {
+      "url": "https://titan.zala.ir/api/v1/telegram/stats/real-time",
+      "status": 200,
+      "latencyMs": 20102,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "success": true,
+        "timestamp": "2026-06-28T16:11:42.999Z",
+        "pipeline": {
+          "total_messages": "41864",
+          "processed_count": "41864",
+          "pending_count": "0",
+          "failed_count": "0",
+          "actionable_count": "2947",
+          "signal_count": "0",
+          "avg_processing_time_ms": "203.4430775845595261",
+          "channels_with_data": "40"
+        },
+        "collector": {
+          "active_channels": "26",
+          "messages_collected": "1902",
+          "last_message_at": "2026-06-28T16:10:49.000Z"
+        },
+        "processor": {
+          "messages_processed": "2822",
+          "avg_processing_delay_ms": "141907.9556800141743000",
+          "channels_processed": "26"
+        },
+        "agentActivity": [
+          {
+            "agent_key": "trend",
+            "new_impacts": "2606",
+            "avg_impact": "0.49808135072908672295",
+            "actions_required": "1"
+          },
+          {
+            "agent_key": "technical",
+            "new_impacts": "2606",
+            "avg_impact": "0.49800460475825019186",
+            "actions_required": "1"
+          },
+          {
+            "agent_key": "sentiment",
+            "new_impacts": "2371",
+            "avg_impact": "0.30000000000000000000",
+            "actions_required": "0"
+          },
+          {
+            "agent_key": "fundamental",
+            "new_impacts": "2058",
+            "avg_impact": "0.49863945578231292517",
+            "actions_required": "1"
+          },
+          {
+            "agent_key": "arbitrage",
+            "new_impacts": "679",
+            "avg_impact": "0.50029455081001472754",
+            "actions_required": "1"
+          },
+          {
+            "agent_key": "volume",
+            "new_impacts": "570",
+            "avg_impact": "0.30000000000000000000",
+            "actions_required": "0"
+          },
+          {
+            "agent_key": "price_prediction",
+            "new_impacts": "185",
+            "avg_impact": "0.49459459459459459459",
+            "actions_required": "1"
+          },
+          {
+            "agent_key": "liquidity",
+            "new_impacts": "70",
+            "avg_impact": "0.30000000000000000000",
+            "actions_required": "0"
+          },
+          {
+            "agent_key": "market_intelligence",
+            "new_impacts": "20",
+            "avg_impact": "0.30500000000000000000",
+            "actions_required": "0"
+          },
+          {
+            "agent_key": "risk",
+            "new_impacts": "17",
+            "avg_impact": "0.30000000000000000000",
+            "actions_required": "0"
+          }
+        ]
+      },
+      "bodySnippet": "{\"success\":true,\"timestamp\":\"2026-06-28T16:11:42.999Z\",\"pipeline\":{\"total_messages\":\"41864\",\"process"
+    },
+    {
+      "url": "https://titan.zala.ir/api/v1/telegram/breaking-news",
+      "status": 200,
+      "latencyMs": 2186,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "success": true,
+        "count": 20,
+        "minImpact": 0.7,
+        "data": [
+          {
+            "id": "b9f866c7-c90d-4d5a-a0a4-ad3bfadfcf2c",
+            "message_id": "144476",
+            "channel_id": "a59b502b-c1e7-4655-ae06-85341134adaf",
+            "channel_username": "den_ir",
+            "channel_title": "روزنامه دنیای اقتصاد",
+            "cleaned_text": "تیتر یک | تورم تا پایان سال سه رقمی می‌شود؟ نسخه صوتی ▫️در «تیتر یک» یکشنبه 7 تیر 1405 ببینید 00:28 بازارها| گزارش روز بازارهای مالی ایران و جهان 04:54 کلان| پیش‌بینی تورم در ادامه سال 11:06 صمت|گزارش آنکتاد: پویایی مواد معدنی در تجارت جهانی 15:00 بازارهای جهانی| تقویم بازارهای جهانی در هفته پیش ‌رو 20:47 دیجیتال| پشت پرده تولد «نفت دیجیتال» چیست؟ 25:20 منهای اقتصاد| زیست افراد دارای معلولیت در شرایط جنگی اخیر 29:59 سیاست جهان| تهدید عراق به خروج از اوپک ▫️ تیتر یک پنجره روزانه به اقتصاد ایران و جهان #تیتر_یک لینک این برنامه در آپارات",
+            "sentiment": "neutral",
+            "news_type": "news",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "OIL"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T15:45:00.000Z",
+            "created_at": "2026-06-28T15:45:14.183Z",
+            "primary_category": "MARKET_DATA",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "OIL"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "news",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "331c3a9e-c124-4d47-8257-6abfcce0c524",
+            "message_id": "144474",
+            "channel_id": "a59b502b-c1e7-4655-ae06-85341134adaf",
+            "channel_username": "den_ir",
+            "channel_title": "روزنامه دنیای اقتصاد",
+            "cleaned_text": "هلیوم در جنگ تنگه محمدرضا فرزانگان؛ استاد اقتصاد دانشگاه فیلیپس ماربورگ پژوهشگر IIASA لاکسن‌بورگ؛ دکتر امید زمانی اهمیت تنگه هرمز فقط به نفت و گاز محدود نیست و اختلال در آن می‌تواند عرضه هلیوم را نیز مختل کند؛ گازی راهبردی که در تولید نیمه‌هادی‌ها، تجهیزات پزشکی، تحقیقات کرایوژنیک و فناوری‌های پاک کاربرد دارد. بحران ۲۰۲۶ با اختلال در تولید قطر و محدودیت تردد در هرمز، عرضه جهانی هلیوم را کاهش و قیمت‌ها را افزایش داد. با وجود توافق موقت ایران و آمریکا و کاهش نسبی فشارهای کوتاه‌مدت، تمرکز جغرافیایی تولید، دشواری ذخیره‌سازی و وابستگی حمل‌ونقل به هرمز، این زنجیره را همچنان آسیب‌پذیر نگه می‌دارد. هلیوم خلیج فارس را به زنجیره تامین نیمه‌هادی‌های آسیا پیوند می‌دهد و برای کاهش آسیب‌پذیری، ارزیابی وابستگی، ایجاد ذخایر راهبردی و افزایش شفافیت بازار ضروری است. همچنین در صورت تثبیت توافق و کاهش پایدار تحریم‌ها، ایران با اتکا به منابع گازی، سرمایه‌گذاری در شناسایی ذخایر، جداسازی، مایع‌سازی، ذخیره‌سازی و حمل‌ونقل تخصصی، می‌تواند به بازار جهانی هلیوم وارد شود و از تقاضای رو به رشد اقتصادهای آسیایی بهره ببرد. متن کامل کانال رسمی روزنامه دنیای اقتصاد",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "OIL"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T15:29:58.000Z",
+            "created_at": "2026-06-28T15:32:50.064Z",
+            "primary_category": "MARKET_DATA",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "OIL"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "55815356-4c76-4b27-80a9-f7b071734a5f",
+            "message_id": "144474",
+            "channel_id": "a59b502b-c1e7-4655-ae06-85341134adaf",
+            "channel_username": "den_ir",
+            "channel_title": "روزنامه دنیای اقتصاد",
+            "cleaned_text": "هلیوم در جنگ تنگه محمدرضا فرزانگان؛ استاد اقتصاد دانشگاه فیلیپس ماربورگ پژوهشگر IIASA لاکسن‌بورگ؛ دکتر امید زمانی اهمیت تنگه هرمز فقط به نفت و گاز محدود نیست و اختلال در آن می‌تواند عرضه هلیوم را نیز مختل کند؛ گازی راهبردی که در تولید نیمه‌هادی‌ها، تجهیزات پزشکی، تحقیقات کرایوژنیک و فناوری‌های پاک کاربرد دارد. بحران ۲۰۲۶ با اختلال در تولید قطر و محدودیت تردد در هرمز، عرضه جهانی هلیوم را کاهش و قیمت‌ها را افزایش داد. با وجود توافق موقت ایران و آمریکا و کاهش نسبی فشارهای کوتاه‌مدت، تمرکز جغرافیایی تولید، دشواری ذخیره‌سازی و وابستگی حمل‌ونقل به هرمز، این زنجیره را همچنان آسیب‌پذیر نگه می‌دارد. هلیوم خلیج فارس را به زنجیره تامین نیمه‌هادی‌های آسیا پیوند می‌دهد و برای کاهش آسیب‌پذیری، ارزیابی وابستگی، ایجاد ذخایر راهبردی و افزایش شفافیت بازار ضروری است. همچنین در صورت تثبیت توافق و کاهش پایدار تحریم‌ها، ایران با اتکا به منابع گازی، سرمایه‌گذاری در شناسایی ذخایر، جداسازی، مایع‌سازی، ذخیره‌سازی و حمل‌ونقل تخصصی، می‌تواند به بازار جهانی هلیوم وارد شود و از تقاضای رو به رشد اقتصادهای آسیایی بهره ببرد. متن کامل کانال رسمی روزنامه دنیای اقتصاد",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "OIL"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T15:29:58.000Z",
+            "created_at": "2026-06-28T15:33:21.715Z",
+            "primary_category": "MARKET_DATA",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "OIL"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "e7179762-4616-4ddf-8aec-eea00fdec264",
+            "message_id": "192235",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی ▫#درهم‌امارات🇦🇪 474,000 ▫#یورو🇪🇺 1,957,000 #پوندانگلیس🇬🇧 2,267,600 ▫#دلارکانادا🇨🇦 1,210,600 #یوآن‌چین🇨🇳 252,700 ▫#لیرترکیه🇹🇷 36,900 #دینارکویت🇰🇼 5,593,800 #یکصدین‌ژاپن🇯🇵 1,065,600 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,184,100 #کرون‌سوئد🇸🇪 177,300 #فرانک‌سوئیس🇨🇭 2,127,100 #دلارهنگ‌کنگ🇭🇰 219,700 #رینگیت‌مالزی🇲🇾 421,800 #یکصددینارعراق🇮🇶 131,100 #ریال‌عربستان🇸🇦 458,800 ▫#روبل‌روسیه🇷🇺 21,700 #دلارسنگاپور🇸🇬 1,334,500 #کرون‌دانمارک🇩🇰 262,300 1405-04-07 18:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T15:27:46.000Z",
+            "created_at": "2026-06-28T15:35:55.374Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "76477b0e-b154-4767-9a29-a063c8f33029",
+            "message_id": "192235",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی ▫#درهم‌امارات🇦🇪 474,000 ▫#یورو🇪🇺 1,957,000 #پوندانگلیس🇬🇧 2,267,600 ▫#دلارکانادا🇨🇦 1,210,600 #یوآن‌چین🇨🇳 252,700 ▫#لیرترکیه🇹🇷 36,900 #دینارکویت🇰🇼 5,593,800 #یکصدین‌ژاپن🇯🇵 1,065,600 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,184,100 #کرون‌سوئد🇸🇪 177,300 #فرانک‌سوئیس🇨🇭 2,127,100 #دلارهنگ‌کنگ🇭🇰 219,700 #رینگیت‌مالزی🇲🇾 421,800 #یکصددینارعراق🇮🇶 131,100 #ریال‌عربستان🇸🇦 458,800 ▫#روبل‌روسیه🇷🇺 21,700 #دلارسنگاپور🇸🇬 1,334,500 #کرون‌دانمارک🇩🇰 262,300 1405-04-07 18:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T15:27:46.000Z",
+            "created_at": "2026-06-28T15:36:29.428Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "7373eb45-dbfd-4c8c-b8ad-1bf8276240e2",
+            "message_id": "192235",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی ▫#درهم‌امارات🇦🇪 474,000 ▫#یورو🇪🇺 1,957,000 #پوندانگلیس🇬🇧 2,267,600 ▫#دلارکانادا🇨🇦 1,210,600 #یوآن‌چین🇨🇳 252,700 ▫#لیرترکیه🇹🇷 36,900 #دینارکویت🇰🇼 5,593,800 #یکصدین‌ژاپن🇯🇵 1,065,600 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,184,100 #کرون‌سوئد🇸🇪 177,300 #فرانک‌سوئیس🇨🇭 2,127,100 #دلارهنگ‌کنگ🇭🇰 219,700 #رینگیت‌مالزی🇲🇾 421,800 #یکصددینارعراق🇮🇶 131,100 #ریال‌عربستان🇸🇦 458,800 ▫#روبل‌روسیه🇷🇺 21,700 #دلارسنگاپور🇸🇬 1,334,500 #کرون‌دانمارک🇩🇰 262,300 1405-04-07 18:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T15:27:46.000Z",
+            "created_at": "2026-06-28T15:36:29.662Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "29db79fa-9984-4248-9b29-b3d7989738a7",
+            "message_id": "171011",
+            "channel_id": "bbb5e2fa-0423-4d6c-a355-fe2da85dcd3c",
+            "channel_username": "Indypersian",
+            "channel_title": "IndyPersian",
+            "cleaned_text": "️مایک والتز، سفیر آمریکا در سازمان ملل، در گفتگو با شبکه فاکس‌نیوز هشدار داد اگر جمهوری اسلامی حتی تصور کند که دونالد ترامپ در برابر حملات ایران به کشتیرانی بین‌المللی یا پایگاه‌های آمریکا واکنشی نشان نخواهد داد، «سخت در اشتباه است». او گفت ایران در روزهای اخیر به‌وضوح پیام واشینگتن را دریافت کرده و در صورت لزوم، آمریکا به اقدام نظامی برای هدف قرار دادن زیرساخت‌هایی که به گفته او برای «کنترل غیرقانونی یک آبراه بین‌المللی» استفاده می‌شود، ادامه خواهد داد. والتز همچنین گفت ۱۴۳ کشور در سازمان ملل این اقدامات را نقض قوانین بین‌المللی می‌دانند و حتی چین و عمان نیز با طرح دریافت عوارض از عبور کشتی‌ها مخالفت کرده‌اند. به گفته او، با وجود تنش‌ها، تردد کشتی‌ها ادامه دارد و قیمت جهانی نفت نیز در حال کاهش است؛ موضوعی که نشان می‌دهد تلاش ایران برای تحت فشار قرار دادن اقتصاد جهانی موفق نبوده است.",
+            "sentiment": "negative",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "OIL"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T14:48:39.000Z",
+            "created_at": "2026-06-28T14:50:33.910Z",
+            "primary_category": "MARKET_DATA",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "OIL"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "a89f162c-d3bb-4431-9d5a-da020ef290c8",
+            "message_id": "192228",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی ▫#درهم‌امارات🇦🇪 474,000 #یورو🇪🇺 1,957,000 #پوندانگلیس🇬🇧 2,267,700 #دلارکانادا🇨🇦 1,210,600 #یوآن‌چین🇨🇳 252,600 ▫#لیرترکیه🇹🇷 36,900 #دینارکویت🇰🇼 5,590,600 #یکصدین‌ژاپن🇯🇵 1,065,000 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,184,300 ▫#کرون‌سوئد🇸🇪 177,200 #فرانک‌سوئیس🇨🇭 2,125,900 #دلارهنگ‌کنگ🇭🇰 219,600 ▫#رینگیت‌مالزی🇲🇾 421,500 ▫#یکصددینارعراق🇮🇶 131,000 #ریال‌عربستان🇸🇦 458,600 ▫#روبل‌روسیه🇷🇺 21,700 #دلارسنگاپور🇸🇬 1,333,700 ▫#کرون‌دانمارک🇩🇰 262,100 1405-04-07 17:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T14:27:46.000Z",
+            "created_at": "2026-06-28T14:29:00.336Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "060ab65a-35f5-4a65-af9c-44bd6eb07aa5",
+            "message_id": "192228",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی ▫#درهم‌امارات🇦🇪 474,000 #یورو🇪🇺 1,957,000 #پوندانگلیس🇬🇧 2,267,700 #دلارکانادا🇨🇦 1,210,600 #یوآن‌چین🇨🇳 252,600 ▫#لیرترکیه🇹🇷 36,900 #دینارکویت🇰🇼 5,590,600 #یکصدین‌ژاپن🇯🇵 1,065,000 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,184,300 ▫#کرون‌سوئد🇸🇪 177,200 #فرانک‌سوئیس🇨🇭 2,125,900 #دلارهنگ‌کنگ🇭🇰 219,600 ▫#رینگیت‌مالزی🇲🇾 421,500 ▫#یکصددینارعراق🇮🇶 131,000 #ریال‌عربستان🇸🇦 458,600 ▫#روبل‌روسیه🇷🇺 21,700 #دلارسنگاپور🇸🇬 1,333,700 ▫#کرون‌دانمارک🇩🇰 262,100 1405-04-07 17:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T14:27:46.000Z",
+            "created_at": "2026-06-28T14:29:18.222Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "65be931f-624a-4aed-91c9-14bade0be12e",
+            "message_id": "113623",
+            "channel_id": "9ac015fe-e8de-475b-b204-f91c83c15d7d",
+            "channel_username": "GeymattOnline",
+            "channel_title": "قیمت انلاین ارز،طلاوخودرو",
+            "cleaned_text": "1405,04,07 دلار آمريکا : 171,800 دلار آمریکا : 171,400 پوند انگليس : 226,400 درهم امارات : 47,140 یورو اروپا : 195,300 طلاي 18 عيار هر گرم : 16,706,700 مثقال طلا: 73.000.000 سکه امامي : 172,000,000 سکه بهار آزادي : 167,700,000 نيم سکه : 89,500,000 ربع سکه : 53,000,000 سکه گرمي : 27,000,000 انس طلا: 4078 بیت کوین؛ 60.080 تتر: 171.300 ترون:0.323 قیمت لحظه ای ارز،طلا وخودرو 🆔",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "GOLD",
+              "GOLD_COIN",
+              "BTC",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T14:11:21.000Z",
+            "created_at": "2026-06-28T14:21:24.459Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "GOLD",
+              "GOLD_COIN",
+              "BTC",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "d5af35dd-8934-41a6-aa9d-22b1be665290",
+            "message_id": "113623",
+            "channel_id": "9ac015fe-e8de-475b-b204-f91c83c15d7d",
+            "channel_username": "GeymattOnline",
+            "channel_title": "قیمت انلاین ارز،طلاوخودرو",
+            "cleaned_text": "1405,04,07 دلار آمريکا : 171,800 دلار آمریکا : 171,400 پوند انگليس : 226,400 درهم امارات : 47,140 یورو اروپا : 195,300 طلاي 18 عيار هر گرم : 16,706,700 مثقال طلا: 73.000.000 سکه امامي : 172,000,000 سکه بهار آزادي : 167,700,000 نيم سکه : 89,500,000 ربع سکه : 53,000,000 سکه گرمي : 27,000,000 انس طلا: 4078 بیت کوین؛ 60.080 تتر: 171.300 ترون:0.323 قیمت لحظه ای ارز،طلا وخودرو 🆔",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "GOLD",
+              "GOLD_COIN",
+              "BTC",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T14:11:21.000Z",
+            "created_at": "2026-06-28T14:21:41.071Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "GOLD",
+              "GOLD_COIN",
+              "BTC",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "bc341b6b-efef-477e-8275-49c8d4722fbb",
+            "message_id": "344798",
+            "channel_id": "8c817dd2-bb41-4205-b3cd-1cf26815e1b5",
+            "channel_username": "IranintlTV",
+            "channel_title": "Iran International ایران اینترنشنال",
+            "cleaned_text": "روزنامه هاآرتص گزارش داد اسناد و تصاویر نشان می‌دهد شرکت‌های اسرائیلی «البیت سیستمز» و «صنایع هوافضای اسرائیل» سامانه‌های پیشرفته دفاعی، از جمله سامانه‌های پدافند موشکی و تجهیزات جنگنده‌های اف-۱۵، به ارزش صدها میلیون شِکِل به قطر و عربستان سعودی فروخته‌اند. بر اساس این گزارش، قطر و عربستان سعودی با وجود نداشتن روابط دیپلماتیک رسمی با اسرائیل، از مشتریان تجهیزات پیشرفته دفاعی اسرائیل بوده‌اند. هاآرتص نوشت هواپیمای حامل شیخ تمیم بن حمد آل ثانی، امیر قطر، هنگام سفر به تهران در سال گذشته به یک سامانه دفاع هوایی ساخت شرکت اسرائیلی البیت سیستمز مجهز بوده است. پیش‌تر نیز بنیامین نتانیاهو با قراردادهای دفاعی بیش از ۱۰۰ میلیون دلاری با قطر موافقت کرده بود.",
+            "sentiment": "neutral",
+            "news_type": "news",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T13:35:42.000Z",
+            "created_at": "2026-06-28T13:38:40.403Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "news",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "ac2e0315-c397-4bb1-86b6-8c22c5ad898c",
+            "message_id": "344798",
+            "channel_id": "8c817dd2-bb41-4205-b3cd-1cf26815e1b5",
+            "channel_username": "IranintlTV",
+            "channel_title": "Iran International ایران اینترنشنال",
+            "cleaned_text": "روزنامه هاآرتص گزارش داد اسناد و تصاویر نشان می‌دهد شرکت‌های اسرائیلی «البیت سیستمز» و «صنایع هوافضای اسرائیل» سامانه‌های پیشرفته دفاعی، از جمله سامانه‌های پدافند موشکی و تجهیزات جنگنده‌های اف-۱۵، به ارزش صدها میلیون شِکِل به قطر و عربستان سعودی فروخته‌اند. بر اساس این گزارش، قطر و عربستان سعودی با وجود نداشتن روابط دیپلماتیک رسمی با اسرائیل، از مشتریان تجهیزات پیشرفته دفاعی اسرائیل بوده‌اند. هاآرتص نوشت هواپیمای حامل شیخ تمیم بن حمد آل ثانی، امیر قطر، هنگام سفر به تهران در سال گذشته به یک سامانه دفاع هوایی ساخت شرکت اسرائیلی البیت سیستمز مجهز بوده است. پیش‌تر نیز بنیامین نتانیاهو با قراردادهای دفاعی بیش از ۱۰۰ میلیون دلاری با قطر موافقت کرده بود.",
+            "sentiment": "neutral",
+            "news_type": "news",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T13:35:42.000Z",
+            "created_at": "2026-06-28T13:39:25.700Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "news",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "3aa9726b-54b5-4d1c-9946-4bccd570db3f",
+            "message_id": "192221",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی ▫#درهم‌امارات🇦🇪 474,000 #یورو🇪🇺 1,954,600 #پوندانگلیس🇬🇧 2,264,700 #دلارکانادا🇨🇦 1,209,100 #یوآن‌چین🇨🇳 252,500 #لیرترکیه🇹🇷 36,900 #دینارکویت🇰🇼 5,589,800 #یکصدین‌ژاپن🇯🇵 1,064,800 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,183,100 #کرون‌سوئد🇸🇪 177,200 #فرانک‌سوئیس🇨🇭 2,125,500 #دلارهنگ‌کنگ🇭🇰 219,500 #رینگیت‌مالزی🇲🇾 421,500 #یکصددینارعراق🇮🇶 131,000 #ریال‌عربستان🇸🇦 458,500 #روبل‌روسیه🇷🇺 21,700 #دلارسنگاپور🇸🇬 1,333,500 #کرون‌دانمارک🇩🇰 262,100 1405-04-07 16:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T13:27:46.000Z",
+            "created_at": "2026-06-28T13:34:01.515Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "2d8bcbca-7e06-41c4-aa17-c0543d9ae93a",
+            "message_id": "192221",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی ▫#درهم‌امارات🇦🇪 474,000 #یورو🇪🇺 1,954,600 #پوندانگلیس🇬🇧 2,264,700 #دلارکانادا🇨🇦 1,209,100 #یوآن‌چین🇨🇳 252,500 #لیرترکیه🇹🇷 36,900 #دینارکویت🇰🇼 5,589,800 #یکصدین‌ژاپن🇯🇵 1,064,800 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,183,100 #کرون‌سوئد🇸🇪 177,200 #فرانک‌سوئیس🇨🇭 2,125,500 #دلارهنگ‌کنگ🇭🇰 219,500 #رینگیت‌مالزی🇲🇾 421,500 #یکصددینارعراق🇮🇶 131,000 #ریال‌عربستان🇸🇦 458,500 #روبل‌روسیه🇷🇺 21,700 #دلارسنگاپور🇸🇬 1,333,500 #کرون‌دانمارک🇩🇰 262,100 1405-04-07 16:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T13:27:46.000Z",
+            "created_at": "2026-06-28T13:34:38.343Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "846542d0-e755-4dcc-961b-1f997f5987d5",
+            "message_id": "192221",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی ▫#درهم‌امارات🇦🇪 474,000 #یورو🇪🇺 1,954,600 #پوندانگلیس🇬🇧 2,264,700 #دلارکانادا🇨🇦 1,209,100 #یوآن‌چین🇨🇳 252,500 #لیرترکیه🇹🇷 36,900 #دینارکویت🇰🇼 5,589,800 #یکصدین‌ژاپن🇯🇵 1,064,800 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,183,100 #کرون‌سوئد🇸🇪 177,200 #فرانک‌سوئیس🇨🇭 2,125,500 #دلارهنگ‌کنگ🇭🇰 219,500 #رینگیت‌مالزی🇲🇾 421,500 #یکصددینارعراق🇮🇶 131,000 #ریال‌عربستان🇸🇦 458,500 #روبل‌روسیه🇷🇺 21,700 #دلارسنگاپور🇸🇬 1,333,500 #کرون‌دانمارک🇩🇰 262,100 1405-04-07 16:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T13:27:46.000Z",
+            "created_at": "2026-06-28T13:33:54.333Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "d8356d8c-f444-4744-8bcf-2b2345948e4e",
+            "message_id": "171001",
+            "channel_id": "bbb5e2fa-0423-4d6c-a355-fe2da85dcd3c",
+            "channel_username": "Indypersian",
+            "channel_title": "IndyPersian",
+            "cleaned_text": "️بر اساس گزارش رویترز، یک بالگرد متعلق به شرکت نفتی آرامکو روز یکشنبه در منطقه رأس تنوره در شرق عربستان سعودی سقوط کرد که در پی آن ۱۴ نفر جان خود را از دست دادند. خبرگزاری دولتی عربستان اعلام کرده علت این حادثه هنوز مشخص نیست و تحقیقات با مشارکت نهادهای مربوطه برای بررسی دلایل سقوط در حال انجام است. این حادثه در حالی رخ داده که آرامکو به‌تازگی بارگیری نفت خام در پایانه راس تنوره را پس از حدود چهار ماه توقف از سر گرفته بود. عربستان سعودی به‌عنوان بزرگ‌ترین صادرکننده نفت جهان، در شرایطی تولید و صادرات انرژی خود را افزایش داده که منطقه خاورمیانه پس از توافق موقت میان ایران و آمریکا برای توقف درگیری‌ها، شاهد تحولات جدیدی در بازار انرژی است.",
+            "sentiment": "positive",
+            "news_type": "news",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "OIL"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T12:58:25.000Z",
+            "created_at": "2026-06-28T13:00:44.934Z",
+            "primary_category": "ENERGY_COMMODITIES",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "OIL"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "news",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "e3785b43-b162-4808-9341-c881ab78830e",
+            "message_id": "192214",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی #درهم‌امارات🇦🇪 474,000 #یورو🇪🇺 1,952,300 #پوندانگلیس🇬🇧 2,262,400 #دلارکانادا🇨🇦 1,207,800 #یوآن‌چین🇨🇳 252,100 ▫#لیرترکیه🇹🇷 36,800 #دینارکویت🇰🇼 5,599,300 #یکصدین‌ژاپن🇯🇵 1,066,600 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,181,700 #کرون‌سوئد🇸🇪 177,500 #فرانک‌سوئیس🇨🇭 2,129,200 #دلارهنگ‌کنگ🇭🇰 219,900 #رینگیت‌مالزی🇲🇾 422,200 ▫#یکصددینارعراق🇮🇶 130,600 #ریال‌عربستان🇸🇦 459,300 #روبل‌روسیه🇷🇺 21,800 #دلارسنگاپور🇸🇬 1,335,800 #کرون‌دانمارک🇩🇰 262,500 1405-04-07 15:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T12:27:46.000Z",
+            "created_at": "2026-06-28T12:33:55.979Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "5728a794-4412-4fbc-8556-4a8bd8010c01",
+            "message_id": "192214",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی #درهم‌امارات🇦🇪 474,000 #یورو🇪🇺 1,952,300 #پوندانگلیس🇬🇧 2,262,400 #دلارکانادا🇨🇦 1,207,800 #یوآن‌چین🇨🇳 252,100 ▫#لیرترکیه🇹🇷 36,800 #دینارکویت🇰🇼 5,599,300 #یکصدین‌ژاپن🇯🇵 1,066,600 ▫#روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,181,700 #کرون‌سوئد🇸🇪 177,500 #فرانک‌سوئیس🇨🇭 2,129,200 #دلارهنگ‌کنگ🇭🇰 219,900 #رینگیت‌مالزی🇲🇾 422,200 ▫#یکصددینارعراق🇮🇶 130,600 #ریال‌عربستان🇸🇦 459,300 #روبل‌روسیه🇷🇺 21,800 #دلارسنگاپور🇸🇬 1,335,800 #کرون‌دانمارک🇩🇰 262,500 1405-04-07 15:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T12:27:46.000Z",
+            "created_at": "2026-06-28T12:34:23.046Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          },
+          {
+            "id": "ef2f41f3-0109-4f27-9aec-26fbcf07f426",
+            "message_id": "192207",
+            "channel_id": "e4f01022-429c-49c9-aa8e-59a41d21e533",
+            "channel_username": "Nerkhland",
+            "channel_title": "NerkhLand",
+            "cleaned_text": "#ارزهای‌صرافی #درهم‌امارات🇦🇪 471,300 #یورو🇪🇺 1,950,100 #پوندانگلیس🇬🇧 2,259,600 #دلارکانادا🇨🇦 1,206,100 #یوآن‌چین🇨🇳 252,000 #لیرترکیه🇹🇷 36,800 #دینارکویت🇰🇼 5,562,300 #یکصدین‌ژاپن🇯🇵 1,062,500 #روپیه‌هند🇮🇳 18,200 #دلاراسترالیا🇦🇺 1,180,100 #کرون‌سوئد🇸🇪 176,800 #فرانک‌سوئیس🇨🇭 2,120,900 #دلارهنگ‌کنگ🇭🇰 219,100 #رینگیت‌مالزی🇲🇾 420,600 #یکصددینارعراق🇮🇶 130,600 #ریال‌عربستان🇸🇦 457,500 #روبل‌روسیه🇷🇺 21,700 #دلارسنگاپور🇸🇬 1,328,300 #کرون‌دانمارک🇩🇰 261,500 1405-04-07 14:57:44",
+            "sentiment": "neutral",
+            "news_type": "market_update",
+            "importance_level": "high",
+            "mentioned_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "extracted_prices": null,
+            "telegram_created_at": "2026-06-28T11:27:46.000Z",
+            "created_at": "2026-06-28T11:34:50.363Z",
+            "primary_category": "FOREX_CURRENCY",
+            "sub_category": null,
+            "regions": null,
+            "affected_entities": [],
+            "affected_markets": [
+              "forex",
+              "crypto",
+              "gold"
+            ],
+            "affected_assets": [
+              "DOLLAR",
+              "EURO",
+              "DIRHAM"
+            ],
+            "market_impact_level": "high",
+            "event_urgency": "medium_term",
+            "source_reliability": "0.80",
+            "event_type": "market_update",
+            "affected_agents_count": "0",
+            "top_affected_agents": null
+          }
+        ],
+        "filters": {
+          "categories": null
+        }
+      },
+      "bodySnippet": "{\"success\":true,\"count\":20,\"minImpact\":0.7,\"data\":[{\"id\":\"b9f866c7-c90d-4d5a-a0a4-ad3bfadfcf2c\",\"mes"
+    },
+    {
+      "url": "https://titan.zala.ir/api/v1/telegram/categories/summary",
+      "status": 200,
+      "latencyMs": 28830,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "success": true,
+        "timeRange": 24,
+        "categories": [
+          {
+            "primary_category": "PRECIOUS_METALS",
+            "message_count": "22500",
+            "high_impact_count": "0",
+            "medium_impact_count": "0",
+            "low_impact_count": "22500",
+            "breaking_count": "22500",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "3",
+            "affected_agents_count": "4",
+            "latest_message_at": "2026-06-28T16:03:48.591Z"
+          },
+          {
+            "primary_category": "GEOPOLITICAL",
+            "message_count": "1450",
+            "high_impact_count": "359",
+            "medium_impact_count": "0",
+            "low_impact_count": "0",
+            "breaking_count": "1450",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "22",
+            "affected_agents_count": "9",
+            "latest_message_at": "2026-06-28T15:40:05.475Z"
+          },
+          {
+            "primary_category": "GENERAL",
+            "message_count": "594",
+            "high_impact_count": "0",
+            "medium_impact_count": "0",
+            "low_impact_count": "590",
+            "breaking_count": "594",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "10",
+            "affected_agents_count": "0",
+            "latest_message_at": "2026-06-28T16:03:48.502Z"
+          },
+          {
+            "primary_category": "FOREX_CURRENCY",
+            "message_count": "135",
+            "high_impact_count": "130",
+            "medium_impact_count": "0",
+            "low_impact_count": "5",
+            "breaking_count": "5",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "5",
+            "affected_agents_count": "5",
+            "latest_message_at": "2026-06-28T15:39:22.820Z"
+          },
+          {
+            "primary_category": "ECONOMIC_INDICATORS",
+            "message_count": "100",
+            "high_impact_count": "28",
+            "medium_impact_count": "0",
+            "low_impact_count": "0",
+            "breaking_count": "100",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "8",
+            "affected_agents_count": "8",
+            "latest_message_at": "2026-06-28T15:48:56.248Z"
+          },
+          {
+            "primary_category": "MARKET_DATA",
+            "message_count": "92",
+            "high_impact_count": "64",
+            "medium_impact_count": "0",
+            "low_impact_count": "0",
+            "breaking_count": "24",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "8",
+            "affected_agents_count": "6",
+            "latest_message_at": "2026-06-28T15:45:14.183Z"
+          },
+          {
+            "primary_category": "ENERGY_COMMODITIES",
+            "message_count": "36",
+            "high_impact_count": "36",
+            "medium_impact_count": "0",
+            "low_impact_count": "0",
+            "breaking_count": "8",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "4",
+            "affected_agents_count": "4",
+            "latest_message_at": "2026-06-28T13:06:03.877Z"
+          },
+          {
+            "primary_category": "FINANCIAL_CRISIS",
+            "message_count": "30",
+            "high_impact_count": "30",
+            "medium_impact_count": "0",
+            "low_impact_count": "0",
+            "breaking_count": "30",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "6",
+            "affected_agents_count": "5",
+            "latest_message_at": "2026-06-28T08:58:33.293Z"
+          },
+          {
+            "primary_category": "POLITICAL",
+            "message_count": "28",
+            "high_impact_count": "12",
+            "medium_impact_count": "0",
+            "low_impact_count": "0",
+            "breaking_count": "12",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "4",
+            "affected_agents_count": "4",
+            "latest_message_at": "2026-06-28T06:01:11.916Z"
+          },
+          {
+            "primary_category": "SANCTIONS_EMBARGO",
+            "message_count": "12",
+            "high_impact_count": "8",
+            "medium_impact_count": "0",
+            "low_impact_count": "0",
+            "breaking_count": "0",
+            "avg_reliability": "0.80000000000000000000",
+            "channel_count": "3",
+            "affected_agents_count": "4",
+            "latest_message_at": "2026-06-28T12:00:50.754Z"
+          }
+        ],
+        "totals": {
+          "total_messages": "41864",
+          "total_channels": "40",
+          "total_agents_affected": "12"
+        }
+      },
+      "bodySnippet": "{\"success\":true,\"timeRange\":24,\"categories\":[{\"primary_category\":\"PRECIOUS_METALS\",\"message_count\":\""
+    },
+    {
+      "url": "https://titan.zala.ir/api/v1/data-sources/stats",
+      "status": 200,
+      "latencyMs": 66,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "total_sources": "55",
+        "active_sources": "49",
+        "total_logs": "26971",
+        "logs_24h": "0",
+        "logs_7d": "0"
+      },
+      "bodySnippet": "{\"total_sources\":\"55\",\"active_sources\":\"49\",\"total_logs\":\"26971\",\"logs_24h\":\"0\",\"logs_7d\":\"0\"}"
+    },
+    {
+      "url": "https://titan.zala.ir/api/v1/data-sources/health",
+      "status": 200,
+      "latencyMs": 498,
+      "contentType": "application/json; charset=utf-8",
+      "isHtml": false,
+      "json": {
+        "status": "healthy",
+        "database": "connected",
+        "activeSources": 49,
+        "totalSources": 55,
+        "sourceCounts": {
+          "active": 49,
+          "telegram": 45,
+          "rss": 3,
+          "api": 1
+        },
+        "collectorHealth": {
+          "total": 45,
+          "active": 43
+        },
+        "publisherHealth": {
+          "total": 5,
+          "active": 2
+        },
+        "queueHealth": {
+          "pending": 0,
+          "failed": 23
+        },
+        "accessLogEvents1h": 0,
+        "pipelineIngested1h": 0,
+        "pipelineNormalized1h": 0,
+        "telegramCreated1h": 0,
+        "healthLastCheckedAt": "2026-06-28T16:11:23.535Z",
+        "dataQuality": {
+          "duplicateUrlGroups": 0,
+          "highRiskDuplicateGroups": 0,
+          "ignoredDuplicateGroups": 0,
+          "skipped": true
+        },
+        "recentActivity": 0,
+        "timestamp": "2026-06-28T16:11:23.535Z"
+      },
+      "bodySnippet": "{\"status\":\"healthy\",\"database\":\"connected\",\"activeSources\":49,\"totalSources\":55,\"sourceCounts\":{\"act"
+    }
+  ],
+  "performanceMs": {
+    "health": 573,
+    "status": 450,
+    "accounts": 544,
+    "collector-channels": 441,
+    "metrics": 460
+  },
+  "browserNetwork": [
+    {
+      "url": "/api/telegram-collector/accounts",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "url": "/api/telegram-collector/collector-channels",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "url": "/api/telegram-collector/collector-channels",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "url": "/api/telegram-collector/channels",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8"
+    }
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BUpgbOSR.js:21:166610)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-BUpgbOSR.js:138:29675)",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BUpgbOSR.js:21:166610)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-BUpgbOSR.js:138:29675)",
+    "WebSocket connection to 'wss://titan.zala.ir/ws/agents?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlMTM0YzdiMS1iMTgzLTRlMjEtOWFjZi1lM2Q1M2I5ODA2ZDYiLCJpYXQiOjE3ODI2NjMwODIsImV4cCI6MTc4MjY2NjY4Mn0.KsjCsjt7snFWnwcWrzpyZftEl-MUwqkTJUNtjR_QDi4' failed: Error during WebSocket handshake: Unexpected response code: 400",
+    "❌ WebSocket error: Event",
+    "❌ Agent WebSocket error: Event",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BUpgbOSR.js:21:166610)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-BUpgbOSR.js:138:29675)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BUpgbOSR.js:21:166610)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-BUpgbOSR.js:138:29675)"
+  ],
+  "limitations": [
+    "Login confirm/import/sync write actions not executed (requires Telegram OTP / explicit permission)",
+    "Session rotation endpoints not invoked"
+  ]
+}

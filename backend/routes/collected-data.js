@@ -14,7 +14,9 @@ import {
     uuidParamSchema
 } from '../schemas/dataHubSchemas.js';
 import * as deduplicationService from '../services/deduplicationService.js';
-import { enforceIngestionFilter } from '../services/datahubFilterRulesService.js';
+import { enforceIngestionPolicy, isFilterRuleBlockedError } from '../services/filterRulesGateway.js';
+import { enforceSourceAccess, sourceAccessAllowedSql } from '../middleware/accessControlGateway.js';
+import { resolveAgentKeyFromRequest } from '../utils/sourceAccessRequest.js';
 
 const router = express.Router();
 
@@ -44,9 +46,16 @@ router.get('/', authenticate, readRateLimiter, validateQuery(collectedDataFilter
             sentiment,
             has_url,
             has_hashtag,
+            agentKey: queryAgentKey,
+            agent_key: queryAgentKeySnake,
             limit = 50,
             offset = 0
         } = req.query;
+
+        const agentKey =
+            queryAgentKey ||
+            queryAgentKeySnake ||
+            resolveAgentKeyFromRequest(req);
 
         let whereConditions = [];
         let params = [];
@@ -96,11 +105,16 @@ router.get('/', authenticate, readRateLimiter, validateQuery(collectedDataFilter
             params.push(has_hashtag.toString());
         }
 
+        if (agentKey) {
+            params.push(agentKey);
+            whereConditions.push(sourceAccessAllowedSql('cd.source_id', paramIndex++));
+        }
+
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
         // Get total count
         const countResult = await query(
-            `SELECT COUNT(*) FROM collected_data ${whereClause}`,
+            `SELECT COUNT(*) FROM collected_data cd ${whereClause}`,
             params
         );
         const total = parseInt(countResult.rows[0].count);
@@ -156,8 +170,8 @@ router.post('/', authenticate, writeRateLimiter, validateBody(createCollectedDat
 
         const meta = metadata && typeof metadata === 'object' ? metadata : {};
         const norm = normalized_data && typeof normalized_data === 'object' ? normalized_data : {};
-        await enforceIngestionFilter({
-            source_id,
+        await enforceIngestionPolicy({
+            sourceId: source_id,
             url: meta.url || meta.source_url || norm.metadata?.url,
             text:
                 norm.content ||
@@ -166,6 +180,7 @@ router.post('/', authenticate, writeRateLimiter, validateBody(createCollectedDat
                 raw_data?.message ||
                 meta.title,
             metadata: meta,
+            enforcementPath: 'collected_data_api',
         });
 
         // Check for duplicate if content_hash provided
@@ -206,7 +221,7 @@ router.post('/', authenticate, writeRateLimiter, validateBody(createCollectedDat
         res.status(201).json(result.rows[0]);
 
     } catch (error) {
-        if (error.status === 403 && error.code === 'FILTER_BLOCKED') {
+        if (error.status === 403 && isFilterRuleBlockedError(error)) {
             return res.status(403).json({
                 error: error.message,
                 code: error.code,
@@ -248,8 +263,8 @@ router.post('/batch', authenticate, writeRateLimiter, validateBody(batchCreateCo
                         ? message.normalized_data
                         : {};
                 try {
-                    await enforceIngestionFilter({
-                        source_id,
+                    await enforceIngestionPolicy({
+                        sourceId: source_id,
                         url: meta.url || meta.source_url || norm.metadata?.url,
                         text:
                             norm.content ||
@@ -258,9 +273,10 @@ router.post('/batch', authenticate, writeRateLimiter, validateBody(batchCreateCo
                             message.raw_data?.message ||
                             meta.title,
                         metadata: meta,
+                        enforcementPath: 'collected_data_batch_api',
                     });
                 } catch (filterErr) {
-                    if (filterErr.code === 'FILTER_BLOCKED') {
+                    if (isFilterRuleBlockedError(filterErr)) {
                         results.blocked++;
                         continue;
                     }
@@ -562,6 +578,7 @@ router.delete('/:id', authenticate, writeRateLimiter, validateParams(uuidParamSc
 router.get('/:id', authenticate, readRateLimiter, validateParams(uuidParamSchema), async (req, res) => {
     try {
         const { id } = req.params;
+        const agentKey = resolveAgentKeyFromRequest(req);
 
         const result = await query(
             `SELECT 
@@ -576,6 +593,24 @@ router.get('/:id', authenticate, readRateLimiter, validateParams(uuidParamSchema
 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Collected data not found' });
+        }
+
+        if (agentKey) {
+            const row = result.rows[0];
+            const dataType = row.metadata?.data_type || row.normalized_data?.data_type || null;
+            const access = await enforceSourceAccess(req, {
+                sourceId: row.source_id,
+                agentKey,
+                action: 'collected_data_read',
+                dataType,
+            });
+            if (!access.allowed) {
+                return res.status(403).json({
+                    error: 'Source access denied',
+                    code: 'SOURCE_ACCESS_DENIED',
+                    agent_key: agentKey,
+                });
+            }
         }
 
         res.json(result.rows[0]);

@@ -12,6 +12,7 @@ import {
   dispatchItemSchema,
   testRunSchema,
   failQueueItemSchema,
+  retryExecutionSchema,
 } from '../schemas/datahubAutomationSchemas.js';
 import {
   listAutomationTopics,
@@ -29,6 +30,7 @@ import {
   runAutomationTest,
   listAutomationExecutions,
   getAutomationOverview,
+  validateAutomationTopic,
 } from '../services/datahubAutomationService.js';
 
 const router = express.Router();
@@ -53,6 +55,21 @@ router.get('/topics', authenticate, readRateLimiter, async (req, res) => {
 });
 
 router.post(
+  '/topics/:id/validate',
+  ...writeAuth,
+  validateParams(uuidParamSchema),
+  async (req, res) => {
+    try {
+      res.json(await validateAutomationTopic(req.params.id));
+    } catch (error) {
+      logger.error('Validate automation topic failed:', error);
+      const status = error.status || 500;
+      res.status(status).json({ error: error.message || 'Failed to validate topic', code: error.code });
+    }
+  },
+);
+
+router.post(
   '/topics',
   ...writeAuth,
   validateBody(createAutomationTopicSchema),
@@ -63,7 +80,7 @@ router.post(
     } catch (error) {
       logger.error('Create automation topic failed:', error);
       const status = error.status || 500;
-      res.status(status).json({ error: error.message || 'Failed to create topic' });
+      res.status(status).json({ error: error.message || 'Failed to create topic', code: error.code });
     }
   },
 );
@@ -80,7 +97,7 @@ router.put(
     } catch (error) {
       logger.error('Update automation topic failed:', error);
       const status = error.status || 500;
-      res.status(status).json({ error: error.message || 'Failed to update topic' });
+      res.status(status).json({ error: error.message || 'Failed to update topic', code: error.code });
     }
   },
 );
@@ -142,7 +159,7 @@ router.post('/queue/refresh', ...writeAuth, async (req, res) => {
     res.json(result);
   } catch (error) {
     logger.error('Refresh automation queue failed:', error);
-    res.status(500).json({ error: 'Failed to refresh queue' });
+    res.status(error.status || 500).json({ error: error.message || 'Failed to refresh queue', code: error.code });
   }
 });
 
@@ -152,12 +169,12 @@ router.post(
   validateBody(dispatchQueueSchema),
   async (req, res) => {
     try {
-      const { limit, dry_run: dryRun } = req.validatedBody;
-      const result = await dispatchAutomationQueue(req.user?.id, { limit, dryRun });
+      const { limit, dry_run: dryRun, confirm_live: confirmLive } = req.validatedBody;
+      const result = await dispatchAutomationQueue(req.user?.id, { limit, dryRun, confirmLive });
       res.json(result);
     } catch (error) {
       logger.error('Dispatch automation queue failed:', error);
-      res.status(500).json({ error: 'Failed to dispatch queue' });
+      res.status(error.status || 500).json({ error: error.message || 'Failed to dispatch queue', code: error.code });
     }
   },
 );
@@ -171,12 +188,13 @@ router.post(
     try {
       const result = await dispatchSingleQueueItem(req.params.id, req.user?.id, {
         dryRun: req.validatedBody.dry_run,
+        confirmLive: req.validatedBody.confirm_live,
       });
       res.json(result);
     } catch (error) {
       logger.error('Dispatch queue item failed:', error);
       const status = error.status || 500;
-      res.status(status).json({ error: error.message || 'Failed to dispatch item' });
+      res.status(status).json({ error: error.message || 'Failed to dispatch item', code: error.code });
     }
   },
 );
@@ -202,14 +220,18 @@ router.post(
   '/executions/:id/retry',
   ...writeAuth,
   validateParams(uuidParamSchema),
+  validateBody(retryExecutionSchema),
   async (req, res) => {
     try {
-      const result = await retryAutomationExecution(req.params.id, req.user?.id);
+      const result = await retryAutomationExecution(req.params.id, req.user?.id, {
+        dryRun: req.validatedBody.dry_run,
+        confirmLive: req.validatedBody.confirm_live,
+      });
       res.json(result);
     } catch (error) {
       logger.error('Retry execution failed:', error);
       const status = error.status || 500;
-      res.status(status).json({ error: error.message || 'Failed to retry' });
+      res.status(status).json({ error: error.message || 'Failed to retry', code: error.code });
     }
   },
 );
@@ -223,12 +245,13 @@ router.post(
       const result = await runAutomationTest(req.user?.id, {
         topicId: req.validatedBody.topic_id,
         dryRun: req.validatedBody.dry_run,
+        confirmLive: req.validatedBody.confirm_live,
       });
       res.json(result);
     } catch (error) {
       logger.error('Automation test run failed:', error);
       const status = error.status || 500;
-      res.status(status).json({ error: error.message || 'Test run failed' });
+      res.status(status).json({ error: error.message || 'Test run failed', code: error.code });
     }
   },
 );

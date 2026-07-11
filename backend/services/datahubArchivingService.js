@@ -1,4 +1,38 @@
 import { query } from '../database/db.js';
+import {
+    enrichHealthRow,
+    enrichOperationRow,
+    enrichPartitionRow,
+    ARCHIVE_ADVISORY_LOCK_KEY,
+} from './datahubArchivingLabels.js';
+
+const DEFAULT_MAX_ROWS = Number(process.env.ARCHIVE_MAX_ROWS || 1000);
+
+async function withArchiveLock(fn) {
+    const lock = await query('SELECT pg_try_advisory_lock($1) AS acquired', [ARCHIVE_ADVISORY_LOCK_KEY]);
+    if (!lock.rows[0]?.acquired) {
+        const err = new Error('Another archive or restore operation is in progress');
+        err.status = 409;
+        err.code = 'ARCHIVE_IN_PROGRESS';
+        throw err;
+    }
+    try {
+        return await fn();
+    } finally {
+        await query('SELECT pg_advisory_unlock($1)', [ARCHIVE_ADVISORY_LOCK_KEY]);
+    }
+}
+
+function mapSqlError(err) {
+    if (String(err.message || '').includes('ARCHIVE_IN_PROGRESS')) {
+        err.status = 409;
+        err.code = 'ARCHIVE_IN_PROGRESS';
+    } else if (String(err.message || '').includes('RESTORE_DUPLICATE_CONFLICT')) {
+        err.status = 409;
+        err.code = 'RESTORE_DUPLICATE_CONFLICT';
+    }
+    return err;
+}
 
 async function logOperationStart({ operationType, dryRun, requestPayload, userId }) {
     const res = await query(
@@ -34,12 +68,12 @@ function requireConfirm(flag, code, message) {
 
 export async function getArchiveHealth() {
     const res = await query('SELECT * FROM check_archive_health()');
-    return res.rows[0] || {};
+    return enrichHealthRow(res.rows[0] || {});
 }
 
 export async function listArchivePartitions() {
     const res = await query('SELECT * FROM list_archive_partitions()');
-    return res.rows.map(r => ({
+    return res.rows.map(r => enrichPartitionRow({
         partition_name: r.partition_name,
         start_date: r.start_date,
         end_date: r.end_date,
@@ -79,7 +113,7 @@ export async function listArchivingOperations({ limit, offset }) {
          LIMIT $1 OFFSET $2`,
         [limit, offset],
     );
-    return res.rows.map(r => ({
+    return res.rows.map(r => enrichOperationRow({
         id: String(r.id),
         operation_type: String(r.operation_type),
         dry_run: Boolean(r.dry_run),
@@ -167,7 +201,7 @@ export async function previewArchive({ daysOld, userId }) {
             resultPayload: {},
             errorSummary: { message: e.message, code: e.code || null },
         });
-        throw e;
+        throw mapSqlError(e);
     }
 }
 
@@ -187,25 +221,28 @@ export async function executeArchive({ daysOld, dryRun, confirmArchive, userId }
     });
 
     try {
-        const res = await query('SELECT * FROM archive_old_decisions($1)', [days]);
-        const row = res.rows[0] || {};
-        const result = {
-            dry_run: false,
-            days_old: days,
-            records_archived: Number(row.records_archived || 0),
-            oldest_date: row.oldest_date ? new Date(row.oldest_date).toISOString() : null,
-            newest_date: row.newest_date ? new Date(row.newest_date).toISOString() : null,
-            execution_time_ms: row.execution_time_ms != null ? Number(row.execution_time_ms) : null,
-        };
-        await logOperationEnd(opId, { status: 'success', resultPayload: result });
-        return result;
+        return await withArchiveLock(async () => {
+            const res = await query('SELECT * FROM archive_old_decisions($1, $2)', [days, DEFAULT_MAX_ROWS]);
+            const row = res.rows[0] || {};
+            const result = {
+                dry_run: false,
+                days_old: days,
+                records_archived: Number(row.records_archived || 0),
+                oldest_date: row.oldest_date ? new Date(row.oldest_date).toISOString() : null,
+                newest_date: row.newest_date ? new Date(row.newest_date).toISOString() : null,
+                execution_time_ms: row.execution_time_ms != null ? Number(row.execution_time_ms) : null,
+                max_rows: DEFAULT_MAX_ROWS,
+            };
+            await logOperationEnd(opId, { status: 'success', resultPayload: result });
+            return result;
+        });
     } catch (e) {
         await logOperationEnd(opId, {
             status: 'failed',
             resultPayload: {},
             errorSummary: { message: e.message, code: e.code || null },
         });
-        throw e;
+        throw mapSqlError(e);
     }
 }
 
@@ -272,21 +309,29 @@ export async function executeRestore({ startDate, endDate, dryRun, confirmRestor
     });
 
     try {
-        const res = await query('SELECT restore_from_archive($1::timestamptz, $2::timestamptz) AS records_restored', [
-            startDate,
-            endDate,
-        ]);
-        const recordsRestored = Number(res.rows[0]?.records_restored || 0);
-        const result = { dry_run: false, start_date: startDate, end_date: endDate, records_restored: recordsRestored };
-        await logOperationEnd(opId, { status: 'success', resultPayload: result });
-        return result;
+        return await withArchiveLock(async () => {
+            const res = await query(
+                'SELECT restore_from_archive($1::timestamptz, $2::timestamptz, $3) AS records_restored',
+                [startDate, endDate, DEFAULT_MAX_ROWS],
+            );
+            const recordsRestored = Number(res.rows[0]?.records_restored || 0);
+            const result = {
+                dry_run: false,
+                start_date: startDate,
+                end_date: endDate,
+                records_restored: recordsRestored,
+                max_rows: DEFAULT_MAX_ROWS,
+            };
+            await logOperationEnd(opId, { status: 'success', resultPayload: result });
+            return result;
+        });
     } catch (e) {
         await logOperationEnd(opId, {
             status: 'failed',
             resultPayload: {},
             errorSummary: { message: e.message, code: e.code || null },
         });
-        throw e;
+        throw mapSqlError(e);
     }
 }
 

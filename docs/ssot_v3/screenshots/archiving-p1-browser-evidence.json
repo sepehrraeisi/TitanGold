@@ -1,0 +1,30 @@
+{
+  "capturedAt": "2026-06-27T17:35:00Z",
+  "path": "DataHub → Advanced Features → Data Archiving",
+  "user": "p4verify2@test.local",
+  "metrics": {
+    "activeRecords": 12,
+    "archivedRecords": 0,
+    "pendingArchive": 4,
+    "status": "WARNING: Archive not run in >30 days"
+  },
+  "rawInternalLabels": [
+    "ai_decisions_archive_2024",
+    "ai_decisions_archive_2025",
+    "ai_decisions_archive_2026"
+  ],
+  "rawOperationTypes": [
+    "preview_archive",
+    "preview_purge",
+    "preview_restore"
+  ],
+  "buttons": {
+    "dryRunArchive": "enabled",
+    "applyArchive": "disabled (RBAC write gate)",
+    "dryRunRestore": "disabled (dates empty)",
+    "restore": "disabled (RBAC + dates)",
+    "countPurgeCandidates": "enabled"
+  },
+  "networkNote": "Page loads via GET /api/v1/data-hub/archiving/stats and /records",
+  "consoleErrors": []
+}

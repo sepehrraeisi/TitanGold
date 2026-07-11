@@ -1,5 +1,5 @@
 import React from 'react';
-import { INPUT_CLASS, DataHubToggle } from '../../dataHubUi';
+import { INPUT_CLASS, DataHubToggle, StatusPill } from '../../dataHubUi';
 
 interface AutomationSchedulePanelProps {
     schedule: {
@@ -12,6 +12,8 @@ interface AutomationSchedulePanelProps {
     onToggle: (enabled: boolean) => void;
     onUpdateInterval: (interval: number) => void;
     canWrite: boolean;
+    /** When false, schedule toggle stores config only — no background worker dispatches automatically. */
+    automationWorkerActive?: boolean;
     t: (key: string) => string;
 }
 
@@ -21,17 +23,32 @@ const AutomationSchedulePanel: React.FC<AutomationSchedulePanelProps> = ({
     onToggle,
     onUpdateInterval,
     canWrite,
+    automationWorkerActive = false,
     t,
 }) => {
     const wgTitle = !canWrite ? t('datahub_requires_admin_trader') : undefined;
+    const toggleLabel = schedule.enabled
+        ? automationWorkerActive
+            ? t('automation_schedule_enabled')
+            : t('automation_schedule_config_enabled')
+        : t('automation_schedule_disabled');
+
     return (
         <div className="rounded-xl border border-purple-500/30 bg-slate-950/70 p-4 mb-5">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
                 <div>
-                    <h4 className="text-[11px] font-semibold text-foreground">
-                        {t('automation_schedule_heading')}
-                    </h4>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <h4 className="text-[11px] font-semibold text-foreground">
+                            {t('automation_schedule_heading')}
+                        </h4>
+                        {!automationWorkerActive && (
+                            <StatusPill label={t('automation_schedule_manual_badge')} variant="warning" />
+                        )}
+                    </div>
                     <p className="text-[10px] text-muted-foreground mt-1">{t('automation_schedule_desc')}</p>
+                    {!automationWorkerActive && (
+                        <p className="text-[10px] text-amber-300 mt-1">{t('automation_schedule_worker_notice')}</p>
+                    )}
                 </div>
                 <DataHubToggle
                     id="automation-schedule-enabled"
@@ -39,11 +56,7 @@ const AutomationSchedulePanel: React.FC<AutomationSchedulePanelProps> = ({
                     onChange={onToggle}
                     disabled={!canWrite || isUpdating}
                     title={wgTitle}
-                    label={
-                        schedule.enabled
-                            ? t('automation_schedule_enabled')
-                            : t('automation_schedule_disabled')
-                    }
+                    label={toggleLabel}
                 />
             </div>
 

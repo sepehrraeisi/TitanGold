@@ -4167,7 +4167,7 @@ export interface DataSource {
   duplicateUrlKey?: string | null;
   duplicateUrlCount?: number;
   duplicateActiveCount?: number;
-  duplicateUrlSeverity?: 'high' | 'medium' | 'low' | null;
+  duplicateUrlSeverity?: 'high' | 'medium' | 'low' | 'info' | null;
   duplicateUrlSiblings?: Array<{
     id: string;
     name: string;
@@ -4293,6 +4293,44 @@ export interface PipelineGlobalTelegramBacklog {
   newestUnprocessed?: string;
 }
 
+export interface PipelineTelegramIngestMetrics {
+  incoming24h?: number | null;
+  transferredToCollectedData24h?: number | null;
+}
+
+export type TransferHealthMetricKey =
+  | 'incoming24h'
+  | 'transferred24h'
+  | 'processed24h'
+  | 'backlogTotal'
+  | 'oldestUnprocessedAge'
+  | 'processingRate'
+  | 'drainRatio'
+  | 'catchUp';
+
+export interface PipelineBacklogMeta {
+  partial?: boolean;
+  warnings?: string[];
+  unavailableMetrics?: TransferHealthMetricKey[];
+  fetchedAt?: string;
+  error?: string;
+  backlogTrend?: PipelineBacklogTrend;
+}
+
+export type PipelineSchedulerStatus = 'running' | 'paused' | 'stopped' | 'unknown';
+
+export interface PipelineBacklogTrend {
+  loaded: boolean;
+  direction: 'up' | 'down' | 'stable' | null;
+  percentChange: number | null;
+  display: string | null;
+  previousBacklog: number | null;
+  source: 'redis_history' | 'flow_balance_estimate' | null;
+  unavailableReason: string | null;
+}
+
+export type TelegramTransferHealthStatus = 'healthy' | 'warning' | 'critical';
+
 export interface DataPipelineSourceSnapshot {
   sourceId: string;
   name: string;
@@ -4324,6 +4362,7 @@ export interface DataPipelineSnapshot {
   normalizedPercent: number;
   transferThroughput?: PipelineTransferThroughput;
   globalTelegramBacklog?: PipelineGlobalTelegramBacklog;
+  telegramIngestMetrics?: PipelineTelegramIngestMetrics;
   sources: DataPipelineSourceSnapshot[];
   categories: DataPipelineCategorySnapshot[];
 }
@@ -4375,6 +4414,57 @@ export interface DataNormalizationSummary {
   warnings: number;
   rejected: number;
   lastProcessedAt?: string;
+}
+
+export interface PipelineNormalizationSummaryMeta {
+  loaded: boolean;
+  cachedAt: string | null;
+  queryMs: number | null;
+  partial: boolean;
+  unavailableReason: string | null;
+}
+
+export interface PipelineNormalizationSummaryResponse {
+  windowHours: number;
+  totalProcessed: number | null;
+  passed: number | null;
+  warnings: number | null;
+  rejected: number | null;
+  passRate: number | null;
+  lastProcessedAt: string | null;
+  meta: PipelineNormalizationSummaryMeta;
+}
+
+export interface PipelineCapacityResponse {
+  mode: 'config_only';
+  modeLabel: string;
+  schedulerStatus: PipelineSchedulerStatus;
+  transfer: {
+    batchSize: number;
+    intervalMs: number;
+    intervalMinutes: number | null;
+    runtimeAdjustable: boolean | 'partial';
+    source: string;
+  };
+  normalization: {
+    batchSize: number;
+    intervalMs: number;
+    intervalMinutes: number | null;
+    runtimeAdjustable: boolean | 'partial';
+    source: string;
+  };
+  lastNormalizationRun: string | null;
+  lastNormalizationStats: {
+    processed: number | null;
+    errors: number | null;
+    durationMs: number | null;
+  } | null;
+  meta: {
+    loaded: boolean;
+    readOnly: boolean;
+    writeControlsAvailable: boolean;
+    notes: string[];
+  };
 }
 
 export interface DataRequest {
@@ -4515,6 +4605,20 @@ export interface AgentTopicRoute {
   lastEvaluated?: string;
   lastPublishedAt?: string;
   stats?: AgentTopicRouteStats;
+  validity?: {
+    status: 'valid' | 'disabled_publisher' | 'missing_mapping' | 'disabled' | 'no_candidates';
+    valid: boolean;
+    reasons: string[];
+    repairActions?: string[];
+    matchingCandidates?: number;
+    canEnqueue?: boolean;
+  };
+}
+
+export interface AutomationPublisherTargetStatus {
+  id: string;
+  name?: string;
+  isActive: boolean;
 }
 
 export interface AutomationScheduleConfig {
@@ -4531,7 +4635,7 @@ export interface DataAutomationConfig {
   schedule?: AutomationScheduleConfig;
 }
 
-export type PublisherQueueStatus = 'pending' | 'processing';
+export type PublisherQueueStatus = 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled';
 
 export interface PublisherQueueItem {
   id: string;
@@ -4548,9 +4652,12 @@ export interface PublisherQueueItem {
   dataType: string;
   qualityScore: number;
   normalizedStatus: NormalizedDataStatus;
+  retryCount?: number;
+  maxRetryCount?: number;
+  lastErrorCode?: string | null;
 }
 
-export type PublisherHistoryStatus = 'sent' | 'failed';
+export type PublisherHistoryStatus = 'sent' | 'failed' | 'dry_run' | 'blocked' | 'skipped';
 
 export interface PublisherHistoryItem {
   id: string;
@@ -4563,6 +4670,8 @@ export interface PublisherHistoryItem {
   sentAt: string;
   latencyMs?: number;
   payloadPreview: string;
+  errorCode?: string | null;
+  deliveryMode?: string | null;
 }
 
 export interface DataHubAdvancedFeatures {

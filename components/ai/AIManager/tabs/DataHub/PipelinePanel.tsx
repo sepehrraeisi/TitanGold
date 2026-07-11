@@ -13,7 +13,15 @@ import {
     MetricCard,
     StatusPill,
 } from './dataHubUi';
-import { formatDataHubQueryError } from './dataHubI18n';
+import TelegramTransferHealth from './TelegramTransferHealth';
+import PipelineNormalizationSummary from './PipelineNormalizationSummary';
+import PipelineCapacityPanel from './PipelineCapacityPanel';
+import { formatDataHubQueryError, safeT } from './dataHubI18n';
+import {
+    classifyResponseTimeSeverity,
+    responseTimeSeverityClass,
+    responseTimeSeverityLabel,
+} from './pipelineOperationalMetrics';
 import { dataHubSourceStatusLabel } from '../../../../../services/dataSourcesApi';
 import type { DataSource } from '../../../../../types';
 
@@ -26,6 +34,18 @@ interface PipelinePanelProps {
     handleRefreshPipelineSnapshot: () => void;
     isLoadingPipeline: boolean;
     isLoadingPipelineBacklog?: boolean;
+    pipelineBacklogError?: string | null;
+    pipelineBacklogPartial?: boolean;
+    pipelineBacklogUnavailableMetrics?: import('../../../../../types').TransferHealthMetricKey[];
+    pipelineBacklogTrend?: import('../../../../../types').PipelineBacklogTrend | null;
+    onRetryPipelineBacklog?: () => void;
+    pipelineNormalizationSummary?: import('../../../../../types').PipelineNormalizationSummaryResponse;
+    isLoadingPipelineNormalization?: boolean;
+    pipelineNormalizationError?: string | null;
+    onRetryPipelineNormalization?: () => void;
+    pipelineCapacity?: import('../../../../../types').PipelineCapacityResponse;
+    isLoadingPipelineCapacity?: boolean;
+    pipelineCapacityError?: string | null;
     pipelineApiError?: DataHubApiError | Error | null;
     setPipelineError: (err: string | null) => void;
     formatTimeAgo: (date: string | Date | undefined) => string;
@@ -197,6 +217,18 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     handleRefreshPipelineSnapshot,
     isLoadingPipeline,
     isLoadingPipelineBacklog = false,
+    pipelineBacklogError = null,
+    pipelineBacklogPartial = false,
+    pipelineBacklogUnavailableMetrics = [],
+    pipelineBacklogTrend = null,
+    onRetryPipelineBacklog,
+    pipelineNormalizationSummary,
+    isLoadingPipelineNormalization = false,
+    pipelineNormalizationError = null,
+    onRetryPipelineNormalization,
+    pipelineCapacity,
+    isLoadingPipelineCapacity = false,
+    pipelineCapacityError = null,
     pipelineApiError = null,
     setPipelineError,
     formatTimeAgo,
@@ -205,7 +237,6 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
 }) => {
     const queryError = formatDataHubQueryError(t, pipelineApiError);
 
-    const [categorySearch, setCategorySearch] = useState('');
     const [sourceSearch, setSourceSearch] = useState('');
     const [sourceStatusFilter, setSourceStatusFilter] = useState<SourceStatusFilter>('all');
     const [sourceSortBy, setSourceSortBy] = useState<SourceSortBy>('name');
@@ -220,14 +251,6 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
         const entry = pipelineHistory.find(item => item.id === selectedSnapshotId);
         return entry?.snapshot || latestSnapshot;
     }, [selectedSnapshotId, latestSnapshot, pipelineHistory]);
-
-    const filteredCategories = useMemo(() => {
-        if (!activeSnapshot) return [];
-        const query = categorySearch.trim().toLowerCase();
-        return activeSnapshot.categories.filter(
-            category => !query || category.name.toLowerCase().includes(query),
-        );
-    }, [activeSnapshot, categorySearch]);
 
     const filteredSources = useMemo(() => {
         if (!activeSnapshot) return [];
@@ -270,7 +293,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
     return (
         <div className={DATAHUB_SHELL}>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
-                <div>
+                    <div>
                     <h3 className="text-sm md:text-base font-semibold text-foreground">{t('data_preparation')}</h3>
                     <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">{t('data_preparation_desc')}</p>
                     {activeSnapshot?.lastRefreshed && (
@@ -278,37 +301,37 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             {t('pipeline_last_refreshed')}: {formatTimeAgo(activeSnapshot.lastRefreshed)}
                         </p>
                     )}
-                </div>
+                    </div>
                 <div className="flex flex-wrap items-end gap-2">
-                    {pipelineHistory.length > 0 && (
+                        {pipelineHistory.length > 0 && (
                         <div>
                             <label className="block text-[10px] text-muted-foreground mb-1">
                                 {t('snapshot_history')}
-                            </label>
-                            <select
-                                value={selectedSnapshotId}
-                                onChange={e => setSelectedSnapshotId(e.target.value)}
+                                </label>
+                                <select
+                                    value={selectedSnapshotId}
+                                    onChange={e => setSelectedSnapshotId(e.target.value)}
                                 className={SELECT_CLASS}
-                            >
+                                >
                                 <option value="latest">{t('snapshot_latest')}</option>
-                                {pipelineHistory.map(entry => (
-                                    <option key={entry.id} value={entry.id}>
-                                        {new Date(entry.generatedAt).toLocaleString()}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-                    <button
+                                    {pipelineHistory.map(entry => (
+                                        <option key={entry.id} value={entry.id}>
+                                            {new Date(entry.generatedAt).toLocaleString()}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        <button
                         type="button"
-                        onClick={handleRefreshPipelineSnapshot}
-                        disabled={isLoadingPipeline}
+                            onClick={handleRefreshPipelineSnapshot}
+                            disabled={isLoadingPipeline}
                         className={BTN_PRIMARY}
-                    >
+                        >
                         {isLoadingPipeline ? t('refreshing') : t('refresh_pipeline')}
-                    </button>
+                        </button>
+                    </div>
                 </div>
-            </div>
 
             {queryError && (
                 <DataHubAlert
@@ -343,6 +366,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             label={t('pipeline_metric_requests')}
                             value={activeSnapshot.totalRequests24h || 0}
                             color="emerald"
+                            hint={t('pipeline_metric_requests_hint')}
                         />
                         <MetricCard
                             label={t('pipeline_metric_passed')}
@@ -361,21 +385,22 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                         />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-5">
-                        <input
-                            value={categorySearch}
-                            onChange={e => setCategorySearch(e.target.value)}
-                            placeholder={t('category_filter_placeholder')}
-                            className={INPUT_CLASS}
-                        />
-                        <input
-                            value={sourceSearch}
-                            onChange={e => setSourceSearch(e.target.value)}
+                    <p
+                        className="text-[10px] text-muted-foreground/90 mb-5 -mt-2"
+                        title={t('pipeline_telegram_comparison_hint')}
+                    >
+                        {t('pipeline_telegram_comparison_hint')}
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-5">
+                    <input
+                        value={sourceSearch}
+                        onChange={e => setSourceSearch(e.target.value)}
                             placeholder={t('source_filter_placeholder')}
                             className={INPUT_CLASS}
-                        />
-                        <select
-                            value={sourceStatusFilter}
+                    />
+                    <select
+                        value={sourceStatusFilter}
                             onChange={e =>
                                 setSourceStatusFilter(e.target.value as typeof sourceStatusFilter)
                             }
@@ -400,56 +425,55 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                             <option value="backlog">{t('pipeline_sort_backlog')}</option>
                             <option value="eta">{t('pipeline_sort_eta')}</option>
                             <option value="rank">{t('pipeline_sort_rank')}</option>
-                        </select>
-                    </div>
+                    </select>
+                </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
-                        <div className={DATAHUB_INNER_LIST}>
-                            <h4 className="text-[11px] font-semibold text-foreground mb-3">
-                                {t('category_screening')}
+                        <TelegramTransferHealth
+                            t={t}
+                            snapshot={activeSnapshot}
+                            isLoading={isLoadingPipelineBacklog}
+                            isPipelineLoaded={Boolean(activeSnapshot)}
+                            error={pipelineBacklogError}
+                            partial={pipelineBacklogPartial}
+                            unavailableMetrics={pipelineBacklogUnavailableMetrics}
+                            backlogTrend={pipelineBacklogTrend}
+                            onRetry={onRetryPipelineBacklog}
+                            formatTimeAgo={formatTimeAgo}
+                        />
+
+                        <PipelineCapacityPanel
+                            t={t}
+                            capacity={pipelineCapacity}
+                            isLoading={isLoadingPipelineCapacity}
+                            error={pipelineCapacityError}
+                            snapshot={activeSnapshot}
+                            unavailableMetrics={pipelineBacklogUnavailableMetrics}
+                        />
+                    </div>
+
+                    <div className="mb-5">
+                        <PipelineNormalizationSummary
+                            t={t}
+                            summary={pipelineNormalizationSummary}
+                            isLoading={isLoadingPipelineNormalization}
+                            error={pipelineNormalizationError}
+                            onRetry={onRetryPipelineNormalization}
+                            formatTimeAgo={formatTimeAgo}
+                        />
+                    </div>
+
+                    <div className={`${DATAHUB_INNER_LIST} mb-5`}>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                            <h4 className="text-[11px] font-semibold text-foreground">
+                                {t('source_quality_board')}
                             </h4>
-                            {filteredCategories.length === 0 ? (
-                                <p className="text-[11px] text-muted-foreground">{t('pipeline_no_categories')}</p>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-[11px]">
-                                        <thead>
-                                            <tr className="border-b border-slate-800 text-muted-foreground text-left">
-                                                <th className="py-2 pr-2">{t('name')}</th>
-                                                <th className="py-2 pr-2">{t('category_inflow')}</th>
-                                                <th className="py-2">{t('category_pass_rate')}</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredCategories.map(cat => (
-                                                <tr
-                                                    key={cat.categoryId}
-                                                    className="border-b border-slate-900/60 hover:bg-slate-900/40"
-                                                >
-                                                    <td className="py-2 pr-2 text-foreground">{cat.name}</td>
-                                                    <td className="py-2 pr-2">{cat.inflow}</td>
-                                                    <td className="py-2 text-emerald-300">
-                                                        {cat.passRate.toFixed(1)}%
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                            {isLoadingPipelineBacklog && (
+                                <span className="text-[10px] text-muted-foreground">
+                                    {safeT(t, 'pipeline_backlog_loading')}
+                                </span>
                             )}
                         </div>
-
-                        <div className={DATAHUB_INNER_LIST}>
-                            <div className="flex items-center justify-between gap-2 mb-3">
-                                <h4 className="text-[11px] font-semibold text-foreground">
-                                    {t('source_quality_board')}
-                                </h4>
-                                {isLoadingPipelineBacklog && (
-                                    <span className="text-[10px] text-muted-foreground">
-                                        {t('pipeline_backlog_loading')}
-                                    </span>
-                                )}
-                            </div>
                             {filteredSources.length === 0 ? (
                                 <p className="text-[11px] text-muted-foreground">{t('pipeline_no_sources')}</p>
                             ) : (
@@ -491,9 +515,25 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                         {renderCollectorBacklogDetails(t, src, formatTimeAgo)}
                                                     </td>
                                                     <td className="py-2">
-                                                        {src.lastResponseTime != null
-                                                            ? `${src.lastResponseTime}ms`
-                                                            : '—'}
+                                                        {src.lastResponseTime != null ? (
+                                                            (() => {
+                                                                const severity = classifyResponseTimeSeverity(
+                                                                    src.lastResponseTime,
+                                                                );
+                                                                const label = responseTimeSeverityLabel(t, severity);
+                                                                return (
+                                                                    <span
+                                                                        className={responseTimeSeverityClass(severity)}
+                                                                        title={label ?? undefined}
+                                                                    >
+                                                                        {src.lastResponseTime}ms
+                                                                        {label ? ` · ${label}` : ''}
+                                                                    </span>
+                                                                );
+                                                            })()
+                                                        ) : (
+                                                            safeT(t, 'pipeline_response_unavailable')
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -501,38 +541,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                     </table>
                                 </div>
                             )}
-                        </div>
                     </div>
-
-                    {normalizationSummary && (
-                        <div className={`${DATAHUB_INNER_LIST} mb-5`}>
-                            <h4 className="text-[11px] font-semibold text-foreground mb-3">
-                                {t('normalization_summary')}
-                            </h4>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                <MetricCard
-                                    label={t('normalization_processed')}
-                                    value={normalizationSummary.totalProcessed}
-                                    color="blue"
-                                />
-                                <MetricCard
-                                    label={t('normalization_passed')}
-                                    value={normalizationSummary.passed}
-                                    color="emerald"
-                                />
-                                <MetricCard
-                                    label={t('normalization_warnings')}
-                                    value={normalizationSummary.warnings}
-                                    color="amber"
-                                />
-                                <MetricCard
-                                    label={t('normalization_rejected')}
-                                    value={normalizationSummary.rejected}
-                                    color="red"
-                                />
-                            </div>
-                        </div>
-                    )}
 
                     {previewNormalized.length > 0 && (
                         <div className={DATAHUB_INNER_LIST}>
@@ -581,7 +590,7 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                                                   {row.qualityScore}
                                                               </span>
                                                             )
-                                                          : '—'}
+                                                          : t('pipeline_response_unavailable')}
                                                 </td>
                                                 <td className="py-2">
                                                     <StatusPill
@@ -593,9 +602,9 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                                         ))}
                                     </tbody>
                                 </table>
-                            </div>
-                        </div>
-                    )}
+                    </div>
+                    </div>
+                )}
                 </>
             )}
         </div>

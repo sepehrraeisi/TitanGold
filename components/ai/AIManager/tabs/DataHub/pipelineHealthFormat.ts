@@ -37,6 +37,33 @@ export function formatCountDisplay(value: unknown): string {
     return n != null ? String(n) : '0';
 }
 
+/** Health metrics: null → unavailable label, 0 is a real zero. */
+export function formatHealthMetricValue(
+    value: unknown,
+    unavailableLabel = 'Unavailable',
+): { display: string; available: boolean } {
+    if (value == null || value === '') {
+        return { display: unavailableLabel, available: false };
+    }
+    const n = parseFiniteCount(value);
+    if (n == null) return { display: unavailableLabel, available: false };
+    return { display: String(n), available: true };
+}
+
+export function formatCacheHitRateDisplay(
+    rate: number | null | undefined,
+    tracked: boolean,
+    labels: { notTracked: string; unavailable: string },
+): { display: string; available: boolean; tracked: boolean } {
+    if (!tracked) {
+        return { display: labels.notTracked, available: false, tracked: false };
+    }
+    if (rate == null || !Number.isFinite(rate)) {
+        return { display: labels.unavailable, available: false, tracked: true };
+    }
+    return { display: `${Math.round(rate * 1000) / 10}%`, available: true, tracked: true };
+}
+
 export function formatNaDisplay(value: unknown): string {
     const n = parseFiniteCount(value);
     return n != null ? String(n) : 'N/A';

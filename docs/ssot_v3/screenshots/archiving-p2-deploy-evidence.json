@@ -1,0 +1,41 @@
+{
+  "capturedAt": "2026-06-28T10:50:00.000Z",
+  "rootCause": "stale_production_dist",
+  "explanation": "Human QA accessed https://titan.zala.ir which nginx serves from /home/ubuntu/webapp/TitanGold/dist. P2 frontend commits were live on pm2 titan-frontend (npm run dev :3000) but dist was not rebuilt until 2026-06-28T10:43:40Z.",
+  "before": {
+    "distIndexHtml": "2026-06-27T17:03:00Z (approx)",
+    "dataHubChunk": "DataHubTab-CUO28e3n.js",
+    "hadArchivingDescV3": true,
+    "hadArchivingExplanationP2": false,
+    "symptoms": [
+      "ai_decisions_archive_2024/2025/2026 visible",
+      "preview_archive/preview_restore/preview_purge visible",
+      "restore panel disabled without empty-state",
+      "status card showed em dash only"
+    ]
+  },
+  "after": {
+    "buildCommand": "npm run build",
+    "distIndexHtml": "2026-06-28T10:43:40Z",
+    "dataHubChunk": "DataHubTab-BYziE4XX.js",
+    "mainIndexChunk": "index-C3OCpwrE.js",
+    "hadArchivingExplanationP2": true,
+    "hadArchivingRestoreEmpty": true,
+    "hadArchivingDescV3": false,
+    "nginxRoot": "/home/ubuntu/webapp/TitanGold/dist",
+    "productionAssetHead": {
+      "url": "https://titan.zala.ir/assets/DataHubTab-BYziE4XX.js",
+      "status": 200,
+      "lastModified": "Sun, 28 Jun 2026 10:43:40 GMT"
+    }
+  },
+  "componentWiring": {
+    "route": "AdvancedFeatures.tsx → ./advanced/Archiving",
+    "duplicateArchivingComponents": 0,
+    "activeFile": "components/ai/AIManager/tabs/DataHub/advanced/Archiving.tsx"
+  },
+  "pm2": {
+    "titanFrontend": "npm run dev :3000 (source — had P2 code before dist rebuild)",
+    "titanBackend": "port 5002 — API enriched labels OK throughout"
+  }
+}

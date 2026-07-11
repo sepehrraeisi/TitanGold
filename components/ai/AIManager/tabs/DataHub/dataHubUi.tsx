@@ -104,17 +104,41 @@ export function MetricCard({
     label,
     value,
     color = 'blue',
+    hint,
+    valueState = 'loaded',
+    emphasis = 'default',
+    valueTooltip,
+    badge,
 }: {
     label: string;
     value: React.ReactNode;
     color?: MetricColor;
+    hint?: string;
+    valueState?: 'loaded' | 'zero' | 'unavailable';
+    emphasis?: 'default' | 'primary';
+    valueTooltip?: string;
+    badge?: React.ReactNode;
 }) {
+    const valueTone =
+        valueState === 'unavailable'
+            ? 'text-muted-foreground font-medium'
+            : METRIC_TEXT[color].split(' ')[1];
+    const valueSize = emphasis === 'primary' ? 'text-lg font-bold' : 'text-sm font-semibold';
     return (
         <div
             className={`rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[color]} to-transparent p-3 backdrop-blur-sm`}
+            title={hint}
         >
-            <p className={`text-[11px] mb-1 ${METRIC_TEXT[color].split(' ')[0]}`}>{label}</p>
-            <p className={`text-sm font-semibold ${METRIC_TEXT[color].split(' ')[1]}`}>{value}</p>
+            <div className="flex items-center justify-between gap-1 mb-1">
+                <p className={`text-[11px] ${METRIC_TEXT[color].split(' ')[0]}`}>{label}</p>
+                {badge}
+            </div>
+            <p className={`${valueSize} ${valueTone}`} title={valueTooltip}>
+                {value}
+            </p>
+            {hint ? (
+                <p className="text-[10px] text-muted-foreground/80 mt-1 line-clamp-2">{hint}</p>
+            ) : null}
         </div>
     );
 }
@@ -434,4 +458,188 @@ export function DataHubTabStripSkeleton({ count = 7 }: { count?: number }) {
             </div>
         </div>
     );
+}
+
+// --- Segmented control, toolbar, loading (DESIGN_SYSTEM_DATAHUB.md §14) ---
+
+const FOCUS_RING =
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950';
+
+const SEGMENT_ITEM_BASE = `px-3 py-1.5 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${FOCUS_RING}`;
+
+const SEGMENT_ITEM_ACTIVE = 'bg-purple-600/20 border-purple-500/60 text-purple-300';
+const SEGMENT_ITEM_INACTIVE =
+    'border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground';
+
+export type DataHubSegmentOption<T extends string | number = string | number> = {
+    value: T;
+    label: string;
+    disabled?: boolean;
+};
+
+export function DataHubSegmentedControl<T extends string | number>({
+    options,
+    value,
+    onChange,
+    ariaLabel,
+    disabled = false,
+    className = '',
+}: {
+    options: DataHubSegmentOption<T>[];
+    value: T;
+    onChange: (value: T) => void;
+    ariaLabel?: string;
+    disabled?: boolean;
+    className?: string;
+}) {
+    return (
+        <div
+            role="group"
+            aria-label={ariaLabel}
+            className={`inline-flex flex-wrap gap-1.5 p-1 border border-white/5 bg-slate-950/70 rounded-xl ${className}`.trim()}
+        >
+            {options.map(opt => {
+                const isActive = value === opt.value;
+                const isDisabled = disabled || opt.disabled;
+                return (
+                    <button
+                        key={String(opt.value)}
+                        type="button"
+                        aria-pressed={isActive}
+                        disabled={isDisabled}
+                        onClick={() => onChange(opt.value)}
+                        className={`${SEGMENT_ITEM_BASE} ${
+                            isActive ? SEGMENT_ITEM_ACTIVE : SEGMENT_ITEM_INACTIVE
+                        }`}
+                    >
+                        {opt.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+/** Standard time-range labels for analytics toolbars */
+export function formatTimeRangeLabel(hours: number): string {
+    if (hours === 24) return '24h';
+    if (hours === 48) return '2d';
+    if (hours === 168) return '7d';
+    if (hours === 720) return '30d';
+    return `${hours}h`;
+}
+
+export const TIME_RANGE_OPTIONS = [24, 48, 168, 720] as const;
+export const TIME_RANGE_OPTIONS_SHORT = [24, 48, 168] as const;
+
+export function PrimaryButton({
+    children,
+    className = '',
+    ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+    return (
+        <button type="button" className={`${BTN_PRIMARY} ${FOCUS_RING} ${className}`.trim()} {...props}>
+            {children}
+        </button>
+    );
+}
+
+export function SecondaryButton({
+    children,
+    className = '',
+    ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+    return (
+        <button type="button" className={`${BTN_SECONDARY} ${FOCUS_RING} ${className}`.trim()} {...props}>
+            {children}
+        </button>
+    );
+}
+
+export function DataHubLoadingSpinner({
+    message,
+    size = 'md',
+    className = '',
+}: {
+    message?: string;
+    size?: 'sm' | 'md' | 'lg';
+    className?: string;
+}) {
+    const dim = size === 'sm' ? 'h-6 w-6' : size === 'lg' ? 'h-12 w-12' : 'h-8 w-8';
+    return (
+        <div className={`py-8 flex flex-col items-center justify-center gap-3 ${className}`.trim()}>
+            <div
+                className={`animate-spin rounded-full border-2 border-purple-500/30 border-t-purple-500 ${dim}`}
+                role="status"
+                aria-label={message || 'Loading'}
+            />
+            {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
+        </div>
+    );
+}
+
+export function DataHubToolbar({
+    children,
+    className = '',
+}: {
+    children: React.ReactNode;
+    className?: string;
+}) {
+    return (
+        <div
+            className={`flex flex-col md:flex-row md:items-center md:justify-between gap-3 flex-wrap ${className}`.trim()}
+        >
+            {children}
+        </div>
+    );
+}
+
+export function DataHubFilterBar({
+    children,
+    className = '',
+}: {
+    children: React.ReactNode;
+    className?: string;
+}) {
+    return (
+        <div className={`flex flex-wrap items-center gap-3 md:gap-4 ${className}`.trim()}>{children}</div>
+    );
+}
+
+export function DataHubSearchInput({
+    value,
+    onChange,
+    placeholder,
+    ariaLabel,
+    className = '',
+}: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+    ariaLabel?: string;
+    className?: string;
+}) {
+    return (
+        <input
+            type="search"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder={placeholder}
+            aria-label={ariaLabel || placeholder}
+            className={`${INPUT_CLASS} max-w-xs ${FOCUS_RING} ${className}`.trim()}
+        />
+    );
+}
+
+export function severityVariant(level: string): PillVariant {
+    if (level === 'high' || level === 'critical') return 'error';
+    if (level === 'medium') return 'warning';
+    if (level === 'low') return 'success';
+    return 'neutral';
+}
+
+export function sentimentVariant(sentiment: string): PillVariant {
+    if (sentiment === 'positive') return 'success';
+    if (sentiment === 'negative') return 'error';
+    return 'neutral';
 }

@@ -1,0 +1,133 @@
+{
+  "capturedAt": "2026-06-27T14:00:22.863Z",
+  "overview": {
+    "status": 200,
+    "durationMs": 131,
+    "health": {
+      "banner": "disabled_publisher",
+      "label": "Disabled publisher",
+      "message": "One or more routing topics target a disabled Telegram Publisher. Edit topics to select an active publisher."
+    },
+    "summary": {
+      "totalTopics": 3,
+      "enabledTopics": 3,
+      "validTopics": 0,
+      "invalidTopics": 3,
+      "queueSize": 0,
+      "avgPassRate": 0,
+      "lastDryRunAt": "2026-06-27T13:41:46.442Z",
+      "lastBlockedReason": "The selected Telegram Publisher is disabled. Choose an active publisher or enable it in Telegram Publisher."
+    },
+    "topics": [
+      {
+        "id": "70b6affe-2f54-49f6-ad86-8283254552d4",
+        "title": "Demo Topic 1779636651973",
+        "validity": {
+          "status": "disabled_publisher",
+          "valid": false,
+          "reasons": [
+            "Publisher target is disabled: Automation Demo Publisher. Select an active publisher."
+          ],
+          "repairActions": [
+            "select_publisher"
+          ],
+          "disabledPublishers": [
+            "Automation Demo Publisher"
+          ]
+        }
+      },
+      {
+        "id": "7ffb5473-cc05-43b1-bfa9-05cd5870b3e6",
+        "title": "Demo Topic 1779636779020",
+        "validity": {
+          "status": "disabled_publisher",
+          "valid": false,
+          "reasons": [
+            "Publisher target is disabled: Automation Demo Publisher. Select an active publisher."
+          ],
+          "repairActions": [
+            "select_publisher"
+          ],
+          "disabledPublishers": [
+            "Automation Demo Publisher"
+          ]
+        }
+      },
+      {
+        "id": "bc6c5f1b-4df1-4e11-a324-3f94efc55e0e",
+        "title": "سیگنال",
+        "validity": {
+          "status": "disabled_publisher",
+          "valid": false,
+          "reasons": [
+            "Publisher target is disabled: تایتان تست. Select an active publisher."
+          ],
+          "repairActions": [
+            "select_publisher"
+          ],
+          "disabledPublishers": [
+            "تایتان تست"
+          ]
+        }
+      }
+    ]
+  },
+  "refresh": {
+    "status": 200,
+    "durationMs": 6874,
+    "summary": {
+      "candidates": 0,
+      "queued": 0,
+      "skipped": 3,
+      "blocked": 0,
+      "reasons": [
+        {
+          "code": "PUBLISHER_DISABLED",
+          "count": 3,
+          "label": "The selected Telegram Publisher is disabled. Choose an active publisher or enable it in Telegram Publisher."
+        }
+      ]
+    }
+  },
+  "executions": [
+    {
+      "status": "skipped",
+      "errorCode": "PUBLISHER_DISABLED",
+      "errorLabel": "The selected Telegram Publisher is disabled. Choose an active publisher or enable it in Telegram Publisher.",
+      "retryAllowed": false,
+      "isStale": false
+    },
+    {
+      "status": "skipped",
+      "errorCode": "PUBLISHER_DISABLED",
+      "errorLabel": "The selected Telegram Publisher is disabled. Choose an active publisher or enable it in Telegram Publisher.",
+      "retryAllowed": false,
+      "isStale": false
+    },
+    {
+      "status": "skipped",
+      "errorCode": "PUBLISHER_DISABLED",
+      "errorLabel": "The selected Telegram Publisher is disabled. Choose an active publisher or enable it in Telegram Publisher.",
+      "retryAllowed": false,
+      "isStale": false
+    },
+    {
+      "status": "skipped",
+      "errorCode": "PUBLISHER_DISABLED",
+      "errorLabel": "The selected Telegram Publisher is disabled. Choose an active publisher or enable it in Telegram Publisher.",
+      "retryAllowed": false,
+      "isStale": false
+    },
+    {
+      "status": "skipped",
+      "errorCode": "PUBLISHER_DISABLED",
+      "errorLabel": "The selected Telegram Publisher is disabled. Choose an active publisher or enable it in Telegram Publisher.",
+      "retryAllowed": false,
+      "isStale": false
+    }
+  ],
+  "performance": {
+    "overviewMs": 131,
+    "refreshMs": 6874
+  }
+}

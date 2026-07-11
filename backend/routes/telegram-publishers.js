@@ -20,6 +20,13 @@ import {
   testPublisherSchema,
   publishPublisherSchema,
   publishResultSchema,
+  publisherMappingsListSchema,
+  publisherMappingSchema,
+  createPublisherMappingSchema,
+  updatePublisherMappingSchema,
+  runtimeModeViewSchema,
+  setRuntimeModeSchema,
+  runtimeModeAuditListSchema,
 } from '../schemas/telegramPublisherSchemas.js';
 import {
   mapPublisherRow,
@@ -27,10 +34,21 @@ import {
   encryptBotTokenOptional,
   runPublisherTest,
   runPublisherPublish,
+  listPublisherMappings,
+  createPublisherMapping,
+  updatePublisherMapping,
+  disablePublisherMapping,
+  isPublisherDryRunForced,
 } from '../services/telegramPublisherService.js';
+import {
+  buildRuntimeModeView,
+  setRuntimeMode,
+  listRuntimeModeAudit,
+} from '../services/telegramPublisherRuntimeModeService.js';
 
 const router = express.Router();
 const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
+const adminAuth = [authenticate, authorize('admin'), writeRateLimiter];
 
 router.get(
   '/',
@@ -52,7 +70,18 @@ router.get(
       );
       const publishers = [...result.rows, ...inactive.rows].map(mapPublisherRow);
       const metrics = await listPublisherMetrics();
-      res.json({ publishers, metrics });
+      const runtimeMode = await buildRuntimeModeView(req.user);
+      res.json({
+        publishers,
+        metrics,
+        system: {
+          dry_run_forced: isPublisherDryRunForced(),
+          server_safety_override: runtimeMode.serverSafetyOverride,
+          configured_mode: runtimeMode.configuredMode,
+          effective_mode: runtimeMode.effectiveMode,
+        },
+        runtimeMode,
+      });
     } catch (error) {
       logger.error('Failed to list telegram publishers:', error);
       res.status(500).json({ error: 'Failed to list telegram publishers' });
@@ -92,6 +121,66 @@ router.post(
     } catch (error) {
       logger.error('Failed to create telegram publisher:', error);
       res.status(500).json({ error: 'Failed to create telegram publisher' });
+    }
+  },
+);
+
+router.get(
+  '/runtime-mode',
+  authenticate,
+  readRateLimiter,
+  validateResponse(runtimeModeViewSchema),
+  async (req, res) => {
+    try {
+      const view = await buildRuntimeModeView(req.user);
+      res.json(view);
+    } catch (error) {
+      logger.error('Failed to fetch publisher runtime mode:', error);
+      res.status(500).json({ error: 'Failed to fetch publisher runtime mode' });
+    }
+  },
+);
+
+router.put(
+  '/runtime-mode',
+  ...adminAuth,
+  validateBody(setRuntimeModeSchema),
+  validateResponse(runtimeModeViewSchema),
+  async (req, res) => {
+    try {
+      const body = req.validatedBody;
+      const view = await setRuntimeMode({
+        mode: body.mode,
+        reason: body.reason,
+        user: req.user,
+        acknowledgeLiveDeliveryRisk: body.acknowledge_live_delivery_risk,
+        confirmRuntimeModeChange: body.confirm_runtime_mode_change,
+      });
+      res.json(view);
+    } catch (error) {
+      const status = error.status || 500;
+      if (status >= 500) logger.error('Failed to set publisher runtime mode:', error);
+      res.status(status).json({
+        error: error.message || 'Failed to set publisher runtime mode',
+        code: error.code || undefined,
+      });
+    }
+  },
+);
+
+router.get(
+  '/runtime-mode/audit',
+  authenticate,
+  authorize('admin'),
+  readRateLimiter,
+  validateResponse(runtimeModeAuditListSchema),
+  async (req, res) => {
+    try {
+      const audit = await listRuntimeModeAudit({ limit: 20 });
+      res.json({ audit });
+    } catch (error) {
+      logger.error('Failed to fetch publisher runtime mode audit:', error);
+      res.status(500).json({ error: 'Failed to fetch publisher runtime mode audit' });
     }
   },
 );
@@ -179,6 +268,95 @@ router.delete(
   },
 );
 
+router.get(
+  '/mappings',
+  authenticate,
+  readRateLimiter,
+  validateResponse(publisherMappingsListSchema),
+  async (req, res) => {
+    try {
+      const mappings = await listPublisherMappings({ includeDisabled: true });
+      res.json({ mappings });
+    } catch (error) {
+      logger.error('Failed to list publisher mappings:', error);
+      res.status(500).json({ error: 'Failed to list publisher mappings' });
+    }
+  },
+);
+
+router.post(
+  '/mappings',
+  ...writeAuth,
+  validateBody(createPublisherMappingSchema),
+  validateResponse(publisherMappingSchema),
+  async (req, res) => {
+    try {
+      const body = req.validatedBody;
+      const mapping = await createPublisherMapping({
+        sourceId: body.source_id,
+        publisherId: body.publisher_id,
+        isEnabled: body.is_enabled,
+        templateId: body.template_id ?? null,
+        userId: req.user?.id ?? null,
+      });
+      res.status(201).json(mapping);
+    } catch (error) {
+      logger.error('Failed to create publisher mapping:', error);
+      res.status(error.status || 500).json({
+        error: error.message || 'Failed to create publisher mapping',
+        code: error.code || undefined,
+      });
+    }
+  },
+);
+
+router.put(
+  '/mappings/:id',
+  ...writeAuth,
+  validateParams(uuidParamSchema),
+  validateBody(updatePublisherMappingSchema),
+  validateResponse(publisherMappingSchema),
+  async (req, res) => {
+    try {
+      const { id } = req.validatedParams;
+      const body = req.validatedBody;
+      const mapping = await updatePublisherMapping(id, {
+        sourceId: body.source_id,
+        publisherId: body.publisher_id,
+        isEnabled: body.is_enabled,
+        templateId: body.template_id,
+      });
+      res.json(mapping);
+    } catch (error) {
+      logger.error('Failed to update publisher mapping:', error);
+      res.status(error.status || 500).json({
+        error: error.message || 'Failed to update publisher mapping',
+        code: error.code || undefined,
+      });
+    }
+  },
+);
+
+router.delete(
+  '/mappings/:id',
+  ...writeAuth,
+  validateParams(uuidParamSchema),
+  validateResponse(publisherMappingSchema),
+  async (req, res) => {
+    try {
+      const { id } = req.validatedParams;
+      const mapping = await disablePublisherMapping(id);
+      res.json(mapping);
+    } catch (error) {
+      logger.error('Failed to disable publisher mapping:', error);
+      res.status(error.status || 500).json({
+        error: error.message || 'Failed to disable publisher mapping',
+        code: error.code || undefined,
+      });
+    }
+  },
+);
+
 router.post(
   '/:id/test',
   ...writeAuth,
@@ -208,12 +386,42 @@ router.post(
   async (req, res) => {
     try {
       const { id } = req.validatedParams;
-      const result = await runPublisherPublish(id, req.validatedBody, req.user?.id);
+      const {
+        source_id,
+        data_type,
+        message,
+        content_type,
+        confirm_publish,
+        title,
+        content,
+        allow_temporary_publish,
+      } = req.validatedBody;
+      const result = await runPublisherPublish(
+        id,
+        {
+          source_id,
+          data_type,
+          message,
+          content_type,
+          confirm_publish,
+          title,
+          content,
+          allow_temporary_publish,
+          accessControl: req.accessControl,
+        },
+        req.user?.id,
+      );
       res.json(result);
     } catch (error) {
       const status = error.status || 500;
       if (status >= 500) logger.error('Publisher publish failed:', error);
-      res.status(status).json({ error: error.message || 'Publisher publish failed' });
+      res.status(status).json({
+        error: error.message || 'Publisher publish failed',
+        code: error.code || undefined,
+        reason: error.reason || undefined,
+        rule: error.rule || undefined,
+        history_id: error.history_id || undefined,
+      });
     }
   },
 );
@@ -242,9 +450,17 @@ router.get(
       const total = count.rows[0]?.total ?? 0;
 
       const rows = await query(
-        `SELECT * FROM publisher_delivery_history
-         WHERE publisher_id = $1
-         ORDER BY created_at DESC
+        `SELECT
+           h.*,
+           tp.name AS publisher_name,
+           ds.name AS source_name,
+           u.email AS created_by_email
+         FROM publisher_delivery_history h
+         JOIN telegram_publishers tp ON tp.id = h.publisher_id
+         LEFT JOIN data_sources ds ON ds.id = h.source_id
+         LEFT JOIN users u ON u.id = h.created_by
+         WHERE h.publisher_id = $1
+         ORDER BY h.created_at DESC
          LIMIT $2 OFFSET $3`,
         [id, limit, offset],
       );
@@ -253,11 +469,20 @@ router.get(
         data: rows.rows.map(r => ({
           id: r.id,
           publisher_id: r.publisher_id,
+          publisher_name: r.publisher_name,
+          source_id: r.source_id,
+          source_name: r.source_name,
+          data_type: r.data_type,
           content_type: r.content_type,
           content_summary: r.content_summary,
           status: r.status,
           telegram_message_id: r.telegram_message_id,
           error_message: r.error_message,
+          error_code: r.error_code,
+          delivery_mode: r.metadata?.delivery_mode || r.metadata?.mode || null,
+          created_by: r.created_by,
+          created_by_email: r.created_by_email,
+          metadata: r.metadata || {},
           created_at: new Date(r.created_at).toISOString(),
         })),
         pagination: {

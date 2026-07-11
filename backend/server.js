@@ -17,6 +17,7 @@ import { requestLogger, logError } from './middleware/requestLogger.js';
 import { addVersionHeader, legacyRedirect } from './middleware/apiVersion.js';
 import { cacheHeaders } from './middleware/cacheHeaders.js';
 import { metricsMiddleware, metricsHandler } from './middleware/metrics.js';
+import accessControlGateway from './middleware/accessControlGateway.js';
 import { shutdownMiddleware, registerShutdownHandlers } from './utils/shutdown.js';
 import swaggerUi from 'swagger-ui-express';
 import openApiSpec from './openapi.js';
@@ -119,7 +120,9 @@ const corsOptions = {
     'Origin',
     'X-API-Version',
     'X-Request-ID',
-    'X-Correlation-ID'
+    'X-Correlation-ID',
+    'X-Agent-Key',
+    'X-Titan-Agent-Key'
   ],
 
   // Exposed headers (accessible to client)
@@ -175,6 +178,7 @@ const limiter = rateLimit({
   }
 });
 app.use('/api/', limiter); // Applies to both /api/* and /api/v1/*
+app.use('/api/v1', accessControlGateway);
 
 // ============================================================================
 // ROUTES

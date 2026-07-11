@@ -1,6 +1,31 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DataSource, TelegramCollectorState } from '../../../../../types.ts';
-import { buildCollectorUrl } from '../../../../../services/api.ts';
+import { buildCollectorUrl, fetchCollectorJson } from '../../../../../services/api.ts';
+import { getCollectorAuthHeaders } from '../../../../../services/collectorAuth.ts';
+import {
+    formatCollectorSafeError,
+    containsRawHtmlError,
+    type CollectorSafeError,
+    type DiagnoseCollectorCheck,
+} from '../../../../../services/telegramCollectorErrors.ts';
+import {
+    DATAHUB_SHELL,
+    BTN_PRIMARY,
+    BTN_SECONDARY,
+    BTN_OUTLINE_SKY,
+    BTN_OUTLINE_AMBER,
+    DataHubAlert,
+    DataHubEmpty,
+    DataHubSectionHeader,
+    StatusPill,
+    dataHubWriteGate,
+} from './dataHubUi';
+import { useDataHubPermissions } from './hooks/useDataHubPermissions';
+import TelegramCollectorMetrics from './telegram/TelegramCollectorMetrics';
+import CollectorDiagnoseCards from './telegram/CollectorDiagnoseCards';
+import TelegramLoginWizard from './TelegramLoginWizard';
+import { accountStatusLabel, accountStatusVariant } from './telegram/telegramCollectorLabels';
+import { useCollectorHealthQuery } from '../../../../../hooks/useTelegramCollector';
 
 type Props = {
     t: (key: string) => string;
@@ -40,6 +65,8 @@ type Props = {
     setShowLoginWizard: (open: boolean) => void;
     accountsRefreshTrigger?: number;
     channelsRefreshTrigger?: number;
+    diagnoseChecks?: DiagnoseCollectorCheck[] | null;
+    setDiagnoseChecks?: (checks: DiagnoseCollectorCheck[] | null) => void;
 };
 
 type TelegramAccountStatus = 'active' | 'disabled' | 'flooded' | 'error' | 'pending_login';
@@ -106,7 +133,12 @@ const TelegramPanel: React.FC<Props> = (props) => {
         setShowLoginWizard,
         accountsRefreshTrigger = 0,
         channelsRefreshTrigger = 0,
+        diagnoseChecks = null,
     } = props;
+
+    const { canWrite } = useDataHubPermissions();
+    const writeGate = (extra = false) => dataHubWriteGate(canWrite, t, extra);
+    const { data: collectorHealthData } = useCollectorHealthQuery();
 
     const [accounts, setAccounts] = useState<TelegramAccount[]>([]);
     const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
@@ -140,19 +172,35 @@ const TelegramPanel: React.FC<Props> = (props) => {
     // Data loading helpers
     // ------------------------------------------------------------------------
 
+    const resolveLoadError = (error: unknown, fallbackKey: string): string => {
+        const err = error as Error & { collectorError?: CollectorSafeError };
+        if (err?.collectorError) {
+            return formatCollectorSafeError(err.collectorError, t);
+        }
+        const raw = err?.message || t(fallbackKey) || fallbackKey;
+        if (containsRawHtmlError(raw)) {
+            return t('collector_proxy_unreachable') || 'Telegram Collector proxy is unreachable.';
+        }
+        return raw;
+    };
+
+    const stripSensitiveAccountFields = (row: Record<string, unknown>) => {
+        const { session_string: _s, api_hash: _h, api_id: _i, ...safe } = row;
+        return safe as TelegramAccount;
+    };
+
     const loadAccounts = async () => {
         setIsLoadingAccounts(true);
         setAccountsError(null);
         try {
-            const response = await fetch(buildCollectorUrl('/api/telegram-collector/accounts'));
-            if (!response.ok) {
-                throw new Error(`Failed to load accounts (${response.status})`);
-            }
-            const data = await response.json();
-            setAccounts(Array.isArray(data.accounts) ? data.accounts : []);
-        } catch (error: any) {
+            const data = await fetchCollectorJson<{ accounts?: TelegramAccount[] }>(
+                buildCollectorUrl('/api/telegram-collector/accounts'),
+            );
+            const rows = Array.isArray(data.accounts) ? data.accounts : [];
+            setAccounts(rows.map(row => stripSensitiveAccountFields(row as Record<string, unknown>)));
+        } catch (error: unknown) {
             console.error('Failed to load telegram accounts:', error);
-            setAccountsError(error?.message || t('failed_to_load_accounts') || 'Failed to load accounts');
+            setAccountsError(resolveLoadError(error, 'failed_to_load_accounts'));
         } finally {
             setIsLoadingAccounts(false);
         }
@@ -169,15 +217,11 @@ const TelegramPanel: React.FC<Props> = (props) => {
             if (statusFilter !== 'all') {
                 url.searchParams.set('status', statusFilter);
             }
-            const response = await fetch(url.toString());
-            if (!response.ok) {
-                throw new Error(`Failed to load channels (${response.status})`);
-            }
-            const data = await response.json();
+            const data = await fetchCollectorJson<{ channels?: CollectorChannel[] }>(url.toString());
             setCollectorChannels(Array.isArray(data.channels) ? data.channels : []);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to load collector channels:', error);
-            setChannelsError(error?.message || t('failed_to_load_channels') || 'Failed to load channels');
+            setChannelsError(resolveLoadError(error, 'failed_to_load_channels'));
         } finally {
             setIsLoadingCollectorChannels(false);
         }
@@ -235,28 +279,31 @@ const TelegramPanel: React.FC<Props> = (props) => {
         }
     };
 
-    // Force sync a channel (on-demand polling)
     const handleForceSync = async (channel: CollectorChannel) => {
         setSyncingChannelId(channel.id);
         setCollectorError(null);
-        setCollectorMessage(null);
+        setChannelsError(null);
         try {
             const response = await fetch(
                 buildCollectorUrl(`/api/telegram-collector/channels/${channel.id}/force-sync`),
                 {
                     method: 'POST',
                     credentials: 'include',
-                }
+                    headers: getCollectorAuthHeaders(),
+                },
             );
             const data = await response.json();
             if (!response.ok || data?.success === false) {
                 throw new Error(data?.error || data?.message || `Failed to sync channel (${response.status})`);
             }
+            const zeroSavedNote =
+                data.messagesSaved === 0
+                    ? ` ${t('force_sync_zero_saved_hint') || '(0 saved — messages were already processed)'}`
+                    : '';
             setCollectorMessage(
-                `✅ ${t('force_sync_success') || 'Force-sync completed'}: ${data.messagesFetched || 0} ${t('messages_fetched') || 'messages fetched'}, ${data.messagesSaved || 0} ${t('saved') || 'saved'} (${data.latency}ms)`
+                `✅ ${t('force_sync_success') || 'Force-sync completed'}: ${data.messagesFetched || 0} ${t('messages_fetched') || 'messages fetched'}, ${data.messagesSaved || 0} ${t('saved') || 'saved'} (${data.latency}ms).${zeroSavedNote}`,
             );
-            // Refresh channels list to update last_synced_at
-            await loadCollectorChannels();
+            loadCollectorChannels().catch(() => undefined);
         } catch (error: any) {
             console.error('Failed to force-sync channel:', error);
             setCollectorError(
@@ -340,7 +387,7 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 if (!ch) continue;
                 const res = await fetch(base, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getCollectorAuthHeaders(),
                     credentials: 'include',
                     body: JSON.stringify({
                         channel_id: String(ch.id),
@@ -494,7 +541,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
         try {
             const response = await fetch(buildCollectorUrl(`/api/telegram-collector/accounts/${id}`), {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getCollectorAuthHeaders(),
+                credentials: 'include',
                 body: JSON.stringify(updates),
             });
             const data = await response.json();
@@ -512,6 +560,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
         try {
             const response = await fetch(buildCollectorUrl(`/api/telegram-collector/accounts/${id}/logout`), {
                 method: 'POST',
+                credentials: 'include',
+                headers: getCollectorAuthHeaders(),
             });
             const data = await response.json();
             if (!response.ok || data?.success === false) {
@@ -558,7 +608,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 buildCollectorUrl(`/api/telegram-collector/collector-channels/${channel.id}`),
                 {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getCollectorAuthHeaders(),
+                    credentials: 'include',
                     body: JSON.stringify({ is_active: !channel.isActive }),
                 },
             );
@@ -579,7 +630,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 buildCollectorUrl(`/api/telegram-collector/collector-channels/${channel.id}`),
                 {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getCollectorAuthHeaders(),
+                    credentials: 'include',
                     body: JSON.stringify({ account_id: accountId }),
                 },
             );
@@ -600,7 +652,8 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 buildCollectorUrl(`/api/telegram-collector/collector-channels/${channel.id}`),
                 {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getCollectorAuthHeaders(),
+                    credentials: 'include',
                     body: JSON.stringify({ priority }),
                 },
             );
@@ -633,144 +686,108 @@ const TelegramPanel: React.FC<Props> = (props) => {
     };
 
     const renderCollectorHealthSummary = () => {
-        if (!telegramCollectorState) return null;
-        
-        const channels = telegramCollectorState.channels || [];
-        const errorChannels = channels.filter((ch: any) => ch.lastError || ch.errorCount > 0).length;
-        const avgLatency = telegramCollectorState.healthSummary?.avgLatencyMs;
-        
-        // Calculate degraded status (Phase 4.2)
+        const routeBroken = Boolean(accountsError || channelsError);
         const totalChannels = collectorChannels.length;
         const channelsWithErrors = collectorChannels.filter(ch => (ch.errorCount || 0) > 0).length;
         const criticalErrorChannels = collectorChannels.filter(ch => (ch.errorCount || 0) >= 3).length;
         const syncedChannels = collectorChannels.filter(ch => ch.lastSyncedAt).length;
-        const syncRate = totalChannels > 0 ? (syncedChannels / totalChannels) * 100 : 0;
-        
-        let collectorStatus = 'healthy';
-        let statusColor = 'emerald';
-        let statusIcon = '✓';
-        
-        if (criticalErrorChannels > 0 || syncRate < 30) {
-            collectorStatus = 'critical';
-            statusColor = 'red';
-            statusIcon = '✗';
-        } else if (channelsWithErrors > 0 || syncRate < 70) {
-            collectorStatus = 'degraded';
-            statusColor = 'amber';
-            statusIcon = '⚠';
-        }
+        const avgLatency =
+            typeof collectorHealthData?.averageLatencyMs === 'number'
+                ? collectorHealthData.averageLatencyMs
+                : telegramCollectorState?.healthSummary?.avgLatencyMs;
+        const lastProcessedAt =
+            typeof collectorHealthData?.lastProcessedAt === 'string'
+                ? collectorHealthData.lastProcessedAt
+                : null;
 
         return (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
-                <div className={`rounded-xl border border-white/5 bg-gradient-to-br from-${statusColor}-500/10 via-${statusColor}-500/5 to-transparent p-3 backdrop-blur-sm`}>
-                    <p className={`text-[11px] text-${statusColor}-300/80 mb-1`}>
-                        {t('collector_status') || 'Collector Status'}
-                    </p>
-                    <p className={`text-sm font-semibold text-${statusColor}-100 capitalize flex items-center gap-1`}>
-                        <span>{statusIcon}</span>
-                        <span>{collectorStatus}</span>
-                    </p>
-                </div>
-                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent p-3 backdrop-blur-sm">
-                    <p className="text-[11px] text-blue-300/80 mb-1">
-                        {t('sync_rate') || 'Sync Rate'}
-                    </p>
-                    <p className="text-sm font-semibold text-blue-100">
-                        {syncRate.toFixed(0)}% ({syncedChannels}/{totalChannels})
-                    </p>
-                </div>
-                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent p-3 backdrop-blur-sm">
-                    <p className="text-[11px] text-purple-300/80 mb-1">
-                        {t('collector_avg_latency') || 'Avg Latency'}
-                    </p>
-                    <p className="text-sm font-semibold text-purple-100">
-                        {avgLatency ? `${Math.round(avgLatency)} ms` : '-'}
-                    </p>
-                </div>
-                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent p-3 backdrop-blur-sm">
-                    <p className="text-[11px] text-red-300/80 mb-1">
-                        {t('collector_channels_with_errors') || 'Channels with errors'}
-                    </p>
-                    <p className="text-sm font-semibold text-red-100">
-                        {channelsWithErrors} {criticalErrorChannels > 0 && `(${criticalErrorChannels} critical)`}
-                    </p>
-                </div>
-            </div>
+            <TelegramCollectorMetrics
+                t={t}
+                formatTimeAgo={formatTimeAgo}
+                metrics={{
+                    routeBroken,
+                    totalChannels,
+                    syncedChannels,
+                    channelsWithErrors,
+                    criticalErrorChannels,
+                    avgLatencyMs: avgLatency,
+                    lastProcessedAt,
+                }}
+            />
         );
     };
 
     return (
         <div className="space-y-6">
-            {/* Header & Actions */}
-            <Card className="bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 border border-white/5 shadow-lg">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <h3 className="font-semibold text-foreground text-sm md:text-base">
-                            {t('telegram_collector') || 'Telegram Collector'}
-                        </h3>
-                        <p className="text-[11px] text-muted-foreground mt-1">
-                            {t('service_url') || 'Service URL'}:{' '}
-                            <span className="font-mono text-xs">
-                                {telegramCollectorUrl || '/api/telegram-collector (proxied)'}
-                            </span>
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 justify-end items-center">
-                        {collectorCooldownSeconds > 0 && (
-                            <span className="text-[10px] text-amber-300/90">
-                                {t('telegram_retry_after_seconds') ||
-                                    'Retry after'}{' '}
-                                {collectorCooldownSeconds}s
-                            </span>
-                        )}
-                        <button
-                            onClick={() => setShowLoginWizard(true)}
-                            disabled={collectorCooldownSeconds > 0}
-                            className="px-3 py-1.5 rounded-full text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {t('start_login_wizard') || 'Start Login Wizard'}
-                        </button>
-                        <button
-                            onClick={handleCollectorHealth}
-                            disabled={isLoadingCollector}
-                            className="px-3 py-1.5 rounded-full text-xs font-medium bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white"
-                        >
-                            {isLoadingCollector
-                                ? t('loading') || 'Loading...'
-                                : t('refresh_health') || 'Refresh Health'}
-                        </button>
-                        <button
-                            onClick={handleSyncTelegramDataSources}
-                            disabled={isSyncingDataSources}
-                            className="px-3 py-1.5 rounded-full text-xs font-medium border border-sky-400/70 text-sky-200 hover:bg-sky-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isSyncingDataSources
-                                ? t('telegram_syncing') || 'Syncing...'
-                                : t('telegram_sync_data_sources') || 'Sync Data Sources'}
-                        </button>
-                        <button
-                            onClick={handleDiagnoseCollector}
-                            disabled={isLoadingCollector}
-                            className="px-3 py-1.5 rounded-full text-xs font-medium border border-amber-400/60 text-amber-200 hover:bg-amber-500/10"
-                        >
-                            {t('diagnose_collector_endpoints') || 'Diagnose Endpoints'}
-                        </button>
-                    </div>
+            <div className={`${DATAHUB_SHELL} space-y-4`}>
+                <DataHubSectionHeader
+                    title={t('telegram_collector')}
+                    subtitle={`${t('service_url')}: ${telegramCollectorUrl || '/api/telegram-collector (proxied)'}`}
+                />
+                <div className="flex flex-wrap gap-2 justify-end items-center">
+                    {collectorCooldownSeconds > 0 && (
+                        <StatusPill
+                            variant="warning"
+                            label={`${t('telegram_retry_after_seconds')} ${collectorCooldownSeconds}s`}
+                        />
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => setShowLoginWizard(true)}
+                        disabled={writeGate(collectorCooldownSeconds > 0).disabled}
+                        title={writeGate(collectorCooldownSeconds > 0).title}
+                        className={BTN_PRIMARY}
+                    >
+                        {t('start_login_wizard')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleCollectorHealth}
+                        disabled={isLoadingCollector}
+                        className={BTN_SECONDARY}
+                    >
+                        {isLoadingCollector ? t('loading') : t('refresh_health')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleSyncTelegramDataSources}
+                        disabled={writeGate(isSyncingDataSources).disabled}
+                        title={writeGate(isSyncingDataSources).title}
+                        className={BTN_OUTLINE_SKY}
+                    >
+                        {isSyncingDataSources ? t('telegram_syncing') : t('telegram_sync_data_sources')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleDiagnoseCollector}
+                        disabled={isLoadingCollector}
+                        className={BTN_OUTLINE_AMBER}
+                    >
+                        {t('diagnose_collector_endpoints')}
+                    </button>
                 </div>
 
                 {collectorMessage && (
-                    <div className="mt-3 p-2 rounded border border-emerald-500/30 bg-emerald-500/10 text-[11px] text-emerald-100">
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100">
                         {collectorMessage}
                     </div>
                 )}
                 {collectorError && (
-                    <div className="mt-3 p-2 rounded border border-red-500/30 bg-red-500/10 text-[11px] text-red-100">
-                        {collectorError}
-                    </div>
+                    <DataHubAlert
+                        variant="error"
+                        message={
+                            containsRawHtmlError(collectorError)
+                                ? t('collector_proxy_unreachable')
+                                : collectorError
+                        }
+                    />
                 )}
 
-                <div className="mt-4">{renderCollectorHealthSummary()}</div>
-            </Card>
+                {renderCollectorHealthSummary()}
+                {diagnoseChecks && diagnoseChecks.length > 0 && (
+                    <CollectorDiagnoseCards t={t} checks={diagnoseChecks} />
+                )}
+            </div>
 
             {/* Per-Account Summary Cards (TASK-DHT-071) */}
             {accounts.length > 0 && (
@@ -1425,170 +1442,23 @@ const TelegramPanel: React.FC<Props> = (props) => {
                 </div>
             )}
 
-            {/* Login Wizard Modal (multi-account aware) */}
-            {showLoginWizard && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
-                    onClick={() => setShowLoginWizard(false)}
-                >
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                    <div
-                        className="relative w-full max-w-md rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-slate-900/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.7)] overflow-hidden"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* Header */}
-                        <div className="px-5 pt-4 pb-3 border-b border-white/5 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-purple-300/80">
-                                    {t('telegram_collector') || 'Telegram Collector'}
-                                </p>
-                                <h3 className="text-sm font-semibold text-foreground">
-                                    {t('start_login_wizard') || 'Start Login Wizard'}
-                                </h3>
-                            </div>
-                            <button
-                                onClick={() => setShowLoginWizard(false)}
-                                className="text-slate-400 hover:text-slate-100 text-xs"
-                            >
-                                ✕
-                            </button>
-                        </div>
+            <TelegramLoginWizard
+                t={t}
+                isOpen={showLoginWizard}
+                onClose={() => setShowLoginWizard(false)}
+                collectorForm={collectorForm}
+                handleCollectorInputChange={handleCollectorInputChange}
+                handleStartCollectorLogin={handleStartCollectorLogin}
+                handleConfirmCollectorLogin={handleConfirmCollectorLogin}
+                handleCancelCollectorLogin={handleCancelCollectorLogin}
+                isLoadingCollector={isLoadingCollector}
+                collectorError={collectorError}
+                collectorMessage={collectorMessage}
+                collectorCooldownSeconds={collectorCooldownSeconds}
+                collectorAuthId={collectorAuthId}
+            />
 
-                        {/* Body */}
-                        <div className="px-5 py-4 space-y-4">
-                            {/* Cooldown / FloodWait message */}
-                            {collectorCooldownSeconds > 0 && (
-                                <div className="text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded px-3 py-2">
-                                    {t('telegram_error_flood_wait') ||
-                                        'Telegram has restricted login attempts for this account. Please wait and try again later.'}
-                                    <br />
-                                    <span className="font-mono">
-                                        {t('telegram_retry_after_seconds') || 'Retry after'}{' '}
-                                        {collectorCooldownSeconds}s
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Step 1: phone + API */}
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="text-[11px] text-muted-foreground mb-1 block">
-                                        {t('telegram_api_id') || 'Telegram API ID'}
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={collectorForm.apiId}
-                                        onChange={(e) =>
-                                            handleCollectorInputChange('apiId', e.target.value)
-                                        }
-                                        placeholder={t('optional') || 'Optional'}
-                                        className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[11px] text-muted-foreground mb-1 block">
-                                        {t('telegram_api_hash') || 'Telegram API Hash'}
-                                    </label>
-                                    <input
-                                        value={collectorForm.apiHash}
-                                        onChange={(e) =>
-                                            handleCollectorInputChange('apiHash', e.target.value)
-                                        }
-                                        placeholder={t('optional') || 'Optional'}
-                                        className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[11px] text-muted-foreground mb-1 block">
-                                        {t('phone_number') || 'Phone Number'}
-                                    </label>
-                                    <input
-                                        value={collectorForm.phoneNumber}
-                                        onChange={(e) =>
-                                            handleCollectorInputChange('phoneNumber', e.target.value)
-                                        }
-                                        placeholder="+98912..."
-                                        className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
-                                    />
-                                </div>
-                                <button
-                                    onClick={() => handleStartCollectorLogin()}
-                                    disabled={isLoadingCollector || collectorCooldownSeconds > 0}
-                                    className="w-full text-xs px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg"
-                                >
-                                    {t('send_verification_code') || 'Send Verification Code'}
-                                </button>
-                                <p className="text-[11px] text-muted-foreground">
-                                    {t('telegram_login_hint') ||
-                                        'Collector stores the Telegram session securely on the server. API credentials are optional if already configured.'}
-                                </p>
-                            </div>
-
-                            {/* Step 2: code + 2FA */}
-                            <div className="mt-3 border-t border-white/5 pt-3 space-y-3">
-                                <div>
-                                    <label className="text-[11px] text-muted-foreground mb-1 block">
-                                        {t('verification_code') || 'Verification Code'}
-                                    </label>
-                                    <input
-                                        value={collectorForm.code}
-                                        onChange={(e) =>
-                                            handleCollectorInputChange('code', e.target.value)
-                                        }
-                                        placeholder="12345"
-                                        className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
-                                        disabled={!collectorAuthId}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[11px] text-muted-foreground mb-1 block">
-                                        {t('telegram_password_optional') ||
-                                            'Telegram Password (2FA)'}
-                                    </label>
-                                    <input
-                                        type="password"
-                                        value={collectorForm.password}
-                                        onChange={(e) =>
-                                            handleCollectorInputChange('password', e.target.value)
-                                        }
-                                        placeholder={t('optional') || 'Optional'}
-                                        className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
-                                        disabled={!collectorAuthId}
-                                    />
-                                        </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => handleConfirmCollectorLogin()}
-                                        disabled={isLoadingCollector || !collectorAuthId}
-                                        className="flex-1 text-xs px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg"
-                                    >
-                                        {t('confirm_login') || 'Confirm Login'}
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            handleCancelCollectorLogin();
-                                            setShowLoginWizard(false);
-                                        }}
-                                        disabled={isLoadingCollector || !collectorAuthId}
-                                        className="text-xs px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg"
-                                    >
-                                        {t('cancel') || 'Cancel'}
-                                    </button>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground">
-                                    {collectorAuthId
-                                        ? t('code_sent_status') ||
-                                          'Code sent. Complete login before it expires.'
-                                        : t('no_active_login') ||
-                                          'No active login request yet. Start by sending the code.'}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Error Details Modal (Phase 4.1) */}
+                        {/* Error Details Modal (Phase 4.1) */}
             {viewingErrorChannel && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-4"

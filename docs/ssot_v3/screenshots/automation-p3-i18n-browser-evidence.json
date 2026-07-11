@@ -1,0 +1,19 @@
+{
+  "capturedAt": "2026-06-27T14:52:00Z",
+  "path": "AI → Manager → Data Hub → Advanced Features → Automation Routing",
+  "rawAutomationKeysInBody": [],
+  "labelsVerified": {
+    "automation_explanation": "Routes processed DataHub records to Telegram Publisher targets...",
+    "automation_valid_topics": "Valid topics",
+    "automation_invalid_topics": "Invalid topics",
+    "automation_last_blocked": "Last blocked reason",
+    "automation_disabled_publisher": "Disabled publisher",
+    "automation_select_active_publisher": "Select active publisher",
+    "automation_validate": "Validate",
+    "automation_test_dry_run": "Test dry-run",
+    "automation_stale_history": "Historical record is no longer available.",
+    "historyErrorLabel": "The selected Telegram Publisher is disabled..."
+  },
+  "consoleErrors": [],
+  "result": "PASS"
+}

@@ -2,7 +2,7 @@ import { query } from '../database/db.js';
 import { logger } from './logger.js';
 import { webCrawlerService } from './webCrawler.js';
 import { fetchRssFeed } from './rssFetcher.js';
-import { evaluateFilterRules, enforceIngestionFilter } from './datahubFilterRulesService.js';
+import { enforceIngestionPolicy, evaluateFilterPolicy, isFilterRuleBlockedError } from './filterRulesGateway.js';
 import { resolveCategoryForWrite } from '../utils/categoryTaxonomy.js';
 import { normalizeWebSelectors } from './webCrawlerSourceConfig.js';
 import { buildDuplicateEnrichmentBySourceId } from './dataSourceUrlDuplicateService.js';
@@ -341,8 +341,8 @@ async function assertRenderJsAllowed(renderJs) {
 }
 
 export async function preCrawlFilterCheck({ source_id, url, text }) {
-    const result = await evaluateFilterRules({
-        source_id,
+    const result = await evaluateFilterPolicy({
+        sourceId: source_id,
         url,
         text,
         apply_target: 'ingestion',
@@ -396,7 +396,7 @@ async function resolveSourceId(body, userId) {
     throw err;
 }
 
-export async function listCrawlers() {
+export async function listCrawlers({ includeDuplicateAnalysis = false } = {}) {
     const sync = await syncCrawlersFromDataSources();
 
     const [crawlerResult, metricsResult, duplicateEnrichmentById] = await Promise.all([
@@ -424,7 +424,7 @@ export async function listCrawlers() {
              FROM datahub_crawler_runs r
              JOIN datahub_crawlers c ON c.id = r.crawler_id AND c.deleted_at IS NULL`,
         ),
-        buildDuplicateEnrichmentBySourceId(),
+        includeDuplicateAnalysis ? buildDuplicateEnrichmentBySourceId() : Promise.resolve(null),
     ]);
     const crawlers = crawlerResult.rows.map(row => mapCrawlerRow(row, duplicateEnrichmentById));
     const metrics = metricsResult.rows[0] || {};
@@ -438,7 +438,10 @@ export async function listCrawlers() {
         enabled: crawlers.filter(c => c.is_enabled).length,
         failed24h: parseInt(metrics.failed_24h, 10) || 0,
         avg_latency_ms: avgLatencyMs,
-        duplicate_risk_count: crawlers.filter(c => c.duplicate_risk).length,
+        duplicate_risk_count: includeDuplicateAnalysis
+            ? crawlers.filter(c => c.duplicate_url_count > 1).length
+            : 0,
+        duplicate_analysis_included: includeDuplicateAnalysis,
     };
     return { crawlers, summary, sync };
 }
@@ -630,10 +633,10 @@ async function ingestItem({ source_id, item, dryRun }) {
     const text = item.content || item.title || item.text || '';
     if (dryRun) {
         try {
-            await enforceIngestionFilter({ source_id, url, text });
+            await enforceIngestionPolicy({ sourceId: source_id, url, text, enforcementPath: dryRun ? 'crawler_dry_run' : 'crawler_ingest' });
             return { ingested: false, blocked: false, dryRun: true };
         } catch (e) {
-            if (e.code === 'FILTER_BLOCKED') {
+            if (isFilterRuleBlockedError(e)) {
                 return { ingested: false, blocked: true, dryRun: true };
             }
             throw e;
@@ -641,9 +644,9 @@ async function ingestItem({ source_id, item, dryRun }) {
     }
 
     try {
-        await enforceIngestionFilter({ source_id, url, text });
+        await enforceIngestionPolicy({ sourceId: source_id, url, text, enforcementPath: dryRun ? 'crawler_dry_run' : 'crawler_ingest' });
     } catch (e) {
-        if (e.code === 'FILTER_BLOCKED') {
+        if (isFilterRuleBlockedError(e)) {
             return { ingested: false, blocked: true };
         }
         throw e;

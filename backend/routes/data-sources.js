@@ -17,22 +17,34 @@ import {
   dataPipelineViewResponseSchema,
   pipelineQuerySchema,
   dataPipelineBacklogResponseSchema,
+  pipelineNormalizationSummaryResponseSchema,
+  pipelineCapacityResponseSchema,
+  healthMonitoringResponseSchema,
+  healthDataQualityResponseSchema,
   accessLogsQuerySchema,
   accessLogsListResponseSchema,
   checkDuplicateUrlQuerySchema,
 } from '../schemas/dataHubSchemas.js';
 import {
   buildDuplicateEnrichmentBySourceId,
+  buildDuplicateEnrichmentBySourceIdLightweight,
   enrichSourceWithDuplicateFields,
   evaluateDuplicateUrlGuard,
   findDuplicateUrlSources,
   listDuplicateUrlGroups,
   getDuplicateUrlDashboard,
-  getDuplicateUrlSummaryForHealth,
   setSourceDuplicateUrlIgnore,
 } from '../services/dataSourceUrlDuplicateService.js';
 import { buildDataPipelineView } from '../services/dataPipelineSnapshot.js';
 import { buildPipelineBacklogEnrichment } from '../services/pipelineBacklogEnrichment.js';
+import { buildPipelineNormalizationSummary } from '../services/pipelineNormalizationSummary.js';
+import { buildPipelineCapacityView } from '../services/pipelineCapacity.js';
+import { buildHealthMonitoringView, buildHealthDataQualityView, queryHealthActivityMetrics, emptyDuplicateSummaryForLegacyHealth } from '../services/healthMonitoring.js';
+import {
+  buildEmptyPipelineBacklogResponse,
+  normalizePipelineBacklogResponse,
+} from '../services/pipelineBacklogSafe.js';
+import { getOrLoadCached } from '../services/pipelineSnapshotCache.js';
 import { listDataHubAccessLogs } from '../services/dataHubAccessLogs.js';
 import { tryInsertDataHubAccessLog } from '../services/dataHubAccessLogWriter.js';
 
@@ -52,13 +64,44 @@ import {
     loadApprovedCategoryLookup,
     resolveCategoryForWrite,
 } from '../utils/categoryTaxonomy.js';
+import {
+  assertAccessControlGateway,
+  enforceSourceAccess,
+  RUNTIME_AGENT_KEYS,
+  sourceAccessAllowedSql,
+} from '../middleware/accessControlGateway.js';
+import { resolveAgentKeyFromRequest } from '../utils/sourceAccessRequest.js';
+import { enforcePublishingPolicy } from '../services/filterRulesGateway.js';
 
 const router = express.Router();
 const writeAuth = [authenticate, authorize('admin', 'trader'), writeRateLimiter];
 
 router.post('/publish-telegram', ...writeAuth, async (req, res) => {
   try {
-    const { channelId, message, photoUrl } = req.body;
+    const { message, photoUrl, source_id: sourceId, data_type: dataType } = req.body;
+
+    if (!sourceId) {
+      return res.status(400).json({
+        error: 'source_id is required',
+        code: 'BAD_REQUEST',
+      });
+    }
+
+    assertAccessControlGateway({
+      accessControl: req.accessControl,
+      sourceId,
+      agentKey: RUNTIME_AGENT_KEYS.PUBLISHER,
+      message: 'Publisher access denied by source ACL',
+    });
+
+    await enforcePublishingPolicy({
+      sourceId,
+      message,
+      dataType,
+      metadata: { photoUrl },
+      userId: req.user?.id,
+      enforcementPath: 'legacy_publish_telegram',
+    });
 
     if (photoUrl) {
       await telegramService.sendPhoto(photoUrl, message);
@@ -68,7 +111,12 @@ router.post('/publish-telegram', ...writeAuth, async (req, res) => {
 
     res.json({ success: true, message: 'Published to Telegram' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to publish to Telegram' });
+    res.status(error.status || 500).json({
+      error: error.message || 'Failed to publish to Telegram',
+      code: error.code || undefined,
+      reason: error.reason || undefined,
+      rule: error.rule || undefined,
+    });
   }
 });
 
@@ -271,25 +319,25 @@ router.get(
 router.get('/', authenticate, readRateLimiter, validateResponse(dataSourcesListResponseSchema), async (req, res) => {
   try {
     const { page, limit } = req.query;
+    const currentPage = Math.max(1, parseInt(page, 10) || 1);
+    const itemsPerPage = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const offset = (currentPage - 1) * itemsPerPage;
 
-    // Get total count
-    const countResult = await query('SELECT COUNT(*) as total FROM data_sources');
-    const totalCount = parseInt(countResult.rows[0].total);
-
-    // Calculate pagination
-    const pagination = calculatePagination(page, limit, totalCount);
-
-    // Get paginated data
-    const result = await query(
-      'SELECT * FROM data_sources ORDER BY name LIMIT $1 OFFSET $2',
-      [pagination.limit, pagination.offset]
-    );
-
-    const [enrichmentById, categoryLookup, duplicateEnrichmentById] = await Promise.all([
-      batchTelegramCollectorEnrichment(result.rows),
+    const [countResult, result, categoryLookup, duplicateEnrichmentById] = await Promise.all([
+      query('SELECT COUNT(*) as total FROM data_sources'),
+      query(
+        'SELECT * FROM data_sources ORDER BY name LIMIT $1 OFFSET $2',
+        [itemsPerPage, offset],
+      ),
       loadApprovedCategoryLookup(query),
-      buildDuplicateEnrichmentBySourceId(),
+      buildDuplicateEnrichmentBySourceIdLightweight(),
     ]);
+    const totalCount = parseInt(countResult.rows[0].total);
+    const pagination = calculatePagination(currentPage, itemsPerPage, totalCount);
+    const enrichmentById = await batchTelegramCollectorEnrichment(result.rows, {
+      includeMessageStats: false,
+      includeCollectedStats: false,
+    });
 
     // Mask sensitive data; enrich category + collector-linked Telegram status
     const sources = result.rows.map(source => {
@@ -659,36 +707,86 @@ router.get('/state', authenticate, readRateLimiter, validateResponse(dataHubStat
   }
 });
 
+// Lazy data quality — duplicate URL analysis (slow; must not block core health)
+router.get('/health/data-quality', authenticate, readRateLimiter, validateResponse(healthDataQualityResponseSchema), async (req, res) => {
+  try {
+    res.json(await buildHealthDataQualityView());
+  } catch (error) {
+    logger.error('DataHub health data-quality failed:', error);
+    res.json({
+      lastCheckAt: new Date().toISOString(),
+      loaded: false,
+      duplicateUrlGroups: null,
+      highRiskDuplicateGroups: null,
+      ignoredDuplicateGroups: null,
+      meta: {
+        partial: true,
+        unavailableMetrics: ['duplicateUrlGroups'],
+        reason: 'error',
+      },
+    });
+  }
+});
+
+// DataHub health monitoring — fast core metrics only
+router.get('/health/monitoring', authenticate, readRateLimiter, validateResponse(healthMonitoringResponseSchema), async (req, res) => {
+  try {
+    res.json(await buildHealthMonitoringView());
+  } catch (error) {
+    logger.error('DataHub health monitoring failed:', error);
+    res.status(503).json({
+      status: 'unhealthy',
+      lastCheckAt: new Date().toISOString(),
+      database: 'disconnected',
+      error: error.message,
+    });
+  }
+});
+
 // DataHub health check
 router.get('/health', authenticate, async (req, res) => {
   try {
-    // Check database connectivity
     await query('SELECT 1');
 
-    // Check active sources
-    const sourcesResult = await query(
-      'SELECT COUNT(*) as count FROM data_sources WHERE is_active = true'
-    );
-    const activeCount = parseInt(sourcesResult.rows[0]?.count) || 0;
+    const [sourceCounts, collectorHealth, publisherHealth, queueHealth, activityMetrics] = await Promise.all([
+      query(
+        `SELECT
+          COUNT(*)::int AS total_sources,
+          COUNT(*) FILTER (WHERE is_active = true)::int AS active_sources,
+          COUNT(*) FILTER (WHERE type = 'telegram' AND is_active = true)::int AS active_telegram_sources,
+          COUNT(*) FILTER (WHERE type = 'rss' AND is_active = true)::int AS active_rss_sources,
+          COUNT(*) FILTER (WHERE type = 'api' AND is_active = true)::int AS active_api_sources
+         FROM data_sources`,
+      ),
+      query(
+        `SELECT
+          COUNT(*)::int AS total_collectors,
+          COUNT(*) FILTER (WHERE is_active = true)::int AS active_collectors
+         FROM telegram_channels`,
+      ),
+      query(
+        `SELECT
+          COUNT(*)::int AS total_publishers,
+          COUNT(*) FILTER (WHERE is_active = true)::int AS active_publishers
+         FROM telegram_publishers`,
+      ),
+      query(
+        `SELECT
+          COUNT(*) FILTER (WHERE status IN ('pending', 'processing'))::int AS pending_queue,
+          COUNT(*) FILTER (WHERE status = 'failed')::int AS failed_queue
+         FROM datahub_automation_queue`,
+      ),
+      queryHealthActivityMetrics(),
+    ]);
 
-    const metricsResult = await query(
-      `SELECT
-        (SELECT COUNT(*)::int FROM data_hub_logs
-          WHERE created_at > NOW() - INTERVAL '1 hour') AS access_log_events_1h,
-        (SELECT COUNT(*)::int FROM collected_data
-          WHERE collected_at > NOW() - INTERVAL '1 hour') AS pipeline_ingested_1h,
-        (SELECT COUNT(*)::int FROM collected_data
-          WHERE processed_at > NOW() - INTERVAL '1 hour' AND status = 'processed') AS pipeline_normalized_1h,
-        (SELECT COUNT(*)::int FROM telegram_messages
-          WHERE created_at > NOW() - INTERVAL '1 hour') AS telegram_created_1h`,
-    );
-    const m = metricsResult.rows[0] || {};
-    const accessLogEvents1h = parseInt(m.access_log_events_1h, 10) || 0;
-    const pipelineIngested1h = parseInt(m.pipeline_ingested_1h, 10) || 0;
-    const pipelineNormalized1h = parseInt(m.pipeline_normalized_1h, 10) || 0;
-    const telegramCreated1h = parseInt(m.telegram_created_1h, 10) || 0;
+    const duplicateSummary = emptyDuplicateSummaryForLegacyHealth();
+
+    const sourceRow = sourceCounts.rows[0] || {};
+    const collectorRow = collectorHealth.rows[0] || {};
+    const publisherRow = publisherHealth.rows[0] || {};
+    const queueRow = queueHealth.rows[0] || {};
+    const activeCount = parseInt(sourceRow.active_sources, 10) || 0;
     const healthLastCheckedAt = new Date().toISOString();
-    const duplicateSummary = await getDuplicateUrlSummaryForHealth();
 
     const isHealthy = activeCount > 0;
 
@@ -696,18 +794,38 @@ router.get('/health', authenticate, async (req, res) => {
       status: isHealthy ? 'healthy' : 'degraded',
       database: 'connected',
       activeSources: activeCount,
-      accessLogEvents1h,
-      pipelineIngested1h,
-      pipelineNormalized1h,
-      telegramCreated1h,
+      totalSources: parseInt(sourceRow.total_sources, 10) || 0,
+      sourceCounts: {
+        active: activeCount,
+        telegram: parseInt(sourceRow.active_telegram_sources, 10) || 0,
+        rss: parseInt(sourceRow.active_rss_sources, 10) || 0,
+        api: parseInt(sourceRow.active_api_sources, 10) || 0,
+      },
+      collectorHealth: {
+        total: parseInt(collectorRow.total_collectors, 10) || 0,
+        active: parseInt(collectorRow.active_collectors, 10) || 0,
+      },
+      publisherHealth: {
+        total: parseInt(publisherRow.total_publishers, 10) || 0,
+        active: parseInt(publisherRow.active_publishers, 10) || 0,
+      },
+      queueHealth: {
+        pending: parseInt(queueRow.pending_queue, 10) || 0,
+        failed: parseInt(queueRow.failed_queue, 10) || 0,
+      },
+      accessLogEvents1h: activityMetrics.accessLogEvents,
+      pipelineIngested1h: activityMetrics.ingested,
+      pipelineNormalized1h: activityMetrics.normalized,
+      telegramCreated1h: activityMetrics.telegramIntake,
       healthLastCheckedAt,
       dataQuality: {
         duplicateUrlGroups: duplicateSummary.duplicateUrlGroups,
         highRiskDuplicateGroups: duplicateSummary.highRiskDuplicateGroups,
         ignoredDuplicateGroups: duplicateSummary.ignoredDuplicateGroups,
+        skipped: true,
       },
       /** @deprecated use pipelineIngested1h — kept for backward compatibility */
-      recentActivity: pipelineIngested1h,
+      recentActivity: activityMetrics.ingested ?? 0,
       timestamp: healthLastCheckedAt,
     });
   } catch (error) {
@@ -735,22 +853,74 @@ router.get('/access-logs', authenticate, readRateLimiter, validateQuery(accessLo
 // Pipeline backlog enrichment (heavy — lazy-loaded by UI, DH-PIPELINE-P2)
 router.get('/pipeline/backlog', authenticate, readRateLimiter, validateResponse(dataPipelineBacklogResponseSchema), async (req, res) => {
   try {
-    const sourcesRows = await query(
-      `SELECT id AS source_id, type FROM data_sources WHERE type = 'telegram'`,
-    );
-    const enrichment = await buildPipelineBacklogEnrichment(sourcesRows.rows);
-    res.json(enrichment);
+    let enrichment;
+    try {
+      enrichment = await getOrLoadCached('pipeline:backlog:enrichment:v2', async () => {
+        const sourcesRows = await query(
+          `SELECT id AS source_id, type FROM data_sources WHERE type = 'telegram'`,
+        );
+        return buildPipelineBacklogEnrichment(sourcesRows.rows);
+      });
+    } catch (loadError) {
+      logger.error('Failed to load DataHub pipeline backlog enrichment:', loadError);
+      enrichment = buildEmptyPipelineBacklogResponse(loadError.message);
+    }
+    res.json(normalizePipelineBacklogResponse(enrichment));
   } catch (error) {
     logger.error('Failed to fetch DataHub pipeline backlog enrichment:', error);
-    res.status(500).json({ error: 'Failed to fetch pipeline backlog enrichment' });
+    res.json(buildEmptyPipelineBacklogResponse(error.message));
+  }
+});
+
+// Pipeline normalization summary — lazy-loaded 24h counts (DH-DATA-PIPELINE-PX)
+router.get('/pipeline/normalization-summary', authenticate, readRateLimiter, validateResponse(pipelineNormalizationSummaryResponseSchema), async (req, res) => {
+  try {
+    const summary = await buildPipelineNormalizationSummary();
+    res.json(summary);
+  } catch (error) {
+    logger.error('Failed to fetch pipeline normalization summary:', error);
+    res.json({
+      windowHours: 24,
+      totalProcessed: null,
+      passed: null,
+      warnings: null,
+      rejected: null,
+      passRate: null,
+      lastProcessedAt: null,
+      meta: {
+        loaded: false,
+        cachedAt: null,
+        queryMs: null,
+        partial: true,
+        unavailableReason: error?.message || 'summary_failed',
+      },
+    });
+  }
+});
+
+// Pipeline capacity — read-only throughput configuration (DH-DATA-PIPELINE-PX)
+router.get('/pipeline/capacity', authenticate, readRateLimiter, validateResponse(pipelineCapacityResponseSchema), async (req, res) => {
+  try {
+    res.json(await buildPipelineCapacityView());
+  } catch (error) {
+    logger.error('Failed to fetch pipeline capacity view:', error);
+    res.status(500).json({ error: 'Failed to fetch pipeline capacity' });
   }
 });
 
 // Pipeline view for DataHub Pipeline tab (GAP-012)
 router.get('/pipeline', authenticate, readRateLimiter, validateQuery(pipelineQuerySchema), validateResponse(dataPipelineViewResponseSchema), async (req, res) => {
   try {
-    const includeBacklog = req.validatedQuery?.includeBacklog === true;
-    const view = await buildDataPipelineView({ includeBacklog });
+    const flags = req.validatedQuery || {};
+    const includeBacklog = flags.includeBacklog === true;
+    const view = await buildDataPipelineView({
+      includeBacklog,
+      includeCategoryScreening: flags.includeCategoryScreening === true,
+      includeNormalizationSummary: flags.includeNormalizationSummary === true,
+      includeDuplicateAnalysis: flags.includeDuplicateAnalysis === true,
+      includeTelegramBacklog: flags.includeTelegramBacklog === true || includeBacklog,
+      includeRecentPreview: flags.includeRecentPreview === true,
+    });
     res.json(view);
   } catch (error) {
     logger.error('Failed to fetch DataHub pipeline view:', error);
@@ -765,9 +935,9 @@ router.get('/stats', authenticate, readRateLimiter, validateResponse(dataHubStat
       SELECT 
         (SELECT COUNT(*) FROM data_sources) as total_sources,
         (SELECT COUNT(*) FROM data_sources WHERE is_active = true) as active_sources,
-        (SELECT COUNT(*) FROM data_hub_logs) as total_logs,
-        (SELECT COUNT(*) FROM data_hub_logs WHERE created_at > NOW() - INTERVAL '24 hours') as logs_24h,
-        (SELECT COUNT(*) FROM data_hub_logs WHERE created_at > NOW() - INTERVAL '7 days') as logs_7d
+        (SELECT GREATEST(reltuples::bigint, 0)::bigint FROM pg_class WHERE oid = 'data_hub_logs'::regclass) as total_logs,
+        0::bigint as logs_24h,
+        0::bigint as logs_7d
     `);
 
     res.json(stats.rows[0] || {});
@@ -786,8 +956,15 @@ router.get('/collected', authenticate, readRateLimiter, validateQuery(collectedD
       end_date,
       source_id,
       limit,
-      offset
+      offset,
+      agentKey: queryAgentKey,
+      agent_key: queryAgentKeySnake,
     } = req.validatedQuery;
+
+    const agentKey =
+      queryAgentKey ||
+      queryAgentKeySnake ||
+      resolveAgentKeyFromRequest(req);
 
     // Build WHERE clause dynamically
     const conditions = [];
@@ -795,29 +972,34 @@ router.get('/collected', authenticate, readRateLimiter, validateQuery(collectedD
     let paramCount = 1;
 
     if (status) {
-      conditions.push(`status = $${paramCount++}`);
+      conditions.push(`cd.status = $${paramCount++}`);
       params.push(status);
     }
 
     if (source_id) {
-      conditions.push(`source_id = $${paramCount++}`);
+      conditions.push(`cd.source_id = $${paramCount++}`);
       params.push(source_id);
     }
 
     if (start_date) {
-      conditions.push(`collected_at >= $${paramCount++}`);
+      conditions.push(`cd.collected_at >= $${paramCount++}`);
       params.push(start_date);
     }
 
     if (end_date) {
-      conditions.push(`collected_at <= $${paramCount++}`);
+      conditions.push(`cd.collected_at <= $${paramCount++}`);
       params.push(end_date);
+    }
+
+    if (agentKey) {
+      params.push(agentKey);
+      conditions.push(sourceAccessAllowedSql('cd.source_id', paramCount++));
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Get total count for pagination metadata
-    const countQuery = `SELECT COUNT(*) as total FROM collected_data ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) as total FROM collected_data cd ${whereClause}`;
     const countResult = await query(countQuery, params);
     const total = parseInt(countResult.rows[0].total);
 
@@ -867,6 +1049,7 @@ router.get('/collected', authenticate, readRateLimiter, validateQuery(collectedD
 router.get('/collected/:id', authenticate, readRateLimiter, validateParams(uuidParamSchema), validateResponse(collectedDataResponseSchema), async (req, res) => {
   try {
     const { id } = req.validatedParams;
+    const agentKey = resolveAgentKeyFromRequest(req);
 
     const result = await query(`
       SELECT 
@@ -880,6 +1063,24 @@ router.get('/collected/:id', authenticate, readRateLimiter, validateParams(uuidP
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Collected data record not found' });
+    }
+
+    if (agentKey) {
+      const row = result.rows[0];
+      const dataType = row.metadata?.data_type || row.normalized_data?.data_type || null;
+      const access = await enforceSourceAccess(req, {
+        sourceId: row.source_id,
+        agentKey,
+        action: 'collected_data_read',
+        dataType,
+      });
+      if (!access.allowed) {
+        return res.status(403).json({
+          error: 'Source access denied',
+          code: 'SOURCE_ACCESS_DENIED',
+          agent_key: agentKey,
+        });
+      }
     }
 
     res.json(result.rows[0]);

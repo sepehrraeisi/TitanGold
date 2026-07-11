@@ -1,0 +1,328 @@
+{
+  "capturedAt": "2026-06-28T12:38:34.333Z",
+  "test_run_id": "fee2c0f9-72b0-4e2f-b6c8-cb08e2847671",
+  "fixture_source": "DH_DATA_ARCHIVING_P3_FIXTURE",
+  "fixture_created_by": "archiving_p3_verify",
+  "success": true,
+  "steps": [
+    {
+      "step": "preflight_migration_043",
+      "ok": true,
+      "message": "Migration 043 not applied"
+    },
+    {
+      "step": "preflight_lock",
+      "ok": true,
+      "message": "Advisory lock held"
+    },
+    {
+      "step": "purge_count_only",
+      "ok": true,
+      "message": "Purge is not count-only or changed row counts"
+    },
+    {
+      "step": "fixture_insert",
+      "ok": true,
+      "message": "Fixture insert did not increment counts as expected"
+    },
+    {
+      "step": "archive_dry_run",
+      "ok": true,
+      "message": "Archive preview does not include fixture"
+    },
+    {
+      "step": "archive_not_applied_yet",
+      "ok": true,
+      "message": "Fixture already archived before apply"
+    },
+    {
+      "step": "archive_apply_movement",
+      "ok": true,
+      "message": "Non-fixture rows moved during archive apply"
+    },
+    {
+      "step": "archive_apply_counts",
+      "ok": true,
+      "message": "Counts wrong after archive apply"
+    },
+    {
+      "step": "restore_dry_run",
+      "ok": true,
+      "message": "Restore preview failed fixture checks"
+    },
+    {
+      "step": "restore_apply_movement",
+      "ok": true,
+      "message": "Non-fixture rows moved during restore apply"
+    },
+    {
+      "step": "restore_apply_payload",
+      "ok": true,
+      "message": "Restored fixture payload mismatch"
+    },
+    {
+      "step": "restore_apply_counts",
+      "ok": true,
+      "message": "Counts wrong after restore apply"
+    },
+    {
+      "step": "cleanup",
+      "ok": true,
+      "message": "Cleanup failed — counts not restored to baseline"
+    }
+  ],
+  "preflight": {
+    "migrations": [
+      "033_create_datahub_archiving_operations",
+      "043_datahub_archiving_p2_safety"
+    ],
+    "advisory_lock_free": true,
+    "baseline": {
+      "active_count": 12,
+      "archived_count": 0,
+      "pending_archive_count": 4,
+      "active_fixture_count": 0,
+      "archived_fixture_count": 0
+    },
+    "partitions": [
+      {
+        "partition_name": "ai_decisions_archive_2024",
+        "start_date": "2024-01-01 00:00:00+00",
+        "end_date": "2025-01-01 00:00:00+00",
+        "row_count": "0",
+        "size": "0 bytes"
+      },
+      {
+        "partition_name": "ai_decisions_archive_2025",
+        "start_date": "2025-01-01 00:00:00+00",
+        "end_date": "2026-01-01 00:00:00+00",
+        "row_count": "0",
+        "size": "0 bytes"
+      },
+      {
+        "partition_name": "ai_decisions_archive_2026",
+        "start_date": "2026-01-01 00:00:00+00",
+        "end_date": "2027-01-01 00:00:00+00",
+        "row_count": "0",
+        "size": "8192 bytes"
+      }
+    ]
+  },
+  "counts": {
+    "before": {
+      "active_count": 12,
+      "archived_count": 0,
+      "pending_archive_count": 4,
+      "active_fixture_count": 0,
+      "archived_fixture_count": 0
+    },
+    "after_insert": {
+      "active_count": 13,
+      "archived_count": 0,
+      "pending_archive_count": 5,
+      "active_fixture_count": 1,
+      "archived_fixture_count": 0
+    },
+    "after_archive": {
+      "active_count": 12,
+      "archived_count": 1,
+      "pending_archive_count": 4,
+      "active_fixture_count": 0,
+      "archived_fixture_count": 1
+    },
+    "after_restore": {
+      "active_count": 13,
+      "archived_count": 0,
+      "pending_archive_count": 5,
+      "active_fixture_count": 1,
+      "archived_fixture_count": 0
+    },
+    "final": {
+      "active_count": 12,
+      "archived_count": 0,
+      "pending_archive_count": 4,
+      "active_fixture_count": 0,
+      "archived_fixture_count": 0
+    }
+  },
+  "fixture": {
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3",
+    "test_run_id": "fee2c0f9-72b0-4e2f-b6c8-cb08e2847671",
+    "created_at": "2026-02-28T12:38:34.991Z",
+    "metadata": {
+      "source": "DH_DATA_ARCHIVING_P3_FIXTURE",
+      "test_run_id": "fee2c0f9-72b0-4e2f-b6c8-cb08e2847671",
+      "created_by": "archiving_p3_verify",
+      "p3_fixture": true,
+      "note": "Safe P3 archive/restore verification — not production trading data"
+    },
+    "input_data": {
+      "fixture": true,
+      "test_run_id": "fee2c0f9-72b0-4e2f-b6c8-cb08e2847671",
+      "harmless": true
+    },
+    "output_data": {
+      "result": "p3_fixture_no_op",
+      "executed": false
+    }
+  },
+  "archive_dry_run": {
+    "dry_run": true,
+    "days_old": 90,
+    "pending_count": 5,
+    "oldest_date": "2026-02-10T14:52:45.710Z",
+    "newest_date": "2026-02-28T12:38:34.991Z",
+    "cutoff_date": "2026-03-30T12:38:35.154Z",
+    "fixture_in_preview": true,
+    "fixture_already_archived": false,
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3"
+  },
+  "archive_apply": {
+    "operation_id": "806fb5e3-9ff1-48cc-b99e-e119ed54bd24",
+    "records_archived": 1,
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3",
+    "archive_partition_year": 2026,
+    "archived_at": "2026-06-28T12:38:35.193Z",
+    "created_at": "2026-02-28T12:38:34.991Z",
+    "movement_check": {
+      "ok": true,
+      "phase": "archive",
+      "active_non_fixture_unchanged": true,
+      "archived_non_fixture_unchanged": true,
+      "fixture_moved_correctly": true,
+      "non_fixture_active_before": [
+        "5ddd20f9-8527-4b97-b320-4e564f6a525e",
+        "63085690-fe18-4603-be19-69fe45cd4667",
+        "68bb3ac4-2181-4d08-afc5-0e6f18b7d41c",
+        "7b352e09-387d-40ee-8f12-0b812fb7eed9",
+        "916228db-b90e-470e-ad56-957d30551834",
+        "a96d7b71-0b8b-4d12-b799-a02b25fdad59",
+        "b9d52d81-47a3-46e8-b21a-ee52478669e0",
+        "d36bd628-f315-46e0-ae69-5700f2b7825c",
+        "d378add7-0dd1-4523-b390-ef7460611a00",
+        "d8fc347c-10f5-4013-991f-970aee485752",
+        "e1c104b1-e140-4fcd-813b-c66be3ea7e47",
+        "f71a4346-292b-4d95-ae04-55b4d974e89e"
+      ],
+      "non_fixture_active_after": [
+        "5ddd20f9-8527-4b97-b320-4e564f6a525e",
+        "63085690-fe18-4603-be19-69fe45cd4667",
+        "68bb3ac4-2181-4d08-afc5-0e6f18b7d41c",
+        "7b352e09-387d-40ee-8f12-0b812fb7eed9",
+        "916228db-b90e-470e-ad56-957d30551834",
+        "a96d7b71-0b8b-4d12-b799-a02b25fdad59",
+        "b9d52d81-47a3-46e8-b21a-ee52478669e0",
+        "d36bd628-f315-46e0-ae69-5700f2b7825c",
+        "d378add7-0dd1-4523-b390-ef7460611a00",
+        "d8fc347c-10f5-4013-991f-970aee485752",
+        "e1c104b1-e140-4fcd-813b-c66be3ea7e47",
+        "f71a4346-292b-4d95-ae04-55b4d974e89e"
+      ]
+    },
+    "partition": {
+      "partition_name": "ai_decisions_archive_2026",
+      "archived_at": "2026-06-28T12:38:35.193Z",
+      "label": "Archive 2026"
+    }
+  },
+  "restore_dry_run": {
+    "dry_run": true,
+    "start_date": "2026-02-28T11:38:34.991Z",
+    "end_date": "2026-02-28T13:38:34.991Z",
+    "pending_count": 1,
+    "oldest_date": "2026-02-28T12:38:34.991Z",
+    "newest_date": "2026-02-28T12:38:34.991Z",
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3",
+    "restore_window": {
+      "start_date": "2026-02-28T11:38:34.991Z",
+      "end_date": "2026-02-28T13:38:34.991Z"
+    },
+    "fixture_in_archive_before_restore": true,
+    "fixture_in_active_before_restore": false,
+    "fixture_in_preview": true
+  },
+  "restore_apply": {
+    "operation_id": "aaab9ce6-4a88-4afc-a940-2410838587e4",
+    "records_restored": 1,
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3",
+    "restored_created_at": "2026-02-28T12:38:34.991Z",
+    "original_created_at": "2026-02-28T12:38:34.991Z",
+    "movement_check": {
+      "ok": true,
+      "phase": "restore",
+      "active_non_fixture_unchanged": true,
+      "archived_non_fixture_unchanged": true,
+      "fixture_moved_correctly": true,
+      "non_fixture_active_before": [
+        "5ddd20f9-8527-4b97-b320-4e564f6a525e",
+        "63085690-fe18-4603-be19-69fe45cd4667",
+        "68bb3ac4-2181-4d08-afc5-0e6f18b7d41c",
+        "7b352e09-387d-40ee-8f12-0b812fb7eed9",
+        "916228db-b90e-470e-ad56-957d30551834",
+        "a96d7b71-0b8b-4d12-b799-a02b25fdad59",
+        "b9d52d81-47a3-46e8-b21a-ee52478669e0",
+        "d36bd628-f315-46e0-ae69-5700f2b7825c",
+        "d378add7-0dd1-4523-b390-ef7460611a00",
+        "d8fc347c-10f5-4013-991f-970aee485752",
+        "e1c104b1-e140-4fcd-813b-c66be3ea7e47",
+        "f71a4346-292b-4d95-ae04-55b4d974e89e"
+      ],
+      "non_fixture_active_after": [
+        "5ddd20f9-8527-4b97-b320-4e564f6a525e",
+        "63085690-fe18-4603-be19-69fe45cd4667",
+        "68bb3ac4-2181-4d08-afc5-0e6f18b7d41c",
+        "7b352e09-387d-40ee-8f12-0b812fb7eed9",
+        "916228db-b90e-470e-ad56-957d30551834",
+        "a96d7b71-0b8b-4d12-b799-a02b25fdad59",
+        "b9d52d81-47a3-46e8-b21a-ee52478669e0",
+        "d36bd628-f315-46e0-ae69-5700f2b7825c",
+        "d378add7-0dd1-4523-b390-ef7460611a00",
+        "d8fc347c-10f5-4013-991f-970aee485752",
+        "e1c104b1-e140-4fcd-813b-c66be3ea7e47",
+        "f71a4346-292b-4d95-ae04-55b4d974e89e"
+      ]
+    },
+    "payload_match": {
+      "input_matches": true,
+      "output_matches": true,
+      "metadata_matches": true,
+      "created_at": "2026-02-28T12:38:34.991Z"
+    }
+  },
+  "cleanup": {
+    "removed_active": 1,
+    "removed_archived": 0,
+    "removed_ids": [
+      "04fef214-5ef5-4054-8574-8878705ba6b3"
+    ]
+  },
+  "purge_check": {
+    "purge_apply_available": false,
+    "would_purge_count": 0,
+    "archived_count_unchanged": true,
+    "active_count_unchanged": true
+  },
+  "confirm_gates": {
+    "archive_requires_confirm": true,
+    "restore_requires_confirm": true
+  },
+  "performance_ms": {
+    "total": 1432
+  },
+  "proof": {
+    "purge_executed": false,
+    "broad_archive_used": false,
+    "non_fixture_rows_moved": false
+  },
+  "cleanup_stale": {
+    "removed_active": 0,
+    "removed_archived": 0,
+    "removed_ids": []
+  },
+  "verdict": "REAL WORKING for fixture archive/restore apply paths",
+  "notes": [
+    "Broad production archive not executed — fixture-only scoped helpers used",
+    "Purge not executed — count-only preview verified",
+    "Production non-fixture row IDs unchanged throughout test"
+  ]
+}

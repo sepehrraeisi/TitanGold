@@ -1,0 +1,181 @@
+{
+  "timestamp": "2026-06-23T14:44:17.154Z",
+  "cases": [
+    {
+      "name": "invalid-token-before",
+      "responses": [
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/channels",
+          "method": "GET",
+          "status": 401,
+          "ok": false,
+          "payload": "{\"error\":\"Invalid token\"}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/preferences",
+          "method": "GET",
+          "status": 401,
+          "ok": false,
+          "payload": "{\"error\":\"Invalid token\"}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/history",
+          "method": "GET",
+          "status": 401,
+          "ok": false,
+          "payload": "{\"error\":\"Invalid token\"}"
+        }
+      ],
+      "consoleMessages": [],
+      "banners": {
+        "channels": true,
+        "preferences": true,
+        "history": true
+      },
+      "hasNotFound": false,
+      "excerpts": {
+        "channels": [
+          "Email Configuration",
+          "Personal notifications manage your own alerts and preferences. Personal Telegram notifications use the configured Telegram Publisher delivery layer. Broadcast channels are managed in DataHub → Advanced Features → Telegram Publisher.",
+          "Channels",
+          "Notification channels could not be loaded.",
+          "Telegram",
+          "Personal Telegram notifications use the configured Telegram Publisher delivery layer. Broadcast channels are managed in DataHub → Advanced Features → Telegram Publisher.",
+          "Telegram delivery not configured",
+          "Provider: Telegram Publisher",
+          "Configure in Telegram Publisher",
+          "Browser",
+          "Enable Browser Notifications",
+          "Email",
+          "Email notifications are coming soon",
+          "Email notifications are coming soon",
+          "Email notifications are coming soon"
+        ],
+        "preferences": [
+          "Personal notifications manage your own alerts and preferences. Personal Telegram notifications use the configured Telegram Publisher delivery layer. Broadcast channels are managed in DataHub → Advanced Features → Telegram Publisher.",
+          "Preferences",
+          "Preferences",
+          "Notification preferences could not be loaded.",
+          "Quiet Hours",
+          "Do Not Disturb",
+          "Notification frequency"
+        ],
+        "history": [
+          "Wallet",
+          "History",
+          "History",
+          "Notification history could not be loaded.",
+          "all",
+          "sent",
+          "failed",
+          "blocked",
+          "dry run",
+          "No notification history yet"
+        ]
+      }
+    },
+    {
+      "name": "valid-token-control",
+      "responses": [
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/preferences",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"success\":true,\"preferences\":{\"telegram_enabled\":false,\"browser_enabled\":false,\"email_enabled\":false,\"quiet_hours_enabled\":true,\"quiet_hours_start\":\"21:15\",\"quiet_hours_end\":\"07:15\",\"do_not_disturb_enabled\":false,\"frequency_level\":\"normal\",\"updated_at\":\"2026-06-23T14:05:14.031Z\",\"is_default\":false}}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/channels",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"success\":true,\"channels\":{\"telegram\":{\"status\":\"configured\",\"provider\":\"telegram_publisher\",\"configured\":true,\"enabled\":false,\"publisherId\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"publisherName\":\"تایتان تست\",\"destinationMasked\":\"****5348\"},\"browser\":{\"status\":\"disabled\",\"configured\":true,\"enabled\":false},\"email\":{\"status\":\"coming_soon\",\"configured\":false,\"enabled\":false}}}"
+        },
+        {
+          "url": "https://titan.zala.ir/api/v1/notifications/history",
+          "method": "GET",
+          "status": 200,
+          "ok": true,
+          "payload": "{\"notifications\":[{\"id\":23,\"user_id\":\"e134c7b1-b183-4e21-9acf-e3d53b9806d6\",\"channel\":\"telegram\",\"message_type\":\"test\",\"title\":\"Notification Test\",\"message_preview\":\"Notification channel test\",\"status\":\"dry_run\",\"dry_run\":true,\"source_id\":null,\"publisher_id\":\"887495e6-0b47-4450-88ef-35dd43477f9a\",\"destination_masked\":\"****5348\",\"error_code\":null,\"error_message\":null,\"metadata\":{\"mode\":\"test\",\"provider\":\"telegram_publisher\",\"requested_at\":\"2026-06-23T14:05:59.662Z\",\"publisher_name\":\"تایتان تست\"},\"created_at\":\"2026-06-23T14:05:59.666Z\",\"read_at\":null},{\"id\":22,\"user_id\":\"e134c7b1-b183-4e21-9acf-e3d53b9806d6\",\"channel\":\"telegram\",\"message_type\":\"test\",\"title\":\"Notification Test\",\"message_preview\":\"Notification channel test\",\"status\":\"dry_run\",\"dry_run\":true,\"source_id\":null,\"publisher_id\":\"88"
+        }
+      ],
+      "consoleMessages": [
+        {
+          "type": "error",
+          "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}"
+        },
+        {
+          "type": "error",
+          "text": "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-D9P-zB_e.js:21:166595)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-D9P-zB_e.js:138:29675)"
+        },
+        {
+          "type": "error",
+          "text": "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}"
+        },
+        {
+          "type": "error",
+          "text": "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-D9P-zB_e.js:21:166595)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-D9P-zB_e.js:138:29675)"
+        }
+      ],
+      "banners": {
+        "channels": false,
+        "preferences": false,
+        "history": false
+      },
+      "hasNotFound": false,
+      "excerpts": {
+        "channels": [
+          "Email Configuration",
+          "Personal notifications manage your own alerts and preferences. Personal Telegram notifications use the configured Telegram Publisher delivery layer. Broadcast channels are managed in DataHub → Advanced Features → Telegram Publisher.",
+          "Channels",
+          "Telegram",
+          "Personal Telegram notifications use the configured Telegram Publisher delivery layer. Broadcast channels are managed in DataHub → Advanced Features → Telegram Publisher.",
+          "Telegram delivery configured: تایتان تست",
+          "Provider: Telegram Publisher",
+          "Configure in Telegram Publisher",
+          "Browser",
+          "Enable Browser Notifications",
+          "Email",
+          "Email notifications are coming soon",
+          "Email notifications are coming soon",
+          "Email notifications are coming soon"
+        ],
+        "preferences": [
+          "Personal notifications manage your own alerts and preferences. Personal Telegram notifications use the configured Telegram Publisher delivery layer. Broadcast channels are managed in DataHub → Advanced Features → Telegram Publisher.",
+          "Preferences",
+          "Preferences",
+          "Quiet Hours",
+          "Do Not Disturb",
+          "Notification frequency"
+        ],
+        "history": [
+          "Wallet",
+          "History",
+          "History",
+          "all",
+          "sent",
+          "failed",
+          "blocked",
+          "dry run",
+          "DATE/TIME\tCHANNEL\tTYPE\tSTATUS\tDRY-RUN/LIVE\tRESULT\tSOURCE",
+          "6/23/2026, 2:05:59 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 2:05:59 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 2:05:59 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 2:05:59 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 1:04:32 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/23/2026, 1:04:31 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 8:27:57 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 8:27:56 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 8:27:56 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 8:27:56 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 2:21:12 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 2:21:09 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 1:21:17 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 1:21:17 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 1:21:17 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-",
+          "6/21/2026, 1:21:17 PM\tTelegram\ttest\tdry run\tdry-run\tNotification channel test\t-"
+        ]
+      }
+    }
+  ]
+}

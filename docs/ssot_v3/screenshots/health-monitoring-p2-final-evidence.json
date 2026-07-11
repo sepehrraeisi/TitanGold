@@ -1,0 +1,88 @@
+{
+  "capturedAt": "2026-07-09T17:54:24.524Z",
+  "task": "DH-HEALTH-MONITORING-P2-COLD-LOAD-PERFORMANCE-FIX",
+  "closeout": true,
+  "endpointTiming": {
+    "coreMonitoring": {
+      "coldMs": 120,
+      "cachedMs": 23,
+      "queryMs": 53
+    },
+    "dataQuality": {
+      "ms": 38,
+      "reason": null
+    },
+    "pipelineBacklogBaselineMs": 55,
+    "pipelineBacklogAfterHealthMs": 14
+  },
+  "browser": {
+    "healthCoreVisibleMs": 3901,
+    "network": [
+      {
+        "url": "/api/v1/data-sources/health/monitoring",
+        "status": 200,
+        "ms": 3129
+      },
+      {
+        "url": "/api/v1/data-sources/health/data-quality",
+        "status": 200,
+        "ms": 3134
+      },
+      {
+        "url": "/api/v1/data-sources/pipeline/backlog",
+        "status": 200,
+        "ms": 16098
+      }
+    ],
+    "healthDom": {
+      "noFakeZeroGrid": true,
+      "noRawNa": true,
+      "noRawDashOnly": true,
+      "noRawI18n": true,
+      "rawI18nKeysFound": [],
+      "hasRealCounts": true,
+      "duplicateSectionPresent": true,
+      "dataQualitySeparateHint": true,
+      "telegramCollectorSection": true,
+      "collectorHasStatusOrUnavailable": true,
+      "coreCardsFast": true,
+      "coreMetricsVisibleEarly": true,
+      "noFullPageBlocking": true
+    },
+    "pipelineChecks": {
+      "tabLoads": true,
+      "pipelineVisibleMs": 2971,
+      "pipelineBaselineMs": 55,
+      "pipelineAfterHealthMs": 14,
+      "pipelineUiResponsive": true,
+      "noRawI18n": true
+    },
+    "telegramChecks": {
+      "tabLoads": true,
+      "telegramVisibleMs": 879,
+      "noRawI18n": true
+    }
+  },
+  "browserQaChecklist": {
+    "coreColdUnder2s": true,
+    "coreCachedUnder300ms": true,
+    "dataQualitySeparateEndpoint": true,
+    "healthCoreVisibleUnder10s": true,
+    "coreDoesNotBlockOnDuplicate": true,
+    "noFakeZeroGrid": true,
+    "noRawNa": true,
+    "noRawI18n": true,
+    "telegramCollectorPresent": true,
+    "collectorStatusShown": true,
+    "pipelineTabNotSlowed": true,
+    "telegramTabNotSlowed": true
+  },
+  "browserQaPass": true,
+  "screenshots": [
+    "health-monitoring-p2-final-core.png",
+    "health-monitoring-p2-final-full.png",
+    "health-monitoring-p2-final-pipeline-tab.png",
+    "health-monitoring-p2-final-telegram-tab.png"
+  ],
+  "verdict": "REAL WORKING / CLOSED"
+}

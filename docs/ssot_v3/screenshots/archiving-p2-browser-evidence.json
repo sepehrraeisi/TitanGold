@@ -1,0 +1,57 @@
+{
+  "capturedAt": "2026-06-28T10:47:24.658Z",
+  "path": "DataHub → Advanced Features → Data Archiving",
+  "user": "sepehr@local",
+  "role": "admin",
+  "metrics": {
+    "activeRecords": "12",
+    "archivedRecords": "0",
+    "pendingArchive": "4",
+    "status": "Healthy",
+    "hasExplanation": true,
+    "hasManualNote": true,
+    "hasArchive2024": true,
+    "hasCountOnly": true,
+    "hasPurgePreviewLabel": true,
+    "notFound": false,
+    "hasUndefined": false
+  },
+  "forbiddenInBody": [],
+  "rawInternalLabels": [],
+  "rawOperationTypes": [],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11075:13)\n    at async Promise.all (index 0)\n    at async loadBalance (http://localhost:3000/components/Header.tsx?t=1782642860425:994:40)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11075:13)\n    at async Promise.all (index 1)\n    at async loadBalance (http://localhost:3000/components/Header.tsx?t=1782642860425:994:40)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11075:13)\n    at async Promise.all (index 0)\n    at async loadBalance (http://localhost:3000/components/Header.tsx?t=1782642860425:994:40)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "❌ MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+    "❌ Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at Module.fetchMexcTicker24hr (http://localhost:3000/services/api.ts:11075:13)\n    at async Promise.all (index 1)\n    at async loadBalance (http://localhost:3000/components/Header.tsx?t=1782642860425:994:40)",
+    "❌ WebSocket error: Event",
+    "❌ Agent WebSocket error: Event",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "In HTML, %s cannot be a descendant of <%s>.\nThis will cause a hydration error.%s <div> p \n\n  ...\n    <div className=\"mt-6\">\n      <Suspense fallback={<div>}>\n        <DataHubTabWithErrorBoundary artemis={{id:\"artemi...\", ...}} t={function} onRefresh={function refreshArtemis} ...>\n          <ErrorBoundary>\n            <DataHubTab artemis={{id:\"artemi...\", ...}} t={function} onRefresh={function refreshArtemis} ...>\n              <ApiWrapper error={null} setError={function setError} isLoading={true}>\n                <div className={\"relative \"}>\n                  <div>\n                  <div className=\"opacity-50...\">\n                    <div className=\"space-y-6\">\n                      <DataHubSummaryCards t={function}>\n                        <div className=\"bg-gradien...\">\n                          <div className=\"grid grid-...\">\n                            <MetricCard label=\"Total Sources\" color=\"blue\" value={<SkeletonLoader>}>\n                              <div className=\"rounded-xl...\">\n                                <p>\n>                               <p className=\"text-sm font-semibold text-blue-100\">\n                                  <SkeletonLoader width=\"40px\" height=\"1.5rem\">\n                                    <div className={\"animate-...\"} style={{width:\"40px\", ...}}>\n>                                     <div\n>                                       className=\"absolute inset-0 bg-gradient-to-r from-transparent via-secondary/20...\"\n>                                     >\n                            ...\n                          ...\n                      ...\n",
+    "<%s> cannot contain a nested %s.\nSee this log for the ancestor stack trace. p <div>"
+  ],
+  "network": [
+    {
+      "url": "/api/v1/data-hub/archiving/records?limit=50&offset=0",
+      "status": 200
+    },
+    {
+      "url": "/api/v1/data-hub/archiving/stats?limit=20",
+      "status": 200
+    }
+  ],
+  "networkAll200": true,
+  "screenshots": [
+    "archiving-p2-overview.png",
+    "archiving-p2-partitions.png",
+    "archiving-p2-operations.png"
+  ]
+}

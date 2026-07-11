@@ -1,0 +1,318 @@
+{
+  "before": {
+    "label": "before",
+    "at": "2026-06-27T15:50:06.909Z",
+    "topics": [
+      {
+        "id": "70b6affe-2f54-49f6-ad86-8283254552d4",
+        "name": "Demo Topic 1779636651973",
+        "is_active": true,
+        "publish_targets": {
+          "publisherIds": [
+            "887495e6-0b47-4450-88ef-35dd43477f9a"
+          ]
+        }
+      },
+      {
+        "id": "7ffb5473-cc05-43b1-bfa9-05cd5870b3e6",
+        "name": "Demo Topic 1779636779020",
+        "is_active": true,
+        "publish_targets": {
+          "publisherIds": [
+            "887495e6-0b47-4450-88ef-35dd43477f9a"
+          ]
+        }
+      },
+      {
+        "id": "bc6c5f1b-4df1-4e11-a324-3f94efc55e0e",
+        "name": "سیگنال",
+        "is_active": true,
+        "publish_targets": {
+          "publisherIds": [
+            "887495e6-0b47-4450-88ef-35dd43477f9a"
+          ]
+        }
+      }
+    ],
+    "mappings": [
+      {
+        "id": "6996c3c0-803f-4505-99c6-04fc981f6ca2",
+        "source_id": "ed0fb136-d20f-46f6-97aa-e70d2605cfef",
+        "source_name": "alphavantage DEMO TEST",
+        "publisher_id": "887495e6-0b47-4450-88ef-35dd43477f9a",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      },
+      {
+        "id": "43bbe28a-7724-4b1a-b473-d0202c734095",
+        "source_id": "d51d05a4-748a-4459-8a30-f132ef8d3e81",
+        "source_name": "BBCPersian",
+        "publisher_id": "26cf7d4a-bab7-45a4-8046-a968ae6daa38",
+        "publisher_name": "سس",
+        "is_enabled": true
+      },
+      {
+        "id": "bc1d1137-1eb6-4406-b3a2-54bdb9e095a2",
+        "source_id": "d51d05a4-748a-4459-8a30-f132ef8d3e81",
+        "source_name": "BBCPersian",
+        "publisher_id": "887495e6-0b47-4450-88ef-35dd43477f9a",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      },
+      {
+        "id": "f4fc4f1c-a0cd-47f7-a071-7940bc050c05",
+        "source_id": "c787a64f-2666-43ef-aef6-dae94449bc4b",
+        "source_name": "JUST IN TIME",
+        "publisher_id": "887495e6-0b47-4450-88ef-35dd43477f9a",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      },
+      {
+        "id": "298efefc-95e5-445d-b5a1-4b614f6d5a12",
+        "source_id": "ed0fb136-d20f-46f6-97aa-e70d2605cfef",
+        "source_name": "alphavantage DEMO TEST",
+        "publisher_id": "5ab9a6bc-5f17-4aae-bb06-4a34e827af24",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      },
+      {
+        "id": "c4119bad-6edd-4ff6-a41e-2c4fe11f59e7",
+        "source_id": "d51d05a4-748a-4459-8a30-f132ef8d3e81",
+        "source_name": "BBCPersian",
+        "publisher_id": "5ab9a6bc-5f17-4aae-bb06-4a34e827af24",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      }
+    ]
+  },
+  "topicUpdates": [],
+  "mappingCreates": [
+    {
+      "source_id": "ed0fb136-d20f-46f6-97aa-e70d2605cfef",
+      "mapping_id": "6996c3c0-803f-4505-99c6-04fc981f6ca2",
+      "via": "legacy_copy"
+    },
+    {
+      "source_id": "d51d05a4-748a-4459-8a30-f132ef8d3e81",
+      "mapping_id": "bc1d1137-1eb6-4406-b3a2-54bdb9e095a2",
+      "via": "legacy_copy"
+    },
+    {
+      "source_id": "c787a64f-2666-43ef-aef6-dae94449bc4b",
+      "mapping_id": "f4fc4f1c-a0cd-47f7-a071-7940bc050c05",
+      "via": "signal_source"
+    }
+  ],
+  "after": {
+    "label": "after",
+    "at": "2026-06-27T15:50:06.921Z",
+    "topics": [
+      {
+        "id": "70b6affe-2f54-49f6-ad86-8283254552d4",
+        "name": "Demo Topic 1779636651973",
+        "is_active": true,
+        "publish_targets": {
+          "publisherIds": [
+            "887495e6-0b47-4450-88ef-35dd43477f9a"
+          ]
+        }
+      },
+      {
+        "id": "7ffb5473-cc05-43b1-bfa9-05cd5870b3e6",
+        "name": "Demo Topic 1779636779020",
+        "is_active": true,
+        "publish_targets": {
+          "publisherIds": [
+            "887495e6-0b47-4450-88ef-35dd43477f9a"
+          ]
+        }
+      },
+      {
+        "id": "bc6c5f1b-4df1-4e11-a324-3f94efc55e0e",
+        "name": "سیگنال",
+        "is_active": true,
+        "publish_targets": {
+          "publisherIds": [
+            "887495e6-0b47-4450-88ef-35dd43477f9a"
+          ]
+        }
+      }
+    ],
+    "mappings": [
+      {
+        "id": "6996c3c0-803f-4505-99c6-04fc981f6ca2",
+        "source_id": "ed0fb136-d20f-46f6-97aa-e70d2605cfef",
+        "source_name": "alphavantage DEMO TEST",
+        "publisher_id": "887495e6-0b47-4450-88ef-35dd43477f9a",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      },
+      {
+        "id": "43bbe28a-7724-4b1a-b473-d0202c734095",
+        "source_id": "d51d05a4-748a-4459-8a30-f132ef8d3e81",
+        "source_name": "BBCPersian",
+        "publisher_id": "26cf7d4a-bab7-45a4-8046-a968ae6daa38",
+        "publisher_name": "سس",
+        "is_enabled": true
+      },
+      {
+        "id": "bc1d1137-1eb6-4406-b3a2-54bdb9e095a2",
+        "source_id": "d51d05a4-748a-4459-8a30-f132ef8d3e81",
+        "source_name": "BBCPersian",
+        "publisher_id": "887495e6-0b47-4450-88ef-35dd43477f9a",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      },
+      {
+        "id": "f4fc4f1c-a0cd-47f7-a071-7940bc050c05",
+        "source_id": "c787a64f-2666-43ef-aef6-dae94449bc4b",
+        "source_name": "JUST IN TIME",
+        "publisher_id": "887495e6-0b47-4450-88ef-35dd43477f9a",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      },
+      {
+        "id": "298efefc-95e5-445d-b5a1-4b614f6d5a12",
+        "source_id": "ed0fb136-d20f-46f6-97aa-e70d2605cfef",
+        "source_name": "alphavantage DEMO TEST",
+        "publisher_id": "5ab9a6bc-5f17-4aae-bb06-4a34e827af24",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      },
+      {
+        "id": "c4119bad-6edd-4ff6-a41e-2c4fe11f59e7",
+        "source_id": "d51d05a4-748a-4459-8a30-f132ef8d3e81",
+        "source_name": "BBCPersian",
+        "publisher_id": "5ab9a6bc-5f17-4aae-bb06-4a34e827af24",
+        "publisher_name": "تایتان تست",
+        "is_enabled": true
+      }
+    ]
+  },
+  "validations": [
+    {
+      "topicId": "70b6affe-2f54-49f6-ad86-8283254552d4",
+      "name": "Demo Topic 1779636651973",
+      "validity": {
+        "status": "valid",
+        "valid": true,
+        "reasons": [],
+        "repairActions": [
+          "validate",
+          "test_dry_run"
+        ],
+        "matchingCandidates": 75,
+        "canEnqueue": true
+      }
+    },
+    {
+      "topicId": "7ffb5473-cc05-43b1-bfa9-05cd5870b3e6",
+      "name": "Demo Topic 1779636779020",
+      "validity": {
+        "status": "valid",
+        "valid": true,
+        "reasons": [],
+        "repairActions": [
+          "validate",
+          "test_dry_run"
+        ],
+        "matchingCandidates": 75,
+        "canEnqueue": true
+      }
+    },
+    {
+      "topicId": "bc6c5f1b-4df1-4e11-a324-3f94efc55e0e",
+      "name": "سیگنال",
+      "validity": {
+        "status": "valid",
+        "valid": true,
+        "reasons": [],
+        "repairActions": [
+          "validate",
+          "test_dry_run"
+        ],
+        "matchingCandidates": 75,
+        "canEnqueue": true
+      }
+    }
+  ],
+  "refresh": {
+    "durationMs": 540,
+    "summary": {
+      "candidates": 172,
+      "queued": 8,
+      "skipped": 164,
+      "blocked": 0,
+      "reasons": [
+        {
+          "code": "PUBLISHER_MAPPING_REQUIRED",
+          "count": 164,
+          "label": "No enabled source→publisher mapping exists. Create a mapping in Telegram Publisher before routing."
+        }
+      ]
+    },
+    "added": 8
+  },
+  "dispatch": {
+    "processed": 1
+  },
+  "executions": [
+    {
+      "id": "07d120c2-cd48-4ccc-82b8-46e39b9ea6ec",
+      "status": "dry_run",
+      "topicId": "70b6affe-2f54-49f6-ad86-8283254552d4",
+      "publisherId": "887495e6-0b47-4450-88ef-35dd43477f9a",
+      "errorLabel": "Automation event recorded",
+      "dryRun": true
+    },
+    {
+      "id": "ae62bc49-e6af-4ad8-bc85-20e73922adbd",
+      "status": "skipped",
+      "topicId": "bc6c5f1b-4df1-4e11-a324-3f94efc55e0e",
+      "publisherId": "887495e6-0b47-4450-88ef-35dd43477f9a",
+      "errorLabel": "No enabled source→publisher mapping exists. Create a mapping in Telegram Publisher before routing.",
+      "dryRun": true
+    },
+    {
+      "id": "2b150b68-358e-4cc8-bd1c-513c026d71bb",
+      "status": "skipped",
+      "topicId": "bc6c5f1b-4df1-4e11-a324-3f94efc55e0e",
+      "publisherId": "887495e6-0b47-4450-88ef-35dd43477f9a",
+      "errorLabel": "No enabled source→publisher mapping exists. Create a mapping in Telegram Publisher before routing.",
+      "dryRun": true
+    }
+  ],
+  "publisherHistory": [
+    {
+      "id": "a0bb51b5-dce4-4584-b1a6-a896db2ec78a",
+      "status": "dry_run",
+      "telegram_message_id": null,
+      "created_at": "2026-06-27T16:04:00.187503+00"
+    },
+    {
+      "id": "a4f45b4d-a28f-460c-8e51-2a54db109dc6",
+      "status": "dry_run",
+      "telegram_message_id": null,
+      "created_at": "2026-06-27T15:50:07.517Z"
+    },
+    {
+      "id": "6928582b-5347-4fd4-a0c8-064a4cdfafdd",
+      "status": "dry_run",
+      "telegram_message_id": null,
+      "created_at": "2026-06-27T15:40:50.916Z"
+    },
+    {
+      "id": "a65320f9-c2cf-423a-b933-c2dc77ba4da2",
+      "status": "dry_run",
+      "telegram_message_id": null,
+      "created_at": "2026-06-27T15:15:00.100Z"
+    }
+  ],
+  "latestDryRun": {
+    "at": "2026-06-27T16:04:00.198Z",
+    "executionId": "09299d21-0fc7-4a4e-af70-917391a12275",
+    "status": "dry_run",
+    "publisherHistoryId": "a0bb51b5-dce4-4584-b1a6-a896db2ec78a",
+    "telegram_message_id": null
+  }
+}

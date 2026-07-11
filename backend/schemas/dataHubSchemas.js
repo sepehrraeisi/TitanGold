@@ -146,7 +146,9 @@ export const collectedDataQuerySchema = paginationQuerySchema.extend({
     }).optional(),
     start_date: z.string().datetime({ message: 'start_date must be a valid ISO 8601 date format' }).optional(),
     end_date: z.string().datetime({ message: 'end_date must be a valid ISO 8601 date format' }).optional(),
-    source_id: z.string().uuid({ message: 'source_id must be a valid UUID' }).optional()
+    source_id: z.string().uuid({ message: 'source_id must be a valid UUID' }).optional(),
+    agentKey: z.string().min(1).optional(),
+    agent_key: z.string().min(1).optional(),
 }).refine(
     (data) => {
         if (data.start_date && data.end_date) {
@@ -438,6 +440,8 @@ export const collectedDataFilterSchema = z.object({
     sentiment: z.enum(['positive', 'negative', 'neutral']).optional(),
     has_url: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
     has_hashtag: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+    agentKey: z.string().min(1).optional(),
+    agent_key: z.string().min(1).optional(),
     limit: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).optional().default('50'),
     offset: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).optional().default('0')
 });
@@ -506,6 +510,11 @@ const pipelineGlobalTelegramBacklogSchema = z.object({
   newestUnprocessed: z.string().optional(),
 });
 
+const pipelineTelegramIngestMetricsSchema = z.object({
+  incoming24h: z.number().int().nonnegative().nullable().optional(),
+  transferredToCollectedData24h: z.number().int().nonnegative().nullable().optional(),
+});
+
 export const dataPipelineSnapshotSchema = z.object({
     lastRefreshed: z.string(),
     totalRequests24h: z.number().int().nonnegative(),
@@ -542,12 +551,174 @@ export const pipelineQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => v === 'true'),
+  includeCategoryScreening: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+  includeNormalizationSummary: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+  includeDuplicateAnalysis: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+  includeTelegramBacklog: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+  includeRecentPreview: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+});
+
+export const pipelineBacklogTrendSchema = z.object({
+  loaded: z.boolean(),
+  direction: z.enum(['up', 'down', 'stable']).nullable(),
+  percentChange: z.number().nullable(),
+  display: z.string().nullable(),
+  previousBacklog: z.number().int().nonnegative().nullable(),
+  source: z.enum(['redis_history', 'flow_balance_estimate']).nullable(),
+  unavailableReason: z.string().nullable(),
 });
 
 export const dataPipelineBacklogResponseSchema = z.object({
-  transferThroughput: pipelineTransferThroughputSchema,
-  globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema,
+  transferThroughput: pipelineTransferThroughputSchema.nullable().optional(),
+  globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema.nullable().optional(),
+  ingestMetrics: pipelineTelegramIngestMetricsSchema.nullable().optional(),
   backlogBySourceId: z.record(pipelineCollectorBacklogSchema),
+  meta: z
+    .object({
+      partial: z.boolean().optional(),
+      warnings: z.array(z.string()).optional(),
+      unavailableMetrics: z.array(z.string()).optional(),
+      fetchedAt: z.string().optional(),
+      error: z.string().optional(),
+      backlogTrend: pipelineBacklogTrendSchema.optional(),
+    })
+    .optional(),
+});
+
+export const pipelineNormalizationSummaryResponseSchema = z.object({
+  windowHours: z.number().int().positive(),
+  totalProcessed: z.number().int().nonnegative().nullable(),
+  passed: z.number().int().nonnegative().nullable(),
+  warnings: z.number().int().nonnegative().nullable(),
+  rejected: z.number().int().nonnegative().nullable(),
+  passRate: z.number().min(0).max(1).nullable(),
+  lastProcessedAt: z.string().nullable(),
+  meta: z.object({
+    loaded: z.boolean(),
+    cachedAt: z.string().nullable(),
+    queryMs: z.number().nullable(),
+    partial: z.boolean(),
+    unavailableReason: z.string().nullable(),
+  }),
+});
+
+export const pipelineCapacityResponseSchema = z.object({
+  mode: z.enum(['config_only']),
+  modeLabel: z.string(),
+  schedulerStatus: z.enum(['running', 'paused', 'stopped', 'unknown']),
+  transfer: z.object({
+    batchSize: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+    intervalMinutes: z.number().int().positive().nullable(),
+    runtimeAdjustable: z.union([z.boolean(), z.literal('partial')]),
+    source: z.string(),
+  }),
+  normalization: z.object({
+    batchSize: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+    intervalMinutes: z.number().int().positive().nullable(),
+    runtimeAdjustable: z.union([z.boolean(), z.literal('partial')]),
+    source: z.string(),
+  }),
+  lastNormalizationRun: z.string().nullable(),
+  lastNormalizationStats: z
+    .object({
+      processed: z.number().int().nonnegative().nullable(),
+      errors: z.number().int().nonnegative().nullable(),
+      durationMs: z.number().int().nonnegative().nullable(),
+    })
+    .nullable(),
+  meta: z.object({
+    loaded: z.boolean(),
+    readOnly: z.boolean(),
+    writeControlsAvailable: z.boolean(),
+    notes: z.array(z.string()),
+  }),
+});
+
+export const healthMonitoringResponseSchema = z.object({
+  status: z.enum(['healthy', 'degraded', 'unhealthy']),
+  lastCheckAt: z.string(),
+  database: z.enum(['connected', 'disconnected']),
+  sources: z.object({
+    total: z.number().int().nonnegative(),
+    active: z.number().int().nonnegative(),
+    byType: z.object({
+      telegram: z.number().int().nonnegative(),
+      rss: z.number().int().nonnegative(),
+      api: z.number().int().nonnegative(),
+    }),
+  }),
+  pipelineActivity1h: z.object({
+    ingested: z.number().int().nonnegative().nullable(),
+    normalized: z.number().int().nonnegative().nullable(),
+    telegramIntake: z.number().int().nonnegative().nullable(),
+    accessLogEvents: z.number().int().nonnegative().nullable(),
+    meta: z.object({
+      partial: z.boolean(),
+      unavailableMetrics: z.array(z.string()),
+      window: z.string(),
+    }),
+  }),
+  performance: z.object({
+    avgResponseMs: z.number().int().nonnegative().nullable(),
+    cacheHitRate: z.number().min(0).max(1).nullable(),
+    cacheHitRateTracked: z.boolean(),
+    meta: z.object({
+      avgResponseWindow: z.string(),
+      cacheHitRateWindow: z.string(),
+    }),
+  }),
+  telegramCollector: z.object({
+    status: z.enum(['healthy', 'degraded', 'unhealthy', 'unknown']),
+    activeChannels: z.number().int().nonnegative().nullable(),
+    totalChannels: z.number().int().nonnegative().nullable(),
+    avgLatencyMs: z.number().nonnegative().nullable(),
+    loggedErrors: z.number().int().nonnegative().nullable(),
+    lastProcessedAt: z.string().nullable(),
+    loaded: z.boolean(),
+  }),
+  meta: z.object({
+    queryMs: z.number().nonnegative(),
+    dataQualityDeferred: z.boolean(),
+  }),
+  activeSources: z.number().int().nonnegative().optional(),
+  accessLogEvents1h: z.number().int().nonnegative().nullable().optional(),
+  pipelineIngested1h: z.number().int().nonnegative().nullable().optional(),
+  pipelineNormalized1h: z.number().int().nonnegative().nullable().optional(),
+  telegramCreated1h: z.number().int().nonnegative().nullable().optional(),
+  healthLastCheckedAt: z.string().optional(),
+  timestamp: z.string().optional(),
+});
+
+export const healthDataQualityResponseSchema = z.object({
+  lastCheckAt: z.string(),
+  loaded: z.boolean(),
+  duplicateUrlGroups: z.number().int().nonnegative().nullable(),
+  highRiskDuplicateGroups: z.number().int().nonnegative().nullable(),
+  ignoredDuplicateGroups: z.number().int().nonnegative().nullable(),
+  meta: z.object({
+    partial: z.boolean(),
+    unavailableMetrics: z.array(z.string()),
+    reason: z.string().nullable(),
+    queryMs: z.number().nonnegative().optional(),
+    source: z.string().optional(),
+  }),
 });
 
 export const accessLogsQuerySchema = z.object({

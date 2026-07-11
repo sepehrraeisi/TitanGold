@@ -4,9 +4,29 @@ import { logger } from '../services/logger.js';
 import { authenticate } from '../middleware/auth.js';
 import { telegramReadAuth } from '../middleware/telegramAuth.js';
 import { readRateLimiter, writeRateLimiter } from '../middleware/rateLimiter.js';
+import {
+    getTelegramAnalyticsCached,
+    TELEGRAM_CACHE_TTL,
+} from '../services/telegramAnalyticsCache.js';
+import { loadAgentFeed, VALID_AGENT_KEYS } from '../services/telegramAgentFeed.js';
 
 const router = express.Router();
 const readAuth = [telegramReadAuth, readRateLimiter];
+
+function parseHours(value, fallback = 24) {
+    return Math.min(720, Math.max(1, parseInt(value, 10) || fallback));
+}
+
+function parseLimit(value, fallback, max) {
+    return Math.min(max, Math.max(1, parseInt(value, 10) || fallback));
+}
+
+async function loadPipelineStatsRow() {
+    const stats = await query('SELECT * FROM telegram_pipeline_stats LIMIT 1');
+    return stats.rows[0] || {};
+}
+
+import { loadSystemStatsForRange } from '../services/telegramSystemStats.js';
 
 // Debug log
 logger.info('📡 Telegram API routes module loaded');
@@ -21,22 +41,25 @@ logger.info('📡 Telegram API routes module loaded');
  */
 router.get('/health', ...readAuth, async (req, res) => {
     try {
-        // Check database connection
-        const dbCheck = await query('SELECT COUNT(*) as count FROM telegram_messages');
-        
-        // Pipeline stats from view (same as before Geographic Map changes)
-        const stats = await query('SELECT * FROM telegram_pipeline_stats');
-        
-        return res.json({
-            success: true,
-            status: 'healthy',
-            timestamp: new Date().toISOString(),
-            database: {
-                connected: true,
-                totalMessages: parseInt(dbCheck.rows[0].count)
+        const payload = await getTelegramAnalyticsCached(
+            'health',
+            {},
+            async () => {
+                const pipeline = await loadPipelineStatsRow();
+                return {
+                    success: true,
+                    status: 'healthy',
+                    timestamp: new Date().toISOString(),
+                    database: {
+                        connected: true,
+                        totalMessages: parseInt(pipeline.total_messages ?? '0', 10),
+                    },
+                    pipeline,
+                };
             },
-            pipeline: stats.rows[0] || {}
-        });
+            TELEGRAM_CACHE_TTL.health,
+        );
+        return res.json(payload);
     } catch (error) {
         logger.error('Telegram health check failed:', error);
         return res.status(503).json({
@@ -72,109 +95,79 @@ router.get('/agents/:agentKey/feed', ...readAuth, async (req, res) => {
             minImpact = 0,
             categories,
             timeRange = 24,
-            requiresAction
+            requiresAction,
+            priority,
         } = req.query;
 
-        // Validate agent key
-        const validAgentKeys = [
-            'technical', 'risk', 'sentiment', 'pattern', 'price_prediction',
-            'arbitrage', 'portfolio', 'liquidity', 'trend', 'optimization',
-            'order', 'fundamental', 'market_intelligence', 'volume', 'timing'
-        ];
+        const validAgentKeys = VALID_AGENT_KEYS;
 
         if (!validAgentKeys.includes(agentKey)) {
             return res.status(400).json({
                 success: false,
                 error: 'Invalid agent key',
-                validKeys: validAgentKeys
+                validKeys: validAgentKeys,
             });
         }
 
-        // Build query
-        let whereConditions = [
-            `ai.agent_key = $1`,
-            `ai.impact_score >= $2`,
-            `pm.created_at >= NOW() - INTERVAL '${parseInt(timeRange)} hours'`
-        ];
-        let params = [agentKey, parseFloat(minImpact)];
-        let paramIndex = 3;
+        const hours = parseHours(timeRange, 24);
+        const pageLimit = parseLimit(limit, 20, 200);
+        const pageOffset = Math.max(0, parseInt(offset, 10) || 0);
+        const minImpactNum = parseFloat(minImpact) || 0;
+        const requiresActionFilter =
+            requiresAction === 'true' ? true : requiresAction === 'false' ? false : undefined;
 
-        // Filter by categories
-        // NOTE: schema differs across environments; agent impacts may not have event_category.
-        // We ignore this filter here to avoid column-not-found errors.
-
-        // Filter by action requirement
-        if (requiresAction !== undefined) {
-            whereConditions.push(`ai.requires_action = $${paramIndex}`);
-            params.push(requiresAction === 'true');
-            paramIndex++;
-        }
-
-        const sql = `
-            SELECT 
-                pm.id,
-                tm.message_id,
-                COALESCE(tc.title, tc.username, pm.channel_id::text) as channel_title,
-                pm.cleaned_text,
-                pm.sentiment,
-                pm.importance_level,
-                COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
-                ai.impact_score,
-                ai.impact_type,
-                ai.confidence as confidence,
-                ai.relevance_reasons,
-                ai.requires_action,
-                ai.action_type,
-                ai.priority_level,
-                ai.created_at as processed_at
-            FROM telegram_agent_impacts ai
-            INNER JOIN processed_telegram_messages pm ON pm.id::text = ai.processed_message_id::text
-            LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
-            LEFT JOIN telegram_channels tc 
-                ON pm.channel_id::text = tc.id::text
-                OR pm.channel_id::text = tc.channel_id::text
-            WHERE ${whereConditions.join(' AND ')}
-            ORDER BY COALESCE(tm.telegram_created_at, pm.created_at) DESC, ai.impact_score DESC
-            LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-        `;
-
-        params.push(Math.min(parseInt(limit), 200), parseInt(offset));
-
-        const result = await query(sql, params);
-
-        // Get total count for pagination
-        const countSql = `
-            SELECT COUNT(*) as total
-            FROM telegram_agent_impacts ai
-            INNER JOIN processed_telegram_messages pm ON pm.id::text = ai.processed_message_id::text
-            WHERE ${whereConditions.join(' AND ')}
-        `;
-        const countResult = await query(countSql, params.slice(0, -2));
+        const payload = await getTelegramAnalyticsCached(
+            'agents/feed',
+            {
+                agentKey,
+                limit: pageLimit,
+                offset: pageOffset,
+                minImpact: minImpactNum,
+                timeRange: hours,
+                requiresAction: requiresAction ?? '',
+                priority: priority ?? '',
+            },
+            () =>
+                loadAgentFeed({
+                    agentKey,
+                    hours,
+                    limit: pageLimit,
+                    offset: pageOffset,
+                    minImpact: minImpactNum,
+                    requiresAction: requiresActionFilter,
+                    priority: priority || null,
+                }),
+            TELEGRAM_CACHE_TTL.agentFeed,
+        );
 
         return res.json({
             success: true,
             agent: agentKey,
-            data: result.rows,
+            data: payload.data,
             pagination: {
-                total: parseInt(countResult.rows[0].total),
-                limit: parseInt(limit),
-                offset: parseInt(offset),
-                hasMore: parseInt(offset) + result.rows.length < parseInt(countResult.rows[0].total)
+                limit: pageLimit,
+                offset: pageOffset,
+                hasMore: payload.hasMore,
+                nextCursor: payload.nextCursor,
             },
             filters: {
-                minImpact: parseFloat(minImpact),
-                categories: null,
-                timeRange: parseInt(timeRange),
-                requiresAction: requiresAction === 'true' ? true : requiresAction === 'false' ? false : null
-            }
+                minImpact: minImpactNum,
+                categories: categories || null,
+                timeRange: hours,
+                requiresAction: requiresActionFilter ?? null,
+                priority: priority || null,
+            },
+            message:
+                payload.data.length === 0
+                    ? 'No feed items for this agent and filter.'
+                    : undefined,
         });
-
     } catch (error) {
         logger.error('Error fetching agent feed:', error);
         return res.status(500).json({
             success: false,
             error: 'Failed to fetch agent feed',
-            message: error.message
+            message: error.message,
         });
     }
 });
@@ -185,49 +178,41 @@ router.get('/agents/:agentKey/feed', ...readAuth, async (req, res) => {
  */
 router.get('/agents/summary', ...readAuth, async (req, res) => {
     try {
-        const hours = Math.min(720, Math.max(1, parseInt(req.query.timeRange, 10) || 24));
-
-        // Agents list: use same time range as user selection (24h / 2d / 7d), not fixed 24h view
-        const agentsSql = `
-            SELECT 
-                ai.agent_key,
-                ai.agent_name,
-                COUNT(*)::text AS total_messages,
-                COUNT(*) FILTER (WHERE ai.requires_action = true)::text AS action_required_count,
-                COUNT(*) FILTER (WHERE ai.priority_level = 'critical')::text AS critical_count,
-                COUNT(*) FILTER (WHERE ai.priority_level = 'high')::text AS high_count,
-                AVG(ai.impact_score) AS average_impact,
-                MAX(ai.created_at) AS last_message_at,
-                array_agg(DISTINCT pm.event_category) FILTER (WHERE pm.event_category IS NOT NULL) AS top_event_categories,
-                array_agg(DISTINCT pm.news_category) FILTER (WHERE pm.news_category IS NOT NULL) AS top_news_categories
-            FROM telegram_agent_impacts ai
-            JOIN processed_telegram_messages pm ON ai.processed_message_id = pm.id
-            WHERE ai.created_at >= NOW() - INTERVAL '1 hour' * $1
-            GROUP BY ai.agent_key, ai.agent_name
-            ORDER BY COUNT(*) DESC
-        `;
-        const agentsResult = await query(agentsSql, [hours]);
-
-        const statsSql = `
-            SELECT 
-                COUNT(DISTINCT pm.id)::text AS total_processed_messages,
-                COUNT(DISTINCT ai.id)::text AS total_agent_impacts,
-                COUNT(DISTINCT pm.channel_id)::text AS active_channels,
-                AVG(ai.impact_score)::text AS avg_impact_score,
-                COUNT(CASE WHEN ai.requires_action THEN 1 END)::text AS total_actions_required,
-                MAX(pm.created_at) AS last_processed_at
-            FROM processed_telegram_messages pm
-            INNER JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
-            WHERE pm.created_at >= NOW() - INTERVAL '1 hour' * $1
-        `;
-        const statsResult = await query(statsSql, [hours]);
-
-        return res.json({
-            success: true,
-            timeRange: hours,
-            agents: agentsResult.rows,
-            systemStats: statsResult.rows[0]
-        });
+        const hours = parseHours(req.query.timeRange, 24);
+        const payload = await getTelegramAnalyticsCached(
+            'agents/summary',
+            { timeRange: hours },
+            async () => {
+                const agentsSql = `
+                    SELECT 
+                        ai.agent_key,
+                        ai.agent_name,
+                        COUNT(*)::text AS total_messages,
+                        COUNT(*) FILTER (WHERE ai.requires_action = true)::text AS action_required_count,
+                        COUNT(*) FILTER (WHERE ai.priority_level = 'critical')::text AS critical_count,
+                        COUNT(*) FILTER (WHERE ai.priority_level = 'high')::text AS high_count,
+                        AVG(ai.impact_score) AS average_impact,
+                        MAX(ai.created_at) AS last_message_at,
+                        ARRAY[]::text[] AS top_event_categories,
+                        ARRAY[]::text[] AS top_news_categories
+                    FROM telegram_agent_impacts ai
+                    WHERE ai.created_at >= NOW() - INTERVAL '1 hour' * $1
+                    GROUP BY ai.agent_key, ai.agent_name
+                    ORDER BY COUNT(*) DESC
+                    LIMIT 15
+                `;
+                const agentsResult = await query(agentsSql, [hours]);
+                const systemStats = await loadSystemStatsForRange(hours);
+                return {
+                    success: true,
+                    timeRange: hours,
+                    agents: agentsResult.rows,
+                    systemStats,
+                };
+            },
+            TELEGRAM_CACHE_TTL.agentsSummary,
+        );
+        return res.json(payload);
 
     } catch (error) {
         logger.error('Error fetching agents summary:', error);
@@ -261,98 +246,107 @@ router.get('/breaking-news', ...readAuth, async (req, res) => {
             categories,
             severity
         } = req.query;
+        const parsedLimit = parseLimit(limit, 20, 100);
+        const cacheParams = {
+            limit: parsedLimit,
+            minImpact,
+            categories: categories || '',
+            severity: severity || '',
+        };
 
-        let whereConditions = [
-            `ne.market_impact_level IS NOT NULL`,
-            `pm.importance_level IN ('high', 'critical')`,
-            `pm.created_at >= NOW() - INTERVAL '6 hours'` // Recent news only
-        ];
-        let params = [];
-        let paramIndex = 1;
+        const payload = await getTelegramAnalyticsCached(
+            'breaking-news',
+            cacheParams,
+            async () => {
+                let whereConditions = [
+                    `ne.market_impact_level IS NOT NULL`,
+                    `pm.importance_level IN ('high', 'critical')`,
+                    `pm.created_at >= NOW() - INTERVAL '6 hours'`
+                ];
+                let params = [];
+                let paramIndex = 1;
 
-        // Filter by categories
-        if (categories) {
-            const categoryList = categories.split(',').map(c => c.trim());
-            whereConditions.push(`ne.primary_category = ANY($${paramIndex})`);
-            params.push(categoryList);
-            paramIndex++;
-        }
+                if (categories) {
+                    const categoryList = categories.split(',').map(c => c.trim());
+                    whereConditions.push(`ne.primary_category = ANY($${paramIndex})`);
+                    params.push(categoryList);
+                    paramIndex++;
+                }
 
-        // Filter by severity
-        if (severity) {
-            whereConditions.push(`ne.market_impact_level = $${paramIndex}`);
-            params.push(severity);
-            paramIndex++;
-        }
+                if (severity) {
+                    whereConditions.push(`ne.market_impact_level = $${paramIndex}`);
+                    params.push(severity);
+                    paramIndex++;
+                }
 
-        const sql = `
-            SELECT 
-                pm.id,
-                tm.message_id,
-                pm.channel_id,
-                tc.username as channel_username,
-                tc.title as channel_title,
-                pm.cleaned_text,
-                pm.sentiment,
-                pm.news_type,
-                pm.importance_level,
-                pm.mentioned_assets,
-                pm.extracted_prices,
-                COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
-                pm.created_at,
-                -- News Event Data
-                ne.primary_category,
-                ne.sub_category,
-                ne.regions,
-                COALESCE(ne.people_mentioned, ARRAY[]::TEXT[]) || COALESCE(ne.organizations, ARRAY[]::TEXT[]) as affected_entities,
-                ne.affected_markets,
-                ne.affected_assets,
-                ne.market_impact_level,
-                ne.event_urgency,
-                ne.source_reliability,
-                ne.event_type,
-                -- Count affected agents
-                (SELECT COUNT(DISTINCT agent_key) 
-                 FROM telegram_agent_impacts ai 
-                 WHERE ai.processed_message_id = pm.id AND ai.impact_score >= ${parseFloat(minImpact)}) as affected_agents_count,
-                -- Get top affected agents
-                (SELECT json_agg(json_build_object(
-                    'agent_key', agent_key,
-                    'impact_score', impact_score,
-                    'requires_action', requires_action
-                ) ORDER BY impact_score DESC)
-                 FROM (
-                     SELECT agent_key, impact_score, requires_action
-                     FROM telegram_agent_impacts
-                     WHERE processed_message_id = pm.id AND impact_score >= ${parseFloat(minImpact)}
-                     LIMIT 5
-                 ) sub) as top_affected_agents
-            FROM processed_telegram_messages pm
-            INNER JOIN telegram_news_events ne ON pm.id = ne.processed_message_id
-            LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
-            INNER JOIN telegram_channels tc ON pm.channel_id = tc.id
-            WHERE ${whereConditions.join(' AND ')}
-            ORDER BY 
-                ne.event_urgency DESC,
-                pm.importance_level DESC,
-                COALESCE(tm.telegram_created_at, pm.created_at) DESC
-            LIMIT $${paramIndex}
-        `;
+                const sql = `
+                    SELECT 
+                        pm.id,
+                        tm.message_id,
+                        pm.channel_id,
+                        tc.username as channel_username,
+                        tc.title as channel_title,
+                        pm.cleaned_text,
+                        pm.sentiment,
+                        pm.news_type,
+                        pm.importance_level,
+                        pm.mentioned_assets,
+                        pm.extracted_prices,
+                        COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
+                        pm.created_at,
+                        ne.primary_category,
+                        ne.sub_category,
+                        ne.regions,
+                        COALESCE(ne.people_mentioned, ARRAY[]::TEXT[]) || COALESCE(ne.organizations, ARRAY[]::TEXT[]) as affected_entities,
+                        ne.affected_markets,
+                        ne.affected_assets,
+                        ne.market_impact_level,
+                        ne.event_urgency,
+                        ne.source_reliability,
+                        ne.event_type,
+                        (SELECT COUNT(DISTINCT agent_key) 
+                         FROM telegram_agent_impacts ai 
+                         WHERE ai.processed_message_id = pm.id AND ai.impact_score >= ${parseFloat(minImpact)}) as affected_agents_count,
+                        (SELECT json_agg(json_build_object(
+                            'agent_key', agent_key,
+                            'impact_score', impact_score,
+                            'requires_action', requires_action
+                        ) ORDER BY impact_score DESC)
+                         FROM (
+                             SELECT agent_key, impact_score, requires_action
+                             FROM telegram_agent_impacts
+                             WHERE processed_message_id = pm.id AND impact_score >= ${parseFloat(minImpact)}
+                             LIMIT 5
+                         ) sub) as top_affected_agents
+                    FROM processed_telegram_messages pm
+                    INNER JOIN telegram_news_events ne ON pm.id = ne.processed_message_id
+                    LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
+                    INNER JOIN telegram_channels tc ON pm.channel_id = tc.id
+                    WHERE ${whereConditions.join(' AND ')}
+                    ORDER BY 
+                        ne.event_urgency DESC,
+                        pm.importance_level DESC,
+                        COALESCE(tm.telegram_created_at, pm.created_at) DESC
+                    LIMIT $${paramIndex}
+                `;
 
-        params.push(Math.min(parseInt(limit), 100));
+                params.push(parsedLimit);
+                const result = await query(sql, params);
+                return {
+                    success: true,
+                    count: result.rows.length,
+                    minImpact: parseFloat(minImpact),
+                    data: result.rows,
+                    filters: {
+                        categories: categories ? categories.split(',') : null,
+                        severity
+                    }
+                };
+            },
+            TELEGRAM_CACHE_TTL.breakingNews,
+        );
 
-        const result = await query(sql, params);
-
-        return res.json({
-            success: true,
-            count: result.rows.length,
-            minImpact: parseFloat(minImpact),
-            data: result.rows,
-            filters: {
-                categories: categories ? categories.split(',') : null,
-                severity
-            }
-        });
+        return res.json(payload);
 
     } catch (error) {
         logger.error('Error fetching breaking news:', error);
@@ -388,80 +382,162 @@ function countriesToRegions(countries) {
 }
 
 /**
+ * GET /api/v1/telegram/events/geographic-summary
+ * Lightweight region aggregates for Geographic Map (no message bodies).
+ */
+router.get('/events/geographic-summary', ...readAuth, async (req, res) => {
+    try {
+        const hours = parseHours(req.query.timeRange, 168);
+        const parsedLimit = parseLimit(req.query.limit, 200, 300);
+        const categories = req.query.categories || '';
+
+        const payload = await getTelegramAnalyticsCached(
+            'events/geographic-summary',
+            { timeRange: hours, limit: parsedLimit, categories },
+            async () => {
+                let whereConditions = [`ne.created_at >= NOW() - INTERVAL '1 hour' * $1`];
+                const params = [hours];
+                let paramIndex = 2;
+
+                if (categories) {
+                    whereConditions.push(`ne.primary_category = ANY($${paramIndex})`);
+                    params.push(categories.split(',').map(c => c.trim()));
+                    paramIndex++;
+                }
+
+                const sql = `
+                    SELECT
+                        ne.primary_category,
+                        ne.regions,
+                        ne.countries,
+                        ne.market_impact_level
+                    FROM telegram_news_events ne
+                    WHERE ${whereConditions.join(' AND ')}
+                    ORDER BY ne.created_at DESC
+                    LIMIT $${paramIndex}
+                `;
+                params.push(parsedLimit);
+                const result = await query(sql, params);
+
+                const categoryRegionFallback = {
+                    GEOPOLITICAL: ['MIDDLE_EAST'],
+                    PRECIOUS_METALS: ['MIDDLE_EAST'],
+                    CRYPTO_BLOCKCHAIN: ['ASIA'],
+                    FOREX_CURRENCY: ['EUROPE'],
+                    MARKET_DATA: ['NORTH_AMERICA'],
+                    GENERAL: ['EUROPE']
+                };
+                const data = result.rows.map(row => {
+                    let regions = row.regions && Array.isArray(row.regions) && row.regions.length > 0
+                        ? row.regions
+                        : countriesToRegions(row.countries || []);
+                    if (regions.length === 0 && row.primary_category) {
+                        regions = categoryRegionFallback[row.primary_category] || [];
+                    }
+                    return { ...row, regions };
+                });
+
+                return {
+                    success: true,
+                    count: data.length,
+                    timeRange: hours,
+                    data,
+                };
+            },
+            TELEGRAM_CACHE_TTL.geographicSummary,
+        );
+
+        return res.json(payload);
+    } catch (error) {
+        logger.error('Error fetching geographic summary:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch geographic summary',
+            message: error.message
+        });
+    }
+});
+
+/**
  * GET /api/v1/telegram/events/recent
  * Get latest categorized events
  */
 router.get('/events/recent', ...readAuth, async (req, res) => {
     try {
-        const { limit = 50, categories, timeRange = 24 } = req.query;
+        const hours = parseHours(req.query.timeRange, 24);
+        const parsedLimit = parseLimit(req.query.limit, 50, 250);
+        const categories = req.query.categories || '';
 
-        let whereConditions = [
-            `pm.created_at >= NOW() - INTERVAL '${parseInt(timeRange)} hours'`
-        ];
-        let params = [];
-        let paramIndex = 1;
+        const payload = await getTelegramAnalyticsCached(
+            'events/recent',
+            { timeRange: hours, limit: parsedLimit, categories },
+            async () => {
+                let whereConditions = [`pm.created_at >= NOW() - INTERVAL '1 hour' * $1`];
+                const params = [hours];
+                let paramIndex = 2;
 
-        if (categories) {
-            const categoryList = categories.split(',').map(c => c.trim());
-            whereConditions.push(`ne.primary_category = ANY($${paramIndex})`);
-            params.push(categoryList);
-            paramIndex++;
-        }
+                if (categories) {
+                    const categoryList = categories.split(',').map(c => c.trim());
+                    whereConditions.push(`ne.primary_category = ANY($${paramIndex})`);
+                    params.push(categoryList);
+                    paramIndex++;
+                }
 
-        const sql = `
-            SELECT 
-                ne.primary_category,
-                ne.sub_category,
-                ne.regions,
-                ne.countries,
-                ne.market_impact_level,
-                ne.event_urgency,
-                ne.event_type,
-                pm.cleaned_text,
-                pm.sentiment,
-                COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
-                tc.title as channel_title,
-                COUNT(ai.id) as affected_agents_count
-            FROM telegram_news_events ne
-            INNER JOIN processed_telegram_messages pm ON ne.processed_message_id = pm.id
-            LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
-            INNER JOIN telegram_channels tc ON pm.channel_id = tc.id
-            LEFT JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
-            WHERE ${whereConditions.join(' AND ')}
-            GROUP BY ne.id, pm.id, tm.telegram_created_at, tc.title
-            ORDER BY COALESCE(tm.telegram_created_at, pm.created_at) DESC
-            LIMIT $${paramIndex}
-        `;
+                const sql = `
+                    SELECT 
+                        ne.primary_category,
+                        ne.sub_category,
+                        ne.regions,
+                        ne.countries,
+                        ne.market_impact_level,
+                        ne.event_urgency,
+                        ne.event_type,
+                        pm.cleaned_text,
+                        pm.sentiment,
+                        COALESCE(tm.telegram_created_at, pm.created_at) as telegram_created_at,
+                        tc.title as channel_title,
+                        0 as affected_agents_count
+                    FROM processed_telegram_messages pm
+                    INNER JOIN telegram_news_events ne ON ne.processed_message_id = pm.id
+                    LEFT JOIN telegram_messages tm ON tm.id = pm.raw_message_id
+                    INNER JOIN telegram_channels tc ON pm.channel_id = tc.id
+                    WHERE ${whereConditions.join(' AND ')}
+                    ORDER BY pm.created_at DESC
+                    LIMIT $${paramIndex}
+                `;
 
-        params.push(Math.min(parseInt(limit), 1000));
+                params.push(parsedLimit);
+                const result = await query(sql, params);
 
-        const result = await query(sql, params);
+                const categoryRegionFallback = {
+                    GEOPOLITICAL: ['MIDDLE_EAST'],
+                    PRECIOUS_METALS: ['MIDDLE_EAST'],
+                    CRYPTO_BLOCKCHAIN: ['ASIA'],
+                    FOREX_CURRENCY: ['EUROPE'],
+                    MARKET_DATA: ['NORTH_AMERICA'],
+                    GENERAL: ['EUROPE']
+                };
+                const data = result.rows.map(row => {
+                    let regions = row.regions && Array.isArray(row.regions) && row.regions.length > 0
+                        ? row.regions
+                        : countriesToRegions(row.countries || []);
+                    if (regions.length === 0 && row.primary_category) {
+                        regions = categoryRegionFallback[row.primary_category] || [];
+                    }
+                    return { ...row, regions };
+                });
 
-        // Ensure regions for Geographic Heat Map: use DB regions if set, else derive from countries, else category fallback
-        const categoryRegionFallback = {
-            GEOPOLITICAL: ['MIDDLE_EAST'],
-            PRECIOUS_METALS: ['MIDDLE_EAST'],
-            CRYPTO_BLOCKCHAIN: ['ASIA'],
-            FOREX_CURRENCY: ['EUROPE'],
-            MARKET_DATA: ['NORTH_AMERICA'],
-            GENERAL: ['EUROPE']
-        };
-        const data = result.rows.map(row => {
-            let regions = row.regions && Array.isArray(row.regions) && row.regions.length > 0
-                ? row.regions
-                : countriesToRegions(row.countries || []);
-            if (regions.length === 0 && row.primary_category) {
-                regions = categoryRegionFallback[row.primary_category] || [];
-            }
-            return { ...row, regions };
-        });
+                return {
+                    success: true,
+                    count: data.length,
+                    timeRange: hours,
+                    data
+                };
+            },
+            TELEGRAM_CACHE_TTL.eventsRecent,
+        );
 
-        return res.json({
-            success: true,
-            count: data.length,
-            timeRange: parseInt(timeRange),
-            data
-        });
+        return res.json(payload);
 
     } catch (error) {
         logger.error('Error fetching recent events:', error);
@@ -483,49 +559,54 @@ router.get('/events/recent', ...readAuth, async (req, res) => {
  */
 router.get('/categories/summary', ...readAuth, async (req, res) => {
     try {
-        const { timeRange = 24 } = req.query;
+        const hours = parseHours(req.query.timeRange, 24);
+        const payload = await getTelegramAnalyticsCached(
+            'categories/summary',
+            { timeRange: hours },
+            async () => {
+                const sql = `
+                    SELECT 
+                        ne.primary_category,
+                        COUNT(*) as message_count,
+                        COUNT(CASE WHEN ne.market_impact_level = 'high' THEN 1 END) as high_impact_count,
+                        COUNT(CASE WHEN ne.market_impact_level = 'medium' THEN 1 END) as medium_impact_count,
+                        COUNT(CASE WHEN ne.market_impact_level = 'low' THEN 1 END) as low_impact_count,
+                        COUNT(CASE WHEN ne.is_breaking = true THEN 1 END) as breaking_count,
+                        AVG(ne.source_reliability) as avg_reliability,
+                        0 as channel_count,
+                        MAX(ne.created_at) as latest_message_at
+                    FROM telegram_news_events ne
+                    WHERE ne.created_at >= NOW() - INTERVAL '1 hour' * $1
+                    GROUP BY ne.primary_category
+                    ORDER BY message_count DESC
+                `;
 
-        const sql = `
-            SELECT 
-                ne.primary_category,
-                COUNT(*) as message_count,
-                COUNT(CASE WHEN ne.market_impact_level = 'high' THEN 1 END) as high_impact_count,
-                COUNT(CASE WHEN ne.market_impact_level = 'medium' THEN 1 END) as medium_impact_count,
-                COUNT(CASE WHEN ne.market_impact_level = 'low' THEN 1 END) as low_impact_count,
-                COUNT(CASE WHEN ne.is_breaking = true THEN 1 END) as breaking_count,
-                AVG(ne.source_reliability) as avg_reliability,
-                COUNT(DISTINCT pm.channel_id) as channel_count,
-                COUNT(DISTINCT ai.agent_key) as affected_agents_count,
-                MAX(pm.created_at) as latest_message_at
-            FROM telegram_news_events ne
-            INNER JOIN processed_telegram_messages pm ON ne.processed_message_id = pm.id
-            LEFT JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
-            WHERE pm.created_at >= NOW() - INTERVAL '${parseInt(timeRange)} hours'
-            GROUP BY ne.primary_category
-            ORDER BY message_count DESC
-        `;
+                const result = await query(sql, [hours]);
 
-        const result = await query(sql);
+                const totalSql = `
+                    SELECT 
+                        COUNT(*) as total_messages,
+                        COUNT(DISTINCT ne.primary_category) as total_channels
+                    FROM telegram_news_events ne
+                    WHERE ne.created_at >= NOW() - INTERVAL '1 hour' * $1
+                `;
 
-        // Get total stats
-        const totalSql = `
-            SELECT 
-                COUNT(DISTINCT pm.id) as total_messages,
-                COUNT(DISTINCT pm.channel_id) as total_channels,
-                COUNT(DISTINCT ai.agent_key) as total_agents_affected
-            FROM processed_telegram_messages pm
-            LEFT JOIN telegram_agent_impacts ai ON pm.id = ai.processed_message_id
-            WHERE pm.created_at >= NOW() - INTERVAL '${parseInt(timeRange)} hours'
-        `;
+                const totalResult = await query(totalSql, [hours]);
 
-        const totalResult = await query(totalSql);
-
-        return res.json({
-            success: true,
-            timeRange: parseInt(timeRange),
-            categories: result.rows,
-            totals: totalResult.rows[0]
-        });
+                return {
+                    success: true,
+                    timeRange: hours,
+                    categories: result.rows,
+                    totals: {
+                        total_messages: String(totalResult.rows[0]?.total_messages ?? 0),
+                        total_channels: String(totalResult.rows[0]?.total_channels ?? 0),
+                        total_agents_affected: '0',
+                    }
+                };
+            },
+            TELEGRAM_CACHE_TTL.categoriesSummary,
+        );
+        return res.json(payload);
 
     } catch (error) {
         logger.error('Error fetching categories summary:', error);

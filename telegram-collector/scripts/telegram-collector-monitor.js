@@ -26,7 +26,7 @@ const { execSync } = require('child_process');
 // =====================================================================
 
 const CONFIG = {
-  collectorBaseUrl: 'http://127.0.0.1:3002',
+  collectorBaseUrl: process.env.COLLECTOR_URL || 'http://127.0.0.1:5003',
   
   // Time thresholds (in minutes)
   staleThresholdMin: parseInt(process.env.STALE_THRESHOLD_MIN || '30'),
