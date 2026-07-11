@@ -121,3 +121,17 @@ export async function upsertAccessControl(
 export async function resetAccessControl(sourceId: string): Promise<void> {
     await aclRequest<{ message: string }>(`/${sourceId}`, { method: 'DELETE' });
 }
+
+export type RegistryAgentOption = {
+    agent_key: string;
+    name: string;
+    runtime?: boolean;
+};
+
+export async function fetchAccessControlRegistryAgents(): Promise<RegistryAgentOption[]> {
+    const { agents } = await aclRequest<{ agents: RegistryAgentOption[] }>('/agents/registry', {
+        method: 'GET',
+    });
+    return agents;
+}
+import { SourceAccessControl } from '../types';

@@ -3,6 +3,7 @@ import {
     fetchAccessControlList,
     upsertAccessControl,
     resetAccessControl,
+    fetchAccessControlRegistryAgents,
     UpsertAccessControlPayload,
 } from '../services/accessControlApi';
 import { DATA_HUB_KEYS } from './useDataHubState';
@@ -10,6 +11,7 @@ import { DATA_HUB_KEYS } from './useDataHubState';
 export const ACCESS_CONTROL_KEYS = {
     all: [...DATA_HUB_KEYS.all, 'accessControl'] as const,
     list: () => [...ACCESS_CONTROL_KEYS.all, 'list'] as const,
+    registryAgents: () => [...ACCESS_CONTROL_KEYS.all, 'registryAgents'] as const,
 };
 
 export function useAccessControlListQuery(options?: { enabled?: boolean }) {
@@ -17,6 +19,15 @@ export function useAccessControlListQuery(options?: { enabled?: boolean }) {
         queryKey: ACCESS_CONTROL_KEYS.list(),
         queryFn: fetchAccessControlList,
         staleTime: 30 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+}
+
+export function useAccessControlRegistryAgentsQuery(options?: { enabled?: boolean }) {
+    return useQuery({
+        queryKey: ACCESS_CONTROL_KEYS.registryAgents(),
+        queryFn: fetchAccessControlRegistryAgents,
+        staleTime: 5 * 60 * 1000,
         enabled: options?.enabled ?? true,
     });
 }
