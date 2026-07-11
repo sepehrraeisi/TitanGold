@@ -161,14 +161,14 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
     return (
         <div className={SHELL}>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                <div>
+                    <div>
                     <h3 className="text-sm md:text-base font-semibold text-foreground flex items-center gap-2">
                         {t('safety_filtering')}
-                    </h3>
+                        </h3>
                     <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
                         {t('safety_filtering_desc')}
-                    </p>
-                </div>
+                        </p>
+                    </div>
                 <button
                     type="button"
                     onClick={() => refetch()}
@@ -196,7 +196,7 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                     <p className="text-[11px] text-amber-300/80 mb-1">{t('filter_metric_keywords')}</p>
                     <p className="text-sm font-semibold text-amber-100">{metrics.keywordRules}</p>
                 </div>
-            </div>
+                </div>
 
             {apiError ? (
                 <div className="mb-4 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
@@ -237,7 +237,7 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                         >
                             {t('filter_rule_add')}
                         </button>
-                    </div>
+                </div>
 
                     {isLoading ? (
                         <p className="text-[11px] text-muted-foreground py-8 text-center">
@@ -255,8 +255,8 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                                       : t('filter_empty_rules')}
                             </p>
                             <p className="text-[11px] mt-1">{t('filter_empty_hint')}</p>
-                        </div>
-                    )}
+                    </div>
+                )}
                 </>
             ) : (
                 <div className="space-y-3 max-w-xl">
@@ -327,15 +327,15 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                                     {evaluateMut.data.matched_rules[0]?.pattern}
                                 </p>
                             ) : null}
-                        </div>
+                                    </div>
                     ) : null}
                     {evaluateMut.error instanceof DataHubApiError ? (
                         <p className="text-[11px] text-red-300">
                             {formatApiErrorForUi(t, evaluateMut.error.message)}
                         </p>
                     ) : null}
-                </div>
-            )}
+                    </div>
+                )}
 
             {modalRule !== undefined ? (
                 <FilterRuleModal
@@ -355,7 +355,7 @@ const BlacklistWhitelist: React.FC<BlacklistWhitelistProps> = ({ t }) => {
                     t={t}
                 />
             ) : null}
-        </div>
+            </div>
     );
 };
 
