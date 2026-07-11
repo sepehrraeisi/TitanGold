@@ -206,24 +206,83 @@ No heavy pipeline queries on Publisher page.
 | Active publishers with token | 2 |
 | Mappings enabled | 6 |
 | History `dry_run` | 71 |
-| History `sent` (last live) | 2 — last `2026-05-30` |
+| History `sent` (last live) | 3 — last **`2026-07-09`** (P2 live test) |
 | History `failed` | 1 |
 | History `blocked` | 1 |
 
 ---
 
+## P2 — Controlled Live Test (2026-07-09)
+
+**Task:** `DH-TELEGRAM-PUBLISHER-P2-CONTROLLED-LIVE-ENABLE-TEST`
+
+### Pre-live checklist — all pass
+
+| Check | Result |
+|-------|--------|
+| Active publisher + bot token | `887495e6-…` — `has_token: true` |
+| Channel active | `104595348` |
+| Mapping BBCPersian enabled | `d51d05a4-748a-4459-8a30-f132ef8d3e81` |
+| ACL allows `publisher` | No block (default allow) |
+| Dry-run test works | `dry_run: true`, history recorded |
+| `api.telegram.org` reachable | HTTP 200 from backend |
+
+### Env before / after
+
+| Phase | `TELEGRAM_PUBLISHER_DRY_RUN` | `dry_run_forced` (API) |
+|-------|------------------------------|------------------------|
+| Before P2 live | `true` | `true` |
+| During live test | `false` | `false` |
+| After rollback (Option A) | `true` | `true` |
+
+**Rollback decision:** **Option A** — restored `TELEGRAM_PUBLISHER_DRY_RUN=true` and `pm2 restart titan-backend --update-env`. Live remains disabled by default until operator explicitly re-enables.
+
+### Live test (exactly one message)
+
+| Field | Value |
+|-------|-------|
+| Timestamp | `2026-07-09T20:59:55.037Z` |
+| Message | `TitanGold Telegram Publisher live test — 2026-07-09T20:59:55.037Z` |
+| Publisher | `887495e6-0b47-4450-88ef-35dd43477f9a` (تایتان تست) |
+| Source | BBCPersian (mapped, no temporary bypass) |
+| `confirm_publish` | `true` |
+| API response | `200`, `success: true`, `dry_run: false`, `status: sent` |
+| `telegram_message_id` | **`205`** (Telegram Bot API accepted message) |
+| `history_id` | `5bbe54b7-0c74-4e42-8363-a6b4f1a95e39` |
+| `delivery_mode` (metadata) | `live` |
+| Duplicate sends | **None** — single controlled publish |
+
+### P2 browser evidence
+
+**Script:** `backend/scripts/telegram-publisher-p2-live-browser-verify.mjs`  
+**Evidence:** `docs/ssot_v3/screenshots/telegram-publisher-p2-live-evidence.json`
+
+| Screenshot | Content |
+|------------|---------|
+| `telegram-publisher-p2-live-overview.png` | Dry-run banner restored post-rollback |
+| `telegram-publisher-p2-live-history.png` | History row with live test message + `sent` |
+
+Post-rollback browser QA: **pass** (`browserQaPass: true`)
+
+### Scope honored
+
+- Telegram Collector — **not touched**
+- Notifications — **not touched**
+- Automation Routing — **not touched**
+- ACL / filter / mapping — **enforced** (BBCPersian mapped source)
+- Bot token / chat ID — **not exposed** in evidence
+
+---
+
 ## Final verdict
 
-**REAL WORKING / CLOSED**
+**REAL WORKING LIVE VERIFIED**
 
-- Dry-run test and publish **work** end-to-end
-- Delivery history **matches** behavior (no fake `telegram_message_id`)
-- Live send **explicitly disabled** by `TELEGRAM_PUBLISHER_DRY_RUN=true` with **clear UI banner**
-- Failure reason **known** (production safety gate, not Notifications/Collector regression)
-- No Telegram secret leak
-- Notifications, Collector, Automation, Pipeline **not broken** by Publisher path
+- P1: Dry-run path operational; safety gate documented
+- P2: **One live Telegram message delivered** (`telegram_message_id: 205`)
+- Delivery history **matches** live behavior (`status: sent`, `delivery_mode: live`)
+- Post-test rollback to **`TELEGRAM_PUBLISHER_DRY_RUN=true`** (Option A)
+- No Telegram secret leak; no Collector/Notifications/Automation regression
 - Browser QA and backend tests **pass**
 
-**Operational note for live sends:** set `TELEGRAM_PUBLISHER_DRY_RUN=false` and ensure per-source ACL allows `publisher` agent.
-
-No blind code fix required in P1 — behavior matches configured safety policy.
+**Operational note:** Re-enable live Publisher sends only by setting `TELEGRAM_PUBLISHER_DRY_RUN=false` in `backend/ecosystem.config.json` and restarting `titan-backend` with operator approval.

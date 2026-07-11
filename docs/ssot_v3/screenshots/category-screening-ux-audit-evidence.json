@@ -1,0 +1,135 @@
+{
+  "capturedAt": "2026-06-30T13:01:36.350Z",
+  "environment": "production DB read-only",
+  "pipeline_fast": {
+    "ms": 2713,
+    "categoriesLen": 0,
+    "sourcesLen": 57,
+    "payloadBytes": 16446,
+    "snapshotBytes": 16319
+  },
+  "pipeline_with_screening": {
+    "ms": 151746,
+    "categories": [
+      {
+        "categoryId": "abdb8012-c5e4-4b58-859b-6289ea3a0d95",
+        "name": "announcements",
+        "inflow": 0,
+        "passRate": 100
+      },
+      {
+        "categoryId": "a7746fe9-98fd-4e2e-96f2-3962ce28109d",
+        "name": "news",
+        "inflow": 58,
+        "passRate": 100
+      },
+      {
+        "categoryId": "d9e1d5cf-40d7-48e7-8134-b6778cb1930b",
+        "name": "signals",
+        "inflow": 154208,
+        "passRate": 99.8
+      },
+      {
+        "categoryId": "48d28eb1-ef6a-4166-9c39-f9f541de4db5",
+        "name": "uncategorized",
+        "inflow": 5,
+        "passRate": 100
+      }
+    ],
+    "categoriesLen": 4,
+    "payloadBytes": 16849,
+    "snapshotBytes": 16722,
+    "categoriesBytes": 405,
+    "incrementalPayloadBytes": 403,
+    "incrementalSnapshotBytes": 403
+  },
+  "api_response_example": {
+    "endpoint": "GET /api/v1/data-sources/pipeline?includeBacklog=false&includeCategoryScreening=true",
+    "snapshot_categories_only": [
+      {
+        "categoryId": "abdb8012-c5e4-4b58-859b-6289ea3a0d95",
+        "name": "announcements",
+        "inflow": 0,
+        "passRate": 100
+      },
+      {
+        "categoryId": "a7746fe9-98fd-4e2e-96f2-3962ce28109d",
+        "name": "news",
+        "inflow": 58,
+        "passRate": 100
+      },
+      {
+        "categoryId": "d9e1d5cf-40d7-48e7-8134-b6778cb1930b",
+        "name": "signals",
+        "inflow": 154208,
+        "passRate": 99.8
+      },
+      {
+        "categoryId": "48d28eb1-ef6a-4166-9c39-f9f541de4db5",
+        "name": "uncategorized",
+        "inflow": 5,
+        "passRate": 100
+      }
+    ],
+    "full_view_keys": [
+      "snapshot",
+      "history",
+      "normalizationSummary",
+      "normalizedData",
+      "duplicateAnalysis"
+    ]
+  },
+  "category_sql_isolated": {
+    "ms": 115362,
+    "rows": [
+      {
+        "category_id": "abdb8012-c5e4-4b58-859b-6289ea3a0d95",
+        "name": "announcements",
+        "inflow": 0,
+        "passed_count": 0
+      },
+      {
+        "category_id": "a7746fe9-98fd-4e2e-96f2-3962ce28109d",
+        "name": "news",
+        "inflow": 58,
+        "passed_count": 58
+      },
+      {
+        "category_id": "d9e1d5cf-40d7-48e7-8134-b6778cb1930b",
+        "name": "signals",
+        "inflow": 154308,
+        "passed_count": 153955
+      },
+      {
+        "category_id": "48d28eb1-ef6a-4166-9c39-f9f541de4db5",
+        "name": "uncategorized",
+        "inflow": 5,
+        "passed_count": 5
+      }
+    ]
+  },
+  "duplication_analysis": {
+    "pipeline_total_records_estimate": 4334654,
+    "category_inflow_sum": 154271,
+    "category_passed_sum": 153963,
+    "pipeline_normalized_percent": 0,
+    "signals_dominates": 154208
+  },
+  "refresh_frequency": {
+    "default_pipeline_query": "on tab open + manual Refresh Pipeline",
+    "category_screening_query": "on-demand only after Load detailed screening click",
+    "react_query_stale_time_category": "5 minutes cache after first load",
+    "react_query_stale_time_pipeline": "30 seconds"
+  },
+  "errors_by_category_24h": {
+    "ms": 95299,
+    "rows": [
+      { "category": "signals", "errors": 253, "pending": 0, "processed": 154245 },
+      { "category": "news", "errors": 0, "pending": 0, "processed": 58 },
+      { "category": "uncategorized", "errors": 0, "pending": 0, "processed": 5 }
+    ]
+  },
+  "verdict": "REPLACE",
+  "recommended_option": "OPTION_B",
+  "audit_doc": "docs/ssot_v3/DH-DATA-PIPELINE-CATEGORY-SCREENING-UX-AUDIT.md"
+}

@@ -1,6 +1,6 @@
 # DH-DATA-ARCHIVING-P2 — Functional Fix, Safety Redesign
 
-Date: 2026-06-28 (Human QA polish: 2026-06-28)  
+Date: 2026-06-28 (Human QA round 2 rejection + deploy fix: 2026-06-28)  
 Task: `DH-DATA-ARCHIVING-P2-FUNCTIONAL-FIX-SAFETY-REDESIGN`  
 Branch: `feat/gap-008-sources-backend-wiring`  
 P1 reference: [`DH-DATA-ARCHIVING-P1-COMPREHENSIVE-RCA.md`](./DH-DATA-ARCHIVING-P1-COMPREHENSIVE-RCA.md)  
@@ -10,35 +10,76 @@ Design reference: [`DESIGN_SYSTEM_DATAHUB.md`](../../DESIGN_SYSTEM_DATAHUB.md)
 
 ## Final Verdict
 
-### **FUNCTIONAL + REDESIGNED + SAFE PREVIEW**
+### **PARTIAL — P2 rejected by Human QA (round 2); stale deploy fixed; automated production verify PASS; awaiting Human QA re-run**
 
-Human QA round 2 defects addressed (see below). Interim status was **PARTIAL** until restore explanations, partition fallback, and operation i18n were fixed.
+Do **not** claim **FUNCTIONAL + REDESIGNED + SAFE PREVIEW** until a human re-runs QA on `https://titan.zala.ir` after hard refresh.
 
 | Layer | Assessment |
 |-------|------------|
 | Backend API + SQL | **Functional** — enriched health/partition/operation metadata; migration 043 applied |
-| UI/UX | **Redesigned** — design-system layout; friendly labels; explicit restore block reasons |
+| UI source code | **Redesigned** — P2 component + label mapping in repo |
+| Production UI (nginx/dist) | **Fixed 2026-06-28** — was serving stale pre-P2 bundle; rebuild deployed |
 | Safety | **Hardened** — RBAC on preview POST; confirm gates; batch limit; advisory lock; restore duplicate guard |
-| Archive/restore apply | **Not verified on production data** — dry-run/preview only in runtime verification |
-| Scheduler | **Manual only** — no dedicated archive worker; maintenance may run if enabled (GAP-033) |
+| Archive/restore apply | **Not verified on production data** — dry-run/preview only |
+| Scheduler | **Manual only** — no dedicated archive worker |
 
 ---
 
-## Human QA Round 2 — Fixes
+## Human QA Round 2 — Rejection
+
+**Date:** 2026-06-28  
+**Result:** **REJECTED / PARTIAL**
+
+### Symptoms reported
+
+| Symptom | Observed by QA |
+|---------|----------------|
+| Raw partition names | `ai_decisions_archive_2024`, `_2025`, `_2026` |
+| Raw operation enums | `preview_purge`, `preview_archive`, `preview_restore` |
+| Restore panel | Disabled with no empty-state explanation |
+| Partitions | Raw DB table names instead of friendly labels |
+| Operations | Raw enum values instead of translated labels |
+| Status card | Only em dash (`—`) |
+
+### Root cause (confirmed)
+
+**Stale production frontend bundle — not wrong component, not missing i18n keys, not backend mapping failure.**
+
+| Factor | Finding |
+|--------|---------|
+| nginx root | `/home/ubuntu/webapp/TitanGold/dist` (serves static production build) |
+| pm2 `titan-frontend` | `npm run dev` on `:3000` — had P2 source code but **not** what Human QA saw on HTTPS |
+| Pre-fix dist chunk | `DataHubTab-CUO28e3n.js` (Jun 27 ~17:03) — contained `archiving_desc_v3`, **no** P2 keys |
+| Post-fix dist chunk | `DataHubTab-BYziE4XX.js` (Jun 28 10:43:40 UTC) — contains `archiving_explanation_p2`, `archiving_restore_empty` |
+| Duplicate components | **None** — single `Archiving.tsx` wired via `AdvancedFeatures.tsx` |
+| Backend API | Always returned friendly `label` / `operation_label` / `status_code` — frontend stale bundle ignored mapping |
+
+Evidence: [`archiving-p2-deploy-evidence.json`](./screenshots/archiving-p2-deploy-evidence.json)
+
+### Fix applied
+
+1. `npm run build` — rebuilt `dist/` with P2 bundle hashes
+2. nginx serves updated files immediately (same root path; no pm2 frontend restart required for HTTPS users)
+3. Frontend hardening: `mapHealthCodeFromApi()` for status card when legacy `status` string present; restore empty copy expanded
+4. Label mapping enforced client-side regardless of backend (`normalizePartition`, `operationLabel`, `isRawArchivingLabel`)
+
+---
+
+## Human QA Round 1 — Fixes (code, pre-deploy)
 
 | Defect | Root cause | Fix |
 |--------|------------|-----|
-| Restore panel silently disabled | `archived_records === 0` + missing dates combined with no explanation | `getRestoreBlockReason()` — explicit messages: empty archive, RBAC, or select dates; empty state hides controls when no archived rows |
-| Partitions table empty | Client relied on stats-only; legacy rows without `label`/`year` rendered blank | `normalizePartition()` fallback from `partition_name`; `useArchivePartitionsQuery` when stats partitions empty; backend preserves `partition_name` |
-| Raw operation enums in UI | `operationLabel()` returned backend `operation_label` or fell back to `operation_type` | Always resolve via i18n from `operation_type`; legacy types (`archive_old_decisions`, `restore_from_archive`) mapped |
-| Restore UX generic inputs | `datetime-local` without design-system styling | `type="date"` + `INPUT_CLASS`; From/To labels; helper text; emerald panel styling |
-| Confusing disabled controls | Tooltip-only RBAC gate | Inline `DataHubAlert` + visible reason text on every blocked restore state |
+| Restore panel silently disabled | `archived_records === 0` + missing dates combined with no explanation | `getRestoreBlockReason()` — explicit messages; empty state hides controls when no archived rows |
+| Partitions table empty | Client relied on stats-only; legacy rows without `label`/`year` rendered blank | `normalizePartition()` fallback; `useArchivePartitionsQuery` when stats partitions empty |
+| Raw operation enums in UI | `operationLabel()` returned backend `operation_label` or fell back to `operation_type` | Always resolve via i18n from `operation_type` |
+| Restore UX generic inputs | `datetime-local` without design-system styling | `type="date"` + `INPUT_CLASS`; emerald panel styling |
+| Confusing disabled controls | Tooltip-only RBAC gate | Inline `DataHubAlert` + visible reason text |
 
 ### Restore block reasons (UI)
 
 | Condition | User-visible message |
 |-----------|---------------------|
-| `archived_records === 0` | "No archived decisions are available yet." — empty state, no date inputs |
+| `archived_records === 0` | "No archived decisions are available yet. Archive decisions first before restoring." — empty state, no date inputs, buttons hidden |
 | Read-only user | "Restore requires administrator or trader permission." |
 | Dates missing/invalid | "Select an archive date range." |
 
@@ -52,7 +93,7 @@ Human QA round 2 defects addressed (see below). Interim status was **PARTIAL** u
 | `restore` / `restore_from_archive` | Restore Completed |
 | `preview_purge` | Purge Preview |
 
-Dry-run badge shown separately via `archiving_dry_run_badge`.
+Dry-run badge: `Dry run` via `archiving_dry_run_badge`. Status badge: `Success` / `Failed`.
 
 ---
 
@@ -64,59 +105,34 @@ Key findings carried into P2:
 
 - Scope limited to `ai_decisions` → `ai_decisions_archive` (not Pipeline/Telegram/Automation).
 - GET endpoints worked; stats accurate (12 active, 0 archived, 4 pending).
-- UI exposed raw partition names (`ai_decisions_archive_2024`) and operation enums (`preview_purge`).
-- `list_archive_partitions()` parsed duplicate/wrong end dates.
-- Apply/restore required confirmation but preview POST was not RBAC-gated in UI.
+- UI exposed raw partition names and operation enums when stale bundle rendered.
+- `list_archive_partitions()` parsed duplicate/wrong end dates — fixed in migration 043.
 - Purge is count-only — no delete in v3.0.
-- No dedicated archive cron/worker; `maintenanceService` may call `archive_old_decisions(90)`.
 
 ---
 
-## P2 Fixes
+## P2 Fixes (implementation)
 
 ### Functional
 
 | Item | Fix |
 |------|-----|
-| Partition labels | `Archive 2024/2025/2026` via `enrichPartitionRow()` — raw table names not returned to UI |
-| Operation labels | `Archive preview`, `Archive applied`, `Restore preview`, `Restore applied`, `Purge preview` |
-| Health status | Stable codes: `healthy`, `warning_stale_archive`, `warning_pending`, `no_archives`, `error` |
-| SQL messages | `status_message` kept server-side; UI uses `status_code` + i18n |
-| Partition dates | Migration 043 fixes `list_archive_partitions()` FROM/TO regex parsing |
+| Partition labels | `Archive 2024/2025/2026` via backend enrich + frontend `normalizePartition()` fallback |
+| Operation labels | i18n from `operation_type` — never render raw enum |
+| Health status | Stable codes + i18n; frontend `mapHealthCodeFromApi()` fallback |
+| Partition dates | Migration 043 fixes `list_archive_partitions()` parsing |
 
 ### Safety hardening
 
 | Control | Implementation |
 |---------|----------------|
-| Preview RBAC | `writeAuth` on all preview POST routes; UI `dataHubWriteGate` disables buttons + tooltip |
-| Apply archive | Requires `confirm_archive: true` — 400 `CONFIRM_ARCHIVE_REQUIRED` without it |
-| Apply restore | Requires `confirm_restore: true` — 400 `CONFIRM_RESTORE_REQUIRED` without it |
-| Batch limit | `archive_old_decisions(days, max_rows)` — default 1000 via service (`ARCHIVE_MAX_ROWS`) |
-| Concurrency | `pg_try_advisory_lock(90324001)` — 409 `ARCHIVE_IN_PROGRESS` |
-| Restore duplicates | SQL guard raises `RESTORE_DUPLICATE_CONFLICT` before move |
-| Purge | Count-only; `purge_apply_available: false` in API response |
-
-### Scheduler clarity
-
-UI copy (P2 i18n):
-
-- **Manual only** — archive jobs from this panel or ops maintenance.
-- **Maintenance scheduler** may run archive jobs if enabled (no dedicated worker in v3.0).
-- GAP-033 remains open for dedicated archive worker.
-
-### UI/UX redesign
-
-`Archiving.tsx` rebuilt per design system:
-
-- Explanation card (scope: AI decisions only)
-- Lifecycle flow strip
-- Metric cards: Active, Archived, Pending, Last run, Status
-- Archive panel: threshold slider, dry-run, apply with confirm modal, safety note
-- Restore panel: date range, validation, dry-run, confirm restore
-- Purge panel: count-only badge + non-destructive copy
-- Partitions table: friendly labels, year, rows, size, date range
-- Recent operations: translated labels + status badges
-- Empty states for no archives, no operations, no pending
+| Preview RBAC | `writeAuth` on preview POST; UI `dataHubWriteGate` |
+| Apply archive | `confirm_archive: true` required |
+| Apply restore | `confirm_restore: true` required |
+| Batch limit | 1000 rows default |
+| Concurrency | Advisory lock 90324001 |
+| Restore duplicates | SQL guard `RESTORE_DUPLICATE_CONFLICT` |
+| Purge | Count-only; `purge_apply_available: false` |
 
 ---
 
@@ -126,72 +142,67 @@ UI copy (P2 i18n):
 |-------|------|--------|
 | Backend unit | `backend/__tests__/unit/datahubArchivingP2.test.js` | 11 passed |
 | Frontend i18n | `src/__tests__/archivingRoutingI18n.test.ts` | 14 passed |
-| Human QA regressions | `src/__tests__/archivingHumanQa.test.ts` | 8 passed |
-
-Coverage includes: health codes, partition enrich + fallback, operation labels (no raw enum), restore block reasons, confirm gates, purge count-only, RBAC route contract.
+| Human QA regressions | `src/__tests__/archivingHumanQa.test.ts` | 9 passed |
 
 ---
 
-## Runtime Verification (Safe — No Apply)
+## API Verification (post-fix, via nginx + backend direct)
 
-Script: `backend/scripts/archiving-p2-runtime-verify.mjs`  
-Evidence: `docs/ssot_v3/screenshots/archiving-p2-runtime.json`
+Both paths return enriched labels (backend unchanged; confirms QA issue was frontend bundle):
 
-| Endpoint | Status | Latency |
-|----------|--------|---------|
-| GET `/stats` | 200 | 233 ms |
-| GET `/health` | 200 | 54 ms |
-| GET `/partitions` | 200 | 27 ms |
-| GET `/records` | 200 | 15 ms |
-| GET `/operations` | 200 | 75 ms |
+| Endpoint | nginx `titan.zala.ir` | backend `:5002` |
+|----------|----------------------|-----------------|
+| GET `/stats` | 200 | 200 |
+| GET `/partitions` | 200 | 200 |
+| GET `/operations` | 200 | 200 |
 
-| Safety check | Result |
-|--------------|--------|
-| POST archive without confirm | 400 `CONFIRM_ARCHIVE_REQUIRED` |
-| POST purge preview | 200 count-only, `purge_apply_available: false` |
-| Destructive apply executed | **No** |
-| Partition labels in API | `Archive 2024`, `Archive 2025`, `Archive 2026` |
-| Health code | `warning_stale_archive` |
+Sample `/stats` response (nginx, 2026-06-28):
 
-All GET endpoints under **500 ms** target.
+- `health.status_code`: `warning_stale_archive`
+- `health.records_pending_archive`: `4`
+- `partitions[].label`: `Archive 2024`, `Archive 2025`, `Archive 2026`
+- `recent_operations[].operation_label`: `Purge preview`, `Archive preview`, etc.
+- Raw `partition_name` / `operation_type` present in JSON but **must not** appear in UI (frontend maps them)
 
 ---
 
-## Browser Evidence
+## Browser Evidence (post-rebuild)
 
-Script: `backend/scripts/archiving-p2-browser-verify.mjs`  
-Evidence: `docs/ssot_v3/screenshots/archiving-p2-browser-evidence.json`
+Scripts: `backend/scripts/archiving-p2-browser-verify.mjs`  
+Run production: `APP=https://titan.zala.ir EVIDENCE_FILE=archiving-p2-production-evidence.json node scripts/archiving-p2-browser-verify.mjs`
 
-Screenshots:
+| Evidence file | URL |
+|---------------|-----|
+| Local dev | [`archiving-p2-browser-evidence.json`](./screenshots/archiving-p2-browser-evidence.json) |
+| Production | [`archiving-p2-production-evidence.json`](./screenshots/archiving-p2-production-evidence.json) |
+| Deploy/build | [`archiving-p2-deploy-evidence.json`](./screenshots/archiving-p2-deploy-evidence.json) |
 
-- `archiving-p2-overview.png`
-- `archiving-p2-partitions.png`
-- `archiving-p2-operations.png`
+Screenshots (refreshed 2026-06-28): `archiving-p2-overview.png`, `archiving-p2-partitions.png`, `archiving-p2-operations.png`
 
-| Check | Result |
-|-------|--------|
-| Raw partition names in body | **None** |
+| Check | Production (`titan.zala.ir`) |
+|-------|------------------------------|
+| Raw partition names in body | **None** (`forbiddenInBody: []`) |
 | Raw operation enums in body | **None** |
-| Archive 2024/2025/2026 visible | **Yes** (`hasArchive2024: true`) |
+| Archive 2024/2025/2026 visible | **Yes** |
 | Restore empty-state copy | **Yes** (when `archived_records === 0`) |
-| `preview_purge` visible | **No** |
-| `Not Found` on archiving panel | **No** |
+| `preview_*` visible | **No** |
 | Archiving network 200 | **Yes** (`/stats`, `/records`) |
-| Console (archiving-specific) | Clean — unrelated MEXC ticker 404s from Header |
+| Console (archiving-specific) | Clean — unrelated MEXC/WS noise from Header |
 
 ---
 
-## Performance
+## Build / Deploy Evidence
 
-| Endpoint | P2 measured |
-|----------|-------------|
-| `/stats` | 233–414 ms |
-| `/health` | 54–88 ms |
-| `/partitions` | 27–181 ms |
-| `/records` | 15–75 ms |
-| `/operations` | 44–75 ms |
-
-Target: GET &lt; 500 ms — **met**.
+| Item | Value |
+|------|-------|
+| Build command | `npm run build` (2026-06-28 10:43 UTC) |
+| Old chunk | `DataHubTab-CUO28e3n.js` |
+| New chunk | `DataHubTab-BYziE4XX.js` |
+| `index.html` main | `index-C3OCpwrE.js` |
+| nginx root | `/home/ubuntu/webapp/TitanGold/dist` |
+| Asset Last-Modified | `Sun, 28 Jun 2026 10:43:40 GMT` |
+| pm2 backend reload | Not required (backend unchanged in this fix) |
+| **Required after frontend changes** | **`npm run build`** — HTTPS users do not use dev server |
 
 ---
 
@@ -199,12 +210,11 @@ Target: GET &lt; 500 ms — **met**.
 
 | Item | Status |
 |------|--------|
-| Migration 043 applied | Yes — recorded in `pgmigrations` |
-| `pm2 reload titan-backend` | Yes |
-| `pm2 reload titan-frontend` | Yes |
-| Archive worker started | **No** — not in pm2 list |
-| Destructive cron scheduled | **No** — manual/maintenance only |
-| Backend logs (archiving) | Clean on GET/preview paths |
+| Migration 043 applied | Yes |
+| `npm run build` (dist) | Yes — 2026-06-28 |
+| `pm2 reload titan-backend` | Not needed for this fix |
+| `pm2 titan-frontend` (dev) | Separate from production HTTPS path |
+| Archive worker | **No** — manual/maintenance only |
 
 ---
 
@@ -216,15 +226,18 @@ Target: GET &lt; 500 ms — **met**.
 | Backend service | `backend/services/datahubArchivingService.js` |
 | Migration | `backend/database/migrations/043_datahub_archiving_p2_safety.sql` |
 | Frontend UI | `components/.../Archiving.tsx`, `archiving/archivingLabels.ts` |
-| API types | `services/dataHubArchivingApi.ts` |
 | i18n | `deploy/blue|green/locales/en.json`, `fa.json` |
-| Tests | `backend/__tests__/unit/datahubArchivingP2.test.js`, `src/__tests__/archivingRoutingI18n.test.ts`, `src/__tests__/archivingHumanQa.test.ts` |
+| Tests | `backend/__tests__/unit/datahubArchivingP2.test.js`, `src/__tests__/archiving*.test.ts` |
 | Verify scripts | `backend/scripts/archiving-p2-*.mjs` |
 
-**Out of scope (unchanged):** `collected_data`, Pipeline, Telegram, Automation.
+**Out of scope:** `collected_data`, Pipeline, Telegram, Automation.
 
 ---
 
 ## Closing
 
-Data Archiving P2 delivers a **design-system-compliant**, **RBAC-aware**, **safety-hardened** workflow with **verified dry-run preview** behavior. Archive/restore **apply** was not executed on production data in this phase; verdict is **FUNCTIONAL + REDESIGNED + SAFE PREVIEW**, not REAL WORKING for apply paths.
+Human QA round 2 rejection was caused by **stale `dist/` production bundle**, not missing P2 code. After `npm run build`, automated browser verification on **`https://titan.zala.ir`** passes all label/empty-state checks.
+
+**Current verdict: PARTIAL / P2 rejected (pending Human QA re-run on production after hard refresh).**
+
+Archive/restore **apply** was not executed on production data; do not claim REAL WORKING for apply paths.

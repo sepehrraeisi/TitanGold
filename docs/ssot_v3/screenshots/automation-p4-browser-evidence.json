@@ -1,35 +1,35 @@
 {
-  "capturedAt": "2026-06-27T16:08:11.818Z",
+  "capturedAt": "2026-06-27T17:01:48.253Z",
   "network": [
     {
       "path": "/api/v1/data-hub/automation/overview",
       "method": "GET",
       "status": 200,
-      "ms": 86
+      "ms": 144
     },
     {
       "path": "/api/v1/data-hub/automation/topics",
       "method": "GET",
       "status": 200,
-      "ms": 20
+      "ms": 41
     },
     {
       "path": "/api/v1/data-hub/automation/queue",
       "method": "GET",
       "status": 200,
-      "ms": 14
+      "ms": 26
     },
     {
       "path": "/api/v1/data-hub/automation/executions?limit=20",
       "method": "GET",
       "status": 200,
-      "ms": 18
+      "ms": 31
     },
     {
       "path": "/api/v1/data-hub/automation/queue/refresh",
       "method": "POST",
       "status": 200,
-      "ms": 146
+      "ms": 2764
     }
   ],
   "networkAll200": true,
@@ -38,15 +38,15 @@
     "enabledTopics": 3,
     "validTopics": 3,
     "invalidTopics": 0,
-    "queueSize": 9,
-    "avgPassRate": 45,
-    "lastDryRunAt": "2026-06-27T16:08:11.762Z",
+    "queueSize": 4,
+    "avgPassRate": 47,
+    "lastDryRunAt": "2026-06-27T17:01:48.151Z",
     "lastBlockedReason": "No enabled source→publisher mapping exists. Create a mapping in Telegram Publisher before routing."
   },
   "health": {
     "banner": "healthy",
     "label": "Ready to dispatch",
-    "message": "9 item(s) pending. Use dry-run dispatch to preview delivery without sending live Telegram messages."
+    "message": "4 item(s) pending. Use dry-run dispatch to preview delivery without sending live Telegram messages."
   },
   "topics": [
     {
@@ -89,27 +89,9 @@
       }
     }
   ],
-  "queueCount": 9,
+  "queueCount": 4,
   "rawKeys": [],
   "consoleErrors": [],
   "screenshots": [],
-  "mcpBrowserVerified": {
-    "method": "cursor-ide-browser",
-    "user": "p4verify2@test.local",
-    "at": "2026-06-27T16:01:00Z",
-    "ui": {
-      "validTopics": "3",
-      "invalidTopics": "0",
-      "queueSize": "9",
-      "agentTopics": "3",
-      "dryRunToggle": true,
-      "healthLabel": "Ready to dispatch",
-      "hasDeliveryHistory": true,
-      "hasAutomationEventRecorded": true,
-      "notFound": false,
-      "rawKeys": []
-    },
-    "note": "Interactive browser session on localhost:3000/?view=ai → Data Hub → Advanced Features → Automation Routing"
-  },
   "playwrightError": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'Manager' })\n"
 }

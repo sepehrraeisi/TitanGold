@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-06-28T11:58:14.813Z",
-  "test_run_id": "161ee5b7-7d9a-4a95-a4c6-fedbc9a67cc0",
+  "capturedAt": "2026-06-28T12:38:34.333Z",
+  "test_run_id": "fee2c0f9-72b0-4e2f-b6c8-cb08e2847671",
   "fixture_source": "DH_DATA_ARCHIVING_P3_FIXTURE",
   "fixture_created_by": "archiving_p3_verify",
   "success": true,
@@ -146,19 +146,19 @@
     }
   },
   "fixture": {
-    "fixture_id": "be283053-81e1-4f18-bf2d-f19a28604d70",
-    "test_run_id": "161ee5b7-7d9a-4a95-a4c6-fedbc9a67cc0",
-    "created_at": "2026-02-28T11:58:14.929Z",
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3",
+    "test_run_id": "fee2c0f9-72b0-4e2f-b6c8-cb08e2847671",
+    "created_at": "2026-02-28T12:38:34.991Z",
     "metadata": {
       "source": "DH_DATA_ARCHIVING_P3_FIXTURE",
-      "test_run_id": "161ee5b7-7d9a-4a95-a4c6-fedbc9a67cc0",
+      "test_run_id": "fee2c0f9-72b0-4e2f-b6c8-cb08e2847671",
       "created_by": "archiving_p3_verify",
       "p3_fixture": true,
       "note": "Safe P3 archive/restore verification — not production trading data"
     },
     "input_data": {
       "fixture": true,
-      "test_run_id": "161ee5b7-7d9a-4a95-a4c6-fedbc9a67cc0",
+      "test_run_id": "fee2c0f9-72b0-4e2f-b6c8-cb08e2847671",
       "harmless": true
     },
     "output_data": {
@@ -171,19 +171,19 @@
     "days_old": 90,
     "pending_count": 5,
     "oldest_date": "2026-02-10T14:52:45.710Z",
-    "newest_date": "2026-02-28T11:58:14.929Z",
-    "cutoff_date": "2026-03-30T11:58:14.956Z",
+    "newest_date": "2026-02-28T12:38:34.991Z",
+    "cutoff_date": "2026-03-30T12:38:35.154Z",
     "fixture_in_preview": true,
     "fixture_already_archived": false,
-    "fixture_id": "be283053-81e1-4f18-bf2d-f19a28604d70"
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3"
   },
   "archive_apply": {
-    "operation_id": "8c658880-f7dd-49bf-b447-3e605787a873",
+    "operation_id": "806fb5e3-9ff1-48cc-b99e-e119ed54bd24",
     "records_archived": 1,
-    "fixture_id": "be283053-81e1-4f18-bf2d-f19a28604d70",
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3",
     "archive_partition_year": 2026,
-    "archived_at": "2026-06-28T11:58:14.970Z",
-    "created_at": "2026-02-28T11:58:14.929Z",
+    "archived_at": "2026-06-28T12:38:35.193Z",
+    "created_at": "2026-02-28T12:38:34.991Z",
     "movement_check": {
       "ok": true,
       "phase": "archive",
@@ -221,32 +221,32 @@
     },
     "partition": {
       "partition_name": "ai_decisions_archive_2026",
-      "archived_at": "2026-06-28T11:58:14.970Z",
+      "archived_at": "2026-06-28T12:38:35.193Z",
       "label": "Archive 2026"
     }
   },
   "restore_dry_run": {
     "dry_run": true,
-    "start_date": "2026-02-28T10:58:14.929Z",
-    "end_date": "2026-02-28T12:58:14.929Z",
+    "start_date": "2026-02-28T11:38:34.991Z",
+    "end_date": "2026-02-28T13:38:34.991Z",
     "pending_count": 1,
-    "oldest_date": "2026-02-28T11:58:14.929Z",
-    "newest_date": "2026-02-28T11:58:14.929Z",
-    "fixture_id": "be283053-81e1-4f18-bf2d-f19a28604d70",
+    "oldest_date": "2026-02-28T12:38:34.991Z",
+    "newest_date": "2026-02-28T12:38:34.991Z",
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3",
     "restore_window": {
-      "start_date": "2026-02-28T10:58:14.929Z",
-      "end_date": "2026-02-28T12:58:14.929Z"
+      "start_date": "2026-02-28T11:38:34.991Z",
+      "end_date": "2026-02-28T13:38:34.991Z"
     },
     "fixture_in_archive_before_restore": true,
     "fixture_in_active_before_restore": false,
     "fixture_in_preview": true
   },
   "restore_apply": {
-    "operation_id": "baac7ccd-a87e-4ec8-9910-3d9447bad30e",
+    "operation_id": "aaab9ce6-4a88-4afc-a940-2410838587e4",
     "records_restored": 1,
-    "fixture_id": "be283053-81e1-4f18-bf2d-f19a28604d70",
-    "restored_created_at": "2026-02-28T11:58:14.929Z",
-    "original_created_at": "2026-02-28T11:58:14.929Z",
+    "fixture_id": "04fef214-5ef5-4054-8574-8878705ba6b3",
+    "restored_created_at": "2026-02-28T12:38:34.991Z",
+    "original_created_at": "2026-02-28T12:38:34.991Z",
     "movement_check": {
       "ok": true,
       "phase": "restore",
@@ -286,14 +286,14 @@
       "input_matches": true,
       "output_matches": true,
       "metadata_matches": true,
-      "created_at": "2026-02-28T11:58:14.929Z"
+      "created_at": "2026-02-28T12:38:34.991Z"
     }
   },
   "cleanup": {
     "removed_active": 1,
     "removed_archived": 0,
     "removed_ids": [
-      "be283053-81e1-4f18-bf2d-f19a28604d70"
+      "04fef214-5ef5-4054-8574-8878705ba6b3"
     ]
   },
   "purge_check": {
@@ -307,7 +307,7 @@
     "restore_requires_confirm": true
   },
   "performance_ms": {
-    "total": 255
+    "total": 1432
   },
   "proof": {
     "purge_executed": false,

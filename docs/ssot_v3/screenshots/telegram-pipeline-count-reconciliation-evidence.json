@@ -1,0 +1,61 @@
+{
+  "capturedAt": "2026-06-30T11:30:00.000Z",
+  "task": "DH-DATA-PIPELINE-PX-TELEGRAM-COUNT-RECONCILIATION",
+  "environment": "production DB read-only",
+  "counts_24h": {
+    "telegram_messages_by_created_at": 67356,
+    "telegram_messages_by_telegram_date": 67221,
+    "telegram_messages_marked_processed_by_processed_at": 150400,
+    "processed_telegram_messages_by_created_at": 154048,
+    "telegram_news_events_by_created_at": 8978,
+    "telegram_agent_impacts_by_created_at": 372081,
+    "actionable_agent_impacts": null,
+    "collected_data_telegram_by_collected_at": 149454,
+    "data_hub_logs_total": 3806,
+    "data_hub_logs_passed": 3287,
+    "data_hub_logs_failed": 519,
+    "data_hub_logs_telegram_sources": 1952
+  },
+  "backlog": {
+    "telegram_messages_unprocessed_total": 720163
+  },
+  "data_hub_logs_breakdown": {
+    "by_action": [
+      { "action": "fetch", "cnt": 3285 },
+      { "action": "fetch_error", "cnt": 519 }
+    ],
+    "fetch_by_source_type": [
+      { "type": "rss", "action": "fetch", "cnt": 1574 },
+      { "type": "telegram", "action": "fetch", "cnt": 1474 },
+      { "type": "telegram", "action": "fetch_error", "cnt": 480 },
+      { "type": "api", "action": "fetch", "cnt": 240 },
+      { "type": "rss", "action": "fetch_error", "cnt": 40 }
+    ],
+    "fetch_metadata_reason": [
+      { "reason": null, "cnt": 2334 },
+      { "reason": "collector_ingestion", "cnt": 1474 }
+    ]
+  },
+  "collected_data_telegram_status_24h": [
+    { "status": "processed", "cnt": 149105 },
+    { "status": "error", "cnt": 249 },
+    { "status": "pending", "cnt": 100 }
+  ],
+  "category_screening_when_enabled": [
+    { "name": "announcements", "inflow": 0, "passed": 0 },
+    { "name": "news", "inflow": 41, "passed": 41 },
+    { "name": "signals", "inflow": 149414, "passed": 149065 },
+    { "name": "uncategorized", "inflow": 2, "passed": 2 }
+  ],
+  "channel_linkage": {
+    "active_collector_channels": 43,
+    "active_telegram_sources": 47,
+    "sources_with_channel_id": 47
+  },
+  "pipeline_api_default": {
+    "totalRequests24h": 3806,
+    "categories_length_default": 0,
+    "categories_length_with_flag": 4
+  },
+  "verdict": "EXPECTED_METRIC_MISMATCH_NOT_BUG"
+}
