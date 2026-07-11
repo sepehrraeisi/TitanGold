@@ -1,5 +1,80 @@
 import React, { useState } from 'react';
 import type { SourceAccessControlUi } from '../../../../../../services/accessControlApi';
+import type { RegistryAgentOption } from '../../../../../../services/accessControlApi';
+import { useAccessControlRegistryAgentsQuery } from '../../../../../../hooks/useAccessControl';
+
+function AgentMultiSelect({
+    label,
+    hint,
+    selected,
+    onChange,
+    agents,
+    loading,
+    emptyLabel,
+}: {
+    label: string;
+    hint?: string;
+    selected: string[];
+    onChange: (keys: string[]) => void;
+    agents: RegistryAgentOption[];
+    loading?: boolean;
+    emptyLabel: string;
+}) {
+    const toggle = (key: string) => {
+        if (selected.includes(key)) {
+            onChange(selected.filter(k => k !== key));
+        } else {
+            onChange([...selected, key]);
+        }
+    };
+
+    return (
+        <div>
+            <label className="text-[11px] text-muted-foreground mb-1 block">
+                {label}
+                {hint ? ` (${hint})` : ''}
+            </label>
+            {loading ? (
+                <p className="text-[11px] text-muted-foreground">…</p>
+            ) : agents.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">{emptyLabel}</p>
+            ) : (
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-700 bg-slate-950/80 p-2 space-y-1">
+                    {agents.map(agent => {
+                        const checked = selected.includes(agent.agent_key);
+                        return (
+                            <label
+                                key={agent.agent_key}
+                                className="flex items-start gap-2 text-[11px] text-foreground cursor-pointer rounded px-1 py-0.5 hover:bg-white/5"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggle(agent.agent_key)}
+                                    className="mt-0.5"
+                                />
+                                <span>
+                                    <span className="font-medium">{agent.name}</span>
+                                    <span className="text-muted-foreground font-mono ml-1">
+                                        ({agent.agent_key})
+                                    </span>
+                                    {agent.runtime ? (
+                                        <span className="ml-1 text-amber-400/90">runtime</span>
+                                    ) : null}
+                                </span>
+                            </label>
+                        );
+                    })}
+                </div>
+            )}
+            {selected.length > 0 && (
+                <p className="text-[10px] text-muted-foreground mt-1 font-mono">
+                    {selected.join(', ')}
+                </p>
+            )}
+        </div>
+    );
+}
 
 const AccessControlModal: React.FC<{
     sourceId: string;
@@ -29,11 +104,14 @@ const AccessControlModal: React.FC<{
     saveTitle,
     t,
 }) => {
-    const [allowedAgents, setAllowedAgents] = useState(
-        (accessControl?.allowedAgents || []).join(', '),
+    const { data: registryAgents = [], isLoading: agentsLoading } =
+        useAccessControlRegistryAgentsQuery();
+
+    const [allowedAgents, setAllowedAgents] = useState<string[]>(
+        accessControl?.allowedAgents || [],
     );
-    const [blockedAgents, setBlockedAgents] = useState(
-        (accessControl?.blockedAgents || []).join(', '),
+    const [blockedAgents, setBlockedAgents] = useState<string[]>(
+        accessControl?.blockedAgents || [],
     );
     const [allowedDataTypes, setAllowedDataTypes] = useState(
         (accessControl?.allowedDataTypes || []).join(', '),
@@ -52,8 +130,8 @@ const AccessControlModal: React.FC<{
     const handleSubmit = async () => {
         await onSave({
             sourceId,
-            allowedAgents: splitList(allowedAgents),
-            blockedAgents: splitList(blockedAgents),
+            allowedAgents,
+            blockedAgents,
             allowedDataTypes: splitList(allowedDataTypes),
             requireAuth,
             maxRequestsPerMinute: maxRequestsPerMinute
@@ -90,30 +168,24 @@ const AccessControlModal: React.FC<{
                 </div>
 
                 <div className="p-4 overflow-y-auto space-y-4 flex-1">
-                    <div>
-                        <label className="text-[11px] text-muted-foreground mb-1 block">
-                            {t('allowed_agents')} ({t('empty_for_all')})
-                        </label>
-                        <input
-                            type="text"
-                            value={allowedAgents}
-                            onChange={e => setAllowedAgents(e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
-                            placeholder="agent_key_1, agent_key_2"
-                        />
-                    </div>
+                    <AgentMultiSelect
+                        label={t('allowed_agents')}
+                        hint={t('empty_for_all')}
+                        selected={allowedAgents}
+                        onChange={setAllowedAgents}
+                        agents={registryAgents}
+                        loading={agentsLoading}
+                        emptyLabel={t('access_no_registry_agents')}
+                    />
 
-                    <div>
-                        <label className="text-[11px] text-muted-foreground mb-1 block">
-                            {t('blocked_agents')}
-                        </label>
-                        <input
-                            type="text"
-                            value={blockedAgents}
-                            onChange={e => setBlockedAgents(e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-950/80 border border-slate-700 rounded-lg text-xs text-foreground"
-                        />
-                    </div>
+                    <AgentMultiSelect
+                        label={t('blocked_agents')}
+                        selected={blockedAgents}
+                        onChange={setBlockedAgents}
+                        agents={registryAgents}
+                        loading={agentsLoading}
+                        emptyLabel={t('access_no_registry_agents')}
+                    />
 
                     <div>
                         <label className="text-[11px] text-muted-foreground mb-1 block">

@@ -89,17 +89,17 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
     return (
         <div className={SHELL}>
             <div className="sticky top-0 z-10 bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 backdrop-blur-sm border-b border-white/10 -mx-4 px-4 py-4 mb-6">
-                <div>
+                    <div>
                     <h3 className="text-sm md:text-base font-semibold text-foreground">{t('smart_prioritization')}</h3>
                     <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
                         {t('prioritization_desc_v3') ||
                             'Preview and manually apply source priorities. No auto-apply in v3.0.'}
-                    </p>
-                </div>
+                        </p>
+                    </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                        <input
-                            type="checkbox"
+                            <input
+                                type="checkbox"
                             checked={settings?.is_enabled ?? false}
                             disabled={wg(settingsMut.isPending).disabled}
                             title={wg(settingsMut.isPending).title}
@@ -111,10 +111,10 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                     tier_thresholds: settings?.tier_thresholds || {},
                                 });
                             }}
-                            className="rounded"
-                        />
+                                className="rounded"
+                            />
                         {t('prioritization_enabled')}
-                    </label>
+                        </label>
                     <button
                         type="button"
                         onClick={() => {
@@ -175,8 +175,8 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                 <div className="rounded-xl border border-white/5 bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent p-3 backdrop-blur-sm">
                     <p className="text-[11px] text-red-300/80 mb-1">{t('low')}</p>
                     <p className="text-sm font-semibold text-red-100">{summary.low}</p>
+                    </div>
                 </div>
-            </div>
 
             {queryError && (
                 <div className="mb-4">
@@ -203,7 +203,7 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                             {t('retry')}
                         </button>
                     ) : null}
-                </div>
+                                    </div>
             ) : null}
 
             {isLoading ? (
@@ -212,7 +212,7 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                 <div className="text-center py-10 text-muted-foreground">
                     <p className="text-sm font-medium">{t('prioritization_empty_title')}</p>
                     <p className="text-[11px] mt-1">{t('prioritization_empty_hint')}</p>
-                </div>
+                                </div>
             ) : (
                 <div className="overflow-x-auto -mx-3 mt-2">
                     <table className="min-w-full text-xs text-foreground/90">
@@ -252,11 +252,11 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                                             {t('prioritization_override')}
                                                         </span>
                                                     ) : null}
-                                                </div>
+                                    </div>
                                                 <div className="text-[11px] text-muted-foreground">
                                                     {source.source_type} · {source.category || 'uncategorized'}
-                                                </div>
-                                            </div>
+                                </div>
+                            </div>
                                         </td>
                                         <td className="px-3 py-2 align-top">
                                             <div className="text-[11px] text-muted-foreground">
@@ -288,22 +288,22 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                                 </span>
                                                 <span className="text-[10px] text-muted-foreground">
                                                     {successRate != null ? `SR ${successRate.toFixed(0)}` : ''}
-                                                </span>
-                                            </div>
+                                                        </span>
+                                                </div>
                                         </td>
                                         <td className="px-3 py-2 align-top">
                                             <div className="flex flex-col">
                                                 <span className="text-[11px] font-medium">
                                                     {freshness != null ? freshness.toFixed(0) : '—'}
-                                                </span>
+                                                        </span>
                                             </div>
                                         </td>
                                         <td className="px-3 py-2 align-top">
                                             <div className="flex flex-col">
                                                 <span className="text-[11px] font-medium">
                                                     {errorHealth != null ? errorHealth.toFixed(0) : '—'}
-                                                </span>
-                                            </div>
+                                                    </span>
+                                                </div>
                                         </td>
                                         <td className="px-3 py-2 align-top text-right">
                                             <div className="flex justify-end gap-2">
@@ -316,7 +316,7 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => {
+                                                        onClick={() => {
                                                         setOverrideSource(source);
                                                         setOverrideValue(
                                                             Math.round(source.override_score ?? source.final_score ?? 50),
@@ -329,11 +329,11 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                                                 >
                                                     {t('override')}
                                                 </button>
-                                            </div>
+                                        </div>
                                         </td>
                                     </tr>
-                                );
-                            })}
+                            );
+                        })}
                         </tbody>
                     </table>
                 </div>
@@ -366,25 +366,25 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                         <h4 className="text-sm font-semibold mb-3">{t('configure_factors')}</h4>
                         <div className="space-y-3">
                             {Object.entries(weights).map(([key, value]) => (
-                                <div key={key}>
+                                    <div key={key}>
                                     <label className="block text-[11px] mb-1">
                                         {safeDynamicT(t, 'prioritization_factor_', key)}: {value}
-                                    </label>
-                                    <input
-                                        type="range"
+                                        </label>
+                                        <input
+                                            type="range"
                                         min={0}
                                         max={100}
-                                        value={value}
+                                            value={value}
                                         onChange={e =>
                                             setWeights(prev => ({
                                                 ...prev,
                                                 [key]: Number(e.target.value),
                                             }))
                                         }
-                                        className="w-full"
-                                    />
-                                </div>
-                            ))}
+                                            className="w-full"
+                                        />
+                                    </div>
+                                ))}
                             <p
                                 className={`text-[11px] ${
                                     totalWeight === 100
@@ -561,7 +561,7 @@ const SmartPrioritization: React.FC<SmartPrioritizationProps> = ({ t }) => {
                     </div>
                 </div>
             ) : null}
-        </div>
+            </div>
     );
 };
 

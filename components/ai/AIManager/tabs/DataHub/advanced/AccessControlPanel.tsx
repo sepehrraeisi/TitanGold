@@ -123,6 +123,10 @@ const AccessControlPanel: React.FC<AccessControlPanelProps> = ({ t }) => {
                 </div>
             </div>
 
+            <div className="mb-4 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-[11px] text-amber-100">
+                {t('access_control_enforcement_notice')}
+            </div>
+
             {apiError && (
                 <div className="mb-4 p-2 rounded border border-red-500/30 bg-red-500/10 text-[11px] text-red-100">
                     {apiError}

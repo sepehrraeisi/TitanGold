@@ -58,12 +58,25 @@ log_warning() {
     log "WARNING" "${YELLOW}$@${NC}"
 }
 
-# Function to send alert (placeholder for future monitoring integration)
-send_alert() {
+# Remove all artifacts for a plain-SQL backup path (*.sql)
+cleanup_backup_artifacts() {
+    local sql_file="$1"
+    rm -f "${sql_file}" "${sql_file}.gpg" "${sql_file}.gpg.sha256"
+    log_info "Removed backup artifacts: $(basename "${sql_file}")*"
+}
+
+# Send CRITICAL alert via Telegram (uses postgres-readable env; never log secrets)
+send_critical_alert() {
     local message="$1"
-    log_error "ALERT: ${message}"
-    # TODO: MONITORING-004 - Integrate with monitoring service (email, Slack, PagerDuty)
-    # Example: curl -X POST "https://monitoring.example.com/alert" -d "{\"message\": \"${message}\"}"
+    log_error "CRITICAL: ${message}"
+    if [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]; then
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d parse_mode="Markdown" \
+            -d text="🔴 *CRITICAL*%0A%0A${message}" >> "${LOG_FILE}" 2>&1 || true
+    elif [[ -x /usr/local/bin/titangold-telegram-notify.sh ]]; then
+        /usr/local/bin/titangold-telegram-notify.sh error "*CRITICAL*%0A%0A${message}" >> "${LOG_FILE}" 2>&1 || true
+    fi
 }
 
 # Function to check prerequisites
@@ -183,8 +196,10 @@ perform_backup() {
                     log_warning "Failed to generate SHA256 checksum"
                 fi
             else
-                log_error "Encryption failed. Keeping unencrypted backup."
-                send_alert "Backup encryption failed for ${DB_NAME}"
+                log_error "Encryption failed. Removing temporary and partial files."
+                cleanup_backup_artifacts "${backup_file}"
+                send_critical_alert "Backup encryption failed for ${DB_NAME}. All temporary files removed."
+                return 1
             fi
         else
             log_warning "Backup NOT encrypted (GPG not available)"
@@ -197,18 +212,27 @@ perform_backup() {
         log_success "${backup_type^} backup completed in ${duration} seconds"
         log_info "Backup location: ${backup_file}"
         
+        # Encrypted backups must end as .gpg; never report success on plain SQL when encryption is required
+        if [[ "${USE_ENCRYPTION}" == "true" && "${backup_file}" != *.gpg ]]; then
+            log_error "Backup verification failed: Expected encrypted .gpg output"
+            cleanup_backup_artifacts "${backup_file}"
+            send_critical_alert "Backup left unencrypted SQL on disk for ${DB_NAME}. Files removed."
+            return 1
+        fi
+        
         # Verify backup file exists and has content
         if [[ -f "${backup_file}" ]] && [[ -s "${backup_file}" ]]; then
             log_success "Backup verification passed"
             return 0
         else
             log_error "Backup verification failed: File is empty or doesn't exist"
-            send_alert "Backup verification failed for ${DB_NAME}"
+            send_critical_alert "Backup verification failed for ${DB_NAME}"
             return 1
         fi
     else
         log_error "Database dump failed"
-        send_alert "Database backup failed for ${DB_NAME}"
+        rm -f "${backup_file}"
+        send_critical_alert "Database backup failed for ${DB_NAME}. Partial dump removed."
         return 1
     fi
 }

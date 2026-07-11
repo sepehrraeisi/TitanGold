@@ -69,3 +69,7 @@ export async function batchTelegramPrioritizationMetrics(sources) {
 
     return map;
 }
+/**
+ * Batch Telegram operational metrics for Smart Prioritization (read-only).
+ * DH-SMARTPRIORITY-P2 — uses collected_data + collector status; does not mutate pipeline.
+ */

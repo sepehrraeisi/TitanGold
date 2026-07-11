@@ -65,6 +65,16 @@ const AppContent: React.FC = () => {
     validateSession();
   }, [setUser]);
 
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      logoutUser();
+      setUser(null);
+    };
+
+    window.addEventListener('titan_auth_expired', handleAuthExpired);
+    return () => window.removeEventListener('titan_auth_expired', handleAuthExpired);
+  }, [setUser]);
+
   const handleLogin = async (username: string, pass: string) => {
     setAuthError(null);
     console.log('🔐 Attempting login with backend API...');
