@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -31,6 +32,7 @@ interface ArbitrageAgentControlProps {
 
 const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<ArbitrageTab>('overview');
     const [config, setConfig] = useState<ArbitrageConfig | null>(agent.arbitrageConfig || null);
     const [metrics, setMetrics] = useState<ArbitrageMetrics | null>(agent.arbitrageMetrics || null);
@@ -56,6 +58,7 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
     }, [agent.id]);
 
     const handleRunScan = async () => {
+        if (!guardExecution()) return;
         setIsScanning(true);
         try {
             const result = await api.runArbitrageAnalysis(agent.id);

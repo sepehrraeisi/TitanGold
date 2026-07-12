@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import { fetchSentimentAgentData } from '../../services/api-backend.ts';
 import type {
@@ -41,6 +42,7 @@ interface SentimentAgentControlProps {
 
 const SentimentAgentControl: React.FC<SentimentAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<SentimentTab>('overview');
     const [config, setConfig] = useState<SentimentAnalysisConfig | null>(agent.sentimentAnalysisConfig || null);
     const [metrics, setMetrics] = useState<SentimentMetrics | null>(agent.sentimentMetrics || null);
@@ -67,6 +69,7 @@ const SentimentAgentControl: React.FC<SentimentAgentControlProps> = ({ agent, on
     }, [agent.id]);
 
     const handleRunAnalysis = async () => {
+        if (!guardExecution()) return;
         setIsAnalyzing(true);
         try {
             const result = await api.runSentimentAnalysis(agent.id);

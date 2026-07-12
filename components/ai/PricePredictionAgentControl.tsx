@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type { AIAgent, PricePredictionConfig, PricePredictionResult, PricePredictionMetrics } from '../../types.ts';
 
@@ -30,6 +31,7 @@ interface PricePredictionAgentControlProps {
 
 const PricePredictionAgentControl: React.FC<PricePredictionAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<PredictionTab>('overview');
     const [config, setConfig] = useState<PricePredictionConfig | null>(agent.pricePredictionConfig || null);
     const [metrics, setMetrics] = useState<PricePredictionMetrics | null>(agent.pricePredictionMetrics || null);
@@ -55,6 +57,7 @@ const PricePredictionAgentControl: React.FC<PricePredictionAgentControlProps> = 
     }, [agent.id]);
 
     const handleRunPrediction = async () => {
+        if (!guardExecution()) return;
         setIsPredicting(true);
         try {
             const result = await api.runPricePredictionAnalysis(agent.id);

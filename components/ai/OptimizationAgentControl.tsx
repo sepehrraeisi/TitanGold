@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -23,6 +24,7 @@ interface OptimizationAgentControlProps {
 
 const OptimizationAgentControl: React.FC<OptimizationAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     type OptimizationTab = 'overview' | 'current_vs_optimized' | 'log' | 'strategy_ranking' | 'backtest' | 'suggestions' | 'settings' | 'integration';
     const [activeTab, setActiveTab] = useState<OptimizationTab>('overview');
     const [config, setConfig] = useState<OptimizationConfig | null>(agent.optimizationConfig || null);
@@ -49,6 +51,7 @@ const OptimizationAgentControl: React.FC<OptimizationAgentControlProps> = ({ age
     }, [agent.id]);
 
     const handleRunOptimization = async () => {
+        if (!guardExecution()) return;
         setIsOptimizing(true);
         try {
             const result = await api.runOptimizationCycle(agent.id);

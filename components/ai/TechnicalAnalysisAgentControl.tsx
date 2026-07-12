@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/apiWithCancellation.ts'; // FRONTEND-010: Use cancellable API
 import type { AIAgent, TechnicalAnalysisConfig, TechnicalIndicator, Timeframe, TechnicalAnalysisResult, AgentPerformanceMetrics } from '../../types.ts';
 import { useIsMounted } from '../../hooks/useMemoryLeakFree.ts';
@@ -13,6 +14,7 @@ interface TechnicalAnalysisAgentControlProps {
 
 const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const isMountedRef = useIsMounted(); // FRONTEND-009: Track mounted state
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'overview' | 'indicators' | 'strategies' | 'performance' | 'settings'>('overview');
@@ -130,6 +132,7 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
     };
 
     const handleRunAnalysis = async (symbol?: string, timeframe?: Timeframe) => {
+        if (!guardExecution()) return;
         if (!isMountedRef.current) return;
         if (isMountedRef.current) setIsAnalyzing(true);
         // FRONTEND-011: Track execution time

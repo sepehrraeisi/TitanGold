@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -22,6 +23,7 @@ const tabs = ['overview', 'profile', 'indicators', 'signals_alerts', 'analytics'
 
 const VolumeAgentControl: React.FC<VolumeAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<typeof tabs[number]>('overview');
     const [config, setConfig] = useState<VolumeAnalysisConfig | null>(agent.volumeAnalysisConfig || null);
     const [metrics, setMetrics] = useState<VolumeAnalysisMetrics | null>(agent.volumeMetrics || null);

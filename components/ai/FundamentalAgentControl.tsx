@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -71,6 +72,7 @@ function normalizeFundamentalAnalysis(raw: any): FundamentalAnalysisResult | nul
 
 const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     type FundamentalTab = 'overview' | 'company_data' | 'financial_ratios' | 'events' | 'onchain' | 'fair_value' | 'settings' | 'integration';
     const [activeTab, setActiveTab] = useState<FundamentalTab>('overview');
     const [config, setConfig] = useState<FundamentalAnalysisConfig | null>(agent.fundamentalAnalysisConfig || null);
@@ -102,6 +104,7 @@ const FundamentalAgentControl: React.FC<FundamentalAgentControlProps> = ({ agent
     }, [agent.id]);
 
     const handleRunAnalysis = async () => {
+        if (!guardExecution()) return;
         setIsRunning(true);
         try {
             // 1. Trigger run (don't use result directly)

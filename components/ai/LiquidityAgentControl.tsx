@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -42,6 +43,7 @@ interface LiquidityAgentControlProps {
 
 const LiquidityAgentControl: React.FC<LiquidityAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<LiquidityTab>('overview');
     const [config, setConfig] = useState<LiquidityAnalysisConfig | null>(agent.liquidityAnalysisConfig || null);
     const [metrics, setMetrics] = useState<LiquidityAnalysisMetrics | null>(agent.liquidityMetrics || null);
@@ -67,6 +69,7 @@ const LiquidityAgentControl: React.FC<LiquidityAgentControlProps> = ({ agent, on
     }, [agent.id]);
 
     const handleRunAnalysis = async () => {
+        if (!guardExecution()) return;
         setIsAnalyzing(true);
         try {
             const result = await api.runLiquidityAnalysis(agent.id);

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -40,6 +41,7 @@ interface PortfolioAllocationAgentControlProps {
 
 const PortfolioAllocationAgentControl: React.FC<PortfolioAllocationAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<PortfolioTab>('overview');
     const [config, setConfig] = useState<PortfolioAllocationConfig | null>(agent.portfolioAllocationConfig || null);
     const [metrics, setMetrics] = useState<PortfolioAllocationMetrics | null>(agent.allocationMetrics || null);
@@ -65,6 +67,7 @@ const PortfolioAllocationAgentControl: React.FC<PortfolioAllocationAgentControlP
     }, [agent.id]);
 
     const handleRunAnalysis = async () => {
+        if (!guardExecution()) return;
         setIsAnalyzing(true);
         try {
             const result = await api.runPortfolioAllocationAnalysis(agent.id);

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -19,6 +20,7 @@ interface Props {
 
 const TimingAgentControl: React.FC<Props> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<TimingTab>('overview');
     const [config, setConfig] = useState<TimingAnalysisConfig | null>(agent.timingAnalysisConfig || null);
     const [metrics, setMetrics] = useState<TimingAnalysisMetrics | null>(agent.timingMetrics || null);
@@ -46,6 +48,7 @@ const TimingAgentControl: React.FC<Props> = ({ agent, onClose, onUpdate }) => {
     const signals = useMemo<TimingSignal[]>(() => analysis?.signals ?? [], [analysis]);
 
     const handleRunAnalysis = async () => {
+        if (!guardExecution()) return;
         setIsRunning(true);
         try {
             const result = await api.runTimingAnalysis(agent.id);

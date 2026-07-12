@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/apiWithCancellation.ts'; // FRONTEND-010: Use cancellable API
 import { useIsMounted } from '../../hooks/useMemoryLeakFree.ts';
 import type {
@@ -41,6 +42,7 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
     onUpdate,
 }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const isMountedRef = useIsMounted(); // FRONTEND-009: Track mounted state
     const [activeTab, setActiveTab] = useState<RiskTab>('overview');
     const [config, setConfig] = useState<RiskManagementConfig | null>(agent.riskManagementConfig ?? null);
@@ -115,6 +117,7 @@ const RiskManagementAgentControl: React.FC<RiskManagementAgentControlProps> = ({
     };
 
     const handleRunAssessment = async () => {
+        if (!guardExecution()) return;
         if (!isMountedRef.current) return;
         if (isMountedRef.current) setIsAssessing(true);
         try {

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
+import { AgentRunButton } from './AgentRunButton.tsx';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -20,6 +22,7 @@ interface OrderManagementAgentControlProps {
 
 const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     type OrderTab = 'overview' | 'open_orders' | 'history' | 'execution_analysis' | 'settings' | 'alerts' | 'integration';
     const [activeTab, setActiveTab] = useState<OrderTab>('overview');
     const [config, setConfig] = useState<OrderManagementConfig | null>(agent.orderManagementConfig || null);
@@ -46,6 +49,7 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
     }, [agent.id]);
 
     const handleRunCycle = async () => {
+        if (!guardExecution()) return;
         setIsRunning(true);
         try {
             const result = await api.runOrderManagementCycle(agent.id);
@@ -114,13 +118,13 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
                         </p>
                     </div>
                     <div className="flex gap-3 flex-wrap">
-                        <button
-                            onClick={handleRunCycle}
-                            disabled={isRunning || agent.status !== 'active'}
+                        <AgentRunButton
+                            onRun={handleRunCycle}
+                            running={isRunning}
+                            label={t('run_cycle') || 'Run cycle'}
+                            disabled={agent.status !== 'active'}
                             className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg text-sm"
-                        >
-                            {isRunning ? t('processing') || 'Processing…' : t('run_cycle') || 'Run cycle'}
-                        </button>
+                        />
                         <button
                             onClick={onClose}
                             className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg text-sm"

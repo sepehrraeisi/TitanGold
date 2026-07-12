@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -43,6 +44,7 @@ interface TrendAgentControlProps {
 
 const TrendAgentControl: React.FC<TrendAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<TrendTab>('overview');
     const [config, setConfig] = useState<TrendDetectionConfig | null>(agent.trendDetectionConfig || null);
     const [metrics, setMetrics] = useState<TrendDetectionMetrics | null>(agent.trendMetrics || null);
@@ -68,6 +70,7 @@ const TrendAgentControl: React.FC<TrendAgentControlProps> = ({ agent, onClose, o
     }, [agent.id]);
 
     const handleRunAnalysis = async () => {
+        if (!guardExecution()) return;
         setIsAnalyzing(true);
         try {
             const result = await api.runTrendDetectionAnalysis(agent.id);

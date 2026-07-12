@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -24,6 +25,7 @@ interface MarketIntelligenceAgentControlProps {
 
 const MarketIntelligenceAgentControl: React.FC<MarketIntelligenceAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     type MITab = 'market_landscape' | 'macro_trend' | 'flow_activity' | 'alerts' | 'event_impact' | 'correlation' | 'settings' | 'integration';
     const [activeTab, setActiveTab] = useState<MITab>('market_landscape');
     const [config, setConfig] = useState<MarketIntelligenceConfig | null>(agent.marketIntelligenceConfig || null);
@@ -59,6 +61,7 @@ const MarketIntelligenceAgentControl: React.FC<MarketIntelligenceAgentControlPro
     const heatmapRanking = useMemo(() => analysis?.heatmapRanking ?? [], [analysis?.heatmapRanking]);
 
     const handleRunCycle = async () => {
+        if (!guardExecution()) return;
         setIsRunning(true);
         try {
             const result = await api.runMarketIntelligenceCycle(agent.id);

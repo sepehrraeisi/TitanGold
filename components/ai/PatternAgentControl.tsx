@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import type {
     AIAgent,
@@ -18,6 +19,7 @@ interface PatternAgentControlProps {
 
 const PatternAgentControl: React.FC<PatternAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
+    const { guardExecution } = useAgentExecutionGate();
     const [isLoading, setIsLoading] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [activeTab, setActiveTab] = useState<'overview' | 'patterns' | 'performance' | 'settings'>('overview');
@@ -43,6 +45,7 @@ const PatternAgentControl: React.FC<PatternAgentControlProps> = ({ agent, onClos
     }, [agent.id]);
 
     const handleRunAnalysis = async () => {
+        if (!guardExecution()) return;
         setIsAnalyzing(true);
         try {
             const result = await api.runPatternRecognitionAnalysis(agent.id);
