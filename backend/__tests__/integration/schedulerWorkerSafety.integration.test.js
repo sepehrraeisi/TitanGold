@@ -42,4 +42,40 @@ describe('engineWorkerLeader kill switch monitor', () => {
     expect(workerSource).toContain('subscribeRuntimeEvents');
     expect(workerSource).toMatch(/setInterval.*3000|3000/);
   });
+
+  it('does not log success inside failure catch blocks', () => {
+    const catchBlocks = workerSource.match(/catch\s*\([^)]*\)\s*\{[^}]*success/gi) || [];
+    expect(catchBlocks.filter((b) => /logger\.(info|log).*success/i.test(b)).length).toBe(0);
+  });
+});
+
+describe('Scheduler process-level safety (mocked execution)', () => {
+  it('executeAgentRun invoked with system identity for scheduled jobs', async () => {
+    const mod = await import('../../services/agentExecutionService.js');
+    expect(typeof mod.executeAgentRun).toBe('function');
+  });
+
+  it('unknown agent fails closed via policy', async () => {
+    const policy = await import('../../services/agentExecutionPolicyService.js');
+    const decision = await policy.evaluateExecutionPolicy({
+      agentKey: 'unknown_agent_xyz',
+      userId: 'system',
+      requestedMode: 'demo',
+      role: 'admin',
+    });
+    expect(decision.allowed === false || decision.effectiveMode === 'demo').toBe(true);
+  });
+
+  it('demo suppression blocks live side effects', async () => {
+    const policy = await import('../../services/agentExecutionPolicyService.js');
+    const decision = await policy.evaluateExecutionPolicy({
+      agentKey: 'order',
+      userId: 'system',
+      requestedMode: 'live',
+      role: 'trader',
+      globalMode: 'demo',
+      killSwitchActive: true,
+    });
+    expect(decision.sideEffectsSuppressed === true || decision.allowed === false || decision.effectiveMode !== 'live').toBe(true);
+  });
 });

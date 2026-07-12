@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 /** Staging/local runtime safety — reuses running dev server on :3000 */
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /runtime-safety|pre-human-qa/,
+  testMatch: /runtime-safety|pre-human-qa|agent-panels|artemis-tabs|topic-routing-browser/,
   fullyParallel: false,
   retries: 0,
   reporter: 'list',

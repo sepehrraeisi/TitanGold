@@ -105,4 +105,24 @@ describe('Redis failure-mode runtime SSOT', () => {
     const state = await svc.getRuntimeExecutionState({ preferCache: false });
     expect(state.killSwitchActive).toBe(true);
   });
+
+  it('invalid newer revision is ignored — PG authoritative', async () => {
+    mockRedisGet.mockResolvedValue(JSON.stringify({ globalMode: 'live', killSwitchActive: false, version: 99999 }));
+    const state = await svc.getRuntimeExecutionState({ preferCache: true });
+    expect(state.killSwitchActive).toBe(true);
+    expect(state.globalMode).toBe('demo');
+  });
+
+  it('stale runtime value with kill switch off in Redis still fails closed', async () => {
+    mockRedisGet.mockResolvedValue(JSON.stringify({ globalMode: 'demo', killSwitchActive: false, version: 5 }));
+    const state = await svc.getRuntimeExecutionState({ preferCache: true });
+    expect(state.killSwitchActive).toBe(true);
+  });
+
+  it('Redis get throws — falls back to PostgreSQL', async () => {
+    redisGetThrows = true;
+    const state = await svc.getRuntimeExecutionState({ preferCache: true });
+    expect(state.killSwitchActive).toBe(true);
+    expect(mockQuery).toHaveBeenCalled();
+  });
 });

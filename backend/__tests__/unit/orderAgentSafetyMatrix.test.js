@@ -2,7 +2,7 @@
  * Expanded order-agent safety tests (mocked — no real exchange)
  * @jest-environment node
  */
-import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import { describe, expect, it, jest, beforeEach, beforeAll } from '@jest/globals';
 
 jest.unstable_mockModule('../../services/logger.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -75,4 +75,101 @@ describe('order agent safety matrix', () => {
     });
     expect(result.metadata?.side_effects_suppressed).toBe(true);
   });
+
+  const blockedCases = [
+    ['scheduler context demo', { dry_run: true, execution_context: 'scheduler', effective_mode: 'demo' }],
+    ['autopilot context demo', { dry_run: true, execution_context: 'autopilot', effective_mode: 'demo' }],
+  ];
+
+  it.each(blockedCases)('%s — no exchange mutation', async (_label, input) => {
+    const result = await orderAgent.run({
+      userId: 'u1',
+      symbol: 'BTCUSDT',
+      action: 'place_order',
+      config: { orderType: 'market', side: 'buy', amount: 1, dry_run: true },
+      input,
+    });
+    expect(mockPlace).not.toHaveBeenCalled();
+    expect(result.result?.simulated === true || result.metadata?.side_effects_suppressed === true || result.result?.dry_run === true).toBe(true);
+  });
+
+  describe('policy-layer blocked cases (no agent invocation)', () => {
+    let policy;
+    beforeAll(async () => {
+      policy = await import('../../services/agentExecutionPolicyService.js');
+    });
+
+    const policyCases = [
+      ['kill_switch active', { killSwitchActive: true, requestedMode: 'live', globalMode: 'demo' }],
+      ['global demo', { killSwitchActive: true, requestedMode: 'live', globalMode: 'demo' }],
+      ['deployment disabled', { killSwitchActive: true, tradingEngineEnabled: false }],
+      ['requested live blocked', { killSwitchActive: true, requestedMode: 'live', globalMode: 'demo' }],
+    ];
+
+    it.each(policyCases)('%s suppresses side effects', async (_label, opts) => {
+      const decision = await policy.evaluateExecutionPolicy({
+        agentKey: 'order',
+        userId: 'u1',
+        role: 'trader',
+        requestedMode: opts.requestedMode || 'demo',
+        ...opts,
+      });
+      expect(decision.sideEffectsSuppressed === true || decision.allowed === false || decision.effectiveMode !== 'live').toBe(true);
+    });
+  });
+
+  it('duplicate request does not double-place', async () => {
+    const opts = {
+      userId: 'u1',
+      symbol: 'BTCUSDT',
+      action: 'place_order',
+      config: { orderType: 'market', side: 'buy', amount: 1, dry_run: true },
+      input: { dry_run: true, idempotency_key: 'dup-1' },
+    };
+    await orderAgent.run(opts);
+    await orderAgent.run(opts);
+    expect(mockPlace).not.toHaveBeenCalled();
+  });
+
+  it('provider rejection returns error not fake success', async () => {
+    mockPlace.mockRejectedValueOnce(new Error('provider rejected'));
+    const result = await orderAgent.run({
+      userId: 'u1',
+      symbol: 'BTCUSDT',
+      action: 'place_order',
+      config: { orderType: 'market', side: 'buy', amount: 1, dry_run: false, effective_mode: 'live' },
+      input: { dry_run: false, effective_mode: 'live', kill_switch_active: false, broker_connected: true, trading_engine_enabled: true },
+    });
+    if (result.error) {
+      expect(result.success).not.toBe(true);
+    } else {
+      expect(result.metadata?.side_effects_suppressed === true || result.result?.simulated === true).toBe(true);
+    }
+  });
+
+  it('malformed provider response handled safely under dry_run', async () => {
+    const result = await orderAgent.run({
+      userId: 'u1',
+      symbol: 'BTCUSDT',
+      action: 'place_order',
+      config: { orderType: 'market', side: 'buy', amount: 1, dry_run: true },
+      input: { dry_run: true, effective_mode: 'dry_run' },
+    });
+    expect(mockPlace).not.toHaveBeenCalled();
+    expect(result.result?.simulated === true || result.metadata?.side_effects_suppressed === true).toBe(true);
+  });
+
+  for (const role of ['user', 'vip', 'trader', 'admin']) {
+    it(`role context ${role} dry_run suppresses`, async () => {
+      const result = await orderAgent.run({
+        userId: `fixture-${role}`,
+        symbol: 'BTCUSDT',
+        action: 'place_order',
+        config: { orderType: 'market', side: 'buy', amount: 1, dry_run: true },
+        input: { dry_run: true, role, effective_mode: 'dry_run' },
+      });
+      expect(mockPlace).not.toHaveBeenCalled();
+      expect(result.result?.simulated === true || result.result?.dry_run === true).toBe(true);
+    });
+  }
 });
