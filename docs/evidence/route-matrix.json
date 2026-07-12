@@ -1,629 +1,1648 @@
 {
-  "generatedAt": "2026-07-12T15:41:53.178Z",
+  "generatedAt": "2026-07-12T17:29:42.700Z",
+  "summary": {
+    "total": 66,
+    "pass": 35,
+    "fail": 13,
+    "blocked": 10,
+    "deprecated": 8,
+    "notApplicable": 0
+  },
   "routes": [
     {
       "method": "POST",
       "path": "/api/v1/ai-agents/chat",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "execution"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "rateLimit",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "POST",
       "path": "/api/v1/ai-agents/:id/run-v2",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.AI_AGENT_EXECUTE_SAFE)"
       ],
-      "sideEffect": "execution"
+      "capabilityMiddleware": [
+        "CAP.AI_AGENT_EXECUTE_SAFE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "rateLimit",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution",
+      "expectedRoles": [
+        "trader",
+        "admin"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/ai-agents/:id/run",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.AI_AGENT_EXECUTE_SAFE)"
       ],
-      "sideEffect": "execution"
+      "capabilityMiddleware": [
+        "CAP.AI_AGENT_EXECUTE_SAFE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "rateLimit",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution",
+      "expectedRoles": [
+        "trader",
+        "admin"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/ai-agents/:id/run-OLD",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "execution"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "rateLimit",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "DEPRECATED AND DISABLED"
     },
     {
       "method": "POST",
       "path": "/api/v1/ai-agents/:id/command",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.AI_AGENT_EXECUTE_SAFE)"
       ],
-      "sideEffect": "execution"
+      "capabilityMiddleware": [
+        "CAP.AI_AGENT_EXECUTE_SAFE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "rateLimit",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution",
+      "expectedRoles": [
+        "trader",
+        "admin"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "DEPRECATED AND DISABLED"
     },
     {
       "method": "PATCH",
       "path": "/api/v1/ai-agents/:id/config",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.AI_AGENT_CONFIGURE)"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "CAP.AI_AGENT_CONFIGURE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "agentConfigPatchSchema (unknown fields rejected)",
+      "fieldAllowlist": "strict — unknown fields rejected",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "admin"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "DEPRECATED AND DISABLED"
     },
     {
       "method": "GET",
       "path": "/api/v1/ai-agents/:id/details",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "DEPRECATED AND DISABLED"
     },
     {
       "method": "GET",
       "path": "/api/v1/ai-agents/manager-overview",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "DEPRECATED AND DISABLED"
     },
     {
       "method": "GET",
       "path": "/api/v1/ai-agents",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "DEPRECATED AND DISABLED"
     },
     {
       "method": "GET",
       "path": "/api/v1/ai-agents/:id",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "DEPRECATED AND DISABLED"
     },
     {
       "method": "PATCH",
       "path": "/api/v1/ai-agents/:id",
-      "file": "ai-agents.js",
-      "auth": [
+      "routeFile": "ai-agents.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.AI_AGENT_ENABLE_DISABLE, CAP.AI_AGENT_CONFIGURE)"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "CAP.AI_AGENT_ENABLE_DISABLE",
+        "CAP.AI_AGENT_CONFIGURE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "strict — unknown fields rejected",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "admin"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "DEPRECATED AND DISABLED"
     },
     {
       "method": "GET",
       "path": "/api/v1/agents/liquidity/status",
-      "file": "liquidity-agent.js",
-      "auth": [
+      "routeFile": "liquidity-agent.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/agents/liquidity/run",
-      "file": "liquidity-agent.js",
-      "auth": [
+      "routeFile": "liquidity-agent.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/agents/liquidity/runs/latest",
-      "file": "liquidity-agent.js",
-      "auth": [
+      "routeFile": "liquidity-agent.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/agents/liquidity/runs",
-      "file": "liquidity-agent.js",
-      "auth": [
+      "routeFile": "liquidity-agent.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/agents/liquidity/metrics",
-      "file": "liquidity-agent.js",
-      "auth": [
+      "routeFile": "liquidity-agent.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/agents/liquidity/settings",
-      "file": "liquidity-agent.js",
-      "auth": [
+      "routeFile": "liquidity-agent.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/agents/liquidity/settings",
-      "file": "liquidity-agent.js",
-      "auth": [
+      "routeFile": "liquidity-agent.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/artemis/health",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/artemis/state",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "execution_or_mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution_or_mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "PATCH",
       "path": "/api/v1/artemis/state",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.ARTEMIS_STATE_WRITE)"
       ],
-      "sideEffect": "execution_or_mutation"
+      "capabilityMiddleware": [
+        "CAP.ARTEMIS_STATE_WRITE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "strict — unknown fields rejected",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution_or_mutation",
+      "expectedRoles": [
+        "admin"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/artemis/scenarios",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/artemis/decision",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.ARTEMIS_DECISION_EXECUTE)"
       ],
-      "sideEffect": "execution_or_mutation"
+      "capabilityMiddleware": [
+        "CAP.ARTEMIS_DECISION_EXECUTE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution_or_mutation",
+      "expectedRoles": [
+        "trader",
+        "admin"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "PATCH",
       "path": "/api/v1/artemis/config/decision-engine",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin')"
       ],
-      "sideEffect": "execution_or_mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "strict — unknown fields rejected",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution_or_mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "GET",
       "path": "/api/v1/artemis/logs",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "DELETE",
       "path": "/api/v1/artemis/logs",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin')"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "PUT",
       "path": "/api/v1/artemis/config",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin')"
       ],
-      "sideEffect": "execution_or_mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution_or_mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "GET",
       "path": "/api/v1/artemis/learning",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "PATCH",
       "path": "/api/v1/artemis/learning/mistake/:id/mark-learned",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "strict — unknown fields rejected",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/artemis/learning/event",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin')"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/artemis/orchestration",
-      "file": "artemis.js",
-      "auth": [
+      "routeFile": "artemis.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "execution_or_mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "artemisSchemas",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "execution_or_mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "GET",
       "path": "/api/v1/autopilot/status",
-      "file": "autopilot.js",
-      "auth": [
+      "routeFile": "autopilot.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "POST",
       "path": "/api/v1/autopilot/enable",
-      "file": "autopilot.js",
-      "auth": [
+      "routeFile": "autopilot.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "POST",
       "path": "/api/v1/autopilot/disable",
-      "file": "autopilot.js",
-      "auth": [
+      "routeFile": "autopilot.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "GET",
       "path": "/api/v1/autopilot/suggestions",
-      "file": "autopilot.js",
-      "auth": [
+      "routeFile": "autopilot.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "POST",
       "path": "/api/v1/autopilot/suggestions/:id/approve",
-      "file": "autopilot.js",
-      "auth": [
+      "routeFile": "autopilot.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "POST",
       "path": "/api/v1/autopilot/suggestions/:id/reject",
-      "file": "autopilot.js",
-      "auth": [
+      "routeFile": "autopilot.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "POST",
       "path": "/api/v1/autopilot/suggestions/:id/rollback",
-      "file": "autopilot.js",
-      "auth": [
+      "routeFile": "autopilot.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "POST",
       "path": "/api/v1/autopilot/run-once",
-      "file": "autopilot.js",
-      "auth": [
+      "routeFile": "autopilot.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "FAIL"
     },
     {
       "method": "GET",
       "path": "/api/v1/settings/trading-mode",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "POST",
       "path": "/api/v1/settings/trading-mode",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "GET",
       "path": "/api/v1/settings/execution-runtime",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "executionRuntimeSchema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "POST",
       "path": "/api/v1/settings/execution-runtime/mode",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.RUNTIME_MODE_WRITE)"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "CAP.RUNTIME_MODE_WRITE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "executionRuntimeSchema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "admin"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/settings/execution-runtime/kill-switch",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.KILL_SWITCH_CONTROL)"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "CAP.KILL_SWITCH_CONTROL"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "executionRuntimeSchema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "trader",
+        "admin"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/settings",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "GET",
       "path": "/api/v1/settings/:key",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "inline_handler",
+      "authMiddleware": [
         "NONE"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "PUT",
       "path": "/api/v1/settings/:key",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin')"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/settings/bulk",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin')"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "DELETE",
       "path": "/api/v1/settings/:key",
-      "file": "settings.js",
-      "auth": [
+      "routeFile": "settings.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin')"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/scheduler/status",
-      "file": "scheduler.js",
-      "auth": [
+      "routeFile": "scheduler.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "POST",
       "path": "/api/v1/scheduler/start",
-      "file": "scheduler.js",
-      "auth": [
+      "routeFile": "scheduler.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin', 'trader')"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/scheduler/stop",
-      "file": "scheduler.js",
-      "auth": [
+      "routeFile": "scheduler.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin', 'trader')"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "PUT",
       "path": "/api/v1/scheduler/config/:section",
-      "file": "scheduler.js",
-      "auth": [
+      "routeFile": "scheduler.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate",
         "authorize('admin', 'trader')"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/scheduler/config",
-      "file": "scheduler.js",
-      "auth": [
+      "routeFile": "scheduler.js",
+      "handler": "authenticate",
+      "authMiddleware": [
         "authenticate"
       ],
-      "sideEffect": "system_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "system_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "agentExecutionPolicy.test.js",
+      "integrationTest": "schedulerWorkerSafety.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "GET",
       "path": "/api/v1/trading-engine/status",
-      "file": "trading-engine.js",
-      "auth": [
+      "routeFile": "trading-engine.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "POST",
       "path": "/api/v1/trading-engine/emergency-stop",
-      "file": "trading-engine.js",
-      "auth": [
+      "routeFile": "trading-engine.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "authorize('admin', 'trader')",
         "requireCapability(CAP.KILL_SWITCH_CONTROL)"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "CAP.KILL_SWITCH_CONTROL"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "trader",
+        "admin"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/trading-engine/emergency-stop/clear",
-      "file": "trading-engine.js",
-      "auth": [
+      "routeFile": "trading-engine.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "authorize('admin')",
         "requireCapability(CAP.KILL_SWITCH_CONTROL)"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "CAP.KILL_SWITCH_CONTROL"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "trader",
+        "admin"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/trading-engine/trades/active",
-      "file": "trading-engine.js",
-      "auth": [
+      "routeFile": "trading-engine.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
+        "authenticateStrict",
         "authenticateStrict"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "GET",
       "path": "/api/v1/trading-engine/opportunities",
-      "file": "trading-engine.js",
-      "auth": [
-        "authenticateStrict"
-      ],
-      "sideEffect": "runtime_control"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/v1/trading-engine/config",
-      "file": "trading-engine.js",
-      "auth": [
+      "routeFile": "trading-engine.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
+        "authenticateStrict",
         "authenticateStrict",
         "authorize('admin', 'trader')",
         "requireCapability(CAP.TRADING_ENGINE_CONTROL)"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "CAP.TRADING_ENGINE_CONTROL"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "trader",
+        "admin"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "PASS"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/trading-engine/config",
+      "routeFile": "trading-engine.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
+        "authenticateStrict",
+        "authorize('admin', 'trader')",
+        "requireCapability(CAP.TRADING_ENGINE_CONTROL)",
+        "authenticateStrict"
+      ],
+      "capabilityMiddleware": [
+        "CAP.TRADING_ENGINE_CONTROL"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "trader",
+        "admin"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/trading-engine/config",
-      "file": "trading-engine.js",
-      "auth": [
+      "routeFile": "trading-engine.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict"
       ],
-      "sideEffect": "runtime_control"
+      "capabilityMiddleware": [
+        "NONE"
+      ],
+      "runtimePolicy": "agentExecutionPolicyService",
+      "validationSchema": "route-specific Zod/Joi schema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "runtime_control",
+      "expectedRoles": [
+        "authenticated"
+      ],
+      "unitTest": "runtimeExecutionState.test.js",
+      "integrationTest": "killSwitchReliability.integration.test.js",
+      "status": "BLOCKED"
     },
     {
       "method": "GET",
       "path": "/api/v1/topic-routing",
-      "file": "topic-routing.js",
-      "auth": [
+      "routeFile": "topic-routing.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.TOPIC_ROUTING_READ)"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "CAP.TOPIC_ROUTING_READ"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "topicRoutingSchema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "user",
+        "vip",
+        "trader",
+        "admin"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "POST",
       "path": "/api/v1/topic-routing",
-      "file": "topic-routing.js",
-      "auth": [
+      "routeFile": "topic-routing.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.TOPIC_ROUTING_WRITE)"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "CAP.TOPIC_ROUTING_WRITE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "topicRoutingSchema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "admin"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "PUT",
       "path": "/api/v1/topic-routing/:id",
-      "file": "topic-routing.js",
-      "auth": [
+      "routeFile": "topic-routing.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.TOPIC_ROUTING_WRITE)"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "CAP.TOPIC_ROUTING_WRITE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "topicRoutingSchema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "admin"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "DELETE",
       "path": "/api/v1/topic-routing/:id",
-      "file": "topic-routing.js",
-      "auth": [
+      "routeFile": "topic-routing.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.TOPIC_ROUTING_WRITE)"
       ],
-      "sideEffect": "mutation"
+      "capabilityMiddleware": [
+        "CAP.TOPIC_ROUTING_WRITE"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "topicRoutingSchema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "auditLog on mutation/execution",
+      "sideEffectClassification": "mutation",
+      "expectedRoles": [
+        "admin"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/v1/topic-routing/logs",
-      "file": "topic-routing.js",
-      "auth": [
+      "routeFile": "topic-routing.js",
+      "handler": "authenticateStrict",
+      "authMiddleware": [
         "authenticateStrict",
         "requireCapability(CAP.TOPIC_ROUTING_READ)"
       ],
-      "sideEffect": "read"
+      "capabilityMiddleware": [
+        "CAP.TOPIC_ROUTING_READ"
+      ],
+      "runtimePolicy": "NONE",
+      "validationSchema": "topicRoutingSchema",
+      "fieldAllowlist": "N/A",
+      "rateLimiter": "NONE",
+      "auditBehavior": "read-only",
+      "sideEffectClassification": "read",
+      "expectedRoles": [
+        "user",
+        "vip",
+        "trader",
+        "admin"
+      ],
+      "unitTest": "authFailClosed.test.js",
+      "integrationTest": "runtimeSafetyAuth.integration.test.js",
+      "status": "PASS"
     }
   ]
 }

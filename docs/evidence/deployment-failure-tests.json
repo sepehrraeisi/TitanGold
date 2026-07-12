@@ -1,0 +1,11 @@
+{
+  "validatedAt": "2026-07-12T18:05:01+00:00",
+  "pass": 4,
+  "fail": 0,
+  "results": [
+    "PASS: syntax_error_detected (exit=1)",
+    "PASS: port_unavailable (exit=1)",
+    "PASS: health_endpoint_failed (exit=1)",
+    "PASS: live_staging_happy_path (exit=0)"
+  ]
+}

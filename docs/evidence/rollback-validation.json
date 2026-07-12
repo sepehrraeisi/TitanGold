@@ -1,0 +1,67 @@
+{
+  "validatedAt": "2026-07-12T17:35:56.926Z",
+  "base": "09dc28b",
+  "revertSequence": [
+    "e8b3de4",
+    "24b97ce",
+    "23fdb3f",
+    "563e553",
+    "6ddadc4",
+    "56501b5",
+    "712930a",
+    "133aecc"
+  ],
+  "steps": [
+    {
+      "step": "worktree_created",
+      "path": "/tmp/titan-rollback-validate",
+      "status": "PASS"
+    },
+    {
+      "step": "cherry_pick_forward",
+      "commits": 8,
+      "status": "PASS"
+    },
+    {
+      "step": "revert_sequence",
+      "commits": 8,
+      "status": "PASS"
+    },
+    {
+      "step": "phase23_file_removed_after_revert",
+      "file": "hooks/useAgentExecutionGate.ts",
+      "status": "PASS"
+    },
+    {
+      "step": "phase23_file_removed_after_revert",
+      "file": "scripts/verify-staging-deployment.sh",
+      "status": "PASS"
+    },
+    {
+      "step": "phase23_file_removed_after_revert",
+      "file": "docs/evidence/route-matrix.json",
+      "status": "PASS"
+    },
+    {
+      "step": "phase23_file_removed_after_revert",
+      "file": "e2e/pre-human-qa.spec.ts",
+      "status": "PASS"
+    },
+    {
+      "step": "tree_matches_base",
+      "status": "PASS"
+    },
+    {
+      "step": "reverted_head",
+      "sha": "0f95bd092c381eaa2dcd481ff9daef74bb5454e6",
+      "status": "PASS"
+    },
+    {
+      "step": "worktree_removed",
+      "status": "PASS"
+    }
+  ],
+  "pass": true,
+  "treeDiffStat": "0 files changed",
+  "revertedHead": "0f95bd092c381eaa2dcd481ff9daef74bb5454e6"
+}
