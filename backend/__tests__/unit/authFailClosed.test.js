@@ -66,7 +66,7 @@ describe('authenticate fail-closed', () => {
     expect(req.user.role).toBe('user');
   });
 
-  it('never defaults to trader on DB unavailable', async () => {
+  it('returns 503 when database unavailable', async () => {
     const userId = '11111111-1111-1111-1111-111111111111';
     const token = jwt.sign({ userId, role: 'trader' }, process.env.JWT_SECRET);
     mockQuery.mockRejectedValueOnce({ code: 'ECONNREFUSED', message: 'ECONNREFUSED' });
@@ -74,9 +74,9 @@ describe('authenticate fail-closed', () => {
     const { req, res } = mockReqRes({ authorization: `Bearer ${token}` });
     const next = jest.fn();
     await authenticate(req, res, next);
-    expect(req.authResolutionFailed).toBe(true);
-    expect(req.user.role).toBe('user');
-    expect(req.user._unverified).toBe(true);
+    expect(res.statusCode).toBe(503);
+    expect(res.body.code).toBe('AUTH_DB_UNAVAILABLE');
+    expect(next).not.toHaveBeenCalled();
   });
 
   it('rejects disabled user with 403', async () => {
@@ -97,7 +97,7 @@ describe('authenticate fail-closed', () => {
 
   it('authorize fails closed when auth resolution failed', () => {
     const { req, res } = mockReqRes();
-    req.user = { id: '1', role: 'admin' };
+    req.user = { id: '1', role: 'admin', is_active: true };
     req.authResolutionFailed = true;
     const next = jest.fn();
     authorize('admin')(req, res, next);

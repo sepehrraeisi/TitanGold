@@ -248,11 +248,23 @@ router.get('/me', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(result.rows[0]);
+    const { getCapabilitiesForRole } = await import('../services/capabilities.js');
+    res.json({
+      ...result.rows[0],
+      capabilities: getCapabilitiesForRole(result.rows[0].role),
+    });
   } catch (error) {
     logger.error('Get current user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
   }
+});
+
+router.get('/capabilities', authenticate, async (req, res) => {
+  const { getCapabilitiesForRole } = await import('../services/capabilities.js');
+  res.json({
+    role: req.user.role,
+    capabilities: getCapabilitiesForRole(req.user.role),
+  });
 });
 
 export default router;

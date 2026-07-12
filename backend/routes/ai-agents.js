@@ -1257,7 +1257,7 @@ function safeParseJson(raw) {
 // Get manager overview (for AI Manager component)
 
 // Agent Control Command (Pause, Start, Restart, etc.)
-router.post('/:id/command', authenticate, rateLimit({ limit: 20, windowMs: 60000 }), async (req, res) => {
+router.post('/:id/command', authenticateStrict, requireCapability(CAP.AI_AGENT_EXECUTE_SAFE), rateLimit({ limit: 20, windowMs: 60000 }), async (req, res) => {
   try {
     const { id } = req.params;
     const { command } = req.body;

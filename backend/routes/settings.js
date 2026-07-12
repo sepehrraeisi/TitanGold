@@ -8,6 +8,8 @@ import {
   setGlobalRuntimeMode,
   activateKillSwitch,
   clearKillSwitch,
+  buildRuntimeView,
+  ensureDefaultRuntimeState,
 } from '../services/runtimeExecutionStateService.js';
 import { logger } from '../services/logger.js';
 
@@ -133,7 +135,6 @@ router.post('/trading-mode', authenticate, async (req, res) => {
       message: error.message 
     });
   }
-  }
 });
 
 // ============================================================================
@@ -142,22 +143,21 @@ router.post('/trading-mode', authenticate, async (req, res) => {
 
 router.get('/execution-runtime', authenticateStrict, async (req, res) => {
   try {
-    const state = await getRuntimeExecutionState();
+    const state = await getRuntimeExecutionState({ preferCache: false });
     const userId = req.user.id;
     const pref = await db.query(
       `SELECT preferences->'trading'->>'mode' AS mode FROM user_preferences WHERE user_id = $1 AND is_deleted = FALSE LIMIT 1`,
       [userId],
     );
+    const broker = await db.query(
+      `SELECT COUNT(*)::int AS c FROM exchange_connections WHERE user_id = $1 AND is_active = TRUE AND api_key IS NOT NULL`,
+      [userId],
+    );
     const requestedMode = pref.rows[0]?.mode === 'live' ? 'live' : 'demo';
-    res.json({
+    res.json(buildRuntimeView(state, {
       requestedMode,
-      effectiveMode: state.killSwitchActive ? 'demo' : state.globalMode,
-      globalRuntimeMode: state.globalMode,
-      killSwitchActive: state.killSwitchActive,
-      killSwitchReason: state.killSwitchReason,
-      deploymentEngineEnabled: String(process.env.TRADING_ENGINE_ENABLED || '').toLowerCase() === 'true',
-      updatedAt: state.updatedAt,
-    });
+      providerConnected: (broker.rows[0]?.c || 0) > 0,
+    }));
   } catch (error) {
     logger.error('Error fetching execution runtime:', error);
     res.status(500).json({ error: 'Failed to fetch execution runtime', code: 'RUNTIME_READ_FAILED' });

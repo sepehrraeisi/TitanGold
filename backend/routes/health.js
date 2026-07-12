@@ -162,6 +162,29 @@ router.get('/ready', validateResponse(readinessResponseSchema), async (req, res)
     };
   }
 
+  // Runtime safety SSOT (staging must remain demo + kill switch)
+  try {
+    const { getRuntimeExecutionState, buildRuntimeView } = await import('../services/runtimeExecutionStateService.js');
+    const state = await getRuntimeExecutionState({ preferCache: false });
+    const view = buildRuntimeView(state);
+    const safe = view.killSwitchActive === true && view.effectiveMode === 'demo';
+    checks.checks.runtime_safety = {
+      status: safe ? 'ok' : 'error',
+      killSwitchActive: view.killSwitchActive,
+      effectiveMode: view.effectiveMode,
+      workerAcknowledged: view.workerAcknowledged,
+      stateVersion: view.stateVersion,
+      message: safe ? 'Demo + kill switch active' : 'UNSAFE runtime state detected',
+    };
+    if (!safe) allReady = false;
+  } catch (error) {
+    allReady = false;
+    checks.checks.runtime_safety = {
+      status: 'error',
+      message: 'Could not verify runtime safety: ' + error.message,
+    };
+  }
+
   // Overall status
   checks.status = allReady ? 'ok' : 'degraded';
 

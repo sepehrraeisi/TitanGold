@@ -2,7 +2,12 @@ import express from 'express';
 import { authenticateStrict, authorize } from '../middleware/auth.js';
 import { requireCapability } from '../middleware/requireCapability.js';
 import { CAP } from '../services/capabilities.js';
-import { activateKillSwitch, getRuntimeExecutionState, clearKillSwitch } from '../services/runtimeExecutionStateService.js';
+import {
+  activateKillSwitch,
+  getRuntimeExecutionState,
+  clearKillSwitch,
+  buildRuntimeView,
+} from '../services/runtimeExecutionStateService.js';
 import { logger } from '../services/logger.js';
 
 const router = express.Router();
@@ -23,13 +28,19 @@ async function getWorkerEngineStatus() {
 
 router.get('/status', authenticateStrict, async (req, res) => {
   try {
-    const runtime = await getRuntimeExecutionState();
+    const state = await getRuntimeExecutionState({ preferCache: false });
+    const view = buildRuntimeView(state);
     res.json({
-      isRunning: !runtime.killSwitchActive && runtime.globalMode === 'live',
-      mode: runtime.killSwitchActive ? 'demo' : runtime.globalMode,
-      killSwitchActive: runtime.killSwitchActive,
-      killSwitchReason: runtime.killSwitchReason,
-      workerAcknowledged: true,
+      isRunning: view.workerAcknowledged && !view.killSwitchActive && view.globalRuntimeMode === 'live',
+      mode: view.effectiveMode,
+      killSwitchActive: view.killSwitchActive,
+      killSwitchReason: view.killSwitchReason,
+      workerAcknowledged: view.workerAcknowledged,
+      workerAckAt: view.workerAckAt,
+      requestedMode: view.requestedMode,
+      effectiveMode: view.effectiveMode,
+      globalRuntimeMode: view.globalRuntimeMode,
+      stateVersion: view.stateVersion,
       activeTrades: 0,
       maxConcurrentTrades: 20,
       queueSize: 0,
@@ -43,41 +54,28 @@ router.get('/status', authenticateStrict, async (req, res) => {
         dailyLoss: 0,
       },
       scanners: [],
-      runtime,
     });
   } catch (error) {
     logger.error('Failed to get trading engine status:', error);
-    res.json({ isRunning: false, mode: 'demo', killSwitchActive: false, workerAcknowledged: false });
+    res.json({ isRunning: false, mode: 'demo', killSwitchActive: true, workerAcknowledged: false });
   }
 });
 
-router.post('/start', authenticateStrict, authorize('admin', 'trader'), requireCapability(CAP.TRADING_ENGINE_CONTROL), async (req, res) => {
-  const runtime = await getRuntimeExecutionState();
-  if (runtime.killSwitchActive) {
-    return res.status(423).json({ error: 'Kill switch active', code: 'KILL_SWITCH_ACTIVE' });
-  }
-  res.json({
-    success: true,
-    message: 'Trading engine start requested — worker processes shared runtime state',
-    runtime,
-  });
-});
-
-router.post('/stop', authenticateStrict, authorize('admin', 'trader'), requireCapability(CAP.TRADING_ENGINE_CONTROL), async (req, res) => {
-  res.json({ success: true, message: 'Trading engine stop requested via shared runtime state' });
-});
-
+/** @deprecated Use POST /api/v1/settings/execution-runtime/kill-switch — compatibility alias */
 router.post('/emergency-stop', authenticateStrict, authorize('admin', 'trader'), requireCapability(CAP.KILL_SWITCH_CONTROL), async (req, res) => {
   try {
     const { reason } = req.body;
     const saved = await activateKillSwitch(reason || 'manual_emergency_stop', { userId: req.user.id });
-    const workerStatus = await getWorkerEngineStatus();
+    res.setHeader('Deprecation', 'true');
+    res.setHeader('Link', '</api/v1/settings/execution-runtime/kill-switch>; rel="successor-version"');
     res.json({
       success: true,
-      message: 'Emergency stop activated across shared runtime state',
+      message: 'Emergency stop activated via canonical runtime service',
+      deprecated: true,
+      canonicalEndpoint: '/api/v1/settings/execution-runtime/kill-switch',
       killSwitchActive: saved.killSwitchActive,
       killSwitchReason: saved.killSwitchReason,
-      workerStatus,
+      stateVersion: saved.version,
     });
   } catch (error) {
     logger.error('Failed to execute emergency stop:', error);

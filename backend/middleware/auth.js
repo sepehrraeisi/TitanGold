@@ -17,7 +17,7 @@ function sanitizeAuthFailure(res, status, code, message) {
 
 /**
  * Verify JWT and resolve user from database (Source of Truth for role).
- * Never elevates to privileged roles on failure.
+ * Fail closed: DB unavailable → 503, no unverified identity.
  */
 export const authenticate = async (req, res, next) => {
   try {
@@ -46,7 +46,6 @@ export const authenticate = async (req, res, next) => {
     }
 
     req.token = token;
-    req.authResolutionFailed = false;
 
     try {
       const sessionResult = await query(
@@ -69,7 +68,6 @@ export const authenticate = async (req, res, next) => {
         return sanitizeAuthFailure(res, 403, 'USER_DISABLED', 'Account is disabled');
       }
 
-      // DB role is authoritative — ignore elevated JWT role claims
       req.user = {
         id: user.id,
         email: user.email,
@@ -78,6 +76,7 @@ export const authenticate = async (req, res, next) => {
         role: user.role,
         is_active: user.is_active,
       };
+      req.authResolutionFailed = false;
 
       if (sessionResult.rows.length > 0) {
         await query(
@@ -89,21 +88,8 @@ export const authenticate = async (req, res, next) => {
       return next();
     } catch (dbError) {
       if (isDbUnavailableError(dbError)) {
-        logger.warn('⚠️ Database unavailable during authentication');
-        req.authResolutionFailed = true;
-        req.authResolutionStatus = 503;
-        req.authResolutionCode = 'AUTH_DB_UNAVAILABLE';
-        // Minimal identity for optional read paths — sensitive routes must use requireStrictAuth
-        req.user = {
-          id: userId,
-          email: decoded.email || null,
-          username: decoded.username || null,
-          full_name: decoded.full_name || decoded.name || null,
-          role: 'user',
-          is_active: false,
-          _unverified: true,
-        };
-        return next();
+        logger.warn('⚠️ Database unavailable during authentication — failing closed');
+        return sanitizeAuthFailure(res, 503, 'AUTH_DB_UNAVAILABLE', 'Identity verification temporarily unavailable');
       }
       throw dbError;
     }
@@ -113,18 +99,7 @@ export const authenticate = async (req, res, next) => {
   }
 };
 
-/** Fail closed when DB identity could not be verified */
-export const authenticateStrict = async (req, res, next) => {
-  await authenticate(req, res, () => {
-    if (req.authResolutionFailed) {
-      return sanitizeAuthFailure(res, 503, 'AUTH_DB_UNAVAILABLE', 'Identity verification temporarily unavailable');
-    }
-    if (!req.user?.is_active) {
-      return sanitizeAuthFailure(res, 403, 'USER_DISABLED', 'Account is disabled');
-    }
-    next();
-  });
-};
+export const authenticateStrict = authenticate;
 
 export const authorize = (...roles) => {
   return (req, res, next) => {

@@ -1,32 +1,32 @@
 /**
- * Capability authorization middleware — uses DB-resolved role only.
+ * Capability authorization middleware — DB-verified identity required.
  */
 
 import { roleHasCapability } from '../services/capabilities.js';
 
+function deny(res, status, code, message, extra = {}) {
+  return res.status(status).json({ error: message, code, ...extra });
+}
+
 export function requireCapability(...capabilities) {
   return (req, res, next) => {
     if (!req.user?.id) {
-      return res.status(401).json({
-        error: 'Not authenticated',
-        code: 'UNAUTHENTICATED',
-      });
+      return deny(res, 401, 'UNAUTHENTICATED', 'Not authenticated');
     }
 
     if (req.authResolutionFailed) {
-      return res.status(req.authResolutionStatus || 503).json({
-        error: 'Identity could not be verified',
-        code: req.authResolutionCode || 'AUTH_UNAVAILABLE',
-      });
+      return deny(res, 503, 'AUTH_DB_UNAVAILABLE', 'Identity verification temporarily unavailable');
+    }
+
+    if (!req.user.is_active) {
+      return deny(res, 403, 'USER_DISABLED', 'Account is disabled');
     }
 
     const role = req.user.role;
     const allowed = capabilities.some((cap) => roleHasCapability(role, cap));
 
     if (!allowed) {
-      return res.status(403).json({
-        error: 'Insufficient permissions',
-        code: 'CAPABILITY_DENIED',
+      return deny(res, 403, 'CAPABILITY_DENIED', 'Insufficient permissions', {
         capability: capabilities[0],
       });
     }
@@ -37,13 +37,13 @@ export function requireCapability(...capabilities) {
 
 export function requireStrictAuth(req, res, next) {
   if (!req.user?.id) {
-    return res.status(401).json({ error: 'Not authenticated', code: 'UNAUTHENTICATED' });
+    return deny(res, 401, 'UNAUTHENTICATED', 'Not authenticated');
   }
   if (req.authResolutionFailed) {
-    return res.status(req.authResolutionStatus || 503).json({
-      error: 'Identity could not be verified',
-      code: req.authResolutionCode || 'AUTH_UNAVAILABLE',
-    });
+    return deny(res, 503, 'AUTH_DB_UNAVAILABLE', 'Identity verification temporarily unavailable');
+  }
+  if (!req.user.is_active) {
+    return deny(res, 403, 'USER_DISABLED', 'Account is disabled');
   }
   next();
 }
