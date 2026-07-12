@@ -12,13 +12,14 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { useWebSocket, WebSocketMessage } from '../../hooks/useWebSocket.ts';
 import { useExecutionRuntime } from '../../hooks/useExecutionRuntime.ts';
 import AgentSafetyBanner from './AgentSafetyBanner.tsx';
-import { canExecuteAgents } from '../../utils/agentPermissions.ts';
+import { useCapabilities } from '../../hooks/useCapabilities.ts';
 
 const AIAgents: React.FC = () => {
     const { t } = useLanguage();
     const { user } = useAppContext();
     const { runtime, loading: runtimeLoading } = useExecutionRuntime();
-    const canExecute = canExecuteAgents(user?.role);
+    const { has: hasCapability } = useCapabilities();
+    const canExecute = hasCapability('AI_AGENT_EXECUTE_SAFE');
     const [isLoading, setIsLoading] = useState(true);
     const [agents, setAgents] = useState<AIAgent[]>([]);
     const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);

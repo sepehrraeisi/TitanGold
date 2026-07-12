@@ -42,6 +42,7 @@ export const AgentSafetyBanner: React.FC<AgentSafetyBannerProps> = ({ runtime, c
         {runtime.killSwitchActive && (
           <span className="text-xs font-semibold px-2 py-1 rounded border bg-red-600/20 text-red-200 border-red-500/50">
             {t('emergency_stop_active') || 'Emergency stop active'}
+            {!runtime.workerAcknowledged ? ` · ${t('worker_pending') || 'worker pending'}` : ''}
           </span>
         )}
       </div>

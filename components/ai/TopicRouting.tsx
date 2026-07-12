@@ -3,12 +3,13 @@ import type { TopicRoutingRule, TopicRoutingLog } from '../../types.ts';
 import * as api from '../../services/api.ts';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { useAppContext } from '../../context/AppContext.tsx';
-import { canWriteTopicRouting } from '../../utils/agentPermissions.ts';
+import { useCapabilities } from '../../hooks/useCapabilities.ts';
 
 const TopicRouting: React.FC = () => {
     const { t } = useLanguage();
     const { user } = useAppContext();
-    const canWrite = canWriteTopicRouting(user?.role);
+    const { has: hasCapability, loading: capsLoading } = useCapabilities();
+    const canWrite = hasCapability('TOPIC_ROUTING_WRITE');
     const [agentOptions, setAgentOptions] = useState<Array<{ key: string; label: string }>>([]);
     const [rules, setRules] = useState<TopicRoutingRule[]>([]);
     const [logs, setLogs] = useState<TopicRoutingLog[]>([]);

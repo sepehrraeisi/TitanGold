@@ -7,6 +7,7 @@ import { Toast } from './ui/toast.tsx';
 import { ConfirmModal } from './ui/confirm-modal.tsx';
 
 import type { ViewKey, OnNavigateHandler } from '../types/navigation.ts';
+import ExecutionModeStatus from './ai/ExecutionModeStatus.tsx';
 
 interface HeaderProps {
     activeView: string | 'dashboard' | 'favorites' | 'trades' | 'portfolio' | 'analysis' | 'news' | 'ai' | 'gold' | 'settings' | 'profile' | 'wallet';
@@ -521,7 +522,7 @@ const MobileMenu: React.FC<{ navLinks: any[], activeView: string, onNavigate: On
                 <div className="flex items-center justify-between gap-2">
                     {/* Trading Mode */}
                     <div className="flex-1 p-2 bg-gray-800/40 rounded-lg border border-gray-700/30 hover:border-blue-500/40 transition-colors">
-                        <ModeToggleWithStatus />
+                        <ExecutionModeStatus />
                     </div>
                     
                     {/* Language Switcher - Icon Only (Same as Header) */}
@@ -860,7 +861,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, onNavigate, onLogout }) => 
                     </div>
                     {/* Demo/Real Mode Toggle - Hidden on mobile, shown in sidebar */}
                     <div className="hidden lg:block border-r border-gray-700/50 pr-1 sm:pr-2 md:pr-3">
-                        <ModeToggleWithStatus />
+                        <ExecutionModeStatus />
                     </div>
                     <UserDropdown onNavigate={onNavigate} onLogout={onLogout} dailyPnL={statusData.dailyPnL} />
                 </div>
