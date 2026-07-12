@@ -5,11 +5,23 @@
 
 ## Final Commit Hash
 
+**Verified repository HEAD (code state under verification):**
+
 ```
 47e3fbdc2867ce2c3129c922b77a20e9f6473541
 ```
 
 Short: `47e3fbd` — `docs(datahub): align verification record to cbf1b17 synchronized HEAD`
+
+**Verification documentation commit (hash-alignment only; does not change verified code state):**
+
+```
+87436ac2a8cc10a4f9274ee1c123dd16e90eebd8
+```
+
+Short: `87436ac` — `docs(datahub): update verification record hash to 47e3fbd`
+
+**Current `main` HEAD after documentation:** `87436ac` (local `main` == `origin/main`)
 
 Cleanup commit (prior on `main`): `45e4e06` — `chore(repo): clean up accidental backup merge artifacts on main`
 
@@ -47,7 +59,7 @@ git push origin main
 # 45e4e06..47e3fbd  main -> main
 ```
 
-## Post-Push Verification (final HEAD)
+## Post-Push Verification (verified repository HEAD at `47e3fbd`)
 
 | Check | Result |
 |-------|--------|
@@ -79,7 +91,9 @@ DataHub deliverable scope is fully on `main` via PR #12. Post-merge cleanup docu
 - Runtime verification: `GET /api/v1/data-hub/telegram-publishers/runtime-mode` returns **200** (PostgreSQL on 5433 required)
 - Merge release notes: `743caae`
 - Repository cleanup: `45e4e06`
-- Final verification record: `47e3fbd`
+- Final verification record (verified code state): `47e3fbd`
+- Verification documentation commit: `87436ac`
+- Current `origin/main` after documentation: `87436ac`
 
 ## Related Documents
 
