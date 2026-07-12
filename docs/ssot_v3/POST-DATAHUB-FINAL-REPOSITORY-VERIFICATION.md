@@ -6,10 +6,10 @@
 ## Final Commit Hash
 
 ```
-c0bb5f4900f3c1254297a3a7f21449e313868c45
+4f2a68477d3e3065c2c8b213abf39d237f740229
 ```
 
-Short: `c0bb5f4` — `docs(datahub): set final commit hash in verification record`
+Short: `4f2a684` — `docs(datahub): align verification record with final main HEAD`
 
 Cleanup commit (prior on `main`): `45e4e06` — `chore(repo): clean up accidental backup merge artifacts on main`
 
@@ -44,16 +44,16 @@ No force push used.
 
 ```bash
 git push origin main
-# 45e4e06..c0bb5f4  main -> main
+# 45e4e06..4f2a684  main -> main
 ```
 
 ## Post-Push Verification (final HEAD)
 
 | Check | Result |
 |-------|--------|
-| Local HEAD | `c0bb5f4900f3c1254297a3a7f21449e313868c45` |
-| `origin/main` | `c0bb5f4900f3c1254297a3a7f21449e313868c45` |
-| `git ls-remote origin refs/heads/main` | `c0bb5f4900f3c1254297a3a7f21449e313868c45` |
+| Local HEAD | `4f2a68477d3e3065c2c8b213abf39d237f740229` |
+| `origin/main` | `4f2a68477d3e3065c2c8b213abf39d237f740229` |
+| `git ls-remote origin refs/heads/main` | `4f2a68477d3e3065c2c8b213abf39d237f740229` |
 | `git status` | Clean |
 | `git status -sb` | `## main...origin/main` (ahead 0, behind 0) |
 
@@ -79,7 +79,7 @@ DataHub deliverable scope is fully on `main` via PR #12. Post-merge cleanup docu
 - Runtime verification: `GET /api/v1/data-hub/telegram-publishers/runtime-mode` returns **200** (PostgreSQL on 5433 required)
 - Merge release notes: `743caae`
 - Repository cleanup: `45e4e06`
-- Final verification record: `c0bb5f4`
+- Final verification record: `4f2a684`
 
 ## Related Documents
 
