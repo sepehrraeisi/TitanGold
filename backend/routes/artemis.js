@@ -229,7 +229,7 @@ router.patch('/state', authenticateStrict, requireCapability(CAP.ARTEMIS_STATE_W
     const userId = req.user?.id;
     const { status, mode, strategy, config } = req.body;
 
-    // 🎯 If mode is being updated, save it to user_preferences (per-user)
+    // User requested mode only — do NOT dual-write global artemis_state.mode
     if (mode !== undefined) {
       try {
         await query(
@@ -241,19 +241,18 @@ router.patch('/state', authenticateStrict, requireCapability(CAP.ARTEMIS_STATE_W
            ),
            updated_at = NOW()
            WHERE user_id = $1`,
-          [userId, JSON.stringify(mode)]
+          [userId, JSON.stringify(mode === 'real' ? 'live' : mode)]
         );
-        logger.info(`🎯 Updated user ${userId} trading mode to: ${mode}`);
+        logger.info(`🎯 Updated user ${userId} trading mode preference to: ${mode}`);
       } catch (modeError) {
         logger.error('❌ Failed to update user trading mode:', modeError);
         throw modeError;
       }
     }
 
-    // Also update global artemis_state (for backward compatibility)
     const result = await query(
-      'UPDATE artemis_state SET status = COALESCE($1, status), mode = COALESCE($2, mode), strategy = COALESCE($3, strategy), config = COALESCE($4, config), updated_at = NOW() RETURNING *',
-      [status, mode, strategy, config ? JSON.stringify(config) : null]
+      'UPDATE artemis_state SET status = COALESCE($1, status), strategy = COALESCE($2, strategy), config = COALESCE($3, config), updated_at = NOW() RETURNING *',
+      [status, strategy, config ? JSON.stringify(config) : null]
     );
 
     // Return updated state (but with user's mode)

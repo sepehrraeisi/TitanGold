@@ -4,8 +4,15 @@
  * با قابلیت Idle Mode: وقتی کاری نیست، backoff می‌کند (نه query storm)
  */
 
-// 🔍 BOOT LOG - Must be first!
-logger.info("🚀 engineWorkerLeader booting", {
+import dotenv from 'dotenv';
+import { query } from '../database/db.js';
+import { messageQueue } from '../services/messageQueue.js';
+import { logger } from '../services/logger.js';
+
+dotenv.config();
+
+// 🔍 BOOT LOG
+logger.info('🚀 engineWorkerLeader booting', {
   pid: process.pid,
   node: process.version,
   cwd: process.cwd(),
@@ -15,15 +22,8 @@ logger.info("🚀 engineWorkerLeader booting", {
     AUTOPILOT_ENABLED: process.env.AUTOPILOT_ENABLED,
     SCHEDULER_ENABLED: process.env.SCHEDULER_ENABLED,
     TRADING_ENGINE_ENABLED: process.env.TRADING_ENGINE_ENABLED,
-  }
+  },
 });
-
-import dotenv from 'dotenv';
-import { query } from '../database/db.js';
-import { messageQueue } from '../services/messageQueue.js';
-import { logger } from '../services/logger.js';
-
-dotenv.config();
 
 // Configuration
 const IDLE_CHECK_INTERVAL_MS = parseInt(process.env.IDLE_CHECK_INTERVAL_MS) || 5000; // 5s initial
@@ -41,6 +41,7 @@ class EngineWorkerLeader {
   constructor() {
     this.isRunning = false;
     this.enginesStarted = false;
+    this.killSwitchMonitorStarted = false;
     this.idleCheckInterval = null;
   }
 
@@ -63,6 +64,9 @@ class EngineWorkerLeader {
     } catch (error) {
       logger.warn('⚠️ Message Queue unavailable, using fallback:', error.message);
     }
+
+    // Safety-critical: always monitor kill switch, even in idle mode
+    this.startKillSwitchMonitor();
 
     // Start idle mode checker
     this.startIdleChecker();
@@ -224,8 +228,6 @@ class EngineWorkerLeader {
 
       this.enginesStarted = true;
       logger.info('✅ All engines initialized');
-
-      this.startKillSwitchMonitor();
       
     } catch (error) {
       logger.error('❌ Failed to start engines:', error);
@@ -234,22 +236,49 @@ class EngineWorkerLeader {
   }
 
   /**
-   * Poll shared kill-switch state and stop trading engine when active.
+   * Immediate pub/sub + fallback poll for kill-switch propagation.
    */
   startKillSwitchMonitor() {
+    if (this.killSwitchMonitorStarted) return;
+    this.killSwitchMonitorStarted = true;
+
     if (this.killSwitchInterval) clearInterval(this.killSwitchInterval);
+
+    const handleState = async (state, source = 'poll') => {
+      try {
+        const { acknowledgeWorkerState } = await import('../services/runtimeExecutionStateService.js');
+        if (state.killSwitchActive) {
+          if (scheduler?.stop) scheduler.stop();
+          if (tradingEngine?.stop) {
+            logger.warn(`🛑 Kill switch (${source}): stopping trading engine — ${state.killSwitchReason}`);
+            await tradingEngine.stop();
+          }
+        }
+        await acknowledgeWorkerState({ revision: state.version });
+      } catch (err) {
+        logger.warn('Kill switch handler error:', err.message);
+      }
+    };
+
+    import('../services/runtimeExecutionStateService.js').then(async (runtime) => {
+      const state = await runtime.getRuntimeExecutionState({ preferCache: false });
+      await handleState(state, 'startup');
+
+      const sub = await runtime.subscribeRuntimeEvents(async (event) => {
+        if (event?.state) await handleState(event.state, 'pubsub');
+      });
+      this.runtimeSubscriber = sub;
+    }).catch((err) => logger.warn('Runtime pub/sub setup failed:', err.message));
+
     this.killSwitchInterval = setInterval(async () => {
       try {
         const { getRuntimeExecutionState } = await import('../services/runtimeExecutionStateService.js');
-        const state = await getRuntimeExecutionState();
-        if (state.killSwitchActive && tradingEngine?.stop) {
-          logger.warn(`🛑 Kill switch active (${state.killSwitchReason}) — stopping trading engine`);
-          await tradingEngine.stop();
-        }
+        const state = await getRuntimeExecutionState({ preferCache: false });
+        await handleState(state, 'poll');
       } catch (err) {
-        logger.warn('Kill switch monitor error:', err.message);
+        logger.warn('Kill switch poll error:', err.message);
       }
-    }, 15000);
+    }, 3000);
   }
 
   /**

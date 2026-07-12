@@ -253,11 +253,24 @@ class TradingEngine {
             );
 
             if (result.rows.length > 0 && result.rows[0].config) {
-                this.config = { ...this.config, ...result.rows[0].config };
+                const { mode: _legacyMode, ...rest } = result.rows[0].config;
+                this.config = { ...this.config, ...rest };
             }
         } catch (error) {
             logger.error('Failed to load trading engine config:', error);
-            // Use default config
+        }
+
+        try {
+            const { getEffectiveGlobalMode, isKillSwitchActive } = await import('../services/runtimeExecutionStateService.js');
+            const [mode, killSwitch] = await Promise.all([
+                getEffectiveGlobalMode(),
+                isKillSwitchActive(),
+            ]);
+            this.config.mode = killSwitch || mode !== 'live' ? 'demo' : 'live';
+            logger.info(`📎 Trading engine mode derived from runtime SSOT: ${this.config.mode}`);
+        } catch (error) {
+            this.config.mode = 'demo';
+            logger.warn('⚠️ Runtime SSOT unavailable — trading engine forced to demo mode');
         }
     }
 

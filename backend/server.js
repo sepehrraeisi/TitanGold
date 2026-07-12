@@ -475,6 +475,15 @@ if (process.env.NODE_ENV !== 'test') {
     // Initialize background services (non-blocking, wrapped in try/catch)
     // These MUST NOT prevent the server from listening
     (async () => {
+      // Safety: initialize canonical runtime state (demo + kill switch default)
+      try {
+        const { ensureDefaultRuntimeState } = await import('./services/runtimeExecutionStateService.js');
+        const state = await ensureDefaultRuntimeState();
+        logger.info(`✅ Runtime SSOT initialized: mode=${state.globalMode}, killSwitch=${state.killSwitchActive}`);
+      } catch (error) {
+        logger.error('❌ Failed to initialize runtime SSOT:', error.message);
+      }
+
       // Initialize Redis
       try {
         await getRedisClient();
