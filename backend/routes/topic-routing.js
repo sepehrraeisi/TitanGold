@@ -1,6 +1,8 @@
 import express from 'express';
 import { query } from '../database/db.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authenticateStrict } from '../middleware/auth.js';
+import { requireCapability } from '../middleware/requireCapability.js';
+import { CAP } from '../services/capabilities.js';
 import { writeRateLimiter } from '../middleware/rateLimiter.js';
 import { logger } from '../services/logger.js';
 import { topicRouter } from '../services/topicRouter.js';
@@ -11,7 +13,7 @@ const router = express.Router();
 // GET ALL ROUTING RULES
 // ============================================================================
 
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticateStrict, requireCapability(CAP.TOPIC_ROUTING_READ), async (req, res) => {
     try {
         const result = await query(
             `SELECT id, name, keywords, agent_key, priority, is_active, created_at, updated_at
@@ -31,7 +33,7 @@ router.get('/', authenticate, async (req, res) => {
 // CREATE ROUTING RULE
 // ============================================================================
 
-router.post('/', authenticate, writeRateLimiter, async (req, res) => {
+router.post('/', authenticateStrict, requireCapability(CAP.TOPIC_ROUTING_WRITE), writeRateLimiter, async (req, res) => {
     try {
         const { name, keywords, agent_key, priority = 0, is_active = true } = req.body;
 
@@ -69,7 +71,7 @@ router.post('/', authenticate, writeRateLimiter, async (req, res) => {
 // UPDATE ROUTING RULE
 // ============================================================================
 
-router.put('/:id', authenticate, writeRateLimiter, async (req, res) => {
+router.put('/:id', authenticateStrict, requireCapability(CAP.TOPIC_ROUTING_WRITE), writeRateLimiter, async (req, res) => {
     try {
         const { id } = req.params;
         const { name, keywords, agent_key, priority, is_active } = req.body;
@@ -134,7 +136,7 @@ router.put('/:id', authenticate, writeRateLimiter, async (req, res) => {
 // DELETE ROUTING RULE
 // ============================================================================
 
-router.delete('/:id', authenticate, writeRateLimiter, async (req, res) => {
+router.delete('/:id', authenticateStrict, requireCapability(CAP.TOPIC_ROUTING_WRITE), writeRateLimiter, async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -161,7 +163,7 @@ router.delete('/:id', authenticate, writeRateLimiter, async (req, res) => {
 // GET ROUTING LOGS
 // ============================================================================
 
-router.get('/logs', authenticate, async (req, res) => {
+router.get('/logs', authenticateStrict, requireCapability(CAP.TOPIC_ROUTING_READ), async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 50;
         const offset = parseInt(req.query.offset) || 0;

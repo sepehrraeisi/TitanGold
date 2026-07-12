@@ -43,16 +43,38 @@ const CACHE_TTL = 30 * 1000; // 30 seconds
  * @param {Object} params - Request parameters
  * @returns {Object} Agent result
  */
-export async function run({ userId, symbol, action, config = {} }) {
+export async function run({ userId, symbol, action, config = {}, input = {} }) {
   const startTime = Date.now();
-  
+  const dryRun = config.dry_run === true || input?.dry_run === true || input?.effective_mode === 'dry_run';
+
   try {
     logger.info('📦 Order Management Agent started', {
       userId,
       symbol,
       action,
-      config: Object.keys(config)
+      dryRun,
+      config: Object.keys(config),
     });
+
+    if (dryRun && ['place_order', 'cancel_order', 'modify_order'].includes(action)) {
+      return {
+        agent: 'order_management',
+        symbol,
+        action,
+        timestamp: new Date().toISOString(),
+        result: {
+          simulated: true,
+          dry_run: true,
+          message: 'Order action suppressed — dry run / demo mode',
+          would_execute: { action, symbol, config: { orderType: config.orderType, side: config.side, amount: config.amount } },
+        },
+        metadata: {
+          execution_time_ms: Date.now() - startTime,
+          success: true,
+          side_effects_suppressed: true,
+        },
+      };
+    }
     
     let result;
     

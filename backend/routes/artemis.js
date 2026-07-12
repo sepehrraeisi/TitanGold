@@ -1,5 +1,8 @@
 import express from 'express';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, authenticateStrict, authorize } from '../middleware/auth.js';
+import { requireCapability } from '../middleware/requireCapability.js';
+import { CAP } from '../services/capabilities.js';
+import { evaluateExecutionPolicy, REASON } from '../services/agentExecutionPolicyService.js';
 import { query } from '../database/db.js';
 import { getMixtureDecision } from '../services/artemisOrchestrator.js';
 import { logger } from '../services/logger.js';
@@ -221,7 +224,7 @@ router.get('/state', authenticate, validateResponse(artemisStateResponseSchema),
   }
 });
 
-router.patch('/state', authenticate, validateResponse(artemisStateResponseSchema), async (req, res) => {
+router.patch('/state', authenticateStrict, requireCapability(CAP.ARTEMIS_STATE_WRITE), validateResponse(artemisStateResponseSchema), async (req, res) => {
   try {
     const userId = req.user?.id;
     const { status, mode, strategy, config } = req.body;
@@ -278,9 +281,34 @@ router.get('/scenarios', authenticate, async (req, res) => {
 });
 
 // Decision endpoint for Trading Engine integration
-router.post('/decision', authenticate, validateResponse(artemisDecisionResponseSchema), async (req, res) => {
+router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECISION_EXECUTE), validateResponse(artemisDecisionResponseSchema), async (req, res) => {
   try {
-    const { opportunity, signals, context } = req.body;
+    const { opportunity, signals, context, confirm_live: confirmLive } = req.body;
+
+    const decisionPolicy = await evaluateExecutionPolicy({
+      identityType: 'user',
+      user: req.user,
+      agentKey: 'artemis_decision',
+      agentEnabled: true,
+      params: { action: 'execute_decision', opportunity },
+      confirmLive: confirmLive === true,
+      action: 'artemis.decision',
+    });
+
+    if (!decisionPolicy.allowed) {
+      return res.status(decisionPolicy.reasonCode === REASON.CONFIRMATION_REQUIRED ? 409 : 403).json({
+        action: 'HOLD',
+        approved: false,
+        reason: decisionPolicy.suppressionReason || decisionPolicy.reasonCode,
+        confidence: opportunity?.confidence || 0,
+        policy: {
+          effective_mode: decisionPolicy.effectiveMode,
+          side_effects_suppressed: decisionPolicy.sideEffectsSuppressed,
+        },
+      });
+    }
+
+    const sideEffectsSuppressed = decisionPolicy.sideEffectsSuppressed;
 
     // Get Artemis state
     const stateResult = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');

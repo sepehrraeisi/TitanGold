@@ -1,6 +1,14 @@
 import express from 'express';
 import db from '../database/db.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, authenticateStrict, authorize } from '../middleware/auth.js';
+import { requireCapability } from '../middleware/requireCapability.js';
+import { CAP } from '../services/capabilities.js';
+import {
+  getRuntimeExecutionState,
+  setGlobalRuntimeMode,
+  activateKillSwitch,
+  clearKillSwitch,
+} from '../services/runtimeExecutionStateService.js';
 import { logger } from '../services/logger.js';
 
 const router = express.Router();
@@ -114,7 +122,8 @@ router.post('/trading-mode', authenticate, async (req, res) => {
     
     res.json({ 
       mode,
-      message: `Trading mode switched to ${mode}`,
+      message: `Trading mode preference updated to ${mode}`,
+      note: 'Preference does not grant live execution permission',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -123,6 +132,67 @@ router.post('/trading-mode', authenticate, async (req, res) => {
       error: 'Failed to update trading mode',
       message: error.message 
     });
+  }
+  }
+});
+
+// ============================================================================
+// Global Execution Runtime (multi-process SSOT)
+// ============================================================================
+
+router.get('/execution-runtime', authenticateStrict, async (req, res) => {
+  try {
+    const state = await getRuntimeExecutionState();
+    const userId = req.user.id;
+    const pref = await db.query(
+      `SELECT preferences->'trading'->>'mode' AS mode FROM user_preferences WHERE user_id = $1 AND is_deleted = FALSE LIMIT 1`,
+      [userId],
+    );
+    const requestedMode = pref.rows[0]?.mode === 'live' ? 'live' : 'demo';
+    res.json({
+      requestedMode,
+      effectiveMode: state.killSwitchActive ? 'demo' : state.globalMode,
+      globalRuntimeMode: state.globalMode,
+      killSwitchActive: state.killSwitchActive,
+      killSwitchReason: state.killSwitchReason,
+      deploymentEngineEnabled: String(process.env.TRADING_ENGINE_ENABLED || '').toLowerCase() === 'true',
+      updatedAt: state.updatedAt,
+    });
+  } catch (error) {
+    logger.error('Error fetching execution runtime:', error);
+    res.status(500).json({ error: 'Failed to fetch execution runtime', code: 'RUNTIME_READ_FAILED' });
+  }
+});
+
+router.post('/execution-runtime/mode', authenticateStrict, requireCapability(CAP.RUNTIME_MODE_WRITE), async (req, res) => {
+  try {
+    const { mode, confirm_runtime_mode_change: confirm } = req.body;
+    if (confirm !== true) {
+      return res.status(400).json({ error: 'confirm_runtime_mode_change must be true', code: 'CONFIRMATION_REQUIRED' });
+    }
+    if (mode !== 'demo' && mode !== 'live') {
+      return res.status(400).json({ error: 'Invalid mode', code: 'INVALID_INPUT' });
+    }
+    const saved = await setGlobalRuntimeMode(mode, { userId: req.user.id });
+    res.json({ success: true, globalRuntimeMode: saved.globalMode, effectiveMode: saved.killSwitchActive ? 'demo' : saved.globalMode });
+  } catch (error) {
+    logger.error('Error setting execution runtime mode:', error);
+    res.status(500).json({ error: 'Failed to set runtime mode', code: 'RUNTIME_WRITE_FAILED' });
+  }
+});
+
+router.post('/execution-runtime/kill-switch', authenticateStrict, requireCapability(CAP.KILL_SWITCH_CONTROL), async (req, res) => {
+  try {
+    const { reason, activate = true, confirm_clear_kill_switch: confirmClear } = req.body;
+    if (activate === false) {
+      const saved = await clearKillSwitch({ userId: req.user.id, confirm: confirmClear === true });
+      return res.json({ success: true, killSwitchActive: saved.killSwitchActive });
+    }
+    const saved = await activateKillSwitch(reason || 'manual', { userId: req.user.id });
+    res.json({ success: true, killSwitchActive: saved.killSwitchActive, killSwitchReason: saved.killSwitchReason });
+  } catch (error) {
+    const status = error.status || 500;
+    res.status(status).json({ error: error.message, code: error.code || 'KILL_SWITCH_FAILED' });
   }
 });
 

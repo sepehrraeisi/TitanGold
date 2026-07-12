@@ -1,5 +1,9 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authenticateStrict } from '../middleware/auth.js';
+import { requireCapability } from '../middleware/requireCapability.js';
+import { CAP } from '../services/capabilities.js';
+import { evaluateExecutionPolicy, evaluateConfigurePolicy, REASON } from '../services/agentExecutionPolicyService.js';
+import { sanitizePolicy, writeExecutionAudit } from '../services/agentExecutionService.js';
 import { query } from '../database/db.js';
 import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigDefaults.js';
 import { normalizeArbitrageConfig } from '../services/normalizeArbitrageConfig.js';
@@ -473,6 +477,42 @@ async function runAgentViaRegistry(req, res) {
 
     logger.info(`✅ [Registry] Agent loaded: ${agent.agent_key} (${agent.name})`);
 
+    const confirmLive = req.body?.confirm_live === true || req.body?.confirmLive === true;
+    const executionPolicy = await evaluateExecutionPolicy({
+      identityType: 'user',
+      user: req.user,
+      agentKey: agent.agent_key,
+      agentEnabled: agent.is_enabled,
+      params: { symbol, timeframe, config: mergedConfig, input, action: input?.action },
+      confirmLive,
+      action: 'agent.run',
+    });
+
+    await writeExecutionAudit({
+      userId: req.user?.id,
+      agentId: agent.id,
+      agentKey: agent.agent_key,
+      action: 'run',
+      allowed: executionPolicy.allowed,
+      reasonCode: executionPolicy.reasonCode,
+      effectiveMode: executionPolicy.effectiveMode,
+      sideEffectsSuppressed: executionPolicy.sideEffectsSuppressed,
+    });
+
+    if (!executionPolicy.allowed) {
+      const status = executionPolicy.reasonCode === REASON.CONFIRMATION_REQUIRED ? 409 : 403;
+      return sendError(
+        res,
+        executionPolicy.reasonCode,
+        executionPolicy.suppressionReason || executionPolicy.reasonCode,
+        status,
+        { policy: sanitizePolicy(executionPolicy) },
+      );
+    }
+
+    const sideEffectsSuppressed = executionPolicy.sideEffectsSuppressed;
+    req.executionPolicy = executionPolicy;
+
     // BACKEND-022: Check for active A/B test experiments
     let experimentData = null;
     let assignedVariant = null;
@@ -508,27 +548,30 @@ async function runAgentViaRegistry(req, res) {
     // BACKEND-022: Track execution start for experiment metrics (needed in catch block too)
     const executionStart = Date.now();
 
-    // BACKEND-023: Notify WebSocket clients that agent execution started
-    try {
-      notifyAgentStarted(agent.id, agent.agent_key, req.user?.id, {
-        symbol,
-        timeframe,
-        config: mergedConfig
-      });
-    } catch (wsError) {
-      // Don't fail request if WebSocket notification fails
-      logger.warn(`⚠️ Failed to send WebSocket start notification: ${wsError.message}`);
+    if (!sideEffectsSuppressed) {
+      try {
+        notifyAgentStarted(agent.id, agent.agent_key, req.user?.id, {
+          symbol,
+          timeframe,
+          config: mergedConfig,
+        });
+      } catch (wsError) {
+        logger.warn(`⚠️ Failed to send WebSocket start notification: ${wsError.message}`);
+      }
     }
 
-    // Execute via registry with timeout
     const result = await withTimeout(
       agentRegistry.runAgent(agent.agent_key, {
         userId: req.user?.id,
-        agent_id: agent.id, // Pass agent_id for metrics
+        agent_id: agent.id,
         symbol,
         timeframe,
         config: mergedConfig,
-        input // optional freeform payload for agents
+        input: {
+          ...(input || {}),
+          dry_run: sideEffectsSuppressed || executionPolicy.effectiveMode !== 'live',
+          effective_mode: executionPolicy.effectiveMode,
+        },
       }),
       timeoutMs,
       `Agent ${agent.agent_key} execution timed out after ${timeoutMs}ms`,
@@ -598,36 +641,34 @@ async function runAgentViaRegistry(req, res) {
 
     logger.info(`📊 [Registry] Agent metadata updated for ${agent.agent_key}`);
 
-    // ✅ Trigger webhooks for agent completion (API-008)
-    try {
-      await webhookDispatcher.triggerAgentEvent(
-        req.user?.id,
-        'agent.completed',
-        {
-          agent_id: agent.id,
-          agent_key: agent.agent_key,
-          agent_name: agent.name,
+    if (!sideEffectsSuppressed) {
+      try {
+        await webhookDispatcher.triggerAgentEvent(
+          req.user?.id,
+          'agent.completed',
+          {
+            agent_id: agent.id,
+            agent_key: agent.agent_key,
+            agent_name: agent.name,
+            symbol,
+            timeframe,
+            effective_mode: executionPolicy.effectiveMode,
+            timestamp: new Date().toISOString(),
+          },
+        );
+      } catch (webhookError) {
+        logger.error(`❌ [Webhook] Failed to trigger for ${agent.agent_key}:`, webhookError.message);
+      }
+
+      try {
+        notifyAgentCompleted(agent.id, agent.agent_key, req.user?.id, uiResult, {
+          execution_time_ms: executionTimeMs,
           symbol,
           timeframe,
-          result: uiResult,
-          timestamp: new Date().toISOString()
-        }
-      );
-      logger.info(`🔔 [Webhook] Triggered for agent ${agent.agent_key}`);
-    } catch (webhookError) {
-      // Don't fail the request if webhooks fail
-      logger.error(`❌ [Webhook] Failed to trigger for ${agent.agent_key}:`, webhookError.message);
-    }
-
-    // BACKEND-023: Notify WebSocket clients of completion
-    try {
-      notifyAgentCompleted(agent.id, agent.agent_key, req.user?.id, uiResult, {
-        execution_time_ms: executionTimeMs,
-        symbol,
-        timeframe
-      });
-    } catch (wsError) {
-      logger.warn(`⚠️ Failed to send WebSocket completion notification: ${wsError.message}`);
+        });
+      } catch (wsError) {
+        logger.warn(`⚠️ Failed to send WebSocket completion notification: ${wsError.message}`);
+      }
     }
 
     // ✅ Safety: Ensure indicators is always an array
@@ -640,16 +681,19 @@ async function runAgentViaRegistry(req, res) {
       ok: true,
       agent_id: agent.id,
       agent_key: agent.agent_key,
-
-      // ✅ TOP-LEVEL fields (UI reads: response.indicators.filter(...))
+      policy: sanitizePolicy(executionPolicy),
+      execution: {
+        requested_mode: executionPolicy.requestedMode,
+        effective_mode: executionPolicy.effectiveMode,
+        side_effects_suppressed: sideEffectsSuppressed,
+        suppression_reason: executionPolicy.suppressionReason,
+      },
       ...uiResult,
       indicators: safeIndicators,
-
-      // ✅ Backward/Alt compatibility (UI reads: response.result.indicators.filter(...))
       result: {
         ...uiResult,
-        indicators: safeIndicators
-      }
+        indicators: safeIndicators,
+      },
     });
   } catch (error) {
     logger.error('❌ [Registry] Run error:', error);
@@ -748,14 +792,14 @@ async function runAgentViaRegistry(req, res) {
 // POST /api/ai-agents/:id/run-v2
 // Supports: application/json (default), text/csv (export)
 // ============================================================================
-router.post('/:id/run-v2', authenticate, contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), validateParams(analyzeParamsSchema), validateBody(analyzeBodySchema), validateResponse(agentAnalysisResponseSchema), runAgentViaRegistry);
+router.post('/:id/run-v2', authenticateStrict, requireCapability(CAP.AI_AGENT_EXECUTE_SAFE), contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), validateParams(analyzeParamsSchema), validateBody(analyzeBodySchema), validateResponse(agentAnalysisResponseSchema), runAgentViaRegistry);
 
 // ============================================================================
 // LEGACY /run endpoint - NOW USES REGISTRY (same as /run-v2)
 // POST /api/ai-agents/:id/run
 // Supports: application/json (default), text/csv (export)
 // ============================================================================
-router.post('/:id/run', authenticate, contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), validateParams(analyzeParamsSchema), validateBody(analyzeBodySchema), validateResponse(agentAnalysisResponseSchema), runAgentViaRegistry);
+router.post('/:id/run', authenticateStrict, requireCapability(CAP.AI_AGENT_EXECUTE_SAFE), contentNegotiation(['json', 'csv']), rateLimit({ limit: 15, windowMs: 60000 }), validateParams(analyzeParamsSchema), validateBody(analyzeBodySchema), validateResponse(agentAnalysisResponseSchema), runAgentViaRegistry);
 
 // ============================================================================
 // OLD LEGACY ROUTE (KEPT FOR REFERENCE - DEPRECATED)
@@ -1276,10 +1320,15 @@ router.post('/:id/command', authenticate, rateLimit({ limit: 20, windowMs: 60000
   }
 });
 // PATCH /api/ai-agents/:id/config - Update agent configuration
-router.patch('/:id/config', authenticate, async (req, res) => {
+router.patch('/:id/config', authenticateStrict, requireCapability(CAP.AI_AGENT_CONFIGURE), async (req, res) => {
   try {
     const { id } = req.params;
     const { config, metadata } = req.body;
+
+    const configurePolicy = await evaluateConfigurePolicy(req.user, 'agent.configure');
+    if (!configurePolicy.allowed) {
+      return sendError(res, configurePolicy.reasonCode, 'Insufficient permissions', 403);
+    }
 
     // Validate
     if (!config || typeof config !== 'object') {
@@ -1725,9 +1774,18 @@ router.get('/:id', authenticate, validateParams(getAgentParamsSchema), validateR
 });
 
 // Update AI agent
-router.patch('/:id', authenticate, validateParams(updateAgentParamsSchema), validateBody(updateAgentBodySchema), validateResponse(agentResponseSchema), async (req, res) => {
+router.patch('/:id', authenticateStrict, requireCapability(CAP.AI_AGENT_ENABLE_DISABLE, CAP.AI_AGENT_CONFIGURE), validateParams(updateAgentParamsSchema), validateBody(updateAgentBodySchema), validateResponse(agentResponseSchema), async (req, res) => {
   try {
     const { status, config, is_enabled } = req.body;
+
+    if (is_enabled !== undefined) {
+      const p = await evaluateConfigurePolicy(req.user, 'agent.enable');
+      if (!p.allowed) return res.status(403).json({ error: 'Insufficient permissions', code: 'CAPABILITY_DENIED' });
+    }
+    if (config !== undefined || status !== undefined) {
+      const p = await evaluateConfigurePolicy(req.user, 'agent.configure');
+      if (!p.allowed) return res.status(403).json({ error: 'Insufficient permissions', code: 'CAPABILITY_DENIED' });
+    }
     const updates = [];
     const values = [];
     let paramCount = 1;
