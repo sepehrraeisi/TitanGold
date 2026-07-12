@@ -134,4 +134,3 @@ export async function fetchAccessControlRegistryAgents(): Promise<RegistryAgentO
     });
     return agents;
 }
-import { SourceAccessControl } from '../types';

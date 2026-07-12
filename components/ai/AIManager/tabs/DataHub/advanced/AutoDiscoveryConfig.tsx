@@ -270,26 +270,26 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
     return (
         <div className={SHELL}>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                    <div>
+                <div>
                     <h3 className="text-sm md:text-base font-semibold text-foreground">
                         {t('auto_discovery')}
-                        </h3>
+                    </h3>
                     <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
                         {t('auto_discovery_desc')}
-                        </p>
-                    </div>
+                    </p>
+                </div>
                 <div className="flex flex-wrap items-center gap-3">
                     <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <input
-                                type="checkbox"
+                        <input
+                            type="checkbox"
                             checked={stats?.settings?.enabled ?? false}
                             disabled={wg(settingsMut.isPending).disabled}
                             title={wg(settingsMut.isPending).title}
                             onChange={e => canWrite && settingsMut.mutate(e.target.checked)}
-                                className="rounded"
-                            />
+                            className="rounded"
+                        />
                         {t('discovery_enabled')}
-                        </label>
+                    </label>
                     <button
                         type="button"
                         onClick={() => scanMut.mutate()}
@@ -335,8 +335,8 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                             ? new Date(stats.settings.last_scan_at).toLocaleString()
                             : t('discovery_never')}
                     </p>
-                    </div>
                 </div>
+            </div>
 
             {queryError && (
                 <div className="mb-4">
@@ -382,13 +382,13 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                     </div>
                     {scanMut.data.duplicate_details?.length ? (
                         <>
-                        <button
+                            <button
                                 type="button"
                                 className="mt-2 text-purple-300 hover:underline"
                                 onClick={() => setShowScanDetails(v => !v)}
                             >
                                 {t('discovery_view_details')}
-                        </button>
+                            </button>
                             {showScanDetails ? (
                                 <DuplicateDetailList
                                     details={scanMut.data.duplicate_details}
@@ -419,7 +419,7 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                 }))}
             />
 
-                {activeTab === 'discovered' && (
+            {activeTab === 'discovered' && (
                 <div className="space-y-2">
                     {isLoading ? (
                         <p className="text-[11px] text-muted-foreground py-8 text-center">{t('loading')}</p>
@@ -427,7 +427,7 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                         <div className="text-center py-10 text-muted-foreground">
                             <p className="text-sm font-medium">{t('discovery_empty_title')}</p>
                             <p className="text-[11px] mt-1">{t('discovery_empty_hint')}</p>
-                                        </div>
+                        </div>
                     ) : (
                         sortedPending.map(s => (
                             <div
@@ -502,13 +502,13 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                                         </button>
                                     </div>
                                 ) : null}
-                                </div>
-                            ))
-                        )}
-                    </div>
-                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
 
-                {activeTab === 'rules' && (
+            {activeTab === 'rules' && (
                 <div>
                     <div className="flex justify-between mb-3">
                         <p className="text-[11px] text-muted-foreground">{t('discovery_rules_desc')}</p>
@@ -521,7 +521,7 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                         >
                             {t('discovery_rule_add')}
                         </button>
-                        </div>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {rules.map(rule => (
                             <div
@@ -548,11 +548,11 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                                 <code className="text-[10px] font-mono text-muted-foreground block mt-1 truncate">
                                     {rule.pattern}
                                 </code>
-                                </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))}
                     </div>
-                )}
+                </div>
+            )}
 
             {activeTab === 'history' && (
                 <div>
@@ -569,8 +569,8 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                             }}
                         />
                     )}
-                    </div>
-                )}
+                </div>
+            )}
 
             {showRuleModal ? (
                 <DiscoveryRuleModal
@@ -583,7 +583,7 @@ const AutoDiscoveryConfig: React.FC<AutoDiscoveryConfigProps> = ({ t }) => {
                     t={t}
                 />
             ) : null}
-            </div>
+        </div>
     );
 };
 

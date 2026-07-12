@@ -16,11 +16,8 @@ BACKUP_BASE="/var/backups/titangold"
 DAILY_DIR="${BACKUP_BASE}/daily"
 WEEKLY_DIR="${BACKUP_BASE}/weekly"
 MONTHLY_DIR="${BACKUP_BASE}/monthly"
-BACKUP_LOG="/var/log/titangold-backup.log"
-BURNIN_START_FILE="/var/log/titangold-burn-in-start.date"
-BURNIN_DAYS=7
-BURNIN_TEMP_DIR="/var/www/titangold-temp-backups"
-POSTGRES_ENV="/etc/titangold-backup-postgres.env"
+GROWTH_TRACKING_FILE="/var/log/titangold-backup-growth.log"
+NGINX_ACCESS_LOG="/var/log/nginx/titangold-backup-downloads.log"
 
 # Frontend and Backend URLs
 FRONTEND_URL="https://titan.zala.ir"
@@ -74,14 +71,14 @@ if [ -n "$LATEST_BACKUP" ]; then
         BACKUP_STATUS="🔴 Failed"
         BACKUP_EMOJI="🔴"
         OVERALL_STATUS="CRITICAL"
-        CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
+        ((CRITICAL_COUNT++))
     elif [ -n "$BACKUP_AGE_HOURS" ] && [ "$((BACKUP_AGE_HOURS))" -ge "$BACKUP_AGE_WARNING_HOURS" ]; then
         BACKUP_STATUS="⚠️ Warning"
         BACKUP_EMOJI="⚠️"
         if [ "$OVERALL_STATUS" == "OK" ]; then
             OVERALL_STATUS="WARNING"
         fi
-        WARNING_COUNT=$((WARNING_COUNT + 1))
+        ((WARNING_COUNT++))
     else
         BACKUP_STATUS="✅ OK"
         BACKUP_EMOJI="✅"
@@ -112,7 +109,7 @@ else
     BACKUP_STATUS="🔴 Failed"
     BACKUP_EMOJI="🔴"
     OVERALL_STATUS="CRITICAL"
-    CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
+    ((CRITICAL_COUNT++))
     REPORT="${REPORT}📦 Backup%0A"
     REPORT="${REPORT}Status: ${BACKUP_STATUS}%0A"
     REPORT="${REPORT}Error: No backups found%0A"
@@ -132,13 +129,13 @@ DISK_TOTAL=$(df -h / | awk 'NR==2 {print $2}')
 DISK_EMOJI="✅"
 if [ "$DISK_USAGE" -gt 80 ]; then
     DISK_EMOJI="🔴"
-    CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
+    ((CRITICAL_COUNT++))
     if [ "$OVERALL_STATUS" == "OK" ]; then
         OVERALL_STATUS="CRITICAL"
     fi
 elif [ "$DISK_USAGE" -gt 70 ]; then
     DISK_EMOJI="⚠️"
-    WARNING_COUNT=$((WARNING_COUNT + 1))
+    ((WARNING_COUNT++))
     if [ "$OVERALL_STATUS" == "OK" ]; then
         OVERALL_STATUS="WARNING"
     fi
@@ -191,7 +188,7 @@ if [ "$FRONTEND_HTTP_CODE" == "200" ]; then
 else
     FRONTEND_STATUS="🔴 Offline"
     FRONTEND_DETAIL="HTTP ${FRONTEND_HTTP_CODE}"
-    CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
+    ((CRITICAL_COUNT++))
     if [ "$OVERALL_STATUS" == "OK" ]; then
         OVERALL_STATUS="CRITICAL"
     fi
@@ -210,7 +207,7 @@ if [ "$BACKEND_HTTP_CODE" == "200" ]; then
     else
         BACKEND_STATUS="⚠️ Online"
         BACKEND_DETAIL="HTTP ${BACKEND_HTTP_CODE}, DB ${DB_STATUS}"
-        WARNING_COUNT=$((WARNING_COUNT + 1))
+        ((WARNING_COUNT++))
         if [ "$OVERALL_STATUS" == "OK" ]; then
             OVERALL_STATUS="WARNING"
         fi
@@ -218,7 +215,7 @@ if [ "$BACKEND_HTTP_CODE" == "200" ]; then
 else
     BACKEND_STATUS="🔴 Offline"
     BACKEND_DETAIL="HTTP ${BACKEND_HTTP_CODE}"
-    CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
+    ((CRITICAL_COUNT++))
     if [ "$OVERALL_STATUS" == "OK" ]; then
         OVERALL_STATUS="CRITICAL"
     fi
@@ -242,7 +239,7 @@ if systemctl is-active --quiet nginx; then
     REPORT="${REPORT}Nginx: ✅ Running%0A"
 else
     REPORT="${REPORT}Nginx: 🔴 Stopped%0A"
-    CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
+    ((CRITICAL_COUNT++))
     if [ "$OVERALL_STATUS" == "OK" ]; then
         OVERALL_STATUS="CRITICAL"
     fi
@@ -253,7 +250,7 @@ if systemctl is-active --quiet postgresql; then
     REPORT="${REPORT}PostgreSQL: ✅ Running%0A"
 else
     REPORT="${REPORT}PostgreSQL: 🔴 Stopped%0A"
-    CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
+    ((CRITICAL_COUNT++))
     if [ "$OVERALL_STATUS" == "OK" ]; then
         OVERALL_STATUS="CRITICAL"
     fi
@@ -296,184 +293,7 @@ fi
 REPORT="${REPORT}%0A"
 
 # ==========================================
-# 5. BURN-IN STATUS (7-day stability watch)
-# ==========================================
-if [ ! -f "$BURNIN_START_FILE" ]; then
-    date '+%Y-%m-%d' > "$BURNIN_START_FILE"
-fi
-BURNIN_START=$(cat "$BURNIN_START_FILE")
-TODAY_DATE=$(date '+%Y-%m-%d')
-BURNIN_DAY=$(( ( $(date -d "$TODAY_DATE" +%s) - $(date -d "$BURNIN_START" +%s) ) / 86400 + 1 ))
-if [ "$BURNIN_DAY" -lt 1 ]; then BURNIN_DAY=1; fi
-if [ "$BURNIN_DAY" -gt "$BURNIN_DAYS" ]; then BURNIN_DAY=$BURNIN_DAYS; fi
-
-burnin_failures=""
-BURNIN_ALERT=0
-
-mark_burnin_fail() {
-    local label="$1"
-    local detail="${2:-}"
-    BURNIN_ALERT=1
-    if [ -n "$detail" ]; then
-        burnin_failures="${burnin_failures}- ${label}: ${detail}%0A"
-    else
-        burnin_failures="${burnin_failures}- ${label}%0A"
-    fi
-}
-
-# --- Backup: completed, size OK, SHA256, decrypt ---
-BI_BACKUP="✅"
-if ! grep -q "${TODAY_DATE}.*Backup process finished successfully" "$BACKUP_LOG" 2>/dev/null \
-   && ! grep -q "$(date -d '1 day ago' '+%Y-%m-%d').*Backup process finished successfully" "$BACKUP_LOG" 2>/dev/null; then
-    BI_BACKUP="❌"
-    mark_burnin_fail "Backup" "no successful backup in last 24h"
-fi
-
-if [ -n "${LATEST_BACKUP:-}" ] && [ "$BI_BACKUP" == "✅" ]; then
-    if [ "${BACKUP_AGE_HOURS:-999}" -ge 26 ]; then
-        BI_BACKUP="❌"
-        mark_burnin_fail "Backup" "latest backup too old (${BACKUP_AGE_HOURS}h)"
-    fi
-fi
-
-BI_SHA256="✅"
-BI_DECRYPT="✅"
-if [ -n "${LATEST_BACKUP:-}" ] && [ -f "${LATEST_BACKUP}.sha256" ]; then
-    stored_sum=$(awk '{print $1}' "${LATEST_BACKUP}.sha256")
-    current_sum=$(sha256sum "$LATEST_BACKUP" | awk '{print $1}')
-    if [ "$stored_sum" != "$current_sum" ]; then
-        BI_SHA256="❌"
-        BI_BACKUP="❌"
-        mark_burnin_fail "SHA256" "checksum mismatch on ${BACKUP_NAME:-latest}"
-    fi
-else
-    BI_SHA256="❌"
-    BI_BACKUP="❌"
-    mark_burnin_fail "SHA256" "missing checksum file"
-fi
-
-if grep -q "${TODAY_DATE}.*GPG decrypt verification passed" "$LOG_FILE" 2>/dev/null; then
-    BI_DECRYPT="✅"
-else
-    BI_DECRYPT="❌"
-    BI_BACKUP="❌"
-    mark_burnin_fail "GPG decrypt" "healthcheck decrypt not passed today"
-fi
-
-# Backup size vs median of recent backups
-if [ -n "${LATEST_BACKUP:-}" ] && [ "$BI_BACKUP" == "✅" ]; then
-    latest_bytes=$(stat -c %s "$LATEST_BACKUP")
-    mapfile -t _bi_sizes < <(find "$DAILY_DIR" -type f -name '*.sql.gpg' -printf '%s\n' | sort -n)
-    if [ "${#_bi_sizes[@]}" -ge 2 ]; then
-        _bi_median="${_bi_sizes[$(( ${#_bi_sizes[@]} / 2 ))]}"
-        _bi_ratio=$(( latest_bytes * 100 / _bi_median ))
-        if [ "$_bi_ratio" -lt 70 ]; then
-            BI_BACKUP="❌"
-            mark_burnin_fail "Backup size" "${_bi_ratio}% of median (threshold 70%)"
-        fi
-    fi
-fi
-
-# --- Rotation ---
-BI_ROTATION="✅"
-if ! grep -q "\[${TODAY_DATE} 03:" "$LOG_FILE" 2>/dev/null || \
-   ! grep "${TODAY_DATE}" "$LOG_FILE" | grep -q "Backup Rotation Completed Successfully"; then
-    BI_ROTATION="❌"
-    mark_burnin_fail "Rotation" "not completed successfully today"
-fi
-
-# --- Healthcheck ---
-BI_HEALTH="✅"
-if ! grep -q "${TODAY_DATE}.*Backup health check passed" "$LOG_FILE" 2>/dev/null; then
-    BI_HEALTH="❌"
-    mark_burnin_fail "Healthcheck" "did not pass today"
-fi
-
-# --- Daily Report (yesterday's run; today runs after this block) ---
-BI_REPORT="✅"
-if ! grep -q "\[$(date -d '1 day ago' '+%Y-%m-%d') 05:" "$LOG_FILE" 2>/dev/null || \
-   ! grep "$(date -d '1 day ago' '+%Y-%m-%d')" "$LOG_FILE" | grep -q "Daily report sent successfully"; then
-    : # first burn-in day has no prior report — keep ✅
-    if [ "$BURNIN_DAY" -gt 1 ]; then
-        BI_REPORT="❌"
-        mark_burnin_fail "Daily Report" "yesterday report not confirmed in log"
-    fi
-fi
-
-# --- Disk stable (<=80%, not in critical band) ---
-BI_DISK="✅"
-if [ "$DISK_USAGE" -gt 80 ]; then
-    BI_DISK="❌"
-    mark_burnin_fail "Disk" "usage ${DISK_USAGE}% (threshold 80%)"
-elif [ "$DISK_USAGE" -gt 75 ]; then
-    BI_DISK="⚠️"
-    mark_burnin_fail "Disk" "usage ${DISK_USAGE}% (watch threshold 75%)"
-fi
-
-# --- Orphan SQL files ---
-ORPHAN_COUNT=$(find "$BACKUP_BASE" -type f -name '*.sql' ! -name '*.sql.gpg' 2>/dev/null | wc -l)
-ORPHAN_COUNT=$(echo "$ORPHAN_COUNT" | tr -d ' ')
-if [ "$ORPHAN_COUNT" -gt 0 ]; then
-    mark_burnin_fail "Orphan SQL" "${ORPHAN_COUNT} file(s) found"
-fi
-
-# --- Partial GPG (smaller than 50% of median) ---
-PARTIAL_GPG_COUNT=0
-mapfile -t _pgp_sizes < <(find "$DAILY_DIR" -type f -name '*.sql.gpg' -printf '%s\n' | sort -n)
-if [ "${#_pgp_sizes[@]}" -ge 2 ]; then
-    _pgp_median="${_pgp_sizes[$(( ${#_pgp_sizes[@]} / 2 ))]}"
-    _pgp_threshold=$(( _pgp_median * 50 / 100 ))
-    while IFS= read -r _gpg; do
-        _sz=$(stat -c %s "$_gpg")
-        if [ "$_sz" -lt "$_pgp_threshold" ]; then
-            PARTIAL_GPG_COUNT=$((PARTIAL_GPG_COUNT + 1))
-        fi
-    done < <(find "$DAILY_DIR" -type f -name '*.sql.gpg')
-fi
-if [ "$PARTIAL_GPG_COUNT" -gt 0 ]; then
-    mark_burnin_fail "Partial GPG" "${PARTIAL_GPG_COUNT} suspicious file(s)"
-fi
-
-# --- Temp download cleanup (no files older than 25h) ---
-STALE_TEMP=$(find "$BURNIN_TEMP_DIR" -type f -mmin +1500 2>/dev/null | wc -l)
-STALE_TEMP=$(echo "$STALE_TEMP" | tr -d ' ')
-if [ "$STALE_TEMP" -gt 0 ]; then
-    mark_burnin_fail "Temp cleanup" "${STALE_TEMP} stale download file(s)"
-fi
-
-# --- Infrastructure (reuse earlier checks) ---
-if [ "${FRONTEND_HTTP_CODE:-000}" != "200" ]; then
-    mark_burnin_fail "Frontend" "HTTP ${FRONTEND_HTTP_CODE:-000}"
-fi
-if [ "${BACKEND_HTTP_CODE:-000}" != "200" ] || [ "${DB_STATUS:-unknown}" != "connected" ]; then
-    mark_burnin_fail "Backend API" "HTTP ${BACKEND_HTTP_CODE:-000}, DB ${DB_STATUS:-unknown}"
-fi
-if ! systemctl is-active --quiet nginx; then
-    mark_burnin_fail "Nginx" "not running"
-fi
-if ! systemctl is-active --quiet postgresql; then
-    mark_burnin_fail "PostgreSQL" "not running"
-fi
-
-BURNIN_SECTION="🔥 Burn-in Status%0A"
-BURNIN_SECTION="${BURNIN_SECTION}Day ${BURNIN_DAY} / ${BURNIN_DAYS}%0A%0A"
-BURNIN_SECTION="${BURNIN_SECTION}Backup: ${BI_BACKUP}%0A"
-BURNIN_SECTION="${BURNIN_SECTION}Rotation: ${BI_ROTATION}%0A"
-BURNIN_SECTION="${BURNIN_SECTION}Healthcheck: ${BI_HEALTH}%0A"
-BURNIN_SECTION="${BURNIN_SECTION}Daily Report: ${BI_REPORT}%0A"
-BURNIN_SECTION="${BURNIN_SECTION}Disk Stable: ${BI_DISK}%0A"
-BURNIN_SECTION="${BURNIN_SECTION}Orphan Files: ${ORPHAN_COUNT}%0A"
-BURNIN_SECTION="${BURNIN_SECTION}Partial GPG: ${PARTIAL_GPG_COUNT}%0A"
-
-# Immediate burn-in alert (do not wait until next morning)
-if [ "$BURNIN_ALERT" -eq 1 ]; then
-    log "Burn-in check FAILED — sending immediate Telegram warning"
-    BURNIN_WARN_MSG="*Burn-in Alert* 🔥%0A%0ADay ${BURNIN_DAY} / ${BURNIN_DAYS}%0A%0A${burnin_failures}"
-    /usr/local/bin/titangold-telegram-notify.sh warning "$BURNIN_WARN_MSG" || true
-fi
-
-# ==========================================
-# 6. OVERALL STATUS AND NOTES
+# 5. OVERALL STATUS AND NOTES
 # ==========================================
 # Add overall status at the top
 OVERALL_EMOJI="✅"
@@ -494,8 +314,6 @@ if [ -n "${BACKUP_AGE_HOURS:-}" ] && [ "${BACKUP_AGE_HOURS}" -ge "$BACKUP_AGE_CR
     FINAL_REPORT="${FINAL_REPORT}⚠️ Notes%0A"
     FINAL_REPORT="${FINAL_REPORT}- Latest backup is too old: ${BACKUP_AGE_HOURS}h%0A"
 fi
-
-FINAL_REPORT="${FINAL_REPORT}%0A${BURNIN_SECTION}"
 
 # ==========================================
 # SEND REPORT

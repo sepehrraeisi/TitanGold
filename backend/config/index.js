@@ -209,4 +209,4 @@ if (nodeEnv === 'development') {
 export default config;
 
 // Export utilities
-export { maskSecrets };
+export { maskSecrets, checkRequiredSecrets };
