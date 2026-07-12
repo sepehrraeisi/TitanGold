@@ -6,10 +6,10 @@
 ## Final Commit Hash
 
 ```
-9be95e7fdc7499aa0e68f5975e2e2b1b5b72dbe1
+1214f99314e3cd1336bf3439f80a65f3a183d0f5
 ```
 
-Short: `9be95e7` — `docs(datahub): record final repository push verification on main`
+Short: `1214f99` — `docs(datahub): record final repository push verification on main`
 
 Cleanup commit (prior on `main`): `45e4e06` — `chore(repo): clean up accidental backup merge artifacts on main`
 
@@ -44,16 +44,16 @@ No force push used.
 
 ```bash
 git push origin main
-# 45e4e06..9be95e7  main -> main
+# 45e4e06..1214f99  main -> main
 ```
 
 ## Post-Push Verification (final HEAD)
 
 | Check | Result |
 |-------|--------|
-| Local HEAD | `9be95e7fdc7499aa0e68f5975e2e2b1b5b72dbe1` |
-| `origin/main` | `9be95e7fdc7499aa0e68f5975e2e2b1b5b72dbe1` |
-| `git ls-remote origin refs/heads/main` | `9be95e7fdc7499aa0e68f5975e2e2b1b5b72dbe1` |
+| Local HEAD | `1214f99314e3cd1336bf3439f80a65f3a183d0f5` |
+| `origin/main` | `1214f99314e3cd1336bf3439f80a65f3a183d0f5` |
+| `git ls-remote origin refs/heads/main` | `1214f99314e3cd1336bf3439f80a65f3a183d0f5` |
 | `git status` | Clean |
 | `git status -sb` | `## main...origin/main` (ahead 0, behind 0) |
 
