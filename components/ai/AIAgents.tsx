@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAppContext } from '../../context/AppContext.tsx';
 import * as api from '../../services/api.ts';
 import { AIAgent } from '../../types.ts';
 import ErrorBoundary from '../ErrorBoundary.tsx';
@@ -9,9 +10,15 @@ import SkeletonLoader, { AgentListSkeleton } from '../ui/SkeletonLoader';
 import { useAgentFavorites } from '../../hooks/useAgentFavorites';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useWebSocket, WebSocketMessage } from '../../hooks/useWebSocket.ts';
+import { useExecutionRuntime } from '../../hooks/useExecutionRuntime.ts';
+import AgentSafetyBanner from './AgentSafetyBanner.tsx';
+import { canExecuteAgents } from '../../utils/agentPermissions.ts';
 
 const AIAgents: React.FC = () => {
     const { t } = useLanguage();
+    const { user } = useAppContext();
+    const { runtime, loading: runtimeLoading } = useExecutionRuntime();
+    const canExecute = canExecuteAgents(user?.role);
     const [isLoading, setIsLoading] = useState(true);
     const [agents, setAgents] = useState<AIAgent[]>([]);
     const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
@@ -161,6 +168,7 @@ const AIAgents: React.FC = () => {
 
     return (
         <>
+            <AgentSafetyBanner runtime={runtime} canExecute={canExecute} loading={runtimeLoading} />
             {/* Search and Filter Bar */}
             <div className="mb-6 space-y-4">
                 {/* Search Input */}

@@ -1,26 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { TopicRoutingRule, TopicRoutingLog } from '../../types.ts';
 import * as api from '../../services/api.ts';
 import { useLanguage } from '../../context/LanguageContext.tsx';
-
-const AVAILABLE_AGENTS = [
-    { key: 'market_intelligence', label: 'Market Intelligence' },
-    { key: 'sentiment', label: 'Sentiment Analysis' },
-    { key: 'technical', label: 'Technical Analysis' },
-    { key: 'risk', label: 'Risk Assessment' },
-    { key: 'pattern', label: 'Pattern Recognition' },
-    { key: 'price_prediction', label: 'Price Prediction' },
-    { key: 'arbitrage', label: 'Arbitrage' },
-    { key: 'portfolio', label: 'Portfolio Allocation' },
-    { key: 'optimization', label: 'Optimization' },
-    { key: 'order_management', label: 'Order Management' },
-    { key: 'timing', label: 'Timing' },
-    { key: 'trend', label: 'Trend Analysis' },
-    { key: 'volume', label: 'Volume Analysis' },
-];
+import { useAppContext } from '../../context/AppContext.tsx';
+import { canWriteTopicRouting } from '../../utils/agentPermissions.ts';
 
 const TopicRouting: React.FC = () => {
     const { t } = useLanguage();
+    const { user } = useAppContext();
+    const canWrite = canWriteTopicRouting(user?.role);
+    const [agentOptions, setAgentOptions] = useState<Array<{ key: string; label: string }>>([]);
     const [rules, setRules] = useState<TopicRoutingRule[]>([]);
     const [logs, setLogs] = useState<TopicRoutingLog[]>([]);
     const [totalLogs, setTotalLogs] = useState(0);
@@ -49,6 +38,16 @@ const TopicRouting: React.FC = () => {
 
     useEffect(() => {
         loadRules();
+        api.fetchAIAgents()
+            .then((agents) => {
+                setAgentOptions(
+                    agents
+                        .filter((a) => a.agent_key)
+                        .map((a) => ({ key: a.agent_key!, label: a.name || a.agent_key! }))
+                        .sort((a, b) => a.label.localeCompare(b.label)),
+                );
+            })
+            .catch(() => setAgentOptions([]));
     }, []);
 
     useEffect(() => {
@@ -190,12 +189,18 @@ const TopicRouting: React.FC = () => {
                         Automatically route data to AI agents based on keywords
                     </p>
                 </div>
-                <button
-                    onClick={handleCreate}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-medium"
-                >
-                    + Create Rule
-                </button>
+                {canWrite ? (
+                    <button
+                        onClick={handleCreate}
+                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-medium"
+                    >
+                        + {t('create_rule') || 'Create Rule'}
+                    </button>
+                ) : (
+                    <span className="text-xs text-muted-foreground px-3 py-2 rounded-lg border border-border bg-muted/30" role="status">
+                        {t('topic_routing_read_only') || 'Read-only — admin required to modify routing rules'}
+                    </span>
+                )}
             </div>
 
             {/* Tabs */}
@@ -262,10 +267,11 @@ const TopicRouting: React.FC = () => {
                                             </div>
                                             <div className="text-sm text-muted-foreground">
                                                 Routes to: <span className="text-foreground font-medium">
-                                                    {AVAILABLE_AGENTS.find(a => a.key === rule.agent_key)?.label || rule.agent_key}
+                                                    {agentOptions.find(a => a.key === rule.agent_key)?.label || rule.agent_key}
                                                 </span>
                                             </div>
                                         </div>
+                                        {canWrite && (
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => handleToggleActive(rule)}
@@ -289,6 +295,7 @@ const TopicRouting: React.FC = () => {
                                                 🗑️
                                             </button>
                                         </div>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -335,7 +342,7 @@ const TopicRouting: React.FC = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-foreground">
-                                                    {AVAILABLE_AGENTS.find(a => a.key === log.agent_key)?.label || log.agent_key}
+                                                    {agentOptions.find(a => a.key === log.agent_key)?.label || log.agent_key}
                                                 </td>
                                             </tr>
                                         ))}
@@ -443,7 +450,7 @@ const TopicRouting: React.FC = () => {
                                     className="w-full px-3 py-2 bg-background border border-border rounded text-foreground"
                                 >
                                     <option value="">Select an agent...</option>
-                                    {AVAILABLE_AGENTS.map(agent => (
+                                    {agentOptions.map(agent => (
                                         <option key={agent.key} value={agent.key}>
                                             {agent.label}
                                         </option>
