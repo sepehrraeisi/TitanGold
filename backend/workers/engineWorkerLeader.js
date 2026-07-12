@@ -224,11 +224,32 @@ class EngineWorkerLeader {
 
       this.enginesStarted = true;
       logger.info('✅ All engines initialized');
+
+      this.startKillSwitchMonitor();
       
     } catch (error) {
       logger.error('❌ Failed to start engines:', error);
       throw error;
     }
+  }
+
+  /**
+   * Poll shared kill-switch state and stop trading engine when active.
+   */
+  startKillSwitchMonitor() {
+    if (this.killSwitchInterval) clearInterval(this.killSwitchInterval);
+    this.killSwitchInterval = setInterval(async () => {
+      try {
+        const { getRuntimeExecutionState } = await import('../services/runtimeExecutionStateService.js');
+        const state = await getRuntimeExecutionState();
+        if (state.killSwitchActive && tradingEngine?.stop) {
+          logger.warn(`🛑 Kill switch active (${state.killSwitchReason}) — stopping trading engine`);
+          await tradingEngine.stop();
+        }
+      } catch (err) {
+        logger.warn('Kill switch monitor error:', err.message);
+      }
+    }, 15000);
   }
 
   /**

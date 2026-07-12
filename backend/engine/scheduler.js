@@ -202,20 +202,29 @@ class SchedulerService {
 
     async executeAgentFunction(agentId, funcName) {
         try {
-            // Use direct API calls instead of importing frontend services
-            // These will be implemented as backend API endpoints
-            const response = await fetch(`http://localhost:${process.env.PORT || 5001}/api/ai-agents/${agentId}/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ function: funcName })
+            const { executeAgentRun } = await import('../services/agentExecutionService.js');
+
+            const result = await executeAgentRun({
+                agentId,
+                symbol: 'BTCUSDT',
+                timeframe: '1h',
+                input: { function: funcName },
+                identityType: 'system',
+                user: null,
+                confirmLive: false,
             });
 
-            if (!response.ok) {
-                throw new Error(`API call failed: ${response.status}`);
+            if (!result.ok) {
+                throw new Error(result.message || result.code || 'Agent execution denied');
             }
+
+            logger.info(`✅ Scheduled agent execution complete: ${agentId} (${funcName})`, {
+                effective_mode: result.policy?.effectiveMode,
+                side_effects_suppressed: result.sideEffectsSuppressed,
+            });
         } catch (error) {
-            // Fallback: Log the execution
-            logger.info(`✅ Executed ${funcName} for ${agentId}`);
+            logger.error(`❌ Failed to execute ${funcName} for ${agentId}:`, error.message);
+            throw error;
         }
     }
 
