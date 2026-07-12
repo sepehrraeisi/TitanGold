@@ -1,0 +1,133 @@
+{
+  "generatedAt": "2026-07-12T15:48:45.175Z",
+  "agents": [
+    {
+      "key": "technical",
+      "backendModule": "backend/services/agents/technical.js",
+      "frontendPanel": "TechnicalAnalysisAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "risk",
+      "backendModule": "backend/services/agents/risk.js",
+      "frontendPanel": "RiskManagementAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "sentiment",
+      "backendModule": "backend/services/agents/sentiment.js",
+      "frontendPanel": "SentimentAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "pattern",
+      "backendModule": "backend/services/agents/pattern.js",
+      "frontendPanel": "PatternAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "price_prediction",
+      "backendModule": "backend/services/agents/price_prediction.js",
+      "frontendPanel": "PricePredictionAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "arbitrage",
+      "backendModule": "backend/services/agents/arbitrage.js",
+      "frontendPanel": "ArbitrageAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "portfolio",
+      "backendModule": "backend/services/agents/portfolio.js",
+      "frontendPanel": "PortfolioAllocationAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "liquidity",
+      "backendModule": "backend/services/agents/liquidity.js",
+      "frontendPanel": "LiquidityAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "trend",
+      "backendModule": "backend/services/agents/trend.js",
+      "frontendPanel": "TrendAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "optimization",
+      "backendModule": "backend/services/agents/optimization.js",
+      "frontendPanel": "OptimizationAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "order",
+      "backendModule": "backend/services/agents/order.js",
+      "frontendPanel": "OrderManagementAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "fundamental",
+      "backendModule": "backend/services/agents/fundamental.js",
+      "frontendPanel": "FundamentalAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "market_intelligence",
+      "backendModule": "backend/services/agents/market_intelligence.js",
+      "frontendPanel": "MarketIntelligenceAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "volume",
+      "backendModule": "backend/services/agents/volume.js",
+      "frontendPanel": "VolumeAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "timing",
+      "backendModule": "backend/services/agents/timing.js",
+      "frontendPanel": "TimingAgentControl.tsx",
+      "hasRunHandler": true,
+      "usesExecutionGate": true,
+      "usesHardcodedRole": false
+    },
+    {
+      "key": "artemis_decision",
+      "backendModule": "MISSING",
+      "frontendPanel": "MISSING",
+      "hasRunHandler": false,
+      "usesExecutionGate": false,
+      "usesHardcodedRole": false
+    }
+  ]
+}

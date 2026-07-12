@@ -1,0 +1,629 @@
+{
+  "generatedAt": "2026-07-12T15:41:53.178Z",
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-agents/chat",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "execution"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-agents/:id/run-v2",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.AI_AGENT_EXECUTE_SAFE)"
+      ],
+      "sideEffect": "execution"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-agents/:id/run",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.AI_AGENT_EXECUTE_SAFE)"
+      ],
+      "sideEffect": "execution"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-agents/:id/run-OLD",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "execution"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-agents/:id/command",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.AI_AGENT_EXECUTE_SAFE)"
+      ],
+      "sideEffect": "execution"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai-agents/:id/config",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.AI_AGENT_CONFIGURE)"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-agents/:id/details",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-agents/manager-overview",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-agents",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-agents/:id",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai-agents/:id",
+      "file": "ai-agents.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.AI_AGENT_ENABLE_DISABLE, CAP.AI_AGENT_CONFIGURE)"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/status",
+      "file": "liquidity-agent.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agents/liquidity/run",
+      "file": "liquidity-agent.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/runs/latest",
+      "file": "liquidity-agent.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/runs",
+      "file": "liquidity-agent.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/metrics",
+      "file": "liquidity-agent.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/liquidity/settings",
+      "file": "liquidity-agent.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agents/liquidity/settings",
+      "file": "liquidity-agent.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/health",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/state",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "execution_or_mutation"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/artemis/state",
+      "file": "artemis.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.ARTEMIS_STATE_WRITE)"
+      ],
+      "sideEffect": "execution_or_mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/scenarios",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artemis/decision",
+      "file": "artemis.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.ARTEMIS_DECISION_EXECUTE)"
+      ],
+      "sideEffect": "execution_or_mutation"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/artemis/config/decision-engine",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin')"
+      ],
+      "sideEffect": "execution_or_mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/logs",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/artemis/logs",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin')"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/artemis/config",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin')"
+      ],
+      "sideEffect": "execution_or_mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/learning",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/artemis/learning/mistake/:id/mark-learned",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artemis/learning/event",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin')"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artemis/orchestration",
+      "file": "artemis.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "execution_or_mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/autopilot/status",
+      "file": "autopilot.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/enable",
+      "file": "autopilot.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/disable",
+      "file": "autopilot.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/autopilot/suggestions",
+      "file": "autopilot.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/suggestions/:id/approve",
+      "file": "autopilot.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/suggestions/:id/reject",
+      "file": "autopilot.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/suggestions/:id/rollback",
+      "file": "autopilot.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopilot/run-once",
+      "file": "autopilot.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/settings/trading-mode",
+      "file": "settings.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/settings/trading-mode",
+      "file": "settings.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/settings/execution-runtime",
+      "file": "settings.js",
+      "auth": [
+        "authenticateStrict"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/settings/execution-runtime/mode",
+      "file": "settings.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.RUNTIME_MODE_WRITE)"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/settings/execution-runtime/kill-switch",
+      "file": "settings.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.KILL_SWITCH_CONTROL)"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/settings",
+      "file": "settings.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/settings/:key",
+      "file": "settings.js",
+      "auth": [
+        "NONE"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/settings/:key",
+      "file": "settings.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin')"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/settings/bulk",
+      "file": "settings.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin')"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/settings/:key",
+      "file": "settings.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin')"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scheduler/status",
+      "file": "scheduler.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scheduler/start",
+      "file": "scheduler.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin', 'trader')"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scheduler/stop",
+      "file": "scheduler.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin', 'trader')"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/scheduler/config/:section",
+      "file": "scheduler.js",
+      "auth": [
+        "authenticate",
+        "authorize('admin', 'trader')"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scheduler/config",
+      "file": "scheduler.js",
+      "auth": [
+        "authenticate"
+      ],
+      "sideEffect": "system_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trading-engine/status",
+      "file": "trading-engine.js",
+      "auth": [
+        "authenticateStrict"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/trading-engine/emergency-stop",
+      "file": "trading-engine.js",
+      "auth": [
+        "authenticateStrict",
+        "authorize('admin', 'trader')",
+        "requireCapability(CAP.KILL_SWITCH_CONTROL)"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/trading-engine/emergency-stop/clear",
+      "file": "trading-engine.js",
+      "auth": [
+        "authenticateStrict",
+        "authorize('admin')",
+        "requireCapability(CAP.KILL_SWITCH_CONTROL)"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trading-engine/trades/active",
+      "file": "trading-engine.js",
+      "auth": [
+        "authenticateStrict"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trading-engine/opportunities",
+      "file": "trading-engine.js",
+      "auth": [
+        "authenticateStrict"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/trading-engine/config",
+      "file": "trading-engine.js",
+      "auth": [
+        "authenticateStrict",
+        "authorize('admin', 'trader')",
+        "requireCapability(CAP.TRADING_ENGINE_CONTROL)"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trading-engine/config",
+      "file": "trading-engine.js",
+      "auth": [
+        "authenticateStrict"
+      ],
+      "sideEffect": "runtime_control"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/topic-routing",
+      "file": "topic-routing.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.TOPIC_ROUTING_READ)"
+      ],
+      "sideEffect": "read"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/topic-routing",
+      "file": "topic-routing.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.TOPIC_ROUTING_WRITE)"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/topic-routing/:id",
+      "file": "topic-routing.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.TOPIC_ROUTING_WRITE)"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/topic-routing/:id",
+      "file": "topic-routing.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.TOPIC_ROUTING_WRITE)"
+      ],
+      "sideEffect": "mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/topic-routing/logs",
+      "file": "topic-routing.js",
+      "auth": [
+        "authenticateStrict",
+        "requireCapability(CAP.TOPIC_ROUTING_READ)"
+      ],
+      "sideEffect": "read"
+    }
+  ]
+}

@@ -38,6 +38,9 @@ coverage/
 
 # Playwright E2E test artifacts
 /test-results/
+
+# Generated perf benchmarks at repo root (evidence lives in docs/evidence/performance/)
+/perf-runtime-*.json
 /playwright-report/
 /playwright/.cache/
 /e2e/screenshots/*.png

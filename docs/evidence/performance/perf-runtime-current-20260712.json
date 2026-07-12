@@ -1,0 +1,13 @@
+{
+  "label": "current",
+  "timestamp": "2026-07-12T15:24:07.241Z",
+  "root": "/home/ubuntu/webapp/TitanGold",
+  "bundle": {
+    "totalKb": 5484
+  },
+  "runtimeLookupMs": {
+    "p50": 0.4024350000000254,
+    "p95": 1.2603340000000003,
+    "max": 51.55014700000001
+  }
+}
