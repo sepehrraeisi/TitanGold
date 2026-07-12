@@ -2,136 +2,160 @@ import jwt from 'jsonwebtoken';
 import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
 
-// Verify JWT token
+const DB_UNAVAILABLE_CODES = new Set(['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND']);
+
+function isDbUnavailableError(error) {
+  if (!error) return false;
+  if (DB_UNAVAILABLE_CODES.has(error.code)) return true;
+  const msg = String(error.message || '').toLowerCase();
+  return msg.includes('econnrefused') || msg.includes('timeout') || msg.includes('connection terminated');
+}
+
+function sanitizeAuthFailure(res, status, code, message) {
+  return res.status(status).json({ error: message, code });
+}
+
+/**
+ * Verify JWT and resolve user from database (Source of Truth for role).
+ * Never elevates to privileged roles on failure.
+ */
 export const authenticate = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
-    
+
     if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
+      return sanitizeAuthFailure(res, 401, 'UNAUTHENTICATED', 'No token provided');
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Try to check session in database, but fallback to JWT-only auth if DB is unavailable
+    let decoded;
     try {
-      // Check if session exists and is valid
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      if (error.name === 'JsonWebTokenError') {
+        return sanitizeAuthFailure(res, 401, 'INVALID_TOKEN', 'Invalid token');
+      }
+      if (error.name === 'TokenExpiredError') {
+        return sanitizeAuthFailure(res, 401, 'TOKEN_EXPIRED', 'Token expired');
+      }
+      throw error;
+    }
+
+    const userId = decoded.userId || decoded.id;
+    if (!userId) {
+      return sanitizeAuthFailure(res, 401, 'INVALID_TOKEN', 'Invalid token');
+    }
+
+    req.token = token;
+    req.authResolutionFailed = false;
+
+    try {
       const sessionResult = await query(
-        'SELECT * FROM user_sessions WHERE token = $1 AND expires_at > NOW()',
-        [token]
-      ).catch(dbError => {
-        // If database is unavailable, log warning and continue with JWT-only auth
-        if (dbError.code === 'ECONNREFUSED' || dbError.message?.includes('ECONNREFUSED')) {
-          logger.warn('⚠️ Database unavailable, using JWT-only authentication');
-          return { rows: [] }; // Continue with fallback
-        }
-        throw dbError; // Re-throw other DB errors
-      });
+        'SELECT token FROM user_sessions WHERE token = $1 AND expires_at > NOW() LIMIT 1',
+        [token],
+      );
+
+      const userResult = await query(
+        'SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1 LIMIT 1',
+        [userId],
+      );
+
+      if (userResult.rows.length === 0) {
+        return sanitizeAuthFailure(res, 401, 'USER_NOT_FOUND', 'Invalid token');
+      }
+
+      const user = userResult.rows[0];
+
+      if (!user.is_active) {
+        return sanitizeAuthFailure(res, 403, 'USER_DISABLED', 'Account is disabled');
+      }
+
+      // DB role is authoritative — ignore elevated JWT role claims
+      req.user = {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        full_name: user.full_name,
+        role: user.role,
+        is_active: user.is_active,
+      };
 
       if (sessionResult.rows.length > 0) {
-        // Database is available and session exists - use full authentication
-        try {
-          // Get user from database
-          const userResult = await query(
-            'SELECT id, email, username, full_name, role, is_active FROM users WHERE id = $1',
-            [decoded.userId]
-          );
-
-          if (userResult.rows.length > 0 && userResult.rows[0].is_active) {
-            req.user = userResult.rows[0];
-            req.token = token;
-            
-            // Update last activity (ignore errors if DB becomes unavailable)
-            await query(
-              'UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1',
-              [token]
-            ).catch(() => {}); // Ignore update errors
-            
-            return next();
-          }
-        } catch (dbError) {
-          // If database becomes unavailable during user lookup, fallback to JWT-only
-          if (dbError.code === 'ECONNREFUSED' || dbError.message?.includes('ECONNREFUSED')) {
-            logger.warn('⚠️ Database unavailable during user lookup, using JWT-only authentication');
-            // Fall through to JWT-only auth below
-          } else {
-            throw dbError;
-          }
-        }
+        await query(
+          'UPDATE user_sessions SET last_activity_at = NOW() WHERE token = $1',
+          [token],
+        ).catch(() => {});
       }
+
+      return next();
     } catch (dbError) {
-      // If database query fails completely, fallback to JWT-only auth
-      if (dbError.code === 'ECONNREFUSED' || dbError.message?.includes('ECONNREFUSED')) {
-        logger.warn('⚠️ Database unavailable, using JWT-only authentication');
-        // Fall through to JWT-only auth below
-      } else {
-        throw dbError;
+      if (isDbUnavailableError(dbError)) {
+        logger.warn('⚠️ Database unavailable during authentication');
+        req.authResolutionFailed = true;
+        req.authResolutionStatus = 503;
+        req.authResolutionCode = 'AUTH_DB_UNAVAILABLE';
+        // Minimal identity for optional read paths — sensitive routes must use requireStrictAuth
+        req.user = {
+          id: userId,
+          email: decoded.email || null,
+          username: decoded.username || null,
+          full_name: decoded.full_name || decoded.name || null,
+          role: 'user',
+          is_active: false,
+          _unverified: true,
+        };
+        return next();
       }
+      throw dbError;
     }
-
-    // Fallback: JWT-only authentication (when database is unavailable)
-    // Create a minimal user object from JWT token
-    req.user = {
-      id: decoded.userId || decoded.id,
-      email: decoded.email || 'user@example.com',
-      username: decoded.username || 'user',
-      full_name: decoded.full_name || decoded.name || 'User',
-      role: decoded.role || 'trader',
-      is_active: true,
-    };
-    req.token = token;
-    
-    logger.info('⚠️ Using JWT-only authentication (database unavailable)');
-    next();
   } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expired' });
-    }
-    logger.error('Authentication error:', error);
-    res.status(500).json({ 
-      error: 'Authentication failed',
-      message: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    logger.error('Authentication error:', error.message);
+    return sanitizeAuthFailure(res, 500, 'AUTH_FAILED', 'Authentication failed');
   }
 };
 
-// Check if user has specific role
+/** Fail closed when DB identity could not be verified */
+export const authenticateStrict = async (req, res, next) => {
+  await authenticate(req, res, () => {
+    if (req.authResolutionFailed) {
+      return sanitizeAuthFailure(res, 503, 'AUTH_DB_UNAVAILABLE', 'Identity verification temporarily unavailable');
+    }
+    if (!req.user?.is_active) {
+      return sanitizeAuthFailure(res, 403, 'USER_DISABLED', 'Account is disabled');
+    }
+    next();
+  });
+};
+
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'Not authenticated' });
+      return sanitizeAuthFailure(res, 401, 'UNAUTHENTICATED', 'Not authenticated');
     }
-
+    if (req.authResolutionFailed) {
+      return sanitizeAuthFailure(res, 503, 'AUTH_DB_UNAVAILABLE', 'Identity verification temporarily unavailable');
+    }
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+      return sanitizeAuthFailure(res, 403, 'INSUFFICIENT_PERMISSIONS', 'Insufficient permissions');
     }
-
     next();
   };
 };
 
-// Optional authentication (doesn't fail if no token)
 export const optionalAuth = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
-    
-    if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const userResult = await query(
-        'SELECT id, email, username, full_name, role FROM users WHERE id = $1 AND is_active = TRUE',
-        [decoded.userId]
-      );
-      if (userResult.rows.length > 0) {
-        req.user = userResult.rows[0];
-      }
+    if (!token) return next();
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userResult = await query(
+      'SELECT id, email, username, full_name, role FROM users WHERE id = $1 AND is_active = TRUE',
+      [decoded.userId || decoded.id],
+    );
+    if (userResult.rows.length > 0) {
+      req.user = userResult.rows[0];
     }
     next();
-  } catch (error) {
-    // Ignore errors for optional auth
+  } catch {
     next();
   }
 };
