@@ -164,6 +164,13 @@ export async function getRuntimeExecutionState({ preferCache = false } = {}) {
   if (preferCache) {
     const cached = await readCachedState();
     if (cached && cached.version === dbState.version) {
+      if (
+        cached.killSwitchActive !== dbState.killSwitchActive
+        || normalizeMode(cached.globalMode) !== normalizeMode(dbState.globalMode)
+      ) {
+        await cacheState(dbState);
+        return dbState;
+      }
       return cached;
     }
   }
