@@ -23,5 +23,11 @@
   ],
   "notes": "Tokens from disposable role fixtures; migration dismissed via injectDevSession; no retries configured",
   "screenshotsDir": "e2e/screenshots",
-  "screenshotCount": 82
+  "screenshotCount": 82,
+  "productionRerun": {
+    "baseURL": "https://titan.zala.ir",
+    "result": "94 passed",
+    "source": "/tmp/pw-prod-full.txt",
+    "passed": 94
+  }
 }
