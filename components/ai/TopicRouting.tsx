@@ -195,7 +195,7 @@ const TopicRouting: React.FC = () => {
                         onClick={handleCreate}
                         className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-medium"
                     >
-                        + {t('create_rule') || 'Create Rule'}
+                        + {t('create_rule')}
                     </button>
                 ) : (
                     <span className="text-xs text-muted-foreground px-3 py-2 rounded-lg border border-border bg-muted/30" role="status">

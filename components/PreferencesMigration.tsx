@@ -49,15 +49,15 @@ const PreferencesMigrationModal: React.FC<MigrationModalProps> = ({ onComplete, 
             setResult(migrationResult);
 
             if (migrationResult.success) {
-                setStatus(`✅ Migration completed! ${migrationResult.migrated} categories migrated.`);
+                setStatus(`Migration completed! ${migrationResult.migrated} categories migrated.`);
                 setTimeout(() => {
                     onComplete();
                 }, 2000);
             } else {
-                setStatus(`❌ Migration failed: ${migrationResult.errors.join(', ')}`);
+                setStatus(`Migration failed: ${migrationResult.errors.join(', ')}`);
             }
         } catch (error: any) {
-            setStatus(`❌ Error: ${error.message}`);
+            setStatus(`Error: ${error.message}`);
             setResult({ success: false, migrated: 0, errors: [error.message] });
         } finally {
             setMigrating(false);
@@ -68,7 +68,12 @@ const PreferencesMigrationModal: React.FC<MigrationModalProps> = ({ onComplete, 
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
             <div className="bg-[#161B22] border border-gray-800 rounded-lg p-8 max-w-md w-full mx-4">
                 <div className="text-center mb-6">
-                    <div className="text-4xl mb-4">🔄</div>
+                    <div
+                        className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-300"
+                        aria-hidden="true"
+                    >
+                        Sync
+                    </div>
                     <h2 className="text-2xl font-bold text-white mb-2">
                         Preferences Migration
                     </h2>
@@ -80,12 +85,12 @@ const PreferencesMigrationModal: React.FC<MigrationModalProps> = ({ onComplete, 
                 {!migrating && !result && (
                     <div className="space-y-4">
                         <div className="bg-blue-500 bg-opacity-10 border border-blue-500 rounded-lg p-4">
-                            <h3 className="text-blue-400 font-semibold mb-2">✨ Benefits:</h3>
-                            <ul className="text-sm text-gray-300 space-y-1">
-                                <li>✅ Access settings from any device</li>
-                                <li>✅ Never lose your preferences</li>
-                                <li>✅ Automatic backup</li>
-                                <li>✅ Sync across devices instantly</li>
+                            <h3 className="text-blue-400 font-semibold mb-2">Benefits</h3>
+                            <ul className="text-sm text-gray-300 space-y-1 list-disc list-inside">
+                                <li>Access settings from any device</li>
+                                <li>Never lose your preferences</li>
+                                <li>Automatic backup</li>
+                                <li>Sync across devices instantly</li>
                             </ul>
                         </div>
 
@@ -139,14 +144,14 @@ const PreferencesMigrationModal: React.FC<MigrationModalProps> = ({ onComplete, 
                     <div className="space-y-4">
                         {result.success ? (
                             <div className="bg-green-500 bg-opacity-10 border border-green-500 rounded-lg p-4">
-                                <h3 className="text-green-400 font-semibold mb-2">✅ Success!</h3>
+                                <h3 className="text-green-400 font-semibold mb-2">Success</h3>
                                 <p className="text-sm text-gray-300">
                                     {result.migrated} categories have been migrated and synced to the server.
                                 </p>
                             </div>
                         ) : (
                             <div className="bg-red-500 bg-opacity-10 border border-red-500 rounded-lg p-4">
-                                <h3 className="text-red-400 font-semibold mb-2">❌ Migration Failed</h3>
+                                <h3 className="text-red-400 font-semibold mb-2">Migration Failed</h3>
                                 <p className="text-sm text-gray-300 mb-2">
                                     Some errors occurred during migration:
                                 </p>
@@ -160,7 +165,6 @@ const PreferencesMigrationModal: React.FC<MigrationModalProps> = ({ onComplete, 
 
                         <button
                             onClick={() => {
-                                console.log('✅ Continue button clicked!', { result });
                                 if (result.success) {
                                     onComplete();
                                 } else {

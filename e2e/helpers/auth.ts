@@ -30,6 +30,9 @@ export async function injectDevSession(page: import('@playwright/test').Page, ro
       localStorage.setItem('titan_user', JSON.stringify(mockUser));
       sessionStorage.setItem('titan_token', t);
       localStorage.setItem('titan_token', t);
+      // Prevent Preferences Migration overlay from blocking panel/screenshot evidence.
+      localStorage.setItem('titan_migration_dismissed', 'true');
+      localStorage.setItem('titan_favorites_migration_dismissed', 'true');
     },
     { r: role, t: token },
   );

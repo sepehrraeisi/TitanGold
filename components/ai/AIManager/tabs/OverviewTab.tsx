@@ -111,7 +111,14 @@ const OverviewTab: React.FC<Props> = ({ data, artemis, t, onRefresh, onNavigate,
                             <div className="space-y-2">
                                 <ProgressBar label={t('total_decisions') || 'Total Decisions'} value={artemis.totalDecisions || 0} />
                                 <ProgressBar label={t('success_rate') || 'Success Rate'} value={artemis.successRate || 0} />
-                                <ProgressBar label={t('active_agents') || 'Active Agents'} value={artemis.activeAgents?.length || 0} maxValue={15} />
+                                <ProgressBar
+                                    label={t('active_agents', {
+                                        active: artemis.activeAgents?.length || 0,
+                                        total: 15,
+                                    })}
+                                    value={artemis.activeAgents?.length || 0}
+                                    maxValue={15}
+                                />
                                 <ProgressBar label={t('system_health') || 'System Health'}
                                     value={artemis.systemHealth?.overall === 'healthy' ? 100 : artemis.systemHealth?.overall === 'degraded' ? 70 : 30} />
                             </div>
@@ -205,7 +212,7 @@ const OverviewTab: React.FC<Props> = ({ data, artemis, t, onRefresh, onNavigate,
                                 </button>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                                <SmallStat label={t('active_agents') || 'Active Agents'} value={orchestration?.activeAgents || 0} />
+                                <SmallStat label={t('active_agents_count') || 'Active Agents'} value={orchestration?.activeAgents || 0} />
                                 <SmallStat label={t('agent_tasks') || 'Agent Tasks'} value={orchestration?.agentTasks?.length || 0} />
                                 <SmallStat label={t('failover_enabled') || 'Failover'} value={orchestration?.failoverStatus?.enabled ? 'On' : 'Off'} />
                                 <SmallStat label={t('resources_allocated') || 'Resources'} value={Object.keys(orchestration?.resourceAllocation || {}).length} />

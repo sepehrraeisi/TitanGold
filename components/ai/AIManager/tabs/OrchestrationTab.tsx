@@ -100,7 +100,7 @@ const OrchestrationTab: React.FC<Props> = ({ t, Card }) => {
                     </button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Stat label={t('active_agents') || 'Active Agents'} value={data?.activeAgents || 0} />
+                    <Stat label={t('active_agents_count') || 'Active Agents'} value={data?.activeAgents || 0} />
                     <Stat label={t('agent_tasks') || 'Agent Tasks'} value={agentTasks.length} />
                     <Stat label={t('resources_allocated') || 'Resources Allocated'} value={Object.keys(resourceAllocation).length} />
                     <Stat label={t('completion_rate') || 'Completion Rate'} value={`${taskStats.completionRate.toFixed(1)}%`} />
