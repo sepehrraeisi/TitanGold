@@ -6,7 +6,8 @@ import { ConfirmModal } from '../ui/confirm-modal.tsx';
 import { Toast } from '../ui/toast.tsx';
 
 /**
- * Header execution status — separates requested preference from effective runtime.
+ * Header execution status — preference vs enforced active mode, human-readable.
+ * Hierarchy: Header = compact preference + active mode; Agents banner = Emergency Stop detail.
  */
 const ExecutionModeStatus: React.FC = () => {
   const { t } = useLanguage();
@@ -68,8 +69,9 @@ const ExecutionModeStatus: React.FC = () => {
     return <div className="w-16 h-5 bg-gray-700/50 rounded animate-pulse" aria-hidden="true" />;
   }
 
-  const effective = runtime?.effectiveMode || 'demo';
-  const kill = runtime?.killSwitchActive;
+  const kill = !!runtime?.killSwitchActive;
+  const activeMode = (kill ? 'demo' : runtime?.effectiveMode || 'demo').toUpperCase();
+  const preferenceLabel = requestedMode.toUpperCase();
   const isRequestedDemo = requestedMode === 'demo';
 
   return (
@@ -79,32 +81,51 @@ const ExecutionModeStatus: React.FC = () => {
         onClick={handleToggle}
         title={
           kill
-            ? (t('kill_switch_active') || 'Emergency stop active — effective execution is Demo')
-            : (t('requested_vs_effective') || `Requested: ${requestedMode.toUpperCase()} · Effective: ${effective.toUpperCase()}`)
+            ? (t('kill_switch_active') || 'Emergency Stop is on — active mode is Demo')
+            : (t('requested_vs_effective') || `Preference ${preferenceLabel} · Active ${activeMode}`)
         }
         role="group"
         aria-label={t('execution_mode_status') || 'Execution mode status'}
+        data-testid="execution-mode-status"
       >
         <div className="flex flex-col items-end gap-0.5">
           <div className="flex items-center gap-1.5">
-            <div className={`relative w-10 h-5 flex items-center rounded-full p-0.5 ${isRequestedDemo ? 'bg-yellow-500/20 border border-yellow-500/40' : 'bg-red-500/20 border border-red-500/40'}`}>
-              <div className={`w-3.5 h-3.5 rounded-full shadow ${isRequestedDemo ? 'bg-yellow-400' : 'bg-red-400 translate-x-4'}`} />
+            <div
+              className={`relative w-10 h-5 flex items-center rounded-full p-0.5 ${
+                isRequestedDemo ? 'bg-yellow-500/20 border border-yellow-500/40' : 'bg-red-500/20 border border-red-500/40'
+              }`}
+            >
+              <div
+                className={`w-3.5 h-3.5 rounded-full shadow ${
+                  isRequestedDemo ? 'bg-yellow-400' : 'bg-red-400 translate-x-4'
+                }`}
+              />
             </div>
             <span className="text-[10px] font-semibold text-muted-foreground hidden lg:inline">
-              {t('requested') || 'Req'}: {requestedMode.toUpperCase()}
+              {t('mode_preference_short') || 'Preference'}: {preferenceLabel}
             </span>
           </div>
-          <span className={`text-[10px] font-bold ${kill ? 'text-red-400' : effective === 'live' ? 'text-red-400' : 'text-amber-400'}`}>
-            {t('effective') || 'Eff'}: {kill ? 'DEMO' : effective.toUpperCase()}
-            {runtime && !runtime.workerAcknowledged && kill ? ' · …' : ''}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className={`text-[10px] font-bold ${kill ? 'text-red-400' : activeMode === 'LIVE' ? 'text-red-400' : 'text-amber-400'}`}>
+              {t('mode_active_short') || 'Active'}: {activeMode}
+            </span>
+            {kill && (
+              <span
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded border border-red-500/50 bg-red-600/25 text-red-100"
+                data-testid="header-emergency-stop"
+              >
+                {t('emergency_stop') || 'Emergency Stop'}
+              </span>
+            )}
+          </div>
         </div>
       </div>
       <ConfirmModal
         isOpen={showConfirm}
         message={
           requestedMode === 'demo'
-            ? (t('switch_preference_live_confirm') || 'Set preference to LIVE? This does not enable live execution without admin/runtime gates.')
+            ? (t('switch_preference_live_confirm') ||
+              'Set preference to LIVE? This does not enable live execution without admin/runtime gates.')
             : (t('switch_preference_demo_confirm') || 'Set preference to DEMO?')
         }
         onConfirm={handleConfirm}

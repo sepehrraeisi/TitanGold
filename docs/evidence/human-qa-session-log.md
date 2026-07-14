@@ -81,3 +81,26 @@
 3. Explicitly confirm whether KC-MEXC-404 and KC-WS-400 should open a remediation cycle **now** for this work package.
 
 Do not treat this support log as Human QA PASS.
+
+---
+
+## HQA-A1 Remediation Cycle (2026-07-14)
+
+Human result: FAIL → remediation implemented.
+
+### Fixes
+- MEXC `getMexcApiUrl` → canonical `/api/v1/market/mexc/ticker/24hr`; unwrap `{ok,data}`; no fake ticker fallbacks in Header
+- Agents WS: max 1 reconnect, quiet errors, stable unavailable banner
+- AgentSafetyBanner: human labels, hide internal kill reasons, Emergency Stop badge + explanation
+- ExecutionModeStatus: Preference/Active labels + header Emergency Stop chip (no raw requested_mode keys)
+- Wallet: terminate Loading → Demo N/A when unavailable
+- Accuracy: show N/A unless accuracy > 0
+- Unit: `__tests__/unit/mexcApiUrl.test.ts` 3/3 PASS
+- Playwright staging: 94/94 PASS
+- Deployed bundle: `assets/index-CgDVqezb.js`
+
+### Safety after fix
+- KS active, demo, worker ack, connections 0
+
+### Human retest required
+Return to HQA-A1 on hard-refreshed `https://titan.zala.ir/?view=ai`

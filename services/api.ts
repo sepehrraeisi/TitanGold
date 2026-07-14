@@ -6466,7 +6466,7 @@ const fetchMexcKlines = async (symbol: string, interval: string = '1h', limit: n
         }
 
         const data = await response.json();
-        return Array.isArray(data) ? data : [];
+        return unwrapMexcPayload(data);
     } catch (error) {
         console.error('Failed to fetch MEXC klines:', error);
         return [];
@@ -13655,16 +13655,35 @@ export const fetchMexcTrades = async (symbol?: string, limit: number = 50): Prom
 
 // Helper to get MEXC API URL (use proxy in development)
 const getMexcApiUrl = (endpoint: string): string => {
-    // Always use backend proxy to avoid CORS issues
-    // Backend proxies requests to MEXC API at /api/market/mexc/*
-    // Map /api/v3/ticker/24hr -> /api/market/mexc/ticker/24hr (with slash)
-    const proxyEndpoint = endpoint
-        .replace('/api/v1/v3/ticker/24hr', '/ticker/24hr')
-        .replace('/api/v1/v3/depth', '/depth')
-        .replace('/api/v1/v3/exchangeInfo', '/exchangeInfo')
-        .replace('/api/v1/v3/ticker/price', '/price');
-    
-    return `/api/market/mexc${proxyEndpoint}`;
+    // Canonical backend proxy: /api/v1/market/mexc/{ticker/24hr|depth|exchangeInfo|price}
+    // Callers historically pass /api/v3/... or /api/v1/v3/... — map to proxy paths only.
+    const [rawPath, query = ''] = endpoint.split('?');
+    const q = query ? `?${query}` : '';
+    let path = rawPath
+        .replace(/^\/api\/v1\/v3\//, '/')
+        .replace(/^\/api\/v3\//, '/')
+        .replace(/^\/v3\//, '/')
+        .replace(/^\/api\/market\/mexc\//, '/')
+        .replace(/^\/api\/v1\/market\/mexc\//, '/');
+
+    if (path.includes('ticker/24hr') || path.includes('ticker24hr')) {
+        path = '/ticker/24hr';
+    } else if (path.includes('ticker/price') || path === '/price') {
+        path = '/price';
+    } else if (path.includes('depth')) {
+        path = '/depth';
+    } else if (path.includes('exchangeInfo')) {
+        path = '/exchangeInfo';
+    } else if (!path.startsWith('/')) {
+        path = `/${path}`;
+    }
+
+    return `/api/v1/market/mexc${path}${q}`;
+};
+
+const unwrapMexcPayload = (payload: any): any[] => {
+    const raw = payload?.data !== undefined ? payload.data : payload;
+    return Array.isArray(raw) ? raw : [raw];
 };
 
 // Get MEXC 24hr Ticker Statistics
@@ -13685,7 +13704,7 @@ export const fetchMexcTicker24hr = async (symbol?: string): Promise<any> => {
         }
 
         const data = await response.json();
-        const result = Array.isArray(data) ? data : [data];
+        const result = unwrapMexcPayload(data);
 
         if (symbol && result.length > 0) {
             console.log(`✅ MEXC ticker data received for ${symbol}:`, {
@@ -13717,7 +13736,7 @@ export const fetchMexcPrice = async (symbol?: string): Promise<any> => {
         }
 
         const data = await response.json();
-        return Array.isArray(data) ? data : [data];
+        return unwrapMexcPayload(data);
     } catch (error) {
         console.error('Failed to fetch MEXC price:', error);
         return [];

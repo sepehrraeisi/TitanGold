@@ -4405,5 +4405,21 @@
   "create_rule": "ایجاد قانون",
   "topic_routing_read_only": "فقط خواندنی — تغییر قوانین فقط برای ادمین",
   "decision_engine_moved": "پیکربندی موتور تصمیم‌گیری منتقل شد",
-  "decision_engine_moved_desc": "تنظیمات موتور تصمیم‌گیری اکنون در Settings → Configuration → Decision Engine مدیریت می‌شود."
+  "decision_engine_moved_desc": "تنظیمات موتور تصمیم‌گیری اکنون در Settings → Configuration → Decision Engine مدیریت می‌شود.",
+  "runtime_mode_badge": "حالت",
+  "runtime_mode_hint": "حالت مؤثر معاملات در این نشست",
+  "emergency_stop_explanation": "توقف اضطراری فعال است. معاملات زنده و اثرات جانبی خارجی تا پاک‌سازی توسط مدیر مسدود می‌مانند.",
+  "demo_safe_execution_short": "عامل‌ها در حالت دمو / dry-run اجرا می‌شوند. اجرای زنده نیازمند عبور از همه گیت‌های ایمنی است.",
+  "worker_ack_pending": "در انتظار تأیید worker",
+  "stop_reason_label": "دلیل",
+  "agent_realtime_unavailable": "به‌روزرسانی لحظه‌ای عامل‌ها موقتاً در دسترس نیست. با بارگذاری مجدد صفحه داده‌ها از REST به‌روز می‌شوند.",
+  "balance_unavailable": "موجودی در دسترس نیست",
+  "loading_runtime": "در حال بارگذاری وضعیت اجرا…",
+  "execution_safety": "ایمنی اجرا",
+  "broker_connected": "کارگزار متصل",
+  "broker_disconnected": "کارگزار آفلاین",
+  "mode_preference_short": "ترجیح",
+  "mode_active_short": "فعال",
+  "kill_switch_active": "توقف اضطراری روشن است — حالت فعال Demo است",
+  "runtime_status_unavailable": "وضعیت ایمنی اجرا بارگذاری نشد. تا دسترسی به وضعیت، همه اقدامات را دمو/dry-run فرض کنید."
 }

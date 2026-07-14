@@ -68,21 +68,24 @@ const AIAgents: React.FC = () => {
         return `${protocol}//${host}/ws/agents`;
     };
 
-    const { isConnected, send } = useWebSocket({
+    const { isConnected, isConnecting, reconnectAttempts, maxReconnectAttempts, send } = useWebSocket({
         url: getWebSocketUrl(),
         token: authToken,
+        // PM2 cluster can reject WS upgrades; degrade after one retry without console spam.
+        maxReconnectAttempts: 1,
+        reconnectInterval: 5000,
         onMessage: (message: WebSocketMessage) => {
             if (message.type === 'agent_update' && message.data) {
                 const agentData = message.data;
-                // If it's a status change or result, we might need to refetch or update locally
-                // For now, let's update the local agent state if the data is complete
                 if (agentData.agent_id) {
                     setAgents(prev => prev.map(a => {
                         if (a.id === agentData.agent_id) {
                             return {
                                 ...a,
                                 status: agentData.new_status || a.status,
-                                accuracy: agentData.result?.confidence * 100 || a.accuracy,
+                                accuracy: agentData.result?.confidence != null
+                                    ? agentData.result.confidence * 100
+                                    : a.accuracy,
                                 lastUpdate: new Date().toISOString()
                             };
                         }
@@ -90,16 +93,11 @@ const AIAgents: React.FC = () => {
                     }));
                 }
             } else if (message.type === 'connected') {
-                // Subscribe to all agent updates
-                send({
-                    type: 'subscribe',
-                    payload: { channel: 'agent:*' }
-                });
+                send({ type: 'subscribe', payload: { channel: 'agent:*' } });
             }
         },
-        onConnect: () => console.log('✅ WebSocket connected for Agent updates'),
-        onError: (err) => console.error('❌ Agent WebSocket error:', err)
     });
+    const realtimeUnavailable = !isConnected && !isConnecting && reconnectAttempts >= maxReconnectAttempts;
 
     // Extract unique categories from agents
     const categories = useMemo(() => {
@@ -170,6 +168,16 @@ const AIAgents: React.FC = () => {
     return (
         <>
             <AgentSafetyBanner runtime={runtime} canExecute={canExecute} loading={runtimeLoading} />
+            {realtimeUnavailable && (
+                <div
+                    className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-100/90"
+                    role="status"
+                    data-testid="agent-realtime-unavailable"
+                >
+                    {t('agent_realtime_unavailable') ||
+                        'Realtime agent updates are temporarily unavailable. Agent data refreshes when you reload or reopen this page.'}
+                </div>
+            )}
             {/* Search and Filter Bar */}
             <div className="mb-6 space-y-4">
                 {/* Search Input */}
@@ -335,7 +343,11 @@ const AgentCard: React.FC<{
                         <p className={`text-xs font-semibold ${agent.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>{t(agent.status)}</p>
                     </div>
                     <div className="text-right">
-                        <p className="text-xl font-bold text-purple-400">{agent.accuracy.toFixed(1)}%</p>
+                        <p className="text-xl font-bold text-purple-400">
+                            {agent.accuracy != null && Number(agent.accuracy) > 0
+                                ? `${Number(agent.accuracy).toFixed(1)}%`
+                                : (t('not_available') || 'N/A')}
+                        </p>
                         <p className="text-xs text-muted-foreground">{t('accuracy')}</p>
                     </div>
                 </div>

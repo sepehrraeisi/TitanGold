@@ -464,11 +464,15 @@ const MobileMenu: React.FC<{ navLinks: any[], activeView: string, onNavigate: On
                     const actualMode = walletBalanceData.mode || mode;
                     const { USDT = 0, BTC = 0, ETH = 0 } = walletBalanceData.balances || {};
                     const [ethPrice, btcPrice] = await Promise.all([
-                        api.fetchMexcTicker24hr('ETHUSDT').catch(() => [{ lastPrice: '2500' }]),
-                        api.fetchMexcTicker24hr('BTCUSDT').catch(() => [{ lastPrice: '45000' }]),
+                        api.fetchMexcTicker24hr('ETHUSDT').catch(() => null),
+                        api.fetchMexcTicker24hr('BTCUSDT').catch(() => null),
                     ]);
-                    const eth = parseFloat(ethPrice[0]?.lastPrice || '2500');
-                    const btc = parseFloat(btcPrice[0]?.lastPrice || '45000');
+                    const eth = parseFloat(ethPrice?.[0]?.lastPrice || '');
+                    const btc = parseFloat(btcPrice?.[0]?.lastPrice || '');
+                    if (!Number.isFinite(eth) || !Number.isFinite(btc)) {
+                        setWalletBalance(null);
+                        return;
+                    }
                     const total = USDT + (BTC * btc) + (ETH * eth);
                     setWalletBalance({ total, mode: actualMode });
                 }
@@ -617,13 +621,18 @@ const WalletBalance: React.FC = () => {
                 if (walletBalance) {
                     const actualMode = walletBalance.mode || mode; // Use mode from API response
                     const { USDT = 0, BTC = 0, ETH = 0 } = walletBalance.balances || {};
-                    // Get prices for conversion
+                    // Get prices for conversion — never invent fake ticker prices
                     const [ethPrice, btcPrice] = await Promise.all([
-                        api.fetchMexcTicker24hr('ETHUSDT').catch(() => [{ lastPrice: '2500' }]),
-                        api.fetchMexcTicker24hr('BTCUSDT').catch(() => [{ lastPrice: '45000' }]),
+                        api.fetchMexcTicker24hr('ETHUSDT').catch(() => null),
+                        api.fetchMexcTicker24hr('BTCUSDT').catch(() => null),
                     ]);
-                    const eth = parseFloat(ethPrice[0]?.lastPrice || '2500');
-                    const btc = parseFloat(btcPrice[0]?.lastPrice || '45000');
+                    const eth = parseFloat(ethPrice?.[0]?.lastPrice || '');
+                    const btc = parseFloat(btcPrice?.[0]?.lastPrice || '');
+                    if (!Number.isFinite(eth) || !Number.isFinite(btc)) {
+                        // Prefer USDT-only total when market tickers are unavailable
+                        setBalance({ total: USDT, mode: actualMode });
+                        return;
+                    }
                     const total = USDT + (BTC * btc) + (ETH * eth);
                     setBalance({ total, mode: actualMode });
                 } else if (mode === 'live') {
@@ -658,11 +667,24 @@ const WalletBalance: React.FC = () => {
         return `$${value.toFixed(2)}`;
     };
 
-    if (isLoading || !balance) {
+    if (isLoading) {
         return (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800/30 border border-gray-700/50">
                 <div className="w-4 h-4 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin"></div>
                 <span className="text-xs text-gray-400">{t('loading') || 'Loading...'}</span>
+            </div>
+        );
+    }
+
+    if (!balance) {
+        return (
+            <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800/30 border border-gray-700/50"
+                title={t('balance_unavailable') || 'Balance unavailable'}
+                role="status"
+            >
+                <span className="text-xs text-gray-400">{t('demo_wallet') || 'Demo'}</span>
+                <span className="text-sm font-bold text-gray-500">{t('not_available') || 'N/A'}</span>
             </div>
         );
     }
@@ -736,9 +758,9 @@ const Header: React.FC<HeaderProps> = ({ activeView, onNavigate, onLogout }) => 
 
                 // Get connection status
                 const isConnected = connectionSettings?.isConnected || false;
-                const connectionText = isConnected 
-                    ? (t('connected') || 'Connected') 
-                    : (t('disconnected') || 'Disconnected');
+                const connectionText = isConnected
+                    ? (t('broker_connected') || 'Broker connected')
+                    : (t('broker_disconnected') || 'Broker offline');
 
                 // Get active trades and daily PNL
                 const activeTrades = tradingStatus?.activeTrades || 0;

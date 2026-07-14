@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 export interface WebSocketMessage {
-    type: 'price_update' | 'alert_triggered' | 'error' | 'connected' | 'pong';
+    type: 'price_update' | 'alert_triggered' | 'error' | 'connected' | 'pong' | 'agent_update' | string;
     data?: any;
     timestamp?: string;
+    payload?: any;
 }
 
 export interface WebSocketHookOptions {
@@ -26,6 +27,7 @@ export interface WebSocketHookReturn {
     connect: () => void;
     disconnect: () => void;
     reconnectAttempts: number;
+    maxReconnectAttempts: number;
 }
 
 /**
@@ -133,34 +135,30 @@ export const useWebSocket = (options: WebSocketHookOptions): WebSocketHookReturn
             };
 
             ws.current.onerror = (event) => {
-                console.error('❌ WebSocket error:', event);
                 setError('WebSocket connection error');
                 setIsConnecting(false);
                 onError?.(event);
             };
 
             ws.current.onclose = (event) => {
-                console.log('🔌 WebSocket disconnected:', event.code, event.reason);
                 setIsConnected(false);
                 setIsConnecting(false);
                 stopHeartbeat();
                 ws.current = null;
                 onDisconnect?.();
 
-                // Attempt reconnection
+                // Attempt limited reconnection (quiet)
                 if (shouldReconnect.current && reconnectAttempts < maxReconnectAttempts) {
-                    console.log(`🔄 Reconnecting in ${reconnectInterval}ms (attempt ${reconnectAttempts + 1}/${maxReconnectAttempts})`);
                     reconnectTimeout.current = setTimeout(() => {
                         setReconnectAttempts(prev => prev + 1);
                         connect();
                     }, reconnectInterval);
                 } else if (reconnectAttempts >= maxReconnectAttempts) {
-                    console.error('❌ Max reconnection attempts reached');
-                    setError('Connection lost. Please refresh the page.');
+                    shouldReconnect.current = false;
+                    setError('realtime_unavailable');
                 }
             };
         } catch (err) {
-            console.error('❌ Failed to create WebSocket:', err);
             setError(err instanceof Error ? err.message : 'Failed to connect');
             setIsConnecting(false);
         }
@@ -212,6 +210,7 @@ export const useWebSocket = (options: WebSocketHookOptions): WebSocketHookReturn
         connect,
         disconnect,
         reconnectAttempts,
+        maxReconnectAttempts,
     };
 };
 

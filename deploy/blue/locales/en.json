@@ -4631,5 +4631,21 @@
   "create_rule": "Create Rule",
   "topic_routing_read_only": "Read-only — admin required to modify routing rules",
   "decision_engine_moved": "Decision Engine Configuration Moved",
-  "decision_engine_moved_desc": "Decision Engine settings are now managed in Settings → Configuration → Decision Engine to provide a unified configuration experience."
+  "decision_engine_moved_desc": "Decision Engine settings are now managed in Settings → Configuration → Decision Engine to provide a unified configuration experience.",
+  "runtime_mode_badge": "Mode",
+  "runtime_mode_hint": "Effective trading mode for this session",
+  "emergency_stop_explanation": "Emergency Stop is active. Live trading and external side effects remain blocked until an administrator clears it.",
+  "demo_safe_execution_short": "Agents run in demo / dry-run. Live execution requires all safety gates to pass.",
+  "worker_ack_pending": "Awaiting worker acknowledgement",
+  "stop_reason_label": "Reason",
+  "agent_realtime_unavailable": "Realtime agent updates are temporarily unavailable. Agent data refreshes when you reload or reopen this page.",
+  "balance_unavailable": "Balance unavailable",
+  "loading_runtime": "Loading execution runtime…",
+  "execution_safety": "Execution safety",
+  "broker_connected": "Broker connected",
+  "broker_disconnected": "Broker offline",
+  "mode_preference_short": "Preference",
+  "mode_active_short": "Active",
+  "kill_switch_active": "Emergency Stop is on — active mode is Demo",
+  "runtime_status_unavailable": "Execution safety status could not be loaded. Treat all agent actions as demo / dry-run until status is available."
 }
