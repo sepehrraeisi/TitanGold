@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
+import { AgentRunButton } from './AgentRunButton.tsx';
 import * as api from '../../services/apiWithCancellation.ts'; // FRONTEND-010: Use cancellable API
 import type { AIAgent, TechnicalAnalysisConfig, TechnicalIndicator, Timeframe, TechnicalAnalysisResult, AgentPerformanceMetrics } from '../../types.ts';
 import { useIsMounted } from '../../hooks/useMemoryLeakFree.ts';
@@ -14,9 +15,10 @@ interface TechnicalAnalysisAgentControlProps {
 
 const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
-    const { guardExecution } = useAgentExecutionGate();
+    const { guardExecution, dryRunForced, killSwitchActive, blockReason, canConfigure } = useAgentExecutionGate();
     const isMountedRef = useIsMounted(); // FRONTEND-009: Track mounted state
     const [isLoading, setIsLoading] = useState(false);
+    const [runError, setRunError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'overview' | 'indicators' | 'strategies' | 'performance' | 'settings'>('overview');
     const [config, setConfig] = useState<TechnicalAnalysisConfig | null>(agent.technicalAnalysisConfig || null);
     const [performance, setPerformance] = useState<AgentPerformanceMetrics | null>(agent.performanceMetrics || null);
@@ -134,7 +136,10 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
     const handleRunAnalysis = async (symbol?: string, timeframe?: Timeframe) => {
         if (!guardExecution()) return;
         if (!isMountedRef.current) return;
-        if (isMountedRef.current) setIsAnalyzing(true);
+        if (isMountedRef.current) {
+            setIsAnalyzing(true);
+            setRunError(null);
+        }
         // FRONTEND-011: Track execution time
         const startTime = performance.now();
         try {
@@ -177,9 +182,8 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
                 setHistoricalPerformance(prev => [...prev.slice(-9), failedEntry]);
             }
             if (isMountedRef.current) {
-                console.error('Failed to run analysis:', error);
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                alert((t('analysis_failed') || 'Analysis failed') + (errorMessage ? `: ${errorMessage}` : ''));
+                setRunError((t('analysis_failed') || 'Analysis failed') + (errorMessage ? `: ${errorMessage}` : ''));
             }
         } finally {
             if (isMountedRef.current) setIsAnalyzing(false);
@@ -207,6 +211,10 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
 
     const handleControlCommand = async (command: string) => {
         if (!isMountedRef.current) return;
+        if (!canConfigure && (command === 'start' || command === 'pause' || command === 'restart')) {
+            setRunError(t('execution_blocked_capability_denied') || 'You do not have permission to control this agent.');
+            return;
+        }
         if (isMountedRef.current) setIsLoading(true);
         try {
             await api.sendAgentControlCommand(agent.id, command);
@@ -218,8 +226,8 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
             }
         } catch (error) {
             if (isMountedRef.current) {
-                console.error('Failed to execute command:', error);
-                alert(t('command_failed') || 'Command failed');
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                setRunError((t('command_failed') || 'Command failed') + (errorMessage ? `: ${errorMessage}` : ''));
             }
         } finally {
             if (isMountedRef.current) setIsLoading(false);
@@ -236,14 +244,14 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
                         <h2 className="text-2xl font-bold text-white">{agent.name} - {t('technical_analysis')}</h2>
                         <p className="text-sm text-gray-400 mt-1">{agent.role}</p>
                     </div>
-                    <div className="flex gap-3">
-                        <button
-                            onClick={handleRunAnalysis}
-                            disabled={isAnalyzing || agent.status !== 'active'}
+                    <div className="flex gap-3 items-center flex-wrap">
+                        <AgentRunButton
+                            onRun={() => handleRunAnalysis()}
+                            running={isAnalyzing}
+                            label={t('run_analysis')}
+                            runningLabel={t('analyzing')}
                             className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg text-sm"
-                        >
-                            {isAnalyzing ? t('analyzing') : t('run_analysis')}
-                        </button>
+                        />
                         <button
                             onClick={onClose}
                             className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg text-sm"
@@ -252,6 +260,22 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
                         </button>
                     </div>
                 </div>
+
+                {(dryRunForced || killSwitchActive) && (
+                    <div className="px-6 py-2 text-xs text-amber-100/90 bg-amber-500/10 border-b border-amber-500/20" role="status">
+                        {t('safe_agent_dry_run_notice')}
+                    </div>
+                )}
+                {runError && (
+                    <div className="px-6 py-2 text-xs text-red-200 bg-red-500/10 border-b border-red-500/20" role="alert" data-testid="agent-run-error">
+                        {runError}
+                    </div>
+                )}
+                {blockReason && (
+                    <div className="px-6 py-2 text-xs text-red-200 bg-red-500/10 border-b border-red-500/20" role="status">
+                        {t(`execution_blocked_${blockReason.toLowerCase()}`)}
+                    </div>
+                )}
 
                 {/* Status Bar */}
                 <div className="bg-gray-900/50 border-b border-gray-800 p-4">
@@ -265,7 +289,7 @@ const TechnicalAnalysisAgentControl: React.FC<TechnicalAnalysisAgentControlProps
                                 {t(agent.status)}
                             </span>
                             <span className="text-sm text-gray-400">
-                                {t('accuracy')}: <span className="text-white font-semibold">{agent.accuracy.toFixed(1)}%</span>
+                                {t('accuracy')}: <span className="text-white font-semibold">{agent.accuracy != null && Number(agent.accuracy) > 0 ? `${Number(agent.accuracy).toFixed(1)}%` : (t('not_available') || 'N/A')}</span>
                             </span>
                             <span className="text-sm text-gray-400">
                                 {t('decisions')}: <span className="text-white font-semibold">{agent.decisions.toLocaleString()}</span>

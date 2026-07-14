@@ -521,27 +521,30 @@ if (process.env.NODE_ENV !== 'test') {
         logger.info('⏸️ Engine Worker disabled (ENGINE_ENABLED != true)');
       }
 
-      // Initialize WebSocket Notifications
+      // Initialize WebSocket Notifications + Agents + Favorites via shared upgrade router.
+      // Multiple path-scoped `new WebSocketServer({ server, path })` instances abort
+      // non-matching upgrades with HTTP 400 — only the first path worked before.
       try {
-        initWebsocket(server);
-        logger.info('✅ WebSocket notifications ready at /ws/notifications');
-      } catch (error) {
-        logger.error('❌ Failed to initialize WebSocket:', error);
-      }
-
-      // Initialize Agent WebSocket Server (BACKEND-023)
-      try {
+        const { attachSharedUpgradeRouter } = await import('./websocket/attachUpgradeRouter.js');
+        const notificationsWss = initWebsocket();
         const { initAgentWebSocketServer } = await import('./websocket/server.js');
-        initAgentWebSocketServer(server);
+        const agentsWss = initAgentWebSocketServer();
+        favoritesWebSocketService.initialize();
+        attachSharedUpgradeRouter(server, new Map([
+          ['/ws/notifications', notificationsWss],
+          ['/ws/agents', agentsWss],
+          ['/ws/favorites', favoritesWebSocketService.wss],
+        ]));
         backgroundServices.agentWebSocket = {
           close: async () => {
             const { closeWebSocketServer } = await import('./websocket/server.js');
             closeWebSocketServer();
           }
         };
-        logger.info('✅ Agent WebSocket server ready at /ws/agents');
+        backgroundServices.favoritesWebSocketService = favoritesWebSocketService;
+        logger.info('✅ WebSocket routes ready: /ws/notifications, /ws/agents, /ws/favorites');
       } catch (error) {
-        logger.error('❌ Failed to initialize Agent WebSocket:', error);
+        logger.error('❌ Failed to initialize WebSocket upgrade router:', error);
       }
 
       // Initialize GraphQL API (API-007)
@@ -549,15 +552,6 @@ if (process.env.NODE_ENV !== 'test') {
         await initializeGraphQL();
       } catch (error) {
         logger.error('❌ Failed to initialize GraphQL API:', error);
-      }
-
-      // Initialize Favorites WebSocket for real-time price updates
-      try {
-        favoritesWebSocketService.initialize(server);
-        backgroundServices.favoritesWebSocketService = favoritesWebSocketService;
-        logger.info('✅ Favorites WebSocket ready at /ws/favorites');
-      } catch (error) {
-        logger.error('❌ Failed to initialize Favorites WebSocket:', error);
       }
 
       // Start Autopilot Worker (if enabled)

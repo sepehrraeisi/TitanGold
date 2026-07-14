@@ -21,126 +21,177 @@ const subscriptions = new Map(); // Map<clientId, Set<subscriptionKey>>
 const heartbeatInterval = 30000; // 30 seconds
 
 /**
- * Initialize WebSocket server
- * @param {http.Server} server - HTTP server instance
+ * Initialize Agent WebSocket server (noServer).
+ * Must be registered with attachSharedUpgradeRouter at path `/ws/agents`.
+ *
+ * Auth preference: post-connect `{ type: 'auth', token }` so JWTs never appear in
+ * the WebSocket URL (browser console would otherwise leak them on handshake failure).
+ * Legacy `?token=` is still accepted but must not be logged.
+ *
  * @returns {WebSocketServer}
  */
-export function initAgentWebSocketServer(server) {
+export function initAgentWebSocketServer() {
   if (wss) {
     logger.info('🔌 WebSocket server already initialized');
     return wss;
   }
 
-  wss = new WebSocketServer({ 
-    server, 
-    path: '/ws/agents',
-    // Increase max payload size for large agent results
+  wss = new WebSocketServer({
+    noServer: true,
     maxPayload: 10 * 1024 * 1024 // 10MB
   });
 
-  logger.info('🚀 Initializing WebSocket server at /ws/agents');
+  logger.info('🚀 Initializing WebSocket server at /ws/agents (noServer)');
 
   wss.on('connection', async (ws, req) => {
     const ip = req.socket.remoteAddress;
     const url = parseUrl(req.url, true);
-    const token = url.query.token || req.headers.authorization?.split(' ')[1];
+    const tokenFromQuery = typeof url.query.token === 'string' ? url.query.token : null;
+    const tokenFromHeader = req.headers.authorization?.split(' ')[1] || null;
+    const bootstrapToken = tokenFromQuery || tokenFromHeader;
 
-    // Authenticate connection
-    let userId, userEmail;
-    try {
-      if (!token) {
-        ws.send(JSON.stringify({ 
-          type: 'error', 
-          code: 'AUTH_REQUIRED',
-          message: 'Authentication token required. Connect with ?token=YOUR_JWT' 
-        }));
+    ws.isAlive = true;
+    ws.connectedAt = new Date();
+    ws.authDeadline = setTimeout(() => {
+      if (!ws.userId) {
+        try {
+          ws.send(JSON.stringify({
+            type: 'error',
+            code: 'AUTH_REQUIRED',
+            message: 'Authentication token required. Send { type: "auth", token } after connect.',
+          }));
+        } catch {
+          // ignore
+        }
         ws.close(1008, 'Authentication required');
-        return;
       }
+    }, 10000);
 
+    const authenticate = (token) => {
+      if (!token) {
+        throw new Error('Authentication token required');
+      }
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      userId = decoded.userId || decoded.id;
-      userEmail = decoded.email;
-
+      const userId = decoded.userId || decoded.id;
+      const userEmail = decoded.email;
       if (!userId) {
         throw new Error('Invalid token: missing userId');
       }
 
-      // Store client information
+      if (ws.authDeadline) {
+        clearTimeout(ws.authDeadline);
+        ws.authDeadline = null;
+      }
+
       const clientId = `${userId}-${Date.now()}`;
       ws.userId = userId;
       ws.userEmail = userEmail;
       ws.clientId = clientId;
-      ws.isAlive = true;
-      ws.connectedAt = new Date();
 
-      // Track user connections
       if (!clients.has(userId)) {
         clients.set(userId, new Set());
       }
       clients.get(userId).add(ws);
-
-      // Initialize subscriptions for this client
       subscriptions.set(clientId, new Set());
 
-      logger.info(`🔌 WebSocket connected: user=${userId} (${userEmail}), ip=${ip}, clientId=${clientId}`);
+      logger.info(`🔌 WebSocket connected: user=${userId}, ip=${ip}, clientId=${clientId}`);
 
-      // Send welcome message
       ws.send(JSON.stringify({
         type: 'connected',
         message: 'Connected to TitanGold Agent Updates',
-        userId: userId,
-        clientId: clientId,
+        userId,
+        clientId,
         timestamp: new Date().toISOString(),
-        serverTime: Date.now()
+        serverTime: Date.now(),
       }));
+    };
 
+    try {
+      if (bootstrapToken) {
+        authenticate(bootstrapToken);
+      } else {
+        ws.send(JSON.stringify({
+          type: 'auth_required',
+          message: 'Send { type: "auth", token } to authenticate',
+        }));
+      }
     } catch (authError) {
       logger.warn(`❌ WebSocket auth failed: ${authError.message}, ip=${ip}`);
-      ws.send(JSON.stringify({ 
-        type: 'error', 
-        code: 'AUTH_FAILED',
-        message: 'Invalid or expired token' 
-      }));
+      try {
+        ws.send(JSON.stringify({
+          type: 'error',
+          code: 'AUTH_FAILED',
+          message: 'Invalid or expired token',
+        }));
+      } catch {
+        // ignore
+      }
       ws.close(1008, 'Authentication failed');
       return;
     }
 
-    // Handle incoming messages (subscriptions, unsubscriptions, ping)
     ws.on('message', (data) => {
       try {
         const message = JSON.parse(data.toString());
+        if (!ws.userId) {
+          if (message.type === 'auth' && message.token) {
+            try {
+              authenticate(message.token);
+            } catch (authError) {
+              logger.warn(`❌ WebSocket auth failed: ${authError.message}, ip=${ip}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                code: 'AUTH_FAILED',
+                message: 'Invalid or expired token',
+              }));
+              ws.close(1008, 'Authentication failed');
+            }
+            return;
+          }
+          ws.send(JSON.stringify({
+            type: 'error',
+            code: 'AUTH_REQUIRED',
+            message: 'Authenticate before sending other messages',
+          }));
+          return;
+        }
         handleClientMessage(ws, message);
       } catch (err) {
-        logger.warn(`⚠️ Invalid WebSocket message from user=${userId}: ${err.message}`);
-        ws.send(JSON.stringify({
-          type: 'error',
-          code: 'INVALID_MESSAGE',
-          message: 'Invalid JSON message'
-        }));
+        logger.warn(`⚠️ Invalid WebSocket message from user=${ws.userId || 'pending'}: ${err.message}`);
+        try {
+          ws.send(JSON.stringify({
+            type: 'error',
+            code: 'INVALID_MESSAGE',
+            message: 'Invalid JSON message',
+          }));
+        } catch {
+          // ignore
+        }
       }
     });
 
-    // Handle pong (heartbeat response)
     ws.on('pong', () => {
       ws.isAlive = true;
     });
 
-    // Handle disconnection
     ws.on('close', (code, reason) => {
+      if (ws.authDeadline) {
+        clearTimeout(ws.authDeadline);
+        ws.authDeadline = null;
+      }
       cleanupClient(ws);
-      logger.info(`🔌 WebSocket disconnected: user=${userId}, code=${code}, reason=${reason || 'none'}`);
+      logger.info(`🔌 WebSocket disconnected: user=${ws.userId || 'pending'}, code=${code}, reason=${reason || 'none'}`);
     });
 
-    // Handle errors
     ws.on('error', (error) => {
-      logger.error(`❌ WebSocket error: user=${userId}, error=${error.message}`);
+      logger.error(`❌ WebSocket error: user=${ws.userId || 'pending'}, error=${error.message}`);
       cleanupClient(ws);
     });
   });
 
   // Heartbeat to detect dead connections
   const heartbeat = setInterval(() => {
+    if (!wss) return;
     wss.clients.forEach((ws) => {
       if (ws.isAlive === false) {
         logger.info(`💀 Terminating dead connection: user=${ws.userId}, clientId=${ws.clientId}`);

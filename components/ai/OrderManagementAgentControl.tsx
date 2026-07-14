@@ -22,7 +22,14 @@ interface OrderManagementAgentControlProps {
 
 const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = ({ agent, onClose, onUpdate }) => {
     const { t } = useLanguage();
-    const { guardExecution } = useAgentExecutionGate();
+    const {
+        guardExecution,
+        dryRunForced,
+        killSwitchActive,
+        liveBlockReason,
+        canConfigure,
+        blockReason,
+    } = useAgentExecutionGate();
     type OrderTab = 'overview' | 'open_orders' | 'history' | 'execution_analysis' | 'settings' | 'alerts' | 'integration';
     const [activeTab, setActiveTab] = useState<OrderTab>('overview');
     const [config, setConfig] = useState<OrderManagementConfig | null>(agent.orderManagementConfig || null);
@@ -30,6 +37,7 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
     const [analysis, setAnalysis] = useState<OrderManagementResult | null>(agent.lastOrderManagementRun || null);
     const [isLoading, setIsLoading] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
+    const [runMessage, setRunMessage] = useState<string | null>(null);
 
     useEffect(() => {
         const loadData = async () => {
@@ -49,11 +57,19 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
     }, [agent.id]);
 
     const handleRunCycle = async () => {
-        if (!guardExecution()) return;
+        // Simulation / dry-run cycle — not live order mutation.
+        if (!guardExecution({ liveSideEffects: false })) return;
         setIsRunning(true);
+        setRunMessage(null);
         try {
             const result = await api.runOrderManagementCycle(agent.id);
             setAnalysis(result);
+            setRunMessage(
+                killSwitchActive || dryRunForced
+                    ? (t('order_simulation_completed') ||
+                        'Simulation completed. Live order placement remains blocked by safety gates.')
+                    : (t('order_cycle_completed') || 'Order cycle completed (simulation).'),
+            );
             const updatedAgents = await api.fetchAIAgents();
             const updatedAgent = updatedAgents.find(a => a.id === agent.id);
             if (updatedAgent) {
@@ -61,8 +77,8 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
                 onUpdate(updatedAgent);
             }
         } catch (error) {
-            console.error('Failed to run order cycle:', error);
-            alert(t('analysis_failed') || 'Analysis failed');
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            setRunMessage((t('analysis_failed') || 'Analysis failed') + (errorMessage ? `: ${errorMessage}` : ''));
         } finally {
             setIsRunning(false);
         }
@@ -83,6 +99,10 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
     };
 
     const handleControlCommand = async (command: string) => {
+        if (!canConfigure) {
+            setRunMessage(t('execution_blocked_capability_denied'));
+            return;
+        }
         setIsLoading(true);
         try {
             await api.sendAgentControlCommand(agent.id, command);
@@ -92,8 +112,8 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
                 onUpdate(updatedAgent);
             }
         } catch (error) {
-            console.error('Failed to run command:', error);
-            alert(t('command_failed') || 'Command failed');
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            setRunMessage((t('command_failed') || 'Command failed') + (errorMessage ? `: ${errorMessage}` : ''));
         } finally {
             setIsLoading(false);
         }
@@ -117,14 +137,24 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
                             {t('order_agent_desc') || 'Routes and supervises spot/perp orders on MEXC with adaptive learning.'}
                         </p>
                     </div>
-                    <div className="flex gap-3 flex-wrap">
+                    <div className="flex gap-3 flex-wrap items-center">
                         <AgentRunButton
                             onRun={handleRunCycle}
                             running={isRunning}
-                            label={t('run_cycle') || 'Run cycle'}
-                            disabled={agent.status !== 'active'}
+                            label={t('run_simulation') || t('run_cycle') || 'Run simulation'}
+                            liveSideEffects={false}
                             className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg text-sm"
                         />
+                        <button
+                            type="button"
+                            disabled
+                            title={t(`execution_blocked_${(liveBlockReason || 'KILL_SWITCH_ACTIVE').toLowerCase()}`)}
+                            aria-disabled="true"
+                            data-testid="order-live-place-blocked"
+                            className="bg-red-900/40 border border-red-500/40 text-red-200/90 font-semibold py-2 px-4 rounded-lg text-sm opacity-80 cursor-not-allowed"
+                        >
+                            {t('place_live_order_blocked') || 'Place Live Order (blocked)'}
+                        </button>
                         <button
                             onClick={onClose}
                             className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg text-sm"
@@ -133,6 +163,21 @@ const OrderManagementAgentControl: React.FC<OrderManagementAgentControlProps> = 
                         </button>
                     </div>
                 </div>
+
+                <div className="px-6 py-2 text-xs text-amber-100/90 bg-amber-500/10 border-b border-amber-500/20" role="status">
+                    {t('order_agent_live_blocked_notice')}
+                    {liveBlockReason ? ` (${t(`execution_blocked_${liveBlockReason.toLowerCase()}`)})` : ''}
+                </div>
+                {runMessage && (
+                    <div className="px-6 py-2 text-xs text-sky-100/90 bg-sky-500/10 border-b border-sky-500/20" role="status" data-testid="order-run-message">
+                        {runMessage}
+                    </div>
+                )}
+                {blockReason && (
+                    <div className="px-6 py-2 text-xs text-red-200 bg-red-500/10 border-b border-red-500/20" role="status">
+                        {t(`execution_blocked_${blockReason.toLowerCase()}`)}
+                    </div>
+                )}
 
                 <div className="bg-gray-900/50 border-b border-gray-800 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">

@@ -21,24 +21,29 @@ class FavoritesWebSocketService {
     }
 
     /**
-     * Initialize WebSocket server
+     * Initialize WebSocket server (noServer — register with shared upgrade router).
+     * Prefer post-connect `{ type: 'auth', token }` so JWTs are never placed in the WS URL.
      */
-    initialize(server) {
-        this.wss = new WebSocketServer({ 
-            server,
-            path: '/ws/favorites'
-        });
+    initialize() {
+        if (this.wss) return this.wss;
+
+        this.wss = new WebSocketServer({ noServer: true });
 
         this.wss.on('connection', async (ws, req) => {
             logger.info('📡 WebSocket client connected');
 
-            // Extract token from query string (?token=xxx)
+            // Legacy query tokens still accepted but must not be logged.
             const url = new URL(req.url, 'http://localhost');
             const tokenFromQuery = url.searchParams.get('token');
             
-            // If token in query string, authenticate immediately
             if (tokenFromQuery) {
                 await this.handleAuth(ws, tokenFromQuery);
+            } else {
+                try {
+                    ws.send(JSON.stringify({ type: 'auth_required' }));
+                } catch {
+                    // ignore
+                }
             }
 
             // Handle authentication

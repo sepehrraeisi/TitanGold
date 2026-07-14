@@ -68,12 +68,18 @@ const AIAgents: React.FC = () => {
         return `${protocol}//${host}/ws/agents`;
     };
 
-    const { isConnected, isConnecting, reconnectAttempts, maxReconnectAttempts, send } = useWebSocket({
+    const {
+        isConnected,
+        realtimeUnavailable,
+        send,
+        connect: reconnectRealtime,
+    } = useWebSocket({
         url: getWebSocketUrl(),
         token: authToken,
-        // PM2 cluster can reject WS upgrades; degrade after one retry without console spam.
-        maxReconnectAttempts: 1,
-        reconnectInterval: 5000,
+        // Bounded attempts + sticky unavailable (no flash / spam)
+        maxReconnectAttempts: 3,
+        reconnectInterval: 2000,
+        quiet: true,
         onMessage: (message: WebSocketMessage) => {
             if (message.type === 'agent_update' && message.data) {
                 const agentData = message.data;
@@ -97,7 +103,8 @@ const AIAgents: React.FC = () => {
             }
         },
     });
-    const realtimeUnavailable = !isConnected && !isConnecting && reconnectAttempts >= maxReconnectAttempts;
+    // Sticky degraded banner only — never oscillate while unavailable.
+    const showRealtimeDegraded = realtimeUnavailable && !isConnected;
 
     // Extract unique categories from agents
     const categories = useMemo(() => {
@@ -168,14 +175,28 @@ const AIAgents: React.FC = () => {
     return (
         <>
             <AgentSafetyBanner runtime={runtime} canExecute={canExecute} loading={runtimeLoading} />
-            {realtimeUnavailable && (
+            {showRealtimeDegraded && (
                 <div
-                    className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-100/90"
+                    className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-100/90 flex flex-wrap items-center justify-between gap-2"
                     role="status"
                     data-testid="agent-realtime-unavailable"
                 >
-                    {t('agent_realtime_unavailable') ||
-                        'Realtime agent updates are temporarily unavailable. Agent data refreshes when you reload or reopen this page.'}
+                    <span>
+                        {t('agent_realtime_unavailable')}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => reconnectRealtime({ force: true })}
+                        className="px-3 py-1 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-50 hover:bg-amber-500/30 font-semibold"
+                        data-testid="agent-realtime-retry"
+                    >
+                        {t('retry')}
+                    </button>
+                </div>
+            )}
+            {isConnected && (
+                <div className="sr-only" data-testid="agent-realtime-connected" aria-live="polite">
+                    {t('agent_realtime_connected') || 'Realtime updates connected'}
                 </div>
             )}
             {/* Search and Filter Bar */}

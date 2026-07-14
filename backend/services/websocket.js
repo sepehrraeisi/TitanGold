@@ -3,10 +3,13 @@ import { logger } from './logger.js';
 
 let wss = null;
 
-export function initWebsocket(server) {
+/**
+ * Notifications WebSocket — noServer; register with shared upgrade router.
+ */
+export function initWebsocket() {
   if (wss) return wss;
 
-  wss = new WebSocketServer({ server, path: '/ws/notifications' });
+  wss = new WebSocketServer({ noServer: true });
 
   wss.on('connection', (ws, req) => {
     const ip = req.socket.remoteAddress;
@@ -31,3 +34,6 @@ export function broadcastNotification(payload) {
   });
 }
 
+export function getNotificationsWebSocketServer() {
+  return wss;
+}

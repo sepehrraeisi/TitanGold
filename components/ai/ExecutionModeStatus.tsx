@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { fetchExecutionRuntime, type ExecutionRuntimeView } from '../../services/executionRuntimeApi.ts';
 import * as api from '../../services/api.ts';
@@ -16,6 +16,7 @@ const ExecutionModeStatus: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
 
   const refresh = async () => {
     try {
@@ -56,12 +57,12 @@ const ExecutionModeStatus: React.FC = () => {
       if (!res.ok) throw new Error('Failed');
       setRequestedMode(next);
       setToast({
-        message: t('mode_preference_updated') || `Preference set to ${next.toUpperCase()} (does not grant live permission)`,
+        message: t('mode_preference_updated'),
         type: 'info',
       });
       await refresh();
     } catch {
-      setToast({ message: t('mode_switch_failed') || 'Failed to update preference', type: 'error' });
+      setToast({ message: t('mode_switch_failed'), type: 'error' });
     }
   };
 
@@ -73,19 +74,30 @@ const ExecutionModeStatus: React.FC = () => {
   const activeMode = (kill ? 'demo' : runtime?.effectiveMode || 'demo').toUpperCase();
   const preferenceLabel = requestedMode.toUpperCase();
   const isRequestedDemo = requestedMode === 'demo';
+  const confirmMessage = requestedMode === 'demo'
+    ? t('switch_preference_live_confirm')
+    : t('switch_preference_demo_confirm');
 
   return (
     <>
       <div
+        ref={triggerRef}
         className="flex items-center gap-2 cursor-pointer group"
         onClick={handleToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setShowConfirm(true);
+          }
+        }}
         title={
           kill
-            ? (t('kill_switch_active') || 'Emergency Stop is on — active mode is Demo')
-            : (t('requested_vs_effective') || `Preference ${preferenceLabel} · Active ${activeMode}`)
+            ? t('kill_switch_active')
+            : t('requested_vs_effective')
         }
-        role="group"
-        aria-label={t('execution_mode_status') || 'Execution mode status'}
+        role="button"
+        tabIndex={0}
+        aria-label={t('execution_mode_status')}
         data-testid="execution-mode-status"
       >
         <div className="flex flex-col items-end gap-0.5">
@@ -102,19 +114,19 @@ const ExecutionModeStatus: React.FC = () => {
               />
             </div>
             <span className="text-[10px] font-semibold text-muted-foreground hidden lg:inline">
-              {t('mode_preference_short') || 'Preference'}: {preferenceLabel}
+              {t('mode_preference_short')}: {preferenceLabel}
             </span>
           </div>
           <div className="flex items-center gap-1">
             <span className={`text-[10px] font-bold ${kill ? 'text-red-400' : activeMode === 'LIVE' ? 'text-red-400' : 'text-amber-400'}`}>
-              {t('mode_active_short') || 'Active'}: {activeMode}
+              {t('mode_active_short')}: {activeMode}
             </span>
             {kill && (
               <span
                 className="text-[9px] font-bold px-1.5 py-0.5 rounded border border-red-500/50 bg-red-600/25 text-red-100"
                 data-testid="header-emergency-stop"
               >
-                {t('emergency_stop') || 'Emergency Stop'}
+                {t('emergency_stop')}
               </span>
             )}
           </div>
@@ -122,15 +134,11 @@ const ExecutionModeStatus: React.FC = () => {
       </div>
       <ConfirmModal
         isOpen={showConfirm}
-        message={
-          requestedMode === 'demo'
-            ? (t('switch_preference_live_confirm') ||
-              'Set preference to LIVE? This does not enable live execution without admin/runtime gates.')
-            : (t('switch_preference_demo_confirm') || 'Set preference to DEMO?')
-        }
+        message={confirmMessage}
         onConfirm={handleConfirm}
         onCancel={() => setShowConfirm(false)}
         type={requestedMode === 'demo' ? 'warning' : 'info'}
+        returnFocusRef={triggerRef}
       />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </>

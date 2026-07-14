@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { redactSensitiveText, redactSensitiveUrl } from '../utils/redactSensitive.ts';
 
 export interface WebSocketMessage {
-    type: 'price_update' | 'alert_triggered' | 'error' | 'connected' | 'pong' | 'agent_update' | string;
+    type: 'price_update' | 'alert_triggered' | 'error' | 'connected' | 'pong' | 'agent_update' | 'auth_required' | string;
     data?: any;
     timestamp?: string;
     payload?: any;
+    token?: string;
+    code?: string;
+    message?: string;
 }
 
 export interface WebSocketHookOptions {
@@ -13,6 +17,7 @@ export interface WebSocketHookOptions {
     autoConnect?: boolean;
     reconnectInterval?: number;
     maxReconnectAttempts?: number;
+    quiet?: boolean;
     onMessage?: (message: WebSocketMessage) => void;
     onConnect?: () => void;
     onDisconnect?: () => void;
@@ -23,22 +28,33 @@ export interface WebSocketHookReturn {
     isConnected: boolean;
     isConnecting: boolean;
     error: string | null;
+    realtimeUnavailable: boolean;
     send: (message: any) => void;
-    connect: () => void;
+    connect: (opts?: { force?: boolean }) => void;
     disconnect: () => void;
     reconnectAttempts: number;
     maxReconnectAttempts: number;
 }
 
+function safeLog(quiet: boolean, level: 'log' | 'warn' | 'error', ...args: unknown[]) {
+    if (quiet && level === 'log') return;
+    const cleaned = args.map((a) => {
+        if (typeof a === 'string') return redactSensitiveText(a);
+        if (a && typeof a === 'object') {
+            try {
+                return JSON.parse(redactSensitiveText(JSON.stringify(a)));
+            } catch {
+                return '[object]';
+            }
+        }
+        return a;
+    });
+    // eslint-disable-next-line no-console
+    console[level](...cleaned);
+}
+
 /**
- * Custom React Hook for WebSocket Connection
- * 
- * @example
- * const { isConnected, send } = useWebSocket({
- *   url: 'ws://localhost:5002/ws/favorites',
- *   token: localStorage.getItem('token'),
- *   onMessage: (message) => console.log('Received:', message)
- * });
+ * Stable WebSocket hook — token never in URL; bounded backoff; sticky unavailable.
  */
 export const useWebSocket = (options: WebSocketHookOptions): WebSocketHookReturn => {
     const {
@@ -46,7 +62,8 @@ export const useWebSocket = (options: WebSocketHookOptions): WebSocketHookReturn
         token,
         autoConnect = true,
         reconnectInterval = 3000,
-        maxReconnectAttempts = 5,
+        maxReconnectAttempts = 3,
+        quiet = true,
         onMessage,
         onConnect,
         onDisconnect,
@@ -57,155 +74,262 @@ export const useWebSocket = (options: WebSocketHookOptions): WebSocketHookReturn
     const [isConnecting, setIsConnecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [reconnectAttempts, setReconnectAttempts] = useState(0);
+    const [realtimeUnavailable, setRealtimeUnavailable] = useState(false);
 
     const ws = useRef<WebSocket | null>(null);
-    const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
-    const heartbeatInterval = useRef<NodeJS.Timeout | null>(null);
+    const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const heartbeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
     const shouldReconnect = useRef(true);
+    const attemptRef = useRef(0);
+    const connectingRef = useRef(false);
+    const unavailableRef = useRef(false);
+    const unmountedRef = useRef(false);
+    const connectSeq = useRef(0);
 
-    /**
-     * Send message to WebSocket server
-     */
-    const send = useCallback((message: any) => {
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify(message));
-            console.log('📤 WebSocket sent:', message);
-        } else {
-            console.warn('⚠️ WebSocket not connected. Cannot send message:', message);
-        }
-    }, []);
+    const urlRef = useRef(url);
+    const tokenRef = useRef(token);
+    const maxAttemptsRef = useRef(maxReconnectAttempts);
+    const baseIntervalRef = useRef(reconnectInterval);
+    const quietRef = useRef(quiet);
+    const onMessageRef = useRef(onMessage);
+    const onConnectRef = useRef(onConnect);
+    const onDisconnectRef = useRef(onDisconnect);
+    const onErrorRef = useRef(onError);
 
-    /**
-     * Start heartbeat (ping/pong) to keep connection alive
-     */
-    const startHeartbeat = useCallback(() => {
-        heartbeatInterval.current = setInterval(() => {
-            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                send({ type: 'ping' });
-            }
-        }, 30000); // Send ping every 30 seconds
-    }, [send]);
+    urlRef.current = url;
+    tokenRef.current = token;
+    maxAttemptsRef.current = maxReconnectAttempts;
+    baseIntervalRef.current = reconnectInterval;
+    quietRef.current = quiet;
+    onMessageRef.current = onMessage;
+    onConnectRef.current = onConnect;
+    onDisconnectRef.current = onDisconnect;
+    onErrorRef.current = onError;
 
-    /**
-     * Stop heartbeat
-     */
-    const stopHeartbeat = useCallback(() => {
-        if (heartbeatInterval.current) {
-            clearInterval(heartbeatInterval.current);
-            heartbeatInterval.current = null;
-        }
-    }, []);
-
-    /**
-     * Connect to WebSocket server
-     */
-    const connect = useCallback(() => {
-        if (ws.current?.readyState === WebSocket.OPEN || isConnecting) {
-            console.log('🔗 WebSocket already connected or connecting');
-            return;
-        }
-
-        setIsConnecting(true);
-        setError(null);
-
-        try {
-            const wsUrl = token ? `${url}?token=${token}` : url;
-            console.log('🔗 Connecting to WebSocket:', wsUrl.replace(token || '', '***'));
-            
-            ws.current = new WebSocket(wsUrl);
-
-            ws.current.onopen = () => {
-                console.log('✅ WebSocket connected successfully');
-                setIsConnected(true);
-                setIsConnecting(false);
-                setError(null);
-                setReconnectAttempts(0);
-                startHeartbeat();
-                onConnect?.();
-            };
-
-            ws.current.onmessage = (event) => {
-                try {
-                    const message: WebSocketMessage = JSON.parse(event.data);
-                    console.log('📥 WebSocket received:', message);
-                    onMessage?.(message);
-                } catch (err) {
-                    console.error('❌ Failed to parse WebSocket message:', err);
-                }
-            };
-
-            ws.current.onerror = (event) => {
-                setError('WebSocket connection error');
-                setIsConnecting(false);
-                onError?.(event);
-            };
-
-            ws.current.onclose = (event) => {
-                setIsConnected(false);
-                setIsConnecting(false);
-                stopHeartbeat();
-                ws.current = null;
-                onDisconnect?.();
-
-                // Attempt limited reconnection (quiet)
-                if (shouldReconnect.current && reconnectAttempts < maxReconnectAttempts) {
-                    reconnectTimeout.current = setTimeout(() => {
-                        setReconnectAttempts(prev => prev + 1);
-                        connect();
-                    }, reconnectInterval);
-                } else if (reconnectAttempts >= maxReconnectAttempts) {
-                    shouldReconnect.current = false;
-                    setError('realtime_unavailable');
-                }
-            };
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to connect');
-            setIsConnecting(false);
-        }
-    }, [url, token, reconnectAttempts, maxReconnectAttempts, reconnectInterval, isConnecting, onMessage, onConnect, onDisconnect, onError, startHeartbeat, stopHeartbeat, send]);
-
-    /**
-     * Disconnect from WebSocket server
-     */
-    const disconnect = useCallback(() => {
-        console.log('🔌 Disconnecting WebSocket...');
-        shouldReconnect.current = false;
-        
+    const clearReconnectTimer = () => {
         if (reconnectTimeout.current) {
             clearTimeout(reconnectTimeout.current);
             reconnectTimeout.current = null;
         }
-        
+    };
+
+    const stopHeartbeat = () => {
+        if (heartbeatInterval.current) {
+            clearInterval(heartbeatInterval.current);
+            heartbeatInterval.current = null;
+        }
+    };
+
+    const startHeartbeat = () => {
         stopHeartbeat();
-        
+        heartbeatInterval.current = setInterval(() => {
+            if (ws.current?.readyState === WebSocket.OPEN) {
+                try {
+                    ws.current.send(JSON.stringify({ type: 'ping' }));
+                } catch {
+                    // ignore
+                }
+            }
+        }, 30000);
+    };
+
+    const markUnavailable = (reason = 'realtime_unavailable') => {
+        unavailableRef.current = true;
+        shouldReconnect.current = false;
+        clearReconnectTimer();
+        connectingRef.current = false;
+        if (!unmountedRef.current) {
+            setRealtimeUnavailable(true);
+            setError(reason);
+            setIsConnecting(false);
+        }
+    };
+
+    const connectInternal = useCallback(() => {
+        if (unmountedRef.current) return;
+        if (ws.current?.readyState === WebSocket.OPEN || connectingRef.current) return;
+        if (unavailableRef.current) return;
+
+        const seq = ++connectSeq.current;
+        connectingRef.current = true;
+        if (!unmountedRef.current) {
+            setIsConnecting(true);
+            setError(null);
+        }
+
+        try {
+            const wsUrl = urlRef.current;
+            safeLog(quietRef.current, 'log', '🔗 Connecting to WebSocket:', redactSensitiveUrl(wsUrl));
+            const socket = new WebSocket(wsUrl);
+            ws.current = socket;
+
+            socket.onopen = () => {
+                if (seq !== connectSeq.current) return;
+                const authToken = tokenRef.current;
+                if (authToken) {
+                    try {
+                        socket.send(JSON.stringify({ type: 'auth', token: authToken }));
+                    } catch {
+                        // ignore
+                    }
+                }
+                connectingRef.current = false;
+                if (!unmountedRef.current) {
+                    setIsConnected(true);
+                    setIsConnecting(false);
+                    setError(null);
+                    attemptRef.current = 0;
+                    setReconnectAttempts(0);
+                    unavailableRef.current = false;
+                    setRealtimeUnavailable(false);
+                }
+                startHeartbeat();
+                onConnectRef.current?.();
+            };
+
+            socket.onmessage = (event) => {
+                try {
+                    const message: WebSocketMessage = JSON.parse(event.data);
+                    if (message.type === 'error' && (message.code === 'AUTH_FAILED' || message.code === 'AUTH_REQUIRED')) {
+                        // AUTH_REQUIRED before auth message is expected — ignore once.
+                        if (message.code === 'AUTH_REQUIRED' && tokenRef.current) return;
+                        safeLog(quietRef.current, 'warn', 'WebSocket auth rejected:', message.code);
+                        shouldReconnect.current = false;
+                        markUnavailable(message.code === 'AUTH_FAILED' ? 'auth_failed' : 'auth_required');
+                        try { socket.close(1008, 'auth'); } catch { /* ignore */ }
+                        return;
+                    }
+                    onMessageRef.current?.(message);
+                } catch (err) {
+                    safeLog(quietRef.current, 'error', '❌ Failed to parse WebSocket message');
+                }
+            };
+
+            socket.onerror = (event) => {
+                onErrorRef.current?.(event);
+            };
+
+            socket.onclose = () => {
+                if (ws.current === socket) ws.current = null;
+                connectingRef.current = false;
+                stopHeartbeat();
+                if (!unmountedRef.current) {
+                    setIsConnected(false);
+                    setIsConnecting(false);
+                }
+                onDisconnectRef.current?.();
+
+                if (!shouldReconnect.current || unavailableRef.current || unmountedRef.current) {
+                    if (!shouldReconnect.current && !unavailableRef.current && attemptRef.current >= maxAttemptsRef.current) {
+                        markUnavailable();
+                    }
+                    return;
+                }
+
+                if (attemptRef.current >= maxAttemptsRef.current) {
+                    markUnavailable();
+                    return;
+                }
+
+                const delay = Math.min(
+                    baseIntervalRef.current * Math.pow(2, attemptRef.current),
+                    30000,
+                );
+                attemptRef.current += 1;
+                if (!unmountedRef.current) {
+                    setReconnectAttempts(attemptRef.current);
+                }
+                clearReconnectTimer();
+                reconnectTimeout.current = setTimeout(() => {
+                    connectInternal();
+                }, delay);
+            };
+        } catch (err) {
+            connectingRef.current = false;
+            const msg = err instanceof Error ? err.message : 'Failed to connect';
+            if (!unmountedRef.current) {
+                setError(redactSensitiveText(msg));
+                setIsConnecting(false);
+            }
+            if (attemptRef.current >= maxAttemptsRef.current) {
+                markUnavailable();
+            } else {
+                attemptRef.current += 1;
+                clearReconnectTimer();
+                reconnectTimeout.current = setTimeout(() => connectInternal(), baseIntervalRef.current);
+            }
+        }
+    }, []);
+
+    const connect = useCallback((opts?: { force?: boolean }) => {
+        if (opts?.force) {
+            unavailableRef.current = false;
+            shouldReconnect.current = true;
+            attemptRef.current = 0;
+            clearReconnectTimer();
+            if (!unmountedRef.current) {
+                setRealtimeUnavailable(false);
+                setReconnectAttempts(0);
+                setError(null);
+            }
+            if (ws.current) {
+                try { ws.current.close(); } catch { /* ignore */ }
+                ws.current = null;
+            }
+            connectingRef.current = false;
+        }
+        connectInternal();
+    }, [connectInternal]);
+
+    const disconnect = useCallback(() => {
+        shouldReconnect.current = false;
+        clearReconnectTimer();
+        stopHeartbeat();
         if (ws.current) {
-            ws.current.close();
+            try { ws.current.close(); } catch { /* ignore */ }
             ws.current = null;
         }
-        
-        setIsConnected(false);
-        setIsConnecting(false);
-    }, [stopHeartbeat]);
-
-    /**
-     * Auto-connect on mount
-     */
-    useEffect(() => {
-        if (autoConnect) {
-            connect();
+        connectingRef.current = false;
+        if (!unmountedRef.current) {
+            setIsConnected(false);
+            setIsConnecting(false);
         }
+    }, []);
 
-        // Cleanup on unmount
+    const send = useCallback((message: any) => {
+        if (ws.current?.readyState === WebSocket.OPEN) {
+            // Strip token from any accidental log path — send payload as-is to server only.
+            ws.current.send(JSON.stringify(message));
+        }
+    }, []);
+
+    useEffect(() => {
+        unmountedRef.current = false;
+        shouldReconnect.current = true;
+        unavailableRef.current = false;
+        attemptRef.current = 0;
+        if (autoConnect) {
+            connectInternal();
+        }
         return () => {
+            unmountedRef.current = true;
             shouldReconnect.current = false;
-            disconnect();
+            clearReconnectTimer();
+            stopHeartbeat();
+            if (ws.current) {
+                try { ws.current.close(); } catch { /* ignore */ }
+                ws.current = null;
+            }
+            connectingRef.current = false;
         };
-    }, [autoConnect]); // Only run on mount and unmount
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoConnect, url]);
 
     return {
         isConnected,
         isConnecting,
         error,
+        realtimeUnavailable,
         send,
         connect,
         disconnect,

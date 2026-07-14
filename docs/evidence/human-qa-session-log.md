@@ -104,3 +104,28 @@ Human result: FAIL → remediation implemented.
 
 ### Human retest required
 Return to HQA-A1 on hard-refreshed `https://titan.zala.ir/?view=ai`
+
+## HQA-A1 Scoped Remediation Cycle 2 (2026-07-14)
+
+Human result: FAIL → remediation for A1–A4 defects.
+
+### RCA
+- Raw `switch_preference_live_confirm`: `t()` returns missing keys as-is; `|| fallback` never runs
+- WS HTTP 400: multiple `WebSocketServer({ server, path })` — first path aborts non-matches with 400 (notifications worked; agents/favorites broken)
+- JWT in console: token previously appended as `?token=` (browsers log failed handshake URLs)
+- Start/Run no-op: frontend treated Kill Switch as hard block for all runs; backend already allows dry-run analytics under KS
+
+### Fixes
+- EN/FA translations for preference confirm + block reasons
+- ConfirmModal: portal, viewport center, focus trap, Escape, restore focus
+- Shared upgrade router (`noServer` + path map) for notifications/agents/favorites
+- Post-connect `{ type: 'auth', token }` — JWT never in WS URL; redaction utility + unit tests
+- Sticky realtime unavailable + Retry; bounded exp backoff
+- Gate allows Dry Run for safe agents; Order Manager simulation + live place blocked with reason
+- Bundle: `assets/index-D_eFuyml.js`
+- Unit: redact 3/3, wsUpgradeRouter PASS, policy PASS
+- Playwright staging scoped: 57/57 PASS (agent-panels + runtime-safety)
+- Runtime preserved: demo, KS active
+
+### Human retest
+Hard-refresh `https://titan.zala.ir/?view=ai` and run A1–A4 only.
