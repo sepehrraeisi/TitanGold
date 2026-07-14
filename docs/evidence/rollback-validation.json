@@ -1,11 +1,11 @@
 {
-  "validatedAt": "2026-07-14T07:52:54.902Z",
-  "tip": "7afbd48365c7afbda3e56547d7980030f36a8ca3",
+  "validatedAt": "2026-07-14T08:58:52.403Z",
+  "tip": "b3e570c6faca187c9b5332f9f17e759a77c5b5b7",
   "procedures": [
     {
       "name": "A_full_work_package",
       "base": "d705bd2",
-      "tip": "7afbd48365c7afbda3e56547d7980030f36a8ca3",
+      "tip": "b3e570c6faca187c9b5332f9f17e759a77c5b5b7",
       "steps": [
         {
           "step": "worktree_created",
@@ -13,12 +13,12 @@
         },
         {
           "step": "cherry_pick_forward",
-          "count": 15,
+          "count": 16,
           "status": "PASS"
         },
         {
           "step": "revert_newest_to_oldest",
-          "count": 15,
+          "count": 16,
           "status": "PASS"
         },
         {
@@ -51,15 +51,16 @@
         "24b97ce8c8eae9a4f74e9eeba643fecea08fe5ef",
         "e8b3de488bca86dc121e364076a0f3133e9d7756",
         "c4723b9227a42aff3790f18bf75d24382eaf273a",
-        "7afbd48365c7afbda3e56547d7980030f36a8ca3"
+        "7afbd48365c7afbda3e56547d7980030f36a8ca3",
+        "b3e570c6faca187c9b5332f9f17e759a77c5b5b7"
       ],
       "treeDiffStat": "0 files changed",
-      "revertedHead": "b55cc9e3b4c3258f78819ef9b4ab2a548a3cb1ad"
+      "revertedHead": "d34bca7efb4c2677d2b22582a09e0267b1e09891"
     },
     {
       "name": "B_later_phase_only",
       "base": "09dc28b",
-      "tip": "7afbd48365c7afbda3e56547d7980030f36a8ca3",
+      "tip": "b3e570c6faca187c9b5332f9f17e759a77c5b5b7",
       "steps": [
         {
           "step": "worktree_created",
@@ -67,12 +68,12 @@
         },
         {
           "step": "cherry_pick_forward",
-          "count": 10,
+          "count": 11,
           "status": "PASS"
         },
         {
           "step": "revert_newest_to_oldest",
-          "count": 10,
+          "count": 11,
           "status": "PASS"
         },
         {
@@ -100,10 +101,11 @@
         "24b97ce8c8eae9a4f74e9eeba643fecea08fe5ef",
         "e8b3de488bca86dc121e364076a0f3133e9d7756",
         "c4723b9227a42aff3790f18bf75d24382eaf273a",
-        "7afbd48365c7afbda3e56547d7980030f36a8ca3"
+        "7afbd48365c7afbda3e56547d7980030f36a8ca3",
+        "b3e570c6faca187c9b5332f9f17e759a77c5b5b7"
       ],
       "treeDiffStat": "0 files changed",
-      "revertedHead": "e38eddb42dc5e10a70ca131ac81635292b90a192"
+      "revertedHead": "9913db4ba2aa21c6e23d1c52f460431f9e3b940d"
     }
   ],
   "pass": true
