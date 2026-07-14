@@ -1,0 +1,17 @@
+{
+  "n": 40,
+  "p50": 5.36,
+  "p95": 7.83,
+  "p99": 8.0,
+  "max": 8.99,
+  "lastLatencyMs": 2,
+  "runtime": {
+    "status": "ok",
+    "killSwitchActive": true,
+    "effectiveMode": "demo",
+    "workerAcknowledged": true,
+    "stateVersion": 198,
+    "message": "Demo + kill switch active",
+    "critical": false
+  }
+}

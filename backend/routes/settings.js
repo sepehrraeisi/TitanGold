@@ -2,7 +2,7 @@ import express from 'express';
 import db from '../database/db.js';
 import { authenticate, authenticateStrict, authorize } from '../middleware/auth.js';
 import { requireCapability } from '../middleware/requireCapability.js';
-import { CAP } from '../services/capabilities.js';
+import { CAP, roleHasCapability } from '../services/capabilities.js';
 import {
   getRuntimeExecutionState,
   setGlobalRuntimeMode,
@@ -23,7 +23,7 @@ const router = express.Router();
  * GET /api/settings/trading-mode
  * Get current user's trading mode (demo | live)
  */
-router.get('/trading-mode', authenticate, async (req, res) => {
+router.get('/trading-mode', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
     const userId = req.user.id;
     
@@ -47,7 +47,8 @@ router.get('/trading-mode', authenticate, async (req, res) => {
     logger.error('Error fetching trading mode:', error);
     res.status(500).json({ 
       error: 'Failed to fetch trading mode',
-      message: error.message 
+      message: error.message,
+      code: 'TRADING_MODE_READ_FAILED',
     });
   }
 });
@@ -56,8 +57,9 @@ router.get('/trading-mode', authenticate, async (req, res) => {
  * POST /api/settings/trading-mode
  * Set current user's trading mode (demo | live)
  * CRITICAL: DB-backed to survive PM2 cluster restarts
+ * Requesting live requires LIVE_TRADING capability; global kill/demo still suppress execution.
  */
-router.post('/trading-mode', authenticate, async (req, res) => {
+router.post('/trading-mode', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
     const userId = req.user.id;
     const { mode } = req.body;
@@ -66,7 +68,16 @@ router.post('/trading-mode', authenticate, async (req, res) => {
     if (mode !== 'demo' && mode !== 'live') {
       return res.status(400).json({ 
         error: 'Invalid mode',
-        message: 'Mode must be "demo" or "live"'
+        message: 'Mode must be "demo" or "live"',
+        code: 'VALIDATION_ERROR',
+      });
+    }
+
+    if (mode === 'live' && !roleHasCapability(req.user.role, CAP.LIVE_TRADING)) {
+      return res.status(403).json({
+        error: 'Insufficient permissions to request live mode',
+        code: 'CAPABILITY_DENIED',
+        capability: CAP.LIVE_TRADING,
       });
     }
     
@@ -141,7 +152,7 @@ router.post('/trading-mode', authenticate, async (req, res) => {
 // Global Execution Runtime (multi-process SSOT)
 // ============================================================================
 
-router.get('/execution-runtime', authenticateStrict, async (req, res) => {
+router.get('/execution-runtime', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
     const state = await getRuntimeExecutionState({ preferCache: false });
     const userId = req.user.id;
@@ -198,13 +209,15 @@ router.post('/execution-runtime/kill-switch', authenticateStrict, requireCapabil
 
 /**
  * GET /api/settings
- * Get all system settings (public + authenticated)
+ * Authenticated read of non-secret system settings.
+ * Blocks raw global_execution_runtime secret fields via redaction.
  */
-router.get('/', async (req, res) => {
+router.get('/', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
     const result = await db.query(`
       SELECT key, value, description, updated_at
       FROM system_settings
+      WHERE key NOT IN ('global_execution_runtime')
       ORDER BY key
     `);
 
@@ -221,43 +234,72 @@ router.get('/', async (req, res) => {
     logger.error('Error fetching settings:', error);
     res.status(500).json({ 
       error: 'Failed to fetch settings',
-      message: error.message 
+      message: error.message,
+      code: 'SETTINGS_READ_FAILED',
     });
   }
 });
 
 /**
  * GET /api/settings/:key
- * Get a specific setting by key
+ * Non-secret public keys are readable without auth for login/bootstrap UX.
+ * Runtime SSOT must use /settings/execution-runtime.
  */
-router.get('/:key', async (req, res) => {
+const PUBLIC_SETTING_KEYS = new Set(['public_registration', 'app_name', 'support_email', 'maintenance_mode']);
+
+router.get('/:key', async (req, res, next) => {
+  const { key } = req.params;
+  if (key === 'global_execution_runtime') {
+    return res.status(403).json({
+      error: 'Use /settings/execution-runtime for runtime state',
+      code: 'USE_CANONICAL_ENDPOINT',
+    });
+  }
+  if (PUBLIC_SETTING_KEYS.has(key)) {
+    try {
+      const result = await db.query(
+        'SELECT key, value, description, updated_at FROM system_settings WHERE key = $1',
+        [key],
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Setting not found', key, code: 'NOT_FOUND' });
+      }
+      const setting = result.rows[0];
+      return res.json({
+        key: setting.key,
+        value: setting.value,
+        description: setting.description,
+        updatedAt: setting.updated_at,
+      });
+    } catch (error) {
+      logger.error('Error fetching public setting:', error);
+      return res.status(500).json({ error: 'Failed to fetch setting', code: 'SETTINGS_READ_FAILED' });
+    }
+  }
+  return next();
+}, authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
     const { key } = req.params;
-
     const result = await db.query(
       'SELECT key, value, description, updated_at FROM system_settings WHERE key = $1',
-      [key]
+      [key],
     );
-
     if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        error: 'Setting not found',
-        key 
-      });
+      return res.status(404).json({ error: 'Setting not found', key, code: 'NOT_FOUND' });
     }
-
     const setting = result.rows[0];
     res.json({
       key: setting.key,
       value: setting.value,
       description: setting.description,
-      updatedAt: setting.updated_at
+      updatedAt: setting.updated_at,
     });
   } catch (error) {
     logger.error('Error fetching setting:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch setting',
-      message: error.message 
+      message: error.message,
+      code: 'SETTINGS_READ_FAILED',
     });
   }
 });
@@ -266,14 +308,22 @@ router.get('/:key', async (req, res) => {
  * PUT /api/settings/:key
  * Update a specific setting (Admin only)
  */
-router.put('/:key', authenticate, authorize('admin'), async (req, res) => {
+router.put('/:key', authenticateStrict, authorize('admin'), requireCapability(CAP.AI_AGENT_CONFIGURE), async (req, res) => {
   try {
     const { key } = req.params;
     const { value, description } = req.body;
 
+    if (key === 'global_execution_runtime') {
+      return res.status(403).json({
+        error: 'Use /settings/execution-runtime endpoints for runtime mutations',
+        code: 'USE_CANONICAL_ENDPOINT',
+      });
+    }
+
     if (value === undefined) {
       return res.status(400).json({ 
-        error: 'Value is required' 
+        error: 'Value is required',
+        code: 'VALIDATION_ERROR',
       });
     }
 

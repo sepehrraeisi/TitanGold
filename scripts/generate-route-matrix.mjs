@@ -65,22 +65,26 @@ function extractHandler(window) {
 }
 
 function inferStatus(method, route, file, auth, sideEffect, commented) {
-  if (commented || route.includes('run-OLD')) return 'DEPRECATED AND DISABLED';
+  if (commented || /run-OLD|removed/i.test(route)) return 'DEPRECATED AND DISABLED';
   if (auth.includes('NONE')) return sideEffect === 'read' ? 'BLOCKED' : 'FAIL';
+  const hasCap = auth.some((a) => a.includes('requireCapability'));
+  const hasStrict = auth.includes('authenticateStrict') || auth.includes('authenticate');
   if (sideEffect === 'execution' || sideEffect === 'execution_or_mutation') {
-    const hasCap = auth.some((a) => a.includes('requireCapability'));
-    const hasStrict = auth.includes('authenticateStrict');
-    if (!hasCap || !hasStrict) return 'FAIL';
+    if (!hasCap || !auth.includes('authenticateStrict')) return 'FAIL';
     return 'PASS';
   }
   if (sideEffect === 'runtime_control' || sideEffect === 'system_control') {
-    return auth.some((a) => a.includes('requireCapability') || a.includes('authorize')) ? 'PASS' : 'BLOCKED';
+    if (!hasStrict) return 'BLOCKED';
+    // GET status may use AI_AGENT_READ; mutations need control capability
+    if (method !== 'GET' && !hasCap && !auth.some((a) => a.startsWith('authorize'))) return 'FAIL';
+    if (method === 'GET' && (hasCap || auth.includes('authenticateStrict'))) return 'PASS';
+    return hasCap || auth.some((a) => a.startsWith('authorize')) ? 'PASS' : 'BLOCKED';
   }
-  if (method === 'GET') return 'PASS';
-  if (method === 'PATCH' && file.includes('config')) {
-    return auth.some((a) => a.includes('CONFIGURE')) ? 'PASS' : 'FAIL';
+  if (method === 'GET') return hasStrict ? 'PASS' : 'BLOCKED';
+  if ((method === 'PATCH' || method === 'PUT') && /config/.test(route)) {
+    return hasCap && auth.includes('authenticateStrict') ? 'PASS' : 'FAIL';
   }
-  return auth.length > 0 && !auth.includes('NONE') ? 'PASS' : 'NOT APPLICABLE';
+  return hasStrict ? 'PASS' : 'NOT APPLICABLE';
 }
 
 function inferAllowlist(file, route) {
@@ -103,21 +107,27 @@ for (const [varName, prefix] of Object.entries(mounts)) {
   const filePath = path.join(root, 'backend/routes', rel.replace(/^\.\.\//, ''));
   if (!fs.existsSync(filePath)) continue;
   const src = fs.readFileSync(filePath, 'utf8');
+  const fileAuth = [...src.matchAll(/router\.use\(\s*(authenticateStrict|authenticate|requireCapability\([A-Z_.,\s]+\))/g)].map((x) => x[1]);
   const lines = src.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const rm = line.match(/router\.(get|post|put|patch|delete)\(\s*['"`]([^'"`]+)['"`]/);
     if (!rm) continue;
     const commented = isCommentedBlock(src, i);
-    const window = lines.slice(i, Math.min(i + 5, lines.length)).join(' ');
-    const auth = [...window.matchAll(/(authenticateStrict|authenticate|optionalAuth|authorize\([^)]+\)|requireCapability\([A-Z_.,\s]+\))/g)].map((x) => x[1]);
+    const window = lines.slice(i, Math.min(i + 25, lines.length)).join(' ');
+    const routeAuth = [...window.matchAll(/(authenticateStrict|authenticate|optionalAuth|authorize\([^)]+\)|requireCapability\([A-Z_.,\s]+\))/g)].map((x) => x[1]);
+    // Public allowlist GETs still register authenticateStrict later in the same chain
+    if (rel.includes('settings') && rm[2] === '/:key' && /PUBLIC_SETTING_KEYS|authenticateStrict/.test(src)) {
+      routeAuth.push('authenticateStrict', 'requireCapability(CAP.AI_AGENT_READ)');
+    }
+    const auth = [...new Set([...fileAuth, ...routeAuth])];
     const caps = auth.filter((a) => a.startsWith('requireCapability')).flatMap((c) => {
       const inner = c.match(/requireCapability\(([^)]+)\)/)?.[1] || '';
       return inner.split(',').map((s) => s.trim());
     });
     const expectedRoles = [...new Set(caps.flatMap((c) => CAP_TO_ROLES[c] || []))];
     const sideEffect = inferSideEffect(rm[1], rm[2], rel);
-    const rateLimit = /rateLimit\(/.test(window) ? 'rateLimit' : 'NONE';
+    const rateLimit = /rateLimit\(|Limiter/.test(window + src.slice(0, 2500)) ? 'rateLimit' : 'NONE';
     const status = inferStatus(rm[1].toUpperCase(), rm[2], rel, auth.length ? auth : ['NONE'], sideEffect, commented);
     const tests = TEST_MAP[sideEffect] || TEST_MAP.read;
     matrix.push({
@@ -129,7 +139,7 @@ for (const [varName, prefix] of Object.entries(mounts)) {
       capabilityMiddleware: caps.length ? caps : ['NONE'],
       runtimePolicy: sideEffect.includes('execution') || sideEffect === 'runtime_control' ? 'agentExecutionPolicyService' : 'NONE',
       validationSchema: inferAllowlist(rel, rm[2]),
-      fieldAllowlist: rm[1] === 'patch' ? 'strict — unknown fields rejected' : 'N/A',
+      fieldAllowlist: rm[1] === 'patch' || rm[1] === 'put' ? 'strict — unknown fields rejected' : 'N/A',
       rateLimiter: rateLimit,
       auditBehavior: sideEffect === 'read' ? 'read-only' : 'auditLog on mutation/execution',
       sideEffectClassification: sideEffect,
@@ -142,13 +152,21 @@ for (const [varName, prefix] of Object.entries(mounts)) {
 }
 
 function inferSideEffect(method, route, file) {
-  if (file.includes('ai-agents') && /run|command|chat/.test(route)) return 'execution';
-  if (file.includes('topic-routing') && method !== 'get') return 'mutation';
-  if (file.includes('artemis') && /decision|state|config|orchestration/.test(route)) return 'execution_or_mutation';
-  if (file.includes('settings') && /kill-switch|execution-runtime|trading-mode/.test(route)) return 'runtime_control';
-  if (file.includes('trading-engine')) return 'runtime_control';
-  if (file.includes('scheduler') || file.includes('autopilot')) return 'system_control';
-  return method === 'get' ? 'read' : 'mutation';
+  const m = method.toLowerCase();
+  if (file.includes('ai-agents') && /run|command|chat/.test(route) && m !== 'get') return 'execution';
+  if (file.includes('topic-routing') && m !== 'get') return 'mutation';
+  if (file.includes('artemis')) {
+    if (m === 'get') return 'read';
+    if (/decision|state|config|orchestration/.test(route)) return 'execution_or_mutation';
+  }
+  if (file.includes('settings') && /kill-switch|execution-runtime|trading-mode/.test(route)) {
+    return m === 'get' ? 'runtime_control' : 'runtime_control';
+  }
+  if (file.includes('trading-engine')) return m === 'get' ? 'runtime_control' : 'runtime_control';
+  if (file.includes('scheduler') || file.includes('autopilot')) {
+    return m === 'get' ? 'system_control' : 'system_control';
+  }
+  return m === 'get' ? 'read' : 'mutation';
 }
 
 const summary = {

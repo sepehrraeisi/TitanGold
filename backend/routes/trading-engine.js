@@ -26,7 +26,7 @@ async function getWorkerEngineStatus() {
   }
 }
 
-router.get('/status', authenticateStrict, async (req, res) => {
+router.get('/status', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
     const state = await getRuntimeExecutionState({ preferCache: false });
     const view = buildRuntimeView(state);
@@ -94,11 +94,11 @@ router.post('/emergency-stop/clear', authenticateStrict, authorize('admin'), req
   }
 });
 
-router.get('/trades/active', authenticateStrict, async (req, res) => {
+router.get('/trades/active', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   res.json({ trades: [] });
 });
 
-router.get('/opportunities', authenticateStrict, async (req, res) => {
+router.get('/opportunities', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   res.json({ opportunities: [] });
 });
 
@@ -106,7 +106,7 @@ router.put('/config', authenticateStrict, authorize('admin', 'trader'), requireC
   res.json({ success: true, message: 'Configuration update routed to worker runtime owner' });
 });
 
-router.get('/config', authenticateStrict, async (req, res) => {
+router.get('/config', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   const runtime = await getRuntimeExecutionState();
   res.json({ mode: runtime.globalMode, killSwitchActive: runtime.killSwitchActive });
 });

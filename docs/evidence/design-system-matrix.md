@@ -1,72 +1,72 @@
 # Design System Matrix
 
-Screenshots captured: 3/66
+Screenshots captured: 66/66
 
 | Panel | Layout | Spacing | Cards | Typography | Loading | Error | Responsive | Dark | i18n | Screenshot |
 |-------|--------|---------|-------|------------|---------|-------|------------|------|------|------------|
-| panel-technical-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-technical-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-technical-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-risk-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-risk-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-risk-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-sentiment-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-sentiment-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-sentiment-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-pattern-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-pattern-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-pattern-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-price_prediction-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-price_prediction-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-price_prediction-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-arbitrage-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-arbitrage-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-arbitrage-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-portfolio-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-portfolio-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-portfolio-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-liquidity-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-liquidity-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-liquidity-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-trend_detection-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-trend_detection-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-trend_detection-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-optimization-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-optimization-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-optimization-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-order-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-order-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-order-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-fundamental-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-fundamental-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-fundamental-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-market_intelligence-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-market_intelligence-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-market_intelligence-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-volume-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-volume-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-volume-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-timing-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-timing-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| panel-timing-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-overview-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-overview-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-overview-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-decision_engine-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-decision_engine-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-decision_engine-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-orchestration-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-orchestration-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-orchestration-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-scenarios-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-scenarios-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-scenarios-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-settings-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-settings-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-settings-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-autopilot-admin | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-autopilot-trader | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
-| artemis-autopilot-user | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | — |
+| panel-technical-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-technical-admin.png |
+| panel-technical-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-technical-trader.png |
+| panel-technical-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-technical-user.png |
+| panel-risk-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-risk-admin.png |
+| panel-risk-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-risk-trader.png |
+| panel-risk-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-risk-user.png |
+| panel-sentiment-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-sentiment-admin.png |
+| panel-sentiment-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-sentiment-trader.png |
+| panel-sentiment-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-sentiment-user.png |
+| panel-pattern-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-pattern-admin.png |
+| panel-pattern-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-pattern-trader.png |
+| panel-pattern-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-pattern-user.png |
+| panel-price_prediction-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-price_prediction-admin.png |
+| panel-price_prediction-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-price_prediction-trader.png |
+| panel-price_prediction-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-price_prediction-user.png |
+| panel-arbitrage-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-arbitrage-admin.png |
+| panel-arbitrage-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-arbitrage-trader.png |
+| panel-arbitrage-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-arbitrage-user.png |
+| panel-portfolio-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-portfolio-admin.png |
+| panel-portfolio-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-portfolio-trader.png |
+| panel-portfolio-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-portfolio-user.png |
+| panel-liquidity-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-liquidity-admin.png |
+| panel-liquidity-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-liquidity-trader.png |
+| panel-liquidity-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-liquidity-user.png |
+| panel-trend_detection-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-trend_detection-admin.png |
+| panel-trend_detection-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-trend_detection-trader.png |
+| panel-trend_detection-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-trend_detection-user.png |
+| panel-optimization-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-optimization-admin.png |
+| panel-optimization-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-optimization-trader.png |
+| panel-optimization-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-optimization-user.png |
+| panel-order-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-order-admin.png |
+| panel-order-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-order-trader.png |
+| panel-order-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-order-user.png |
+| panel-fundamental-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-fundamental-admin.png |
+| panel-fundamental-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-fundamental-trader.png |
+| panel-fundamental-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-fundamental-user.png |
+| panel-market_intelligence-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-market_intelligence-admin.png |
+| panel-market_intelligence-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-market_intelligence-trader.png |
+| panel-market_intelligence-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-market_intelligence-user.png |
+| panel-volume-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-volume-admin.png |
+| panel-volume-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-volume-trader.png |
+| panel-volume-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-volume-user.png |
+| panel-timing-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-timing-admin.png |
+| panel-timing-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-timing-trader.png |
+| panel-timing-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/panel-timing-user.png |
+| artemis-overview-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-overview-admin.png |
+| artemis-overview-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-overview-trader.png |
+| artemis-overview-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-overview-user.png |
+| artemis-decision_engine-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-decision_engine-admin.png |
+| artemis-decision_engine-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-decision_engine-trader.png |
+| artemis-decision_engine-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-decision_engine-user.png |
+| artemis-orchestration-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-orchestration-admin.png |
+| artemis-orchestration-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-orchestration-trader.png |
+| artemis-orchestration-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-orchestration-user.png |
+| artemis-scenarios-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-scenarios-admin.png |
+| artemis-scenarios-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-scenarios-trader.png |
+| artemis-scenarios-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-scenarios-user.png |
+| artemis-settings-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-settings-admin.png |
+| artemis-settings-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-settings-trader.png |
+| artemis-settings-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-settings-user.png |
+| artemis-autopilot-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-autopilot-admin.png |
+| artemis-autopilot-trader | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-autopilot-trader.png |
+| artemis-autopilot-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/artemis-autopilot-user.png |
 | topic-routing-admin | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/topic-routing-admin.png |
 | topic-routing-user | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/topic-routing-user.png |
 | pre-qa-home | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | e2e/screenshots/pre-qa-home.png |

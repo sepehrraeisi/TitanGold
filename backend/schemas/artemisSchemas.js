@@ -100,8 +100,21 @@ export const artemisDecisionResponseSchema = z.object({
     providers: z.array(z.string()).optional()
 });
 
+export const artemisDecisionEnginePatchSchema = z.object({
+    useMixture: z.boolean().optional(),
+    models: z.array(z.string()).optional(),
+}).strict();
+
+export const artemisConfigPutSchema = z.object({
+    decisionEngine: z.record(z.any()).optional(),
+    monitoring: z.record(z.any()).optional(),
+    integrations: z.record(z.any()).optional(),
+}).strict();
+
 export default {
     artemisHealthResponseSchema,
     artemisStateResponseSchema,
-    artemisDecisionResponseSchema
+    artemisDecisionResponseSchema,
+    artemisDecisionEnginePatchSchema,
+    artemisConfigPutSchema,
 };

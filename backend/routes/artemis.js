@@ -10,7 +10,9 @@ import { validateBody, validateParams, validateResponse } from '../middleware/va
 import {
   artemisHealthResponseSchema,
   artemisStateResponseSchema,
-  artemisDecisionResponseSchema
+  artemisDecisionResponseSchema,
+  artemisDecisionEnginePatchSchema,
+  artemisConfigPutSchema,
 } from '../schemas/artemisSchemas.js';
 
 const router = express.Router();
@@ -80,7 +82,7 @@ router.get('/health', authenticate, validateResponse(artemisHealthResponseSchema
     });
   }
 });
-router.get('/state', authenticate, validateResponse(artemisStateResponseSchema), async (req, res) => {
+router.get('/state', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), validateResponse(artemisStateResponseSchema), async (req, res) => {
   try {
     const userId = req.user?.id;
 
@@ -473,7 +475,7 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
 });
 
 // Update decision engine config (used by Mixture Agents UI)
-router.patch('/config/decision-engine', authenticate, authorize('admin'), async (req, res) => {
+router.patch('/config/decision-engine', authenticateStrict, requireCapability(CAP.ARTEMIS_STATE_WRITE), validateBody(artemisDecisionEnginePatchSchema), async (req, res) => {
   try {
     const { useMixture, models } = req.body || {};
 
@@ -608,7 +610,7 @@ router.delete('/logs', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // General config update (used by Settings tabs)
-router.put('/config', authenticate, authorize('admin'), async (req, res) => {
+router.put('/config', authenticateStrict, requireCapability(CAP.ARTEMIS_STATE_WRITE), validateBody(artemisConfigPutSchema), async (req, res) => {
   try {
     const updates = req.body;
 
@@ -776,7 +778,7 @@ router.post('/learning/event', authenticate, authorize('admin'), async (req, res
 // ============================================================================
 // ORCHESTRATION ENDPOINT — Real-time Agent Task Tracking
 // ============================================================================
-router.get('/orchestration', authenticate, async (req, res) => {
+router.get('/orchestration', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
     // 1. Get active agents
     const agentsResult = await query(

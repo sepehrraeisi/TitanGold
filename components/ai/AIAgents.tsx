@@ -310,7 +310,11 @@ const AgentCard: React.FC<{
     const { t } = useLanguage();
 
     return (
-        <div className="bg-card border border-border rounded-lg p-4 flex flex-col justify-between relative">
+        <div
+          className="bg-card border border-border rounded-lg p-4 flex flex-col justify-between relative"
+          data-agent-key={agent.agent_key}
+          data-testid={`agent-card-${agent.agent_key}`}
+        >
             {/* Favorite Star Icon */}
             <button
                 onClick={(e) => {
@@ -351,6 +355,7 @@ const AgentCard: React.FC<{
             <div className="mt-4 pt-3 border-t border-border flex justify-between items-center">
                 <button
                     onClick={onOpenControlPanel}
+                    data-testid={`agent-open-${agent.agent_key}`}
                     className="text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold py-1 px-3 rounded-md"
                 >
                     {t('control_panel')}

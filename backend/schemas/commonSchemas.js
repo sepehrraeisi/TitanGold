@@ -25,6 +25,7 @@ export const healthResponseSchema = z.object({
 export const readinessResponseSchema = z.object({
     status: z.enum(['ok', 'degraded', 'error']),
     timestamp: z.string().datetime(),
+    latencyMs: z.number().optional(),
     checks: z.record(z.object({
         status: z.enum(['ok', 'warning', 'degraded', 'error']),
         message: z.string(),
@@ -32,5 +33,12 @@ export const readinessResponseSchema = z.object({
         summary: z.any().optional(),
         agents: z.any().optional(),
         memory_used: z.string().optional(),
-    })),
-});
+        killSwitchActive: z.boolean().optional(),
+        effectiveMode: z.string().optional(),
+        workerAcknowledged: z.boolean().optional(),
+        stateVersion: z.number().optional(),
+        critical: z.boolean().optional(),
+        blocksReadiness: z.boolean().optional(),
+        latencyMs: z.number().optional(),
+    }).passthrough()),
+}).passthrough();

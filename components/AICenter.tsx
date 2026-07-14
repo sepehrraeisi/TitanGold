@@ -96,6 +96,7 @@ const AICenter: React.FC<Props> = ({ onNavigate }) => {
             {tabs.map(tab => (
               <button
                 key={tab.id}
+                data-ai-tab={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
                     ? 'border-purple-500 text-purple-400'

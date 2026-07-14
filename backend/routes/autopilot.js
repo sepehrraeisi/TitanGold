@@ -10,7 +10,9 @@
  */
 
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticateStrict } from '../middleware/auth.js';
+import { requireCapability } from '../middleware/requireCapability.js';
+import { CAP } from '../services/capabilities.js';
 import { rateLimit } from 'express-rate-limit';
 import { query } from '../database/db.js';
 import autopilotService from '../services/autopilot.js';
@@ -59,9 +61,10 @@ const requireAdmin = async (req, res, next) => {
   }
 };
 
-// Apply to all routes
-router.use(authenticate);
-router.use(requireAdmin);
+// Apply to all routes — DB-verified identity + capability (admin-only AUTOPILOT_CONTROL)
+router.use(authenticateStrict);
+router.use(requireCapability(CAP.AUTOPILOT_CONTROL));
+router.use(requireAdmin); // defense-in-depth role check
 router.use(autopilotLimiter);
 
 // ==================== Routes ====================

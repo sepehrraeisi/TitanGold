@@ -1,67 +1,110 @@
 {
-  "validatedAt": "2026-07-12T17:35:56.926Z",
-  "base": "09dc28b",
-  "revertSequence": [
-    "e8b3de4",
-    "24b97ce",
-    "23fdb3f",
-    "563e553",
-    "6ddadc4",
-    "56501b5",
-    "712930a",
-    "133aecc"
-  ],
-  "steps": [
+  "validatedAt": "2026-07-14T07:52:54.902Z",
+  "tip": "7afbd48365c7afbda3e56547d7980030f36a8ca3",
+  "procedures": [
     {
-      "step": "worktree_created",
-      "path": "/tmp/titan-rollback-validate",
-      "status": "PASS"
+      "name": "A_full_work_package",
+      "base": "d705bd2",
+      "tip": "7afbd48365c7afbda3e56547d7980030f36a8ca3",
+      "steps": [
+        {
+          "step": "worktree_created",
+          "status": "PASS"
+        },
+        {
+          "step": "cherry_pick_forward",
+          "count": 15,
+          "status": "PASS"
+        },
+        {
+          "step": "revert_newest_to_oldest",
+          "count": 15,
+          "status": "PASS"
+        },
+        {
+          "step": "tree_matches_base",
+          "status": "PASS",
+          "detail": "0 files changed"
+        },
+        {
+          "step": "syntax_check_server",
+          "status": "PASS"
+        },
+        {
+          "step": "worktree_removed",
+          "status": "PASS"
+        }
+      ],
+      "pass": true,
+      "forwardCommits": [
+        "878e92ccda14d6a6549d33119a6acbd223b9c9c6",
+        "beb327479543dbeaefbcc72b361a840fe4463c25",
+        "00537a1fbc958869fec09150539cb4ab1e2070ea",
+        "1f56ced1b3bee9c5c96bd2e85d495ea4429e57b6",
+        "09dc28b212e804eca0df88c9d80297e52c85ffce",
+        "133aecccb50e7f85f799365e5a9490ac5a337940",
+        "712930afe3ea28b468717d55869789af64cc4625",
+        "56501b5b2b6ae2ff593c62240f97d27d638ebec9",
+        "6ddadc4b8d1abb27907e6f01ae75e7ff81f02378",
+        "563e553b1f41850ac612e8e4a3008eaa3c36321c",
+        "23fdb3f5f90799e42f8c417bc3a28be5a63c3851",
+        "24b97ce8c8eae9a4f74e9eeba643fecea08fe5ef",
+        "e8b3de488bca86dc121e364076a0f3133e9d7756",
+        "c4723b9227a42aff3790f18bf75d24382eaf273a",
+        "7afbd48365c7afbda3e56547d7980030f36a8ca3"
+      ],
+      "treeDiffStat": "0 files changed",
+      "revertedHead": "b55cc9e3b4c3258f78819ef9b4ab2a548a3cb1ad"
     },
     {
-      "step": "cherry_pick_forward",
-      "commits": 8,
-      "status": "PASS"
-    },
-    {
-      "step": "revert_sequence",
-      "commits": 8,
-      "status": "PASS"
-    },
-    {
-      "step": "phase23_file_removed_after_revert",
-      "file": "hooks/useAgentExecutionGate.ts",
-      "status": "PASS"
-    },
-    {
-      "step": "phase23_file_removed_after_revert",
-      "file": "scripts/verify-staging-deployment.sh",
-      "status": "PASS"
-    },
-    {
-      "step": "phase23_file_removed_after_revert",
-      "file": "docs/evidence/route-matrix.json",
-      "status": "PASS"
-    },
-    {
-      "step": "phase23_file_removed_after_revert",
-      "file": "e2e/pre-human-qa.spec.ts",
-      "status": "PASS"
-    },
-    {
-      "step": "tree_matches_base",
-      "status": "PASS"
-    },
-    {
-      "step": "reverted_head",
-      "sha": "0f95bd092c381eaa2dcd481ff9daef74bb5454e6",
-      "status": "PASS"
-    },
-    {
-      "step": "worktree_removed",
-      "status": "PASS"
+      "name": "B_later_phase_only",
+      "base": "09dc28b",
+      "tip": "7afbd48365c7afbda3e56547d7980030f36a8ca3",
+      "steps": [
+        {
+          "step": "worktree_created",
+          "status": "PASS"
+        },
+        {
+          "step": "cherry_pick_forward",
+          "count": 10,
+          "status": "PASS"
+        },
+        {
+          "step": "revert_newest_to_oldest",
+          "count": 10,
+          "status": "PASS"
+        },
+        {
+          "step": "tree_matches_base",
+          "status": "PASS",
+          "detail": "0 files changed"
+        },
+        {
+          "step": "syntax_check_server",
+          "status": "PASS"
+        },
+        {
+          "step": "worktree_removed",
+          "status": "PASS"
+        }
+      ],
+      "pass": true,
+      "forwardCommits": [
+        "133aecccb50e7f85f799365e5a9490ac5a337940",
+        "712930afe3ea28b468717d55869789af64cc4625",
+        "56501b5b2b6ae2ff593c62240f97d27d638ebec9",
+        "6ddadc4b8d1abb27907e6f01ae75e7ff81f02378",
+        "563e553b1f41850ac612e8e4a3008eaa3c36321c",
+        "23fdb3f5f90799e42f8c417bc3a28be5a63c3851",
+        "24b97ce8c8eae9a4f74e9eeba643fecea08fe5ef",
+        "e8b3de488bca86dc121e364076a0f3133e9d7756",
+        "c4723b9227a42aff3790f18bf75d24382eaf273a",
+        "7afbd48365c7afbda3e56547d7980030f36a8ca3"
+      ],
+      "treeDiffStat": "0 files changed",
+      "revertedHead": "e38eddb42dc5e10a70ca131ac81635292b90a192"
     }
   ],
-  "pass": true,
-  "treeDiffStat": "0 files changed",
-  "revertedHead": "0f95bd092c381eaa2dcd481ff9daef74bb5454e6"
+  "pass": true
 }

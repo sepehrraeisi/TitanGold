@@ -57,10 +57,12 @@ router.get('/', validateResponse(healthResponseSchema), async (req, res) => {
 
 /**
  * Readiness check (includes DB + dependencies)
- * Returns 200 only if all critical services are ready
+ * Returns 200 only if critical services are ready.
+ * Non-critical diagnostics run in parallel with timeouts; do not cache unsafe runtime state.
  * Accessible via both /api/ready and /api/health/ready
  */
 router.get('/ready', validateResponse(readinessResponseSchema), async (req, res) => {
+  const started = Date.now();
   const checks = {
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -69,124 +71,109 @@ router.get('/ready', validateResponse(readinessResponseSchema), async (req, res)
 
   let allReady = true;
 
-  // Check database
-  try {
+  const withTimeout = (promise, ms, label) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms)),
+    ]);
+
+  const runDatabase = async () => {
     const result = await query('SELECT 1 as health');
-    checks.checks.database = {
+    return {
       status: result.rows[0]?.health === 1 ? 'ok' : 'degraded',
       message: 'Database connection successful',
+      latencyMs: Date.now() - started,
     };
-  } catch (error) {
-    allReady = false;
-    checks.checks.database = {
-      status: 'error',
-      message: error.message,
-    };
-  }
+  };
 
-  // Check MEXC API keys
-  try {
-    const hasEnvKeys = !!(process.env.MEXC_ACCESS_KEY && process.env.MEXC_SECRET_KEY);
-    checks.checks.mexc_keys = {
-      status: hasEnvKeys ? 'ok' : 'warning',
-      message: hasEnvKeys ? 'MEXC keys configured (ENV)' : 'No MEXC keys in ENV',
-    };
-  } catch (error) {
-    checks.checks.mexc_keys = {
-      status: 'warning',
-      message: 'Could not check MEXC keys',
-    };
-  }
-
-  // Check user exchange connections
-  try {
-    const result = await query('SELECT COUNT(*) as count FROM exchange_connections');
-    const count = parseInt(result.rows[0]?.count || 0);
-    checks.checks.user_connections = {
-      status: 'ok',
-      count,
-      message: `${count} user exchange connection(s)`,
-    };
-  } catch (error) {
-    checks.checks.user_connections = {
-      status: 'warning',
-      message: 'Could not check user connections',
-    };
-  }
-
-  // Check Redis
-  try {
-    if (isRedisAvailable()) {
-      const redisInfo = await getRedisInfo();
-      checks.checks.redis = {
-        status: redisInfo.status === 'connected' ? 'ok' : 'error',
-        message: redisInfo.status === 'connected'
-          ? `Redis ${redisInfo.version} - Hit rate: ${redisInfo.stats.hit_rate}%`
-          : redisInfo.message,
-        memory_used: redisInfo.memory?.used_memory_human || 'unknown'
-      };
-    } else {
-      checks.checks.redis = {
-        status: 'warning',
-        message: 'Redis not connected (fallback mode active)'
-      };
+  const runRedis = async () => {
+    if (!isRedisAvailable()) {
+      return { status: 'warning', message: 'Redis not connected (fallback mode active)' };
     }
-  } catch (error) {
-    checks.checks.redis = {
-      status: 'warning',
-      message: 'Redis check failed',
-    };
-  }
-
-  // BACKEND-015: Check AI Agents health
-  try {
-    const agentHealthSummary = getHealthSummary();
-    const agentHealthStatus = getAllAgentHealthStatus();
-
-    checks.checks.ai_agents = {
-      status: agentHealthSummary.unhealthy > 0 ? 'degraded' :
-        agentHealthSummary.degraded > 0 ? 'warning' : 'ok',
-      message: `${agentHealthSummary.healthy}/${agentHealthSummary.total} agents healthy`,
-      summary: agentHealthSummary,
-      agents: agentHealthStatus
-    };
-
-    // Mark as not fully ready if any agents are unhealthy
-    if (agentHealthSummary.unhealthy > 0) {
-      allReady = false;
+    // Lightweight availability only — avoid INFO on every readiness probe
+    const { getRedisClient } = await import('../utils/redis.js');
+    const client = await getRedisClient();
+    if (client?.ping) {
+      const pong = await client.ping();
+      return { status: pong === 'PONG' || pong === true ? 'ok' : 'warning', message: 'Redis ping ok' };
     }
-  } catch (error) {
-    checks.checks.ai_agents = {
-      status: 'warning',
-      message: 'Could not check agent health: ' + error.message
-    };
-  }
+    return { status: 'ok', message: 'Redis client available' };
+  };
 
-  // Runtime safety SSOT (staging must remain demo + kill switch)
-  try {
+  const runRuntimeSafety = async () => {
     const { getRuntimeExecutionState, buildRuntimeView } = await import('../services/runtimeExecutionStateService.js');
-    const state = await getRuntimeExecutionState({ preferCache: false });
+    // preferCache:true — Redis cannot weaken PG kill switch (validated in service)
+    const state = await getRuntimeExecutionState({ preferCache: true });
     const view = buildRuntimeView(state);
     const safe = view.killSwitchActive === true && view.effectiveMode === 'demo';
-    checks.checks.runtime_safety = {
+    return {
       status: safe ? 'ok' : 'error',
       killSwitchActive: view.killSwitchActive,
       effectiveMode: view.effectiveMode,
       workerAcknowledged: view.workerAcknowledged,
       stateVersion: view.stateVersion,
       message: safe ? 'Demo + kill switch active' : 'UNSAFE runtime state detected',
+      critical: !safe,
     };
-    if (!safe) allReady = false;
-  } catch (error) {
-    allReady = false;
-    checks.checks.runtime_safety = {
-      status: 'error',
-      message: 'Could not verify runtime safety: ' + error.message,
-    };
-  }
+  };
 
-  // Overall status
+  const runMexcKeys = async () => {
+    const hasEnvKeys = !!(process.env.MEXC_ACCESS_KEY && process.env.MEXC_SECRET_KEY);
+    return {
+      status: hasEnvKeys ? 'ok' : 'warning',
+      message: hasEnvKeys ? 'MEXC keys configured (ENV)' : 'No MEXC keys in ENV',
+    };
+  };
+
+  const runUserConnections = async () => {
+    // Deployment-disabled engines: count is informational, never blocks readiness
+    const result = await query('SELECT COUNT(*)::int as count FROM exchange_connections');
+    const count = result.rows[0]?.count || 0;
+    return { status: 'ok', count, message: `${count} user exchange connection(s)` };
+  };
+
+  const runAgentHealth = async () => {
+    const agentHealthSummary = getHealthSummary();
+    return {
+      status: agentHealthSummary.unhealthy > 0 ? 'degraded'
+        : agentHealthSummary.degraded > 0 ? 'warning' : 'ok',
+      message: `${agentHealthSummary.healthy}/${agentHealthSummary.total} agents healthy`,
+      summary: agentHealthSummary,
+      // Full per-agent payload removed from readiness hot path (use /health/status)
+      blocksReadiness: agentHealthSummary.unhealthy > 0,
+    };
+  };
+
+  const settled = await Promise.allSettled([
+    withTimeout(runDatabase(), 2000, 'database'),
+    withTimeout(runRedis(), 800, 'redis'),
+    withTimeout(runRuntimeSafety(), 1500, 'runtime_safety'),
+    withTimeout(runMexcKeys(), 100, 'mexc_keys'),
+    withTimeout(runUserConnections(), 1500, 'user_connections'),
+    withTimeout(runAgentHealth(), 200, 'ai_agents'),
+  ]);
+
+  const names = ['database', 'redis', 'runtime_safety', 'mexc_keys', 'user_connections', 'ai_agents'];
+  settled.forEach((result, idx) => {
+    const name = names[idx];
+    if (result.status === 'fulfilled') {
+      checks.checks[name] = result.value;
+      if (name === 'database' && result.value.status === 'error') allReady = false;
+      if (name === 'runtime_safety' && result.value.critical) allReady = false;
+      if (name === 'ai_agents' && result.value.blocksReadiness) allReady = false;
+      if (name === 'database' && result.value.status === 'degraded') allReady = false;
+    } else {
+      const isCritical = name === 'database' || name === 'runtime_safety';
+      checks.checks[name] = {
+        status: isCritical ? 'error' : 'warning',
+        message: result.reason?.message || String(result.reason),
+      };
+      if (isCritical) allReady = false;
+    }
+  });
+
   checks.status = allReady ? 'ok' : 'degraded';
+  checks.latencyMs = Date.now() - started;
 
   res.status(allReady ? 200 : 503).json(checks);
 });

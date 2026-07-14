@@ -188,6 +188,7 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
             {tabs.map(tab => (
               <button
                 key={tab.id}
+                data-artemis-tab={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                   activeTab === tab.id

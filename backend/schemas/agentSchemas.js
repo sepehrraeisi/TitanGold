@@ -223,7 +223,7 @@ export const updateAgentBodySchema = z.object({
   config: z.record(z.any()).optional(),
   is_enabled: z.boolean().optional(),
   metadata: z.record(z.any()).optional(),
-}).refine(
+}).strict().refine(
   (data) => Object.keys(data).length > 0,
   { message: 'At least one field must be provided for update' }
 );
@@ -262,8 +262,14 @@ export const chatBodySchema = z.object({
     symbol: symbolSchema.optional(),
     timeframe: timeframeSchema.optional(),
     conversationId: uuidSchema.optional(),
-  }).optional(),
-});
+  }).strict().optional(),
+}).strict();
+
+/** PATCH /api/v1/ai-agents/:id/config — explicit allowlist, reject unknown fields */
+export const agentConfigPatchSchema = z.object({
+  config: z.record(z.unknown()),
+  metadata: z.record(z.unknown()).optional(),
+}).strict();
 
 // ============================================================================
 // TECHNICAL ANALYSIS SCHEMAS
@@ -447,6 +453,7 @@ export default {
   analyzeBodySchema,
   chatParamsSchema,
   chatBodySchema,
+  agentConfigPatchSchema,
 
   // Specific analyses
   technicalAnalysisConfigSchema,

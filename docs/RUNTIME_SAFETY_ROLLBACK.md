@@ -1,132 +1,100 @@
 # Runtime Safety Rollback Procedure (Staging)
 
-## Work Package Commit Range
+## Baselines
 
-**First work-package commit:** `878e92c` (auth fail-closed + capabilities)  
-**Phase 1 closeout:** `09dc28b`  
-**Phase 2 SSOT + tests:** `133aecc` … `563e553`  
-**Phase 3 pre-Human-QA:** `23fdb3f`, `24b97ce`, `e8b3de4`  
-**Newest related commit:** `e8b3de4`
+| Procedure | Restores tree to | Scope |
+|-----------|------------------|-------|
+| **A. Full work-package** | `d705bd2` | All commits from `878e92c` through current HEAD |
+| **B. Later-phase only** | `09dc28b` | Commits from `133aecc` through current HEAD |
 
-| Order | Commit | Subject | Runtime/DB Effect |
-|-------|--------|---------|-------------------|
-| 1 | `878e92c` | fix(auth): fail-closed identity + capabilities | auth middleware |
-| 2 | `beb3274` | feat(agents): execution policy + route auth | routes + policy |
-| 3 | `00537a1` | fix(worker): scheduler + kill switch | worker/scheduler |
-| 4 | `1f56ced` | feat(ui): safety banner + routing UX | frontend |
-| 5 | `09dc28b` | docs: closeout report | docs only |
-| 6 | `133aecc` | fix(runtime): SSOT + risk-gate + worker KS | **runtime SSOT + DB** |
-| 7 | `712930a` | fix(auth): fail-closed routes + readiness | routes + health |
-| 8 | `56501b5` | test(runtime): safety matrix (50 tests) | tests only |
-| 9 | `6ddadc4` | feat(ui): header + capabilities contract | frontend |
-| 10 | `563e553` | chore(devops): verify + Playwright + docs | scripts + docs |
-| 11 | `23fdb3f` | fix(runtime): Redis cannot weaken kill switch | **Redis cache safety** |
-| 12 | `24b97ce` | feat(ui): execution gate on 15 panels | frontend |
-| 13 (newest) | `e8b3de4` | test(docs): evidence, route matrix, Redis PW | tests + docs |
+**First implementation commit:** `878e92c`  
+**Current related HEAD:** see `git rev-parse HEAD` (update after each push)
 
-**Base before work package:** `d705bd2` (parent of `878e92c`)  
-**Safe revert target:** `09dc28b` (phase 1 only) or `d705bd2` (full revert)
+## Complete Related Commit List (oldest → newest)
 
-## Invalid Command (Do Not Use)
-
-```bash
-git revert 563e553..133aecc   # WRONG — range syntax reverts unintended commits
-git revert e8b3de4..878e92c   # WRONG — reversed range
+```
+878e92c fix(auth): fail-closed identity resolution and capability model
+beb3274 feat(agents): centralized execution policy and route authorization
+00537a1 fix(worker): scheduler direct execution and cross-process kill switch
+1f56ced feat(ui): agent safety banner and permission-aware routing UX
+09dc28b docs: AI agent runtime safety closeout report
+133aecc fix(runtime): close SSOT gaps and connect legacy risk-gate
+712930a fix(auth): fail-closed routes and readiness runtime safety check
+56501b5 test(runtime): unit and integration safety matrix (50 tests)
+6ddadc4 feat(ui): header effective mode sync and backend capability contract
+563e553 chore(devops): staging deployment verify, browser QA and closeout docs
+23fdb3f fix(runtime): reject Redis cache that weakens kill switch vs PostgreSQL
+24b97ce feat(ui): capability-aware execution gate on all 15 agent panels
+e8b3de4 test(docs): pre-Human-QA evidence, route matrix, Redis and Playwright
+c4723b9 docs(devops): complete rollback plan and staging access
+7afbd48 test(qa): close pre-Human-QA verification gaps
+(+ any newer remediation commits on main)
 ```
 
-## Valid Rollback (Newest → Oldest)
+## Invalid Commands
 
 ```bash
-# Isolated worktree or disposable branch ONLY — NOT on active staging without approval
-git revert --no-edit e8b3de4 24b97ce 23fdb3f 563e553 6ddadc4 56501b5 712930a 133aecc
+git revert 7afbd48..878e92c     # WRONG — reversed range
+git revert 563e553..133aecc     # WRONG — incomplete + reversed
 ```
 
-Alternative single range (equivalent for phase 2+3):
+## A. Full Work-Package Rollback → `d705bd2`
 
 ```bash
-git revert --no-edit 133aecc^..e8b3de4
+# Isolated worktree / disposable branch only
+git revert --no-edit $(git rev-list --reverse d705bd2..HEAD | tac | tr '\n' ' ')
+# Equivalent when HEAD includes full package:
+# git revert --no-edit 878e92c^..HEAD   # use carefully — verify rev-list first
 ```
 
-Full work-package revert (includes phase 1):
+Expected:
+
+- Working tree matches `d705bd2`
+- Kill Switch in PostgreSQL remains active (never cleared during code rollback)
+- Live remains disabled
+- Rebuild frontend dist from restored tree
+- `pm2 restart titan-backend titan-engine-worker`
+- `./scripts/verify-staging-deployment.sh`
+
+## B. Later-Phase-Only Rollback → `09dc28b`
 
 ```bash
-git revert --no-edit e8b3de4 24b97ce 23fdb3f 563e553 6ddadc4 56501b5 712930a 133aecc 09dc28b 1f56ced 00537a1 beb3274 878e92c
+git revert --no-edit $(git rev-list --reverse 09dc28b..HEAD | tac | tr '\n' ' ')
 ```
 
-## Runtime State — DO NOT WEAKEN SAFETY
+Expected:
 
-Rollback of **code** must **not** clear Kill Switch or enable Live:
+- Working tree matches `09dc28b`
+- Phase-1 auth/policy/worker commits remain
+- Later Redis UI/evidence/tests reverted
 
-1. Before revert: confirm PG `global_execution_runtime.killSwitchActive = true`
-2. After revert: if service missing, defaults remain demo + kill ON
-3. **Never** run `clearKillSwitch` during rollback
-4. Verify: `curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:5002/api/v1/settings/execution-runtime`
+## Automated Validation
 
-## Redis Cache Handling
+```bash
+node scripts/validate-rollback.mjs
+# docs/evidence/rollback-validation.json must show pass:true for A and B
+```
 
-- Redis may hold stale post-rollback values
-- After revert: restart backend + worker so PG authoritative state re-caches
-- Optional: `redis-cli DEL titan:runtime:execution_state` **only after PG verified**
-- Invalid/stale Redis must not weaken kill switch (fixed in `23fdb3f`)
+Validated results must show `0 files changed` vs the target base.
 
-## PM2 Restart Order
+## Runtime State — DO NOT WEAKEN
+
+1. Confirm PG `killSwitchActive=true` before and after
+2. Never run kill-switch clear during rollback
+3. Redis: restart services; optional `DEL titan:runtime:execution_state` only after PG verified
+4. TRADING_ENGINE_ENABLED must remain false
+
+## PM2 Order
 
 ```bash
 pm2 restart titan-backend
 pm2 restart titan-engine-worker
-./scripts/verify-staging-deployment.sh   # must exit 0
+./scripts/verify-staging-deployment.sh
 ```
 
-## Frontend Dist Rollback
+## Frontend Dist
 
 ```bash
 npm run build
-# Serve from /home/ubuntu/webapp/TitanGold/dist (staging path)
-# Verify bundle hash matches reverted commit
+# Verify served bundle matches post-rollback HEAD
 ```
-
-## Nginx Verification
-
-```bash
-curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1/api/v1/health
-# Optional: NGINX_URL=https://staging.example ./scripts/verify-staging-deployment.sh
-```
-
-## Validation (Isolated Worktree)
-
-Automated validation:
-
-```bash
-node scripts/validate-rollback.mjs
-# Output: docs/evidence/rollback-validation.json
-```
-
-Manual equivalent:
-
-```bash
-git worktree add /tmp/titan-rollback-test 09dc28b
-cd /tmp/titan-rollback-test
-git cherry-pick 133aecc..e8b3de4
-git revert --no-edit e8b3de4 24b97ce 23fdb3f 563e553 6ddadc4 56501b5 712930a 133aecc
-npm run build   # verify project builds
-git worktree remove /tmp/titan-rollback-test
-```
-
-## Post-Rollback Deployment Check
-
-- Port 5002 listening (both cluster instances if applicable)
-- `/api/v1/health` → 200
-- `/api/v1/health/ready` → 200 with `runtime_safety.ok`
-- Worker ack revision matches PG version
-- Kill Switch remains **active**
-- Effective mode remains **demo**
-- TRADING_ENGINE_ENABLED=false
-- Zero broker connections
-
-## Documentation/Test-Only Commits (safe to revert independently)
-
-- `56501b5`, `563e553`, `e8b3de4` — tests, evidence, docs (no standalone runtime mutation)
-
-## Commits With Runtime/Database Effects (revert together or verify PG after)
-
-- `133aecc`, `712930a`, `23fdb3f`, `beb3274`, `00537a1`, `878e92c`
