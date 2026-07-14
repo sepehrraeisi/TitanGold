@@ -1,0 +1,153 @@
+{
+  "startedAt": "2026-07-14T09:42:49.419Z",
+  "checks": [
+    {
+      "name": "pm2_cluster_mode",
+      "status": "PASS",
+      "detail": {
+        "modes": [
+          "cluster_mode",
+          "cluster_mode"
+        ]
+      }
+    },
+    {
+      "name": "pm2_instance_count_two",
+      "status": "PASS",
+      "detail": {
+        "count": 2,
+        "pids": [
+          2133183,
+          2133206
+        ]
+      }
+    },
+    {
+      "name": "both_backend_online",
+      "status": "PASS",
+      "detail": {
+        "statuses": [
+          {
+            "pid": 2133183,
+            "status": "online",
+            "restarts": 4
+          },
+          {
+            "pid": 2133206,
+            "status": "online",
+            "restarts": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "worker_separate_fork",
+      "status": "PASS",
+      "detail": {
+        "pid": 2157874,
+        "mode": "fork_mode"
+      }
+    },
+    {
+      "name": "no_restart_loop",
+      "status": "PASS",
+      "detail": {
+        "restarts": [
+          4,
+          4
+        ]
+      }
+    },
+    {
+      "name": "port_5002_bound",
+      "status": "PASS",
+      "detail": {
+        "port": "LISTEN 0      511          0.0.0.0:5002       0.0.0.0:*    users:((\"PM2 v6.0.13: Go\",pid=2084974,fd=52))"
+      }
+    },
+    {
+      "name": "repeated_health_200",
+      "status": "PASS",
+      "detail": {
+        "statuses": [
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "n": 20
+      }
+    },
+    {
+      "name": "nginx_upstream_health",
+      "status": "PASS",
+      "detail": {
+        "status": 301,
+        "via": "host-header-http"
+      }
+    },
+    {
+      "name": "single_instance_restart_api_available",
+      "status": "PASS",
+      "detail": {
+        "during": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "afterPids": [
+          2157992,
+          2133206
+        ],
+        "afterStatuses": [
+          "online",
+          "online"
+        ]
+      }
+    },
+    {
+      "name": "runtime_safety_after_cluster_ops",
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "postgres_enabled_or_documented",
+      "status": "PASS",
+      "detail": {
+        "pgUnit": "enabled-runtime"
+      }
+    },
+    {
+      "name": "redis_enabled_or_documented",
+      "status": "PASS",
+      "detail": {
+        "redisUnit": "enabled"
+      }
+    },
+    {
+      "name": "pm2_resurrect_configured",
+      "status": "PASS",
+      "detail": {
+        "pm2Startup": "enabled\ndump_exists"
+      }
+    }
+  ],
+  "pass": true,
+  "endedAt": "2026-07-14T09:43:02.140Z"
+}

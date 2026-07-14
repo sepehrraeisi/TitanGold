@@ -1,0 +1,433 @@
+{
+  "startedAt": "2026-07-14T09:42:25.287Z",
+  "scenarios": [
+    {
+      "name": "backend_ready_redis_available",
+      "started": "2026-07-14T09:42:25.493Z",
+      "ended": "2026-07-14T09:42:25.605Z",
+      "durationMs": 295,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "health": 200,
+        "ready": 200
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "process_start_redis_unavailable",
+      "started": "2026-07-14T09:42:25.789Z",
+      "ended": "2026-07-14T09:42:26.145Z",
+      "durationMs": 504,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "exitCode": 0,
+        "parsed": {
+          "killSwitchActive": true,
+          "globalMode": "demo",
+          "version": 201,
+          "effectiveMode": "demo",
+          "killCheck": true,
+          "policyAllowed": false,
+          "policyMode": "demo",
+          "sideEffectsSuppressed": true
+        },
+        "timedOut": false,
+        "stderrTail": ""
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "worker_ack_path_redis_unavailable",
+      "started": "2026-07-14T09:42:26.293Z",
+      "ended": "2026-07-14T09:42:26.623Z",
+      "durationMs": 478,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "exitCode": 0,
+        "parsed": {
+          "killSwitchActive": true,
+          "workerAckRevision": 201,
+          "version": 201,
+          "workerAcknowledged": true,
+          "effectiveMode": "demo"
+        }
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "scheduler_policy_redis_unavailable",
+      "started": "2026-07-14T09:42:26.771Z",
+      "ended": "2026-07-14T09:42:27.053Z",
+      "durationMs": 451,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "exitCode": 0,
+        "decision": {
+          "allowed": false,
+          "reasonCode": "UNAUTHENTICATED",
+          "requestedMode": "demo",
+          "effectiveMode": "demo",
+          "sideEffectClass": "order_live",
+          "sideEffectsAllowed": false,
+          "sideEffectsSuppressed": true,
+          "suppressionReason": "UNAUTHENTICATED",
+          "identityType": "user",
+          "role": null,
+          "runtimeState": {
+            "deploymentEnabled": false,
+            "globalMode": "demo",
+            "killSwitchActive": true,
+            "providerConnected": false
+          }
+        }
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "redis_pause_during_runtime_lookup",
+      "started": "2026-07-14T09:42:27.222Z",
+      "ended": "2026-07-14T09:42:32.242Z",
+      "durationMs": 5166,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "duringPauseReady": 503,
+        "duringPauseRuntime": {
+          "status": "error",
+          "message": "runtime_safety timeout after 1500ms"
+        },
+        "duringPauseRedis": {
+          "status": "warning",
+          "message": "redis timeout after 800ms"
+        },
+        "afterReady": 200,
+        "elapsedMs": 1503
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "redis_stale_weaker_cache_rejected",
+      "started": "2026-07-14T09:42:32.388Z",
+      "ended": "2026-07-14T09:42:32.823Z",
+      "durationMs": 573,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "exitCode": 0,
+        "parsed": {
+          "state": {
+            "globalMode": "demo",
+            "killSwitchActive": true,
+            "killSwitchReason": "fixture_test",
+            "killSwitchAt": "2026-07-14T08:00:47.262Z",
+            "killSwitchByUserId": "e5fca72c-8177-4dd6-a428-cb33d2a423ac",
+            "version": 201,
+            "workerAckRevision": 201,
+            "workerAckAt": "2026-07-14T09:42:31.285Z",
+            "workerAckPid": 2111037,
+            "workerAckHost": "worker",
+            "updatedAt": "2026-07-12T14:28:55.529Z",
+            "updatedByUserId": "e5fca72c-8177-4dd6-a428-cb33d2a423ac"
+          },
+          "view": {
+            "requestedMode": "demo",
+            "effectiveMode": "demo",
+            "globalRuntimeMode": "demo",
+            "killSwitchActive": true,
+            "killSwitchReason": "fixture_test",
+            "deploymentEngineEnabled": false,
+            "providerConnected": false,
+            "workerAcknowledged": true,
+            "workerAckAt": "2026-07-14T09:42:31.285Z",
+            "workerAckRevision": 201,
+            "stateVersion": 201,
+            "updatedAt": "2026-07-12T14:28:55.529Z"
+          }
+        }
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "redis_invalid_json_ignored",
+      "started": "2026-07-14T09:42:32.961Z",
+      "ended": "2026-07-14T09:42:33.227Z",
+      "durationMs": 399,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "exitCode": 0
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "redis_invalid_newer_revision_ignored",
+      "started": "2026-07-14T09:42:33.360Z",
+      "ended": "2026-07-14T09:42:33.768Z",
+      "durationMs": 553,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "exitCode": 0
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "isolated_redis_pubsub_duplicate_out_of_order",
+      "started": "2026-07-14T09:42:33.914Z",
+      "ended": "2026-07-14T09:42:34.862Z",
+      "durationMs": 1082,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "eventsReceived": 4,
+        "exitCode": 0
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "backend_survives_redis_reconnect",
+      "started": "2026-07-14T09:42:34.996Z",
+      "ended": "2026-07-14T09:42:37.517Z",
+      "durationMs": 2684,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "before": 200,
+        "afterHealth": 200,
+        "afterReady": 200,
+        "runtime": {
+          "status": "ok",
+          "killSwitchActive": true,
+          "effectiveMode": "demo",
+          "workerAcknowledged": true,
+          "stateVersion": 201,
+          "message": "Demo + kill switch active",
+          "critical": false
+        }
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    {
+      "name": "staging_worker_still_online_after_tests",
+      "started": "2026-07-14T09:42:37.680Z",
+      "ended": "2026-07-14T09:42:37.834Z",
+      "durationMs": 312,
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "ok": true,
+        "workerPid": 2111037,
+        "backendPids": [
+          2133183,
+          2133206
+        ],
+        "backendMode": "cluster_mode"
+      },
+      "pg": {
+        "killSwitchActive": true,
+        "globalMode": "demo",
+        "version": 201,
+        "workerAckRevision": 201
+      },
+      "readyStatus": 200,
+      "readyRuntime": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    }
+  ],
+  "pass": true,
+  "final": {
+    "pg": {
+      "killSwitchActive": true,
+      "globalMode": "demo",
+      "version": 201,
+      "workerAckRevision": 201
+    },
+    "ready": {
+      "status": "ok",
+      "killSwitchActive": true,
+      "effectiveMode": "demo",
+      "workerAcknowledged": true,
+      "stateVersion": 201,
+      "message": "Demo + kill switch active",
+      "critical": false
+    },
+    "brokerConnections": 0
+  },
+  "endedAt": "2026-07-14T09:42:38.133Z",
+  "summary": {
+    "total": 11,
+    "pass": 11,
+    "fail": 0
+  }
+}

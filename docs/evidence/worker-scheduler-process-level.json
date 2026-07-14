@@ -1,0 +1,186 @@
+{
+  "startedAt": "2026-07-14T09:42:38.170Z",
+  "scenarios": [
+    {
+      "name": "scheduler_source_no_legacy_http",
+      "started": "2026-07-14T09:42:38.171Z",
+      "ended": "2026-07-14T09:42:38.171Z",
+      "status": "PASS",
+      "detail": {
+        "ok": true,
+        "hasCanonical": true,
+        "hasLegacyHttp": false,
+        "hasBypass": false
+      }
+    },
+    {
+      "name": "worker_startup_kill_switch_already_active",
+      "started": "2026-07-14T09:42:38.174Z",
+      "ended": "2026-07-14T09:42:38.498Z",
+      "status": "PASS",
+      "detail": {
+        "ok": true,
+        "exitCode": 0,
+        "parsed": {
+          "ok": true,
+          "killSwitchActive": true,
+          "killCheck": true,
+          "workerAcknowledged": true,
+          "workerAckRevision": 201,
+          "version": 201,
+          "effectiveMode": "demo"
+        }
+      }
+    },
+    {
+      "name": "duplicate_job_idempotency_safe_run",
+      "started": "2026-07-14T09:42:38.498Z",
+      "ended": "2026-07-14T09:42:38.810Z",
+      "status": "PASS",
+      "detail": {
+        "ok": true,
+        "parsed": {
+          "a": {
+            "allowed": false,
+            "effectiveMode": "demo",
+            "sideEffectsSuppressed": true
+          },
+          "b": {
+            "allowed": false,
+            "effectiveMode": "demo",
+            "sideEffectsSuppressed": true
+          },
+          "liveBlocked": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "unknown_agent_fails_closed",
+      "started": "2026-07-14T09:42:38.811Z",
+      "ended": "2026-07-14T09:42:39.133Z",
+      "status": "PASS",
+      "detail": {
+        "ok": true,
+        "decision": {
+          "allowed": false,
+          "reasonCode": "UNAUTHENTICATED",
+          "requestedMode": "demo",
+          "effectiveMode": "demo",
+          "sideEffectClass": "unclassified",
+          "sideEffectsAllowed": false,
+          "sideEffectsSuppressed": true,
+          "suppressionReason": "UNAUTHENTICATED",
+          "identityType": "user",
+          "role": null,
+          "runtimeState": {
+            "deploymentEnabled": false,
+            "globalMode": "demo",
+            "killSwitchActive": true,
+            "providerConnected": false
+          }
+        }
+      }
+    },
+    {
+      "name": "denied_live_capable_order_under_kill_switch",
+      "started": "2026-07-14T09:42:39.133Z",
+      "ended": "2026-07-14T09:42:39.430Z",
+      "status": "PASS",
+      "detail": {
+        "ok": true,
+        "decision": {
+          "allowed": false,
+          "reasonCode": "UNAUTHENTICATED",
+          "requestedMode": "demo",
+          "effectiveMode": "demo",
+          "sideEffectClass": "order_live",
+          "sideEffectsAllowed": false,
+          "sideEffectsSuppressed": true,
+          "suppressionReason": "UNAUTHENTICATED",
+          "identityType": "user",
+          "role": null,
+          "runtimeState": {
+            "deploymentEnabled": false,
+            "globalMode": "demo",
+            "killSwitchActive": true,
+            "providerConnected": false
+          }
+        }
+      }
+    },
+    {
+      "name": "postgres_outage_fails_closed",
+      "started": "2026-07-14T09:42:39.431Z",
+      "ended": "2026-07-14T09:42:39.665Z",
+      "status": "PASS",
+      "detail": {
+        "ok": true,
+        "exitCode": 0,
+        "parsed": {
+          "failedClosed": true,
+          "message": "connect ECONNREFUSED 127.0.0.1:19998"
+        },
+        "stderrTail": "ge\":\"❌ Query error:\",\"timestamp\":\"2026-07-14T09:42:39.656Z\",\"error\":\"connect ECONNREFUSED 127.0.0.1:19998\",\"query\":\"SELECT value, updated_at FROM system_settings WHERE key = $1 LIMIT 1\",\"duration\":5}\n"
+      }
+    },
+    {
+      "name": "duplicate_scheduler_leader_guard",
+      "started": "2026-07-14T09:42:39.666Z",
+      "ended": "2026-07-14T09:42:40.374Z",
+      "status": "PASS",
+      "detail": {
+        "ok": true,
+        "hasLeaderMechanism": true,
+        "a": {
+          "killSwitchActive": true,
+          "effectiveMode": "demo",
+          "version": 201
+        },
+        "b": {
+          "killSwitchActive": true,
+          "effectiveMode": "demo",
+          "version": 201
+        },
+        "note": "leader primitives present in worker"
+      }
+    },
+    {
+      "name": "worker_restart_pm2_soft",
+      "started": "2026-07-14T09:42:40.374Z",
+      "ended": "2026-07-14T09:42:49.300Z",
+      "status": "PASS",
+      "detail": {
+        "ok": true,
+        "beforePid": 2111037,
+        "afterPid": 2157874,
+        "runtime": {
+          "status": "ok",
+          "killSwitchActive": true,
+          "effectiveMode": "demo",
+          "workerAcknowledged": true,
+          "stateVersion": 201,
+          "message": "Demo + kill switch active",
+          "critical": false
+        }
+      }
+    },
+    {
+      "name": "no_success_log_in_worker_catch",
+      "started": "2026-07-14T09:42:49.300Z",
+      "ended": "2026-07-14T09:42:49.301Z",
+      "status": "PASS",
+      "detail": {
+        "ok": true,
+        "badCatchCount": 0
+      }
+    }
+  ],
+  "pass": true,
+  "endedAt": "2026-07-14T09:42:49.301Z",
+  "summary": {
+    "total": 9,
+    "pass": 9,
+    "fail": 0
+  }
+}
