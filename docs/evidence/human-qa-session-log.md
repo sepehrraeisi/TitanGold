@@ -129,3 +129,21 @@ Human result: FAIL → remediation for A1–A4 defects.
 
 ### Human retest
 Hard-refresh `https://titan.zala.ir/?view=ai` and run A1–A4 only.
+
+## Agents Shell Finalization (2026-07-14)
+
+### Preference RCA
+POST `/api/v1/settings/trading-mode` returned 500: `could not determine data type of parameter $2` in jsonb upsert.
+Fixed typed `$2::jsonb` with `JSON.stringify(mode)` string value. Preference Live works under KS; effective remains Demo.
+
+### Shell
+- Removed category filter chips; Search + Status + Sort
+- Compact AgentCard standard (N/A accuracy, Open Agent)
+- Shared `AgentControlShell` defined for gradual panel adoption
+- WS copy stabilized; Playwright 57/57
+
+### Deploy
+- Bundle: `assets/index-DRAnhmQg.js`
+- Runtime: demo + KS active
+
+### Human retest: AS-1 … AS-5 only

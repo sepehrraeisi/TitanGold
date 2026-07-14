@@ -6,14 +6,15 @@ import { ConfirmModal } from '../ui/confirm-modal.tsx';
 import { Toast } from '../ui/toast.tsx';
 
 /**
- * Header execution status — preference vs enforced active mode, human-readable.
- * Hierarchy: Header = compact preference + active mode; Agents banner = Emergency Stop detail.
+ * Header execution status — preference vs enforced active mode.
+ * Preference updates must succeed under Emergency Stop without enabling Live.
  */
 const ExecutionModeStatus: React.FC = () => {
   const { t } = useLanguage();
   const [runtime, setRuntime] = useState<ExecutionRuntimeView | null>(null);
   const [requestedMode, setRequestedMode] = useState<'demo' | 'live'>('demo');
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -41,28 +42,31 @@ const ExecutionModeStatus: React.FC = () => {
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (saving) return;
     setShowConfirm(true);
   };
 
   const handleConfirm = async () => {
     setShowConfirm(false);
     const next = requestedMode === 'demo' ? 'live' : 'demo';
+    setSaving(true);
     try {
-      const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-      const res = await fetch('/api/v1/settings/trading-mode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ mode: next }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      setRequestedMode(next);
+      const result = await api.updateTradingMode(next);
+      const persisted = result.mode === 'live' ? 'live' : 'demo';
+      setRequestedMode(persisted);
       setToast({
         message: t('mode_preference_updated'),
         type: 'info',
       });
       await refresh();
-    } catch {
-      setToast({ message: t('mode_switch_failed'), type: 'error' });
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : t('mode_switch_failed');
+      setToast({ message, type: 'error' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -82,7 +86,7 @@ const ExecutionModeStatus: React.FC = () => {
     <>
       <div
         ref={triggerRef}
-        className="flex items-center gap-2 cursor-pointer group"
+        className={`flex items-center gap-2 cursor-pointer group ${saving ? 'opacity-60 pointer-events-none' : ''}`}
         onClick={handleToggle}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -90,15 +94,14 @@ const ExecutionModeStatus: React.FC = () => {
             setShowConfirm(true);
           }
         }}
-        title={
-          kill
-            ? t('kill_switch_active')
-            : t('requested_vs_effective')
-        }
+        title={kill ? t('kill_switch_active') : t('requested_vs_effective')}
         role="button"
         tabIndex={0}
         aria-label={t('execution_mode_status')}
+        aria-busy={saving}
         data-testid="execution-mode-status"
+        data-preference={requestedMode}
+        data-effective={activeMode.toLowerCase()}
       >
         <div className="flex flex-col items-end gap-0.5">
           <div className="flex items-center gap-1.5">

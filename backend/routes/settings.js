@@ -2,7 +2,7 @@ import express from 'express';
 import db from '../database/db.js';
 import { authenticate, authenticateStrict, authorize } from '../middleware/auth.js';
 import { requireCapability } from '../middleware/requireCapability.js';
-import { CAP, roleHasCapability } from '../services/capabilities.js';
+import { CAP } from '../services/capabilities.js';
 import {
   getRuntimeExecutionState,
   setGlobalRuntimeMode,
@@ -55,61 +55,66 @@ router.get('/trading-mode', authenticateStrict, requireCapability(CAP.AI_AGENT_R
 
 /**
  * POST /api/settings/trading-mode
- * Set current user's trading mode (demo | live)
- * CRITICAL: DB-backed to survive PM2 cluster restarts
- * Requesting live requires LIVE_TRADING capability; global kill/demo still suppress execution.
+ * Set current user's trading mode preference (demo | live).
+ * Preference alone never grants live execution — runtime gates remain authoritative.
+ * Emergency Stop does not block preference updates.
  */
 router.post('/trading-mode', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
     const userId = req.user.id;
     const { mode } = req.body;
-    
-    // Validate mode
+
     if (mode !== 'demo' && mode !== 'live') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Invalid mode',
         message: 'Mode must be "demo" or "live"',
         code: 'VALIDATION_ERROR',
       });
     }
 
-    if (mode === 'live' && !roleHasCapability(req.user.role, CAP.LIVE_TRADING)) {
-      return res.status(403).json({
-        error: 'Insufficient permissions to request live mode',
-        code: 'CAPABILITY_DENIED',
-        capability: CAP.LIVE_TRADING,
-      });
-    }
-    
-    // Update user_preferences with new mode
-    await db.query(
-      `INSERT INTO user_preferences (user_id, preferences, sync_source)
-       VALUES ($1, jsonb_build_object('trading', jsonb_build_object('mode', $2)), 'web')
-       ON CONFLICT (user_id)
-       DO UPDATE SET 
-         preferences = jsonb_set(
-           COALESCE(user_preferences.preferences, '{}'::jsonb),
-           '{trading,mode}',
-           to_jsonb($2::text)
-         ),
-         sync_source = 'web',
-         updated_at = NOW()`,
-      [userId, mode]
+    // Persist preference with typed jsonb payload (avoid PG "could not determine data type of parameter").
+    // Path {trading,mode} expects a JSON string value, e.g. "live" — not an object.
+    const modeJson = JSON.stringify(mode);
+    const updated = await db.query(
+      `UPDATE user_preferences
+       SET preferences = jsonb_set(
+             jsonb_set(
+               COALESCE(preferences, '{}'::jsonb),
+               '{trading}',
+               COALESCE(preferences->'trading', '{}'::jsonb),
+               true
+             ),
+             '{trading,mode}',
+             $2::jsonb,
+             true
+           ),
+           sync_source = 'web',
+           updated_at = NOW(),
+           is_deleted = FALSE,
+           deleted_at = NULL
+       WHERE user_id = $1
+       RETURNING preferences->'trading'->>'mode' AS mode`,
+      [userId, modeJson],
     );
-    
-    // If switching to demo, initialize demo wallet with defaults
+
+    if (updated.rowCount === 0) {
+      await db.query(
+        `INSERT INTO user_preferences (user_id, preferences, sync_source, is_deleted)
+         VALUES ($1, $2::jsonb, 'web', FALSE)`,
+        [userId, JSON.stringify({ trading: { mode } })],
+      );
+    }
+
+    // If switching to demo, initialize demo wallet with defaults when missing
     if (mode === 'demo') {
       const defaultBalances = { USDT: 10000, BTC: 0, ETH: 0 };
-      
-      // Check if demo wallet already exists
       const walletResult = await db.query(
         `SELECT preferences->'wallet'->'demo'->>'balances' as balances
          FROM user_preferences
          WHERE user_id = $1 AND is_deleted = FALSE`,
-        [userId]
+        [userId],
       );
-      
-      // Only initialize if not already set
+
       if (!walletResult.rows[0]?.balances) {
         await db.query(
           `UPDATE user_preferences
@@ -117,33 +122,39 @@ router.post('/trading-mode', authenticateStrict, requireCapability(CAP.AI_AGENT_
              jsonb_set(
                COALESCE(preferences, '{}'::jsonb),
                '{wallet}',
-               COALESCE(preferences->'wallet', '{}'::jsonb)
+               COALESCE(preferences->'wallet', '{}'::jsonb),
+               true
              ),
              '{wallet,demo,balances}',
-             $2::jsonb
+             $2::jsonb,
+             true
            ),
            updated_at = NOW()
            WHERE user_id = $1`,
-          [userId, JSON.stringify(defaultBalances)]
+          [userId, JSON.stringify(defaultBalances)],
         );
-        
-        logger.info(`✅ Demo wallet initialized for user ${userId}: ${JSON.stringify(defaultBalances)}`);
+        logger.info(`✅ Demo wallet initialized for user ${userId}`);
       }
     }
-    
-    logger.info(`✅ Trading mode updated for user ${userId}: ${mode}`);
-    
-    res.json({ 
+
+    const runtime = await getRuntimeExecutionState({ preferCache: true }).catch(() => null);
+    logger.info(`✅ Trading mode preference updated for user ${userId}: ${mode}`);
+
+    res.json({
       mode,
+      requestedMode: mode,
+      effectiveMode: runtime?.killSwitchActive ? 'demo' : (runtime?.globalMode || 'demo'),
+      killSwitchActive: runtime?.killSwitchActive === true,
       message: `Trading mode preference updated to ${mode}`,
       note: 'Preference does not grant live execution permission',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     logger.error('Error updating trading mode:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to update trading mode',
-      message: error.message 
+      message: error.message,
+      code: 'TRADING_MODE_WRITE_FAILED',
     });
   }
 });

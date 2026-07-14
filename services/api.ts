@@ -24423,6 +24423,42 @@ export const fetchTradingMode = async (): Promise<{ mode: 'demo' | 'live' }> => 
 };
 
 /**
+ * Update user trading-mode preference only (does not clear Emergency Stop / grant live).
+ */
+export const updateTradingMode = async (
+    mode: 'demo' | 'live',
+): Promise<{
+    mode: 'demo' | 'live';
+    requestedMode?: 'demo' | 'live';
+    effectiveMode?: string;
+    killSwitchActive?: boolean;
+    message?: string;
+}> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) throw new Error('Authentication required');
+
+    const response = await fetch('/api/v1/settings/trading-mode', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ mode }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const err = new Error(
+            payload?.message || payload?.error || 'Failed to update trading mode preference',
+        ) as Error & { code?: string; status?: number };
+        err.code = payload?.code;
+        err.status = response.status;
+        throw err;
+    }
+    return payload;
+};
+
+/**
  * Fetch wallet balance (demo or live)
  */
 export const fetchWalletBalance = async (): Promise<{ mode: 'demo' | 'live', balances: { USDT: number, BTC: number, ETH: number }, updatedAt: string }> => {
