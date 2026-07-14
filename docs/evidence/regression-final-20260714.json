@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-07-14T10:50:00Z",
+  "apiSmoke": [
+    {
+      "module": "health",
+      "path": "/api/v1/health",
+      "http": 200,
+      "classification": "pass"
+    },
+    {
+      "module": "ready",
+      "path": "/api/v1/health/ready",
+      "http": 200,
+      "classification": "pass"
+    },
+    {
+      "module": "agents",
+      "path": "/api/v1/ai-agents",
+      "http": 200,
+      "classification": "pass"
+    },
+    {
+      "module": "topic-routing",
+      "path": "/api/v1/topic-routing",
+      "http": 200,
+      "classification": "pass"
+    },
+    {
+      "module": "artemis-state",
+      "path": "/api/v1/artemis/state",
+      "http": 200,
+      "classification": "pass"
+    },
+    {
+      "module": "execution-runtime",
+      "path": "/api/v1/settings/execution-runtime",
+      "http": 200,
+      "classification": "pass"
+    },
+    {
+      "module": "scheduler",
+      "path": "/api/v1/scheduler/status",
+      "http": 200,
+      "classification": "pass"
+    },
+    {
+      "module": "trading-engine",
+      "path": "/api/v1/trading-engine/status",
+      "http": 200,
+      "classification": "pass"
+    }
+  ],
+  "knownPreexistingBroken": [
+    {
+      "module": "System Logs",
+      "classification": "pre-existing",
+      "note": "May remain broken; not worsened by this package"
+    },
+    {
+      "module": "Backtesting",
+      "classification": "pre-existing",
+      "note": "May remain broken; not worsened by this package"
+    }
+  ],
+  "dataHub": "UNCHANGED_BY_DESIGN",
+  "verdict": "no newly introduced API smoke failures on runtime-safety surfaces"
+}

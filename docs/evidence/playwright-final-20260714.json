@@ -1,0 +1,27 @@
+{
+  "runAt": "2026-07-14T10:50:00Z",
+  "config": "playwright.staging.config.ts",
+  "baseURL": "http://127.0.0.1:3000",
+  "retries": 0,
+  "result": "94 passed",
+  "passed": 94,
+  "failed": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "firstRunFailures": 0,
+  "suites": {
+    "agent-panels.spec.ts": 54,
+    "artemis-tabs.spec.ts": 24,
+    "pre-human-qa.spec.ts": 9,
+    "runtime-safety.spec.ts": 3,
+    "topic-routing-browser.spec.ts": 4
+  },
+  "roles": [
+    "Admin",
+    "Trader",
+    "User"
+  ],
+  "notes": "Tokens from disposable role fixtures; migration dismissed via injectDevSession; no retries configured",
+  "screenshotsDir": "e2e/screenshots",
+  "screenshotCount": 82
+}

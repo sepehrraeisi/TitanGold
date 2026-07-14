@@ -1,0 +1,82 @@
+{
+  "startedAt": "2026-07-14T09:52:10Z",
+  "scenarios": {
+    "ready_port_5002_warm": {
+      "n": 40,
+      "p50": 4.56,
+      "p95": 14.44,
+      "p99": 16.14,
+      "max": 16.14,
+      "codes": {
+        "200": 40
+      },
+      "sample": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    "health_port_5002_warm": {
+      "n": 20,
+      "p50": 2.16,
+      "p95": 3.63,
+      "p99": 6.66,
+      "max": 6.66,
+      "codes": {
+        "200": 20
+      },
+      "sample": null
+    },
+    "ready_via_nginx_https": {
+      "n": 30,
+      "p50": 8.77,
+      "p95": 10.74,
+      "p99": 15.5,
+      "max": 15.5,
+      "codes": {
+        "200": 30
+      },
+      "sample": {
+        "status": "ok",
+        "killSwitchActive": true,
+        "effectiveMode": "demo",
+        "workerAcknowledged": true,
+        "stateVersion": 201,
+        "message": "Demo + kill switch active",
+        "critical": false
+      }
+    },
+    "health_via_nginx_https": {
+      "n": 20,
+      "p50": 6.39,
+      "p95": 8.01,
+      "p99": 8.05,
+      "max": 8.05,
+      "codes": {
+        "200": 20
+      },
+      "sample": null
+    },
+    "ready_concurrent_40": {
+      "n": 40,
+      "p50": 16.06,
+      "p95": 89.62,
+      "p99": 92.45,
+      "max": 92.45,
+      "ok": 40,
+      "fail": 0
+    },
+    "cluster_pids_alive": {
+      "2157992": true,
+      "2133206": true
+    }
+  },
+  "endedAt": "2026-07-14T09:52:11Z",
+  "falseReady": 0,
+  "falseNotReady": 0,
+  "notes": "false-ready/not-ready=0 under current demo+KS safety state; Redis/PG down scenarios covered in redis-process-level + deployment-failure tests"
+}

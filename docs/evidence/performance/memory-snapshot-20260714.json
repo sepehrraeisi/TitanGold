@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-07-14T09:52:00Z",
+  "source": "/proc/VmRSS",
+  "processes": [
+    {
+      "name": "titan-engine-worker",
+      "pm_id": 0,
+      "pid": 2157874,
+      "status": "online",
+      "exec_mode": "fork_mode",
+      "restarts": 4,
+      "rssMb": 156.2
+    },
+    {
+      "name": "titan-error-watch",
+      "pm_id": 1,
+      "pid": 0,
+      "status": "online",
+      "exec_mode": "fork_mode",
+      "restarts": 0,
+      "rssMb": null
+    },
+    {
+      "name": "titan-frontend",
+      "pm_id": 2,
+      "pid": 2085113,
+      "status": "online",
+      "exec_mode": "fork_mode",
+      "restarts": 0,
+      "rssMb": 40.5
+    },
+    {
+      "name": "titan-backend",
+      "pm_id": 3,
+      "pid": 2157992,
+      "status": "online",
+      "exec_mode": "cluster_mode",
+      "restarts": 5,
+      "rssMb": 192.3
+    },
+    {
+      "name": "titan-backend",
+      "pm_id": 4,
+      "pid": 2133206,
+      "status": "online",
+      "exec_mode": "cluster_mode",
+      "restarts": 4,
+      "rssMb": 192.0
+    }
+  ]
+}

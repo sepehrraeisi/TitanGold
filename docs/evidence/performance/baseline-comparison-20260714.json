@@ -1,0 +1,111 @@
+{
+  "baselineCommit": "d705bd2",
+  "currentCommit": "c647abee823c44c707ae23502b5e8abd807a2b8d",
+  "baselineRuntimeSafety": "BASELINE NOT AVAILABLE",
+  "reason": "d705bd2 precedes runtime-safety package; /ready runtime_safety and capability-gated AI endpoints absent or not equivalent",
+  "historicalReadyBeforeFixP95Ms": 870,
+  "currentReadyP95Ms": 6.47,
+  "readyImprovementPct": 99.3,
+  "currentBundleKb": 5487.8,
+  "baselineBundleKb": null,
+  "currentEndpointSummary": {
+    "health": {
+      "p50": 2.62,
+      "p95": 3.44,
+      "codes": {
+        "200": 25
+      }
+    },
+    "ready": {
+      "p50": 3.73,
+      "p95": 6.47,
+      "codes": {
+        "200": 25
+      }
+    },
+    "agents": {
+      "p50": 12.12,
+      "p95": 15.75,
+      "codes": {
+        "200": 25
+      }
+    },
+    "agentDetail": {
+      "p50": 8.85,
+      "p95": 10.19,
+      "codes": {
+        "200": 25
+      }
+    },
+    "deniedAgentRun": {
+      "p50": 7.81,
+      "p95": 9.55,
+      "codes": {
+        "400": 14,
+        "429": 11
+      }
+    },
+    "topicRoutingList": {
+      "p50": 5.96,
+      "p95": 7.66,
+      "codes": {
+        "200": 25
+      }
+    },
+    "topicRoutingDeniedMutation": {
+      "p50": 6.69,
+      "p95": 14.09,
+      "codes": {
+        "403": 15
+      }
+    },
+    "artemisState": {
+      "p50": 10.82,
+      "p95": 13.46,
+      "codes": {
+        "200": 25
+      }
+    },
+    "executionRuntime": {
+      "p50": 6.39,
+      "p95": 10.49,
+      "codes": {
+        "200": 25
+      }
+    },
+    "capabilities": {
+      "p50": 5.7,
+      "p95": 10.23,
+      "codes": {
+        "200": 25
+      }
+    },
+    "killSwitchActivateIdempotent": {
+      "p50": 9.89,
+      "p95": 16.05,
+      "codes": {
+        "200": 25
+      }
+    }
+  },
+  "memoryMb": [
+    {
+      "name": "titan-engine-worker",
+      "pm_id": 0,
+      "pid": 2157874,
+      "rssMb": 157.7
+    },
+    {
+      "name": "titan-backend",
+      "pm_id": 3,
+      "pid": 2157992,
+      "rssMb": 211.2
+    },
+    {
+      "name": "titan-backend",
+      "pm_id": 4,
+      "pid": 2133206,
+      "rssMb": 206.0
+    }
+  ]
+}

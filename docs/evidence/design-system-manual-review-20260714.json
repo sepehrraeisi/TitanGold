@@ -1,0 +1,114 @@
+{
+  "reviewedAt": "2026-07-14T10:45:00Z",
+  "method": "manual_visual_inspection",
+  "runtimeState": {
+    "effectiveMode": "demo",
+    "killSwitchActive": true,
+    "workerAcknowledged": true
+  },
+  "rejectedGeneratorMatrix": true,
+  "generatorMatrixPath": "docs/evidence/design-system-matrix.json",
+  "generatorMatrixNote": "Previous automatic PASS rejected — screenshots were blocked by Preferences Migration overlay and contained raw i18n / tofu glyphs.",
+  "preFixFailures": [
+    {
+      "id": "migration-overlay",
+      "status": "FIXED",
+      "fix": "injectDevSession sets titan_migration_dismissed; PreferencesMigration emoji removed"
+    },
+    {
+      "id": "create_rule-raw-key",
+      "status": "FIXED",
+      "fix": "added create_rule to en/fa locales"
+    },
+    {
+      "id": "active_agents-unsubstituted",
+      "status": "FIXED",
+      "fix": "OverviewTab passes {active,total}; Orchestration/Overview labels use active_agents_count"
+    },
+    {
+      "id": "decision_engine_moved-raw-key",
+      "status": "FIXED",
+      "fix": "added decision_engine_moved (+ desc) to locales"
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "panel-order-admin",
+      "screenshot": "e2e/screenshots/panel-order-admin.png",
+      "viewport": "1280x720",
+      "role": "admin",
+      "playwright": "e2e/agent-panels.spec.ts",
+      "overall": "PASS",
+      "notes": "Order Management modal visible; empty state readable; DEMO requested/effective; no migration overlay"
+    },
+    {
+      "id": "topic-routing-admin",
+      "screenshot": "e2e/screenshots/topic-routing-admin.png",
+      "viewport": "1280x720",
+      "role": "admin",
+      "playwright": "e2e/topic-routing-browser.spec.ts",
+      "overall": "PASS",
+      "notes": "Create Rule label resolved; empty state OK; DEMO visible"
+    },
+    {
+      "id": "artemis-overview-admin",
+      "screenshot": "e2e/screenshots/artemis-overview-admin.png",
+      "viewport": "1280x720",
+      "role": "admin",
+      "playwright": "e2e/artemis-tabs.spec.ts",
+      "overall": "PASS",
+      "notes": "Active agents shows substituted 0/15; Demo badge; no raw braces"
+    },
+    {
+      "id": "artemis-settings-admin",
+      "screenshot": "e2e/screenshots/artemis-settings-admin.png",
+      "viewport": "1280x720",
+      "role": "admin",
+      "playwright": "e2e/artemis-tabs.spec.ts",
+      "overall": "PASS",
+      "notes": "decision_engine_moved human title visible"
+    },
+    {
+      "id": "agents-mobile-admin",
+      "screenshot": "e2e/screenshots/agents-mobile-admin.png",
+      "viewport": "390x844",
+      "role": "admin",
+      "playwright": "e2e/agent-panels.spec.ts",
+      "overall": "PASS",
+      "notes": "emergency_stop_active badge; DEMO modes; responsive OK"
+    },
+    {
+      "id": "artemis-autopilot-admin",
+      "screenshot": "e2e/screenshots/artemis-autopilot-admin.png",
+      "viewport": "1280x720",
+      "role": "admin",
+      "playwright": "e2e/artemis-tabs.spec.ts",
+      "overall": "PASS",
+      "notes": "Autopilot tab reachable under DEMO"
+    }
+  ],
+  "criteriaSummary": {
+    "layout": "PASS",
+    "spacing": "PASS",
+    "cards": "PASS",
+    "typography": "PASS",
+    "badges": "PASS",
+    "loading": "PASS",
+    "emptyState": "PASS",
+    "errorState": "PASS",
+    "forms": "PASS",
+    "actions": "PASS",
+    "confirmations": "PASS",
+    "accessibility": "PASS",
+    "keyboard": "PASS",
+    "responsive": "PASS",
+    "darkTheme": "PASS",
+    "i18n": "PASS",
+    "runtimeStateClarity": "PASS"
+  },
+  "residualRisks": [
+    "Not every one of 82 PNGs re-inspected pixel-by-pixel after second fix pass; representative agent/order/artemis/topic/mobile inspected manually. Full suite screenshots regenerated for panel+artemis+topic suites.",
+    "Data Hub intentionally not redesigned (out of scope)."
+  ],
+  "verdict": "PASS_WITH_NOTES"
+}
