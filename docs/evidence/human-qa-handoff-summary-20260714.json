@@ -1,0 +1,33 @@
+{
+  "generatedAt": "2026-07-14T12:10:00Z",
+  "head": "b94ee1dad2987ba2f0747cd0a6e00da1ca1888bf",
+  "redisGate": "PASS",
+  "newlyExecuted": [
+    {
+      "scenario": 14,
+      "name": "gap14_worker_restart_while_redis_unavailable",
+      "result": "PASS",
+      "evidence": "docs/evidence/redis-gap-scenarios-14-15.json"
+    },
+    {
+      "scenario": 15,
+      "name": "gap15_backend_cluster_instance_restart_while_redis_unavailable",
+      "result": "PASS",
+      "evidence": "docs/evidence/redis-gap-scenarios-14-15.json"
+    }
+  ],
+  "matrix": "docs/evidence/redis-16-scenario-reconciliation.md",
+  "representativePerf": "docs/evidence/performance/representative-frontend-20260714.json",
+  "deploymentClassification": "docs/HUMAN_QA_DEPLOYMENT_TARGET.md",
+  "evidenceIndex": "docs/HUMAN_QA_EVIDENCE_INDEX.md",
+  "checklist": "docs/HUMAN_QA_CHECKLIST.md",
+  "humanQaReadiness": "READY",
+  "finalVerdict": "NEEDS MORE VERIFICATION",
+  "acceptedLimitations": [
+    "BASELINE NOT AVAILABLE for runtime-safety vs d705bd2",
+    "deploy-production-frontend.sh name is staging technical debt",
+    "Staging MEXC ticker 404 and agent WebSocket 400 console noise",
+    "System Logs / Backtesting pre-existing broken modules",
+    "Human visual approval still pending (expected)"
+  ]
+}

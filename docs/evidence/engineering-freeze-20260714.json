@@ -1,0 +1,55 @@
+{
+  "frozenAt": "2026-07-14T12:05:00Z",
+  "branch": "main",
+  "localHead": "b94ee1dad2987ba2f0747cd0a6e00da1ca1888bf",
+  "originMain": "b94ee1dad2987ba2f0747cd0a6e00da1ca1888bf",
+  "aheadBehind": "0\t0",
+  "porcelainEmpty": false,
+  "porcelain": "?? docs/evidence/performance/representative-frontend-20260714.json\n?? docs/evidence/redis-gap-scenarios-14-15.json\n?? scripts/perf-representative-frontend.mjs\n?? scripts/redis-gap-scenarios-14-15.mjs\n",
+  "distBuildCommit": "b94ee1dad2987ba2f0747cd0a6e00da1ca1888bf",
+  "servedIndexBundle": "assets/index-BN4pReol.js",
+  "runtime_safety": {
+    "status": "ok",
+    "killSwitchActive": true,
+    "effectiveMode": "demo",
+    "workerAcknowledged": true,
+    "stateVersion": 227,
+    "message": "Demo + kill switch active",
+    "critical": false
+  },
+  "connections": {
+    "status": "ok",
+    "count": 0,
+    "message": "0 user exchange connection(s)"
+  },
+  "pm2": [
+    {
+      "name": "titan-engine-worker",
+      "pm_id": 0,
+      "pid": 2204815,
+      "cwd": "/home/ubuntu/webapp/TitanGold/backend",
+      "status": "online",
+      "exec_mode": "fork_mode",
+      "script": "/home/ubuntu/webapp/TitanGold/backend/workers/engineWorkerLeader.js"
+    },
+    {
+      "name": "titan-backend",
+      "pm_id": 3,
+      "pid": 2204918,
+      "cwd": "/home/ubuntu/webapp/TitanGold/backend",
+      "status": "online",
+      "exec_mode": "cluster_mode",
+      "script": "/home/ubuntu/webapp/TitanGold/backend/server.js"
+    },
+    {
+      "name": "titan-backend",
+      "pm_id": 4,
+      "pid": 2133206,
+      "cwd": "/home/ubuntu/webapp/TitanGold/backend",
+      "status": "online",
+      "exec_mode": "cluster_mode",
+      "script": "/home/ubuntu/webapp/TitanGold/backend/server.js"
+    }
+  ],
+  "note": "Engineering freeze after handoff docs commit; further code changes require Human QA defect + scoped cycle"
+}

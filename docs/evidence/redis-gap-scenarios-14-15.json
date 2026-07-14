@@ -1,0 +1,106 @@
+{
+  "startedAt": "2026-07-14T11:56:41.063Z",
+  "scenarios": [
+    {
+      "name": "gap14_worker_restart_while_redis_unavailable",
+      "requiredScenario": 14,
+      "started": "2026-07-14T11:56:41.063Z",
+      "ended": "2026-07-14T11:56:48.783Z",
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "beforePid": 2157874,
+        "afterPid": 2204815,
+        "afterStatus": "online",
+        "restartSnippet": "[PM2] Applying action restartProcessId on app [titan-engine-worker](ids: [ 0 ])\n[PM2] [titan-engine-worker](0) ✓\n┌────┬───────────────────────────────┬─────────────┬─────────┬─────────┬──────────┬────",
+        "ready": {
+          "status": "ok",
+          "killSwitchActive": true,
+          "effectiveMode": "demo",
+          "workerAcknowledged": true,
+          "stateVersion": 227,
+          "message": "Demo + kill switch active",
+          "critical": false
+        },
+        "pg": {
+          "killSwitchActive": true,
+          "globalMode": "demo",
+          "version": 227,
+          "workerAckRevision": 227
+        },
+        "connections": 0
+      }
+    },
+    {
+      "name": "gap15_backend_cluster_instance_restart_while_redis_unavailable",
+      "requiredScenario": 15,
+      "started": "2026-07-14T11:56:48.785Z",
+      "ended": "2026-07-14T11:57:02.532Z",
+      "status": "PASS",
+      "issues": [],
+      "detail": {
+        "targetPmId": 3,
+        "midHealthProbes": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "after": [
+          {
+            "pm_id": 3,
+            "pid": 2204918,
+            "status": "online",
+            "mode": "cluster_mode"
+          },
+          {
+            "pm_id": 4,
+            "pid": 2133206,
+            "status": "online",
+            "mode": "cluster_mode"
+          }
+        ],
+        "restartSnippet": "[PM2] Applying action restartProcessId on app [3](ids: [ '3' ])\n[PM2] [titan-backend](3) ✓\n┌────┬───────────────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬──────────",
+        "ready": {
+          "status": "ok",
+          "killSwitchActive": true,
+          "effectiveMode": "demo",
+          "workerAcknowledged": true,
+          "stateVersion": 227,
+          "message": "Demo + kill switch active",
+          "critical": false
+        },
+        "pg": {
+          "killSwitchActive": true,
+          "globalMode": "demo",
+          "version": 227,
+          "workerAckRevision": 227
+        },
+        "connections": 0
+      }
+    }
+  ],
+  "note": "Gap-only: worker restart during Redis unavailable; one backend cluster instance restart during Redis unavailable",
+  "final": {
+    "pg": {
+      "killSwitchActive": true,
+      "globalMode": "demo",
+      "version": 227,
+      "workerAckRevision": 227
+    },
+    "ready": {
+      "status": "ok",
+      "killSwitchActive": true,
+      "effectiveMode": "demo",
+      "workerAcknowledged": true,
+      "stateVersion": 227,
+      "message": "Demo + kill switch active",
+      "critical": false
+    },
+    "connections": 0
+  },
+  "pass": true,
+  "endedAt": "2026-07-14T11:57:02.663Z"
+}

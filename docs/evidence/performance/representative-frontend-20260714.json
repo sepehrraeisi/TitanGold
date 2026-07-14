@@ -1,0 +1,254 @@
+{
+  "measuredAt": "2026-07-14T12:06:48.246Z",
+  "baseURL": "https://titan.zala.ir",
+  "samples": [
+    {
+      "category": "shared_shell",
+      "label": "Agents parent / navigation shell",
+      "coldMs": 1245,
+      "warmMs": 709,
+      "browserRequestCount": 49,
+      "warmRequestCount": 23,
+      "duplicateUrlCount": 16,
+      "sampleDuplicates": [
+        "https://fonts.googleapis.com/css2",
+        "https://titan.zala.ir/api/v1/artemis/state",
+        "https://titan.zala.ir/api/v1/settings/execution-runtime",
+        "https://titan.zala.ir/api/v1/settings/trading-mode",
+        "https://titan.zala.ir/api/market/mexc/api/v3/ticker/24hr"
+      ],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)",
+        "WebSocket connection to 'wss://titan.zala.ir/ws/agents?token=[REDACTED_JWT]' failed: Error during WebSocket handshake: Unexpected response code: 400",
+        "\u274c WebSocket error: Event",
+        "\u274c Agent WebSocket error: Event",
+        "Failed to load resource: the server responded with a status of 404 ()"
+      ],
+      "failedRequests": []
+    },
+    {
+      "category": "readonly_analytical",
+      "label": "Technical (read-only analytical)",
+      "coldMs": 1662,
+      "warmMs": 725,
+      "browserRequestCount": 30,
+      "warmRequestCount": 0,
+      "duplicateUrlCount": 7,
+      "sampleDuplicates": [
+        "https://fonts.googleapis.com/css2",
+        "https://titan.zala.ir/api/v1/settings/execution-runtime",
+        "https://titan.zala.ir/api/v1/settings/trading-mode",
+        "https://titan.zala.ir/api/v1/artemis/state",
+        "https://titan.zala.ir/api/market/mexc/api/v3/ticker/24hr"
+      ],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)",
+        "WebSocket connection to 'wss://titan.zala.ir/ws/agents?token=[REDACTED_JWT]' failed: Error during WebSocket handshake: Unexpected response code: 400",
+        "\u274c WebSocket error: Event",
+        "\u274c Agent WebSocket error: Event"
+      ],
+      "failedRequests": []
+    },
+    {
+      "category": "provider_llm",
+      "label": "Sentiment (provider/LLM-style)",
+      "coldMs": 1706,
+      "warmMs": 723,
+      "browserRequestCount": 29,
+      "warmRequestCount": 0,
+      "duplicateUrlCount": 7,
+      "sampleDuplicates": [
+        "https://fonts.googleapis.com/css2",
+        "https://titan.zala.ir/api/v1/settings/execution-runtime",
+        "https://titan.zala.ir/api/v1/settings/trading-mode",
+        "https://titan.zala.ir/api/v1/artemis/state",
+        "https://titan.zala.ir/api/market/mexc/api/v3/ticker/24hr"
+      ],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)",
+        "WebSocket connection to 'wss://titan.zala.ir/ws/agents?token=[REDACTED_JWT]' failed: Error during WebSocket handshake: Unexpected response code: 400",
+        "\u274c WebSocket error: Event",
+        "\u274c Agent WebSocket error: Event"
+      ],
+      "failedRequests": []
+    },
+    {
+      "category": "market_data",
+      "label": "Market Intelligence (market-data)",
+      "coldMs": 2296,
+      "warmMs": 721,
+      "browserRequestCount": 27,
+      "warmRequestCount": 0,
+      "duplicateUrlCount": 7,
+      "sampleDuplicates": [
+        "https://fonts.googleapis.com/css2",
+        "https://titan.zala.ir/api/v1/settings/execution-runtime",
+        "https://titan.zala.ir/api/v1/settings/trading-mode",
+        "https://titan.zala.ir/api/v1/artemis/state",
+        "https://titan.zala.ir/api/market/mexc/api/v3/ticker/24hr"
+      ],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)",
+        "WebSocket connection to 'wss://titan.zala.ir/ws/agents?token=[REDACTED_JWT]' failed: Error during WebSocket handshake: Unexpected response code: 400",
+        "\u274c WebSocket error: Event",
+        "\u274c Agent WebSocket error: Event"
+      ],
+      "failedRequests": []
+    },
+    {
+      "category": "order_live_capable",
+      "label": "Order Management (order/live-capable)",
+      "coldMs": 1702,
+      "warmMs": 713,
+      "browserRequestCount": 29,
+      "warmRequestCount": 0,
+      "duplicateUrlCount": 7,
+      "sampleDuplicates": [
+        "https://fonts.googleapis.com/css2",
+        "https://titan.zala.ir/api/v1/settings/execution-runtime",
+        "https://titan.zala.ir/api/v1/settings/trading-mode",
+        "https://titan.zala.ir/api/v1/artemis/state",
+        "https://titan.zala.ir/api/market/mexc/api/v3/ticker/24hr"
+      ],
+      "consoleErrors": [
+        "WebSocket connection to 'wss://titan.zala.ir/ws/agents?token=[REDACTED_JWT]' failed: Error during WebSocket handshake: Unexpected response code: 400",
+        "\u274c WebSocket error: Event",
+        "\u274c Agent WebSocket error: Event",
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for ETHUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=ETHUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 0)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)",
+        "\u274c MEXC API error 404: {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}",
+        "\u274c Failed to fetch MEXC 24hr ticker for BTCUSDT: Error: MEXC API error: 404 - {\"error\":\"Not Found\",\"message\":\"Cannot GET /api/v1/market/mexc/api/v3/ticker/24hr?symbol=BTCUSDT\"}\n    at yn (https://titan.zala.ir/assets/index-BN4pReol.js:21:166429)\n    at async Promise.all (index 1)\n    at async g (https://titan.zala.ir/assets/index-BN4pReol.js:138:30058)"
+      ],
+      "failedRequests": []
+    }
+  ],
+  "equivalenceNotes": [
+    "15 AgentControl* lazy chunks share the same open/close shell and API list pattern; only representatives measured.",
+    "Read-only analytical ~ Technical/Pattern/Trend/Volume/Timing (same control panel architecture).",
+    "Provider/LLM ~ Sentiment/Fundamental (LLM/provider settings surfaces).",
+    "Market-data ~ Market Intelligence/Liquidity/Arbitrage.",
+    "Order/live-capable ~ Order Management only for order routes; policy fail-closed under Kill Switch.",
+    "BASELINE NOT AVAILABLE vs d705bd2 for runtime-safety-gated surfaces."
+  ],
+  "bundle": {
+    "totalJsCssKb": 5492,
+    "topChunks": [
+      {
+        "file": "index-BN4pReol.js",
+        "kb": 2117
+      },
+      {
+        "file": "DataHubTab-A3jg37Sk.js",
+        "kb": 929
+      },
+      {
+        "file": "core-C1NeSWkh.js",
+        "kb": 545
+      },
+      {
+        "file": "index-B1jy9gBy.js",
+        "kb": 489
+      },
+      {
+        "file": "GeographicHeatMap-C77ZJHB3.js",
+        "kb": 215
+      },
+      {
+        "file": "index-BYqHC46S.js",
+        "kb": 212
+      },
+      {
+        "file": "basic-CXglkiNx.js",
+        "kb": 112
+      },
+      {
+        "file": "index-rme_Kq_Z.js",
+        "kb": 83
+      }
+    ],
+    "agentControlChunks": [
+      {
+        "file": "TechnicalAnalysisAgentControl-H-cUki4_.js",
+        "kb": 35
+      },
+      {
+        "file": "FundamentalAgentControl-B2xs7i0a.js",
+        "kb": 34
+      },
+      {
+        "file": "OptimizationAgentControl-DaHF8YbN.js",
+        "kb": 29
+      },
+      {
+        "file": "VolumeAgentControl-DG1BJ8XK.js",
+        "kb": 29
+      },
+      {
+        "file": "MarketIntelligenceAgentControl-ChLmgzA4.js",
+        "kb": 28
+      },
+      {
+        "file": "PortfolioAllocationAgentControl-D-kHBXmm.js",
+        "kb": 28
+      },
+      {
+        "file": "RiskManagementAgentControl-CggsPuW4.js",
+        "kb": 28
+      },
+      {
+        "file": "LiquidityAgentControl-D6FvshPy.js",
+        "kb": 27
+      },
+      {
+        "file": "OrderManagementAgentControl-IqL3q6Py.js",
+        "kb": 27
+      },
+      {
+        "file": "TimingAgentControl-_5YWJ-tW.js",
+        "kb": 27
+      },
+      {
+        "file": "ArbitrageAgentControl-Dy8eofXN.js",
+        "kb": 26
+      },
+      {
+        "file": "SentimentAgentControl-BJh2DLe1.js",
+        "kb": 23
+      },
+      {
+        "file": "TrendAgentControl-B7v8QwBV.js",
+        "kb": 22
+      },
+      {
+        "file": "PricePredictionAgentControl-RktliQ56.js",
+        "kb": 21
+      },
+      {
+        "file": "PatternAgentControl-Bu6RvHpc.js",
+        "kb": 11
+      }
+    ]
+  }
+}
