@@ -4672,7 +4672,7 @@
   "execution_blocked_loading": "Loading execution permissions…",
   "execution_blocked_provider_disconnected": "Broker is disconnected — live order placement is blocked.",
   "open_agent": "Open Agent",
-  "never_run": "Never run",
+  "never_run": "Never",
   "last_run": "Last run",
   "results_count": "Results",
   "execution_type": "Type",
@@ -4691,5 +4691,13 @@
   "sort_by_last_run": "Last Run",
   "sort_by_status": "Status",
   "broker_label": "Broker",
-  "agent_purpose_fallback": "AI agent"
+  "agent_purpose_fallback": "AI agent",
+  "effective_mode": "Effective Mode",
+  "agents_dry_run_blocked_short": "Agents run in Dry Run. Live side effects are blocked.",
+  "agents_read_only_badge": "View only",
+  "agents_permission_limited": "Your role has limited agent access. Some actions may be unavailable.",
+  "blocked_badge": "Blocked",
+  "results_count_hint": "Documented result/decision count from the agent summary. N/A when unknown.",
+  "agent_metrics": "Agent metrics",
+  "agent_safety_badges": "Safety"
 }

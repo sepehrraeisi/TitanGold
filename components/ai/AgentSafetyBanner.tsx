@@ -1,6 +1,7 @@
 import React from 'react';
-import type { ExecutionRuntimeView } from '../services/executionRuntimeApi';
+import type { ExecutionRuntimeView } from '../../services/executionRuntimeApi';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { AGENT_SAFETY_SHELL, StatusPill } from './shell/agentsShellUi.ts';
 
 interface AgentSafetyBannerProps {
   runtime: ExecutionRuntimeView | null;
@@ -23,7 +24,11 @@ export const AgentSafetyBanner: React.FC<AgentSafetyBannerProps> = ({ runtime, c
 
   if (loading) {
     return (
-      <div className="mb-4 rounded-lg border border-border bg-card/60 px-4 py-3 text-sm text-muted-foreground" role="status">
+      <div
+        className={`${AGENT_SAFETY_SHELL} mb-4 text-[11px] text-muted-foreground`}
+        role="status"
+        data-testid="agent-safety-banner-loading"
+      >
         {t('loading_runtime') || 'Loading execution runtime…'}
       </div>
     );
@@ -32,7 +37,7 @@ export const AgentSafetyBanner: React.FC<AgentSafetyBannerProps> = ({ runtime, c
   if (!runtime) {
     return (
       <div
-        className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90"
+        className={`${AGENT_SAFETY_SHELL} mb-4 border-amber-500/30 bg-amber-500/10 text-[11px] text-amber-100/90`}
         role="status"
         data-testid="agent-safety-banner-unavailable"
       >
@@ -42,56 +47,47 @@ export const AgentSafetyBanner: React.FC<AgentSafetyBannerProps> = ({ runtime, c
     );
   }
 
-  const modeLabel = (runtime.killSwitchActive ? 'demo' : runtime.effectiveMode || 'demo').toUpperCase();
+  const effectiveLabel = (runtime.killSwitchActive ? 'demo' : runtime.effectiveMode || 'demo').toUpperCase();
   const publicReason = isPublicKillSwitchReason(runtime.killSwitchReason) ? runtime.killSwitchReason : null;
 
   return (
     <div
-      className="mb-4 rounded-lg border border-border bg-card/80 px-4 py-3 space-y-2"
+      className={`${AGENT_SAFETY_SHELL} mb-4`}
       role="region"
       aria-label={t('execution_safety') || 'Execution safety'}
       data-testid="agent-safety-banner"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className="text-xs font-semibold px-2.5 py-1 rounded-md border bg-yellow-500/15 text-yellow-200 border-yellow-500/40"
+      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+        <StatusPill
+          variant="warning"
+          label={`${t('effective_mode') || 'Effective Mode'}: ${effectiveLabel}`}
           title={t('runtime_mode_hint') || 'Effective trading mode for this session'}
-        >
-          {t('runtime_mode_badge') || 'Mode'}: {modeLabel}
-        </span>
+        />
         {runtime.killSwitchActive && (
-          <span
-            className="text-xs font-semibold px-2.5 py-1 rounded-md border bg-red-600/25 text-red-100 border-red-500/50"
-            role="status"
-            data-testid="emergency-stop-badge"
-          >
-            {t('emergency_stop') || 'Emergency Stop'}
-            {!runtime.workerAcknowledged
-              ? ` · ${t('worker_ack_pending') || 'Awaiting worker acknowledgement'}`
-              : ''}
+          <span data-testid="emergency-stop-badge">
+            <StatusPill
+              variant="error"
+              label={
+                !runtime.workerAcknowledged
+                  ? `${t('emergency_stop') || 'Emergency Stop'}: ${t('active') || 'Active'} · ${t('worker_ack_pending') || 'Awaiting worker acknowledgement'}`
+                  : `${t('emergency_stop') || 'Emergency Stop'}: ${t('active') || 'Active'}`
+              }
+            />
           </span>
         )}
+        {!canExecute && (
+          <StatusPill
+            variant="neutral"
+            label={t('agents_read_only_badge') || 'View only'}
+            title={t('agents_read_only_role') || 'Your account can view agents but cannot execute or modify them.'}
+          />
+        )}
       </div>
-
-      {runtime.killSwitchActive ? (
-        <p className="text-xs text-red-200/90">
-          {t('emergency_stop_explanation') ||
-            'Emergency Stop is active. Live trading and external side effects remain blocked until an administrator clears it.'}
-        </p>
-      ) : null}
-
-      <p className="text-xs text-muted-foreground">
-        {!canExecute
-          ? (t('agents_read_only_role') || 'Your account can view agents but cannot execute or modify them.')
-          : (t('demo_safe_execution_short') ||
-            'Agents run in demo / dry-run. Live execution requires all safety gates to pass.')}
+      <p className="text-[11px] text-muted-foreground leading-snug">
+        {t('agents_dry_run_blocked_short') ||
+          'Agents run in Dry Run. Live side effects are blocked.'}
+        {publicReason ? ` · ${t('stop_reason_label') || 'Reason'}: ${publicReason}` : ''}
       </p>
-
-      {publicReason ? (
-        <p className="text-xs text-muted-foreground">
-          {t('stop_reason_label') || 'Reason'}: {publicReason}
-        </p>
-      ) : null}
     </div>
   );
 };

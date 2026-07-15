@@ -4488,7 +4488,7 @@
   "execution_blocked_loading": "در حال بارگذاری مجوزهای اجرا…",
   "execution_blocked_provider_disconnected": "کارگزار متصل نیست — ثبت سفارش زنده مسدود است.",
   "open_agent": "باز کردن عامل",
-  "never_run": "هرگز اجرا نشده",
+  "never_run": "هرگز",
   "last_run": "آخرین اجرا",
   "results_count": "نتایج",
   "execution_type": "نوع",
@@ -4507,5 +4507,13 @@
   "sort_by_last_run": "آخرین اجرا",
   "sort_by_status": "وضعیت",
   "broker_label": "کارگزار",
-  "agent_purpose_fallback": "عامل هوش مصنوعی"
+  "agent_purpose_fallback": "عامل هوش مصنوعی",
+  "effective_mode": "حالت مؤثر",
+  "agents_dry_run_blocked_short": "عامل‌ها در Dry Run اجرا می‌شوند. اثرات جانبی زنده مسدود است.",
+  "agents_read_only_badge": "فقط مشاهده",
+  "agents_permission_limited": "نقش شما دسترسی محدود به عامل‌ها دارد. برخی اقدامات ممکن است در دسترس نباشند.",
+  "blocked_badge": "مسدود",
+  "results_count_hint": "تعداد نتایج/تصمیم‌های مستند از خلاصه عامل. در صورت نامشخص: N/A.",
+  "agent_metrics": "شاخص‌های عامل",
+  "agent_safety_badges": "ایمنی"
 }

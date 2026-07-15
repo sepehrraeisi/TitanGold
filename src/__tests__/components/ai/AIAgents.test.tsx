@@ -4,21 +4,52 @@ import AIAgents from '../../../../components/ai/AIAgents';
 import * as api from '../../../../services/api';
 import type { AIAgent } from '../../../../types';
 
-// Mock the API module
 vi.mock('../../../../services/api', () => ({
   fetchAIAgents: vi.fn(),
   runTrendDetectionAnalysis: vi.fn(),
   sendAgentControlCommand: vi.fn(),
 }));
 
-// Mock LanguageContext
 vi.mock('../../../../context/LanguageContext', () => ({
   useLanguage: () => ({
     t: (key: string) => key,
   }),
 }));
 
-// Mock all agent control components
+vi.mock('../../../../hooks/useWebSocket.ts', () => ({
+  useWebSocket: () => ({
+    isConnected: false,
+    realtimeUnavailable: false,
+    send: vi.fn(),
+    connect: vi.fn(),
+  }),
+}));
+
+vi.mock('../../../../hooks/useExecutionRuntime.ts', () => ({
+  useExecutionRuntime: () => ({
+    runtime: {
+      effectiveMode: 'demo',
+      globalMode: 'demo',
+      killSwitchActive: true,
+      killSwitchReason: null,
+      workerAcknowledged: true,
+    },
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+  }),
+}));
+
+vi.mock('../../../../hooks/useCapabilities.ts', () => ({
+  useCapabilities: () => ({
+    capabilities: ['AI_AGENT_READ', 'AI_AGENT_EXECUTE_SAFE'],
+    role: 'admin',
+    loading: false,
+    has: (cap: string) =>
+      ['AI_AGENT_READ', 'AI_AGENT_EXECUTE_SAFE'].includes(cap),
+  }),
+}));
+
 vi.mock('../../../../components/ai/TechnicalAnalysisAgentControl', () => ({
   default: ({ agent, onClose }: any) => (
     <div data-testid="technical-agent-control">
@@ -46,7 +77,6 @@ vi.mock('../../../../components/ai/RiskManagementAgentControl', () => ({
   ),
 }));
 
-// Mock other agent controls
 vi.mock('../../../../components/ai/SentimentAgentControl', () => ({
   default: ({ agent, onClose }: any) => (
     <div data-testid="sentimentagentcontrol">
@@ -155,7 +185,6 @@ vi.mock('../../../../components/ai/TimingAgentControl', () => ({
   ),
 }));
 
-// Mock ErrorBoundary
 vi.mock('../../../../components/ErrorBoundary', () => ({
   default: ({ children }: any) => <div>{children}</div>,
 }));
@@ -215,23 +244,21 @@ describe('AIAgents Component', () => {
   });
 
   describe('Rendering', () => {
-    it('renders agent panels correctly', async () => {
+    it('renders agent cards correctly', async () => {
       const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
       mockFetchAIAgents.mockResolvedValue(mockAgents);
 
       render(<AIAgents />);
 
-      // Wait for loading to complete
       await waitFor(() => {
-        expect(screen.queryByText('loading')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('agents-loading-skeleton')).not.toBeInTheDocument();
       });
 
-      // Check if all agent cards are rendered
-      expect(screen.getByText(/Artemis: Technical Analysis/i)).toBeInTheDocument();
-      expect(screen.getByText(/Trend Master: Trend Detection/i)).toBeInTheDocument();
-      expect(screen.getByText(/Risk Guardian: Risk Management/i)).toBeInTheDocument();
+      expect(screen.getByText('Artemis')).toBeInTheDocument();
+      expect(screen.getByText('Technical Analysis')).toBeInTheDocument();
+      expect(screen.getByText('Trend Master')).toBeInTheDocument();
+      expect(screen.getByText('Risk Guardian')).toBeInTheDocument();
 
-      // Check accuracy display
       expect(screen.getByText('85.5%')).toBeInTheDocument();
       expect(screen.getByText('78.3%')).toBeInTheDocument();
       expect(screen.getByText('92.1%')).toBeInTheDocument();
@@ -239,63 +266,57 @@ describe('AIAgents Component', () => {
 
     it('displays loading state initially', () => {
       const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
-      mockFetchAIAgents.mockImplementation(() => new Promise(() => {})); // Never resolves
+      mockFetchAIAgents.mockImplementation(() => new Promise(() => {}));
 
       render(<AIAgents />);
 
+      expect(screen.getByTestId('agents-loading-skeleton')).toBeInTheDocument();
       expect(screen.getByText('loading')).toBeInTheDocument();
     });
 
-    it('renders agent status correctly', async () => {
+    it('renders mapped operational status badges', async () => {
       const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
       mockFetchAIAgents.mockResolvedValue(mockAgents);
 
       render(<AIAgents />);
 
       await waitFor(() => {
-        expect(screen.queryByText('loading')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('agents-loading-skeleton')).not.toBeInTheDocument();
       });
 
-      // Check status badges
-      expect(screen.getByText('active')).toBeInTheDocument();
-      expect(screen.getByText('training')).toBeInTheDocument();
-      expect(screen.getByText('inactive')).toBeInTheDocument();
+      expect(screen.getAllByText('agent_state_ready').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('agent_state_running').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('agent_state_paused').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('renders agent capabilities', async () => {
+    it('renders compact safety summary', async () => {
       const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
       mockFetchAIAgents.mockResolvedValue(mockAgents);
 
       render(<AIAgents />);
 
       await waitFor(() => {
-        expect(screen.queryByText('loading')).not.toBeInTheDocument();
+        expect(screen.getByTestId('agent-safety-banner')).toBeInTheDocument();
       });
 
-      // Check capabilities
-      expect(screen.getByText('Chart Analysis')).toBeInTheDocument();
-      expect(screen.getByText('Pattern Recognition')).toBeInTheDocument();
-      expect(screen.getByText('Trend Analysis')).toBeInTheDocument();
-      expect(screen.getByText('Risk Assessment')).toBeInTheDocument();
+      expect(screen.getByTestId('emergency-stop-badge')).toBeInTheDocument();
+      expect(screen.getByText('agents_dry_run_blocked_short')).toBeInTheDocument();
     });
   });
 
   describe('Interactions', () => {
-    it('opens control panel when button is clicked', async () => {
+    it('opens control panel when Open Agent is clicked', async () => {
       const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
       mockFetchAIAgents.mockResolvedValue(mockAgents);
 
       render(<AIAgents />);
 
       await waitFor(() => {
-        expect(screen.queryByText('loading')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('agents-loading-skeleton')).not.toBeInTheDocument();
       });
 
-      // Find and click the first control panel button
-      const controlPanelButtons = screen.getAllByText('control_panel');
-      fireEvent.click(controlPanelButtons[0]);
+      fireEvent.click(screen.getByTestId('agent-open-technical'));
 
-      // Check if control panel is opened
       await waitFor(() => {
         expect(screen.getByTestId('technical-agent-control')).toBeInTheDocument();
       });
@@ -308,20 +329,16 @@ describe('AIAgents Component', () => {
       render(<AIAgents />);
 
       await waitFor(() => {
-        expect(screen.queryByText('loading')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('agents-loading-skeleton')).not.toBeInTheDocument();
       });
 
-      // Open control panel
-      const controlPanelButtons = screen.getAllByText('control_panel');
-      fireEvent.click(controlPanelButtons[0]);
+      fireEvent.click(screen.getByTestId('agent-open-technical'));
 
       await waitFor(() => {
         expect(screen.getByTestId('technical-agent-control')).toBeInTheDocument();
       });
 
-      // Close control panel
-      const closeButton = screen.getByText('Close');
-      fireEvent.click(closeButton);
+      fireEvent.click(screen.getByText('Close'));
 
       await waitFor(() => {
         expect(screen.queryByTestId('technical-agent-control')).not.toBeInTheDocument();
@@ -335,16 +352,34 @@ describe('AIAgents Component', () => {
       render(<AIAgents />);
 
       await waitFor(() => {
-        expect(screen.queryByText('loading')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('agents-loading-skeleton')).not.toBeInTheDocument();
       });
 
-      // Open trend agent control panel (second button)
-      const controlPanelButtons = screen.getAllByText('control_panel');
-      fireEvent.click(controlPanelButtons[1]);
+      fireEvent.click(screen.getByTestId('agent-open-trend'));
 
       await waitFor(() => {
         expect(screen.getByTestId('trend-agent-control')).toBeInTheDocument();
         expect(screen.getByText('Trend Master Control Panel')).toBeInTheDocument();
+      });
+    });
+
+    it('filters agents by search', async () => {
+      const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
+      mockFetchAIAgents.mockResolvedValue(mockAgents);
+
+      render(<AIAgents />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-grid')).toBeInTheDocument();
+      });
+
+      fireEvent.change(screen.getByTestId('agents-search'), {
+        target: { value: 'Trend' },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Trend Master')).toBeInTheDocument();
+        expect(screen.queryByText('Artemis')).not.toBeInTheDocument();
       });
     });
   });
@@ -357,10 +392,10 @@ describe('AIAgents Component', () => {
       render(<AIAgents />);
 
       await waitFor(() => {
+        expect(screen.getByTestId('agents-error')).toBeInTheDocument();
         expect(screen.getByText('failed_to_load_data')).toBeInTheDocument();
       });
 
-      // Check retry button is present
       expect(screen.getByText('retry')).toBeInTheDocument();
     });
 
@@ -375,14 +410,11 @@ describe('AIAgents Component', () => {
         expect(screen.getByText('failed_to_load_data')).toBeInTheDocument();
       });
 
-      // Click retry button
-      const retryButton = screen.getByText('retry');
-      fireEvent.click(retryButton);
+      fireEvent.click(screen.getByText('retry'));
 
-      // Wait for successful load
       await waitFor(() => {
         expect(screen.queryByText('failed_to_load_data')).not.toBeInTheDocument();
-        expect(screen.getByText(/Artemis: Technical Analysis/i)).toBeInTheDocument();
+        expect(screen.getByText('Artemis')).toBeInTheDocument();
       });
 
       expect(mockFetchAIAgents).toHaveBeenCalledTimes(2);
@@ -395,46 +427,28 @@ describe('AIAgents Component', () => {
       render(<AIAgents />);
 
       await waitFor(() => {
-        expect(screen.queryByText('loading')).not.toBeInTheDocument();
+        expect(screen.getByTestId('agents-empty')).toBeInTheDocument();
       });
 
-      // Should render empty grid without errors
-      const controlPanelButtons = screen.queryAllByText('control_panel');
-      expect(controlPanelButtons.length).toBe(0);
+      expect(screen.queryAllByText('open_agent').length).toBe(0);
     });
   });
 
   describe('Agent Metrics Display', () => {
-    it('displays all agent metrics correctly', async () => {
+    it('displays compact card metrics', async () => {
       const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
       mockFetchAIAgents.mockResolvedValue(mockAgents);
 
       render(<AIAgents />);
 
       await waitFor(() => {
-        expect(screen.queryByText('loading')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('agents-loading-skeleton')).not.toBeInTheDocument();
       });
 
-      // Check metrics for first agent
-      expect(screen.getByText('1,000')).toBeInTheDocument(); // decisions
-      expect(screen.getByText('120')).toBeInTheDocument(); // learning time
-      expect(screen.getByText('45.2MB')).toBeInTheDocument(); // knowledge size
-    });
-
-    it('displays training progress bars', async () => {
-      const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
-      mockFetchAIAgents.mockResolvedValue(mockAgents);
-
-      render(<AIAgents />);
-
-      await waitFor(() => {
-        expect(screen.queryByText('loading')).not.toBeInTheDocument();
-      });
-
-      // Check training progress percentages
-      expect(screen.getByText('95.0%')).toBeInTheDocument();
-      expect(screen.getByText('65.0%')).toBeInTheDocument();
-      expect(screen.getByText('100.0%')).toBeInTheDocument();
+      expect(screen.getByText('1,000')).toBeInTheDocument();
+      expect(screen.getByText('500')).toBeInTheDocument();
+      expect(screen.getByText('2,000')).toBeInTheDocument();
+      expect(screen.getAllByText('open_agent').length).toBe(3);
     });
   });
 });

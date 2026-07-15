@@ -8,12 +8,16 @@ import {
   mapAgentOperationalState,
 } from './shell/agentCardMeta.ts';
 import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
+import {
+  AGENT_CARD_SHELL,
+  BTN_PRIMARY,
+  MetricCard,
+  StatusPill,
+} from './shell/agentsShellUi.ts';
 
 interface AgentCardProps {
   agent: AIAgent;
   onOpen: () => void;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
   canOpen?: boolean;
 }
 
@@ -32,11 +36,17 @@ const STATE_I18N: Record<string, string> = {
   unavailable: 'agent_state_unavailable',
 };
 
+const STATE_PILL: Record<string, 'success' | 'info' | 'warning' | 'error' | 'neutral'> = {
+  ready: 'success',
+  running: 'info',
+  paused: 'warning',
+  error: 'error',
+  unavailable: 'neutral',
+};
+
 export const AgentCard: React.FC<AgentCardProps> = ({
   agent,
   onOpen,
-  isFavorite,
-  onToggleFavorite,
   canOpen = true,
 }) => {
   const { t } = useLanguage();
@@ -46,8 +56,11 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   const state = mapAgentOperationalState(agent.status);
   const purpose = agent.role || t('agent_purpose_fallback') || 'Agent';
   const accuracy = formatAccuracy(agent.accuracy, t('not_available') || 'N/A');
-  const lastRun = formatLastRun(agent.lastUpdate, t('never_run') || 'Never run');
-  const decisionsLabel = t('results_count') || t('decisions') || 'Results';
+  const lastRun = formatLastRun(agent.lastUpdate, t('never_run') || 'Never');
+  const decisionsLabel = t('results_count') || 'Results';
+  const resultsHint =
+    t('results_count_hint') ||
+    'Documented result/decision count from the agent summary. N/A when unknown.';
   const decisionsValue =
     agent.decisions != null && Number(agent.decisions) >= 0
       ? Number(agent.decisions).toLocaleString()
@@ -59,96 +72,102 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
   const showLiveBadge = kind === 'live_capable';
   const showDryRun = dryRunForced || killSwitchActive || kind === 'analytical';
-  const blocked =
+  const blockedMessage =
     showLiveBadge && liveBlockReason
       ? t(`execution_blocked_${liveBlockReason.toLowerCase()}`)
       : blockReason
         ? t(`execution_blocked_${blockReason.toLowerCase()}`)
         : null;
-
-  const stateColor =
-    state === 'ready'
-      ? 'text-emerald-400'
-      : state === 'running'
-        ? 'text-sky-400'
-        : state === 'error'
-          ? 'text-red-400'
-          : 'text-amber-400';
+  const isBlocked = Boolean(blockedMessage) && showLiveBadge;
 
   return (
     <article
-      className="bg-card/80 border border-border rounded-xl p-4 flex flex-col gap-3 relative min-h-[180px]"
+      className={AGENT_CARD_SHELL}
       data-agent-key={key}
       data-testid={`agent-card-${key || agent.id}`}
     >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleFavorite();
-        }}
-        className="absolute top-3 right-3 text-lg leading-none opacity-80 hover:opacity-100"
-        title={isFavorite ? t('remove_from_favorites') : t('add_to_favorites')}
-        aria-label={isFavorite ? t('remove_from_favorites') : t('add_to_favorites')}
-      >
-        {isFavorite ? '★' : '☆'}
-      </button>
-
-      <header className="pr-7 space-y-1">
-        <h3 className="font-semibold text-foreground text-sm leading-snug">{agent.name}</h3>
-        <p className="text-xs text-muted-foreground line-clamp-2">{purpose}</p>
-        <p className={`text-[11px] font-semibold uppercase tracking-wide ${stateColor}`}>
-          {t(STATE_I18N[state]) || state}
-        </p>
+      <header className="space-y-1.5">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-sm font-semibold text-foreground leading-snug min-w-0">
+            {agent.name}
+          </h3>
+          <StatusPill
+            label={t(STATE_I18N[state]) || state}
+            variant={STATE_PILL[state] || 'neutral'}
+            className="shrink-0 uppercase tracking-wide"
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground line-clamp-2 leading-snug">{purpose}</p>
       </header>
 
-      <div className="grid grid-cols-2 gap-2 text-[11px]">
-        <div>
-          <p className="text-muted-foreground">{t('last_run') || 'Last run'}</p>
-          <p className="text-foreground font-medium truncate" title={lastRun}>{lastRun}</p>
+      <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('agent_metrics') || 'Agent metrics'}>
+        <MetricCard
+          label={t('last_run') || 'Last Run'}
+          value={lastRun}
+          color="blue"
+          valueTooltip={lastRun}
+          valueState={lastRun === (t('never_run') || 'Never') || lastRun === 'Never' ? 'unavailable' : 'loaded'}
+        />
+        <div title={resultsHint}>
+          <MetricCard
+            label={decisionsLabel}
+            value={decisionsValue}
+            color="purple"
+            valueState={decisionsValue === (t('not_available') || 'N/A') ? 'unavailable' : 'loaded'}
+          />
         </div>
-        <div>
-          <p className="text-muted-foreground">{t('accuracy')}</p>
-          <p className="text-foreground font-medium" data-testid="agent-accuracy-value">{accuracy}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">{decisionsLabel}</p>
-          <p className="text-foreground font-medium">{decisionsValue}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">{t('execution_type') || 'Type'}</p>
-          <p className="text-foreground font-medium">{t(KIND_I18N[kind]) || kind}</p>
-        </div>
+        <MetricCard
+          label={t('accuracy')}
+          value={<span data-testid="agent-accuracy-value">{accuracy}</span>}
+          color="emerald"
+          valueState={accuracy === (t('not_available') || 'N/A') || accuracy === 'N/A' ? 'unavailable' : 'loaded'}
+        />
+        <MetricCard
+          label={t('execution_type') || 'Execution Type'}
+          value={t(KIND_I18N[kind]) || kind}
+          color="amber"
+        />
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1.5" aria-label={t('agent_safety_badges') || 'Safety'}>
         {showDryRun && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-amber-100">
-            {t('dry_run_badge') || 'Dry Run'}
-          </span>
+          <StatusPill label={t('dry_run_badge') || 'Dry Run'} variant="warning" />
+        )}
+        {kind === 'analytical' && (
+          <StatusPill label={t('execution_kind_analytical') || 'Analytical'} variant="info" />
+        )}
+        {kind === 'provider' && (
+          <StatusPill label={t('execution_kind_provider') || 'Provider'} variant="primary" />
+        )}
+        {kind === 'simulation' && (
+          <StatusPill label={t('execution_kind_simulation') || 'Simulation'} variant="info" />
         )}
         {showLiveBadge && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded border border-red-500/40 bg-red-500/10 text-red-100">
-            {t('live_capable_badge') || 'Live-capable'}
-          </span>
+          <StatusPill label={t('live_capable_badge') || 'Live-capable'} variant="error" />
+        )}
+        {isBlocked && (
+          <StatusPill
+            label={t('blocked_badge') || 'Blocked'}
+            variant="error"
+            title={blockedMessage || undefined}
+          />
         )}
       </div>
 
-      {blocked && (
-        <p className="text-[10px] text-red-200/90 line-clamp-2" title={blocked}>
-          {blocked}
-        </p>
-      )}
-
-      <div className="mt-auto pt-2 border-t border-border flex justify-end">
+      <div className="mt-auto pt-1 border-t border-white/5 flex justify-stretch sm:justify-end">
         <button
           type="button"
           onClick={onOpen}
           disabled={!canOpen}
           title={openBlockedReason}
           aria-disabled={!canOpen}
+          aria-label={
+            openBlockedReason
+              ? `${t('open_agent') || 'Open Agent'} — ${openBlockedReason}`
+              : (t('open_agent') || 'Open Agent')
+          }
           data-testid={`agent-open-${key || agent.id}`}
-          className="text-xs bg-cyan-700 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-1.5 px-3 rounded-md"
+          className={`${BTN_PRIMARY} w-full sm:w-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950`}
         >
           {t('open_agent') || 'Open Agent'}
         </button>

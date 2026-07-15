@@ -27,13 +27,19 @@ export function mapAgentOperationalState(status?: string | null): AgentOperation
   return 'unavailable';
 }
 
-export function formatLastRun(iso?: string | null, neverLabel = 'Never run'): string {
+export function formatLastRun(iso?: string | null, neverLabel = 'Never'): string {
   if (!iso) return neverLabel;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return neverLabel;
   // Heuristic: very old / epoch placeholders treat as never
   if (d.getFullYear() < 2000) return neverLabel;
-  return d.toLocaleString();
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function formatAccuracy(accuracy: number | null | undefined, naLabel = 'N/A'): string {

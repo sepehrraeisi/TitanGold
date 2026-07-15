@@ -20,9 +20,9 @@ describe('agentCardMeta', () => {
   });
 
   it('formats last run / never', () => {
-    expect(formatLastRun(undefined)).toBe('Never run');
-    expect(formatLastRun('1990-01-01T00:00:00.000Z')).toBe('Never run');
-    expect(formatLastRun('2026-07-14T12:00:00.000Z')).not.toBe('Never run');
+    expect(formatLastRun(undefined)).toBe('Never');
+    expect(formatLastRun('1990-01-01T00:00:00.000Z')).toBe('Never');
+    expect(formatLastRun('2026-07-14T12:00:00.000Z')).not.toBe('Never');
   });
 
   it('maps operational states', () => {
