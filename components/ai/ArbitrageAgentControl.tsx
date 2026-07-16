@@ -336,7 +336,7 @@ const StatusBar: React.FC<{
     const avgRisk = scan?.riskStats?.averageScore ?? scan?.avgRiskScore ?? metrics?.riskStats?.averageScore;
     return (
         <div className="px-4 sm:px-6 py-3 border-b border-white/10 bg-[#0B1017]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-3 min-w-0">
                     <span
                         className={`px-3 py-1 rounded-full text-[10px] font-medium border ${
@@ -361,7 +361,7 @@ const StatusBar: React.FC<{
                         value={metrics?.qualifiedStats?.total ?? 0}
                     />
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                     {agent.status === 'active' ? (
                         <button
                             type="button"
