@@ -19,8 +19,7 @@
 | Kind | Value |
 |------|--------|
 | **Runtime implementation baseline (this slice)** | `40f4c5f` |
-| **Documentation closeout HEAD** | `400f449` |
-| **Documentation closeout HEAD** | `400f449` |
+| **Documentation closeout HEAD** | `2ebc6d9` and later docs-only fixes on `main` |
 | **Served frontend bundle (before)** | `assets/index-D6ZmsjWR.js` |
 | **Served frontend bundle (after)** | `assets/index-WlHdPJwp.js` |
 | **Environment** | Staging `https://titan.zala.ir` |
@@ -261,24 +260,18 @@ Human QA must explicitly PASS:
 
 ## 22. Commits
 
-Actual:
-
-- `40f4c5f` — `feat(arb): redesign Overview around truthful scan outcomes`
-
+- `40f4c5f` — `feat(arb): redesign Overview around truthful scan outcomes` (**runtime**)
 - `400f449` — `docs(arb): record ARB-WP1B-2A Overview closeout evidence`
+- `2ebc6d9` — `docs(arb): distinguish WP1B2A runtime vs documentation HEAD`
 
-`origin/main` == `400f449` (docs closeout)
-Runtime served from implementation commit `40f4c5f` / bundle `index-WlHdPJwp.js`
+Runtime served from `40f4c5f` via bundle `assets/index-WlHdPJwp.js`.  
+Documentation-only commits after `40f4c5f` do not rebuild the frontend.
 
 ## 23. Git Verification
 
-Recorded after push:
-
-- Isolated worktree clean at `40f4c5f`
-- `HEAD` == - `400f449` — `docs(arb): record ARB-WP1B-2A Overview closeout evidence`
-
-`origin/main` == `400f449` (docs closeout)
-Runtime served from implementation commit `40f4c5f` / bundle `index-WlHdPJwp.js`
+- Isolated verification worktree clean and synchronized with `origin/main`
+- Runtime implementation commit: `40f4c5f`
+- Served bundle verified: `assets/index-WlHdPJwp.js`
 - Original worktree `/home/ubuntu/webapp/TitanGold` remains dirty only for protected unrelated scripts
 
 ## 24. Remaining Risks
