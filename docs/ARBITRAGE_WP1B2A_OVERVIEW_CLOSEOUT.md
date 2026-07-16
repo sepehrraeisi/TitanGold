@@ -18,7 +18,7 @@
 
 | Kind | Value |
 |------|--------|
-| **Runtime implementation baseline (this slice)** | pending push — see Commits after Git closeout |
+| **Runtime implementation baseline (this slice)** | `40f4c5f` |
 | **Documentation closeout HEAD** | Same as runtime for this slice (docs included) |
 | **Served frontend bundle (before)** | `assets/index-D6ZmsjWR.js` |
 | **Served frontend bundle (after)** | `assets/index-WlHdPJwp.js` |
@@ -260,15 +260,19 @@ Human QA must explicitly PASS:
 
 ## 22. Commits
 
-Suggested: `feat(arb): redesign Overview around truthful scan outcomes`
+Actual:
+
+- `40f4c5f` — `feat(arb): redesign Overview around truthful scan outcomes`
+
+`origin/main` == `40f4c5f`
 
 ## 23. Git Verification
 
 Recorded after push:
 
-- Worktree clean
-- `HEAD` == `origin/main`
-- Original worktree remains dirty only for protected unrelated scripts
+- Isolated worktree clean at `40f4c5f`
+- `HEAD` == `origin/main` == `40f4c5f`
+- Original worktree `/home/ubuntu/webapp/TitanGold` remains dirty only for protected unrelated scripts
 
 ## 24. Remaining Risks
 
