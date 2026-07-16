@@ -22,6 +22,9 @@ vi.mock('../../../../hooks/useAgentExecutionGate.ts', () => ({
     guardExecution: () => true,
     dryRunForced: true,
     killSwitchActive: true,
+    effectiveMode: 'dry_run',
+    liveBlockReason: 'KILL_SWITCH_ACTIVE',
+    runtime: { providerConnected: false, killSwitchActive: true, workerAcknowledged: true },
   }),
 }));
 

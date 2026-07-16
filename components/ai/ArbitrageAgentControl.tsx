@@ -9,6 +9,7 @@ import {
     PrimaryButton,
     SecondaryButton,
 } from './AIManager/tabs/DataHub/dataHubUi.tsx';
+import AgentControlShell from './shell/AgentControlShell.tsx';
 import type {
     AIAgent,
     ArbitrageConfig,
@@ -204,125 +205,138 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
     );
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
-            <div className="bg-[#10141A] border border-gray-800 rounded-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
-                <Header agent={agent} t={t} onRunScan={handleRunScan} onClose={onClose} isScanning={isScanning} />
-                <StatusBar
-                    agent={agent}
-                    metrics={metrics}
-                    scan={scan}
-                    onCommand={handleControlCommand}
-                    commandPending={isCommandPending}
-                    t={t}
-                />
-
-                <div className="px-6 pt-3 border-b border-gray-800 bg-[#0B1017]">
-                    <p className="text-xs text-amber-300/90 mb-3">
-                        {t('arbitrage_analytical_mode_banner') ||
-                            'Analytical mode: MEXC spot bid/ask spread monitor. Not executable multi-leg arbitrage. No live orders.'}
-                    </p>
-                    <div className="flex flex-wrap gap-2 pb-3">
-                        {TAB_ITEMS.map(tab => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
-                                    activeTab === tab.id
-                                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                        : 'bg-gray-800 text-gray-400 border border-gray-700'
-                                }`}
-                            >
-                                {t(tab.labelKey)}
-                            </button>
-                        ))}
+        <AgentControlShell
+            agent={agent}
+            onClose={onClose}
+            closeTestId="arb-close"
+            purpose={
+                t('arbitrage_agent_desc') ||
+                'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'
+            }
+            primaryAction={
+                <PrimaryButton
+                    type="button"
+                    data-testid="arb-run-scan"
+                    data-variant="primary"
+                    onClick={handleRunScan}
+                    disabled={isScanning || agent.status !== 'active'}
+                    aria-busy={isScanning}
+                    aria-label={isScanning ? t('scanning') || 'Scanning...' : t('run_scan') || 'Run Scan'}
+                >
+                    {isScanning ? t('scanning') || 'Scanning...' : t('run_scan') || 'Run Scan'}
+                </PrimaryButton>
+            }
+            belowHeader={
+                <>
+                    <StatusBar
+                        agent={agent}
+                        metrics={metrics}
+                        scan={scan}
+                        onCommand={handleControlCommand}
+                        commandPending={isCommandPending}
+                        t={t}
+                    />
+                    <div className="px-4 sm:px-6 pt-3">
+                        <p className="text-xs text-amber-300/90 mb-3">
+                            {t('arbitrage_analytical_mode_banner') ||
+                                'Analytical mode: MEXC spot bid/ask spread monitor. Not executable multi-leg arbitrage. No live orders.'}
+                        </p>
+                        <div
+                            className="flex flex-nowrap sm:flex-wrap gap-2 pb-3 overflow-x-auto overscroll-x-contain"
+                            role="tablist"
+                            aria-label={t('arbitrage_tabs') || 'Arbitrage tabs'}
+                            data-testid="arb-tablist"
+                        >
+                            {TAB_ITEMS.map(tab => {
+                                const selected = activeTab === tab.id;
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        type="button"
+                                        role="tab"
+                                        id={`arb-tab-${tab.id}`}
+                                        aria-selected={selected}
+                                        aria-controls={`arb-panel-${tab.id}`}
+                                        data-testid={`arb-tab-${tab.id}`}
+                                        tabIndex={selected ? 0 : -1}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        onKeyDown={e => {
+                                            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                                            e.preventDefault();
+                                            const idx = TAB_ITEMS.findIndex(item => item.id === activeTab);
+                                            const delta = e.key === 'ArrowRight' ? 1 : -1;
+                                            const next = TAB_ITEMS[(idx + delta + TAB_ITEMS.length) % TAB_ITEMS.length];
+                                            setActiveTab(next.id);
+                                            requestAnimationFrame(() => {
+                                                document.getElementById(`arb-tab-${next.id}`)?.focus();
+                                            });
+                                        }}
+                                        className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${FOCUS_RING} ${
+                                            selected
+                                                ? 'bg-purple-600/20 border-purple-500/60 text-purple-300'
+                                                : 'border-slate-600/70 bg-slate-900/70 text-slate-300 hover:border-purple-400/50'
+                                        }`}
+                                    >
+                                        {t(tab.labelKey)}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-6 bg-[#0F151D]">
-                    {isLoading && !scan && !metrics ? (
-                        <EmptyState message={t('loading') || 'Loading...'} />
-                    ) : loadError ? (
-                        <EmptyState message={loadError} />
-                    ) : (
-                        <>
-                            {activeTab === 'overview' && (
-                                <OverviewTab
-                                    scan={scan}
-                                    metrics={metrics}
-                                    spreadCandidates={spreadCandidates}
-                                    t={t}
-                                />
-                            )}
-                            {activeTab === 'candidates' && (
-                                <CandidatesTab
-                                    spreadCandidates={spreadCandidates}
-                                    rejectedCandidates={rejectedCandidates}
-                                    qualified={qualified}
-                                    t={t}
-                                />
-                            )}
-                            {activeTab === 'history' && (
-                                <HistoryTab
-                                    items={historyItems}
-                                    total={historyTotal}
-                                    page={historyPage}
-                                    loading={historyLoading}
-                                    onPage={loadHistory}
-                                    t={t}
-                                />
-                            )}
-                            {activeTab === 'profitRisk' && <ProfitRiskTab metrics={metrics} scan={scan} t={t} />}
-                            {activeTab === 'settings' && config && (
-                                <SettingsTab config={config} disabled={isLoading} onUpdate={handleUpdateConfig} t={t} />
-                            )}
-                            {activeTab === 'integration' && config && <IntegrationTab config={config} t={t} />}
-                        </>
-                    )}
-                </div>
+                </>
+            }
+            embedChildren
+        >
+            <div
+                className="p-4 sm:p-6 bg-[#0F151D]"
+                role="tabpanel"
+                id={`arb-panel-${activeTab}`}
+                aria-labelledby={`arb-tab-${activeTab}`}
+                data-testid="arb-tab-panel"
+            >
+                {isLoading && !scan && !metrics ? (
+                    <EmptyState message={t('loading') || 'Loading...'} />
+                ) : loadError ? (
+                    <EmptyState message={loadError} />
+                ) : (
+                    <>
+                        {activeTab === 'overview' && (
+                            <OverviewTab
+                                scan={scan}
+                                metrics={metrics}
+                                spreadCandidates={spreadCandidates}
+                                t={t}
+                            />
+                        )}
+                        {activeTab === 'candidates' && (
+                            <CandidatesTab
+                                spreadCandidates={spreadCandidates}
+                                rejectedCandidates={rejectedCandidates}
+                                qualified={qualified}
+                                t={t}
+                            />
+                        )}
+                        {activeTab === 'history' && (
+                            <HistoryTab
+                                items={historyItems}
+                                total={historyTotal}
+                                page={historyPage}
+                                loading={historyLoading}
+                                onPage={loadHistory}
+                                t={t}
+                            />
+                        )}
+                        {activeTab === 'profitRisk' && <ProfitRiskTab metrics={metrics} scan={scan} t={t} />}
+                        {activeTab === 'settings' && config && (
+                            <SettingsTab config={config} disabled={isLoading} onUpdate={handleUpdateConfig} t={t} />
+                        )}
+                        {activeTab === 'integration' && config && <IntegrationTab config={config} t={t} />}
+                    </>
+                )}
             </div>
-        </div>
+        </AgentControlShell>
     );
 };
-
-const Header: React.FC<{
-    agent: AIAgent;
-    t: (key: string) => string;
-    onRunScan: () => void;
-    onClose: () => void;
-    isScanning: boolean;
-}> = ({ agent, t, onRunScan, onClose, isScanning }) => (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between px-4 sm:px-6 py-5 border-b border-white/10 bg-[#0B1017]">
-        <div className="min-w-0">
-            <h2 className="text-2xl font-bold text-white">{agent.name}</h2>
-            <p className="text-sm text-gray-400 mt-1">
-                {t('arbitrage_agent_desc') ||
-                    'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'}
-            </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <PrimaryButton
-                type="button"
-                data-testid="arb-run-scan"
-                data-variant="primary"
-                onClick={onRunScan}
-                disabled={isScanning || agent.status !== 'active'}
-                aria-busy={isScanning}
-                aria-label={isScanning ? t('scanning') || 'Scanning...' : t('run_scan') || 'Run Scan'}
-            >
-                {isScanning ? t('scanning') || 'Scanning...' : t('run_scan') || 'Run Scan'}
-            </PrimaryButton>
-            <SecondaryButton
-                type="button"
-                data-testid="arb-close"
-                data-variant="neutral"
-                onClick={onClose}
-                aria-label={t('close') || 'Close'}
-            >
-                {t('close') || 'Close'}
-            </SecondaryButton>
-        </div>
-    </div>
-);
 
 const StatusBar: React.FC<{
     agent: AIAgent;
@@ -335,18 +349,9 @@ const StatusBar: React.FC<{
     const best = metrics?.qualifiedStats?.bestProfitBps ?? metrics?.bestProfitBps;
     const avgRisk = scan?.riskStats?.averageScore ?? scan?.avgRiskScore ?? metrics?.riskStats?.averageScore;
     return (
-        <div className="px-4 sm:px-6 py-3 border-b border-white/10 bg-[#0B1017]">
+        <div className="px-4 sm:px-6 py-3 border-b border-white/10" data-testid="arb-status-row">
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-3 min-w-0">
-                    <span
-                        className={`px-3 py-1 rounded-full text-[10px] font-medium border ${
-                            agent.status === 'active'
-                                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40'
-                                : 'bg-slate-700 text-slate-300 border-slate-600'
-                        }`}
-                    >
-                        {t(agent.status)}
-                    </span>
                     <DataPoint label={t('total_scans') || 'Total scans'} value={metrics?.totalScans ?? 0} />
                     <DataPoint
                         label={t('best_qualified_profit_bps') || 'Best qualified profit (bps)'}
