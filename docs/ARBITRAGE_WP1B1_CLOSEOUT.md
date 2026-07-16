@@ -75,7 +75,23 @@ Header, safety strip, status row, analytical banner, and tablist are `shrink-0` 
 
 ## 5. Browser QA
 
-Filled after Staging deployment (supporting evidence). Human QA is final.
+**Environment:** Staging `https://titan.zala.ir` · Served bundle `assets/index-DxzDppsX.js` · HEAD `5d078e7`
+
+| Check | Result |
+|-------|--------|
+| Shared shell present (`agent-control-shell`, `data-agent-key=arbitrage`) | PASS |
+| Scroll owner `agent-control-shell-body` (`overflow-y: auto`) | PASS |
+| Panel fits viewport / no page overflow-x | PASS |
+| Run Scan / Close / Pause / Restart variants | PASS (purple / neutral / amber / blue pills) |
+| Six tabs + Settings Reset/Save reachable | PASS |
+| Escape closes panel | PASS |
+| Close restores focus to Open Agent | PASS |
+| English chrome | PASS |
+| Persian chrome (اجرای اسکن / بستن / توقف / راه‌اندازی مجدد / تب‌ها) | PASS |
+| Analytical banner + Dry Run / Emergency Stop messaging | PASS |
+| No raw keys on shell actions | PASS |
+
+Human QA remains the final authority for ARB-B1…B4.
 
 ---
 
