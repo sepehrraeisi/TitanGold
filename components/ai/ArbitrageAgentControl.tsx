@@ -373,7 +373,7 @@ const StatusBar: React.FC<{
                             aria-label={t('pause') || 'Pause'}
                             className={btnClass(BTN_WARNING)}
                         >
-                            {commandPending ? t('working') || 'Working...' : t('pause') || 'Pause'}
+                            {commandPending ? t('loading') || 'Loading...' : t('pause') || 'Pause'}
                         </button>
                     ) : (
                         <button
@@ -386,7 +386,7 @@ const StatusBar: React.FC<{
                             aria-label={t('start') || 'Start'}
                             className={btnClass(BTN_ACTION_BLUE)}
                         >
-                            {commandPending ? t('working') || 'Working...' : t('start') || 'Start'}
+                            {commandPending ? t('loading') || 'Loading...' : t('start') || 'Start'}
                         </button>
                     )}
                     <button
@@ -399,7 +399,7 @@ const StatusBar: React.FC<{
                         aria-label={t('restart') || 'Restart'}
                         className={btnClass(BTN_ACTION_BLUE)}
                     >
-                        {commandPending ? t('working') || 'Working...' : t('restart') || 'Restart'}
+                        {commandPending ? t('loading') || 'Loading...' : t('restart') || 'Restart'}
                     </button>
                 </div>
             </div>
