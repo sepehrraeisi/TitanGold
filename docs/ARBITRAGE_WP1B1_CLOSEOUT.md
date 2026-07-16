@@ -112,17 +112,19 @@ Header, safety strip, status row, analytical banner, and tablist are `shrink-0` 
 
 ## 5. Browser QA
 
-**Environment:** Staging `https://titan.zala.ir` · Served bundle `assets/index-D6ZmsjWR.js` · HEAD *(after push)*
+**Environment:** Staging `https://titan.zala.ir` · Served bundle `assets/index-D6ZmsjWR.js` · HEAD `a9d6a5e`
 
 | Check | Result |
 |-------|--------|
-| No raw `DRY_RUN` / `dry_run` in header | VERIFIED (Staging Browser QA) |
-| One Dry Run chip only | VERIFIED |
-| `Broker: Offline` (not `Broker: Broker offline`) | VERIFIED |
-| Operational status Active | VERIFIED |
-| Emergency Stop + short Live-block line | VERIFIED |
-| EN / FA | VERIFIED |
-| Escape / focus / six tabs / buttons | VERIFIED (regression) |
+| No raw `DRY_RUN` / `dry_run` in header | VERIFIED — EN status Active / Dry Run / Provider |
+| One Dry Run chip only | VERIFIED (`dryRunCount=1`) |
+| `Broker: Offline` (not `Broker: Broker offline`) | VERIFIED — `Emergency Stop: Active · Broker: Offline` |
+| Operational status Active (not Ready+Active) | VERIFIED |
+| Live-block detail without ES duplication | VERIFIED — `Live side effects are blocked.` |
+| Persian labels / no English leakage on statuses | VERIFIED — فعال / اجرای آزمایشی / کارگزار: آفلاین |
+| Desktop / tablet / mobile / landscape overflow | VERIFIED — no page overflow-x; Close reachable |
+| Escape closes panel | VERIFIED |
+| Runtime safety | VERIFIED — Demo preference, killSwitchActive true, workerAcknowledged true |
 
 Human QA remains the final authority for ARB-B1…B4.
 
