@@ -1,13 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
 import {
     BTN_ACTION_BLUE,
     BTN_WARNING,
+    DATAHUB_SHELL,
     FOCUS_RING,
     PrimaryButton,
     SecondaryButton,
+    DataHubAlert,
+    DataHubEmpty,
+    DataHubSectionHeader,
+    MetricCard as DataHubMetricCard,
+    StatusPill,
 } from './AIManager/tabs/DataHub/dataHubUi.tsx';
 import AgentControlShell from './shell/AgentControlShell.tsx';
 import type {
@@ -34,6 +40,13 @@ const TAB_ITEMS: Array<{ id: ArbitrageTab; labelKey: string }> = [
 ];
 
 const NA = (t: (k: string) => string) => t('not_available') || 'N/A';
+
+type ArbitragePanelLoadErrorKind = 'permission' | 'auth' | 'network' | 'generic';
+
+type ArbitragePanelLoadError = {
+    kind: ArbitragePanelLoadErrorKind;
+    status?: number;
+};
 
 const formatCurrency = (value: number | null | undefined, t: (k: string) => string) => {
     if (value == null || Number.isNaN(Number(value))) return NA(t);
@@ -66,6 +79,100 @@ const strategyLabel = (item: { strategy?: string; strategyLabelKey?: string }, t
     return mapped;
 };
 
+const formatScanTimestamp = (value: string | null | undefined, t: (k: string) => string) => {
+    if (!value) return NA(t);
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return NA(t);
+    return d.toLocaleString();
+};
+
+const mapOverviewScanStatus = (
+    scan: ArbitrageScanResult | null,
+    metrics: ArbitrageMetrics | null,
+): 'never' | 'completed' | 'failed' | 'legacy' | 'unavailable' => {
+    if (!scan && !metrics?.scanStats?.lastCompletedAt) return 'never';
+    if (!scan && metrics?.scanStats?.lastCompletedAt) return 'unavailable';
+    if (scan?.legacy) return 'legacy';
+    const anyScan = scan as (ArbitrageScanResult & { status?: string; error?: boolean; errorMessage?: string | null }) | null;
+    if (anyScan?.error || anyScan?.status === 'failed' || anyScan?.errorMessage) return 'failed';
+    return 'completed';
+};
+
+const humanizeScanStatus = (
+    status: ReturnType<typeof mapOverviewScanStatus>,
+    t: (k: string) => string,
+) => {
+    switch (status) {
+        case 'never':
+            return t('arbitrage_overview_never_scanned') || 'Never scanned';
+        case 'failed':
+            return t('arbitrage_overview_scan_failed') || 'Scan failed';
+        case 'legacy':
+            return t('legacy_scan') || 'Legacy scan';
+        case 'unavailable':
+            return t('arbitrage_overview_data_unavailable') || 'Data unavailable';
+        default:
+            return t('completed') || 'Completed';
+    }
+};
+
+const getLoadErrorMessage = (error: ArbitragePanelLoadError | null, t: (k: string) => string) => {
+    if (!error) return null;
+    if (error.kind === 'permission') {
+        return t('arbitrage_overview_permission_limited') || 'You do not have permission to view this overview.';
+    }
+    if (error.kind === 'auth') {
+        return t('arbitrage_overview_auth_required') || 'Authentication is required to load this overview.';
+    }
+    if (error.kind === 'network') {
+        return t('arbitrage_overview_network_error') || 'Network error while loading the overview.';
+    }
+    return t('arbitrage_overview_error_help') || t('load_failed') || 'Failed to load overview data. Retry when ready.';
+};
+
+const mapRejectionReason = (reason: string | null | undefined, t: (k: string) => string) => {
+    if (!reason) return NA(t);
+    const key = `arbitrage_rejection_${reason.toLowerCase()}`;
+    const mapped = t(key);
+    if (mapped && mapped !== key) return mapped;
+    return reason
+        .toLowerCase()
+        .split('_')
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+};
+
+const summarizeRejectionReasons = (
+    rejectedCandidates: ArbitrageSpreadCandidate[],
+    t: (k: string) => string,
+): string[] => {
+    const counts = new Map<string, number>();
+    for (const item of rejectedCandidates) {
+        const label = mapRejectionReason(item.rejectionReason, t);
+        counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([label, count]) => `${label} (${count})`);
+};
+
+const mapLoadError = (error: unknown): ArbitragePanelLoadError => {
+    const raw = error as Error & { status?: number };
+    const statusMatch = raw?.message?.match?.(/(\d{3})/);
+    const status = raw.status || (statusMatch ? Number(statusMatch[1]) : undefined);
+    if (status === 401) {
+        return { kind: 'auth', status };
+    }
+    if (status === 403) {
+        return { kind: 'permission', status };
+    }
+    if (raw?.message?.toLowerCase().includes('network') || raw?.name === 'TypeError') {
+        return { kind: 'network', status };
+    }
+    return { kind: 'generic', status };
+};
+
 interface ArbitrageAgentControlProps {
     agent: AIAgent;
     onClose: () => void;
@@ -86,12 +193,12 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
     const [isLoading, setIsLoading] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const [isCommandPending, setIsCommandPending] = useState(false);
-    const [loadError, setLoadError] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<ArbitragePanelLoadError | null>(null);
     const scanPendingRef = useRef(false);
     const commandPendingRef = useRef(false);
     const savePendingRef = useRef(false);
 
-    const loadHistory = async (page = 1) => {
+    const loadHistory = useCallback(async (page = 1) => {
         setHistoryLoading(true);
         try {
             const data = await api.fetchArbitrageScanHistory(agent.id, { page, pageSize: 10 });
@@ -103,28 +210,28 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
         } finally {
             setHistoryLoading(false);
         }
-    };
+    }, [agent.id]);
+
+    const loadData = useCallback(async () => {
+        setIsLoading(true);
+        setLoadError(null);
+        try {
+            const data = await api.fetchArbitrageAgentData(agent.id);
+            if (data.config) setConfig(data.config);
+            if (data.metrics) setMetrics(data.metrics);
+            if (data.lastScan) setScan(data.lastScan);
+            await loadHistory(1);
+        } catch (error) {
+            console.error('Failed to load arbitrage agent data:', error);
+            setLoadError(mapLoadError(error));
+        } finally {
+            setIsLoading(false);
+        }
+    }, [agent.id, loadHistory]);
 
     useEffect(() => {
-        const loadData = async () => {
-            setIsLoading(true);
-            setLoadError(null);
-            try {
-                const data = await api.fetchArbitrageAgentData(agent.id);
-                if (data.config) setConfig(data.config);
-                if (data.metrics) setMetrics(data.metrics);
-                if (data.lastScan) setScan(data.lastScan);
-                await loadHistory(1);
-            } catch (error) {
-                console.error('Failed to load arbitrage agent data:', error);
-                setLoadError(t('load_failed') || 'Failed to load agent data');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        loadData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [agent.id]);
+        void loadData();
+    }, [loadData]);
 
     const handleRunScan = async () => {
         if (scanPendingRef.current || isScanning) return;
@@ -294,20 +401,25 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
                 aria-labelledby={`arb-tab-${activeTab}`}
                 data-testid="arb-tab-panel"
             >
-                {isLoading && !scan && !metrics ? (
+                {activeTab === 'overview' ? (
+                    <OverviewTab
+                        scan={scan}
+                        metrics={metrics}
+                        spreadCandidates={spreadCandidates}
+                        rejectedCandidates={rejectedCandidates}
+                        qualified={qualified}
+                        isLoading={isLoading}
+                        loadError={loadError}
+                        onRetry={loadData}
+                        onOpenTab={setActiveTab}
+                        t={t}
+                    />
+                ) : isLoading && !scan && !metrics ? (
                     <EmptyState message={t('loading') || 'Loading...'} />
                 ) : loadError ? (
-                    <EmptyState message={loadError} />
+                    <EmptyState message={getLoadErrorMessage(loadError, t) || (t('load_failed') || 'Failed to load')} />
                 ) : (
                     <>
-                        {activeTab === 'overview' && (
-                            <OverviewTab
-                                scan={scan}
-                                metrics={metrics}
-                                spreadCandidates={spreadCandidates}
-                                t={t}
-                            />
-                        )}
                         {activeTab === 'candidates' && (
                             <CandidatesTab
                                 spreadCandidates={spreadCandidates}
@@ -416,67 +528,267 @@ const OverviewTab: React.FC<{
     scan: ArbitrageScanResult | null;
     metrics: ArbitrageMetrics | null;
     spreadCandidates: ArbitrageSpreadCandidate[];
+    rejectedCandidates: ArbitrageSpreadCandidate[];
+    qualified: ArbitrageSpreadCandidate[];
+    isLoading: boolean;
+    loadError: ArbitragePanelLoadError | null;
+    onRetry: () => void;
+    onOpenTab: (tab: ArbitrageTab) => void;
     t: (key: string) => string;
-}> = ({ scan, metrics, spreadCandidates, t }) => (
-    <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            <MetricCard
-                label={t('last_scan_at') || 'Last scan'}
-                value={
-                    scan?.timestamp
-                        ? new Date(scan.timestamp).toLocaleString()
-                        : metrics?.scanStats?.lastCompletedAt
-                          ? new Date(metrics.scanStats.lastCompletedAt).toLocaleString()
-                          : NA(t)
-                }
-            />
-            <MetricCard
-                label={t('spread_candidates') || 'Spread candidates'}
-                value={scan?.candidateStats?.spreadCandidates ?? spreadCandidates.length}
-            />
-            <MetricCard
-                label={t('rejected_candidates') || 'Rejected candidates'}
-                value={scan?.candidateStats?.rejected ?? 0}
-            />
-            <MetricCard
-                label={t('qualified_opportunities') || 'Qualified opportunities'}
-                value={scan?.qualifiedStats?.total ?? 0}
-            />
-        </div>
+}> = ({
+    scan,
+    metrics,
+    spreadCandidates,
+    rejectedCandidates,
+    qualified,
+    isLoading,
+    loadError,
+    onRetry,
+    onOpenTab,
+    t,
+}) => {
+    const scanStatus = mapOverviewScanStatus(scan, metrics);
+    const completedAt = scan?.timestamp || metrics?.scanStats?.lastCompletedAt || null;
+    const spreadCount = scan?.candidateStats?.spreadCandidates ?? spreadCandidates.length ?? 0;
+    const rejectedCount = scan?.candidateStats?.rejected ?? rejectedCandidates.length ?? 0;
+    const qualifiedCount = scan?.qualifiedStats?.total ?? qualified.length ?? 0;
+    const avgRisk = scan?.riskStats?.averageScore ?? scan?.avgRiskScore ?? metrics?.riskStats?.averageScore ?? null;
+    const isNeverScanned = scanStatus === 'never';
+    const isFailed = scanStatus === 'failed';
+    const isLegacy = scanStatus === 'legacy';
+    const hasCandidates = spreadCount > 0;
+    const hasRejected = rejectedCount > 0;
+    const hasQualified = qualifiedCount > 0;
+    const rejectionSummary = summarizeRejectionReasons(rejectedCandidates, t);
 
-        <SectionCard title={t('arbitrage_classification_note') || 'Classification'}>
-            <p className="text-sm text-gray-300">
-                {t('arbitrage_no_qualified_reason') ||
-                    'Same-market bid/ask spreads are analytical only. Qualified arbitrage opportunities require a proven multi-leg executable strategy (not available in this slice).'}
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-                <MiniStat label={t('total_scans') || 'Total scans'} value={metrics?.totalScans ?? 0} />
-                <MiniStat
-                    label={t('best_qualified_profit_bps') || 'Best qualified profit'}
-                    value={formatBps(metrics?.qualifiedStats?.bestProfitBps, t)}
-                />
-                <MiniStat
-                    label={t('execution_support') || 'Execution'}
-                    value={t('execution_unsupported') || 'Not supported'}
-                />
+    const outcomeMessage = (() => {
+        if (isNeverScanned) {
+            return t('arbitrage_overview_never_scanned_help') || 'No analytical scan has completed yet. Run a safe scan to inspect current same-market spread conditions.';
+        }
+        if (isFailed) {
+            return t('arbitrage_overview_scan_failed_help') || 'The latest analytical scan did not complete successfully. Retry or review scan history for failure details.';
+        }
+        if (!hasCandidates && !hasRejected) {
+            return t('arbitrage_overview_no_candidates_help') || 'No positive analytical spread candidate was detected in the latest completed scan.';
+        }
+        if (!hasCandidates && hasRejected) {
+            return t('arbitrage_overview_all_rejected_help') || 'Candidates were detected but all were rejected before qualifying as analytical spread candidates.';
+        }
+        if (hasCandidates && !hasQualified) {
+            return t('arbitrage_overview_no_qualified_help') || 'Positive spread candidates were observed, but none qualify as executable arbitrage opportunities in the current analytical monitor.';
+        }
+        return t('arbitrage_overview_qualified_detected_help') || 'Qualified opportunities would appear here only for an executable proven strategy. This monitor remains analytical.';
+    })();
+
+    const interpretationMessage = (() => {
+        if (rejectionSummary.length > 0 && !hasCandidates) {
+            return `${t('arbitrage_overview_top_rejections') || 'Top rejection reasons'}: ${rejectionSummary.join(' · ')}`;
+        }
+        if (hasCandidates && !hasQualified) {
+            return t('arbitrage_no_qualified_reason') ||
+                'Same-market bid/ask spreads are analytical only. Qualified arbitrage opportunities require a proven multi-leg executable strategy (not available in this slice).';
+        }
+        if (isLegacy) {
+            return t('arbitrage_overview_legacy_help') || 'This result uses legacy normalized scan data. Only fields present in the historical contract are shown.';
+        }
+        return t('arbitrage_overview_execution_truth') || 'A scan is not an execution. Candidates are not automatically opportunities, and execution support is not available.';
+    })();
+
+    const previewItems = [...spreadCandidates.slice(0, 2), ...rejectedCandidates.slice(0, 2)].slice(0, 3);
+
+    if (isLoading && !scan && !metrics) {
+        return (
+            <div className="space-y-6" data-testid="arb-overview-loading">
+                <OverviewSkeleton />
             </div>
-        </SectionCard>
+        );
+    }
 
-        <SectionCard title={t('arbitrage_recent_spread_candidates') || 'Recent spread candidates'}>
-            {spreadCandidates.length ? (
-                <div className="space-y-3">
-                    {spreadCandidates.slice(0, 5).map(c => (
-                        <CandidateRow key={c.id} candidate={c} t={t} />
-                    ))}
+    if (loadError) {
+        const isPermission = loadError.kind === 'permission' || loadError.kind === 'auth';
+        return (
+            <div className="space-y-6" data-testid={isPermission ? 'arb-overview-permission' : 'arb-overview-error'}>
+                <div className={DATAHUB_SHELL}>
+                    <DataHubSectionHeader
+                        title={
+                            isPermission
+                                ? t('arbitrage_overview_permission_limited_title') || 'Permission limited'
+                                : t('arbitrage_overview_error_title') || 'Overview unavailable'
+                        }
+                        subtitle={
+                            isPermission
+                                ? t('arbitrage_overview_permission_limited') || 'You do not have permission to view this overview.'
+                                : getLoadErrorMessage(loadError, t) || (t('load_failed') || 'Failed to load')
+                        }
+                    />
+                    <DataHubAlert
+                        variant={isPermission ? 'warning' : 'error'}
+                        message={getLoadErrorMessage(loadError, t) || (t('load_failed') || 'Failed to load')}
+                        onRetry={isPermission ? undefined : onRetry}
+                        retryLabel={t('retry') || 'Retry'}
+                    />
                 </div>
-            ) : (
-                <EmptyState
-                    message={t('arbitrage_no_spread_candidates') || 'No positive analytical spread candidates in the last scan.'}
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6" data-testid="arb-overview">
+            <section className={DATAHUB_SHELL}>
+                <DataHubSectionHeader
+                    title={t('arbitrage_overview_latest_scan') || 'Latest Scan'}
+                    subtitle={outcomeMessage}
+                    actions={
+                        <StatusPill
+                            label={humanizeScanStatus(scanStatus, t)}
+                            variant={isFailed ? 'error' : isNeverScanned ? 'warning' : 'info'}
+                        />
+                    }
                 />
-            )}
-        </SectionCard>
-    </div>
-);
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                    <DataHubMetricCard
+                        label={t('last_scan_at') || 'Last scan'}
+                        value={formatScanTimestamp(completedAt, t)}
+                        color="blue"
+                        valueState={completedAt ? 'loaded' : 'unavailable'}
+                        hint={isLegacy ? (t('arbitrage_overview_legacy_hint') || 'Legacy normalized scan record.') : undefined}
+                    />
+                    <DataHubMetricCard
+                        label={t('spread_candidates') || 'Spread candidates'}
+                        value={spreadCount}
+                        color="purple"
+                        valueState={spreadCount === 0 ? 'zero' : 'loaded'}
+                    />
+                    <DataHubMetricCard
+                        label={t('rejected_candidates') || 'Rejected candidates'}
+                        value={rejectedCount}
+                        color="amber"
+                        valueState={rejectedCount === 0 ? 'zero' : 'loaded'}
+                    />
+                    <DataHubMetricCard
+                        label={t('qualified_opportunities') || 'Qualified opportunities'}
+                        value={qualifiedCount}
+                        color="emerald"
+                        valueState={qualifiedCount === 0 ? 'zero' : 'loaded'}
+                        hint={t('arbitrage_overview_qualified_hint') || 'Qualified requires an executable proven strategy. Current monitor is analytical only.'}
+                    />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                    <OverviewInfoBlock
+                        label={t('arbitrage_avg_risk_score') || 'Avg risk score'}
+                        value={formatRiskScore(avgRisk, t)}
+                    />
+                    <OverviewInfoBlock
+                        label={t('execution_support') || 'Execution support'}
+                        value={t('execution_unsupported') || 'Not supported'}
+                    />
+                </div>
+            </section>
+
+            <section className={DATAHUB_SHELL}>
+                <DataHubSectionHeader
+                    title={t('arbitrage_overview_scan_outcome') || 'Scan Outcome'}
+                    subtitle={t('arbitrage_overview_scan_outcome_subtitle') || 'Candidate, rejected, and qualified counts are distinct and use the latest verified scan contract.'}
+                />
+                <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <OutcomeCard
+                            label={t('spread_candidates') || 'Spread candidates'}
+                            value={spreadCount}
+                            tone="purple"
+                            helper={t('arbitrage_overview_spread_candidates_helper') || 'Positive analytical spread detections before qualification.'}
+                        />
+                        <OutcomeCard
+                            label={t('rejected_candidates') || 'Rejected candidates'}
+                            value={rejectedCount}
+                            tone="amber"
+                            helper={t('arbitrage_overview_rejected_candidates_helper') || 'Detected candidates that failed threshold, depth, or execution-leg checks.'}
+                        />
+                        <OutcomeCard
+                            label={t('qualified_opportunities') || 'Qualified opportunities'}
+                            value={qualifiedCount}
+                            tone="emerald"
+                            helper={t('arbitrage_overview_qualified_candidates_helper') || 'Executable qualified opportunities are not expected in this analytical same-market monitor.'}
+                        />
+                    </div>
+                    <div className="bg-slate-950/70 border border-white/5 rounded-xl p-4">
+                        <p className="text-[11px] text-muted-foreground mb-2">
+                            {t('arbitrage_overview_why_no_qualified') || 'Why is there no qualified opportunity?'}
+                        </p>
+                        <p className="text-sm text-foreground leading-6">{interpretationMessage}</p>
+                        {rejectionSummary.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 mt-3" data-testid="arb-overview-rejection-summary">
+                                {rejectionSummary.map(item => (
+                                    <StatusPill key={item} label={item} variant="warning" />
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+                </div>
+            </section>
+
+            <section className={DATAHUB_SHELL}>
+                <DataHubSectionHeader
+                    title={t('arbitrage_overview_interpretation') || 'Analytical Interpretation'}
+                    subtitle={t('arbitrage_overview_interpretation_subtitle') || 'What the latest scan does and does not tell you.'}
+                />
+                <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-4">
+                    <div className="bg-slate-950/70 border border-white/5 rounded-xl p-4">
+                        <p className="text-sm text-foreground leading-6">
+                            {t('arbitrage_no_qualified_reason') ||
+                                'Same-market bid/ask spreads are analytical only. Qualified arbitrage opportunities require a proven multi-leg executable strategy (not available in this slice).'}
+                        </p>
+                        <ul className="mt-4 space-y-2 text-xs text-muted-foreground">
+                            <li>{t('arbitrage_overview_truth_scan_not_execution') || 'A scan is not an execution.'}</li>
+                            <li>{t('arbitrage_overview_truth_candidate_not_opportunity') || 'A candidate is not automatically a qualified opportunity.'}</li>
+                            <li>{t('arbitrage_overview_truth_execution_unavailable') || 'Captured or realized profit is unavailable because execution is not supported.'}</li>
+                        </ul>
+                    </div>
+                    <div className="bg-slate-950/70 border border-white/5 rounded-xl p-4">
+                        <p className="text-[11px] text-muted-foreground mb-3">
+                            {t('arbitrage_overview_next_step') || 'What should you do next?'}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <SecondaryButton type="button" onClick={() => onOpenTab('candidates')}>
+                                {t('arbitrage_overview_review_candidates') || 'Review candidates'}
+                            </SecondaryButton>
+                            <SecondaryButton type="button" onClick={() => onOpenTab('history')}>
+                                {t('arbitrage_overview_view_scan_history') || 'View scan history'}
+                            </SecondaryButton>
+                            <SecondaryButton type="button" onClick={() => onOpenTab('settings')}>
+                                {t('arbitrage_overview_adjust_settings') || 'Review settings'}
+                            </SecondaryButton>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section className={DATAHUB_SHELL}>
+                <DataHubSectionHeader
+                    title={t('arbitrage_overview_recent_summary') || 'Recent Candidate Summary'}
+                    subtitle={t('arbitrage_overview_recent_summary_subtitle') || 'A compact preview of the latest analytical result. Full lists remain in Candidates.'}
+                />
+                {previewItems.length ? (
+                    <div className="space-y-3">
+                        {previewItems.map(candidate => (
+                            <CompactCandidateRow key={candidate.id} candidate={candidate} t={t} />
+                        ))}
+                    </div>
+                ) : (
+                    <DataHubEmpty
+                        message={
+                            isNeverScanned
+                                ? t('arbitrage_overview_never_scanned_help') || 'No analytical scan has completed yet.'
+                                : hasRejected
+                                  ? t('arbitrage_overview_all_rejected_help') || 'Candidates were detected but all were rejected.'
+                                  : t('arbitrage_no_spread_candidates') || 'No positive analytical spread candidates in the last scan.'
+                        }
+                    />
+                )}
+            </section>
+        </div>
+    );
+};
 
 const CandidatesTab: React.FC<{
     spreadCandidates: ArbitrageSpreadCandidate[];
@@ -816,7 +1128,7 @@ const CandidateRow: React.FC<{
                 </p>
                 {showRejection && candidate.rejectionReason && (
                     <p className="text-xs text-rose-300 mt-1">
-                        {t('rejection_reason') || 'Rejection'}: {candidate.rejectionReason}
+                        {t('rejection_reason') || 'Rejection'}: {mapRejectionReason(candidate.rejectionReason, t)}
                     </p>
                 )}
             </div>
@@ -833,6 +1145,99 @@ const CandidateRow: React.FC<{
             </div>
         </div>
     </div>
+);
+
+const OverviewInfoBlock: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+    <div className="bg-slate-950/70 border border-white/5 rounded-xl p-3">
+        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <p className="text-sm font-semibold text-foreground mt-1">{value}</p>
+    </div>
+);
+
+const OutcomeCard: React.FC<{
+    label: string;
+    value: React.ReactNode;
+    helper: string;
+    tone: 'purple' | 'amber' | 'emerald';
+}> = ({ label, value, helper, tone }) => {
+    const color = tone === 'amber' ? 'amber' : tone === 'emerald' ? 'emerald' : 'purple';
+    return (
+        <DataHubMetricCard
+            label={label}
+            value={value}
+            color={color}
+            hint={helper}
+            valueState={String(value) === '0' ? 'zero' : 'loaded'}
+            emphasis="primary"
+        />
+    );
+};
+
+const CompactCandidateRow: React.FC<{
+    candidate: ArbitrageSpreadCandidate;
+    t: (key: string) => string;
+}> = ({ candidate, t }) => {
+    const isRejected = candidate.classification === 'rejected_candidate';
+    return (
+        <div className="bg-slate-950/70 border border-white/5 rounded-xl p-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                    <StatusPill
+                        label={
+                            isRejected
+                                ? t('rejected_candidates') || 'Rejected candidates'
+                                : t('spread_candidates') || 'Spread candidates'
+                        }
+                        variant={isRejected ? 'warning' : 'info'}
+                    />
+                    {candidate.legacy ? (
+                        <StatusPill label={t('legacy_scan') || 'Legacy scan'} variant="neutral" />
+                    ) : null}
+                </div>
+                <p className="text-sm font-semibold text-foreground mt-2">
+                    {(candidate.path || []).join(' → ') || candidate.symbol || NA(t)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                    {candidate.timestamp ? new Date(candidate.timestamp).toLocaleString() : NA(t)}
+                </p>
+                {isRejected ? (
+                    <p className="text-[11px] text-amber-200 mt-2">
+                        {t('rejection_reason') || 'Rejection'}: {mapRejectionReason(candidate.rejectionReason, t)}
+                    </p>
+                ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm shrink-0">
+                <OverviewInfoBlock
+                    label={t('arbitrage_expected_profit') || 'Expected profit'}
+                    value={formatBps(candidate.expectedProfitBps, t)}
+                />
+                <OverviewInfoBlock
+                    label={t('risk_score') || 'Risk score'}
+                    value={formatRiskScore(candidate.riskScore, t)}
+                />
+            </div>
+        </div>
+    );
+};
+
+const OverviewSkeleton: React.FC = () => (
+    <>
+        {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className={DATAHUB_SHELL}>
+                <div className="animate-pulse space-y-4">
+                    <div className="h-5 w-40 rounded bg-slate-900/70" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                        {Array.from({ length: 4 }).map((__, metricIdx) => (
+                            <div key={metricIdx} className="rounded-xl border border-white/5 bg-slate-950/70 p-4 space-y-3">
+                                <div className="h-3 w-24 rounded bg-slate-900/70" />
+                                <div className="h-6 w-20 rounded bg-slate-900/70" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        ))}
+    </>
 );
 
 const DataPoint: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (

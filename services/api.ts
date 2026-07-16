@@ -8000,57 +8000,57 @@ export const fetchArbitrageAgentData = async (agentId: string): Promise<{
     metrics: ArbitrageMetrics | null;
     lastScan: ArbitrageScanResult | null;
 }> => {
-    try {
-        const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
-        if (!token) {
-            throw new Error('Authentication required');
-        }
-
-        const response = await fetch(`/api/ai-agents/${agentId}/details`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to fetch arbitrage data: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const lastScan = data.lastScan
-            ? {
-                timestamp: data.lastScan.timestamp || new Date().toISOString(),
-                analyticalMode: data.lastScan.analyticalMode,
-                strategyClassification: data.lastScan.strategyClassification,
-                candidates: data.lastScan.candidates || [],
-                rejectedCandidates: data.lastScan.rejectedCandidates || [],
-                qualifiedOpportunities: data.lastScan.qualifiedOpportunities || [],
-                candidateStats: data.lastScan.candidateStats || data.candidateStats,
-                qualifiedStats: data.lastScan.qualifiedStats || data.qualifiedStats,
-                riskStats: data.lastScan.riskStats || data.riskStats,
-                opportunities: [],
-                exchangesChecked: data.lastScan.exchangesChecked || ['mexc'],
-                symbolsChecked: data.lastScan.symbolsChecked || [],
-                avgRiskScore: data.lastScan.avgRiskScore ?? data.lastScan.riskStats?.averageScore ?? null,
-                netProfitPotentialUSDT: data.lastScan.netProfitPotentialUSDT ?? null,
-                avgExecutionMs: null,
-                execution: data.lastScan.execution || { supported: false, realizedProfitUSDT: null },
-                legacy: Boolean(data.lastScan.legacy),
-                dryRun: true,
-            }
-            : null;
-
-        return {
-            config: data.agent?.config || null,
-            metrics: data.metrics || null,
-            lastScan,
-        };
-    } catch (e) {
-        console.warn('Failed to fetch arbitrage agent data:', e);
-        return { config: null, metrics: null, lastScan: null };
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        const authError = new Error('Authentication required');
+        (authError as Error & { status?: number }).status = 401;
+        throw authError;
     }
+
+    const response = await fetch(`/api/ai-agents/${agentId}/details`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const error = new Error(body?.error?.message || body?.message || `Failed to fetch arbitrage data: ${response.status}`);
+        (error as Error & { status?: number }).status = response.status;
+        throw error;
+    }
+
+    const data = await response.json();
+    const lastScan = data.lastScan
+        ? {
+            timestamp: data.lastScan.timestamp || new Date().toISOString(),
+            analyticalMode: data.lastScan.analyticalMode,
+            strategyClassification: data.lastScan.strategyClassification,
+            candidates: data.lastScan.candidates || [],
+            rejectedCandidates: data.lastScan.rejectedCandidates || [],
+            qualifiedOpportunities: data.lastScan.qualifiedOpportunities || [],
+            candidateStats: data.lastScan.candidateStats || data.candidateStats,
+            qualifiedStats: data.lastScan.qualifiedStats || data.qualifiedStats,
+            riskStats: data.lastScan.riskStats || data.riskStats,
+            opportunities: [],
+            exchangesChecked: data.lastScan.exchangesChecked || ['mexc'],
+            symbolsChecked: data.lastScan.symbolsChecked || [],
+            avgRiskScore: data.lastScan.avgRiskScore ?? data.lastScan.riskStats?.averageScore ?? null,
+            netProfitPotentialUSDT: data.lastScan.netProfitPotentialUSDT ?? null,
+            avgExecutionMs: null,
+            execution: data.lastScan.execution || { supported: false, realizedProfitUSDT: null },
+            legacy: Boolean(data.lastScan.legacy),
+            dryRun: true,
+        }
+        : null;
+
+    return {
+        config: data.agent?.config || null,
+        metrics: data.metrics || null,
+        lastScan,
+    };
 };
 
 export const fetchArbitrageScanHistory = async (

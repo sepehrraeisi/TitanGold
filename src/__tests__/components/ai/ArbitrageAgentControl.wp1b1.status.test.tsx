@@ -163,7 +163,7 @@ describe('ARB-WP1B-1 header status presentation', () => {
 
   it('shows one Active status, one Dry Run mode, and clean Broker Offline', async () => {
     render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
-    await waitFor(() => expect(screen.getByTestId('agent-shell-status')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('arb-overview')).toBeTruthy());
 
     const shellText = screen.getByTestId('agent-control-shell').textContent || '';
 
@@ -184,9 +184,10 @@ describe('ARB-WP1B-1 header status presentation', () => {
       'Live side effects are blocked.',
     );
 
-    // Dry Run appears once in the intended status badge (not duplicated as a second badge)
-    const dryRunMatches = shellText.match(/Dry Run/g) || [];
+    // Dry Run appears once in the intended header status badge (Overview must not duplicate it)
+    const dryRunMatches = (screen.getByTestId('agent-shell-status-row').textContent || '').match(/Dry Run/g) || [];
     expect(dryRunMatches.length).toBe(1);
+    expect(screen.getByTestId('arb-overview').textContent || '').not.toContain('Dry Run');
   });
 
   it('preserves approved button variants and WP1A metrics row', async () => {

@@ -168,13 +168,13 @@ describe('ArbitrageAgentControl WP1A', () => {
     render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
 
     await waitFor(() => {
-      expect(screen.getByText('total_scans')).toBeTruthy();
+      expect(screen.getByTestId('arb-status-row').textContent || '').toMatch(/total_scans/);
     });
 
     expect(screen.getAllByText('12').length).toBeGreaterThan(0);
     expect(screen.queryByText('net_profit_captured')).toBeNull();
     expect(screen.queryByText(/\$\-51/)).toBeNull();
-    expect(screen.getByText('best_qualified_profit_bps')).toBeTruthy();
+    expect(screen.getByTestId('arb-status-row').textContent || '').toMatch(/best_qualified_profit_bps/);
     expect(screen.getAllByText('not_available').length).toBeGreaterThan(0);
     expect(screen.queryByText('strategy_spot')).toBeNull();
     expect(screen.queryByText('strategy_triangle')).toBeNull();
@@ -230,7 +230,8 @@ describe('ArbitrageAgentControl ARB-A9 button design system', () => {
 
   async function openPanel(onClose = () => {}) {
     render(<ArbitrageAgentControl agent={agent} onClose={onClose} onUpdate={() => {}} />);
-    await waitFor(() => expect(screen.getByTestId('arb-run-scan')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('arb-overview')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('arb-run-scan')).not.toBeDisabled());
   }
 
   it('maps six actions to canonical design-system variants', async () => {
