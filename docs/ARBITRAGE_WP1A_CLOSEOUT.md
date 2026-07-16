@@ -3,10 +3,15 @@
 **Module:** AI → Agents → Arbitrage Scanner  
 **Work Package:** ARB-WP1A  
 **Date:** 2026-07-16  
-**Human QA:** FAIL on button design (ARB-A9) → remediation deployed; retest **NEEDS MORE VERIFICATION**  
-**Engineering verdict (pre-Human-QA):** NEEDS MORE VERIFICATION  
+**Human QA:** ARB-A9 **PASS** (explicit Human confirmation)  
+**Engineering verdict:** **REAL WORKING**  
+**WP1A status:** **CLOSED AND FROZEN**  
 
-**Not closed:** Full Arbitrage Agent remains open. This is slice 1 only. ARB-WP1B not started.
+**Arbitrage Agent status:** OPEN — additional slices remain.  
+**ARB-WP1B status:** NOT STARTED  
+
+**Runtime implementation HEAD:** `f4fd43a`  
+**Served bundle:** `assets/index-kRpMtyAR.js`  
 
 ---
 
@@ -156,17 +161,75 @@ ARB-A1 … ARB-A8 as specified in the Work Package (pending human execution).
 - `45f5488` — `fix(arb): align WP1A actions with TitanGold design system`  
 - `71d5f69` — `fix(arb): use loading i18n for pending Pause/Restart labels`  
 - `cfaf954` — `fix(arb): stack WP1A status actions cleanly on narrow viewports`  
+- `f4fd43a` — `docs(arb): record ARB-A9 button design-system remediation evidence`  
 
-**Human-QA status after this remediation:** **NEEDS MORE VERIFICATION** — awaiting explicit Human PASS on ARB-A9.  
-Do **not** mark ARB-WP1A CLOSED / REAL WORKING until Human retest.
+**Human-QA decision:** **ARB-A9 = PASS** (explicit Human confirmation of all six controls).
 
-## 13. Remaining Arbitrage slices
+## 13. Shared Design-Token Baseline Verification (post ARB-A9 PASS)
 
-- ARB-WP1B: AgentControlShell + full professional redesign — **blocked until ARB-WP1A Human QA including ARB-A9**  
+### Classification: **Case A — Safe additive shared-token extension**
+
+`git diff 1a3955f..f4fd43a -- components/ai/AIManager/tabs/DataHub/dataHubUi.tsx`:
+
+- Lines added: **11**  
+- Lines removed: **3** (private `FOCUS_RING` relocated to exported constant with **identical** class string)  
+- Existing exports modified: **none** (`BTN_PRIMARY`, `BTN_SECONDARY`, outline tokens unchanged)  
+- Existing class values modified: **none**  
+- Existing shared components modified: **none** (`PrimaryButton` / `SecondaryButton` still compose the same tokens)  
+- New exports: `BTN_ACTION_BLUE`, `BTN_WARNING`, `FOCUS_RING` (promotion of previously private focus utility)  
+- Arbitrage-specific naming in shared owner: **none** — tokens follow `DESIGN_SYSTEM_DATAHUB.md` §6.2 / §2.3  
+
+Data Hub business/runtime files under `components/ai/AIManager/tabs/DataHub/**` unchanged except this token file.  
+Agents Shell files (`AIAgents`, `AgentCard`, `AgentSafetyBanner`, `shell/*`) unchanged (0 files).
+
+### Token-consumer matrix (verified)
+
+| Token | Defined In | Existing Consumers | New Consumers | Existing Behavior Changed? |
+|-------|------------|--------------------|---------------|----------------------------|
+| `BTN_PRIMARY` | `dataHubUi.tsx` | Data Hub panels/modals; Agents `AgentCard` / shell | Unchanged usage; Arbitrage via `PrimaryButton` | No |
+| `BTN_SECONDARY` | `dataHubUi.tsx` | Data Hub panels/modals; Agents `AIAgents` retry | Unchanged usage; Arbitrage via `SecondaryButton` | No |
+| `BTN_WARNING` | `dataHubUi.tsx` (new) | none | Arbitrage Pause | N/A (additive) |
+| `BTN_ACTION_BLUE` | `dataHubUi.tsx` (new) | none | Arbitrage Restart / Start | N/A (additive) |
+| `FOCUS_RING` | `dataHubUi.tsx` (exported; value identical to prior private) | Segmented control / PrimaryButton / SecondaryButton / inputs (in-file) | Arbitrage Pause/Restart wrapper | No (same string) |
+
+No Arbitrage-only parallel button system. No Data Hub → Arbitrage imports. No circular dependency.
+
+### Closed-baseline regression
+
+**Data Hub (Telegram Collector) — Staging Browser QA:** PASS  
+- Primary purple pills (e.g. Start Login Wizard / شروع ویزارد ورود)  
+- Secondary slate outline (Refresh health / به‌روزرسانی سلامت)  
+- Outline amber/sky/red retained  
+- EN + FA, dark theme, desktop, no overflow on panel, no console errors from token change  
+
+**Agents Shell — Staging Browser QA + unit tests:** PASS  
+- Page renders; 15 cards; search/filter/sort present  
+- Open Agent remains purple Primary pill (`باز کردن عامل`)  
+- Safety banner Dry Run / Emergency Stop intact  
+- Unit: `AIAgents.test.tsx` 14 passed; `AgentCard.test.tsx` 17 passed  
+
+**Arbitrage buttons on served bundle:** VERIFIED (same `assets/index-kRpMtyAR.js`)
+
+### Runtime safety (closeout check)
+
+- Effective Mode: Demo  
+- Emergency Stop: active  
+- workerAcknowledged: true  
+- Live: impossible  
+
+### Protected unrelated files (still dirty only in original worktree; never committed)
+
+- `scripts/backup-db.sh`  
+- `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`  
+- `scripts/phase2-monitoring/titangold-telegram-notify.sh`  
+
+## 14. Remaining Arbitrage slices
+
+- **ARB-WP1B:** AgentControlShell + full professional redesign — **NOT STARTED** (do not begin automatically)  
 - Later: real multi-leg strategies only with proven executable contracts  
 - Foundation: market-proxy exposure hardening  
 
-## 14. Rollback
+## 15. Rollback
 
 ```bash
 git revert <WP1A_COMMITS>
