@@ -19,7 +19,8 @@
 | Kind | Value |
 |------|--------|
 | **Runtime implementation baseline (this slice)** | `40f4c5f` |
-| **Documentation closeout HEAD** | Same as runtime for this slice (docs included) |
+| **Documentation closeout HEAD** | `400f449` |
+| **Documentation closeout HEAD** | `400f449` |
 | **Served frontend bundle (before)** | `assets/index-D6ZmsjWR.js` |
 | **Served frontend bundle (after)** | `assets/index-WlHdPJwp.js` |
 | **Environment** | Staging `https://titan.zala.ir` |
@@ -264,14 +265,20 @@ Actual:
 
 - `40f4c5f` — `feat(arb): redesign Overview around truthful scan outcomes`
 
-`origin/main` == `40f4c5f`
+- `400f449` — `docs(arb): record ARB-WP1B-2A Overview closeout evidence`
+
+`origin/main` == `400f449` (docs closeout)
+Runtime served from implementation commit `40f4c5f` / bundle `index-WlHdPJwp.js`
 
 ## 23. Git Verification
 
 Recorded after push:
 
 - Isolated worktree clean at `40f4c5f`
-- `HEAD` == `origin/main` == `40f4c5f`
+- `HEAD` == - `400f449` — `docs(arb): record ARB-WP1B-2A Overview closeout evidence`
+
+`origin/main` == `400f449` (docs closeout)
+Runtime served from implementation commit `40f4c5f` / bundle `index-WlHdPJwp.js`
 - Original worktree `/home/ubuntu/webapp/TitanGold` remains dirty only for protected unrelated scripts
 
 ## 24. Remaining Risks
