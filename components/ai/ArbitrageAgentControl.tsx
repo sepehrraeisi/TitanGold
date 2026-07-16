@@ -1,7 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import * as api from '../../services/api.ts';
+import {
+    BTN_ACTION_BLUE,
+    BTN_WARNING,
+    FOCUS_RING,
+    PrimaryButton,
+    SecondaryButton,
+} from './AIManager/tabs/DataHub/dataHubUi.tsx';
 import type {
     AIAgent,
     ArbitrageConfig,
@@ -11,6 +18,8 @@ import type {
     ArbitrageSpreadCandidate,
     ArbitrageStrategyConfig,
 } from '../../types.ts';
+
+const btnClass = (base: string) => `${base} ${FOCUS_RING} inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors`.trim();
 
 type ArbitrageTab = 'overview' | 'candidates' | 'history' | 'profitRisk' | 'settings' | 'integration';
 
@@ -75,7 +84,11 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
     const [historyLoading, setHistoryLoading] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
+    const [isCommandPending, setIsCommandPending] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const scanPendingRef = useRef(false);
+    const commandPendingRef = useRef(false);
+    const savePendingRef = useRef(false);
 
     const loadHistory = async (page = 1) => {
         setHistoryLoading(true);
@@ -113,7 +126,9 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
     }, [agent.id]);
 
     const handleRunScan = async () => {
+        if (scanPendingRef.current || isScanning) return;
         if (!guardExecution()) return;
+        scanPendingRef.current = true;
         setIsScanning(true);
         try {
             const result = await api.runArbitrageAnalysis(agent.id);
@@ -135,11 +150,14 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
             console.error('Failed to run arbitrage scan:', error);
             alert(t('analysis_failed') || 'Scan failed');
         } finally {
+            scanPendingRef.current = false;
             setIsScanning(false);
         }
     };
 
     const handleUpdateConfig = async (updatedConfig: ArbitrageConfig) => {
+        if (savePendingRef.current) return;
+        savePendingRef.current = true;
         setIsLoading(true);
         try {
             await api.updateArbitrageConfig(agent.id, updatedConfig);
@@ -149,12 +167,15 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
             console.error('Failed to update arbitrage config:', error);
             alert(t('update_failed') || 'Update failed');
         } finally {
+            savePendingRef.current = false;
             setIsLoading(false);
         }
     };
 
     const handleControlCommand = async (command: string) => {
-        setIsLoading(true);
+        if (commandPendingRef.current || isCommandPending) return;
+        commandPendingRef.current = true;
+        setIsCommandPending(true);
         try {
             await api.sendAgentControlCommand(agent.id, command);
             const agents = await api.fetchAIAgents();
@@ -164,7 +185,8 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
             console.error('Failed to execute command:', error);
             alert(t('command_failed') || 'Command failed');
         } finally {
-            setIsLoading(false);
+            commandPendingRef.current = false;
+            setIsCommandPending(false);
         }
     };
 
@@ -185,7 +207,14 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
             <div className="bg-[#10141A] border border-gray-800 rounded-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
                 <Header agent={agent} t={t} onRunScan={handleRunScan} onClose={onClose} isScanning={isScanning} />
-                <StatusBar agent={agent} metrics={metrics} scan={scan} onCommand={handleControlCommand} t={t} />
+                <StatusBar
+                    agent={agent}
+                    metrics={metrics}
+                    scan={scan}
+                    onCommand={handleControlCommand}
+                    commandPending={isCommandPending}
+                    t={t}
+                />
 
                 <div className="px-6 pt-3 border-b border-gray-800 bg-[#0B1017]">
                     <p className="text-xs text-amber-300/90 mb-3">
@@ -262,25 +291,35 @@ const Header: React.FC<{
     onClose: () => void;
     isScanning: boolean;
 }> = ({ agent, t, onRunScan, onClose, isScanning }) => (
-    <div className="flex items-center justify-between px-6 py-5 border-b border-gray-800 bg-[#0B1017]">
-        <div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between px-4 sm:px-6 py-5 border-b border-white/10 bg-[#0B1017]">
+        <div className="min-w-0">
             <h2 className="text-2xl font-bold text-white">{agent.name}</h2>
             <p className="text-sm text-gray-400 mt-1">
                 {t('arbitrage_agent_desc') ||
                     'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'}
             </p>
         </div>
-        <div className="flex gap-3">
-            <button
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <PrimaryButton
+                type="button"
+                data-testid="arb-run-scan"
+                data-variant="primary"
                 onClick={onRunScan}
                 disabled={isScanning || agent.status !== 'active'}
-                className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                aria-busy={isScanning}
+                aria-label={isScanning ? t('scanning') || 'Scanning...' : t('run_scan') || 'Run Scan'}
             >
                 {isScanning ? t('scanning') || 'Scanning...' : t('run_scan') || 'Run Scan'}
-            </button>
-            <button onClick={onClose} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg text-sm">
-                {t('close')}
-            </button>
+            </PrimaryButton>
+            <SecondaryButton
+                type="button"
+                data-testid="arb-close"
+                data-variant="neutral"
+                onClick={onClose}
+                aria-label={t('close') || 'Close'}
+            >
+                {t('close') || 'Close'}
+            </SecondaryButton>
         </div>
     </div>
 );
@@ -290,19 +329,20 @@ const StatusBar: React.FC<{
     metrics: ArbitrageMetrics | null;
     scan: ArbitrageScanResult | null;
     onCommand: (command: string) => void;
+    commandPending: boolean;
     t: (key: string) => string;
-}> = ({ agent, metrics, scan, onCommand, t }) => {
+}> = ({ agent, metrics, scan, onCommand, commandPending, t }) => {
     const best = metrics?.qualifiedStats?.bestProfitBps ?? metrics?.bestProfitBps;
     const avgRisk = scan?.riskStats?.averageScore ?? scan?.avgRiskScore ?? metrics?.riskStats?.averageScore;
     return (
-        <div className="px-6 py-3 border-b border-gray-800 bg-[#0B1017]">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex flex-wrap items-center gap-4">
+        <div className="px-4 sm:px-6 py-3 border-b border-white/10 bg-[#0B1017]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3 min-w-0">
                     <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        className={`px-3 py-1 rounded-full text-[10px] font-medium border ${
                             agent.status === 'active'
-                                ? 'bg-green-500/20 text-green-400'
-                                : 'bg-gray-500/20 text-gray-400'
+                                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40'
+                                : 'bg-slate-700 text-slate-300 border-slate-600'
                         }`}
                     >
                         {t(agent.status)}
@@ -321,27 +361,45 @@ const StatusBar: React.FC<{
                         value={metrics?.qualifiedStats?.total ?? 0}
                     />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {agent.status === 'active' ? (
                         <button
+                            type="button"
+                            data-testid="arb-pause"
+                            data-variant="warning"
                             onClick={() => onCommand('pause')}
-                            className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-semibold py-1.5 px-3 rounded-md"
+                            disabled={commandPending}
+                            aria-busy={commandPending}
+                            aria-label={t('pause') || 'Pause'}
+                            className={btnClass(BTN_WARNING)}
                         >
-                            {t('pause')}
+                            {commandPending ? t('working') || 'Working...' : t('pause') || 'Pause'}
                         </button>
                     ) : (
                         <button
+                            type="button"
+                            data-testid="arb-start"
+                            data-variant="action-blue"
                             onClick={() => onCommand('start')}
-                            className="bg-green-600 hover:bg-green-500 text-white text-xs font-semibold py-1.5 px-3 rounded-md"
+                            disabled={commandPending}
+                            aria-busy={commandPending}
+                            aria-label={t('start') || 'Start'}
+                            className={btnClass(BTN_ACTION_BLUE)}
                         >
-                            {t('start')}
+                            {commandPending ? t('working') || 'Working...' : t('start') || 'Start'}
                         </button>
                     )}
                     <button
+                        type="button"
+                        data-testid="arb-restart"
+                        data-variant="action-blue"
                         onClick={() => onCommand('restart')}
-                        className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-1.5 px-3 rounded-md"
+                        disabled={commandPending}
+                        aria-busy={commandPending}
+                        aria-label={t('restart') || 'Restart'}
+                        className={btnClass(BTN_ACTION_BLUE)}
                     >
-                        {t('restart')}
+                        {commandPending ? t('working') || 'Working...' : t('restart') || 'Restart'}
                     </button>
                 </div>
             </div>
@@ -573,6 +631,7 @@ const SettingsTab: React.FC<{
     const [draft, setDraft] = useState(config);
     useEffect(() => setDraft(config), [config]);
 
+    const isDirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(config), [draft, config]);
     const spotStrategy = draft.strategies?.find(s => s.type === 'spot' || s.type === 'mexc_spot_spread_monitor');
 
     const updateSpot = (field: keyof ArbitrageStrategyConfig, value: number) => {
@@ -582,6 +641,16 @@ const SettingsTab: React.FC<{
                 s.type === 'spot' || s.type === 'mexc_spot_spread_monitor' ? { ...s, [field]: value } : s,
             ),
         }));
+    };
+
+    const handleSave = () => {
+        if (disabled || !isDirty) return;
+        onUpdate(draft);
+    };
+
+    const handleReset = () => {
+        if (disabled || !isDirty) return;
+        setDraft(config);
     };
 
     return (
@@ -671,21 +740,32 @@ const SettingsTab: React.FC<{
                 </label>
             </SectionCard>
 
-            <div className="flex gap-3">
-                <button
-                    onClick={() => setDraft(config)}
-                    disabled={disabled}
-                    className="px-4 py-2 rounded-lg bg-gray-800 text-gray-200 text-sm"
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+                <SecondaryButton
+                    type="button"
+                    data-testid="arb-reset"
+                    data-variant="neutral"
+                    onClick={handleReset}
+                    disabled={disabled || !isDirty}
+                    aria-label={t('reset') || 'Reset'}
                 >
                     {t('reset') || 'Reset'}
-                </button>
-                <button
-                    onClick={() => onUpdate(draft)}
-                    disabled={disabled}
-                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold"
+                </SecondaryButton>
+                <PrimaryButton
+                    type="button"
+                    data-testid="arb-save-changes"
+                    data-variant="primary"
+                    onClick={handleSave}
+                    disabled={disabled || !isDirty}
+                    aria-busy={disabled}
+                    aria-label={
+                        disabled
+                            ? t('saving') || 'Saving...'
+                            : t('save_changes') || 'Save changes'
+                    }
                 >
-                    {t('save_changes') || 'Save changes'}
-                </button>
+                    {disabled ? t('saving') || 'Saving...' : t('save_changes') || 'Save changes'}
+                </PrimaryButton>
             </div>
         </div>
     );

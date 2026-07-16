@@ -19,6 +19,17 @@ export const BTN_PRIMARY =
 export const BTN_SECONDARY =
     'text-[11px] px-3 py-1.5 rounded-full border border-slate-600/70 bg-slate-900/70 text-foreground hover:border-purple-400 hover:text-purple-200 transition disabled:opacity-50';
 
+/** DESIGN_SYSTEM_DATAHUB.md §6.2 — filled blue secondary action */
+export const BTN_ACTION_BLUE =
+    'text-[11px] px-3 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed';
+
+/** DESIGN_SYSTEM_DATAHUB.md §2.3 / §6 — warning action (amber) at primary control size */
+export const BTN_WARNING =
+    'text-[11px] px-3 py-1.5 rounded-full bg-amber-600 hover:bg-amber-500 text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed';
+
+export const FOCUS_RING =
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950';
+
 export const BTN_OUTLINE_EMERALD =
     'text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/60 text-emerald-200 hover:bg-emerald-500/10 disabled:opacity-40';
 
@@ -461,9 +472,6 @@ export function DataHubTabStripSkeleton({ count = 7 }: { count?: number }) {
 }
 
 // --- Segmented control, toolbar, loading (DESIGN_SYSTEM_DATAHUB.md §14) ---
-
-const FOCUS_RING =
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950';
 
 const SEGMENT_ITEM_BASE = `px-3 py-1.5 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${FOCUS_RING}`;
 

@@ -3,10 +3,10 @@
 **Module:** AI → Agents → Arbitrage Scanner  
 **Work Package:** ARB-WP1A  
 **Date:** 2026-07-16  
-**Human QA:** PENDING  
+**Human QA:** FAIL on button design (ARB-A9) → remediation deployed; retest **NEEDS MORE VERIFICATION**  
 **Engineering verdict (pre-Human-QA):** NEEDS MORE VERIFICATION  
 
-**Not closed:** Full Arbitrage Agent remains open. This is slice 1 only.
+**Not closed:** Full Arbitrage Agent remains open. This is slice 1 only. ARB-WP1B not started.
 
 ---
 
@@ -111,9 +111,36 @@ Filled at closeout time in the final report.
 
 ARB-A1 … ARB-A8 as specified in the Work Package (pending human execution).
 
+### ARB-A9 — Button Design-System Compliance (Human-QA remediation)
+
+**Human-QA defect (FAIL):** six action buttons did not match TitanGold Design System  
+(`Run Scan`, `Close`, `Pause`, `Restart`, `Reset`, `Save changes`).
+
+**RCA:** Arbitrage panel used one-off Tailwind (green primary, rectangular `rounded-lg` / `rounded-md`, slate filled Close) instead of shared Data Hub button tokens (`PrimaryButton` / `SecondaryButton` / `BTN_WARNING` / `BTN_ACTION_BLUE`).
+
+**Canonical variants applied:**
+
+| Control | Variant | Token / component |
+|---------|---------|-------------------|
+| Run Scan | Primary purple, pill | `PrimaryButton` / `BTN_PRIMARY` |
+| Save changes | Primary purple, pill | `PrimaryButton` / `BTN_PRIMARY` |
+| Close | Neutral outline, pill | `SecondaryButton` / `BTN_SECONDARY` |
+| Reset | Neutral outline, pill | `SecondaryButton` / `BTN_SECONDARY` |
+| Pause | Amber warning, pill | `BTN_WARNING` |
+| Restart | Blue secondary, pill | `BTN_ACTION_BLUE` |
+
+**Shared foundation:** exported `BTN_ACTION_BLUE`, `BTN_WARNING`, `FOCUS_RING` from `dataHubUi.tsx` (no Arbitrage-only button CSS).
+
+**Interaction preservation:** handlers unchanged; pending refs prevent double Run Scan / Pause / Restart / Save; Reset/Save disabled when not dirty.
+
+**Automated tests:** `src/__tests__/components/ai/ArbitrageAgentControl.wp1a.test.tsx` — 6 passed (WP1A + ARB-A9).
+
+**Human-QA status after this remediation:** **NEEDS MORE VERIFICATION** — awaiting explicit Human PASS on ARB-A9.  
+Do **not** mark ARB-WP1A CLOSED / REAL WORKING until Human retest.
+
 ## 13. Remaining Arbitrage slices
 
-- ARB-WP1B: AgentControlShell + full professional redesign  
+- ARB-WP1B: AgentControlShell + full professional redesign — **blocked until ARB-WP1A Human QA including ARB-A9**  
 - Later: real multi-leg strategies only with proven executable contracts  
 - Foundation: market-proxy exposure hardening  
 
