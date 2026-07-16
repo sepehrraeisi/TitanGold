@@ -8,6 +8,15 @@ import { query } from '../database/db.js';
 import { normalizeAgentConfig, mergeAgentConfig } from '../services/agentConfigDefaults.js';
 import { normalizeArbitrageConfig } from '../services/normalizeArbitrageConfig.js';
 import { normalizeFundamentalConfig } from '../services/normalizeFundamentalConfig.js';
+import {
+  ARBITRAGE_DECISION_TYPE,
+  buildArbitrageMetricsFromNormalized,
+  buildLastScanPayload,
+  countArbitrageScans,
+  fetchArbitrageScanHistory,
+  getArbitrageScanCountsByAgentIds,
+  normalizeScanResult,
+} from '../services/arbitrageScanContract.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { contentNegotiation } from '../middleware/contentNegotiation.js';
 import { getCache, setCache, buildCacheKey, invalidateAgentCache } from '../services/cache.js';
@@ -115,17 +124,31 @@ const transformAgent = (agent, decisionStats = { total: 0, successful: 0, learni
   }
 
   if (agent.agent_key === 'arbitrage') {
+    // ARB-WP1A: decisionStats.total must be arbitrage_scan count (injected by list handler).
+    // ai_agents.total_decisions is deprecated for Arbitrage and must not be used.
+    const scanTotal = parseInt(decisionStats.total, 10) || 0;
+    const lastScanAt =
+      decisionStats.last_completed_at ||
+      agent.last_active_at ||
+      agent.updated_at ||
+      agent.created_at;
     return {
       ...baseMetrics,
       accuracy: null,
       trainingProgress: null,
       learningTime: null,
       knowledgeSize: null,
-      totalScans: parseInt(decisionStats.total, 10),
+      decisions: scanTotal,
+      totalScans: scanTotal,
+      lastUpdate: lastScanAt,
+      last_active_at: lastScanAt,
       activeHours: parseFloat(learningHours.toFixed(1)),
       dataStoredMB: parseFloat(knowledgeMB),
-      opportunitiesFound: metadata?.last_result?.summary?.totalOpportunities || 0,
-      totalProfitUSDT: metadata?.last_result?.summary?.totalProfitUSDT || 0
+      opportunitiesFound: metadata?.last_result?.candidateStats?.spreadCandidates ?? 0,
+      // Never expose estimated last-scan sum as captured/realized profit
+      totalProfitUSDT: null,
+      analyticalMode: 'analytical_spread_monitor',
+      executionSupported: false,
     };
   }
 
@@ -264,21 +287,24 @@ function transformAgentResultForUI(agent_key, rawResult) {
   try {
     const { symbol, timeframe, confidence, signal, indicators, timestamp, _meta } = rawResult;
 
-    // Special handling for arbitrage agent
+    // Special handling for arbitrage agent — preserve WP1A classification fields
     if (agent_key === 'arbitrage') {
       return {
+        ...rawResult,
         timestamp: rawResult.timestamp || new Date().toISOString(),
         confidence: typeof rawResult.confidence === 'number' ? rawResult.confidence : 0.5,
-        indicators: [], // Arbitrage doesn't use indicators
-
-        // Arbitrage-specific fields
+        indicators: [],
         summary: rawResult.summary || {},
+        candidates: rawResult.candidates || [],
+        rejectedCandidates: rawResult.rejectedCandidates || [],
+        qualifiedOpportunities: rawResult.qualifiedOpportunities || [],
+        // Empty: same-market spreads are not qualified opportunities
         opportunities: rawResult.opportunities || [],
         riskAlerts: rawResult.riskAlerts || [],
         config: rawResult.config || {},
-
-        // Meta
-        _meta: rawResult._meta || { source: 'real', version: '1.0.0' }
+        analyticalMode: rawResult.analyticalMode || 'analytical_spread_monitor',
+        execution: rawResult.execution || { supported: false, realizedProfitUSDT: null },
+        _meta: rawResult._meta || { source: 'real', version: '2.0.0-wp1a' },
       };
     }
 
@@ -916,6 +942,25 @@ router.patch('/:id/config', authenticateStrict, requireCapability(CAP.AI_AGENT_C
     let normalizedConfig;
     if (agent_key === 'arbitrage') {
       normalizedConfig = normalizeArbitrageConfig(mergedConfig);
+      // ARB-WP1A: preserve stored autoExecute preference; never treat it as operational.
+      // UI must not enable Live auto-execution for this non-live-capable agent.
+      if (normalizedConfig.execution) {
+        normalizedConfig.execution.autoExecute = existingConfig?.execution?.autoExecute === true;
+        normalizedConfig.execution.autoExecuteSupported = false;
+      }
+      // Keep unsupported strategy flags disabled in persisted operational sense
+      if (Array.isArray(normalizedConfig.strategies)) {
+        normalizedConfig.strategies = normalizedConfig.strategies.map((s) => {
+          if (!s) return s;
+          if (s.type === 'triangle' || s.type === 'triangular' || s.type === 'cross_exchange' || s.type === 'spot_vs_perp') {
+            return { ...s, enabled: false, supported: false };
+          }
+          if (s.type === 'spot') {
+            return { ...s, type: 'spot', supported: true, labelKey: 'strategy_mexc_spot_spread_monitor' };
+          }
+          return s;
+        });
+      }
     } else if (agent_key === 'fundamental') {
       normalizedConfig = normalizeFundamentalConfig(mergedConfig);
     } else {
@@ -973,6 +1018,46 @@ router.patch('/:id/config', authenticateStrict, requireCapability(CAP.AI_AGENT_C
 });
 
 
+
+// ARB-WP1A: Paginated canonical scan history from ai_decisions
+router.get(
+  '/:id/scan-history',
+  authenticate,
+  requireCapability(CAP.AI_AGENT_READ),
+  rateLimit({ limit: 60, windowMs: 60000 }),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const page = req.query.page;
+      const pageSize = req.query.pageSize || req.query.limit;
+
+      const agentResult = await query(
+        `SELECT id, agent_key, name FROM ai_agents WHERE id = $1 LIMIT 1`,
+        [id],
+      );
+      if (agentResult.rows.length === 0) {
+        return sendError(res, 'NOT_FOUND', 'Agent not found', 404);
+      }
+      const agent = agentResult.rows[0];
+      if (agent.agent_key !== 'arbitrage') {
+        return sendError(res, 'VALIDATION_ERROR', 'Scan history is only available for the Arbitrage agent', 400);
+      }
+
+      const history = await fetchArbitrageScanHistory(id, { page, pageSize });
+      return res.json({
+        agent: { id: agent.id, agent_key: agent.agent_key, name: agent.name },
+        history: {
+          items: history.items,
+          pagination: history.pagination,
+        },
+        execution: { supported: false, realizedProfitUSDT: null },
+      });
+    } catch (error) {
+      logger.error('Arbitrage scan-history error:', error);
+      return sendError(res, 'SERVER_ERROR', 'Failed to load scan history', 500);
+    }
+  },
+);
 
 // Agent Details (Config, Performance, Last Analysis)
 router.get('/:id/details', authenticate, async (req, res) => {
@@ -1059,29 +1144,58 @@ router.get('/:id/details', authenticate, async (req, res) => {
       },
     };
 
-    // For arbitrage, add metrics and lastScan
+    // For arbitrage, add canonical metrics and lastScan from ai_decisions (ARB-WP1A)
     if (agent.agent_key === 'arbitrage') {
-      // Get recent scan from metadata
-      const lastScan = metadata?.last_result || null;
+      const scanCount = await countArbitrageScans(agent.id);
+      const latestDecision = await query(
+        `SELECT output_data, created_at
+         FROM ai_decisions
+         WHERE agent_id = $1 AND decision_type = $2
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`,
+        [agent.id, ARBITRAGE_DECISION_TYPE],
+      );
 
-      // Calculate metrics from last scan
-      const metrics = {
-        netProfitCapturedUSDT: lastScan?.summary?.totalProfitUSDT || 0,
-        successRate: 0, // TODO: Calculate from ai_decisions
-        avgExecutionMs: 200, // Average from opportunities
-        riskAlerts: lastScan?.riskAlerts?.length || 0,
-        opportunityFrequency24h: lastScan?.summary?.totalOpportunities || 0,
-        totalScans: parseInt(agent.total_decisions, 10) || 0,
-        opportunitiesFound: lastScan?.summary?.totalOpportunities || 0,
-        averageProfitBps: 0,
-        bestProfitBps: 0,
-        simulatedVolumeUSDT: 0,
-        executionHistory: [],
-        opportunityHistory: []
-      };
+      // Canonical last scan = latest decision; metadata.last_result is denormalized cache only
+      const latestRaw = latestDecision.rows[0]?.output_data || metadata?.last_result || null;
+      const normalized = normalizeScanResult(latestRaw, { legacy: true });
+      if (!normalized.timestamp && latestDecision.rows[0]?.created_at) {
+        normalized.timestamp = new Date(latestDecision.rows[0].created_at).toISOString();
+      }
+
+      const metrics = buildArbitrageMetricsFromNormalized(
+        normalized,
+        scanCount.total,
+        scanCount.lastCompletedAt || normalized.timestamp,
+      );
+
+      // Strip misleading futures/auto-execute presentation in read contract
+      if (config && typeof config === 'object') {
+        if (config.execution) {
+          config.execution = {
+            ...config.execution,
+            autoExecute: false,
+            autoExecuteSupported: false,
+            autoExecuteStoredPreference: Boolean(rawConfig?.execution?.autoExecute),
+          };
+        }
+      }
 
       response.metrics = metrics;
-      response.lastScan = lastScan;
+      response.lastScan = buildLastScanPayload(normalized);
+      response.scanStats = metrics.scanStats;
+      response.candidateStats = metrics.candidateStats;
+      response.qualifiedStats = metrics.qualifiedStats;
+      response.riskStats = metrics.riskStats;
+      response.execution = metrics.execution;
+      response.analyticalMode = metrics.analyticalMode;
+      // Deprecated for Arbitrage: ai_agents.total_decisions (stale column)
+      response.deprecated = {
+        ai_agents_total_decisions: 'Do not use for Arbitrage scan count; use scanStats.total',
+        netProfitCapturedUSDT: 'Removed — was estimated last-scan sum, not realized profit',
+        executionHistory: 'Unsupported — Arbitrage agent has no verified execution model',
+        opportunityHistory: 'Replaced by GET /:id/scan-history from ai_decisions',
+      };
     }
 
     // For fundamental, add metrics and lastAnalysis
@@ -1279,6 +1393,42 @@ router.get('/', authenticate, validateQuery(listAgentsQuerySchema), validateResp
     const decisionsMap = new Map(
       decisionsResult.rows.map(d => [d.agent_id, d])
     );
+
+    // ARB-WP1A: override Arbitrage counts with arbitrage_scan-only aggregate (no N+1)
+    const arbIds = result.rows.filter((a) => a.agent_key === 'arbitrage').map((a) => a.id);
+    const arbCounts = await getArbitrageScanCountsByAgentIds(arbIds);
+    for (const [agentId, stats] of arbCounts.entries()) {
+      const existing = decisionsMap.get(agentId) || {
+        agent_id: agentId,
+        total: 0,
+        successful: 0,
+        learning_hours: 0,
+      };
+      decisionsMap.set(agentId, {
+        ...existing,
+        total: stats.total,
+        last_completed_at: stats.lastCompletedAt,
+      });
+    }
+    // Agents with zero arbitrage_scan rows still need explicit zero for arbitrage key
+    for (const id of arbIds) {
+      if (!decisionsMap.has(id)) {
+        decisionsMap.set(id, {
+          agent_id: id,
+          total: 0,
+          successful: 0,
+          learning_hours: 0,
+          last_completed_at: null,
+        });
+      } else if (!arbCounts.has(id)) {
+        const existing = decisionsMap.get(id);
+        decisionsMap.set(id, {
+          ...existing,
+          total: 0,
+          last_completed_at: null,
+        });
+      }
+    }
 
     // Map DB fields to UI contract using a shared helper
     const agents = result.rows.map(agent => transformAgent(agent, decisionsMap.get(agent.id)));

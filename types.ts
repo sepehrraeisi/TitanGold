@@ -1850,13 +1850,25 @@ export interface PricePredictionMetrics {
   };
 }
 
-export type ArbitrageStrategyType = 'triangular' | 'spot_vs_perp' | 'cross_exchange';
+export type ArbitrageStrategyType =
+  | 'mexc_spot_spread_monitor'
+  | 'spot'
+  | 'triangle'
+  | 'triangular'
+  | 'spot_vs_perp'
+  | 'cross_exchange';
+
 export type ArbitrageDetectionSensitivity = 'conservative' | 'balanced' | 'aggressive';
+
+export type ArbitrageCandidateClassification =
+  | 'spread_candidate'
+  | 'rejected_candidate'
+  | 'qualified_opportunity';
 
 export interface ArbitrageExchangeConfig {
   id: string;
   name: string;
-  markets: Array<'spot' | 'perpetual'>;
+  markets: Array<'spot' | 'perpetual' | 'futures'>;
   enabled: boolean;
   tradingFeeBps: number;
   latencyMs?: number;
@@ -1868,10 +1880,14 @@ export interface ArbitrageStrategyConfig {
   minProfitBps: number;
   maxSlippageBps: number;
   maxExposureUSDT: number;
+  supported?: boolean;
+  labelKey?: string;
 }
 
 export interface ArbitrageExecutionSettings {
   autoExecute: boolean;
+  autoExecuteSupported?: boolean;
+  autoExecuteStoredPreference?: boolean;
   preferSpeed: boolean;
   maxConcurrent: number;
   capitalPerTradeUSDT: number;
@@ -1939,25 +1955,37 @@ export interface ArbitrageRouteLeg {
   exchangeId: string;
 }
 
-export interface ArbitrageOpportunity {
+export interface ArbitrageSpreadCandidate {
   id: string;
-  strategy: ArbitrageStrategyType;
+  symbol?: string | null;
+  classification: ArbitrageCandidateClassification;
+  strategy: string;
+  strategyLabelKey?: string;
   path: string[];
-  expectedProfitBps: number;
-  expectedProfitUSDT: number;
-  netProfitUSDT: number;
-  netProfitBps: number;
-  notionalUSDT: number;
-  legs: ArbitrageRouteLeg[];
-  requiredExchanges: string[];
+  expectedProfitBps: number | null;
+  netProfitUSDT: number | null;
+  riskScore: number | null;
   timestamp: string;
-  confidence: number;
-  riskScore: number;
-  executionTimeMs: number;
+  analytical?: boolean;
+  executableArbitrage?: boolean;
+  rejectionReason?: string | null;
+  executionTimeMs?: number | null;
+  notes?: string;
+  legacy?: boolean;
+}
+
+/** @deprecated Use ArbitrageSpreadCandidate — kept for transitional typing */
+export interface ArbitrageOpportunity extends ArbitrageSpreadCandidate {
+  expectedProfitUSDT?: number;
+  netProfitBps?: number;
+  notionalUSDT?: number;
+  legs?: ArbitrageRouteLeg[];
+  requiredExchanges?: string[];
+  confidence?: number;
   latencyMs?: number;
-  feeImpactBps: number;
-  transferCostUSDT: number;
-  status: 'open' | 'expired' | 'simulated';
+  feeImpactBps?: number;
+  transferCostUSDT?: number;
+  status?: 'open' | 'expired' | 'simulated';
 }
 
 export interface ArbitrageExecutionRecord {
@@ -1984,20 +2012,79 @@ export interface ArbitrageOpportunityHistoryEntry {
   strategy: ArbitrageStrategyType;
 }
 
+export interface ArbitrageScanHistoryItem {
+  id: string;
+  decisionType: string;
+  completedAt: string | null;
+  startedAt: string | null;
+  status: string;
+  legacy: boolean;
+  analyticalMode: string;
+  strategyClassification: string;
+  candidateStats: {
+    total: number;
+    rejected: number;
+    spreadCandidates: number;
+    qualified: number;
+  };
+  qualifiedStats: {
+    total: number;
+    bestProfitBps: number | null;
+    expectedNetProfitUSDT: number | null;
+  };
+  riskStats: {
+    averageScore: number | null;
+    unit: string;
+  };
+  dryRun: boolean;
+  errorMessage: string | null;
+  confidence: number | null;
+}
+
 export interface ArbitrageMetrics {
   totalScans: number;
+  scanStats?: {
+    total: number;
+    lastCompletedAt: string | null;
+  };
+  candidateStats?: {
+    total: number;
+    rejected: number;
+    spreadCandidates: number;
+    qualified: number;
+  };
+  qualifiedStats?: {
+    total: number;
+    bestProfitBps: number | null;
+    expectedNetProfitUSDT: number | null;
+  };
+  riskStats?: {
+    averageScore: number | null;
+    unit: string;
+  };
+  execution?: {
+    supported: boolean;
+    realizedProfitUSDT: number | null;
+  };
+  analyticalMode?: string;
+  strategyClassification?: string;
   opportunitiesFound: number;
-  averageProfitBps: number;
-  bestProfitBps: number;
-  simulatedVolumeUSDT: number;
-  netProfitCapturedUSDT: number;
-  avgExecutionMs: number;
-  successRate: number;
+  averageProfitBps: number | null;
+  bestProfitBps: number | null;
+  simulatedVolumeUSDT: number | null;
+  /** @deprecated Always null — was mislabeled estimated sum */
+  netProfitCapturedUSDT: number | null;
+  avgExecutionMs: number | null;
+  successRate: number | null;
   riskAlerts: number;
-  opportunityFrequency24h: number;
-  executionHistory: ArbitrageExecutionRecord[];
-  opportunityHistory: ArbitrageOpportunityHistoryEntry[];
-  recentPerformance: {
+  opportunityFrequency24h: number | null;
+  executionHistorySupported?: boolean;
+  opportunityHistorySupported?: boolean;
+  /** @deprecated unsupported */
+  executionHistory?: ArbitrageExecutionRecord[];
+  /** @deprecated use scan-history API */
+  opportunityHistory?: ArbitrageOpportunityHistoryEntry[];
+  recentPerformance?: {
     last24h: { scans: number; opportunities: number; avgProfitBps: number; netProfitUSDT: number };
     last7d: { scans: number; opportunities: number; avgProfitBps: number; netProfitUSDT: number };
     last30d: { scans: number; opportunities: number; avgProfitBps: number; netProfitUSDT: number };
@@ -2006,12 +2093,23 @@ export interface ArbitrageMetrics {
 
 export interface ArbitrageScanResult {
   timestamp: string;
+  analyticalMode?: string;
+  strategyClassification?: string;
+  candidates?: ArbitrageSpreadCandidate[];
+  rejectedCandidates?: ArbitrageSpreadCandidate[];
+  qualifiedOpportunities?: ArbitrageSpreadCandidate[];
+  candidateStats?: ArbitrageMetrics['candidateStats'];
+  qualifiedStats?: ArbitrageMetrics['qualifiedStats'];
+  riskStats?: ArbitrageMetrics['riskStats'];
   opportunities: ArbitrageOpportunity[];
   exchangesChecked: string[];
   symbolsChecked: string[];
-  avgRiskScore: number;
-  netProfitPotentialUSDT: number;
-  avgExecutionMs: number;
+  avgRiskScore: number | null;
+  netProfitPotentialUSDT: number | null;
+  avgExecutionMs: number | null;
+  execution?: { supported: boolean; realizedProfitUSDT: number | null };
+  legacy?: boolean;
+  dryRun?: boolean;
 }
 
 export interface AllocationTarget {

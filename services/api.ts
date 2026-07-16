@@ -3773,22 +3773,23 @@ const createDefaultAllocationMetrics = (): PortfolioAllocationMetrics => ({
 });
 const createDefaultArbitrageMetrics = (): ArbitrageMetrics => ({
     totalScans: 0,
+    scanStats: { total: 0, lastCompletedAt: null },
+    candidateStats: { total: 0, rejected: 0, spreadCandidates: 0, qualified: 0 },
+    qualifiedStats: { total: 0, bestProfitBps: null, expectedNetProfitUSDT: null },
+    riskStats: { averageScore: null, unit: 'score_0_100' },
+    execution: { supported: false, realizedProfitUSDT: null },
+    analyticalMode: 'analytical_spread_monitor',
     opportunitiesFound: 0,
-    averageProfitBps: 0,
-    bestProfitBps: 0,
-    simulatedVolumeUSDT: 0,
-    netProfitCapturedUSDT: 0,
-    avgExecutionMs: 0,
-    successRate: 0,
+    averageProfitBps: null,
+    bestProfitBps: null,
+    simulatedVolumeUSDT: null,
+    netProfitCapturedUSDT: null,
+    avgExecutionMs: null,
+    successRate: null,
     riskAlerts: 0,
-    opportunityFrequency24h: 0,
-    executionHistory: [],
-    opportunityHistory: [],
-    recentPerformance: {
-        last24h: { scans: 0, opportunities: 0, avgProfitBps: 0, netProfitUSDT: 0 },
-        last7d: { scans: 0, opportunities: 0, avgProfitBps: 0, netProfitUSDT: 0 },
-        last30d: { scans: 0, opportunities: 0, avgProfitBps: 0, netProfitUSDT: 0 },
-    },
+    opportunityFrequency24h: null,
+    executionHistorySupported: false,
+    opportunityHistorySupported: false,
 });
 
 const createDefaultPatternMetrics = (): PatternMetrics => ({
@@ -8005,9 +8006,6 @@ export const fetchArbitrageAgentData = async (agentId: string): Promise<{
             throw new Error('Authentication required');
         }
 
-        console.log('📊 Fetching arbitrage agent data from backend...');
-
-        // Call backend /details endpoint
         const response = await fetch(`/api/ai-agents/${agentId}/details`, {
             method: 'GET',
             headers: {
@@ -8021,18 +8019,81 @@ export const fetchArbitrageAgentData = async (agentId: string): Promise<{
         }
 
         const data = await response.json();
-        
-        console.log('✅ Arbitrage data loaded from backend');
+        const lastScan = data.lastScan
+            ? {
+                timestamp: data.lastScan.timestamp || new Date().toISOString(),
+                analyticalMode: data.lastScan.analyticalMode,
+                strategyClassification: data.lastScan.strategyClassification,
+                candidates: data.lastScan.candidates || [],
+                rejectedCandidates: data.lastScan.rejectedCandidates || [],
+                qualifiedOpportunities: data.lastScan.qualifiedOpportunities || [],
+                candidateStats: data.lastScan.candidateStats || data.candidateStats,
+                qualifiedStats: data.lastScan.qualifiedStats || data.qualifiedStats,
+                riskStats: data.lastScan.riskStats || data.riskStats,
+                opportunities: [],
+                exchangesChecked: data.lastScan.exchangesChecked || ['mexc'],
+                symbolsChecked: data.lastScan.symbolsChecked || [],
+                avgRiskScore: data.lastScan.avgRiskScore ?? data.lastScan.riskStats?.averageScore ?? null,
+                netProfitPotentialUSDT: data.lastScan.netProfitPotentialUSDT ?? null,
+                avgExecutionMs: null,
+                execution: data.lastScan.execution || { supported: false, realizedProfitUSDT: null },
+                legacy: Boolean(data.lastScan.legacy),
+                dryRun: true,
+            }
+            : null;
 
         return {
             config: data.agent?.config || null,
             metrics: data.metrics || null,
-            lastScan: data.lastScan || null
+            lastScan,
         };
     } catch (e) {
         console.warn('Failed to fetch arbitrage agent data:', e);
         return { config: null, metrics: null, lastScan: null };
     }
+};
+
+export const fetchArbitrageScanHistory = async (
+    agentId: string,
+    opts: { page?: number; pageSize?: number } = {},
+): Promise<{
+    items: import('../types.ts').ArbitrageScanHistoryItem[];
+    pagination: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+        hasMore: boolean;
+    };
+}> => {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) throw new Error('Authentication required');
+
+    const page = opts.page || 1;
+    const pageSize = opts.pageSize || 20;
+    const response = await fetch(
+        `/api/ai-agents/${agentId}/scan-history?page=${page}&pageSize=${pageSize}`,
+        {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        },
+    );
+    if (!response.ok) {
+        throw new Error(`Failed to fetch scan history: ${response.status}`);
+    }
+    const data = await response.json();
+    return {
+        items: data.history?.items || [],
+        pagination: data.history?.pagination || {
+            page,
+            pageSize,
+            total: 0,
+            totalPages: 1,
+            hasMore: false,
+        },
+    };
 };
 
 export const updateArbitrageConfig = async (
@@ -8075,9 +8136,6 @@ export const runArbitrageAnalysis = async (agentId: string): Promise<ArbitrageSc
             throw new Error('Authentication required');
         }
 
-        console.log('🔍 Running arbitrage analysis for agent:', agentId);
-
-        // Call backend endpoint (to be created)
         const response = await fetch(`/api/ai-agents/${agentId}/run`, {
             method: 'POST',
             headers: {
@@ -8085,27 +8143,39 @@ export const runArbitrageAnalysis = async (agentId: string): Promise<ArbitrageSc
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                symbol: 'BTCUSDT', // Default for now
+                symbol: 'BTCUSDT',
                 timeframe: '1h',
             }),
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || 'Failed to run arbitrage analysis');
         }
 
         const data = await response.json();
-        
-        // Transform backend response to ArbitrageScanResult format
+        // Registry returns dual format; prefer nested result fields when present
+        const raw = data.result || data;
+
         return {
-            timestamp: data.timestamp || new Date().toISOString(),
-            opportunities: data.opportunities || [],
-            exchangesChecked: data.exchangesChecked || ['mexc'],
-            symbolsChecked: data.symbolsChecked || ['BTCUSDT'],
-            avgRiskScore: data.avgRiskScore || 0,
-            netProfitPotentialUSDT: data.netProfitPotentialUSDT || 0,
-            avgExecutionMs: data.avgExecutionMs || 0,
+            timestamp: raw.timestamp || data.timestamp || new Date().toISOString(),
+            analyticalMode: raw.analyticalMode || 'analytical_spread_monitor',
+            strategyClassification: raw.strategyClassification || 'mexc_spot_spread_monitor',
+            candidates: raw.candidates || [],
+            rejectedCandidates: raw.rejectedCandidates || [],
+            qualifiedOpportunities: raw.qualifiedOpportunities || [],
+            candidateStats: raw.candidateStats,
+            qualifiedStats: raw.qualifiedStats,
+            riskStats: raw.riskStats,
+            opportunities: [],
+            exchangesChecked: raw.exchangesChecked || ['mexc'],
+            symbolsChecked: raw.config?.symbols || raw.symbolsChecked || [],
+            avgRiskScore: raw.riskStats?.averageScore ?? raw.summary?.avgRiskScore ?? null,
+            netProfitPotentialUSDT: raw.qualifiedStats?.expectedNetProfitUSDT ?? null,
+            avgExecutionMs: null,
+            execution: raw.execution || { supported: false, realizedProfitUSDT: null },
+            legacy: false,
+            dryRun: true,
         };
     } catch (error) {
         console.error('❌ Failed to run arbitrage analysis:', error);
