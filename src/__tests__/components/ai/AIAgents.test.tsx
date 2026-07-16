@@ -10,9 +10,118 @@ vi.mock('../../../../services/api', () => ({
   sendAgentControlCommand: vi.fn(),
 }));
 
+let currentLanguage: 'en' | 'fa' = 'en';
+
+const translations = {
+  en: {
+    loading: 'loading',
+    failed_to_load_data: 'Failed to load AI agents.',
+    retry: 'Retry',
+    open_agent: 'Open Agent',
+    close: 'Close',
+    search_agents: 'Search by name, purpose, or capability...',
+    status: 'Status',
+    sort: 'Sort',
+    all: 'All',
+    no_agents_found: 'No agents found',
+    try_different_search: 'Try a different search term or adjust the filters.',
+    clear_filters: 'Clear filters',
+    agents_results_all: 'Showing {count} agents',
+    agents_results_filtered: 'Showing {count} of {total} agents',
+    agents_results_one: '1 agent found',
+    agents_results_none: 'No agents found',
+    agent_state_ready: 'Ready',
+    agent_state_running: 'Running',
+    agent_state_paused: 'Paused',
+    agent_state_error: 'Error',
+    sort_by_name: 'Name',
+    sort_by_last_run: 'Last Run',
+    sort_by_status: 'Status',
+    agents_dry_run_blocked_short: 'Agents run in Dry Run. Live side effects are blocked.',
+    effective_mode: 'Effective Mode',
+    emergency_stop: 'Emergency Stop',
+    active: 'Active',
+    last_run: 'Last run',
+    results_count: 'Results',
+    execution_type: 'Type',
+    execution_kind_analytical: 'Analytical',
+    execution_kind_provider: 'Provider',
+    execution_kind_live_capable: 'Live-capable',
+    not_available: 'N/A',
+    dry_run_badge: 'Dry Run',
+    blocked_badge: 'Blocked',
+    live_capable_badge: 'Live-capable',
+    agent_realtime_unavailable: 'Real-time updates unavailable',
+    agent_realtime_connected: 'Realtime agent updates connected',
+    agents_permission_limited: 'Your role has limited agent access. Some actions may be unavailable.',
+    agents_read_only_badge: 'View only',
+    execution_safety: 'Execution safety',
+    runtime_mode_hint: 'Effective trading mode for this session',
+  },
+  fa: {
+    loading: 'در حال بارگذاری',
+    failed_to_load_data: 'بارگذاری عامل‌های هوش مصنوعی انجام نشد.',
+    retry: 'تلاش دوباره',
+    open_agent: 'باز کردن عامل',
+    close: 'بستن',
+    search_agents: 'جست‌وجو بر اساس نام، نقش یا قابلیت...',
+    status: 'وضعیت',
+    sort: 'مرتب‌سازی',
+    all: 'همه',
+    no_agents_found: 'هیچ عاملی پیدا نشد',
+    try_different_search: 'عبارت دیگری را جست‌وجو کنید یا فیلترها را تغییر دهید.',
+    clear_filters: 'پاک کردن فیلترها',
+    agents_results_all: 'نمایش {count} عامل',
+    agents_results_filtered: 'نمایش {count} عامل از {total} عامل',
+    agents_results_one: '۱ عامل پیدا شد',
+    agents_results_none: 'هیچ عاملی پیدا نشد',
+    agent_state_ready: 'آماده',
+    agent_state_running: 'در حال اجرا',
+    agent_state_paused: 'متوقف',
+    agent_state_error: 'خطا',
+    sort_by_name: 'نام',
+    sort_by_last_run: 'آخرین اجرا',
+    sort_by_status: 'وضعیت',
+    agents_dry_run_blocked_short: 'عامل‌ها در Dry Run اجرا می‌شوند. اثرات جانبی زنده مسدود است.',
+    effective_mode: 'حالت مؤثر',
+    emergency_stop: 'توقف اضطراری',
+    active: 'فعال',
+    last_run: 'آخرین اجرا',
+    results_count: 'نتایج',
+    execution_type: 'نوع',
+    execution_kind_analytical: 'تحلیلی',
+    execution_kind_provider: 'ارائه‌دهنده',
+    execution_kind_live_capable: 'قابلیت زنده',
+    not_available: 'N/A',
+    dry_run_badge: 'Dry Run',
+    blocked_badge: 'مسدود',
+    live_capable_badge: 'قابلیت زنده',
+    agent_realtime_unavailable: 'به‌روزرسانی برخط در دسترس نیست',
+    agent_realtime_connected: 'به‌روزرسانی برخط عامل‌ها متصل است',
+    agents_permission_limited: 'نقش شما دسترسی محدود به عامل‌ها دارد. برخی اقدامات ممکن است در دسترس نباشند.',
+    agents_read_only_badge: 'فقط مشاهده',
+    execution_safety: 'ایمنی اجرا',
+    runtime_mode_hint: 'حالت مؤثر معامله برای این نشست',
+  },
+} as const;
+
+function translate(key: string, options?: { [key: string]: string | number }) {
+  let value = (translations[currentLanguage] as Record<string, string>)[key] || key;
+  if (options) {
+    for (const [k, v] of Object.entries(options)) {
+      value = value.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+    }
+  }
+  return value;
+}
+
 vi.mock('../../../../context/LanguageContext', () => ({
   useLanguage: () => ({
-    t: (key: string) => key,
+    language: currentLanguage,
+    setLanguage: (language: 'en' | 'fa') => {
+      currentLanguage = language;
+    },
+    t: translate,
   }),
 }));
 
@@ -199,6 +308,7 @@ const mockAgents: AIAgent[] = [
     accuracy: 85.5,
     trainingProgress: 95.0,
     decisions: 1000,
+    level: 'Expert',
     learningTime: 120,
     knowledgeSize: 45.2,
     capabilities: ['Chart Analysis', 'Pattern Recognition'],
@@ -213,6 +323,7 @@ const mockAgents: AIAgent[] = [
     accuracy: 78.3,
     trainingProgress: 65.0,
     decisions: 500,
+    level: 'Advanced',
     learningTime: 60,
     knowledgeSize: 32.1,
     capabilities: ['Trend Analysis', 'Reversal Detection'],
@@ -227,6 +338,7 @@ const mockAgents: AIAgent[] = [
     accuracy: 92.1,
     trainingProgress: 100.0,
     decisions: 2000,
+    level: 'Advanced',
     learningTime: 200,
     knowledgeSize: 78.5,
     capabilities: ['Risk Assessment', 'Portfolio Protection'],
@@ -237,6 +349,7 @@ const mockAgents: AIAgent[] = [
 describe('AIAgents Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    currentLanguage = 'en';
   });
 
   afterEach(() => {
@@ -284,9 +397,9 @@ describe('AIAgents Component', () => {
         expect(screen.queryByTestId('agents-loading-skeleton')).not.toBeInTheDocument();
       });
 
-      expect(screen.getAllByText('agent_state_ready').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('agent_state_running').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('agent_state_paused').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Ready').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Paused').length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders compact safety summary', async () => {
@@ -300,7 +413,7 @@ describe('AIAgents Component', () => {
       });
 
       expect(screen.getByTestId('emergency-stop-badge')).toBeInTheDocument();
-      expect(screen.getByText('agents_dry_run_blocked_short')).toBeInTheDocument();
+      expect(screen.getByText('Agents run in Dry Run. Live side effects are blocked.')).toBeInTheDocument();
     });
   });
 
@@ -370,7 +483,8 @@ describe('AIAgents Component', () => {
       render(<AIAgents />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('agents-grid')).toBeInTheDocument();
+      expect(screen.getByTestId('agents-grid')).toBeInTheDocument();
+      expect(screen.getByTestId('agents-results-count')).toHaveTextContent('Showing 3 agents');
       });
 
       fireEvent.change(screen.getByTestId('agents-search'), {
@@ -381,6 +495,7 @@ describe('AIAgents Component', () => {
         expect(screen.getByText('Trend Master')).toBeInTheDocument();
         expect(screen.queryByText('Artemis')).not.toBeInTheDocument();
       });
+      expect(screen.getByTestId('agents-results-count')).toHaveTextContent('1 agent found');
     });
   });
 
@@ -393,10 +508,10 @@ describe('AIAgents Component', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('agents-error')).toBeInTheDocument();
-        expect(screen.getByText('failed_to_load_data')).toBeInTheDocument();
+        expect(screen.getByText('Failed to load AI agents.')).toBeInTheDocument();
       });
 
-      expect(screen.getByText('retry')).toBeInTheDocument();
+      expect(screen.getByText('Retry')).toBeInTheDocument();
     });
 
     it('retries fetching data when retry button is clicked', async () => {
@@ -407,13 +522,13 @@ describe('AIAgents Component', () => {
       render(<AIAgents />);
 
       await waitFor(() => {
-        expect(screen.getByText('failed_to_load_data')).toBeInTheDocument();
+        expect(screen.getByText('Failed to load AI agents.')).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText('retry'));
+      fireEvent.click(screen.getByText('Retry'));
 
       await waitFor(() => {
-        expect(screen.queryByText('failed_to_load_data')).not.toBeInTheDocument();
+        expect(screen.queryByText('Failed to load AI agents.')).not.toBeInTheDocument();
         expect(screen.getByText('Artemis')).toBeInTheDocument();
       });
 
@@ -430,7 +545,8 @@ describe('AIAgents Component', () => {
         expect(screen.getByTestId('agents-empty')).toBeInTheDocument();
       });
 
-      expect(screen.queryAllByText('open_agent').length).toBe(0);
+      expect(screen.getByTestId('agents-empty')).toHaveTextContent('No agents found');
+      expect(screen.queryByTestId('agents-clear-filters')).not.toBeInTheDocument();
     });
   });
 
@@ -448,7 +564,98 @@ describe('AIAgents Component', () => {
       expect(screen.getByText('1,000')).toBeInTheDocument();
       expect(screen.getByText('500')).toBeInTheDocument();
       expect(screen.getByText('2,000')).toBeInTheDocument();
-      expect(screen.getAllByText('open_agent').length).toBe(3);
+      expect(screen.getAllByText('Open Agent').length).toBe(3);
+    });
+  });
+
+  describe('Agents Shell i18n', () => {
+    it('renders English full, filtered, one, zero, clear action, and no raw keys', async () => {
+      vi.mocked(api.fetchAIAgents).mockResolvedValue(mockAgents);
+      render(<AIAgents />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('Showing 3 agents');
+      });
+
+      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'ready' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('1 agent found');
+      });
+
+      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'all' } });
+      fireEvent.change(screen.getByTestId('agents-search'), { target: { value: 'Risk' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('1 agent found');
+      });
+
+      fireEvent.change(screen.getByTestId('agents-search'), { target: { value: 'Analysis' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('Showing 2 of 3 agents');
+      });
+
+      fireEvent.change(screen.getByTestId('agents-search'), { target: { value: 'zzz-none' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('No agents found');
+        expect(screen.getByTestId('agents-empty')).toHaveTextContent('Try a different search term or adjust the filters.');
+      });
+
+      const clearButton = screen.getByTestId('agents-clear-filters');
+      expect(clearButton).toHaveAccessibleName('Clear filters');
+      clearButton.focus();
+      expect(clearButton).toHaveFocus();
+      fireEvent.click(clearButton);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('Showing 3 agents');
+        expect(screen.getByDisplayValue('')).toBeInTheDocument();
+      });
+
+      expect((screen.getByTestId('agents-status-filter') as HTMLSelectElement).value).toBe('all');
+      expect((screen.getByTestId('agents-sort') as HTMLSelectElement).value).toBe('name');
+      expect(screen.queryByText('showing_results')).not.toBeInTheDocument();
+      expect(screen.queryByText('try_different_search')).not.toBeInTheDocument();
+      expect(screen.queryByText('clear_filters')).not.toBeInTheDocument();
+      expect(screen.queryByText(/agent_state_|execution_kind_|undefined|null/)).not.toBeInTheDocument();
+    });
+
+    it('renders Persian full, filtered, one, zero, clear action, and no raw keys', async () => {
+      currentLanguage = 'fa';
+      vi.mocked(api.fetchAIAgents).mockResolvedValue(mockAgents);
+      render(<AIAgents />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('نمایش 3 عامل');
+      });
+
+      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'ready' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('۱ عامل پیدا شد');
+      });
+
+      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'all' } });
+      fireEvent.change(screen.getByTestId('agents-search'), { target: { value: 'Analysis' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('نمایش 2 عامل از 3 عامل');
+      });
+
+      fireEvent.change(screen.getByTestId('agents-search'), { target: { value: 'zzz-none' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('هیچ عاملی پیدا نشد');
+        expect(screen.getByTestId('agents-empty')).toHaveTextContent('عبارت دیگری را جست‌وجو کنید یا فیلترها را تغییر دهید.');
+      });
+
+      const clearButton = screen.getByTestId('agents-clear-filters');
+      expect(clearButton).toHaveAccessibleName('پاک کردن فیلترها');
+      fireEvent.keyDown(clearButton, { key: 'Enter' });
+      fireEvent.click(clearButton);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('نمایش 3 عامل');
+      });
+
+      expect(screen.queryByText('showing_results')).not.toBeInTheDocument();
+      expect(screen.queryByText('try_different_search')).not.toBeInTheDocument();
+      expect(screen.queryByText('clear_filters')).not.toBeInTheDocument();
     });
   });
 });

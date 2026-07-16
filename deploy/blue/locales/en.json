@@ -4699,5 +4699,11 @@
   "blocked_badge": "Blocked",
   "results_count_hint": "Documented result/decision count from the agent summary. N/A when unknown.",
   "agent_metrics": "Agent metrics",
-  "agent_safety_badges": "Safety"
+  "agent_safety_badges": "Safety",
+  "agents_results_all": "Showing {count} agents",
+  "agents_results_filtered": "Showing {count} of {total} agents",
+  "agents_results_one": "1 agent found",
+  "agents_results_none": "No agents found",
+  "try_different_search": "Try a different search term or adjust the filters.",
+  "clear_filters": "Clear filters"
 }

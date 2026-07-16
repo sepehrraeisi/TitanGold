@@ -4515,5 +4515,11 @@
   "blocked_badge": "مسدود",
   "results_count_hint": "تعداد نتایج/تصمیم‌های مستند از خلاصه عامل. در صورت نامشخص: N/A.",
   "agent_metrics": "شاخص‌های عامل",
-  "agent_safety_badges": "ایمنی"
+  "agent_safety_badges": "ایمنی",
+  "agents_results_all": "نمایش {count} عامل",
+  "agents_results_filtered": "نمایش {count} عامل از {total} عامل",
+  "agents_results_one": "۱ عامل پیدا شد",
+  "agents_results_none": "هیچ عاملی پیدا نشد",
+  "try_different_search": "عبارت دیگری را جست‌وجو کنید یا فیلترها را تغییر دهید.",
+  "clear_filters": "پاک کردن فیلترها"
 }

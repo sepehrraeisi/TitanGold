@@ -24,6 +24,24 @@ import Skeleton from '../ui/skeleton';
 type StatusFilter = 'all' | 'ready' | 'paused' | 'error' | 'running';
 type SortMode = 'name' | 'last_run' | 'status';
 
+function getAgentsResultsLabel(
+  t: (key: string, options?: { [key: string]: string | number }) => string,
+  visibleCount: number,
+  totalCount: number,
+  hasActiveFilters: boolean,
+) {
+  if (visibleCount <= 0) {
+    return t('agents_results_none');
+  }
+  if (visibleCount === 1) {
+    return t('agents_results_one');
+  }
+  if (hasActiveFilters && visibleCount !== totalCount) {
+    return t('agents_results_filtered', { count: visibleCount, total: totalCount });
+  }
+  return t('agents_results_all', { count: visibleCount });
+}
+
 const AgentsShellSkeleton: React.FC<{ count?: number }> = ({ count = 6 }) => (
   <div
     className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4"
@@ -197,8 +215,9 @@ const AIAgents: React.FC = () => {
     const agentRegistryEntry = selectedAgent ? getAgentControl(selectedAgent.agent_key) : null;
     const hasActiveFilters = Boolean(debouncedSearchTerm) || statusFilter !== 'all';
     const emptyMessage = hasActiveFilters
-        ? (t('try_different_search') || 'Try adjusting your search or status filter')
-        : (t('no_agents_found') || 'No agents found');
+        ? t('try_different_search')
+        : t('no_agents_found');
+    const resultsLabel = getAgentsResultsLabel(t, sortedAgents.length, agents.length, hasActiveFilters);
 
     return (
         <>
@@ -296,12 +315,13 @@ const AIAgents: React.FC = () => {
                     </div>
                 </div>
 
-                {hasActiveFilters && (
-                    <p className="text-[11px] text-muted-foreground mt-2" aria-live="polite">
-                        {t('showing_results', { count: sortedAgents.length, total: agents.length }) ||
-                            `${sortedAgents.length} / ${agents.length}`}
-                    </p>
-                )}
+                <p
+                    className="text-[11px] text-muted-foreground mt-2"
+                    aria-live="polite"
+                    data-testid="agents-results-count"
+                >
+                    {resultsLabel}
+                </p>
             </div>
 
             {sortedAgents.length > 0 ? (
@@ -329,9 +349,11 @@ const AIAgents: React.FC = () => {
                                     setSearchTerm('');
                                     setStatusFilter('all');
                                 }}
-                                className={BTN_SECONDARY}
+                                className={`${BTN_SECONDARY} focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950`}
+                                aria-label={t('clear_filters')}
+                                data-testid="agents-clear-filters"
                             >
-                                {t('clear_filters') || 'Clear filters'}
+                                {t('clear_filters')}
                             </button>
                         </div>
                     )}
