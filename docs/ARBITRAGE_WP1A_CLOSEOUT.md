@@ -135,6 +135,28 @@ ARB-A1 … ARB-A8 as specified in the Work Package (pending human execution).
 
 **Automated tests:** `src/__tests__/components/ai/ArbitrageAgentControl.wp1a.test.tsx` — 6 passed (WP1A + ARB-A9).
 
+**Browser QA (staging `https://titan.zala.ir`, supporting evidence):**
+
+| Control | Visual | Hover classes | Focus utility | Disabled | Loading | Action |
+|---------|--------|---------------|---------------|----------|---------|--------|
+| Run Scan | Primary purple pill VERIFIED | PASS | PASS (`focus-visible:ring`) | PASS | PASS (pending guard) | PASS |
+| Close | Neutral outline pill VERIFIED | PASS | PASS | N/A | N/A | PASS |
+| Pause | Amber warning pill VERIFIED | PASS | PASS | PASS | PASS (`aria-busy`) | PASS |
+| Restart | Blue secondary pill VERIFIED | PASS | PASS | PASS | PASS | PASS |
+| Reset | Neutral outline pill VERIFIED | PASS | PASS | PASS (not dirty) | N/A | PASS |
+| Save changes | Primary purple pill VERIFIED | PASS | PASS | PASS (not dirty) | PASS | PASS |
+
+- EN + FA labels verified (no raw keys); FA examples: اجرای اسکن / بستن / توقف / راه‌اندازی مجدد / بازنشانی / ذخیره تغییرات  
+- Served bundle: `assets/index-kRpMtyAR.js`  
+- Runtime: Effective Mode Demo, Emergency Stop active, worker acknowledged true  
+- No Live enable / no Kill Switch clear / no external side effects in this remediation  
+
+**Commits:**
+
+- `45f5488` — `fix(arb): align WP1A actions with TitanGold design system`  
+- `71d5f69` — `fix(arb): use loading i18n for pending Pause/Restart labels`  
+- `cfaf954` — `fix(arb): stack WP1A status actions cleanly on narrow viewports`  
+
 **Human-QA status after this remediation:** **NEEDS MORE VERIFICATION** — awaiting explicit Human PASS on ARB-A9.  
 Do **not** mark ARB-WP1A CLOSED / REAL WORKING until Human retest.
 
