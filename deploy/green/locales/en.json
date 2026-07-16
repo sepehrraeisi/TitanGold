@@ -4700,5 +4700,10 @@
   "arbitrage_integration_truth": "Binance, Gate, futures, settlement, and live execution integrations are not active for this agent.",
   "preference_only": "Preference only",
   "rejection_reason": "Rejection",
-  "analytical": "Analytical"
+  "analytical": "Analytical",
+  "execution_mode_dry_run": "Dry Run",
+  "execution_mode_demo": "Demo",
+  "execution_mode_live": "Live",
+  "online": "Online",
+  "live_side_effects_blocked": "Live side effects are blocked."
 }

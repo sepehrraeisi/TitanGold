@@ -3,9 +3,11 @@ import { createPortal } from 'react-dom';
 import { useLanguage } from '../../../context/LanguageContext.tsx';
 import type { AIAgent } from '../../../types.ts';
 import {
+  effectiveExecutionModeLabelKey,
   formatLastRun,
   getAgentExecutionKind,
   mapAgentOperationalState,
+  shellOperationalStatusLabelKey,
 } from './agentCardMeta.ts';
 import { useAgentExecutionGate } from '../../../hooks/useAgentExecutionGate.ts';
 import { SecondaryButton } from '../AIManager/tabs/DataHub/dataHubUi.tsx';
@@ -58,11 +60,13 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  const { dryRunForced, killSwitchActive, effectiveMode, liveBlockReason, runtime } =
-    useAgentExecutionGate();
+  const { killSwitchActive, effectiveMode, liveBlockReason, runtime } = useAgentExecutionGate();
 
   const kind = getAgentExecutionKind(agent.agent_key);
   const state = mapAgentOperationalState(agent.status);
+  const operationalLabelKey = shellOperationalStatusLabelKey(state);
+  const effectiveModeKey = effectiveExecutionModeLabelKey(effectiveMode);
+  const brokerConnected = runtime?.providerConnected === true;
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
@@ -115,14 +119,26 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
 
   if (typeof document === 'undefined') return null;
 
-  const suppression =
-    liveBlockReason
-      ? t(`execution_blocked_${liveBlockReason.toLowerCase()}`)
-      : killSwitchActive
-        ? t('execution_blocked_kill_switch_active')
+  // Safety strip: Emergency Stop + Broker once; short Live-block line without repeating ES.
+  const safetyDetail =
+    killSwitchActive
+      ? t('live_side_effects_blocked') || 'Live side effects are blocked.'
+      : liveBlockReason
+        ? t(`execution_blocked_${liveBlockReason.toLowerCase()}`)
         : null;
 
   const purposeText = purpose || agent.role;
+  const operationalLabel = t(operationalLabelKey) || (state === 'ready' ? 'Active' : state);
+  const effectiveModeLabel =
+    t(effectiveModeKey) ||
+    (effectiveModeKey === 'execution_mode_dry_run'
+      ? 'Dry Run'
+      : effectiveModeKey === 'execution_mode_live'
+        ? 'Live'
+        : 'Demo');
+  const brokerValue = brokerConnected
+    ? t('online') || 'Online'
+    : t('offline') || 'Offline';
 
   return createPortal(
     <div
@@ -151,27 +167,34 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
             <p id={descriptionId} className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
               {purposeText}
             </p>
-            <div className="flex flex-wrap gap-2 text-[10px] sm:text-[11px]">
+            <div
+              className="flex flex-wrap gap-2 text-[10px] sm:text-[11px]"
+              data-testid="agent-shell-status-row"
+            >
               <span
                 className="px-2 py-0.5 rounded-full border border-border text-muted-foreground"
                 data-testid="agent-shell-status"
               >
-                {t(`agent_state_${state}`) || state}
+                {operationalLabel}
               </span>
-              <span className="px-2 py-0.5 rounded-full border border-amber-500/30 text-amber-100">
-                {t('mode_active_short')}: {(effectiveMode || 'demo').toUpperCase()}
+              <span
+                className="px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-100"
+                data-testid="agent-shell-effective-mode"
+              >
+                {effectiveModeLabel}
               </span>
-              <span className="px-2 py-0.5 rounded-full border border-border text-muted-foreground">
+              <span
+                className="px-2 py-0.5 rounded-full border border-border text-muted-foreground"
+                data-testid="agent-shell-execution-kind"
+              >
                 {t(`execution_kind_${kind}`) || kind}
               </span>
-              <span className="px-2 py-0.5 rounded-full border border-border text-muted-foreground">
-                {t('last_run')}: {formatLastRun(agent.lastUpdate, t('never_run') || 'Never run')}
+              <span
+                className="px-2 py-0.5 rounded-full border border-border text-muted-foreground"
+                data-testid="agent-shell-last-run"
+              >
+                {t('last_run')}: {formatLastRun(agent.lastUpdate, t('never_run') || 'Never')}
               </span>
-              {(dryRunForced || killSwitchActive) && (
-                <span className="px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-100">
-                  {t('dry_run_badge')}
-                </span>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap shrink-0">
@@ -194,13 +217,14 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
             role="status"
             data-testid="agent-shell-safety"
           >
-            <p>
+            <p data-testid="agent-shell-safety-primary">
               {t('emergency_stop')}: {killSwitchActive ? t('active') : t('inactive')}
               {' · '}
-              {t('broker_label') || 'Broker'}:{' '}
-              {runtime?.providerConnected ? t('broker_connected') : t('broker_disconnected')}
+              {t('broker_label') || 'Broker'}: {brokerValue}
             </p>
-            {suppression && <p>{suppression}</p>}
+            {safetyDetail && (
+              <p data-testid="agent-shell-safety-detail">{safetyDetail}</p>
+            )}
             {safetyExtra}
           </div>
         )}

@@ -46,3 +46,33 @@ export function formatAccuracy(accuracy: number | null | undefined, naLabel = 'N
   if (accuracy == null || Number(accuracy) <= 0) return naLabel;
   return `${Number(accuracy).toFixed(1)}%`;
 }
+
+export type EffectiveExecutionMode = 'dry_run' | 'demo' | 'live';
+
+/**
+ * Normalize runtime effectiveMode for presentation.
+ * Never return raw backend enums for UI — map to stable keys for i18n.
+ */
+export function normalizeEffectiveExecutionMode(mode?: string | null): EffectiveExecutionMode {
+  const m = String(mode || 'demo')
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '_');
+  if (m === 'dry_run' || m === 'dryrun') return 'dry_run';
+  if (m === 'live') return 'live';
+  return 'demo';
+}
+
+/** Locale key for effective execution mode (e.g. execution_mode_dry_run → "Dry Run"). */
+export function effectiveExecutionModeLabelKey(mode?: string | null): string {
+  return `execution_mode_${normalizeEffectiveExecutionMode(mode)}`;
+}
+
+/**
+ * Shell header operational label key.
+ * Card filter vocabulary keeps `ready`; control-panel chrome prefers `Active`.
+ */
+export function shellOperationalStatusLabelKey(state: AgentOperationalState): string {
+  if (state === 'ready') return 'active';
+  return `agent_state_${state}`;
+}

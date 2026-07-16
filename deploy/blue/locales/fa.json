@@ -4558,5 +4558,10 @@
   "arbitrage_integration_truth": "یکپارچه‌سازی Binance، Gate، فیوچرز، تسویه و اجرای زنده برای این عامل فعال نیست.",
   "preference_only": "فقط ترجیح",
   "rejection_reason": "علت رد",
-  "analytical": "تحلیلی"
+  "analytical": "تحلیلی",
+  "execution_mode_dry_run": "اجرای آزمایشی",
+  "execution_mode_demo": "دمو",
+  "execution_mode_live": "زنده",
+  "online": "آنلاین",
+  "live_side_effects_blocked": "اثرات جانبی زنده مسدود است."
 }
