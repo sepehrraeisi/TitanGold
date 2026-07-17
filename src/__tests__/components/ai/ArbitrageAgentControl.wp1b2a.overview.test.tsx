@@ -49,11 +49,15 @@ const translations: Record<string, string> = {
   arbitrage_overview_scan_outcome: 'Scan Outcome',
   arbitrage_overview_scan_outcome_subtitle:
     'Candidate, rejected, and qualified counts are distinct and use the latest verified scan contract.',
-  arbitrage_overview_interpretation: 'Analytical Interpretation',
-  arbitrage_overview_interpretation_subtitle: 'What the latest scan does and does not tell you.',
-  arbitrage_overview_recent_summary: 'Recent Candidate Summary',
-  arbitrage_overview_recent_summary_subtitle:
-    'A compact preview of the latest analytical result. Full lists remain in Candidates.',
+  arbitrage_overview_interpretation: 'Interpretation',
+  arbitrage_overview_interpretation_subtitle_compact: 'Outcome context for the latest scan.',
+  arbitrage_overview_interpretation_compact:
+    'No qualified multi-leg opportunity exists in this scan. Execution-backed profit is unavailable.',
+  arbitrage_overview_next_preview: 'Next step',
+  arbitrage_overview_next_preview_subtitle:
+    'Compact preview or guidance. Full lists remain in Candidates.',
+  arbitrage_overview_legacy_once:
+    'Labeled Legacy by the current scan contract. Available fields only are shown.',
   arbitrage_overview_never_scanned: 'Never scanned',
   arbitrage_overview_never_scanned_help:
     'No analytical scan has completed yet. Run a safe scan to inspect current same-market spread conditions.',
@@ -264,25 +268,107 @@ describe('ARB-WP1B-2A Overview redesign', () => {
     mockData();
   });
 
-  it('renders latest scan, distinct outcome counts, and no duplicated shell metrics', async () => {
+  it('renders latest scan once without duplicated outcome metrics or repeated analytical copy', async () => {
     render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
     await waitFor(() => expect(screen.getByTestId('arb-overview')).toBeTruthy());
 
     expect(screen.getByText('Latest Scan')).toBeTruthy();
-    expect(screen.getByText('Scan Outcome')).toBeTruthy();
-    expect(screen.getByText('Analytical Interpretation')).toBeTruthy();
-    expect(screen.getByText('Recent Candidate Summary')).toBeTruthy();
-    expect(screen.getByText('Review candidates')).toBeTruthy();
-    expect(screen.getByText('View scan history')).toBeTruthy();
+    expect(screen.getByText('Interpretation')).toBeTruthy();
+    expect(screen.getByText('Next step')).toBeTruthy();
+    expect(screen.queryByText('Scan Outcome')).toBeNull();
+    expect(screen.queryByText('Analytical Interpretation')).toBeNull();
+    expect(screen.queryByText('Recent Candidate Summary')).toBeNull();
 
     const overviewText = screen.getByTestId('arb-overview').textContent || '';
     expect(overviewText).not.toContain('Total scans');
     expect(overviewText).not.toContain('Best qualified profit');
-    expect(overviewText).toContain('Execution-backed profit figures are unavailable');
+    expect(overviewText).not.toContain('Scan Outcome');
+    expect(overviewText).not.toContain('Positive analytical spread detections before qualification');
+    expect(overviewText).not.toMatch(/A scan is not an execution/);
+    expect(overviewText).not.toMatch(/candidate is not automatically/i);
+    expect(overviewText).toContain('No qualified multi-leg opportunity exists in this scan');
     expect(overviewText).not.toMatch(/\bcaptured profit\b/i);
     expect(overviewText).not.toMatch(/\brealized profit\b/i);
     expect(overviewText).not.toMatch(/DRY_RUN|\bdry_run\b/);
     expect(overviewText).not.toContain('arbitrage_overview_');
+    expect(overviewText).not.toContain('...');
+    expect(screen.queryByText(/Qualified requires an executable/i)).toBeNull();
+  });
+
+  it('uses a compact empty state without oversized empty chrome', async () => {
+    mockData({
+      metrics: { ...baseMetrics(), candidateStats: { total: 0, rejected: 0, rawCandidates: 0, qualified: 0 } },
+      lastScan: {
+        timestamp: '2026-07-16T10:23:02.000Z',
+        candidates: [],
+        rejectedCandidates: [],
+        qualifiedOpportunities: [],
+        opportunities: [],
+        candidateStats: { total: 0, rejected: 0, spreadCandidates: 0, qualified: 0 },
+        qualifiedStats: { total: 0, bestProfitBps: null, expectedNetProfitUSDT: null },
+        riskStats: { averageScore: null, unit: 'score_0_100' },
+        legacy: false,
+        dryRun: true,
+      },
+    });
+    render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('arb-overview-empty')).toBeTruthy());
+    const empty = screen.getByTestId('arb-overview-empty');
+    expect(empty.className).toMatch(/py-4/);
+    expect(empty.className).not.toMatch(/py-12/);
+    expect(empty.textContent || '').toMatch(/No positive analytical spread candidate/i);
+    expect(screen.getAllByText('View scan history').length).toBeGreaterThan(0);
+  });
+
+  it('labels API-provided legacy scan once without repeating legacy copy', async () => {
+    mockData({
+      metrics: { ...baseMetrics(), candidateStats: { total: 0, rejected: 0, rawCandidates: 0, qualified: 0 } },
+      lastScan: {
+        timestamp: '2026-07-17T09:12:40.807Z',
+        candidates: [],
+        rejectedCandidates: [],
+        qualifiedOpportunities: [],
+        opportunities: [],
+        candidateStats: { total: 0, rejected: 0, spreadCandidates: 0, qualified: 0 },
+        qualifiedStats: { total: 0, bestProfitBps: null, expectedNetProfitUSDT: null },
+        riskStats: { averageScore: null, unit: 'score_0_100' },
+        legacy: true,
+        dryRun: true,
+      },
+    });
+    render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('arb-overview')).toBeTruthy());
+    const overviewText = screen.getByTestId('arb-overview').textContent || '';
+    const legacyMatches = overviewText.match(/Legacy scan/g) || [];
+    expect(legacyMatches.length).toBe(1);
+    expect(screen.getByTestId('arb-overview-legacy-note')).toBeTruthy();
+    expect(overviewText).not.toContain('Legacy normalized scan record');
+    expect((overviewText.match(/Labeled Legacy by the current scan contract/g) || []).length).toBe(1);
+  });
+
+  it('does not label a modern non-legacy scan as Legacy', async () => {
+    mockData({
+      lastScan: {
+        timestamp: '2026-07-17T09:12:40.807Z',
+        candidates: [],
+        rejectedCandidates: [],
+        qualifiedOpportunities: [],
+        opportunities: [],
+        candidateStats: { total: 0, rejected: 0, spreadCandidates: 0, qualified: 0 },
+        qualifiedStats: { total: 0, bestProfitBps: null, expectedNetProfitUSDT: null },
+        riskStats: { averageScore: null, unit: 'score_0_100' },
+        analyticalMode: 'analytical_spread_monitor',
+        strategyClassification: 'mexc_spot_spread_monitor',
+        legacy: false,
+        dryRun: true,
+      },
+    });
+    render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('arb-overview')).toBeTruthy());
+    const overviewText = screen.getByTestId('arb-overview').textContent || '';
+    expect(overviewText).not.toContain('Legacy scan');
+    expect(overviewText).not.toContain('Labeled Legacy');
+    expect(screen.queryByTestId('arb-overview-legacy-note')).toBeNull();
   });
 
   it('shows never-scanned empty state with useful guidance', async () => {
@@ -291,11 +377,12 @@ describe('ARB-WP1B-2A Overview redesign', () => {
     await waitFor(() => expect(screen.getByText('Never scanned')).toBeTruthy());
     expect(screen.getAllByText(/No analytical scan has completed yet/i).length).toBeGreaterThan(0);
     expect(screen.getByText('Review settings')).toBeTruthy();
+    expect(screen.getByTestId('arb-overview-empty')).toBeTruthy();
   });
 
   it('shows all-rejected state and human-readable rejection reasons', async () => {
     mockData({
-      metrics: { ...baseMetrics(), candidateStats: { total: 1, rejected: 1, spreadCandidates: 0, qualified: 0 } },
+      metrics: { ...baseMetrics(), candidateStats: { total: 1, rejected: 1, rawCandidates: 0, qualified: 0 } },
       lastScan: {
         timestamp: '2026-07-16T10:23:02.000Z',
         candidates: [],
@@ -379,65 +466,35 @@ describe('ARB-WP1B-2A Overview redesign', () => {
 
     fireEvent.click(screen.getByTestId('arb-tab-overview'));
     await waitFor(() => expect(screen.getByText('View scan history')).toBeTruthy());
-    fireEvent.click(screen.getByText('View scan history'));
+    fireEvent.click(screen.getAllByText('View scan history')[0]);
     await waitFor(() => expect(screen.getByTestId('arb-tab-history').getAttribute('aria-selected')).toBe('true'));
   });
 
   it('renders Persian overview copy without raw keys or English leakage in status states', async () => {
     Object.assign(translations, {
       arbitrage_overview_latest_scan: 'آخرین اسکن',
-      arbitrage_overview_scan_outcome: 'خروجی اسکن',
-      arbitrage_overview_scan_outcome_subtitle:
-        'شمارش کاندید، ردشده و واجد شرایط متمایز است و از قرارداد تأییدشدهٔ آخرین اسکن استفاده می‌کند.',
-      arbitrage_overview_interpretation: 'تفسیر تحلیلی',
-      arbitrage_overview_interpretation_subtitle: 'آخرین اسکن چه چیزی را نشان می‌دهد و چه چیزی را نشان نمی‌دهد.',
-      arbitrage_overview_recent_summary: 'خلاصه اخیر کاندیدها',
-      arbitrage_overview_recent_summary_subtitle:
-        'پیش‌نمایش فشرده از آخرین نتیجه تحلیلی. فهرست کامل در تب کاندیدهاست.',
+      arbitrage_overview_interpretation: 'تفسیر',
+      arbitrage_overview_interpretation_subtitle_compact: 'زمینهٔ نتیجه برای آخرین اسکن.',
+      arbitrage_overview_interpretation_compact:
+        'در این اسکن فرصت چندپایه‌ای واجد شرایط وجود ندارد. سود مبتنی بر اجرا در دسترس نیست.',
+      arbitrage_overview_next_preview: 'گام بعدی',
+      arbitrage_overview_next_preview_subtitle:
+        'پیش‌نمایش فشرده یا راهنما. فهرست کامل در تب کاندیدهاست.',
       arbitrage_overview_review_candidates: 'بررسی کاندیدها',
       arbitrage_overview_view_scan_history: 'مشاهده تاریخچه اسکن',
       arbitrage_overview_adjust_settings: 'مرور تنظیمات',
       arbitrage_overview_no_candidates_help: 'در آخرین اسکن کامل، هیچ کاندید اسپرد تحلیلی مثبتی شناسایی نشد.',
       arbitrage_overview_never_scanned: 'هنوز اسکن نشده',
-      arbitrage_overview_execution_truth: 'اسکن معادل اجرا نیست. کاندیدها به‌طور خودکار فرصت نیستند و پشتیبانی اجرا در دسترس نیست.',
-      arbitrage_overview_data_unavailable: 'داده در دسترس نیست',
       arbitrage_overview_never_scanned_help:
         'هنوز هیچ اسکن تحلیلی کامل نشده است. برای بررسی شرایط فعلی اسپرد همان‌بازار، یک اسکن امن اجرا کنید.',
-      arbitrage_overview_permission_limited_title: 'دسترسی محدود',
-      arbitrage_overview_permission_limited: 'شما مجوز مشاهده این نمای کلی را ندارید.',
-      arbitrage_overview_why_no_qualified: 'چرا فرصت واجد شرایط وجود ندارد؟',
-      arbitrage_overview_next_step: 'گام بعدی چیست؟',
-      arbitrage_overview_qualified_hint:
-        'واجد شرایط بودن نیازمند استراتژی اجرایی اثبات‌شده است. مانیتور فعلی فقط تحلیلی است.',
-      arbitrage_overview_spread_candidates_helper: 'شناسایی‌های مثبت اسپرد تحلیلی پیش از مرحله واجد شرایط.',
-      arbitrage_overview_rejected_candidates_helper:
-        'کاندیدهایی که در آستانه، عمق یا پایه‌های اجرا رد شده‌اند.',
-      arbitrage_overview_qualified_candidates_helper:
-        'فرصت‌های اجرایی واجد شرایط در این مانیتور تحلیلی همان‌بازار انتظار نمی‌رود.',
-      arbitrage_overview_truth_scan_not_execution: 'اسکن معادل اجرا نیست.',
-      arbitrage_overview_truth_candidate_not_opportunity: 'کاندید به‌طور خودکار فرصت واجد شرایط نیست.',
-      arbitrage_overview_truth_execution_unavailable:
-        'به‌دلیل پشتیبانی‌نشدن اجرا، رقم سود مبتنی بر اجرا در دسترس نیست.',
-      arbitrage_no_qualified_reason:
-        'اسپردهای bid/ask همان‌بازار فقط تحلیلی هستند. فرصت آربیتراژ واجد شرایط نیازمند استراتژی چندپایهٔ اجرایی اثبات‌شده است.',
       arbitrage_no_spread_candidates: 'در آخرین اسکن هیچ کاندید اسپرد تحلیلی مثبتی نیست.',
-      arbitrage_rejection_below_min_profit: 'کمتر از آستانه حداقل سود',
-      execution_unsupported: 'پشتیبانی نمی‌شود',
-      execution_support: 'پشتیبانی اجرا',
       spread_candidates: 'کاندیدهای اسپرد',
       rejected_candidates: 'کاندیدهای ردشده',
       qualified_opportunities: 'فرصت‌های واجد شرایط',
       last_scan_at: 'آخرین اسکن',
-      arbitrage_avg_risk_score: 'میانگین امتیاز ریسک',
-      risk_score: 'امتیاز ریسک',
-      dry_run: 'اجرای آزمایشی',
-      active: 'فعال',
-      offline: 'آفلاین',
-      broker_label: 'کارگزار',
-      emergency_stop: 'توقف اضطراری',
-      execution_mode_dry_run: 'اجرای آزمایشی',
       completed: 'کامل‌شده',
       not_available: 'ناموجود',
+      execution_mode_dry_run: 'اجرای آزمایشی',
     });
     mockData({
       metrics: {
@@ -454,7 +511,9 @@ describe('ARB-WP1B-2A Overview redesign', () => {
     const text = screen.getByTestId('arb-overview').textContent || '';
     expect(text).toContain('هنوز اسکن نشده');
     expect(text).toContain('بررسی کاندیدها');
-    expect(text).not.toMatch(/DRY_RUN|dry_run/);
+    expect(text).toContain('تفسیر');
+    expect(text).toContain('گام بعدی');
+    expect(text).not.toMatch(/DRY_RUN|dry_run|Latest Scan|Scan Outcome/);
     expect(text).not.toContain('arbitrage_overview_');
   });
 });

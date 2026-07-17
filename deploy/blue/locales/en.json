@@ -4751,7 +4751,7 @@
   "arbitrage_overview_latest_scan": "Latest Scan",
   "arbitrage_overview_scan_outcome": "Scan Outcome",
   "arbitrage_overview_scan_outcome_subtitle": "Candidate, rejected, and qualified counts are distinct and use the latest verified scan contract.",
-  "arbitrage_overview_interpretation": "Analytical Interpretation",
+  "arbitrage_overview_interpretation": "Interpretation",
   "arbitrage_overview_interpretation_subtitle": "What the latest scan does and does not tell you.",
   "arbitrage_overview_recent_summary": "Recent Candidate Summary",
   "arbitrage_overview_recent_summary_subtitle": "A compact preview of the latest analytical result. Full lists remain in Candidates.",
@@ -4798,5 +4798,10 @@
   "arbitrage_rejection_legacy_negative_estimate": "Legacy estimate is non-positive",
   "arbitrage_rejection_not_executable_arbitrage": "Not an executable arbitrage route",
   "arbitrage_overview_error_help": "Failed to load overview data. Retry when ready.",
-  "arbitrage_overview_legacy_help": "This result uses legacy normalized scan data. Only fields present in the historical contract are shown."
+  "arbitrage_overview_legacy_help": "This result uses legacy normalized scan data. Only fields present in the historical contract are shown.",
+  "arbitrage_overview_interpretation_subtitle_compact": "Outcome context for the latest scan.",
+  "arbitrage_overview_interpretation_compact": "No qualified multi-leg opportunity exists in this scan. Execution-backed profit is unavailable.",
+  "arbitrage_overview_next_preview": "Next step",
+  "arbitrage_overview_next_preview_subtitle": "Compact preview or guidance. Full lists remain in Candidates.",
+  "arbitrage_overview_legacy_once": "Labeled Legacy by the current scan contract. Available fields only are shown."
 }

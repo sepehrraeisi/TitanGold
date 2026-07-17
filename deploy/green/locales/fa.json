@@ -4525,7 +4525,7 @@
   "arbitrage_overview_latest_scan": "آخرین اسکن",
   "arbitrage_overview_scan_outcome": "خروجی اسکن",
   "arbitrage_overview_scan_outcome_subtitle": "تعداد کاندید، ردشده و واجد شرایط از قرارداد تاییدشده آخرین اسکن می‌آید و با هم یکی نیستند.",
-  "arbitrage_overview_interpretation": "تفسیر تحلیلی",
+  "arbitrage_overview_interpretation": "تفسیر",
   "arbitrage_overview_interpretation_subtitle": "این اسکن دقیقاً چه چیزی را نشان می‌دهد و چه چیزی را نشان نمی‌دهد.",
   "arbitrage_overview_recent_summary": "خلاصه اخیر کاندیدها",
   "arbitrage_overview_recent_summary_subtitle": "پیش‌نمایش فشرده‌ای از آخرین نتیجه تحلیلی. فهرست کامل در تب Candidates است.",
@@ -4572,5 +4572,10 @@
   "arbitrage_rejection_legacy_negative_estimate": "برآورد قدیمی مثبت نیست",
   "arbitrage_rejection_not_executable_arbitrage": "مسیر آربیتراژ اجرایی نیست",
   "arbitrage_overview_error_help": "بارگذاری داده‌های نمای کلی ناموفق بود. در صورت آمادگی دوباره تلاش کنید.",
-  "arbitrage_overview_legacy_help": "این نتیجه از دادهٔ نرمال‌شدهٔ قدیمی استفاده می‌کند. فقط فیلدهای موجود در قرارداد تاریخی نمایش داده می‌شوند."
+  "arbitrage_overview_legacy_help": "این نتیجه از دادهٔ نرمال‌شدهٔ قدیمی استفاده می‌کند. فقط فیلدهای موجود در قرارداد تاریخی نمایش داده می‌شوند.",
+  "arbitrage_overview_interpretation_subtitle_compact": "زمینهٔ نتیجه برای آخرین اسکن.",
+  "arbitrage_overview_interpretation_compact": "در این اسکن فرصت چندپایه‌ای واجد شرایط وجود ندارد. سود مبتنی بر اجرا در دسترس نیست.",
+  "arbitrage_overview_next_preview": "گام بعدی",
+  "arbitrage_overview_next_preview_subtitle": "پیش‌نمایش فشرده یا راهنما. فهرست کامل در تب کاندیدهاست.",
+  "arbitrage_overview_legacy_once": "طبق قرارداد فعلی اسکن با برچسب Legacy نمایش داده می‌شود. فقط فیلدهای موجود نشان داده شده‌اند."
 }

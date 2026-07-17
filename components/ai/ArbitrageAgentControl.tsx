@@ -10,7 +10,6 @@ import {
     PrimaryButton,
     SecondaryButton,
     DataHubAlert,
-    DataHubEmpty,
     DataHubSectionHeader,
     MetricCard as DataHubMetricCard,
     StatusPill,
@@ -561,7 +560,7 @@ const OverviewTab: React.FC<{
     const hasQualified = qualifiedCount > 0;
     const rejectionSummary = summarizeRejectionReasons(rejectedCandidates, t);
 
-    const outcomeMessage = (() => {
+    const resultSummary = (() => {
         if (isNeverScanned) {
             return t('arbitrage_overview_never_scanned_help') || 'No analytical scan has completed yet. Run a safe scan to inspect current same-market spread conditions.';
         }
@@ -580,21 +579,26 @@ const OverviewTab: React.FC<{
         return t('arbitrage_overview_qualified_detected_help') || 'Qualified opportunities would appear here only for an executable proven strategy. This monitor remains analytical.';
     })();
 
-    const interpretationMessage = (() => {
-        if (rejectionSummary.length > 0 && !hasCandidates) {
-            return `${t('arbitrage_overview_top_rejections') || 'Top rejection reasons'}: ${rejectionSummary.join(' · ')}`;
+    // One concise interpretation — do not repeat shell/banner analytical limitations.
+    const interpretationMessage =
+        t('arbitrage_overview_interpretation_compact') ||
+        'No qualified multi-leg opportunity exists in this scan. Execution-backed profit is unavailable.';
+
+    const emptyPreviewMessage = (() => {
+        if (isNeverScanned) {
+            return t('arbitrage_overview_never_scanned_help') || 'No analytical scan has completed yet.';
         }
-        if (hasCandidates && !hasQualified) {
-            return t('arbitrage_no_qualified_reason') ||
-                'Same-market bid/ask spreads are analytical only. Qualified arbitrage opportunities require a proven multi-leg executable strategy (not available in this slice).';
+        if (hasRejected && !hasCandidates) {
+            return t('arbitrage_overview_all_rejected_help') || 'Candidates were detected but all were rejected.';
         }
-        if (isLegacy) {
-            return t('arbitrage_overview_legacy_help') || 'This result uses legacy normalized scan data. Only fields present in the historical contract are shown.';
-        }
-        return t('arbitrage_overview_execution_truth') || 'A scan is not an execution. Candidates are not automatically opportunities, and execution support is not available.';
+        return t('arbitrage_no_spread_candidates') || 'No positive analytical spread candidates in the last scan.';
     })();
 
     const previewItems = [...spreadCandidates.slice(0, 2), ...rejectedCandidates.slice(0, 2)].slice(0, 3);
+    const showRisk =
+        avgRisk != null &&
+        !Number.isNaN(Number(avgRisk)) &&
+        (hasCandidates || hasRejected || hasQualified || Number(avgRisk) > 0);
 
     if (isLoading && !scan && !metrics) {
         return (
@@ -633,25 +637,24 @@ const OverviewTab: React.FC<{
     }
 
     return (
-        <div className="space-y-6" data-testid="arb-overview">
-            <section className={DATAHUB_SHELL}>
+        <div className="space-y-5" data-testid="arb-overview">
+            <section className={DATAHUB_SHELL} aria-label={t('arbitrage_overview_latest_scan') || 'Latest Scan'}>
                 <DataHubSectionHeader
                     title={t('arbitrage_overview_latest_scan') || 'Latest Scan'}
-                    subtitle={outcomeMessage}
+                    subtitle={resultSummary}
                     actions={
                         <StatusPill
                             label={humanizeScanStatus(scanStatus, t)}
-                            variant={isFailed ? 'error' : isNeverScanned ? 'warning' : 'info'}
+                            variant={isFailed ? 'error' : isNeverScanned || isLegacy ? 'warning' : 'info'}
                         />
                     }
                 />
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                     <DataHubMetricCard
                         label={t('last_scan_at') || 'Last scan'}
                         value={formatScanTimestamp(completedAt, t)}
                         color="blue"
                         valueState={completedAt ? 'loaded' : 'unavailable'}
-                        hint={isLegacy ? (t('arbitrage_overview_legacy_hint') || 'Legacy normalized scan record.') : undefined}
                     />
                     <DataHubMetricCard
                         label={t('spread_candidates') || 'Spread candidates'}
@@ -670,84 +673,46 @@ const OverviewTab: React.FC<{
                         value={qualifiedCount}
                         color="emerald"
                         valueState={qualifiedCount === 0 ? 'zero' : 'loaded'}
-                        hint={t('arbitrage_overview_qualified_hint') || 'Qualified requires an executable proven strategy. Current monitor is analytical only.'}
                     />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                    <OverviewInfoBlock
-                        label={t('arbitrage_avg_risk_score') || 'Avg risk score'}
-                        value={formatRiskScore(avgRisk, t)}
-                    />
-                    <OverviewInfoBlock
-                        label={t('execution_support') || 'Execution support'}
-                        value={t('execution_unsupported') || 'Not supported'}
-                    />
-                </div>
+                {showRisk ? (
+                    <div className="mt-3" data-testid="arb-overview-risk">
+                        <OverviewInfoBlock
+                            label={t('arbitrage_avg_risk_score') || 'Avg risk score'}
+                            value={formatRiskScore(avgRisk, t)}
+                        />
+                    </div>
+                ) : null}
             </section>
 
-            <section className={DATAHUB_SHELL}>
+            <section className={DATAHUB_SHELL} aria-label={t('arbitrage_overview_interpretation') || 'Interpretation'}>
                 <DataHubSectionHeader
-                    title={t('arbitrage_overview_scan_outcome') || 'Scan Outcome'}
-                    subtitle={t('arbitrage_overview_scan_outcome_subtitle') || 'Candidate, rejected, and qualified counts are distinct and use the latest verified scan contract.'}
+                    title={t('arbitrage_overview_interpretation') || 'Interpretation'}
+                    subtitle={t('arbitrage_overview_interpretation_subtitle_compact') || 'Outcome context for the latest scan.'}
                 />
-                <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <OutcomeCard
-                            label={t('spread_candidates') || 'Spread candidates'}
-                            value={spreadCount}
-                            tone="purple"
-                            helper={t('arbitrage_overview_spread_candidates_helper') || 'Positive analytical spread detections before qualification.'}
-                        />
-                        <OutcomeCard
-                            label={t('rejected_candidates') || 'Rejected candidates'}
-                            value={rejectedCount}
-                            tone="amber"
-                            helper={t('arbitrage_overview_rejected_candidates_helper') || 'Detected candidates that failed threshold, depth, or execution-leg checks.'}
-                        />
-                        <OutcomeCard
-                            label={t('qualified_opportunities') || 'Qualified opportunities'}
-                            value={qualifiedCount}
-                            tone="emerald"
-                            helper={t('arbitrage_overview_qualified_candidates_helper') || 'Executable qualified opportunities are not expected in this analytical same-market monitor.'}
-                        />
+                <p className="text-sm text-foreground leading-6" data-testid="arb-overview-interpretation">
+                    {interpretationMessage}
+                </p>
+                {rejectionSummary.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 mt-3" data-testid="arb-overview-rejection-summary">
+                        {rejectionSummary.map(item => (
+                            <StatusPill key={item} label={item} variant="warning" />
+                        ))}
                     </div>
-                    <div className="bg-slate-950/70 border border-white/5 rounded-xl p-4">
-                        <p className="text-[11px] text-muted-foreground mb-2">
-                            {t('arbitrage_overview_why_no_qualified') || 'Why is there no qualified opportunity?'}
-                        </p>
-                        <p className="text-sm text-foreground leading-6">{interpretationMessage}</p>
-                        {rejectionSummary.length > 0 ? (
-                            <div className="flex flex-wrap gap-2 mt-3" data-testid="arb-overview-rejection-summary">
-                                {rejectionSummary.map(item => (
-                                    <StatusPill key={item} label={item} variant="warning" />
-                                ))}
-                            </div>
-                        ) : null}
-                    </div>
-                </div>
+                ) : null}
+                {isLegacy ? (
+                    <p className="text-xs text-muted-foreground mt-3" data-testid="arb-overview-legacy-note">
+                        {t('arbitrage_overview_legacy_once') ||
+                            'Labeled Legacy by the current scan contract. Available fields only are shown.'}
+                    </p>
+                ) : null}
             </section>
 
-            <section className={DATAHUB_SHELL}>
+            <section className={DATAHUB_SHELL} aria-label={t('arbitrage_overview_next_preview') || 'Next step'}>
                 <DataHubSectionHeader
-                    title={t('arbitrage_overview_interpretation') || 'Analytical Interpretation'}
-                    subtitle={t('arbitrage_overview_interpretation_subtitle') || 'What the latest scan does and does not tell you.'}
-                />
-                <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-4">
-                    <div className="bg-slate-950/70 border border-white/5 rounded-xl p-4">
-                        <p className="text-sm text-foreground leading-6">
-                            {t('arbitrage_no_qualified_reason') ||
-                                'Same-market bid/ask spreads are analytical only. Qualified arbitrage opportunities require a proven multi-leg executable strategy (not available in this slice).'}
-                        </p>
-                        <ul className="mt-4 space-y-2 text-xs text-muted-foreground">
-                            <li>{t('arbitrage_overview_truth_scan_not_execution') || 'A scan is not an execution.'}</li>
-                            <li>{t('arbitrage_overview_truth_candidate_not_opportunity') || 'A candidate is not automatically a qualified opportunity.'}</li>
-                            <li>{t('arbitrage_overview_truth_execution_unavailable') || 'Captured or realized profit is unavailable because execution is not supported.'}</li>
-                        </ul>
-                    </div>
-                    <div className="bg-slate-950/70 border border-white/5 rounded-xl p-4">
-                        <p className="text-[11px] text-muted-foreground mb-3">
-                            {t('arbitrage_overview_next_step') || 'What should you do next?'}
-                        </p>
+                    title={t('arbitrage_overview_next_preview') || 'Next step'}
+                    subtitle={t('arbitrage_overview_next_preview_subtitle') || 'Compact preview or guidance. Full lists remain in Candidates.'}
+                    actions={
                         <div className="flex flex-wrap gap-2">
                             <SecondaryButton type="button" onClick={() => onOpenTab('candidates')}>
                                 {t('arbitrage_overview_review_candidates') || 'Review candidates'}
@@ -759,30 +724,19 @@ const OverviewTab: React.FC<{
                                 {t('arbitrage_overview_adjust_settings') || 'Review settings'}
                             </SecondaryButton>
                         </div>
-                    </div>
-                </div>
-            </section>
-
-            <section className={DATAHUB_SHELL}>
-                <DataHubSectionHeader
-                    title={t('arbitrage_overview_recent_summary') || 'Recent Candidate Summary'}
-                    subtitle={t('arbitrage_overview_recent_summary_subtitle') || 'A compact preview of the latest analytical result. Full lists remain in Candidates.'}
+                    }
                 />
                 {previewItems.length ? (
-                    <div className="space-y-3">
+                    <div className="space-y-3" data-testid="arb-overview-preview">
                         {previewItems.map(candidate => (
                             <CompactCandidateRow key={candidate.id} candidate={candidate} t={t} />
                         ))}
                     </div>
                 ) : (
-                    <DataHubEmpty
-                        message={
-                            isNeverScanned
-                                ? t('arbitrage_overview_never_scanned_help') || 'No analytical scan has completed yet.'
-                                : hasRejected
-                                  ? t('arbitrage_overview_all_rejected_help') || 'Candidates were detected but all were rejected.'
-                                  : t('arbitrage_no_spread_candidates') || 'No positive analytical spread candidates in the last scan.'
-                        }
+                    <OverviewCompactEmpty
+                        message={emptyPreviewMessage}
+                        actionLabel={t('arbitrage_overview_view_scan_history') || 'View scan history'}
+                        onAction={() => onOpenTab('history')}
                     />
                 )}
             </section>
@@ -1154,24 +1108,21 @@ const OverviewInfoBlock: React.FC<{ label: string; value: React.ReactNode }> = (
     </div>
 );
 
-const OutcomeCard: React.FC<{
-    label: string;
-    value: React.ReactNode;
-    helper: string;
-    tone: 'purple' | 'amber' | 'emerald';
-}> = ({ label, value, helper, tone }) => {
-    const color = tone === 'amber' ? 'amber' : tone === 'emerald' ? 'emerald' : 'purple';
-    return (
-        <DataHubMetricCard
-            label={label}
-            value={value}
-            color={color}
-            hint={helper}
-            valueState={String(value) === '0' ? 'zero' : 'loaded'}
-            emphasis="primary"
-        />
-    );
-};
+const OverviewCompactEmpty: React.FC<{
+    message: string;
+    actionLabel: string;
+    onAction: () => void;
+}> = ({ message, actionLabel, onAction }) => (
+    <div
+        className="py-4 px-3 text-center text-xs text-muted-foreground bg-slate-900/60 border border-white/5 rounded-lg space-y-3"
+        data-testid="arb-overview-empty"
+    >
+        <p className="leading-5 max-w-xl mx-auto">{message}</p>
+        <SecondaryButton type="button" onClick={onAction}>
+            {actionLabel}
+        </SecondaryButton>
+    </div>
+);
 
 const CompactCandidateRow: React.FC<{
     candidate: ArbitrageSpreadCandidate;
@@ -1190,18 +1141,15 @@ const CompactCandidateRow: React.FC<{
                         }
                         variant={isRejected ? 'warning' : 'info'}
                     />
-                    {candidate.legacy ? (
-                        <StatusPill label={t('legacy_scan') || 'Legacy scan'} variant="neutral" />
-                    ) : null}
                 </div>
-                <p className="text-sm font-semibold text-foreground mt-2">
+                <p className="text-sm font-semibold text-foreground mt-2 break-words">
                     {(candidate.path || []).join(' → ') || candidate.symbol || NA(t)}
                 </p>
-                <p className="text-[11px] text-muted-foreground mt-1">
+                <p className="text-[11px] text-muted-foreground mt-1 break-words">
                     {candidate.timestamp ? new Date(candidate.timestamp).toLocaleString() : NA(t)}
                 </p>
                 {isRejected ? (
-                    <p className="text-[11px] text-amber-200 mt-2">
+                    <p className="text-[11px] text-amber-200 mt-2 break-words">
                         {t('rejection_reason') || 'Rejection'}: {mapRejectionReason(candidate.rejectionReason, t)}
                     </p>
                 ) : null}

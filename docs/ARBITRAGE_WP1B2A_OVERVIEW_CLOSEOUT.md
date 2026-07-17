@@ -1,16 +1,16 @@
-# ARB-WP1B-2A Closeout — Overview Tab Professional Redesign
+# ARB-WP1B-2A Closeout — Overview Tab Professional Redesign + Human-QA Remediation
 
 **Module:** AI → Agents → Arbitrage Scanner → Overview  
 **Work Package:** ARB-WP1B-2A  
-**Date:** 2026-07-16  
+**Date:** 2026-07-17  
 
-## Final status (before Human QA)
+## Final status (before Human QA re-check)
 
 | Item | Value |
 |------|--------|
-| Human QA | **NOT STARTED** |
+| Human QA | **FAIL → remediations deployed; awaiting re-PASS** |
 | Engineering verdict | **NEEDS MORE VERIFICATION** |
-| ARB-WP1B-2A | Implementation + Staging Browser QA complete; awaiting Human QA |
+| ARB-WP1B-2A | Remediation implemented + Staging Browser QA; awaiting Human QA |
 | Arbitrage Agent | **OPEN** — Candidates / History / Profit & Risk / Settings / Integrations remain |
 | ARB-WP1B-2B | **NOT STARTED** (stop condition) |
 
@@ -18,147 +18,151 @@
 
 | Kind | Value |
 |------|--------|
-| **Runtime implementation baseline (this slice)** | `40f4c5f` |
-| **Documentation closeout HEAD** | `2ebc6d9` and later docs-only fixes on `main` |
-| **Served frontend bundle (before)** | `assets/index-D6ZmsjWR.js` |
-| **Served frontend bundle (after)** | `assets/index-WlHdPJwp.js` |
+| **Runtime implementation baseline (initial redesign)** | `40f4c5f` |
+| **Runtime implementation baseline (Human-QA remediation)** | *(this remediation commit on `main` after push)* |
+| **Documentation closeout HEAD (prior)** | `4d42353` |
+| **Served frontend bundle (before remediation)** | `assets/index-WlHdPJwp.js` |
+| **Served frontend bundle (after remediation)** | `assets/index-DsAjAa6N.js` |
 | **Environment** | Staging `https://titan.zala.ir` |
 | **Frozen WP1A runtime** | `f4fd43a` |
 | **Frozen WP1B-1 runtime** | `a9d6a5e` |
-| **Frozen WP1B-1 docs** | `a17ef46` |
+
+---
+
+## Human-QA Defects Addressed (ARB-WP1B-2A remediation)
+
+| # | Defect | Fix |
+|---|--------|-----|
+| 1 | Latest Scan + Scan Outcome duplicated Candidate/Rejected/Qualified | Removed Scan Outcome metric block; counts appear once under Latest Scan |
+| 2 | Analytical / execution limitations repeated many times | One compact interpretation sentence; removed bullets / duplicate cards / redundant hints |
+| 3 | Metric-card descriptions truncated with ellipsis on Desktop | Removed metric `hint`/`line-clamp` on Overview counts |
+| 4 | Oversized Recent Candidate Summary empty state | Replaced with compact `OverviewCompactEmpty` (`py-4`) |
+| 5 | Latest scan labeled Legacy — SoT RCA required | **Case B** recorded (see below); UI shows Legacy **once** without hiding the read-path defect |
+| 6 | State coverage incomplete | Unit fixtures for never-scanned / all-rejected / failed / loading / API error / permission / modern / genuine legacy |
+| 7 | Persian / tablet / mobile / a11y incomplete | Staging Browser QA EN+FA + 1440/768/390/844 viewports |
+
+---
+
+## Latest-Scan Legacy RCA — **Case B**
+
+### Traced record (Staging)
+
+| Field | Value |
+|-------|--------|
+| Decision ID | `c5164284-f7a2-4aa9-b5c9-0666f3e8ce96` |
+| Displayed time | `7/17/2026, 12:42:40 PM` (local) ≈ `2026-07-17T09:12:40.830Z` |
+| Persist path | `backend/services/agents/arbitrage.js` `run()` writes modern shape with `legacy: false` |
+| Read path | `backend/routes/ai-agents.js` details/`lastScan` calls `normalizeScanResult(latestRaw, { legacy: true })` |
+| History path | `backend/services/arbitrageScanContract.js` `fetchArbitrageScanHistory` also forces `{ legacy: true }` |
+
+### Classification
+
+**Case B — Post-WP1A scan incorrectly classified as Legacy by the read-path.**
+
+- Write path produces the modern WP1A contract.
+- Read/normalize path **always** forces `legacy: true`, so every latest/history item surfaces as Legacy even when the persisted payload is modern.
+- This is a **reproduced WP1A contract/read-path defect**, not a genuine pre-WP1A legacy row, and not a frontend-only mis-detect of a modern API flag.
+
+### Overview remediation response (authorized scope)
+
+- Do **not** silently reopen or patch WP1A backend in this slice.
+- Overview displays API `legacy` truthfully **once** (status pill + one short note).
+- Does **not** repeat “Legacy normalized scan record”.
+- Propose separate Work Package: **ARB-WP1A-R1 — Legacy read-path force**  
+  - Call `normalizeScanResult(raw)` without forced `{ legacy: true }`  
+  - Let shape / persisted `raw.legacy` decide  
+  - Add contract regression tests for manual + scheduled modern runs
+
+### ARB-O2 implication
+
+Legacy/Modern correctness for post-WP1A scans remains **blocked on WP1A-R1**. Overview presentation is honest about the API flag without concealing Case B.
 
 ---
 
 ## 1. Scope
 
-Professional redesign of **Overview only**, using verified WP1A contracts and WP1B-1 shared shell, without modifying AgentControlShell or WP1A canonical definitions.
+Overview-only Human-QA remediation: information hierarchy, truncation, compact empty state, Legacy presentation honesty, focused tests, Staging Browser QA, deploy, Git closeout docs.
 
 ## 2. Out of Scope
 
-Candidates, Scan History, Profit & Risk, Settings, Integrations redesigns; AgentControlShell; Data Hub; Agents Shell; DB/Redis/worker/scheduler; Live execution; external notifications; ARB-WP1B-2B.
+Candidates / History / Profit & Risk / Settings / Integrations redesigns; `AgentControlShell`; Data Hub; Agents Shell; silent WP1A backend contract fix; Live execution; DB mutations; ARB-WP1B-2B.
 
 ## 3. Repository Status
 
 - Isolated worktree: `/tmp/titangold-arb-wp1b2a-overview`
-- Branch: `feat/arb-wp1b2a-overview` (from `origin/main` @ `a17ef46`)
-- Original tree `/home/ubuntu/webapp/TitanGold`: dirty **only** with protected unrelated scripts (not staged/committed)
+- Branch: `feat/arb-wp1b2a-overview-remediation` (from `origin/main` @ `4d42353`)
+- Original tree `/home/ubuntu/webapp/TitanGold`: dirty **only** with protected unrelated scripts
 - Protected files untouched:
   - `scripts/backup-db.sh`
   - `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`
   - `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
-## 4. RCA (Overview content)
+## 4. RCA (Overview presentation)
 
-### Duplicated from shared shell (removed / not repeated)
+### Duplicated metrics (removed)
 
-- Operational status, Dry Run badge, Emergency Stop, Broker
-- Total Scans, Best Qualified Profit, Qualified Opportunities (shell metrics row)
-- Run Scan / Pause / Restart primary actions
+- Scan Outcome Candidate / Rejected / Qualified block (same as Latest Scan)
 
-### Genuinely useful (kept / elevated)
+### Repeated analytical copy (reduced to one)
 
-- Latest-scan completion time and humanized status
-- Distinct spread / rejected / qualified counts with explanation
-- Analytical interpretation (scan ≠ execution; candidate ≠ opportunity)
-- Execution support = Not supported
-- Rejection reason summary (humanized)
-- Compact recent candidate preview
-- Next-step navigation to Candidates / History / Settings
+- Removed multi-bullet Analytical Interpretation / execution-support info row / metric hints that restated “analytical only / not execution”
 
-### Weak hierarchy (fixed)
+### Truncation (removed)
 
-- Flat KPI grid that competed with the shell
-- Empty containers without guidance
-- Raw rejection enums / weak empty copy
+- No `line-clamp` essential hints on Overview metric cards
 
-### Misleading / overly technical (fixed)
+### Empty state (compacted)
 
-- Dry Run duplicated inside Overview
-- Captured/realized profit wording that could be misread as a metric
-- Raw backend status / enum leakage
+- `OverviewCompactEmpty` with optional View Scan History action
 
 ## 5. Dependency Findings
 
 | Layer | Dependency | Action |
 |-------|------------|--------|
-| UI | `DATAHUB_SHELL`, `DataHubSectionHeader`, `MetricCard`, `DataHubAlert`, `DataHubEmpty`, `StatusPill`, `SecondaryButton` | Reused |
+| UI | DATAHUB tokens, MetricCard, StatusPill, SecondaryButton | Reused |
 | Shell | `AgentControlShell` | Unchanged |
-| API | `GET /api/ai-agents/:id/details` via `fetchArbitrageAgentData` | Read path; error surfacing only |
-| Contracts | WP1A candidateStats / qualifiedStats / riskStats / rejectionReason / legacy | Preserved |
-| i18n | `deploy/{blue,green}/locales/{en,fa}.json` | Extended |
+| API | details payload / `legacy` flag | Displayed as returned (Case B noted) |
+| Contracts | WP1A definitions | Not silently changed |
+| i18n | blue+green EN/FA | Compact keys added |
 
 ## 6. Source of Truth
 
-- WP1A analytical spread monitor semantics remain authoritative
+- WP1A analytical semantics remain authoritative
 - Shell owns chrome metrics and Run Scan
-- Overview answers: latest scan / why no qualified / what next
-- Unknown → `N/A`; zero only when real; no fabricated duration/symbols/latency/realized profit
+- Overview: Latest Scan → one Interpretation → Next step / compact preview
+- Unknown → `N/A`; no fabricated realized/captured profit
 
 ## 7. Architecture Decision
 
-Overview is a **presentation-only** vertical slice:
+Three content groups only:
 
-1. Latest Scan (status + compact metrics with context)
-2. Scan Outcome (distinct counts + why-no-qualified)
-3. Analytical Interpretation + next steps
-4. Recent Candidate Summary (preview only)
+1. **Latest Scan** — time, status, Spread/Rejected/Qualified once, optional risk
+2. **Interpretation** — one compact sentence + optional rejection pills + Legacy note once
+3. **Next step** — nav + compact preview or compact empty
 
-No new backend contracts. Frontend mapping only: humanize statuses/rejections; surface load errors as permission/auth/network/generic without raw status codes in UI.
+## 8–12. Backend / DB / Redis / Security / Runtime
 
-## 8. Backend Changes
-
-**NOT APPLICABLE** — no backend route/service changes.
-
-## 9. Database Changes
-
-**NOT APPLICABLE**
-
-## 10. Redis/Cache Changes
-
-**NOT APPLICABLE**
-
-## 11. Security Changes
-
-- Permission/auth Overview states fail closed (403/401)
-- Generic API errors do not expose status codes or capability internals
-- No Live / order / notification side effects introduced
-
-## 12. Runtime/Worker Changes
-
-**NOT APPLICABLE** — no worker/scheduler changes. Passive remains Demo + Emergency Stop.
+| Area | Result |
+|------|--------|
+| Backend Changes | **NOT APPLICABLE** (Case B proposed as separate WP1A-R1) |
+| Database | **NOT APPLICABLE** — no data mutation |
+| Redis | **NOT APPLICABLE** |
+| Security | Permission/error Overview states preserved |
+| Runtime/Worker | Unchanged — Demo + Emergency Stop + broker offline |
 
 ## 13. Frontend Changes
 
-- `components/ai/ArbitrageAgentControl.tsx` — Overview redesign
-- `services/api.ts` — `fetchArbitrageAgentData` throws on failure (was swallowing nulls)
-- Locales EN/FA (blue + green)
-- Focused tests: `ArbitrageAgentControl.wp1b2a.overview.test.tsx`
-- Minor regression assertion updates in WP1A / WP1B-1 status tests
+- `components/ai/ArbitrageAgentControl.tsx` — hierarchy / truncation / empty / Legacy-once
+- Locales EN/FA (blue + green) — compact interpretation / next / legacy_once
+- `src/__tests__/components/ai/ArbitrageAgentControl.wp1b2a.overview.test.tsx` — remediation assertions
 
 ## 14. UI/UX Redesign
 
-Design-system matrix (engineering Browser QA evidence required for PASS):
-
 | Item | Status |
 |------|--------|
-| Layout | PASS (Staging Browser QA) |
-| Spacing | PASS |
-| Cards | PASS |
-| Typography | PASS |
-| Badges | PASS |
-| Loading | PASS |
-| Empty State | PASS |
-| Error State | PASS |
-| Forms | N/A |
-| Actions | PASS (navigation SecondaryButtons) |
-| Confirmations | N/A |
-| Accessibility | PASS (headings, labels, focusable actions) |
-| Keyboard | PASS (shell preserved; Overview links reachable) |
-| Responsive | PASS (desktop/tablet/mobile/landscape checked) |
-| Dark Theme | PASS |
-| i18n | PASS (EN/FA) |
-| Overflow | PASS |
-| Focus | PASS (no Overview focus trap regression vs shell) |
+| Layout / Spacing / Cards / Typography / Badges | PASS (Staging Browser QA) |
+| Loading / Empty / Error | PASS (unit + Browser where applicable) |
+| Accessibility / Keyboard / Responsive / Dark / i18n / Overflow / Focus | PASS (Staging Browser QA) |
 
 ## 15. Tests
 
@@ -167,44 +171,38 @@ Design-system matrix (engineering Browser QA evidence required for PASS):
 | `ArbitrageAgentControl.wp1a.test.tsx` | 6 | 6 | 0 | 0 | vitest/jsdom |
 | `ArbitrageAgentControl.wp1b1.test.tsx` | 7 | 7 | 0 | 0 | vitest/jsdom |
 | `ArbitrageAgentControl.wp1b1.status.test.tsx` | 3 | 3 | 0 | 0 | vitest/jsdom |
-| `ArbitrageAgentControl.wp1b2a.overview.test.tsx` | 8 | 8 | 0 | 0 | vitest/jsdom |
+| `ArbitrageAgentControl.wp1b2a.overview.test.tsx` | 11 | 11 | 0 | 0 | vitest/jsdom |
 
-**Total (focused closeout run):** 24 executed · 24 passed · 0 failed · 0 skipped · 0 retried  
-**Retries:** not used  
-**Environment:** Node vitest in isolated worktree `/tmp/titangold-arb-wp1b2a-overview`
-
-Covered Overview states: completed latest scan, never-scanned, all-rejected, legacy rejection label, API error + retry, permission-limited, loading skeleton, EN/FA, navigation, no shell metric duplication, no raw rejection enum, N/A / no captured-profit claim.
+**Total:** 27 executed · 27 passed · 0 failed · 0 skipped  
+**Environment:** Node vitest in `/tmp/titangold-arb-wp1b2a-overview` (`--pool=forks --maxWorkers=1`)
 
 ## 16. Performance
 
 | Metric | Result |
 |--------|--------|
 | Overview initial render baseline | **BASELINE NOT AVAILABLE** |
-| Extra Overview API | None — reuses existing details payload |
+| Extra Overview API | None |
 | Polling added | None |
-| DB/Redis diagnostics | None |
 
 ## 17. Browser QA
 
-Staging `https://titan.zala.ir` after deploy.
+Staging after deploy of bundle `assets/index-DsAjAa6N.js`.
 
 | Item | Result |
 |------|--------|
-| Served bundle | `assets/index-WlHdPJwp.js` |
-| Desktop Overview load + hierarchy | PASS |
-| No shell metric duplication / no Dry Run dup | PASS |
-| Navigation Review candidates / Scan history | PASS |
+| No Scan Outcome / Analytical Interpretation / oversized empty titles | PASS |
+| No essential Overview ellipsis | PASS |
+| Legacy label at most once | PASS |
+| Nav Review candidates / Scan history | PASS |
 | Escape closes shell | PASS |
-| Tablet / mobile portrait / mobile landscape | PASS |
-| Persian Overview labels | PASS |
-| Hard refresh | PASS |
-| Dark theme | PASS |
+| Tablet / mobile portrait / landscape | PASS |
+| Persian labels / no EN leakage / no raw keys | PASS |
 | Console Overview-related errors | PASS |
-| Runtime safety badges (Emergency Stop / Broker Offline) | PASS |
+| Runtime Emergency Stop / Broker Offline | PASS |
 
-Automated Staging Playwright checks: **32/32 PASS**
+Automated Staging Playwright: **35/35 PASS**
 
-Passive API runtime check (`/api/trading-engine/status`, `/api/settings/execution-runtime`):
+Runtime (`/api/settings/execution-runtime`):
 
 - requestedMode / globalRuntimeMode / effectiveMode: `demo`
 - killSwitchActive: `true`
@@ -212,74 +210,51 @@ Passive API runtime check (`/api/trading-engine/status`, `/api/settings/executio
 - providerConnected: `false`
 - deploymentEngineEnabled: `false`
 
-Explicit negatives verified:
-
-- No captured/realized profit metric
-- No execution claim
-- No negative candidate as opportunity
-- No raw enum / raw i18n key in Overview
-- No `--` placeholders
-- Runtime safety unchanged (Demo, Emergency Stop active)
-
 ## 18. Human-QA Handoff
 
-Human QA must explicitly PASS:
-
-### ARB-O1 — Information Hierarchy
-### ARB-O2 — Data Truthfulness
-### ARB-O3 — Empty and Failure States
-### ARB-O4 — Navigation and Usefulness
-### ARB-O5 — Responsive, Language and Accessibility
+Human QA must explicitly PASS ARB-O1 … ARB-O5 (see handoff below).  
+Note for ARB-O2: Legacy API flag is Case B; modern classification requires WP1A-R1.
 
 ## 19. Regression
 
-- WP1A analytical contracts unchanged
-- WP1B-1 shell frame unchanged
-- Status presentation (one Dry Run in header) preserved
-- Other Arbitrage tabs not redesigned (intentionally untouched)
+- WP1A write contract untouched
+- WP1B-1 shell unchanged (unit regression green)
+- No backend restart
 
 ## 20. Build/Deployment
 
 - Production-style `vite build` from isolated worktree
 - Sync to nginx root `/home/ubuntu/webapp/TitanGold/dist`
-- Backend restart: **not required** (frontend-only)
-- Migration: **none**
+- Backend restart: **not required**
+- Served bundle verified: `assets/index-DsAjAa6N.js`
 
-## 21. Files Changed
+## 21. Files Changed (remediation)
 
 - `components/ai/ArbitrageAgentControl.tsx`
-- `services/api.ts`
 - `deploy/blue/locales/en.json`
 - `deploy/blue/locales/fa.json`
 - `deploy/green/locales/en.json`
 - `deploy/green/locales/fa.json`
 - `src/__tests__/components/ai/ArbitrageAgentControl.wp1b2a.overview.test.tsx`
-- `src/__tests__/components/ai/ArbitrageAgentControl.wp1a.test.tsx`
-- `src/__tests__/components/ai/ArbitrageAgentControl.wp1b1.status.test.tsx`
 - `docs/ARBITRAGE_WP1B2A_OVERVIEW_CLOSEOUT.md`
 
 ## 22. Commits
 
-- `40f4c5f` — `feat(arb): redesign Overview around truthful scan outcomes` (**runtime**)
-- `400f449` — `docs(arb): record ARB-WP1B-2A Overview closeout evidence`
-- `2ebc6d9` — `docs(arb): distinguish WP1B2A runtime vs documentation HEAD`
-
-Runtime served from `40f4c5f` via bundle `assets/index-WlHdPJwp.js`.  
-Documentation-only commits after `40f4c5f` do not rebuild the frontend.
+- `40f4c5f` — initial Overview redesign (prior runtime)
+- Remediation commit: `fix(arb): simplify Overview and correct legacy scan presentation`
+- Prior docs-only: `400f449`, `2ebc6d9`, `4d42353`
 
 ## 23. Git Verification
 
-- Isolated verification worktree clean and synchronized with `origin/main`
-- Runtime implementation commit: `40f4c5f`
-- Served bundle verified: `assets/index-WlHdPJwp.js`
-- Original worktree `/home/ubuntu/webapp/TitanGold` remains dirty only for protected unrelated scripts
+- Isolated worktree used for implementation
+- Path-scoped staging only (no protected scripts)
+- Original `/home/ubuntu/webapp/TitanGold` remains dirty only for protected unrelated scripts
 
 ## 24. Remaining Risks
 
-- Human QA not yet performed
-- Other Arbitrage tabs still use older interior layouts
-- History tab still contains pre-existing “realized/captured” denial copy (out of Overview scope)
-- API error path depends on frontend throw behavior of `fetchArbitrageAgentData`
+- **Case B** Legacy misclassification until WP1A-R1
+- Human QA re-check not yet performed
+- Other Arbitrage tabs still older interior layouts
 
 ## 25. Final Verdict
 
@@ -287,9 +262,9 @@ Documentation-only commits after `40f4c5f` do not rebuild the frontend.
 
 ## Rollback
 
-1. Revert the ARB-WP1B-2A commit on `main`
+1. Revert the remediation commit on `main`
 2. Rebuild frontend and sync `dist/`
-3. Confirm served bundle returns to prior hash (`index-D6ZmsjWR.js` or documented prior)
+3. Confirm served bundle returns to `assets/index-WlHdPJwp.js` (or documented prior)
 
 ## Remaining Arbitrage tabs
 
@@ -300,3 +275,4 @@ Documentation-only commits after `40f4c5f` do not rebuild the frontend.
 - Integrations
 
 Do **not** begin ARB-WP1B-2B until this slice is Human-QA PASS and CLOSED AND FROZEN.
+Do **not** silently patch WP1A; open **ARB-WP1A-R1** for Legacy read-path force if approved.
