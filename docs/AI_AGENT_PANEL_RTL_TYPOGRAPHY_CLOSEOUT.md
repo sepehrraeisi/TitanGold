@@ -17,7 +17,7 @@
 
 | Kind | Value |
 |------|--------|
-| **Runtime implementation commit** | *(recorded after push; expected message below)* |
+| **Runtime implementation commit** | `cecbe79` — `fix(ai-shell): inherit RTL and Persian typography in agent panels` |
 | **Served frontend bundle** | `assets/index-CSyOLG24.js` |
 | **Environment** | Staging `https://titan.zala.ir` |
 | **Isolated worktree** | `/tmp/titangold-ai-rtl-typography` |
@@ -188,7 +188,9 @@ See AI-RTL-1 … AI-RTL-4 below.
 
 ## 22–23. Commits / Git
 
-Recorded after scoped push to `main`. Isolated worktree clean; original tree protected-dirty only.
+- Runtime + initial docs: `cecbe79` on `origin/main`
+- Documentation closeout HEAD may differ if a docs-only stamp follows
+- Isolated worktree synchronized; original tree protected-dirty only
 
 ## 24. Remaining Risks
 
