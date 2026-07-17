@@ -36,9 +36,26 @@ const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
+ * Local LTR isolation for technical tokens (symbols, ISO times, IDs).
+ * Do not wrap whole cards — only the value that must stay Latin-ordered.
+ */
+export const AgentTechnicalLtr: React.FC<{
+  children: React.ReactNode;
+  className?: string;
+  'data-testid'?: string;
+}> = ({ children, className, 'data-testid': testId }) => (
+  <span dir="ltr" className={className} data-testid={testId || 'agent-technical-ltr'}>
+    {children}
+  </span>
+);
+
+/**
  * Shared Control Panel shell — consistent modal chrome for agent panels.
  * Owns overlay, viewport-safe frame, Escape, focus trap/restoration, and body scroll.
  * Individual agents keep their own business tabs and state.
+ *
+ * Portal root receives canonical lang/dir/typography from LanguageContext because
+ * createPortal(document.body) sits outside the Dashboard RTL/font wrapper.
  */
 export const AgentControlShell: React.FC<AgentControlShellProps> = ({
   agent,
@@ -56,7 +73,7 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
   embedChildren = true,
   closeTestId = 'agent-shell-close',
 }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -67,6 +84,13 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
   const operationalLabelKey = shellOperationalStatusLabelKey(state);
   const effectiveModeKey = effectiveExecutionModeLabelKey(effectiveMode);
   const brokerConnected = runtime?.providerConnected === true;
+  const isPersian = language === 'fa';
+  const panelDir = isPersian ? 'rtl' : 'ltr';
+  // Match Dashboard SoT: class `rtl` + IRANSans stack (also covered by index.html [dir=rtl] rules).
+  const panelLangClass = isPersian ? 'rtl' : '';
+  const panelFontStyle = isPersian
+    ? ({ fontFamily: 'IRANSans, Vazir, Tahoma, sans-serif' } as React.CSSProperties)
+    : undefined;
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
@@ -139,13 +163,21 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
   const brokerValue = brokerConnected
     ? t('online') || 'Online'
     : t('offline') || 'Offline';
+  const lastRunLabel = t('never_run') || 'Never';
+  const lastRunValue = formatLastRun(agent.lastUpdate, lastRunLabel);
+  const lastRunIsTechnical = Boolean(agent.lastUpdate) && lastRunValue !== lastRunLabel;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4"
+      className={`fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 ${panelLangClass}`}
       role="presentation"
+      lang={language}
+      dir={panelDir}
+      style={panelFontStyle}
       onClick={onClose}
       data-testid="agent-control-shell-overlay"
+      data-shell-lang={language}
+      data-shell-dir={panelDir}
     >
       <div
         ref={panelRef}
@@ -153,10 +185,15 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
+        lang={language}
+        dir={panelDir}
         data-testid="agent-control-shell"
         data-agent-key={agent.agent_key}
         data-scroll-owner="agent-control-shell-body"
-        className="bg-[#12161c] border border-border rounded-xl w-full max-w-6xl max-h-[min(92vh,100dvh-1.5rem)] overflow-hidden flex flex-col shadow-2xl"
+        data-shell-lang={language}
+        data-shell-dir={panelDir}
+        className={`bg-[#12161c] border border-border rounded-xl w-full max-w-6xl max-h-[min(92vh,100dvh-1.5rem)] overflow-hidden flex flex-col shadow-2xl ${panelLangClass}`}
+        style={panelFontStyle}
         onClick={e => e.stopPropagation()}
       >
         <header className="shrink-0 z-10 bg-[#12161c]/95 border-b border-border px-4 sm:px-6 py-4 flex flex-wrap gap-3 items-start justify-between">
@@ -193,7 +230,12 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
                 className="px-2 py-0.5 rounded-full border border-border text-muted-foreground"
                 data-testid="agent-shell-last-run"
               >
-                {t('last_run')}: {formatLastRun(agent.lastUpdate, t('never_run') || 'Never')}
+                {t('last_run')}:{' '}
+                {lastRunIsTechnical ? (
+                  <AgentTechnicalLtr>{lastRunValue}</AgentTechnicalLtr>
+                ) : (
+                  lastRunValue
+                )}
               </span>
             </div>
           </div>
