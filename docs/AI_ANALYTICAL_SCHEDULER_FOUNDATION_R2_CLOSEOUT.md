@@ -6,7 +6,7 @@
 
 **Runtime implementation commits:** `3f2f7b0` (core), `76a76b6` (status TTL/heartbeat)
 
-**Documentation closeout HEAD:** `61772db` (docs-only; runtime remains `76a76b6`)
+**Documentation closeout HEAD:** `85a91e5` (docs-only; runtime remains `76a76b6`)
 
 **Return target after Human QA:** `ARB-WP1A-R1` (ARB-R1-3 scheduler contract)
 
