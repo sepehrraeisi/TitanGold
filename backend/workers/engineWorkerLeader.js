@@ -46,6 +46,7 @@ class EngineWorkerLeader {
     this.idleCheckInterval = null;
     this._lastKillSwitchActive = null;
     this._lastTradingStopLogAt = 0;
+    this._lastStatusHeartbeatAt = 0;
   }
 
   /**
@@ -305,6 +306,13 @@ class EngineWorkerLeader {
               this._lastTradingStopLogAt = now;
             }
             await tradingEngine.stop();
+          }
+
+          // Keep worker status fresh between long agent intervals (TTL 700s; refresh ≤60s)
+          const nowHb = Date.now();
+          if (scheduler?.publishStatus && nowHb - this._lastStatusHeartbeatAt > 60000) {
+            this._lastStatusHeartbeatAt = nowHb;
+            await scheduler.publishStatus();
           }
         } else if (transitioned) {
           if (scheduler?.clearEmergencyStopSeparation) {

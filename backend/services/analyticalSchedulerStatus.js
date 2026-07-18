@@ -9,7 +9,8 @@ import { logger } from './logger.js';
 import os from 'os';
 
 export const REDIS_ANALYTICAL_SCHEDULER_STATUS_KEY = 'titan:scheduler:analytical_status';
-export const ANALYTICAL_SCHEDULER_STATUS_TTL_SEC = 90;
+/** Must exceed agents.interval (default 300s) so status remains fresh between ticks. */
+export const ANALYTICAL_SCHEDULER_STATUS_TTL_SEC = 700;
 
 /**
  * @typedef {object} AnalyticalSchedulerStatus
