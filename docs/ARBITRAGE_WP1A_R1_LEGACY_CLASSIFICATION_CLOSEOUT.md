@@ -18,7 +18,7 @@
 
 | Kind | Value |
 |------|--------|
-| **Runtime implementation baseline** | *(commit after push)* — `fix(arb): classify modern and legacy scan contracts correctly` |
+| **Runtime implementation baseline** | `69d5ee2` — `fix(arb): classify modern and legacy scan contracts correctly` |
 | **Served frontend bundle** | `assets/index-DdyO2tD0.js` |
 | **Environment** | Staging `https://titan.zala.ir` |
 | **Backend process commit (health, after reload)** | reports `a17ef46` from original tree checkout (process cwd `/home/ubuntu/webapp/TitanGold/backend`); **runtime files for this fix were synced from worktree and reloaded** |
@@ -219,7 +219,14 @@ Staging after deploy — **24/24 PASS** including:
 
 ## 20. Commits / Git
 
-Recorded after scoped push. Path-scoped staging only.
+| Commit | Role |
+|--------|------|
+| `69d5ee2` | **Runtime implementation baseline** — `fix(arb): classify modern and legacy scan contracts correctly` |
+
+- `HEAD == origin/main` after push
+- Path-scoped staging only; protected scripts absent
+- Isolated worktree clean after push
+- Original `/home/ubuntu/webapp/TitanGold` remains dirty for protected scripts **and** previously synced runtime backend file copies used for Staging reload (not committed from original tree)
 
 ## 21. Remaining Risks
 
