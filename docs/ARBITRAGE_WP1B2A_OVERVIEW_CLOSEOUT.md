@@ -33,7 +33,7 @@
 | **Pre-Human-QA Overview documentation commit** | `7b8d99e` (closeout doc embedded with remediation; prior docs-only: `400f449`, `2ebc6d9`, `4d42353`) |
 | **Pre-closeout documentation HEAD** | `7984a3c` |
 | **Human-QA closeout content commit** | `0d16704` — `docs(arb): close Overview redesign after Human QA` |
-| **Documentation closeout HEAD** | same as Human-QA content commit `0d16704`; subsequent docs tips may only refine HEAD pointers |
+| **Documentation closeout HEAD** | current `origin/main` tip after this documentation series (Human-QA content commit `0d16704`) |
 | **Served frontend bundle** | `assets/index-DdyO2tD0.js` |
 | **Environment** | Staging |
 
