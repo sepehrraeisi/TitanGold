@@ -1,343 +1,220 @@
+/**
+ * /connections/exchanges compatibility + containment (CONNECTIONS-WP1A).
+ * - No plaintext credential write/read
+ * - MEXC delegates to canonical encrypted service
+ * - Unsupported providers fail closed
+ */
+
 import express from 'express';
-import { authenticate, authorize } from '../middleware/auth.js';
-import { query } from '../database/db.js';
+import { authenticate } from '../middleware/auth.js';
+import { requireCapability } from '../middleware/requireCapability.js';
+import { rateLimit } from '../middleware/rateLimit.js';
+import { CAP } from '../services/capabilities.js';
 import { logger } from '../services/logger.js';
+import { CONNECTION_ERROR, connectionError } from '../services/connectionErrors.js';
+import {
+  listConnectionsForUser,
+  getConnectionForUser,
+  upsertEncryptedConnection,
+  deleteConnection,
+  recordUntestedConnectionProbe,
+  ConnectionServiceError,
+  LISTED_PROVIDERS,
+  CANONICAL_PROVIDER,
+} from '../services/exchangeConnectionService.js';
 
 const router = express.Router();
+const mutationLimiter = rateLimit({ limit: 20, windowMs: 60_000 });
+const testLimiter = rateLimit({ limit: 10, windowMs: 60_000 });
 
-// Supported exchanges
-const SUPPORTED_EXCHANGES = ['MEXC', 'Binance', 'Bybit', 'KuCoin', 'Gate.io'];
-
-// Get all exchange connections for current user
-router.get('/', authenticate, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const result = await query(
-      `SELECT exchange, api_key, api_secret, is_active, is_testnet, last_sync_at, permissions, account_info
-       FROM exchange_connections 
-       WHERE user_id = $1
-       ORDER BY exchange`,
-      [userId]
-    );
-
-    const connections = result.rows.map(row => ({
-      exchange: row.exchange,
-      apiKey: row.api_key || '',
-      apiSecret: row.api_secret ? '••••••••' : '', // Mask secret
-      isConnected: row.is_active || false,
-      isTestnet: row.is_testnet || false,
-      lastSyncAt: row.last_sync_at,
-      permissions: row.permissions || [],
-      accountInfo: row.account_info || {},
-    }));
-
-    // Add missing exchanges
-    const existingExchanges = connections.map(c => c.exchange);
-    SUPPORTED_EXCHANGES.forEach(exchange => {
-      if (!existingExchanges.includes(exchange)) {
-        connections.push({
-          exchange,
-          apiKey: '',
-          apiSecret: '',
-          isConnected: false,
-          isTestnet: false,
-          lastSyncAt: null,
-          permissions: [],
-          accountInfo: {},
-        });
-      }
-    });
-
-    res.json({ connections });
-  } catch (error) {
-    logger.error('Failed to fetch exchange connections:', error);
-    // If database is unavailable, return empty connections
-    if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-      logger.warn('⚠️ Database unavailable, returning empty connections');
-      return res.json({
-        connections: SUPPORTED_EXCHANGES.map(exchange => ({
-          exchange,
-          apiKey: '',
-          apiSecret: '',
-          isConnected: false,
-          isTestnet: false,
-          lastSyncAt: null,
-          permissions: [],
-          accountInfo: {},
-        }))
-      });
-    }
-    res.status(500).json({ error: 'Failed to fetch exchange connections', message: error.message });
+function handleServiceError(res, error, fallbackMessage) {
+  if (error instanceof ConnectionServiceError) {
+    return connectionError(res, error.httpStatus, error.code, error.message, error.extra);
   }
-});
-
-// Get specific exchange connection
-router.get('/:exchange', authenticate, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { exchange } = req.params;
-    
-    if (!SUPPORTED_EXCHANGES.includes(exchange)) {
-      return res.status(400).json({ error: 'Unsupported exchange', supported: SUPPORTED_EXCHANGES });
-    }
-
-    const result = await query(
-      `SELECT api_key, api_secret, is_active, is_testnet, last_sync_at, permissions, account_info 
-       FROM exchange_connections 
-       WHERE user_id = $1 AND exchange = $2
-       LIMIT 1`,
-      [userId, exchange]
-    );
-
-    if (result.rows.length === 0) {
-      return res.json({
-        apiKey: '',
-        apiSecret: '',
-        isConnected: false,
-        permissions: [],
-        accountInfo: {},
-      });
-    }
-
-    const connection = result.rows[0];
-    res.json({
-      apiKey: connection.api_key || '',
-      apiSecret: connection.api_secret || '',
-      isConnected: connection.is_active || false,
-      isTestnet: connection.is_testnet || false,
-      lastSyncAt: connection.last_sync_at,
-      permissions: connection.permissions || [],
-      accountInfo: connection.account_info || {},
-    });
-  } catch (error) {
-    logger.error(`Failed to fetch ${req.params.exchange} connection:`, error);
-    // If database is unavailable, return empty connection
-    if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-      logger.warn('⚠️ Database unavailable, returning empty connection settings');
-      return res.json({
-        apiKey: '',
-        apiSecret: '',
-        isConnected: false,
-        permissions: [],
-        accountInfo: {},
-      });
-    }
-    res.status(500).json({ error: 'Failed to fetch connection settings', message: error.message });
-  }
-});
-
-// Save/Update exchange connection
-router.post('/:exchange', authenticate, authorize('admin', 'trader'), async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { exchange } = req.params;
-    const { apiKey, apiSecret, isTestnet } = req.body;
-
-    if (!SUPPORTED_EXCHANGES.includes(exchange)) {
-      return res.status(400).json({ error: 'Unsupported exchange', supported: SUPPORTED_EXCHANGES });
-    }
-
-    if (!apiKey || !apiSecret) {
-      return res.status(400).json({ error: 'API key and secret are required' });
-    }
-
-    // Test connection first and get permissions
-    const testResult = await testExchangeConnection(exchange, apiKey, apiSecret, isTestnet);
-    
-    const result = await query(
-      `INSERT INTO exchange_connections (user_id, exchange, api_key, api_secret, is_active, is_testnet, last_sync_at, permissions, account_info)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8)
-       ON CONFLICT (user_id, exchange) 
-       DO UPDATE SET 
-         api_key = EXCLUDED.api_key,
-         api_secret = EXCLUDED.api_secret,
-         is_active = EXCLUDED.is_active,
-         is_testnet = EXCLUDED.is_testnet,
-         last_sync_at = NOW(),
-         permissions = EXCLUDED.permissions,
-         account_info = EXCLUDED.account_info,
-         updated_at = NOW()
-       RETURNING *`,
-      [userId, exchange, apiKey, apiSecret, testResult.success, isTestnet || false, JSON.stringify(testResult.permissions || []), JSON.stringify(testResult.accountInfo || {})]
-    );
-
-    res.json({
-      success: true,
-      isConnected: testResult.success,
-      message: testResult.success ? 'Connection saved and tested successfully' : 'Connection saved but test failed',
-      permissions: testResult.permissions || [],
-      accountInfo: testResult.accountInfo || {},
-    });
-  } catch (error) {
-    logger.error(`Failed to save ${req.params.exchange} connection:`, error);
-    res.status(500).json({ error: 'Failed to save connection settings' });
-  }
-});
-
-// Test exchange connection
-router.post('/:exchange/test', authenticate, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { exchange } = req.params;
-    const { apiKey, apiSecret, isTestnet } = req.body;
-
-    if (!SUPPORTED_EXCHANGES.includes(exchange)) {
-      return res.status(400).json({ error: 'Unsupported exchange', supported: SUPPORTED_EXCHANGES });
-    }
-
-    // If keys provided in request, use them; otherwise get from database
-    let testApiKey = apiKey;
-    let testApiSecret = apiSecret;
-    let testIsTestnet = isTestnet;
-
-    if (!testApiKey || !testApiSecret) {
-      const result = await query(
-        `SELECT api_key, api_secret, is_testnet 
-         FROM exchange_connections 
-         WHERE user_id = $1 AND exchange = $2 AND is_active = true
-         LIMIT 1`,
-        [userId, exchange]
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: `${exchange} connection not configured` });
-      }
-
-      testApiKey = result.rows[0].api_key;
-      testApiSecret = result.rows[0].api_secret;
-      testIsTestnet = result.rows[0].is_testnet;
-    }
-
-    const testResult = await testExchangeConnection(exchange, testApiKey, testApiSecret, testIsTestnet);
-    res.json(testResult);
-  } catch (error) {
-    logger.error(`Failed to test ${req.params.exchange} connection:`, error);
-    res.status(500).json({ error: 'Failed to test connection' });
-  }
-});
-
-// Delete exchange connection
-router.delete('/:exchange', authenticate, authorize('admin', 'trader'), async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { exchange } = req.params;
-
-    if (!SUPPORTED_EXCHANGES.includes(exchange)) {
-      return res.status(400).json({ error: 'Unsupported exchange' });
-    }
-
-    await query(
-      'DELETE FROM exchange_connections WHERE user_id = $1 AND exchange = $2',
-      [userId, exchange]
-    );
-
-    res.json({ success: true, message: `${exchange} connection removed` });
-  } catch (error) {
-    logger.error(`Failed to delete ${req.params.exchange} connection:`, error);
-    res.status(500).json({ error: 'Failed to delete connection' });
-  }
-});
-
-// Get connection health status for all exchanges
-router.get('/health/status', authenticate, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const result = await query(
-      `SELECT exchange, is_active, last_sync_at, account_info 
-       FROM exchange_connections 
-       WHERE user_id = $1 AND is_active = true`,
-      [userId]
-    );
-
-    const healthStatus = await Promise.all(
-      result.rows.map(async (row) => {
-        // Check if last sync is recent (within 5 minutes)
-        const lastSync = row.last_sync_at ? new Date(row.last_sync_at) : null;
-        const now = new Date();
-        const minutesSinceSync = lastSync ? (now.getTime() - lastSync.getTime()) / 1000 / 60 : Infinity;
-        
-        const status = minutesSinceSync < 5 ? 'healthy' : 'stale';
-        
-        return {
-          exchange: row.exchange,
-          status,
-          lastSync: row.last_sync_at,
-          minutesSinceSync: lastSync ? Math.floor(minutesSinceSync) : null,
-          accountInfo: row.account_info || {},
-        };
-      })
-    );
-
-    res.json({ health: healthStatus });
-  } catch (error) {
-    logger.error('Failed to fetch health status:', error);
-    res.status(500).json({ error: 'Failed to fetch health status' });
-  }
-});
-
-// Helper function to test exchange connection
-async function testExchangeConnection(exchangeName, apiKey, apiSecret, isTestnet = false) {
-  try {
-    const ccxt = (await import('ccxt')).default;
-    
-    // Normalize exchange name to ccxt format
-    const exchangeId = exchangeName.toLowerCase().replace(/\./g, '');
-    
-    // Create exchange instance
-    const ExchangeClass = ccxt[exchangeId];
-    if (!ExchangeClass) {
-      return {
-        success: false,
-        message: `Exchange ${exchangeName} not supported by CCXT`,
-        permissions: [],
-        accountInfo: {},
-      };
-    }
-
-    const exchange = new ExchangeClass({
-      apiKey,
-      secret: apiSecret,
-      options: {
-        defaultType: 'spot',
-      },
-      ...(isTestnet && exchange.urls?.test ? { urls: { api: exchange.urls.test } } : {}),
-    });
-
-    // Test by fetching balance (lightweight operation)
-    const balance = await exchange.fetchBalance();
-    
-    // Get account info
-    const accountInfo = {
-      totalBalance: balance.total ? Object.keys(balance.total).filter(k => balance.total[k] > 0).length : 0,
-      currencies: balance.total ? Object.keys(balance.total).filter(k => balance.total[k] > 0) : [],
-    };
-
-    // Try to determine permissions (if exchange supports it)
-    let permissions = ['spot']; // Default permission
-    try {
-      if (exchange.has['fetchMyTrades']) permissions.push('trading');
-      if (exchange.has['fetchDeposits']) permissions.push('deposits');
-      if (exchange.has['fetchWithdrawals']) permissions.push('withdrawals');
-    } catch (err) {
-      // Ignore permission detection errors
-    }
-
-    return { 
-      success: true, 
-      message: 'Connection successful',
-      permissions,
-      accountInfo,
-    };
-  } catch (error) {
-    logger.error(`${exchangeName} connection test failed:`, error);
-    return { 
-      success: false, 
-      message: error.message || 'Connection test failed',
-      error: error.message,
-      permissions: [],
-      accountInfo: {},
-    };
-  }
+  logger.error(fallbackMessage, { message: error.message });
+  return connectionError(res, 500, CONNECTION_ERROR.CONNECTION_INTERNAL_ERROR, 'Internal connection error');
 }
+
+function requestMeta(req) {
+  return {
+    ipAddress: req.ip || null,
+    userAgent: req.get?.('user-agent') || null,
+  };
+}
+
+function toLegacyCompatibleDto(dto) {
+  return {
+    exchange: dto.provider,
+    // Never return stored secrets or ciphertext
+    apiKey: dto.maskedKeyIdentifier || '',
+    apiSecret: '',
+    isConnected: false,
+    isTestnet: dto.isTestnet,
+    lastSyncAt: dto.lastSyncAt,
+    permissions: [],
+    accountInfo: {},
+    configured: dto.configured,
+    credentialStatus: dto.credentialStatus,
+    status: dto.status,
+    secretReentryRequired: dto.secretReentryRequired,
+    privateAuthVerified: false,
+    id: dto.id,
+  };
+}
+
+router.get(
+  '/',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_READ),
+  async (req, res) => {
+    try {
+      const connections = await listConnectionsForUser(req.user.id);
+      return res.json({ connections: connections.map(toLegacyCompatibleDto) });
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to fetch exchange connections');
+    }
+  },
+);
+
+// Health status — metadata only, no polling loop amplification from invalid sessions
+router.get(
+  '/health/status',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_READ),
+  async (req, res) => {
+    try {
+      const connections = await listConnectionsForUser(req.user.id);
+      const health = connections
+        .filter((c) => c.configured)
+        .map((c) => ({
+          exchange: c.provider,
+          status: c.secretReentryRequired
+            ? 'reentry_required'
+            : (c.credentialStatus || 'configured_unverified'),
+          lastSync: c.lastSyncAt,
+          minutesSinceSync: null,
+          accountInfo: {},
+          privateAuthVerified: false,
+        }));
+      return res.json({ health });
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to fetch health status');
+    }
+  },
+);
+
+router.get(
+  '/:exchange',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_READ),
+  async (req, res) => {
+    try {
+      const connection = await getConnectionForUser(req.user.id, req.params.exchange);
+      return res.json(toLegacyCompatibleDto(connection));
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to fetch connection settings');
+    }
+  },
+);
+
+router.post(
+  '/:exchange',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_MANAGE),
+  mutationLimiter,
+  async (req, res) => {
+    try {
+      const exchange = req.params.exchange;
+      if (exchange !== CANONICAL_PROVIDER && !LISTED_PROVIDERS.includes(exchange)) {
+        return connectionError(
+          res,
+          400,
+          CONNECTION_ERROR.CONNECTION_PROVIDER_UNSUPPORTED,
+          'Unsupported exchange',
+          { supported: LISTED_PROVIDERS },
+        );
+      }
+      if (exchange !== CANONICAL_PROVIDER) {
+        return connectionError(
+          res,
+          400,
+          CONNECTION_ERROR.CONNECTION_PROVIDER_UNSUPPORTED,
+          `${exchange} credential persistence is not available in this release`,
+          { provider: exchange, supported: [CANONICAL_PROVIDER] },
+        );
+      }
+
+      const { apiKey, apiSecret, isTestnet } = req.body || {};
+      const connection = await upsertEncryptedConnection({
+        userId: req.user.id,
+        provider: CANONICAL_PROVIDER,
+        apiKey,
+        apiSecret,
+        isTestnet,
+        ...requestMeta(req),
+      });
+
+      return res.json({
+        success: true,
+        isConnected: false,
+        message: 'Connection saved. Private authentication is pending and not yet verified.',
+        code: CONNECTION_ERROR.CONNECTION_UNTESTED,
+        permissions: [],
+        accountInfo: {},
+        connection: toLegacyCompatibleDto(connection),
+      });
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to save connection settings');
+    }
+  },
+);
+
+router.post(
+  '/:exchange/test',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_TEST),
+  testLimiter,
+  async (req, res) => {
+    try {
+      // Do not use request-body secrets for private provider calls in WP1A.
+      const result = await recordUntestedConnectionProbe({
+        userId: req.user.id,
+        provider: req.params.exchange,
+        ...requestMeta(req),
+      });
+      return res.status(200).json(result);
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to test connection');
+    }
+  },
+);
+
+router.delete(
+  '/:exchange',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_MANAGE),
+  mutationLimiter,
+  async (req, res) => {
+    try {
+      if (req.params.exchange !== CANONICAL_PROVIDER) {
+        return connectionError(
+          res,
+          400,
+          CONNECTION_ERROR.CONNECTION_PROVIDER_UNSUPPORTED,
+          `${req.params.exchange} deletion via this path is limited to MEXC in this release`,
+          { supported: [CANONICAL_PROVIDER] },
+        );
+      }
+      const result = await deleteConnection({
+        userId: req.user.id,
+        provider: CANONICAL_PROVIDER,
+        ...requestMeta(req),
+      });
+      return res.json({ ...result, message: 'MEXC connection removed' });
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to delete connection');
+    }
+  },
+);
 
 export default router;

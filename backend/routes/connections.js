@@ -1,166 +1,189 @@
+/**
+ * Connections routes — CONNECTIONS-WP1A
+ * Canonical MEXC path delegates to exchangeConnectionService.
+ * Generic /exchanges mounted as compatibility aliases only.
+ */
+
 import express from 'express';
-import { authenticate, authorize } from '../middleware/auth.js';
-import { query } from '../database/db.js';
-import exchangesRouter from './exchanges.js';
+import { authenticate } from '../middleware/auth.js';
+import { requireCapability } from '../middleware/requireCapability.js';
+import { rateLimit } from '../middleware/rateLimit.js';
+import { CAP } from '../services/capabilities.js';
 import { logger } from '../services/logger.js';
-import { encryptSecret, decryptSecret, isEncrypted, maskSecret } from '../utils/crypto.js';
+import { CONNECTION_ERROR, connectionError } from '../services/connectionErrors.js';
+import {
+  listConnectionsForUser,
+  getConnectionForUser,
+  upsertEncryptedConnection,
+  deleteConnection,
+  recordUntestedConnectionProbe,
+  auditLocalInsecureCopyRemoved,
+  ConnectionServiceError,
+  CANONICAL_PROVIDER,
+} from '../services/exchangeConnectionService.js';
+import exchangesRouter from './exchanges.js';
 
 const router = express.Router();
 
-// Mount exchanges router
-router.use('/exchanges', exchangesRouter);
+const mutationLimiter = rateLimit({ limit: 20, windowMs: 60_000 });
+const testLimiter = rateLimit({ limit: 10, windowMs: 60_000 });
 
-// Get MEXC connection settings
-router.get('/mexc', authenticate, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const result = await query(
-      `SELECT api_key, api_secret, is_active, is_testnet, last_sync_at 
-       FROM exchange_connections 
-       WHERE user_id = $1 AND exchange = 'MEXC'
-       LIMIT 1`,
-      [userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.json({
-        apiKey: '',
-        apiSecret: '',
-        isConnected: false,
-      });
-    }
-
-    const connection = result.rows[0];
-
-    // Decrypt if necessary, but mask for safety in response
-    const rawApiKey = isEncrypted(connection.api_key) ? decryptSecret(connection.api_key) : (connection.api_key || '');
-    const rawApiSecret = isEncrypted(connection.api_secret) ? decryptSecret(connection.api_secret) : (connection.api_secret || '');
-
-    res.json({
-      apiKey: maskSecret(rawApiKey),
-      apiSecret: maskSecret(rawApiSecret),
-      isConnected: connection.is_active || false,
-      isTestnet: connection.is_testnet || false,
-      lastSyncAt: connection.last_sync_at,
-    });
-  } catch (error) {
-    logger.error('Failed to fetch MEXC connection:', error);
-    // If database is unavailable, return empty connection instead of error
-    if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-      logger.warn('⚠️ Database unavailable, returning empty connection settings');
-      return res.json({
-        apiKey: '',
-        apiSecret: '',
-        isConnected: false,
-      });
-    }
-    res.status(500).json({ error: 'Failed to fetch connection settings', message: error.message });
+function mapAuthFailure(res, err) {
+  // Do not expose raw middleware payloads as provider failures.
+  if (err?.code === 'TOKEN_EXPIRED' || err?.name === 'TokenExpiredError') {
+    return connectionError(res, 401, CONNECTION_ERROR.APP_SESSION_EXPIRED, 'Your session expired. Please sign in again.');
   }
-});
-
-// Save/Update MEXC connection settings
-router.post('/mexc', authenticate, authorize('admin', 'trader'), async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { apiKey, apiSecret, isTestnet } = req.body;
-
-    if (!apiKey || !apiSecret) {
-      return res.status(400).json({ error: 'API key and secret are required' });
-    }
-
-    // Test connection first
-    const testResult = await testMexcConnection(apiKey, apiSecret);
-
-    // Encrypt before saving
-    const encryptedApiKey = encryptSecret(apiKey);
-    const encryptedApiSecret = encryptSecret(apiSecret);
-
-    const result = await query(
-      `INSERT INTO exchange_connections (user_id, exchange, api_key, api_secret, is_active, is_testnet, last_sync_at)
-       VALUES ($1, 'MEXC', $2, $3, $4, $5, NOW())
-       ON CONFLICT (user_id, exchange) 
-       DO UPDATE SET 
-         api_key = EXCLUDED.api_key,
-         api_secret = EXCLUDED.api_secret,
-         is_active = EXCLUDED.is_active,
-         is_testnet = EXCLUDED.is_testnet,
-         last_sync_at = NOW(),
-         updated_at = NOW()
-       RETURNING *`,
-      [userId, encryptedApiKey, encryptedApiSecret, testResult.success, isTestnet || false]
-    );
-
-    res.json({
-      success: true,
-      isConnected: testResult.success,
-      message: testResult.success ? 'Connection saved and tested successfully' : 'Connection saved but test failed',
-    });
-  } catch (error) {
-    logger.error('Failed to save MEXC connection:', error);
-    res.status(500).json({ error: 'Failed to save connection settings' });
-  }
-});
-
-// Test MEXC connection
-router.post('/mexc/test', authenticate, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { apiKey, apiSecret } = req.body;
-
-    // If keys provided in request, use them; otherwise get from database
-    let testApiKey = apiKey;
-    let testApiSecret = apiSecret;
-
-    if (!testApiKey || !testApiSecret) {
-      const result = await query(
-        `SELECT api_key, api_secret 
-         FROM exchange_connections 
-         WHERE user_id = $1 AND exchange = 'MEXC' AND is_active = true
-         LIMIT 1`,
-        [userId]
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'MEXC connection not configured' });
-      }
-
-      const connection = result.rows[0];
-      testApiKey = isEncrypted(connection.api_key) ? decryptSecret(connection.api_key) : connection.api_key;
-      testApiSecret = isEncrypted(connection.api_secret) ? decryptSecret(connection.api_secret) : connection.api_secret;
-    }
-
-    const testResult = await testMexcConnection(testApiKey, testApiSecret);
-    res.json(testResult);
-  } catch (error) {
-    logger.error('Failed to test MEXC connection:', error);
-    res.status(500).json({ error: 'Failed to test connection' });
-  }
-});
-
-// Helper function to test MEXC connection
-async function testMexcConnection(apiKey, apiSecret) {
-  try {
-    const ccxt = (await import('ccxt')).default;
-    const exchange = new ccxt.mexc({
-      apiKey,
-      secret: apiSecret,
-      options: {
-        defaultType: 'spot',
-      },
-    });
-
-    // Test by fetching balance (lightweight operation)
-    await exchange.fetchBalance();
-    return { success: true, message: 'Connection successful' };
-  } catch (error) {
-    logger.error('MEXC connection test failed:', error);
-    return {
-      success: false,
-      message: error.message || 'Connection test failed',
-      error: error.message
-    };
-  }
+  return null;
 }
 
-export default router;
+function handleServiceError(res, error, fallbackMessage) {
+  if (error instanceof ConnectionServiceError) {
+    return connectionError(res, error.httpStatus, error.code, error.message, error.extra);
+  }
+  logger.error(fallbackMessage, { message: error.message });
+  return connectionError(res, 500, CONNECTION_ERROR.CONNECTION_INTERNAL_ERROR, 'Internal connection error');
+}
 
+function requestMeta(req) {
+  return {
+    ipAddress: req.ip || null,
+    userAgent: req.get?.('user-agent') || null,
+  };
+}
+
+// Compatibility / containment aliases for MultiExchange UI
+router.use('/exchanges', exchangesRouter);
+
+// ---------- Canonical MEXC routes ----------
+
+router.get(
+  '/mexc',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_READ),
+  async (req, res) => {
+    try {
+      const connection = await getConnectionForUser(req.user.id, CANONICAL_PROVIDER);
+      // Compatibility shape for legacy FE while remaining secret-safe
+      return res.json({
+        ...connection,
+        apiKey: connection.maskedKeyIdentifier || '',
+        apiSecret: '',
+        isConnected: false,
+        isTestnet: connection.isTestnet,
+        lastSyncAt: connection.lastSyncAt,
+      });
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to fetch MEXC connection');
+    }
+  },
+);
+
+router.post(
+  '/mexc',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_MANAGE),
+  mutationLimiter,
+  async (req, res) => {
+    try {
+      const { apiKey, apiSecret, isTestnet } = req.body || {};
+      const connection = await upsertEncryptedConnection({
+        userId: req.user.id,
+        provider: CANONICAL_PROVIDER,
+        apiKey,
+        apiSecret,
+        isTestnet,
+        ...requestMeta(req),
+      });
+      return res.json({
+        success: true,
+        isConnected: false,
+        message: 'Connection saved. Private authentication is pending and not yet verified.',
+        code: CONNECTION_ERROR.CONNECTION_UNTESTED,
+        connection,
+      });
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to save MEXC connection');
+    }
+  },
+);
+
+router.post(
+  '/mexc/test',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_TEST),
+  testLimiter,
+  async (req, res) => {
+    try {
+      // WP1A: ignore body secrets for private auth; do not call provider private APIs.
+      const result = await recordUntestedConnectionProbe({
+        userId: req.user.id,
+        provider: CANONICAL_PROVIDER,
+        ...requestMeta(req),
+      });
+      return res.status(200).json(result);
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to test MEXC connection');
+    }
+  },
+);
+
+router.delete(
+  '/mexc',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_MANAGE),
+  mutationLimiter,
+  async (req, res) => {
+    try {
+      const result = await deleteConnection({
+        userId: req.user.id,
+        provider: CANONICAL_PROVIDER,
+        ...requestMeta(req),
+      });
+      return res.json(result);
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to delete MEXC connection');
+    }
+  },
+);
+
+/**
+ * Optional client telemetry: legacy insecure browser copy removed.
+ * Never accepts secret values.
+ */
+router.post(
+  '/security/local-copy-removed',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_MANAGE),
+  mutationLimiter,
+  async (req, res) => {
+    try {
+      const keysRemoved = Array.isArray(req.body?.keysRemoved) ? req.body.keysRemoved : [];
+      await auditLocalInsecureCopyRemoved({
+        userId: req.user.id,
+        keysRemoved,
+        ...requestMeta(req),
+      });
+      return res.json({ success: true });
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to audit local copy removal');
+    }
+  },
+);
+
+// List all (safe DTO)
+router.get(
+  '/',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_READ),
+  async (req, res) => {
+    try {
+      const connections = await listConnectionsForUser(req.user.id);
+      return res.json({ connections });
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to list connections');
+    }
+  },
+);
+
+export default router;
+export { mapAuthFailure };

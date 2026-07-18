@@ -23,6 +23,12 @@ export const CAP = Object.freeze({
   LIVE_TRADING: 'LIVE_TRADING',
   RUNTIME_MODE_WRITE: 'RUNTIME_MODE_WRITE',
   KILL_SWITCH_CONTROL: 'KILL_SWITCH_CONTROL',
+  /** Settings → Connections metadata read (own scope) */
+  CONNECTIONS_READ: 'CONNECTIONS_READ',
+  /** Create / update / disable / delete Connections */
+  CONNECTIONS_MANAGE: 'CONNECTIONS_MANAGE',
+  /** Invoke Connection test endpoints (WP2 private auth; WP1A returns untested) */
+  CONNECTIONS_TEST: 'CONNECTIONS_TEST',
 });
 
 /** @type {Record<string, Set<string>>} */
@@ -30,10 +36,12 @@ const ROLE_CAPABILITIES = {
   user: new Set([
     CAP.AI_AGENT_READ,
     CAP.TOPIC_ROUTING_READ,
+    CAP.CONNECTIONS_READ,
   ]),
   vip: new Set([
     CAP.AI_AGENT_READ,
     CAP.TOPIC_ROUTING_READ,
+    CAP.CONNECTIONS_READ,
   ]),
   trader: new Set([
     CAP.AI_AGENT_READ,
@@ -45,6 +53,9 @@ const ROLE_CAPABILITIES = {
     CAP.TRADING_ENGINE_CONTROL,
     CAP.LIVE_TRADING,
     CAP.KILL_SWITCH_CONTROL,
+    CAP.CONNECTIONS_READ,
+    CAP.CONNECTIONS_MANAGE,
+    CAP.CONNECTIONS_TEST,
   ]),
   admin: new Set([
     CAP.AI_AGENT_READ,
@@ -62,6 +73,9 @@ const ROLE_CAPABILITIES = {
     CAP.LIVE_TRADING,
     CAP.RUNTIME_MODE_WRITE,
     CAP.KILL_SWITCH_CONTROL,
+    CAP.CONNECTIONS_READ,
+    CAP.CONNECTIONS_MANAGE,
+    CAP.CONNECTIONS_TEST,
   ]),
 };
 

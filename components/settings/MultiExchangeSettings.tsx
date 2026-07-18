@@ -1,515 +1,393 @@
-import React, { useState, useEffect } from 'react';
-import { authenticatedFetch } from '../../services/api-auth.ts';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLanguage } from '../../context/LanguageContext.tsx';
+import {
+  fetchExchangeConnections,
+  saveMexcConnection,
+  testMexcConnectionCanonical,
+  deleteMexcConnection,
+  detectLegacyInsecureCredentialKeys,
+  removeLegacyInsecureCredentialKeys,
+  type SafeConnectionDto,
+} from '../../services/connectionsApi.ts';
 
-interface ExchangeConnection {
-    exchange: string;
-    apiKey: string;
-    apiSecret: string;
-    isConnected: boolean;
-    isTestnet: boolean;
-    lastSyncAt: string | null;
-    permissions: string[];
-    accountInfo: {
-        totalBalance?: number;
-        currencies?: string[];
-    };
-}
-
-interface HealthStatus {
-    exchange: string;
-    status: 'healthy' | 'stale' | 'error';
-    lastSync: string | null;
-    minutesSinceSync: number | null;
-    accountInfo: any;
+interface DraftSecrets {
+  apiKey: string;
+  apiSecret: string;
 }
 
 const EXCHANGE_ICONS: Record<string, string> = {
-    'MEXC': '🟣',
-    'Binance': '🟡',
-    'Bybit': '🟠',
-    'KuCoin': '🟢',
-    'Gate.io': '🔵',
+  MEXC: '🟣',
+  Binance: '🟡',
+  Bybit: '🟠',
+  KuCoin: '🟢',
+  'Gate.io': '🔵',
 };
 
-const EXCHANGE_COLORS: Record<string, string> = {
-    'MEXC': '#9c27b0',
-    'Binance': '#f0b90b',
-    'Bybit': '#ff6600',
-    'KuCoin': '#24ae8f',
-    'Gate.io': '#2354e6',
-};
+function statusLabel(connection: SafeConnectionDto, t: (k: string) => string): string {
+  if (connection.secretReentryRequired) return t('connections_secret_reentry_required');
+  if (connection.configured) return t('connections_configured_unverified');
+  if (connection.provider && connection.provider !== 'MEXC') return t('connections_provider_unsupported');
+  return t('connections_not_configured');
+}
 
 export default function MultiExchangeSettings() {
-    const [connections, setConnections] = useState<ExchangeConnection[]>([]);
-    const [healthStatus, setHealthStatus] = useState<HealthStatus[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [expandedExchange, setExpandedExchange] = useState<string | null>(null);
-    const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
-    const [testingExchange, setTestingExchange] = useState<string | null>(null);
-    const [savingExchange, setSavingExchange] = useState<string | null>(null);
-    const [messages, setMessages] = useState<Record<string, { type: 'success' | 'error' | 'info'; text: string }>>({});
+  const { t } = useLanguage();
+  const [connections, setConnections] = useState<SafeConnectionDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedExchange, setExpandedExchange] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, DraftSecrets>>({});
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [testingExchange, setTestingExchange] = useState<string | null>(null);
+  const [savingExchange, setSavingExchange] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Record<string, { type: 'success' | 'error' | 'info'; text: string }>>({});
+  const [legacyKeys, setLegacyKeys] = useState<string[]>([]);
+  const [removingLegacy, setRemovingLegacy] = useState(false);
 
-    useEffect(() => {
-        loadConnections();
-        loadHealthStatus();
-        
-        // Refresh health status every 30 seconds
-        const interval = setInterval(loadHealthStatus, 30000);
-        return () => clearInterval(interval);
-    }, []);
+  const clearDraft = useCallback((exchange: string) => {
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[exchange];
+      return next;
+    });
+    setShowSecrets((prev) => ({ ...prev, [exchange]: false }));
+  }, []);
 
-    const loadConnections = async () => {
-        try {
-            setLoading(true);
-            console.log('MultiExchange: Loading connections via authenticatedFetch...');
+  const loadConnections = useCallback(async () => {
+    try {
+      setLoading(true);
+      const list = await fetchExchangeConnections();
+      setConnections(list);
+    } catch (error: any) {
+      const key = error?.message || 'connections_internal_error';
+      setMessages((prev) => ({
+        ...prev,
+        _global: { type: 'error', text: t(key) },
+      }));
+      setConnections([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [t]);
 
-            // استفاده از همان مکانیزم احراز هویت سراسری
-            const response = await authenticatedFetch('/connections/exchanges', {
-                method: 'GET',
-            });
-            
-            console.log('MultiExchange: Response status:', response.status);
-            
-            if (response.ok) {
-                const data = await response.json();
-                console.log('MultiExchange: Loaded connections:', data);
-                setConnections(data.connections || []);
-            } else {
-                console.error('MultiExchange: Failed to load, status:', response.status);
-                // Set empty connections to show UI anyway
-                setConnections([]);
-            }
-        } catch (error) {
-            console.error('Failed to load exchange connections:', error);
-            // Set empty connections to show UI anyway
-            setConnections([]);
-        } finally {
-            setLoading(false);
-            console.log('MultiExchange: Loading complete, loading =', false);
-        }
+  useEffect(() => {
+    loadConnections();
+    setLegacyKeys(detectLegacyInsecureCredentialKeys());
+    // No background health polling in WP1A (avoids invalid-token storms).
+  }, [loadConnections]);
+
+  useEffect(() => {
+    return () => {
+      // Clear any in-memory drafts on unmount
+      setDrafts({});
     };
+  }, []);
 
-    const loadHealthStatus = async () => {
-        try {
-            const response = await fetch('/api/connections/exchanges/health/status', {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                },
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                setHealthStatus(data.health || []);
-            }
-        } catch (error) {
-            console.error('Failed to load health status:', error);
-        }
-    };
+  const updateDraft = (exchange: string, field: keyof DraftSecrets, value: string) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [exchange]: {
+        apiKey: prev[exchange]?.apiKey || '',
+        apiSecret: prev[exchange]?.apiSecret || '',
+        [field]: value,
+      },
+    }));
+  };
 
-    const handleSaveConnection = async (exchangeName: string) => {
-        const connection = connections.find(c => c.exchange === exchangeName);
-        if (!connection || !connection.apiKey || !connection.apiSecret) {
-            setMessages(prev => ({
-                ...prev,
-                [exchangeName]: { type: 'error', text: 'API Key and Secret are required' }
-            }));
-            return;
-        }
-
-        try {
-            setSavingExchange(exchangeName);
-            const response = await fetch(`/api/connections/exchanges/${exchangeName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                },
-                body: JSON.stringify({
-                    apiKey: connection.apiKey,
-                    apiSecret: connection.apiSecret,
-                    isTestnet: connection.isTestnet,
-                }),
-            });
-
-            const result = await response.json();
-            
-            if (response.ok && result.success) {
-                setMessages(prev => ({
-                    ...prev,
-                    [exchangeName]: { type: 'success', text: result.message }
-                }));
-                
-                setConnections(prev => prev.map(c => 
-                    c.exchange === exchangeName 
-                        ? { 
-                            ...c, 
-                            isConnected: result.isConnected,
-                            permissions: result.permissions || [],
-                            accountInfo: result.accountInfo || {},
-                        } 
-                        : c
-                ));
-                
-                await loadHealthStatus();
-            } else {
-                setMessages(prev => ({
-                    ...prev,
-                    [exchangeName]: { type: 'error', text: result.error || 'Failed to save connection' }
-                }));
-            }
-        } catch (error) {
-            setMessages(prev => ({
-                ...prev,
-                [exchangeName]: { type: 'error', text: 'Failed to save connection' }
-            }));
-        } finally {
-            setSavingExchange(null);
-        }
-    };
-
-    const handleTestConnection = async (exchangeName: string) => {
-        const connection = connections.find(c => c.exchange === exchangeName);
-        if (!connection || !connection.apiKey || !connection.apiSecret) {
-            setMessages(prev => ({
-                ...prev,
-                [exchangeName]: { type: 'error', text: 'API Key and Secret are required' }
-            }));
-            return;
-        }
-
-        try {
-            setTestingExchange(exchangeName);
-            const response = await fetch(`/api/connections/exchanges/${exchangeName}/test`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                },
-                body: JSON.stringify({
-                    apiKey: connection.apiKey,
-                    apiSecret: connection.apiSecret,
-                    isTestnet: connection.isTestnet,
-                }),
-            });
-
-            const result = await response.json();
-            
-            if (result.success) {
-                setMessages(prev => ({
-                    ...prev,
-                    [exchangeName]: { type: 'success', text: '✅ Connection successful!' }
-                }));
-                
-                if (result.permissions) {
-                    setConnections(prev => prev.map(c => 
-                        c.exchange === exchangeName 
-                            ? { ...c, permissions: result.permissions, accountInfo: result.accountInfo || {} } 
-                            : c
-                    ));
-                }
-            } else {
-                setMessages(prev => ({
-                    ...prev,
-                    [exchangeName]: { type: 'error', text: `❌ ${result.message || 'Connection failed'}` }
-                }));
-            }
-        } catch (error) {
-            setMessages(prev => ({
-                ...prev,
-                [exchangeName]: { type: 'error', text: '❌ Failed to test connection' }
-            }));
-        } finally {
-            setTestingExchange(null);
-        }
-    };
-
-    const handleDeleteConnection = async (exchangeName: string) => {
-        if (!confirm(`Are you sure you want to delete ${exchangeName} connection?`)) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/connections/exchanges/${exchangeName}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                },
-            });
-
-            if (response.ok) {
-                setMessages(prev => ({
-                    ...prev,
-                    [exchangeName]: { type: 'info', text: 'Connection deleted' }
-                }));
-                
-                setConnections(prev => prev.map(c => 
-                    c.exchange === exchangeName 
-                        ? { 
-                            ...c, 
-                            apiKey: '', 
-                            apiSecret: '', 
-                            isConnected: false, 
-                            permissions: [], 
-                            accountInfo: {} 
-                        } 
-                        : c
-                ));
-                
-                await loadHealthStatus();
-            }
-        } catch (error) {
-            setMessages(prev => ({
-                ...prev,
-                [exchangeName]: { type: 'error', text: 'Failed to delete connection' }
-            }));
-        }
-    };
-
-    const getHealthStatusForExchange = (exchangeName: string) => {
-        return healthStatus.find(h => h.exchange === exchangeName);
-    };
-
-    const renderHealthIndicator = (exchangeName: string) => {
-        const health = getHealthStatusForExchange(exchangeName);
-        const connection = connections.find(c => c.exchange === exchangeName);
-        
-        if (!connection?.isConnected) {
-            return <span className="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded">Not Connected</span>;
-        }
-        
-        if (!health) {
-            return <span className="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded">Unknown</span>;
-        }
-
-        const statusConfig = {
-            healthy: { label: 'Healthy', color: 'bg-green-500/20 text-green-400', icon: '✓' },
-            stale: { label: 'Stale', color: 'bg-yellow-500/20 text-yellow-400', icon: '⚠' },
-            error: { label: 'Error', color: 'bg-red-500/20 text-red-400', icon: '✕' },
-        };
-
-        const config = statusConfig[health.status];
-        
-        return (
-            <div className="flex items-center gap-2">
-                <span className={`px-2 py-1 text-xs rounded ${config.color}`}>
-                    {config.icon} {config.label}
-                </span>
-                {health.minutesSinceSync !== null && (
-                    <span className="text-xs text-gray-400">
-                        {health.minutesSinceSync < 1 
-                            ? 'Just now' 
-                            : `${health.minutesSinceSync}m ago`}
-                    </span>
-                )}
-            </div>
-        );
-    };
-
-    if (loading) {
-        console.log('MultiExchange: Rendering loading state');
-        return (
-            <div className="bg-[#161B22] border border-gray-800 rounded-lg p-8">
-                <div className="flex justify-center items-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                    <span className="ml-3 text-gray-400">Loading exchanges...</span>
-                </div>
-            </div>
-        );
+  const handleSaveConnection = async (exchangeName: string) => {
+    if (exchangeName !== 'MEXC') {
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: { type: 'error', text: t('connections_provider_unsupported') },
+      }));
+      return;
+    }
+    const draft = drafts[exchangeName];
+    if (!draft?.apiKey?.trim() || !draft?.apiSecret?.trim()) {
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: { type: 'error', text: t('connections_validation_failed') },
+      }));
+      return;
     }
 
-    console.log('MultiExchange: Rendering main content, connections:', connections.length);
+    try {
+      setSavingExchange(exchangeName);
+      const result = await saveMexcConnection({
+        apiKey: draft.apiKey.trim(),
+        apiSecret: draft.apiSecret.trim(),
+        isTestnet: false,
+      });
+      clearDraft(exchangeName);
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: {
+          type: 'info',
+          text: t('connections_saved_untested'),
+        },
+      }));
+      await loadConnections();
+      void result;
+    } catch (error: any) {
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: { type: 'error', text: t(error?.message || 'connections_internal_error') },
+      }));
+    } finally {
+      setSavingExchange(null);
+      clearDraft(exchangeName);
+    }
+  };
 
+  const handleTestConnection = async (exchangeName: string) => {
+    if (exchangeName !== 'MEXC') {
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: { type: 'error', text: t('connections_provider_unsupported') },
+      }));
+      return;
+    }
+    try {
+      setTestingExchange(exchangeName);
+      // WP1A: never submit secrets for private provider auth
+      const result = await testMexcConnectionCanonical();
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: {
+          type: 'info',
+          text: t(result.messageKey || 'connections_untested'),
+        },
+      }));
+      await loadConnections();
+    } catch (error: any) {
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: { type: 'error', text: t(error?.message || 'connections_internal_error') },
+      }));
+    } finally {
+      setTestingExchange(null);
+      clearDraft(exchangeName);
+    }
+  };
+
+  const handleDeleteConnection = async (exchangeName: string) => {
+    if (exchangeName !== 'MEXC') {
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: { type: 'error', text: t('connections_provider_unsupported') },
+      }));
+      return;
+    }
+    if (!window.confirm(t('delete_connection_confirm'))) return;
+    try {
+      await deleteMexcConnection();
+      clearDraft(exchangeName);
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: { type: 'info', text: t('connection_deleted') },
+      }));
+      await loadConnections();
+    } catch (error: any) {
+      setMessages((prev) => ({
+        ...prev,
+        [exchangeName]: { type: 'error', text: t(error?.message || 'connections_internal_error') },
+      }));
+    }
+  };
+
+  const handleRemoveLegacy = async () => {
+    if (!window.confirm(t('connections_legacy_remove_confirm'))) return;
+    setRemovingLegacy(true);
+    try {
+      await removeLegacyInsecureCredentialKeys();
+      setLegacyKeys(detectLegacyInsecureCredentialKeys());
+      setMessages((prev) => ({
+        ...prev,
+        _global: { type: 'info', text: t('connections_legacy_removed') },
+      }));
+    } finally {
+      setRemovingLegacy(false);
+    }
+  };
+
+  const toggleExpand = (exchange: string) => {
+    setExpandedExchange((prev) => {
+      if (prev && prev !== exchange) clearDraft(prev);
+      if (prev === exchange) {
+        clearDraft(exchange);
+        return null;
+      }
+      return exchange;
+    });
+  };
+
+  if (loading) {
     return (
-        <div className="bg-[#161B22] border border-gray-800 rounded-lg">
-            <div className="p-6 border-b border-gray-800">
-                <h3 className="text-lg font-semibold text-white">Exchange Connections</h3>
-                <p className="text-sm text-gray-400 mt-1">
-                    Connect your exchange accounts to enable automated trading. Your API keys are stored securely.
-                </p>
-            </div>
-            
-            <div className="p-6 space-y-4">
-                {connections.map((connection) => {
-                    const isExpanded = expandedExchange === connection.exchange;
-                    const showSecret = showSecrets[connection.exchange] || false;
-                    const message = messages[connection.exchange];
-
-                    return (
-                        <div key={connection.exchange} className="bg-[#0D111C] border border-gray-700 rounded-lg overflow-hidden">
-                            {/* Header */}
-                            <div 
-                                className="p-4 cursor-pointer hover:bg-gray-800/50 transition-colors"
-                                onClick={() => setExpandedExchange(isExpanded ? null : connection.exchange)}
-                            >
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3 flex-1">
-                                        <span className="text-3xl">{EXCHANGE_ICONS[connection.exchange]}</span>
-                                        <div className="flex-1">
-                                            <h4 
-                                                className="font-semibold text-lg"
-                                                style={{ color: EXCHANGE_COLORS[connection.exchange] }}
-                                            >
-                                                {connection.exchange}
-                                            </h4>
-                                            {renderHealthIndicator(connection.exchange)}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-2">
-                                        {connection.isConnected && connection.permissions.length > 0 && (
-                                            <div className="flex gap-1 mr-2">
-                                                {connection.permissions.map(perm => (
-                                                    <span 
-                                                        key={perm} 
-                                                        className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded border border-blue-500/30"
-                                                    >
-                                                        {perm}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                        
-                                        <svg 
-                                            className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                            fill="none" 
-                                            stroke="currentColor" 
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                        </svg>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Expanded Content */}
-                            {isExpanded && (
-                                <div className="p-4 border-t border-gray-700 space-y-4">
-                                    {message && (
-                                        <div className={`p-3 rounded ${
-                                            message.type === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                                            message.type === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                                            'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                        }`}>
-                                            {message.text}
-                                        </div>
-                                    )}
-
-                                    {/* API Key Input */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-1">
-                                            API Key
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={connection.apiKey}
-                                            onChange={(e) => {
-                                                setConnections(prev => prev.map(c =>
-                                                    c.exchange === connection.exchange
-                                                        ? { ...c, apiKey: e.target.value }
-                                                        : c
-                                                ));
-                                            }}
-                                            placeholder="Enter your API key"
-                                            className="w-full p-2 bg-[#0D111C] border border-gray-700 rounded-md focus:ring-blue-500 focus:border-blue-500 text-white"
-                                        />
-                                    </div>
-
-                                    {/* API Secret Input */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-1">
-                                            API Secret
-                                        </label>
-                                        <div className="relative">
-                                            <input
-                                                type={showSecret ? 'text' : 'password'}
-                                                value={connection.apiSecret}
-                                                onChange={(e) => {
-                                                    setConnections(prev => prev.map(c =>
-                                                        c.exchange === connection.exchange
-                                                            ? { ...c, apiSecret: e.target.value }
-                                                            : c
-                                                    ));
-                                                }}
-                                                placeholder="Enter your API secret"
-                                                className="w-full p-2 pr-10 bg-[#0D111C] border border-gray-700 rounded-md focus:ring-blue-500 focus:border-blue-500 text-white"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowSecrets(prev => ({
-                                                    ...prev,
-                                                    [connection.exchange]: !showSecret
-                                                }))}
-                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                                            >
-                                                {showSecret ? '👁️' : '👁️‍🗨️'}
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Account Info */}
-                                    {connection.accountInfo?.currencies && connection.accountInfo.currencies.length > 0 && (
-                                        <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded">
-                                            <div className="flex items-start gap-2">
-                                                <span className="text-blue-400">ℹ️</span>
-                                                <div className="flex-1">
-                                                    <p className="text-sm text-blue-400 font-medium">
-                                                        Account Info: {connection.accountInfo.totalBalance || 0} assets with balance
-                                                    </p>
-                                                    <p className="text-xs text-blue-300 mt-1">
-                                                        Currencies: {connection.accountInfo.currencies.join(', ')}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Action Buttons */}
-                                    <div className="flex gap-2 pt-2">
-                                        <button
-                                            onClick={() => handleSaveConnection(connection.exchange)}
-                                            disabled={savingExchange === connection.exchange || !connection.apiKey || !connection.apiSecret}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-md transition-colors flex items-center gap-2"
-                                        >
-                                            {savingExchange === connection.exchange ? (
-                                                <>
-                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                                    Saving...
-                                                </>
-                                            ) : (
-                                                'Save & Test'
-                                            )}
-                                        </button>
-
-                                        <button
-                                            onClick={() => handleTestConnection(connection.exchange)}
-                                            disabled={testingExchange === connection.exchange || !connection.apiKey || !connection.apiSecret}
-                                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-md transition-colors flex items-center gap-2"
-                                        >
-                                            {testingExchange === connection.exchange ? (
-                                                <>
-                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                                    Testing...
-                                                </>
-                                            ) : (
-                                                'Test Connection'
-                                            )}
-                                        </button>
-
-                                        {connection.isConnected && (
-                                            <button
-                                                onClick={() => handleDeleteConnection(connection.exchange)}
-                                                className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-md transition-colors border border-red-600/30"
-                                            >
-                                                🗑️ Delete
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
+      <div className="bg-[#161B22] border border-gray-800 rounded-lg p-6 text-gray-400">
+        {t('loading')}
+      </div>
     );
+  }
+
+  return (
+    <div className="bg-[#161B22] border border-gray-800 rounded-lg">
+      <div className="p-6 border-b border-gray-800">
+        <h3 className="text-lg font-semibold text-white">{t('exchange_connections')}</h3>
+        <p className="text-sm text-gray-400 mt-1">{t('exchange_connections_desc')}</p>
+      </div>
+
+      {legacyKeys.length > 0 && (
+        <div className="mx-6 mt-4 p-3 rounded-md border border-amber-700/60 bg-amber-950/40 text-amber-100 text-sm">
+          <p>{t('connections_legacy_warning')}</p>
+          <button
+            type="button"
+            className="mt-2 px-3 py-1.5 rounded bg-amber-700 text-white text-sm disabled:opacity-50"
+            disabled={removingLegacy}
+            onClick={handleRemoveLegacy}
+          >
+            {t('connections_legacy_remove')}
+          </button>
+        </div>
+      )}
+
+      {messages._global && (
+        <div className={`mx-6 mt-4 text-sm ${messages._global.type === 'error' ? 'text-red-400' : 'text-blue-300'}`}>
+          {messages._global.text}
+        </div>
+      )}
+
+      <div className="p-6 space-y-3">
+        {connections.map((connection) => {
+          const exchange = connection.provider || connection.exchange || '';
+          const expanded = expandedExchange === exchange;
+          const draft = drafts[exchange] || { apiKey: '', apiSecret: '' };
+          const isMexc = exchange === 'MEXC';
+
+          return (
+            <div key={exchange} className="border border-gray-800 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between p-4 text-left hover:bg-[#0D111C]"
+                onClick={() => toggleExpand(exchange)}
+              >
+                <div className="flex items-center gap-3">
+                  <span aria-hidden="true">{EXCHANGE_ICONS[exchange] || '⚪'}</span>
+                  <div>
+                    <div className="text-white font-medium">{exchange}</div>
+                    <div className="text-xs text-gray-400">{statusLabel(connection, t)}</div>
+                  </div>
+                </div>
+                <span className="text-gray-500 text-sm">{expanded ? '−' : '+'}</span>
+              </button>
+
+              {expanded && (
+                <div className="p-4 border-t border-gray-800 space-y-3 bg-[#0D111C]">
+                  {connection.maskedKeyIdentifier && (
+                    <p className="text-xs text-gray-400">
+                      {t('connections_masked_key')}: {connection.maskedKeyIdentifier}
+                    </p>
+                  )}
+
+                  {isMexc ? (
+                    <>
+                      <div>
+                        <label className="block text-sm text-gray-300 mb-1" htmlFor={`${exchange}-key`}>
+                          {t('mexc_api_key')}
+                        </label>
+                        <input
+                          id={`${exchange}-key`}
+                          type="text"
+                          autoComplete="off"
+                          value={draft.apiKey}
+                          onChange={(e) => updateDraft(exchange, 'apiKey', e.target.value)}
+                          placeholder={connection.configured ? t('connections_leave_blank_rotate') : t('enter_api_key')}
+                          className="w-full p-2 bg-[#161B22] border border-gray-700 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-300 mb-1" htmlFor={`${exchange}-secret`}>
+                          {t('api_secret')}
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            id={`${exchange}-secret`}
+                            type={showSecrets[exchange] ? 'text' : 'password'}
+                            autoComplete="new-password"
+                            value={draft.apiSecret}
+                            onChange={(e) => updateDraft(exchange, 'apiSecret', e.target.value)}
+                            placeholder={t('enter_api_secret')}
+                            className="w-full p-2 bg-[#161B22] border border-gray-700 rounded-md"
+                          />
+                          <button
+                            type="button"
+                            className="px-2 text-xs text-gray-300 border border-gray-700 rounded"
+                            onClick={() => setShowSecrets((p) => ({ ...p, [exchange]: !p[exchange] }))}
+                          >
+                            {showSecrets[exchange] ? t('hide') : t('show')}
+                          </button>
+                        </div>
+                      </div>
+
+                      {messages[exchange] && (
+                        <p
+                          className={`text-sm ${
+                            messages[exchange].type === 'error'
+                              ? 'text-red-400'
+                              : messages[exchange].type === 'success'
+                                ? 'text-green-400'
+                                : 'text-blue-300'
+                          }`}
+                        >
+                          {messages[exchange].text}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={savingExchange === exchange}
+                          onClick={() => handleSaveConnection(exchange)}
+                          className="px-3 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-50"
+                        >
+                          {t('save_changes')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={testingExchange === exchange || !connection.configured}
+                          onClick={() => handleTestConnection(exchange)}
+                          className="px-3 py-2 rounded border border-gray-600 text-gray-200 text-sm disabled:opacity-50"
+                        >
+                          {t('test_connection')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clearDraft(exchange);
+                            setExpandedExchange(null);
+                          }}
+                          className="px-3 py-2 rounded border border-gray-700 text-gray-300 text-sm"
+                        >
+                          {t('cancel')}
+                        </button>
+                        {connection.configured && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteConnection(exchange)}
+                            className="px-3 py-2 rounded border border-red-800 text-red-300 text-sm"
+                          >
+                            {t('delete')}
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-400">{t('connections_provider_unsupported')}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

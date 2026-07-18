@@ -13411,7 +13411,7 @@ export const testAIIntegration = async (
 // MEXC API Service
 const MEXC_API_BASE = 'https://api.mexc.com';
 
-export const fetchConnectionSettings = async (): Promise<{ apiKey: string; apiSecret: string; isConnected: boolean }> => {
+export const fetchConnectionSettings = async (): Promise<{ apiKey: string; apiSecret: string; isConnected: boolean; configured?: boolean; credentialStatus?: string }> => {
     try {
         const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
         if (!token) {
@@ -13427,163 +13427,68 @@ export const fetchConnectionSettings = async (): Promise<{ apiKey: string; apiSe
 
         if (response.ok) {
             const data = await response.json();
-            // Backend returns: { apiKey, apiSecret, isConnected, ... } or { api_key, api_secret, is_active, ... }
-            if (data && (data.apiKey !== undefined || data.api_key !== undefined || data.isConnected !== undefined || data.is_active !== undefined)) {
-                console.log('✅ MEXC connection settings loaded from backend');
-                return {
-                    apiKey: data.apiKey || data.api_key || '',
-                    apiSecret: data.apiSecret || data.api_secret || '',
-                    isConnected: data.isConnected !== undefined ? data.isConnected : (data.is_active || false)
-                };
-            }
-        } else if (response.status !== 500) {
-            // Only throw if it's not a server error (might be DB issue)
-            throw new Error(`Failed to fetch connection settings: ${response.status}`);
+            // WP1A: backend returns masked metadata only — never treat as privately connected
+            return {
+                apiKey: data.maskedKeyIdentifier || data.apiKey || '',
+                apiSecret: '',
+                isConnected: false,
+                configured: Boolean(data.configured),
+                credentialStatus: data.credentialStatus || data.status,
+            };
+        }
+        if (response.status === 401) {
+            window.dispatchEvent(new CustomEvent('titan_auth_expired'));
         }
     } catch (error) {
-        console.warn('⚠️ Failed to fetch connection settings from backend, using fallback:', error);
+        console.warn('⚠️ Failed to fetch connection settings from backend:', error);
     }
 
-    // Fallback: Try to load from IndexedDB
-    try {
-        const saved = await database.get<{ apiKey: string; apiSecret: string; isConnected: boolean; id: string }>('connectionSettings', 'default');
-        if (saved) {
-            console.log('✅ MEXC settings loaded from IndexedDB fallback');
-            return {
-                apiKey: saved.apiKey || '',
-                apiSecret: saved.apiSecret || '',
-                isConnected: saved.isConnected || false
-            };
-        }
-    } catch (e) {
-        console.warn('Failed to load from IndexedDB:', e);
-    }
-
-    // Fallback: Try localStorage
-    try {
-        const localData = localStorage.getItem('titan_mexc_settings');
-        if (localData) {
-            const parsed = JSON.parse(localData);
-            console.log('✅ MEXC settings loaded from localStorage fallback');
-            return {
-                apiKey: parsed.apiKey || '',
-                apiSecret: parsed.apiSecret || '',
-                isConnected: parsed.isConnected || false
-            };
-        }
-    } catch (e) {
-        console.warn('Failed to load from localStorage:', e);
-    }
-
-    // Last resort: Return empty/default
-    console.warn('⚠️ No connection settings found, returning defaults');
-    return { apiKey: '', apiSecret: '', isConnected: false };
+    // WP1A: do not fall back to IndexedDB/localStorage secrets as Source of Truth
+    return { apiKey: '', apiSecret: '', isConnected: false, configured: false };
 };
 
 export const saveConnectionSettings = async (settings: { apiKey: string; apiSecret: string; isConnected: boolean }): Promise<void> => {
-    // Save to IndexedDB
-    try {
-        await database.save('connectionSettings', {
-            id: 'default',
-            ...settings,
-            updatedAt: new Date().toISOString()
-        });
-        console.log('✅ MEXC settings saved to IndexedDB');
-    } catch (e) {
-        console.warn('Failed to save to IndexedDB:', e);
+    // WP1A: persist only via canonical encrypted backend — never write secrets to browser storage
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        throw new Error('Authentication required');
     }
-
-    // Also save to localStorage as backup
-    try {
-        localStorage.setItem('titan_mexc_settings', JSON.stringify({
-            id: 'default',
-            ...settings,
-            updatedAt: new Date().toISOString()
-        }));
-        console.log('✅ MEXC settings saved to localStorage');
-    } catch (e) {
-        console.error('Failed to save to localStorage:', e);
+    const response = await fetch('/api/v1/connections/mexc', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            apiKey: settings.apiKey,
+            apiSecret: settings.apiSecret,
+            isTestnet: false,
+        }),
+    });
+    if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent('titan_auth_expired'));
+        throw new Error('connections_session_expired');
     }
-
-    // Also save to memory
-    db.connectionSettings = settings;
-
-    return Promise.resolve();
+    if (!response.ok) {
+        throw new Error('Failed to save connection settings');
+    }
+    // Explicitly refuse to retain secrets in browser stores
+    try {
+        localStorage.removeItem('titan_mexc_settings');
+    } catch {
+        // ignore
+    }
 };
 
 export const testMexcConnection = async (key: string, secret: string): Promise<{ success: boolean; message: string }> => {
-    if (!key || !secret) {
-        return { success: false, message: 'API Key and Secret are required' };
-    }
-
-    try {
-        // Test connection by getting account info
-        // MEXC API endpoint: /api/v3/account
-        const timestamp = Date.now();
-        const queryString = `timestamp=${timestamp}`;
-
-        // Note: In production, you need proper HMAC-SHA256 signature
-        // For now, we'll use a simple test endpoint that doesn't require signature
-
-        // Test with a public endpoint first (like server time)
-        // Use Vite proxy in development to bypass CORS
-        const apiUrl = import.meta.env.DEV
-            ? `/api/mexc/api/v3/time`
-            : `${MEXC_API_BASE}/api/v3/time`;
-
-        const response = await fetch(apiUrl, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        // If server time works, try to get account info (requires signature)
-        // Validate the keys format (MEXC keys can vary in length)
-        const keyTrimmed = key.trim();
-        const secretTrimmed = secret.trim();
-
-        // More lenient validation - MEXC API keys can be 16-32 characters
-        // API Secret is typically 40+ characters but can vary
-        const keyFormatValid = keyTrimmed.length >= 16 && /^[A-Za-z0-9_-]+$/.test(keyTrimmed);
-        const secretFormatValid = secretTrimmed.length >= 32 && /^[A-Za-z0-9_-]+$/.test(secretTrimmed);
-
-        if (!keyFormatValid) {
-            return {
-                success: false,
-                message: `❌ Invalid API key format. Key must be at least 16 characters and contain only letters, numbers, hyphens, and underscores. Current length: ${keyTrimmed.length}`
-            };
-        }
-
-        if (!secretFormatValid) {
-            return {
-                success: false,
-                message: `❌ Invalid API secret format. Secret must be at least 32 characters and contain only letters, numbers, hyphens, and underscores. Current length: ${secretTrimmed.length}`
-            };
-        }
-
-        // Save the connection if format is valid
-        await saveConnectionSettings({
-            apiKey: keyTrimmed,
-            apiSecret: secretTrimmed,
-            isConnected: true
-        });
-
-        return {
-            success: true,
-            message: '✅ Connection successful! MEXC API keys format is valid. Note: Full authentication requires proper HMAC signature implementation.'
-        };
-    } catch (error) {
-        console.error('MEXC connection test error:', error);
-        return {
-            success: false,
-            message: `❌ Connection failed: ${error instanceof Error ? error.message : 'Network error'}`
-        };
-    }
+    // WP1A: public time / format checks must NOT mark a private Connection as connected.
+    // Private authentication belongs to CONNECTIONS-WP2.
+    void key;
+    void secret;
+    return {
+        success: false,
+        message: 'Private credential verification is not available yet. Connection remains untested.',
+    };
 };
 
 // Get MEXC Account Balance
