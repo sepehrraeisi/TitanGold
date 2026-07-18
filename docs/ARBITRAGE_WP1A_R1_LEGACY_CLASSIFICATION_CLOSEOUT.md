@@ -1,94 +1,61 @@
-# ARB-WP1A-R1 Closeout — Modern Scan Legacy Classification Repair
+# ARB-WP1A-R1 Closeout — Modern and Legacy Scan Classification
 
 **Module:** AI → Agents → Arbitrage Scanner  
 **Work Package:** ARB-WP1A-R1 — Modern Scan Legacy Classification Repair  
-**Date:** 2026-07-17  
-
-## Final status (before Human QA)
-
-| Item | Value |
-|------|--------|
-| Human QA | **NOT STARTED** — awaiting ARB-R1-1 … ARB-R1-4 |
-| Engineering verdict | **NEEDS MORE VERIFICATION** |
-| Arbitrage Agent | **OPEN** |
-| ARB-WP1B-2A Overview | **OPEN** (return target after this slice closes) |
-| Next after Human QA closeout | Return to **ARB-WP1B-2A** — do not auto-start |
-
-## Distinction
-
-| Kind | Value |
-|------|--------|
-| **Runtime implementation baseline** | `69d5ee2` — `fix(arb): classify modern and legacy scan contracts correctly` |
-| **Served frontend bundle** | `assets/index-DdyO2tD0.js` |
-| **Environment** | Staging `https://titan.zala.ir` |
-| **Backend process commit (health, after reload)** | reports `a17ef46` from original tree checkout (process cwd `/home/ubuntu/webapp/TitanGold/backend`); **runtime files for this fix were synced from worktree and reloaded** |
-| **Isolated worktree** | `/tmp/titangold-arb-wp1a-r1` |
-| **Preflight origin/main** | `9ab8ca6` |
-| **Preflight served bundle (before)** | `assets/index-CSyOLG24.js` |
+**Environment:** Staging (`https://titan.zala.ir`)
 
 ---
 
-## 1. Scope
-
-Repair scan-contract classification ownership: modern vs Legacy detection, read-path normalization, details/history/latest-scan agreement, minimal frontend consumption, tests, controlled Staging verification.
-
-## 2. Out of Scope
-
-Overview/Candidates/History/Profit&Risk/Settings/Integrations redesign; AgentControlShell; RTL foundation; profitability formulas; qualification rules; execution; Connections; Redis cache; Data Hub; Agents Shell; Live; Emergency Stop clear.
-
-## 3. Repository / Runtime Preflight
+## Final status
 
 | Item | Value |
 |------|--------|
-| origin/main (start) | `9ab8ca6` |
-| Isolated branch | `fix/arb-wp1a-r1-legacy-classification` @ `9ab8ca6` |
-| Ahead/behind | 0 / 0 vs origin/main at start |
-| Isolated status | clean |
-| Original worktree | behind origin/main; dirty **only** protected scripts |
-| Active frontend source | `/home/ubuntu/webapp/TitanGold/dist` (nginx) |
-| Active backend source | `/home/ubuntu/webapp/TitanGold/backend` (PM2 `titan-backend`) |
-| PM2 | `titan-backend` online (cluster), `titan-engine-worker` online |
-| Backend health commit before reload | `1a3955f` (≠ repo HEAD — documented) |
-| Runtime | Demo, Kill Switch active, worker acknowledged, broker offline |
+| Engineering verdict | **`REAL WORKING`** |
+| Slice status | **`CLOSED AND FROZEN`** |
+| Human QA | **PASS** (ARB-R1-1 … ARB-R1-4) |
+| Final Human-QA verdict | **PASS** |
 
-Protected files untouched:
+| Dependent / deferred | Status |
+|----------------------|--------|
+| AI-FOUNDATION-R2 (scheduler path) | **CLOSED AND FROZEN** — runtime baseline `76a76b6` |
+| ARB-WP1B-2A Overview | **OPEN — READY FOR FINAL HUMAN-QA AND CLOSEOUT** |
+| Scan History drill-down | **DEFERRED** → `ARB-WP1B-2B` |
+| Connections | **NOT STARTED** → `SETTINGS-CONNECTIONS-D1` |
 
-- `scripts/backup-db.sh`
-- `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`
-- `scripts/phase2-monitoring/titangold-telegram-notify.sh`
+---
 
-## 4. RCA
+## Baselines (keep separate)
 
-### Symptom
+| Kind | Value |
+|------|--------|
+| **ARB-WP1A-R1 runtime implementation baseline** | `69d5ee2` — `fix(arb): classify modern and legacy scan contracts correctly` |
+| **AI-FOUNDATION-R2 runtime implementation baseline** | `76a76b6` — analytical scheduler separation + status TTL |
+| **Pre-Human-QA ARB-WP1A-R1 documentation** | `4658529` — `docs(arb): record ARB-WP1A-R1 runtime commit and Staging evidence` |
+| **Pre-closeout repository documentation HEAD** | `5fdb84d` — AI-FOUNDATION-R2 docs closeout |
+| **Documentation closeout HEAD** | `docs(arb): close modern and legacy scan classification R1` on `main` (see Git after push) |
+| **Served frontend bundle** | `assets/index-DdyO2tD0.js` |
 
-Post-WP1A scans (persisted `legacy: false`, `analyticalMode`, `_meta.version=2.0.0-wp1a`) rendered as **Legacy**.
+After `69d5ee2`, runtime source for classification was not changed except separately documented **AI-FOUNDATION-R2** worker/scheduler work (`3f2f7b0`, `76a76b6`) and documentation-only commits.
 
-### Reverified affected record
+---
 
-| Field | Value |
-|-------|--------|
-| Decision ID | `c5164284-f7a2-4aa9-b5c9-0666f3e8ce96` |
-| created_at | `2026-07-17T09:12:40.830Z` |
-| Persisted | `legacy: false`, `analytical_spread_monitor`, `_meta.version: 2.0.0-wp1a`, has `candidates` |
+## 1. Human QA
 
-### Lifecycle
+| Scenario | Result |
+|----------|--------|
+| **ARB-R1-1** Modern Scan | **PASS** |
+| **ARB-R1-2** Genuine Legacy Scan | **PASS** |
+| **ARB-R1-3** Scheduler Contract Consistency | **PASS** |
+| **ARB-R1-4** Safety and Regression | **PASS** |
+| **Final Human-QA verdict** | **PASS** |
 
-Manual/Scheduler → `services/agents/arbitrage.js` `run()` → persist `ai_decisions.output_data` → details route / `fetchArbitrageScanHistory` → **`normalizeScanResult(raw, { legacy: true })`** → API `legacy: true` → Overview/History Legacy labels.
+---
 
-### Root cause
+## 2. Contract behavior
 
-`normalizeScanResult` only used the modern branch when `isNewShape && !legacy`. Call sites **forced** `{ legacy: true }`, so modern payloads always fell into the historical path and returned `legacy: true`.
+### Canonical classification owner
 
-### Call sites that forced Legacy
-
-1. `backend/routes/ai-agents.js` details/`lastScan`
-2. `backend/services/arbitrageScanContract.js` `fetchArbitrageScanHistory`
-
-Write path already set `legacy: false` + `_meta.version` — not the producer defect.
-
-## 5. Canonical classification
-
-Owner: `classifyScanContract` / `normalizeScanResult` in `arbitrageScanContract.js`.
+`classifyScanContract` / `normalizeScanResult` in `backend/services/arbitrageScanContract.js`.
 
 Precedence:
 
@@ -96,154 +63,169 @@ Precedence:
 2. Explicit `legacy` boolean marker
 3. Verified modern payload shape
 4. Verified historical `opportunities[]` shape
-5. `partial` when evidence insufficient
+5. `partial` when evidence is insufficient
 
-Deprecated `options.legacy` **cannot** override explicit modern data.
+Deprecated `options.legacy` **cannot** override explicit modern data. No destructive historical rewrite / backfill.
 
-API fields:
+### Producers
 
-- `classification`: `modern` | `legacy` | `partial`
-- `legacy`: `false` | `true` | `null` (partial)
-- `contractVersion` when known
-- status: `completed` | `failed` | `unavailable`
-
-## 6. Existing data (read-only audit)
-
-Agent `04b6ca95-5fd3-471d-a568-bd7f1c391d83`, decision_type `arbitrage_scan`, after controlled scan:
-
-| Class | Count |
-|-------|------:|
-| clearly modern | 17 |
-| clearly Legacy | 12 |
-| partial/ambiguous | 0 |
-| **total** | **29** |
-
-Rule: `classifyScanContract` precedence above. No UPDATE/DELETE/backfill.
-
-## 7–12. Layers
-
-| Area | Result |
+| Path | Result |
 |------|--------|
-| Backend | Fixed classification + call sites; producer adds top-level `contractVersion` |
-| Database | NOT APPLICABLE (no migration) |
-| Redis | NOT APPLICABLE |
-| Security | Auth/capability unchanged; errors sanitized as before |
-| Runtime/Worker | Analytical scan only; side effects suppressed (`KILL_SWITCH_ACTIVE`) |
-| Frontend | Consume `classification`/`legacy`; History humanizes status; no layout redesign |
+| Manual analytical run | Modern WP1A contract (`legacy: false`, `contractVersion: 2.0.0-wp1a`) |
+| Scheduler analytical tick | Same canonical `arbitrage` service / contract; modern classification |
+| Overview ↔ Scan History | Agree on classification and completion semantics |
+| One tick → one decision | Confirmed (manual controlled run + scheduler recurrence via Foundation R2) |
 
-## 13. Controlled scan evidence
+---
+
+## 3. Human-observed History labels
+
+### Modern rows
+
+`Analytical scan · Completed · Dry run`
+
+- Modern WP1A contract
+- Not labeled Legacy
+- Consistent in Overview and Scan History
+- Produced by manual and scheduler paths
+
+### Genuine historical rows
+
+`Legacy scan · Completed · Dry run`
+
+**These describe different dimensions and are not contradictory:**
+
+| Token | Dimension |
+|-------|-----------|
+| **Legacy** | Stored **contract generation** (historical shape / version) |
+| **Completed** | Successful **scan completion** status |
+| **Dry Run** | **Execution-safety** classification (non-live analytical operation) |
+
+Legacy:
+
+- appears only once per historical row
+- does not replace modern records
+- does not imply execution
+- does not imply realized profit
+- preserves available historical values (unknown modern fields remain N/A / null — not fabricated as profit)
+
+---
+
+## 4. Evidence
+
+### Modern manual scan
 
 | Field | Value |
 |-------|--------|
 | Decision ID | `6e9ada1e-e94a-48df-9e03-5ff202dab847` |
 | created_at | `2026-07-17T18:38:33.361Z` |
-| Producer | POST `/api/ai-agents/:id/run` (manual analytical) |
-| Persisted | `legacy: false`, `contractVersion: 2.0.0-wp1a`, `_meta.version: 2.0.0-wp1a` |
-| Details API | `classification: modern`, `legacy: false` |
-| History API | same |
-| Overview UI | **Completed**, no Legacy |
-| History UI | Analytical scan · Completed |
+| Producer | Manual `POST …/run` |
+| Persisted | `legacy: false`, `contractVersion: 2.0.0-wp1a` |
+| Details / History API | `classification: modern`, `legacy: false` |
+| UI | Completed / Analytical scan · Completed · Dry run |
 
-Scheduler path: same `run()` producer → same modern contract. Passive observation of a new scheduler tick during this window: **NOT VERIFIED** (no scheduler restart triggered; remaining test = observe next scheduled `arbitrage_scan` after closeout).
+### Modern scheduler scan (depends on AI-FOUNDATION-R2)
 
-## 14. Tests
+| Field | Value |
+|-------|--------|
+| First verified scheduler decision | `48604985-483c-4177-9bbc-3ea917702e99` @ `2026-07-18T12:36:52.318Z` |
+| Producer | `trigger=scheduler`, `producer=titan-engine-worker` |
+| Contract | `2.0.0-wp1a`, `legacy: false`, `modern` |
+| Nearby POST `/run` | 0 |
+| Recurrence | ~one modern row per 300000ms allowlisted tick |
 
-### Backend (Jest)
+### Genuine historical / Legacy
 
-| Suite | Executed | Passed | Failed | Skipped |
-|-------|----------|--------|--------|---------|
-| `arbitrage.wp1a.test.js` | 8 | 8 | 0 | 0 |
-| `arbitrage.wp1a.r1.classification.test.js` | 11 | 11 | 0 | 0 |
-| **Backend total** | **19** | **19** | **0** | **0** |
+| Field | Value |
+|-------|--------|
+| Example ID | `a96d7b71-0b8b-4d12-b799-a02b25fdad59` @ `2026-02-23T13:23:08.852Z` |
+| Reason | Historical `opportunities[]` / `_meta.version` `1.0.0` (not WP1A modern shape) |
+| API | `classification: legacy`, `legacy: true` |
+| UI | Legacy scan · Completed · Dry run |
 
-### Frontend (Vitest)
+### Case B (misclassified modern before fix)
 
-| Suite | Executed | Passed | Failed | Skipped |
-|-------|----------|--------|--------|---------|
-| WP1A | 6 | 6 | 0 | 0 |
-| WP1B-1 | 7 | 7 | 0 | 0 |
-| WP1B-1 status | 3 | 3 | 0 | 0 |
-| WP1B-2A Overview | 12 | 12 | 0 | 0 |
-| AI-FOUNDATION-R1 RTL | 7 | 7 | 0 | 0 |
-| **Frontend total** | **35** | **35** | **0** | **0** |
+`c5164284-f7a2-4aa9-b5c9-0666f3e8ce96` — persisted modern (`legacy: false`, wp1a) but forced Legacy by read-path `{ legacy: true }` — repaired by `69d5ee2`.
 
-**Combined:** 54 executed · 54 passed · 0 failed · 0 skipped · 0 retried
+### Classification counts (engineering audit at R1 implementation)
 
-## 15. Performance
+At controlled-scan window (agent `04b6ca95-…`, `arbitrage_scan`): modern ~17 · Legacy ~12 · partial 0 · total ~29 (later totals grew via scheduler; Live/History pagination continues to show Legacy on later pages).
 
-| Path | Observation |
-|------|-------------|
-| details / history | Bounded pagination unchanged; no full-history scan; no N+1 introduced |
-| Overview load | Same single details request |
-| Baseline | **BASELINE NOT AVAILABLE** for historical p95 |
+### Tests (at R1 implementation)
 
-## 16. Browser QA
+| Layer | Result |
+|-------|--------|
+| Backend Jest (WP1A + R1 classification) | **19/19 PASS** |
+| Frontend Vitest (WP1A / WP1B-1 / WP1B-2A / AI-RTL) | **35/35 PASS** |
+| Combined | **54/54 PASS** |
 
-Staging after deploy — **24/24 PASS** including:
+### Browser QA / i18n
 
-- Modern Completed (EN/FA)
-- History page 2 Legacy retained
-- RTL + IRANSans preserved
-- Desktop/tablet/mobile/landscape
-- Escape / console clean
-- Bundle `index-DdyO2tD0.js`
+Engineering + Human QA: English, Persian, RTL, IRANSans, Overview/History agreement, no raw enum/key on verified paths. Served bundle `assets/index-DdyO2tD0.js`.
 
-## 17. Runtime safety (post-scan)
+### Runtime safety (closeout passive verification)
 
-- requestedMode / effectiveMode: `demo`
-- killSwitchActive: `true`
-- workerAcknowledged: `true`
-- providerConnected: `false`
-- policy on controlled run: `sideEffectsSuppressed: true`, reason `KILL_SWITCH_ACTIVE`
-- No orders / transfers / notifications
+- Effective Mode: `demo`
+- Emergency Stop: active
+- workerAcknowledged: true
+- providerConnected: false
+- Live impossible
+- Scheduler owner: `titan-engine-worker`
+- Allowlist: `["arbitrage"]`
+- Latest scan: modern / Completed / Dry Run
+- Genuine Legacy rows still present on later History pages
 
-## 18. Build / Deployment
+### Dependencies / baselines untouched
 
-- Frontend: production `vite build` → sync `dist/`
-- Backend: synced changed service/route files into active backend cwd + `pm2 reload titan-backend`
-- Health/ready: ok after reload
-- Served bundle: `assets/index-DdyO2tD0.js`
+- Data Hub — untouched
+- Agents Shell — untouched
+- AI-FOUNDATION-R1 — untouched
+- AI-FOUNDATION-R2 — closed separately; not modified in this docs closeout
 
-## 19. Files Changed
+### Protected unrelated files
 
-- `backend/services/arbitrageScanContract.js`
-- `backend/routes/ai-agents.js`
-- `backend/services/agents/arbitrage.js`
-- `backend/__tests__/services/agents/arbitrage.wp1a.test.js`
-- `backend/__tests__/services/agents/arbitrage.wp1a.r1.classification.test.js`
-- `components/ai/ArbitrageAgentControl.tsx`
-- `services/api.ts`
-- `types.ts`
-- `src/__tests__/components/ai/ArbitrageAgentControl.wp1b2a.overview.test.tsx`
-- `docs/ARBITRAGE_WP1A_R1_LEGACY_CLASSIFICATION_CLOSEOUT.md`
+Untouched:
 
-## 20. Commits / Git
+- `scripts/backup-db.sh`
+- `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`
+- `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
-| Commit | Role |
-|--------|------|
-| `69d5ee2` | **Runtime implementation baseline** — `fix(arb): classify modern and legacy scan contracts correctly` |
+---
 
-- `HEAD == origin/main` after push
-- Path-scoped staging only; protected scripts absent
-- Isolated worktree clean after push
-- Original `/home/ubuntu/webapp/TitanGold` remains dirty for protected scripts **and** previously synced runtime backend file copies used for Staging reload (not committed from original tree)
+## 5. Original RCA (summary)
 
-## 21. Remaining Risks
+**Symptom:** Post-WP1A modern scans rendered as Legacy.
 
-- Scheduler modern classification on a future tick: **NOT VERIFIED** in this window
-- Backend health `commit` field still reflects original tree HEAD, not worktree SHA — operational process/reporting quirk; file hashes were synced
-- Human QA pending
+**Cause:** Read path called `normalizeScanResult(raw, { legacy: true })`, forcing the historical branch even when persisted data was modern.
 
-## 22. Final Verdict
+**Fix:** Canonical `classifyScanContract` precedence; remove force-Legacy from details/`lastScan` and `fetchArbitrageScanHistory`; producer top-level `contractVersion`; minimal frontend consumption of `classification` / `legacy`.
 
-**NEEDS MORE VERIFICATION**
+---
 
-## Rollback
+## 6. Deferred Scan History UX
 
-1. Revert the ARB-WP1A-R1 commit on `main`
-2. Restore prior `arbitrageScanContract.js` / `ai-agents.js` / `arbitrage.js` on the PM2 cwd and reload
-3. Rebuild frontend to prior bundle (`index-CSyOLG24.js`) if needed
+**`ARB-WP1B-2B — Scan History Redesign and Scan Detail Drill-down`**
 
-## Return target
+- Rows do not open details; no drawer/details route exposed
+- Information-architecture / UX enhancement
+- **Not** a classification defect
+- **Not authorized** in this closeout
 
-After Human-QA PASS and closeout freeze: return to **ARB-WP1B-2A** (do not auto-start).
+---
+
+## 7. Rollback
+
+1. Revert `69d5ee2` on `main` (or redeploy prior classification sources)
+2. Restore prior `arbitrageScanContract.js` / `ai-agents.js` / `arbitrage.js` on PM2 cwd and reload
+3. Rebuild frontend to prior bundle if UI consumption must roll back
+4. Scheduler Foundation (`76a76b6`) rolls back separately if required
+
+Documentation-only closeout commits do not require runtime rebuild.
+
+---
+
+## 8. Return target
+
+After this freeze: **ARB-WP1B-2A Overview — READY FOR FINAL HUMAN-QA AND CLOSEOUT**.
+
+Do **not** auto-start Overview, Scan History drill-down, or Connections from this closeout.
