@@ -135,12 +135,33 @@ describe('ARB-WP1A Arbitrage analytical contracts', () => {
     });
 
     expect(result.analyticalMode).toBe('analytical_spread_monitor');
+    expect(result.legacy).toBe(false);
+    expect(result.contractVersion).toBe('2.0.0-wp1a');
+    expect(result._meta.version).toBe('2.0.0-wp1a');
     expect(result.qualifiedOpportunities).toEqual([]);
     expect(result.qualifiedStats.bestProfitBps).toBeNull();
     expect(result.summary.totalProfitUSDT).toBeNull();
     expect(result.execution.supported).toBe(false);
     expect(result.opportunities).toEqual([]);
     expect(result.unsupportedStrategies.some((s) => s.type === 'triangle')).toBe(true);
+  });
+
+  test('normalizeScanResult classifies modern persisted marker without forced legacy option', () => {
+    const normalized = normalizeScanResult(
+      {
+        legacy: false,
+        contractVersion: '2.0.0-wp1a',
+        analyticalMode: 'analytical_spread_monitor',
+        candidates: [],
+        rejectedCandidates: [],
+        qualifiedOpportunities: [],
+        timestamp: '2026-07-17T09:12:40.830Z',
+      },
+      { legacy: true },
+    );
+    expect(normalized.classification).toBe('modern');
+    expect(normalized.legacy).toBe(false);
+    expect(normalized.status).toBe('completed');
   });
 
   test('normalizeScanResult classifies legacy negative opportunities as rejected', () => {

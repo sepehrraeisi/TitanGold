@@ -10,6 +10,10 @@ import { query } from '../database/db.js';
 export const ARBITRAGE_DECISION_TYPE = 'arbitrage_scan';
 export const ARBITRAGE_ANALYTICAL_MODE = 'analytical_spread_monitor';
 export const ARBITRAGE_STRATEGY_CLASS = 'mexc_spot_spread_monitor';
+/** Canonical modern contract version written by post-WP1A producers. */
+export const ARBITRAGE_CONTRACT_VERSION_WP1A = '2.0.0-wp1a';
+
+/** @typedef {'modern' | 'legacy' | 'partial'} ArbitrageScanClassification */
 
 export const REJECTION_REASONS = Object.freeze({
   NON_POSITIVE_NET: 'NON_POSITIVE_NET',
@@ -40,41 +44,121 @@ function asIso(value) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-/**
- * Normalize a persisted scan result (legacy or new) into the WP1A contract.
- */
-export function normalizeScanResult(raw, { legacy = false } = {}) {
-  if (!raw || typeof raw !== 'object') {
-    return {
-      legacy: true,
-      analyticalMode: ARBITRAGE_ANALYTICAL_MODE,
-      strategyClassification: ARBITRAGE_STRATEGY_CLASS,
-      timestamp: null,
-      status: 'unknown',
-      candidateStats: { total: 0, rejected: 0, spreadCandidates: 0, qualified: 0 },
-      qualifiedStats: {
-        total: 0,
-        bestProfitBps: null,
-        expectedNetProfitUSDT: null,
-      },
-      riskStats: { averageScore: null, unit: 'score_0_100' },
-      candidates: [],
-      rejectedCandidates: [],
-      qualifiedOpportunities: [],
-      unsupportedStrategies: [],
-      execution: { supported: false, realizedProfitUSDT: null },
-      error: false,
-      errorMessage: null,
-      dryRun: true,
-    };
-  }
+function readContractVersion(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const v = raw.contractVersion ?? raw._meta?.version ?? null;
+  return v == null ? null : String(v);
+}
 
-  const isNewShape =
+function isWp1aContractVersion(version) {
+  if (!version) return false;
+  const v = String(version).toLowerCase();
+  return v === ARBITRAGE_CONTRACT_VERSION_WP1A || v.includes('wp1a');
+}
+
+function hasModernShape(raw) {
+  if (!raw || typeof raw !== 'object') return false;
+  return (
     Array.isArray(raw.candidates) ||
     Array.isArray(raw.rejectedCandidates) ||
-    raw.analyticalMode === ARBITRAGE_ANALYTICAL_MODE;
+    raw.analyticalMode === ARBITRAGE_ANALYTICAL_MODE
+  );
+}
 
-  if (isNewShape && !legacy) {
+function hasHistoricalShape(raw) {
+  if (!raw || typeof raw !== 'object') return false;
+  return Array.isArray(raw.opportunities);
+}
+
+/**
+ * Canonical scan-contract classification owner (ARB-WP1A-R1).
+ * Precedence:
+ * 1) explicit contract/schema version
+ * 2) explicit legacy/modern marker
+ * 3) verified modern payload shape
+ * 4) verified historical payload shape
+ * 5) partial/unknown
+ *
+ * Callers must NOT force Legacy via options. The deprecated `legacy` option is
+ * ignored so explicit modern data can never be overridden by a default.
+ *
+ * @returns {{ classification: ArbitrageScanClassification, legacy: boolean | null, contractVersion: string | null }}
+ */
+export function classifyScanContract(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { classification: 'partial', legacy: null, contractVersion: null };
+  }
+
+  const contractVersion = readContractVersion(raw);
+
+  // 1) Explicit contract version
+  if (isWp1aContractVersion(contractVersion)) {
+    return { classification: 'modern', legacy: false, contractVersion };
+  }
+
+  // 2) Explicit persisted marker
+  if (raw.legacy === true) {
+    return { classification: 'legacy', legacy: true, contractVersion };
+  }
+  if (raw.legacy === false) {
+    return { classification: 'modern', legacy: false, contractVersion };
+  }
+
+  // 3) Verified modern shape
+  if (hasModernShape(raw)) {
+    return { classification: 'modern', legacy: false, contractVersion };
+  }
+
+  // 4) Verified historical shape
+  if (hasHistoricalShape(raw)) {
+    return { classification: 'legacy', legacy: true, contractVersion };
+  }
+
+  // 5) Partial / ambiguous
+  return { classification: 'partial', legacy: null, contractVersion };
+}
+
+function buildPartialNormalized(raw, classified) {
+  return {
+    classification: 'partial',
+    legacy: null,
+    contractVersion: classified.contractVersion,
+    analyticalMode: ARBITRAGE_ANALYTICAL_MODE,
+    strategyClassification: ARBITRAGE_STRATEGY_CLASS,
+    timestamp: asIso(raw?.timestamp) || asIso(raw?.completedAt) || null,
+    status: 'unavailable',
+    candidateStats: { total: 0, rejected: 0, spreadCandidates: 0, qualified: 0 },
+    qualifiedStats: {
+      total: 0,
+      bestProfitBps: null,
+      expectedNetProfitUSDT: null,
+    },
+    riskStats: { averageScore: null, unit: 'score_0_100' },
+    candidates: [],
+    rejectedCandidates: [],
+    qualifiedOpportunities: [],
+    unsupportedStrategies: [],
+    execution: { supported: false, realizedProfitUSDT: null },
+    error: Boolean(raw?.error),
+    errorMessage: raw?.errorMessage || null,
+    dryRun: true,
+    summary: raw?.summary || null,
+    config: raw?.config || null,
+  };
+}
+
+/**
+ * Normalize a persisted scan result (legacy or new) into the WP1A contract.
+ * Classification is owned solely by classifyScanContract — options.legacy is ignored.
+ */
+export function normalizeScanResult(raw, _options = {}) {
+  const classified = classifyScanContract(raw);
+
+  if (classified.classification === 'partial') {
+    return buildPartialNormalized(raw, classified);
+  }
+
+  if (classified.classification === 'modern') {
     const qualified = Array.isArray(raw.qualifiedOpportunities) ? raw.qualifiedOpportunities : [];
     const candidates = Array.isArray(raw.candidates) ? raw.candidates : [];
     const rejected = Array.isArray(raw.rejectedCandidates) ? raw.rejectedCandidates : [];
@@ -85,7 +169,9 @@ export function normalizeScanResult(raw, { legacy = false } = {}) {
         : null;
 
     return {
-      legacy: Boolean(raw.legacy),
+      classification: 'modern',
+      legacy: false,
+      contractVersion: classified.contractVersion || ARBITRAGE_CONTRACT_VERSION_WP1A,
       analyticalMode: ARBITRAGE_ANALYTICAL_MODE,
       strategyClassification: raw.strategyClassification || ARBITRAGE_STRATEGY_CLASS,
       timestamp: asIso(raw.timestamp) || asIso(raw.completedAt),
@@ -122,7 +208,7 @@ export function normalizeScanResult(raw, { legacy = false } = {}) {
   }
 
   // Legacy: opportunities[] treated as historical estimates — never as realized profit.
-  const legacyOpps = Array.isArray(raw.opportunities) ? raw.opportunities : [];
+  const legacyOpps = Array.isArray(raw?.opportunities) ? raw.opportunities : [];
   const rejectedCandidates = [];
   const candidates = [];
 
@@ -139,7 +225,7 @@ export function normalizeScanResult(raw, { legacy = false } = {}) {
       expectedProfitBps: bps,
       netProfitUSDT: net,
       riskScore: toNum(opp.riskScore),
-      timestamp: asIso(opp.timestamp) || asIso(raw.timestamp),
+      timestamp: asIso(opp.timestamp) || asIso(raw?.timestamp),
       analytical: true,
       executableArbitrage: false,
       legacy: true,
@@ -160,14 +246,16 @@ export function normalizeScanResult(raw, { legacy = false } = {}) {
     }
   }
 
-  const avg = toNum(raw.summary?.avgRiskScore);
+  const avg = toNum(raw?.summary?.avgRiskScore);
 
   return {
+    classification: 'legacy',
     legacy: true,
+    contractVersion: classified.contractVersion,
     analyticalMode: ARBITRAGE_ANALYTICAL_MODE,
     strategyClassification: ARBITRAGE_STRATEGY_CLASS,
-    timestamp: asIso(raw.timestamp),
-    status: raw.error ? 'failed' : 'completed',
+    timestamp: asIso(raw?.timestamp),
+    status: raw?.error ? 'failed' : 'completed',
     candidateStats: {
       total: candidates.length + rejectedCandidates.length,
       rejected: rejectedCandidates.length,
@@ -188,11 +276,11 @@ export function normalizeScanResult(raw, { legacy = false } = {}) {
     qualifiedOpportunities: [],
     unsupportedStrategies: [],
     execution: { supported: false, realizedProfitUSDT: null },
-    error: Boolean(raw.error),
-    errorMessage: raw.errorMessage || null,
+    error: Boolean(raw?.error),
+    errorMessage: raw?.errorMessage || null,
     dryRun: true,
-    summary: raw.summary || null,
-    config: raw.config || null,
+    summary: raw?.summary || null,
+    config: raw?.config || null,
   };
 }
 
@@ -306,14 +394,16 @@ export async function fetchArbitrageScanHistory(agentId, { page = 1, pageSize = 
 
   const items = rows.rows.map((row) => {
     const raw = typeof row.output_data === 'string' ? JSON.parse(row.output_data) : row.output_data;
-    const normalized = normalizeScanResult(raw, { legacy: true });
+    const normalized = normalizeScanResult(raw);
     return {
       id: row.id,
       decisionType: row.decision_type,
       completedAt: asIso(row.created_at),
       startedAt: asIso(raw?.timestamp) || asIso(row.created_at),
       status: normalized.status,
+      classification: normalized.classification,
       legacy: normalized.legacy,
+      contractVersion: normalized.contractVersion,
       analyticalMode: normalized.analyticalMode,
       strategyClassification: normalized.strategyClassification,
       candidateStats: normalized.candidateStats,
@@ -356,7 +446,9 @@ export function buildLastScanPayload(normalized) {
     exchangesChecked: ['mexc'],
     symbolsChecked: [],
     execution: normalized.execution,
+    classification: normalized.classification,
     legacy: normalized.legacy,
+    contractVersion: normalized.contractVersion,
     dryRun: true,
     // Deprecated: do not treat as opportunities
     opportunities: [],

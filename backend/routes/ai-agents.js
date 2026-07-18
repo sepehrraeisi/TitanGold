@@ -1158,7 +1158,7 @@ router.get('/:id/details', authenticate, async (req, res) => {
 
       // Canonical last scan = latest decision; metadata.last_result is denormalized cache only
       const latestRaw = latestDecision.rows[0]?.output_data || metadata?.last_result || null;
-      const normalized = normalizeScanResult(latestRaw, { legacy: true });
+      const normalized = normalizeScanResult(latestRaw);
       if (!normalized.timestamp && latestDecision.rows[0]?.created_at) {
         normalized.timestamp = new Date(latestDecision.rows[0].created_at).toISOString();
       }

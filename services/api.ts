@@ -8041,7 +8041,20 @@ export const fetchArbitrageAgentData = async (agentId: string): Promise<{
             netProfitPotentialUSDT: data.lastScan.netProfitPotentialUSDT ?? null,
             avgExecutionMs: null,
             execution: data.lastScan.execution || { supported: false, realizedProfitUSDT: null },
-            legacy: Boolean(data.lastScan.legacy),
+            classification: data.lastScan.classification ?? undefined,
+            legacy:
+                data.lastScan.classification === 'legacy'
+                    ? true
+                    : data.lastScan.classification === 'modern'
+                      ? false
+                      : data.lastScan.classification === 'partial'
+                        ? null
+                        : data.lastScan.legacy === true
+                          ? true
+                          : data.lastScan.legacy === false
+                            ? false
+                            : null,
+            contractVersion: data.lastScan.contractVersion ?? null,
             dryRun: true,
         }
         : null;

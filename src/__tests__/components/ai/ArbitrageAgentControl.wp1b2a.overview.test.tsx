@@ -332,6 +332,7 @@ describe('ARB-WP1B-2A Overview redesign', () => {
         candidateStats: { total: 0, rejected: 0, spreadCandidates: 0, qualified: 0 },
         qualifiedStats: { total: 0, bestProfitBps: null, expectedNetProfitUSDT: null },
         riskStats: { averageScore: null, unit: 'score_0_100' },
+        classification: 'legacy',
         legacy: true,
         dryRun: true,
       },
@@ -359,15 +360,42 @@ describe('ARB-WP1B-2A Overview redesign', () => {
         riskStats: { averageScore: null, unit: 'score_0_100' },
         analyticalMode: 'analytical_spread_monitor',
         strategyClassification: 'mexc_spot_spread_monitor',
+        classification: 'modern',
         legacy: false,
+        contractVersion: '2.0.0-wp1a',
         dryRun: true,
       },
     });
     render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
     await waitFor(() => expect(screen.getByTestId('arb-overview')).toBeTruthy());
     const overviewText = screen.getByTestId('arb-overview').textContent || '';
+    expect(overviewText).toContain('Completed');
     expect(overviewText).not.toContain('Legacy scan');
     expect(overviewText).not.toContain('Labeled Legacy');
+    expect(screen.queryByTestId('arb-overview-legacy-note')).toBeNull();
+  });
+
+  it('shows truthful unavailable state for partial classification', async () => {
+    mockData({
+      lastScan: {
+        timestamp: '2026-07-17T09:12:40.807Z',
+        candidates: [],
+        rejectedCandidates: [],
+        qualifiedOpportunities: [],
+        opportunities: [],
+        candidateStats: { total: 0, rejected: 0, spreadCandidates: 0, qualified: 0 },
+        qualifiedStats: { total: 0, bestProfitBps: null, expectedNetProfitUSDT: null },
+        riskStats: { averageScore: null, unit: 'score_0_100' },
+        classification: 'partial',
+        legacy: null,
+        dryRun: true,
+      },
+    });
+    render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('arb-overview')).toBeTruthy());
+    const overviewText = screen.getByTestId('arb-overview').textContent || '';
+    expect(overviewText).toContain('Data unavailable');
+    expect(overviewText).not.toContain('Legacy scan');
     expect(screen.queryByTestId('arb-overview-legacy-note')).toBeNull();
   });
 

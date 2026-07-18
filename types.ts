@@ -2018,7 +2018,11 @@ export interface ArbitrageScanHistoryItem {
   completedAt: string | null;
   startedAt: string | null;
   status: string;
-  legacy: boolean;
+  /** Canonical: modern | legacy | partial — owned by backend classifyScanContract */
+  classification?: 'modern' | 'legacy' | 'partial';
+  /** true=legacy, false=modern, null=partial/unknown — do not invent Legacy client-side */
+  legacy: boolean | null;
+  contractVersion?: string | null;
   analyticalMode: string;
   strategyClassification: string;
   candidateStats: {
@@ -2108,7 +2112,11 @@ export interface ArbitrageScanResult {
   netProfitPotentialUSDT: number | null;
   avgExecutionMs: number | null;
   execution?: { supported: boolean; realizedProfitUSDT: number | null };
-  legacy?: boolean;
+  /** Canonical: modern | legacy | partial — owned by backend */
+  classification?: 'modern' | 'legacy' | 'partial';
+  /** true=legacy, false=modern, null=partial/unknown */
+  legacy?: boolean | null;
+  contractVersion?: string | null;
   dryRun?: boolean;
 }
 

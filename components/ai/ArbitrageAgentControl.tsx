@@ -91,9 +91,12 @@ const mapOverviewScanStatus = (
 ): 'never' | 'completed' | 'failed' | 'legacy' | 'unavailable' => {
     if (!scan && !metrics?.scanStats?.lastCompletedAt) return 'never';
     if (!scan && metrics?.scanStats?.lastCompletedAt) return 'unavailable';
-    if (scan?.legacy) return 'legacy';
+    // Backend owns classification — never invent Legacy on the client.
+    if (scan?.classification === 'legacy' || scan?.legacy === true) return 'legacy';
+    if (scan?.classification === 'partial' || scan?.legacy === null) return 'unavailable';
     const anyScan = scan as (ArbitrageScanResult & { status?: string; error?: boolean; errorMessage?: string | null }) | null;
     if (anyScan?.error || anyScan?.status === 'failed' || anyScan?.errorMessage) return 'failed';
+    if (anyScan?.status === 'unavailable') return 'unavailable';
     return 'completed';
 };
 
@@ -818,10 +821,17 @@ const HistoryTab: React.FC<{
                                         {item.completedAt ? new Date(item.completedAt).toLocaleString() : NA(t)}
                                     </p>
                                     <p className="text-xs text-gray-400 mt-1">
-                                        {item.legacy
+                                        {item.classification === 'legacy' || item.legacy === true
                                             ? t('legacy_scan') || 'Legacy scan'
-                                            : t('analytical_scan') || 'Analytical scan'}{' '}
-                                        · {item.status}
+                                            : item.classification === 'partial' || item.legacy === null
+                                              ? t('arbitrage_overview_data_unavailable') || 'Data unavailable'
+                                              : t('analytical_scan') || 'Analytical scan'}{' '}
+                                        ·{' '}
+                                        {item.status === 'failed'
+                                            ? t('arbitrage_overview_scan_failed') || 'Scan failed'
+                                            : item.status === 'unavailable'
+                                              ? t('arbitrage_overview_data_unavailable') || 'Data unavailable'
+                                              : t('completed') || 'Completed'}
                                         {item.dryRun ? ` · ${t('dry_run') || 'Dry Run'}` : ''}
                                     </p>
                                 </div>

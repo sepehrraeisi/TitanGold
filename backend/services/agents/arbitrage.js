@@ -13,6 +13,7 @@ import { logger } from '../../services/logger.js';
 import { circuitBreakerManager } from '../../utils/circuitBreaker.js';
 import {
   ARBITRAGE_ANALYTICAL_MODE,
+  ARBITRAGE_CONTRACT_VERSION_WP1A,
   ARBITRAGE_STRATEGY_CLASS,
   REJECTION_REASONS,
 } from '../arbitrageScanContract.js';
@@ -446,6 +447,7 @@ export async function run(params) {
       timestamp: new Date().toISOString(),
       analyticalMode: ARBITRAGE_ANALYTICAL_MODE,
       strategyClassification: ARBITRAGE_STRATEGY_CLASS,
+      contractVersion: ARBITRAGE_CONTRACT_VERSION_WP1A,
       dryRun: true,
       legacy: false,
       summary,
@@ -492,7 +494,7 @@ export async function run(params) {
         candidates.length > 0 ? Math.min(0.5 + candidates.length * 0.05, 0.85) : 0.1,
       _meta: {
         source: 'real',
-        version: '2.0.0-wp1a',
+        version: ARBITRAGE_CONTRACT_VERSION_WP1A,
         dataProvider: 'mexc',
         analyticalMode: ARBITRAGE_ANALYTICAL_MODE,
       },
@@ -505,7 +507,9 @@ export async function run(params) {
       timestamp: new Date().toISOString(),
       analyticalMode: ARBITRAGE_ANALYTICAL_MODE,
       strategyClassification: ARBITRAGE_STRATEGY_CLASS,
+      contractVersion: ARBITRAGE_CONTRACT_VERSION_WP1A,
       dryRun: true,
+      legacy: false,
       error: true,
       errorMessage: error.message,
       summary: {
@@ -530,7 +534,7 @@ export async function run(params) {
       riskAlerts: [],
       execution: { supported: false, realizedProfitUSDT: null },
       confidence: 0,
-      _meta: { source: 'error', version: '2.0.0-wp1a', error: error.message },
+      _meta: { source: 'error', version: ARBITRAGE_CONTRACT_VERSION_WP1A, error: error.message },
     };
   }
 }
