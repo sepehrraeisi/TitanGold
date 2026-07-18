@@ -32,7 +32,7 @@
 | **Analytical Scheduler Foundation runtime baseline** | `76a76b6` (AI-FOUNDATION-R2 — CLOSED AND FROZEN) |
 | **Pre-Human-QA Overview documentation commit** | `7b8d99e` (closeout doc embedded with remediation; prior docs-only: `400f449`, `2ebc6d9`, `4d42353`) |
 | **Pre-closeout documentation HEAD** | `7984a3c` |
-| **Documentation closeout HEAD** | *(this documentation-only commit on `main` after push)* |
+| **Documentation closeout HEAD** | `0d16704` — `docs(arb): close Overview redesign after Human QA` |
 | **Served frontend bundle** | `assets/index-DdyO2tD0.js` |
 | **Environment** | Staging |
 
@@ -332,7 +332,7 @@ No further Overview Human-QA handoff is required for ARB-WP1B-2A.
 | `69d5ee2` | Modern/Legacy classification runtime |
 | `76a76b6` | Analytical Scheduler Foundation runtime |
 | `7984a3c` | Pre-closeout documentation HEAD (R1 docs closeout) |
-| *(this commit)* | `docs(arb): close Overview redesign after Human QA` |
+| `0d16704` | `docs(arb): close Overview redesign after Human QA` |
 
 ## 23. Git Verification
 
