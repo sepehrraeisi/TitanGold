@@ -41,8 +41,11 @@ class EngineWorkerLeader {
   constructor() {
     this.isRunning = false;
     this.enginesStarted = false;
+    this.analyticalSchedulerReady = false;
     this.killSwitchMonitorStarted = false;
     this.idleCheckInterval = null;
+    this._lastKillSwitchActive = null;
+    this._lastTradingStopLogAt = 0;
   }
 
   /**
@@ -204,30 +207,60 @@ class EngineWorkerLeader {
       scheduler = schedulerModule;
       tradingEngine = tradingEngineModule;
 
-      // Start engines based on env
+      // Runtime state for Emergency Stop separation (AI-FOUNDATION-R2)
+      let killSwitchActive = false;
+      try {
+        const { getRuntimeExecutionState } = await import('../services/runtimeExecutionStateService.js');
+        const runtimeState = await getRuntimeExecutionState({ preferCache: false });
+        killSwitchActive = runtimeState.killSwitchActive === true;
+      } catch (err) {
+        logger.warn('Runtime state unavailable at engine start; assuming Emergency Stop active', {
+          error: err.message,
+        });
+        killSwitchActive = true;
+      }
+
+      // Autopilot / trading are Live-adjacent — do not start under Emergency Stop
       if (process.env.AUTOPILOT_ENABLED === 'true') {
-        autopilot.start();
-        logger.info('✅ Autopilot started');
+        if (killSwitchActive) {
+          logger.info('⏸️ Autopilot not started — Emergency Stop active');
+        } else {
+          autopilot.start();
+          logger.info('✅ Autopilot started');
+        }
       } else {
         logger.info('⏸️ Autopilot disabled');
       }
 
       if (process.env.SCHEDULER_ENABLED === 'true') {
-        scheduler.start();
-        logger.info('✅ Scheduler started');
+        if (killSwitchActive) {
+          await scheduler.applyEmergencyStopSeparation();
+          logger.info('✅ Analytical scheduler started under Emergency Stop separation');
+        } else {
+          await scheduler.start();
+          logger.info('✅ Scheduler started');
+        }
+        this.analyticalSchedulerReady = true;
       } else {
         logger.info('⏸️ Scheduler disabled');
       }
 
       if (process.env.TRADING_ENGINE_ENABLED === 'true') {
-        tradingEngine.start();
-        logger.info('✅ Trading Engine started');
+        if (killSwitchActive) {
+          logger.info('⏸️ Trading Engine not started — Emergency Stop active');
+        } else {
+          tradingEngine.start();
+          logger.info('✅ Trading Engine started');
+        }
       } else {
         logger.info('⏸️ Trading Engine disabled');
       }
 
       this.enginesStarted = true;
-      logger.info('✅ All engines initialized');
+      logger.info('✅ All engines initialized', {
+        killSwitchActive,
+        analyticalSchedulerReady: this.analyticalSchedulerReady,
+      });
       
     } catch (error) {
       logger.error('❌ Failed to start engines:', error);
@@ -247,13 +280,42 @@ class EngineWorkerLeader {
     const handleState = async (state, source = 'poll') => {
       try {
         const { acknowledgeWorkerState } = await import('../services/runtimeExecutionStateService.js');
-        if (state.killSwitchActive) {
-          if (scheduler?.stop) scheduler.stop();
+        const killActive = state.killSwitchActive === true;
+        const transitioned = this._lastKillSwitchActive !== killActive;
+        this._lastKillSwitchActive = killActive;
+
+        if (killActive) {
+          // AI-FOUNDATION-R2: do NOT call scheduler.stop() — preserve safe analytical timers
+          if (scheduler?.applyEmergencyStopSeparation) {
+            await scheduler.applyEmergencyStopSeparation();
+            this.analyticalSchedulerReady = true;
+          } else if (scheduler?.ensureAnalyticalAgentScheduler) {
+            await scheduler.ensureAnalyticalAgentScheduler();
+          }
+
+          if (autopilot?.stop) {
+            try { autopilot.stop(); } catch { /* ignore */ }
+          }
+
           if (tradingEngine?.stop) {
-            logger.warn(`🛑 Kill switch (${source}): stopping trading engine — ${state.killSwitchReason}`);
+            const now = Date.now();
+            // Idempotent: log at most once per transition (or rare heartbeat ≥60s)
+            if (transitioned || now - this._lastTradingStopLogAt > 60000) {
+              logger.warn(`🛑 Kill switch (${source}): stopping trading engine — ${state.killSwitchReason}`);
+              this._lastTradingStopLogAt = now;
+            }
             await tradingEngine.stop();
           }
+        } else if (transitioned) {
+          if (scheduler?.clearEmergencyStopSeparation) {
+            await scheduler.clearEmergencyStopSeparation();
+          }
+          logger.info(`Kill switch cleared (${source}) — analytical separation lifted`);
+        } else if (scheduler?.ensureAnalyticalAgentScheduler) {
+          // Steady state: keep analytical timer healthy without spam
+          await scheduler.ensureAnalyticalAgentScheduler();
         }
+
         await acknowledgeWorkerState({ revision: state.version });
       } catch (err) {
         logger.warn('Kill switch handler error:', err.message);

@@ -23,6 +23,19 @@ describe('Scheduler safety static verification', () => {
   it('imports executeAgentRun from canonical service', () => {
     expect(source).toContain('executeAgentRun');
   });
+
+  it('uses canonical agent resolution not synthetic agent-N ids', () => {
+    expect(source).toContain('resolveScheduledAgent');
+    expect(source).toContain('normalizeAgentAllowlist');
+    expect(source).not.toMatch(/'agent-1'/);
+    expect(source).not.toMatch(/'agent-6'/);
+    expect(source).not.toMatch(/'agent-15'/);
+  });
+
+  it('supports Emergency Stop separation without global agent timer wipe intent', () => {
+    expect(source).toContain('applyEmergencyStopSeparation');
+    expect(source).toContain('ensureAnalyticalAgentScheduler');
+  });
 });
 
 describe('engineWorkerLeader kill switch monitor', () => {
@@ -41,6 +54,20 @@ describe('engineWorkerLeader kill switch monitor', () => {
   it('uses pub/sub and poll fallback', () => {
     expect(workerSource).toContain('subscribeRuntimeEvents');
     expect(workerSource).toMatch(/setInterval.*3000|3000/);
+  });
+
+  it('does not call scheduler.stop under kill switch (AI-FOUNDATION-R2)', () => {
+    expect(workerSource).toContain('applyEmergencyStopSeparation');
+    // Ensure the kill-switch branch does not wipe analytical timers
+    const handleIdx = workerSource.indexOf('const handleState');
+    const handleSlice = workerSource.slice(handleIdx, handleIdx + 2500);
+    expect(handleSlice).not.toMatch(/scheduler\?\.stop\)\s*scheduler\.stop/);
+    expect(handleSlice).not.toMatch(/if \(scheduler\?\.stop\)\s*scheduler\.stop/);
+  });
+
+  it('stops trading engine under kill switch', () => {
+    expect(workerSource).toContain('tradingEngine?.stop');
+    expect(workerSource).toMatch(/stopping trading engine/);
   });
 
   it('does not log success inside failure catch blocks', () => {

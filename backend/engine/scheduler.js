@@ -1,5 +1,5 @@
 // 24/7 Scheduler Service for TitanGold AI Center
-// Handles automatic execution of all AI components
+// AI-FOUNDATION-R2: analytical agent scheduling separated from Live/trading engines
 
 import { query } from '../database/db.js';
 import { logger } from '../services/logger.js';
@@ -10,98 +10,205 @@ import {
     processNormalizationBatch,
     NORMALIZATION_DEFAULT_BATCH,
 } from '../services/normalizationWorker.js';
+import {
+    normalizeAgentAllowlist,
+    resolveScheduledAgent,
+    isSafeAnalyticalUnderEmergencyStop,
+    logResolutionOutcome,
+} from '../services/scheduledAgentResolver.js';
+import {
+    publishAnalyticalSchedulerStatus,
+    buildEmptyStatus,
+} from '../services/analyticalSchedulerStatus.js';
+import { isKillSwitchActive } from '../services/runtimeExecutionStateService.js';
+import { isLiveCapableAgent } from '../services/agentCapabilityRegistry.js';
 
 class SchedulerService {
     constructor() {
         this.isRunning = false;
         this.intervals = new Map();
         this.jobs = new Map();
+        this.inFlight = new Set();
+        this.emergencyStopSeparation = false;
+        this._lastKillLogAt = 0;
+        this._status = buildEmptyStatus();
         this.config = {
             agents: {
                 enabled: true,
                 interval: 5 * 60 * 1000, // 5 minutes
-                agents: [] // All 15 agents by default
+                agents: [], // explicit allowlist — empty = nobody
             },
             dataHub: {
                 enabled: true,
-                interval: parseInt(process.env.DATAHUB_FETCH_INTERVAL_MS) || 2 * 60 * 1000, // 2 minutes default
+                interval: parseInt(process.env.DATAHUB_FETCH_INTERVAL_MS) || 2 * 60 * 1000,
                 autoRefresh: true,
                 autoNormalize: true
             },
             training: {
                 enabled: true,
-                interval: 30 * 60 * 1000, // 30 minutes
-                autoSchedule: true // Enable auto-scheduling
+                interval: 30 * 60 * 1000,
+                autoSchedule: true
             },
             analytics: {
                 enabled: true,
-                interval: 10 * 60 * 1000, // 10 minutes
+                interval: 10 * 60 * 1000,
                 autoRefresh: true
             },
             artemis: {
                 enabled: true,
-                interval: 1 * 60 * 1000, // 1 minute
+                interval: 1 * 60 * 1000,
                 autoDecisions: true
             },
             maintenance: {
                 enabled: true,
-                interval: 24 * 60 * 60 * 1000, // 24 hours
+                interval: 24 * 60 * 60 * 1000,
                 autoRun: true
             },
             telegramPipeline: {
                 enabled: true,
-                interval: parseInt(process.env.TELEGRAM_PIPELINE_INTERVAL_MS) || 5 * 60 * 1000 // 5 minutes default (TASK-TC-003)
+                interval: parseInt(process.env.TELEGRAM_PIPELINE_INTERVAL_MS) || 5 * 60 * 1000
             },
             normalization: {
                 enabled: true,
-                interval: 60 * 1000, // 1 minute (DH-NORMALIZATION-P0-WORKER-1)
+                interval: 60 * 1000,
                 batchSize: NORMALIZATION_DEFAULT_BATCH,
             },
         };
     }
 
-    async start() {
-        if (this.isRunning) {
-            logger.info('⚠️ Scheduler is already running');
+    async start({ analyticalOnly = false } = {}) {
+        if (this.isRunning && this.intervals.has('agents')) {
+            logger.info('Scheduler already running (analytical agents active)');
+            await this.publishStatus();
             return;
         }
 
         try {
             this.isRunning = true;
-            logger.info('🚀 24/7 Scheduler Service Started');
+            logger.info('24/7 Scheduler Service Started', { analyticalOnly });
 
-            // Load configuration from database
             await this.loadConfig();
 
-            // Start all scheduled jobs
-            this.startAgentScheduler();
-            this.startDataHubScheduler();
-            this.startTelegramPipelineScheduler();
-            this.startNormalizationScheduler();
-            this.startTrainingScheduler();
-            this.startAnalyticsScheduler();
-            this.startArtemisScheduler();
-            this.startMaintenanceScheduler();
+            await this.ensureAnalyticalAgentScheduler();
 
-            logger.info('✅ All schedulers initialized');
+            if (!analyticalOnly) {
+                this.startDataHubScheduler();
+                this.startTelegramPipelineScheduler();
+                this.startNormalizationScheduler();
+                if (!this.emergencyStopSeparation) {
+                    this.startTrainingScheduler();
+                    this.startAnalyticsScheduler();
+                    this.startArtemisScheduler();
+                    this.startMaintenanceScheduler();
+                }
+            }
+
+            logger.info('Schedulers initialized', {
+                intervals: Array.from(this.intervals.keys()),
+                emergencyStopSeparation: this.emergencyStopSeparation,
+            });
+            await this.publishStatus();
         } catch (error) {
             this.isRunning = false;
-            logger.error('❌ Failed to start scheduler:', error);
-            throw error; // Re-throw to let the route handler catch it
+            logger.error('Failed to start scheduler:', error);
+            throw error;
         }
+    }
+
+    /**
+     * Emergency Stop: keep safe analytical agent timers; stop Live-adjacent jobs.
+     * Idempotent — no stop-log spam.
+     */
+    async applyEmergencyStopSeparation() {
+        const wasSeparated = this.emergencyStopSeparation;
+        this.emergencyStopSeparation = true;
+        this.isRunning = true;
+
+        // Stop Live-adjacent / auto-decision intervals only
+        for (const key of ['artemis', 'training', 'maintenance']) {
+            if (this.intervals.has(key)) {
+                clearInterval(this.intervals.get(key));
+                this.intervals.delete(key);
+            }
+        }
+
+        // Load config only on transition or when agents timer is missing
+        if (!wasSeparated || !this.intervals.has('agents')) {
+            await this.loadConfig();
+        }
+        await this.ensureAnalyticalAgentScheduler();
+
+        // Keep dataHub / telegram / normalization if already running; start if missing and enabled
+        if (!wasSeparated) {
+            if (this.config.dataHub?.enabled && !this.intervals.has('dataHub')) {
+                this.startDataHubScheduler();
+            }
+            if (this.config.telegramPipeline?.enabled && !this.intervals.has('telegramPipeline')) {
+                this.startTelegramPipelineScheduler();
+            }
+            if (this.config.normalization?.enabled && !this.intervals.has('normalization')) {
+                this.startNormalizationScheduler();
+            }
+            logger.info('Emergency Stop separation applied — analytical agent scheduler preserved');
+            await this.publishStatus();
+        } else if (!this.intervals.has('agents')) {
+            await this.publishStatus();
+        }
+    }
+
+    /**
+     * Ensure exactly one agents interval exists when agents.enabled.
+     */
+    async ensureAnalyticalAgentScheduler() {
+        if (!this.config.agents?.enabled) {
+            if (this.intervals.has('agents')) {
+                clearInterval(this.intervals.get('agents'));
+                this.intervals.delete('agents');
+            }
+            return;
+        }
+        if (this.intervals.has('agents')) {
+            return;
+        }
+        this.startAgentScheduler();
+    }
+
+    async clearEmergencyStopSeparation() {
+        if (!this.emergencyStopSeparation) {
+            await this.ensureAnalyticalAgentScheduler();
+            await this.publishStatus();
+            return;
+        }
+        this.emergencyStopSeparation = false;
+        logger.info('Emergency Stop separation cleared — restoring non-Live schedulers if enabled');
+        if (this.isRunning) {
+            if (this.config.training?.enabled && !this.intervals.has('training')) {
+                this.startTrainingScheduler();
+            }
+            if (this.config.analytics?.enabled && !this.intervals.has('analytics')) {
+                this.startAnalyticsScheduler();
+            }
+            if (this.config.artemis?.enabled && !this.intervals.has('artemis')) {
+                this.startArtemisScheduler();
+            }
+            if (this.config.maintenance?.enabled && !this.intervals.has('maintenance')) {
+                this.startMaintenanceScheduler();
+            }
+        }
+        await this.ensureAnalyticalAgentScheduler();
+        await this.publishStatus();
     }
 
     async stop() {
         this.isRunning = false;
-
-        // Clear all intervals
         this.intervals.forEach((intervalId) => {
             clearInterval(intervalId);
         });
         this.intervals.clear();
         this.jobs.clear();
-
-        logger.info('🛑 24/7 Scheduler Service Stopped');
+        this.inFlight.clear();
+        logger.info('24/7 Scheduler Service Stopped');
+        await this.publishStatus();
     }
 
     async loadConfig() {
@@ -111,11 +218,15 @@ class SchedulerService {
             );
 
             if (result.rows.length > 0 && result.rows[0].config) {
-                this.config = { ...this.config, ...result.rows[0].config };
+                const dbConfig = result.rows[0].config;
+                this.config = { ...this.config, ...dbConfig };
+                // Deep-merge agents so defaults remain if partial
+                if (dbConfig.agents && typeof dbConfig.agents === 'object') {
+                    this.config.agents = { ...this.config.agents, ...dbConfig.agents };
+                }
             }
         } catch (error) {
             logger.error('Failed to load scheduler config:', error);
-            // Use default config
         }
     }
 
@@ -132,133 +243,191 @@ class SchedulerService {
         }
     }
 
-    // Agent Scheduler - Auto-execute all 15 agents
+    getAllowlistKeys() {
+        const normalized = normalizeAgentAllowlist(this.config.agents?.agents);
+        if (!normalized.ok) {
+            this._status.lastSkipReason = normalized.reason;
+            logger.warn('scheduler_allowlist_invalid', { message: normalized.message });
+            return [];
+        }
+        return normalized.keys;
+    }
+
+    // Agent Scheduler — allowlisted canonical agents only
     startAgentScheduler() {
         if (!this.config.agents.enabled) {
-            logger.info('⏸️ Agent Scheduler is disabled');
+            logger.info('Agent Scheduler is disabled');
+            return;
+        }
+        if (this.intervals.has('agents')) {
             return;
         }
 
-        const agentIds = [
-            'agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5',
-            'agent-6', 'agent-7', 'agent-8', 'agent-9', 'agent-10',
-            'agent-11', 'agent-12', 'agent-13', 'agent-14', 'agent-15'
-        ];
+        const allowlist = this.getAllowlistKeys();
+        const intervalMs = Number(this.config.agents.interval) || 5 * 60 * 1000;
 
-        const agentFunctions = [
-            'runTechnicalAnalysis',
-            'runRiskAssessment',
-            'runSentimentAnalysis',
-            'runPatternRecognitionAnalysis',
-            'runPricePredictionAnalysis',
-            'runArbitrageAnalysis',
-            'runPortfolioAllocationAnalysis',
-            'runLiquidityAnalysis',
-            'runTrendDetectionAnalysis',
-            'runOptimizationCycle',
-            'runOrderManagementCycle',
-            'runFundamentalAnalysis',
-            'runMarketIntelligenceCycle',
-            'runVolumeAnalysis',
-            'runTimingAnalysis'
-        ];
-
-        const intervalId = setInterval(async () => {
-            if (!this.isRunning || !this.config.agents.enabled) return;
-
-            try {
-                logger.info('🤖 Running scheduled agent executions...');
-
-                for (let i = 0; i < agentIds.length; i++) {
-                    const agentId = agentIds[i];
-                    const funcName = agentFunctions[i];
-
-                    // Check if agent is enabled
-                    if (this.config.agents.agents.length > 0 &&
-                        !this.config.agents.agents.includes(agentId)) {
-                        continue;
-                    }
-
-                    try {
-                        // Execute agent function
-                        await this.executeAgentFunction(agentId, funcName);
-
-                        // Small delay between agents to avoid overload
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                    } catch (error) {
-                        logger.error(`❌ Failed to execute ${funcName} for ${agentId}:`, error);
-                    }
-                }
-
-                logger.info('✅ Agent execution cycle completed');
-            } catch (error) {
-                logger.error('❌ Agent scheduler error:', error);
-            }
-        }, this.config.agents.interval);
+        const intervalId = setInterval(() => {
+            this.runAgentTick().catch((error) => {
+                logger.error('Agent scheduler tick error:', error);
+            });
+        }, intervalMs);
 
         this.intervals.set('agents', intervalId);
-        logger.info(`✅ Agent Scheduler started (interval: ${this.config.agents.interval / 1000}s)`);
+        logger.info('Agent Scheduler started', {
+            intervalSec: intervalMs / 1000,
+            allowlist,
+            emptyMeansNobody: true,
+        });
     }
 
-    async executeAgentFunction(agentId, funcName) {
+    async runAgentTick() {
+        if (!this.isRunning || !this.config.agents.enabled) return;
+
+        const tickAt = new Date().toISOString();
+        this._status.lastTickAt = tickAt;
+
+        const allowlist = this.getAllowlistKeys();
+        if (allowlist.length === 0) {
+            this._status.lastSkipReason = 'empty_allowlist';
+            await this.publishStatus();
+            return;
+        }
+
+        let killSwitchActive = false;
+        try {
+            killSwitchActive = await isKillSwitchActive();
+        } catch {
+            killSwitchActive = this.emergencyStopSeparation;
+        }
+
+        logger.info('Running scheduled agent executions', {
+            allowlist,
+            killSwitchActive,
+            emergencyStopSeparation: this.emergencyStopSeparation,
+        });
+
+        for (const agentRef of allowlist) {
+            await this.executeAllowlistedAgent(agentRef, { killSwitchActive });
+        }
+
+        logger.info('Agent execution cycle completed');
+        await this.publishStatus();
+    }
+
+    async executeAllowlistedAgent(agentRef, { killSwitchActive }) {
+        const resolved = await resolveScheduledAgent(agentRef);
+        logResolutionOutcome(resolved, { source: 'scheduler_tick' });
+        if (!resolved.ok) {
+            this._status.lastSkipReason = resolved.reason;
+            return;
+        }
+
+        if (killSwitchActive && !isSafeAnalyticalUnderEmergencyStop(resolved.agentKey)) {
+            this._status.lastSkipReason = 'live_capable_blocked_by_emergency_stop';
+            logger.warn('scheduled_agent_skipped_live_capable', {
+                agentKey: resolved.agentKey,
+                agentId: resolved.agentId,
+            });
+            return;
+        }
+
+        if (this.inFlight.has(resolved.agentKey)) {
+            this._status.lastSkipReason = 'overlap_skipped';
+            logger.warn('scheduled_agent_overlap_skipped', { agentKey: resolved.agentKey });
+            return;
+        }
+
+        this.inFlight.add(resolved.agentKey);
+        const started = Date.now();
         try {
             const { executeAgentRun } = await import('../services/agentExecutionService.js');
-
             const result = await executeAgentRun({
-                agentId,
+                agentId: resolved.agentId,
                 symbol: 'BTCUSDT',
                 timeframe: '1h',
-                input: { function: funcName },
+                input: {
+                    function: 'scheduled_analytical_run',
+                    trigger: 'scheduler',
+                    producer: 'titan-engine-worker',
+                    agent_key: resolved.agentKey,
+                },
                 identityType: 'system',
                 user: null,
                 confirmLive: false,
             });
 
             if (!result.ok) {
-                throw new Error(result.message || result.code || 'Agent execution denied');
+                this._status.lastFailureAt = new Date().toISOString();
+                this._status.lastSkipReason = result.code || 'execution_denied';
+                logger.warn('scheduled_agent_execution_denied', {
+                    agentKey: resolved.agentKey,
+                    code: result.code,
+                    message: result.message,
+                });
+                return;
             }
 
-            logger.info(`✅ Scheduled agent execution complete: ${agentId} (${funcName})`, {
+            this._status.lastSuccessAt = new Date().toISOString();
+            this._status.lastSkipReason = null;
+            this._status.lastRun = {
+                agentKey: resolved.agentKey,
+                agentId: resolved.agentId,
+                at: this._status.lastSuccessAt,
+                durationMs: Date.now() - started,
+                decisionType: result.result?.decision_type || null,
+                effectiveMode: result.policy?.effectiveMode || null,
+                sideEffectsSuppressed: result.sideEffectsSuppressed === true,
+                producer: 'scheduler',
+            };
+            logger.info('Scheduled agent execution complete', {
+                agentKey: resolved.agentKey,
+                agentId: resolved.agentId,
+                durationMs: Date.now() - started,
                 effective_mode: result.policy?.effectiveMode,
                 side_effects_suppressed: result.sideEffectsSuppressed,
             });
         } catch (error) {
-            logger.error(`❌ Failed to execute ${funcName} for ${agentId}:`, error.message);
-            throw error;
+            this._status.lastFailureAt = new Date().toISOString();
+            this._status.lastSkipReason = 'execution_error';
+            logger.error('Failed scheduled agent execution', {
+                agentKey: resolved.agentKey,
+                error: error.message,
+            });
+        } finally {
+            this.inFlight.delete(resolved.agentKey);
         }
     }
 
-    // Data Hub Scheduler - Auto-refresh all data sources
+    // Data Hub Scheduler
     startDataHubScheduler() {
         if (!this.config.dataHub.enabled) {
-            logger.info('⏸️ Data Hub Scheduler is disabled');
+            logger.info('Data Hub Scheduler is disabled');
             return;
         }
+        if (this.intervals.has('dataHub')) return;
 
         const intervalId = setInterval(async () => {
             if (!this.isRunning || !this.config.dataHub.enabled) return;
-
             try {
                 await runDataFetchJob();
             } catch (error) {
-                logger.error('❌ Data Hub scheduler error:', error);
+                logger.error('Data Hub scheduler error:', error);
             }
         }, this.config.dataHub.interval);
 
         this.intervals.set('dataHub', intervalId);
-        logger.info(`✅ Data Hub Scheduler started (interval: ${this.config.dataHub.interval / 1000}s)`);
+        logger.info(`Data Hub Scheduler started (interval: ${this.config.dataHub.interval / 1000}s)`);
     }
 
-    // Telegram Pipeline Scheduler - Transfer telegram_messages → collected_data (TASK-TC-003)
     startTelegramPipelineScheduler() {
         if (!this.config.telegramPipeline?.enabled) {
-            logger.info('⏸️ Telegram Pipeline Scheduler is disabled');
+            logger.info('Telegram Pipeline Scheduler is disabled');
             return;
         }
+        if (this.intervals.has('telegramPipeline')) return;
 
         const intervalId = setInterval(async () => {
             if (!this.isRunning || !this.config.telegramPipeline?.enabled) return;
-
             try {
                 const summary = await transferTelegramMessagesToPipeline(
                     TELEGRAM_TRANSFER_DEFAULT_BATCH,
@@ -270,71 +439,65 @@ class SchedulerService {
                     summary.skipped_filtered > 0
                 ) {
                     logger.info(
-                        `📨 Telegram pipeline: selected=${summary.selected} inserted=${summary.inserted} backlog=${summary.backlogRemaining} durationMs=${summary.durationMs}`,
+                        `Telegram pipeline: selected=${summary.selected} inserted=${summary.inserted} backlog=${summary.backlogRemaining} durationMs=${summary.durationMs}`,
                     );
                 }
             } catch (error) {
-                logger.error('❌ Telegram pipeline scheduler error:', error);
+                logger.error('Telegram pipeline scheduler error:', error);
             }
         }, this.config.telegramPipeline.interval);
 
         this.intervals.set('telegramPipeline', intervalId);
-        logger.info(`✅ Telegram Pipeline Scheduler started (interval: ${this.config.telegramPipeline.interval / 1000}s)`);
+        logger.info(`Telegram Pipeline Scheduler started (interval: ${this.config.telegramPipeline.interval / 1000}s)`);
     }
 
-    // Normalization Worker — pending collected_data → processed (no agents/publish)
     startNormalizationScheduler() {
         if (!this.config.normalization?.enabled) {
-            logger.info('⏸️ Normalization Worker Scheduler is disabled');
+            logger.info('Normalization Worker Scheduler is disabled');
             return;
         }
+        if (this.intervals.has('normalization')) return;
 
         const intervalId = setInterval(async () => {
             if (!this.isRunning || !this.config.normalization?.enabled) return;
-
             try {
                 const batchSize =
                     this.config.normalization.batchSize || NORMALIZATION_DEFAULT_BATCH;
                 const summary = await processNormalizationBatch(batchSize);
                 if (summary.processed > 0 || summary.errors > 0) {
                     logger.info(
-                        `📐 Normalization: selected=${summary.selected} processed=${summary.processed} errors=${summary.errors} backlog=${summary.backlogRemaining} durationMs=${summary.durationMs}`,
+                        `Normalization: selected=${summary.selected} processed=${summary.processed} errors=${summary.errors} backlog=${summary.backlogRemaining} durationMs=${summary.durationMs}`,
                     );
                 }
             } catch (error) {
-                logger.error('❌ Normalization worker scheduler error:', error);
+                logger.error('Normalization worker scheduler error:', error);
             }
         }, this.config.normalization.interval);
 
         this.intervals.set('normalization', intervalId);
         logger.info(
-            `✅ Normalization Worker Scheduler started (interval: ${this.config.normalization.interval / 1000}s, batch: ${this.config.normalization.batchSize || NORMALIZATION_DEFAULT_BATCH})`,
+            `Normalization Worker Scheduler started (interval: ${this.config.normalization.interval / 1000}s, batch: ${this.config.normalization.batchSize || NORMALIZATION_DEFAULT_BATCH})`,
         );
     }
 
-    // Training Scheduler - Auto-schedule training sessions
     startTrainingScheduler() {
         if (!this.config.training.enabled) {
-            logger.info('⏸️ Training Scheduler is disabled');
+            logger.info('Training Scheduler is disabled');
             return;
         }
+        if (this.intervals.has('training')) return;
 
         const intervalId = setInterval(async () => {
-            if (!this.isRunning || !this.config.training.enabled) return;
-
+            if (!this.isRunning || !this.config.training.enabled || this.emergencyStopSeparation) return;
             try {
                 if (this.config.training.autoSchedule) {
-                    logger.info('🎓 Checking for training opportunities...');
-
-                    // Check if any agents need training
+                    logger.info('Checking for training opportunities...');
                     const trainingData = await this.fetchTrainingData();
-
                     if (trainingData && trainingData.recommendations) {
                         for (const recommendation of trainingData.recommendations) {
                             if (recommendation.priority === 'high' || recommendation.priority === 'critical') {
                                 try {
                                     await this.scheduleTraining(recommendation.agentIds, recommendation.mode);
-                                    logger.info(`✅ Auto-scheduled training for agents: ${recommendation.agentIds.join(', ')}`);
                                 } catch (error) {
                                     logger.error('Failed to schedule training:', error);
                                 }
@@ -343,17 +506,16 @@ class SchedulerService {
                     }
                 }
             } catch (error) {
-                logger.error('❌ Training scheduler error:', error);
+                logger.error('Training scheduler error:', error);
             }
         }, this.config.training.interval);
 
         this.intervals.set('training', intervalId);
-        logger.info(`✅ Training Scheduler started (interval: ${this.config.training.interval / 1000}s)`);
+        logger.info(`Training Scheduler started (interval: ${this.config.training.interval / 1000}s)`);
     }
 
     async fetchTrainingData() {
         try {
-            // Import scheduleAutomaticTraining from artemisOrchestrator
             const { scheduleAutomaticTraining } = await import('../services/artemisOrchestrator.js');
             const result = await scheduleAutomaticTraining();
             return {
@@ -371,107 +533,102 @@ class SchedulerService {
 
     async scheduleTraining(agentIds, mode) {
         try {
-            // Import triggerTrainingSession from artemisOrchestrator
             const { triggerTrainingSession } = await import('../services/artemisOrchestrator.js');
             await triggerTrainingSession(agentIds, mode);
-            logger.info(`✅ Training scheduled for agents: ${agentIds.join(', ')}`);
         } catch (error) {
             logger.error('Failed to schedule training:', error);
         }
     }
 
-    // Analytics Scheduler - Auto-refresh analytics
     startAnalyticsScheduler() {
         if (!this.config.analytics.enabled) {
-            logger.info('⏸️ Analytics Scheduler is disabled');
+            logger.info('Analytics Scheduler is disabled');
             return;
         }
+        if (this.intervals.has('analytics')) return;
 
         const intervalId = setInterval(async () => {
             if (!this.isRunning || !this.config.analytics.enabled) return;
-
             try {
                 if (this.config.analytics.autoRefresh) {
-                    logger.info('📈 Refreshing analytics data...');
-                    // Analytics data is automatically updated when agents run
-                    // This is mainly for UI refresh triggers
+                    // UI refresh trigger placeholder
                 }
             } catch (error) {
-                logger.error('❌ Analytics scheduler error:', error);
+                logger.error('Analytics scheduler error:', error);
             }
         }, this.config.analytics.interval);
 
         this.intervals.set('analytics', intervalId);
-        logger.info(`✅ Analytics Scheduler started (interval: ${this.config.analytics.interval / 1000}s)`);
+        logger.info(`Analytics Scheduler started (interval: ${this.config.analytics.interval / 1000}s)`);
     }
 
-    // Artemis Scheduler - Auto-decision making
     startArtemisScheduler() {
         if (!this.config.artemis.enabled) {
-            logger.info('⏸️ Artemis Scheduler is disabled');
+            logger.info('Artemis Scheduler is disabled');
             return;
         }
+        if (this.intervals.has('artemis')) return;
 
         const intervalId = setInterval(async () => {
-            if (!this.isRunning || !this.config.artemis.enabled) return;
-
+            if (!this.isRunning || !this.config.artemis.enabled || this.emergencyStopSeparation) return;
             try {
                 if (this.config.artemis.autoDecisions) {
-                    logger.info('🧠 Artemis decision cycle...');
-                    // Artemis makes decisions based on agent signals
-                    // This is handled by the decision engine
+                    // Decision engine placeholder — no Live side effects here
                 }
             } catch (error) {
-                logger.error('❌ Artemis scheduler error:', error);
+                logger.error('Artemis scheduler error:', error);
             }
         }, this.config.artemis.interval);
 
         this.intervals.set('artemis', intervalId);
-        logger.info(`✅ Artemis Scheduler started (interval: ${this.config.artemis.interval / 1000}s)`);
+        logger.info(`Artemis Scheduler started (interval: ${this.config.artemis.interval / 1000}s)`);
     }
 
-    // Maintenance Scheduler - Auto-run daily maintenance
     startMaintenanceScheduler() {
         if (!this.config.maintenance.enabled) {
-            logger.info('⏸️ Maintenance Scheduler is disabled');
+            logger.info('Maintenance Scheduler is disabled');
             return;
         }
+        if (this.intervals.has('maintenance')) return;
 
         const intervalId = setInterval(async () => {
-            if (!this.isRunning || !this.config.maintenance.enabled) return;
-
+            if (!this.isRunning || !this.config.maintenance.enabled || this.emergencyStopSeparation) return;
             try {
                 if (this.config.maintenance.autoRun) {
                     await maintenanceService.runFullSiteMaintenance();
                 }
             } catch (error) {
-                logger.error('❌ Maintenance scheduler error:', error);
+                logger.error('Maintenance scheduler error:', error);
             }
         }, this.config.maintenance.interval);
 
         this.intervals.set('maintenance', intervalId);
-        logger.info(`✅ Maintenance Scheduler started (interval: ${this.config.maintenance.interval / (1000 * 60 * 60)}h)`);
+        logger.info(`Maintenance Scheduler started (interval: ${this.config.maintenance.interval / (1000 * 60 * 60)}h)`);
 
-        // Run once on startup after a small delay
         setTimeout(() => {
-            if (this.isRunning && this.config.maintenance.autoRun) {
+            if (this.isRunning && this.config.maintenance.autoRun && !this.emergencyStopSeparation) {
                 maintenanceService.runFullSiteMaintenance();
             }
-        }, 30000); // 30 seconds after startup
+        }, 30000);
     }
 
-    // Update configuration
     async updateConfig(section, updates) {
         if (this.config[section]) {
+            if (section === 'agents' && updates && Object.prototype.hasOwnProperty.call(updates, 'agents')) {
+                const normalized = normalizeAgentAllowlist(updates.agents);
+                if (!normalized.ok) {
+                    const err = new Error(normalized.message);
+                    err.code = 'VALIDATION_ERROR';
+                    throw err;
+                }
+                updates = { ...updates, agents: normalized.keys };
+            }
             this.config[section] = { ...this.config[section], ...updates };
             await this.saveConfig();
 
-            // Restart affected scheduler
             if (this.intervals.has(section)) {
                 clearInterval(this.intervals.get(section));
                 this.intervals.delete(section);
-
-                // Restart scheduler
                 if (section === 'agents') this.startAgentScheduler();
                 else if (section === 'dataHub') this.startDataHubScheduler();
                 else if (section === 'training') this.startTrainingScheduler();
@@ -481,19 +638,51 @@ class SchedulerService {
                 else if (section === 'telegramPipeline') this.startTelegramPipelineScheduler();
                 else if (section === 'normalization') this.startNormalizationScheduler();
             }
+            await this.publishStatus();
         }
     }
 
-    // Get current status
+    async publishStatus() {
+        const allowlist = this.getAllowlistKeys();
+        this._status = {
+            ...this._status,
+            ...buildEmptyStatus({
+                isRunning: this.isRunning && this.intervals.has('agents'),
+                agentsEnabled: this.config.agents?.enabled === true,
+                allowlist,
+                registeredJobs: allowlist,
+                activeIntervals: Array.from(this.intervals.keys()),
+                emergencyStopSeparation: this.emergencyStopSeparation,
+                lastTickAt: this._status.lastTickAt,
+                lastSuccessAt: this._status.lastSuccessAt,
+                lastFailureAt: this._status.lastFailureAt,
+                lastSkipReason: this._status.lastSkipReason,
+                lastRun: this._status.lastRun,
+            }),
+        };
+        await publishAnalyticalSchedulerStatus(this._status);
+    }
+
     getStatus() {
         return {
             isRunning: this.isRunning,
             config: this.config,
             activeJobs: Array.from(this.jobs.keys()),
-            intervals: Array.from(this.intervals.keys())
+            intervals: Array.from(this.intervals.keys()),
+            emergencyStopSeparation: this.emergencyStopSeparation,
+            allowlist: this.getAllowlistKeys(),
+            ownerHint: 'local-process-singleton',
+            authoritativeOwner: 'titan-engine-worker',
+            lastTickAt: this._status.lastTickAt,
+            lastSuccessAt: this._status.lastSuccessAt,
+            lastFailureAt: this._status.lastFailureAt,
+            lastSkipReason: this._status.lastSkipReason,
+            lastRun: this._status.lastRun,
         };
     }
 }
 
 export const scheduler = new SchedulerService();
 
+// Re-export helpers for tests
+export { isLiveCapableAgent };
