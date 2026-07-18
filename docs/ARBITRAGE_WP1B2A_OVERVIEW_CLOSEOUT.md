@@ -32,7 +32,8 @@
 | **Analytical Scheduler Foundation runtime baseline** | `76a76b6` (AI-FOUNDATION-R2 — CLOSED AND FROZEN) |
 | **Pre-Human-QA Overview documentation commit** | `7b8d99e` (closeout doc embedded with remediation; prior docs-only: `400f449`, `2ebc6d9`, `4d42353`) |
 | **Pre-closeout documentation HEAD** | `7984a3c` |
-| **Documentation closeout HEAD** | `d06456c` (pins content closeout `0d16704`) |
+| **Human-QA closeout content commit** | `0d16704` — `docs(arb): close Overview redesign after Human QA` |
+| **Documentation closeout HEAD** | equals `origin/main` after documentation push (see Git Verification; tip recorded at push time) |
 | **Served frontend bundle** | `assets/index-DdyO2tD0.js` |
 | **Environment** | Staging |
 
