@@ -22,6 +22,8 @@ import {
   CANONICAL_PROVIDER,
 } from '../services/exchangeConnectionService.js';
 import { verifyOwnedMexcConnection } from '../services/connections/connectionPrivateVerificationService.js';
+import { buildMexcConnectionSummary, assertTier4Blocked } from '../services/connections/mexc/connectionCapabilityService.js';
+import { runMexcVerificationOrchestrator } from '../services/connections/mexc/verificationOrchestrator.js';
 import exchangesRouter from './exchanges.js';
 
 const router = express.Router();
@@ -29,6 +31,7 @@ const router = express.Router();
 const mutationLimiter = rateLimit({ limit: 20, windowMs: 60_000 });
 const testLimiter = rateLimit({ limit: 10, windowMs: 60_000 });
 const privateVerifyLimiter = rateLimit({ limit: 5, windowMs: 60_000 });
+const capabilityVerifyLimiter = rateLimit({ limit: 5, windowMs: 60_000 });
 
 function mapAuthFailure(res, err) {
   // Do not expose raw middleware payloads as provider failures.
@@ -180,6 +183,106 @@ router.delete(
     } catch (error) {
       return handleServiceError(res, error, 'Failed to delete MEXC connection');
     }
+  },
+);
+
+/**
+ * MEXC-E2E — canonical capability summary (matrix + consumers + truthful state).
+ * Never returns secrets or raw provider payloads.
+ */
+router.get(
+  '/mexc/capabilities',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_READ),
+  async (req, res) => {
+    try {
+      const summary = await buildMexcConnectionSummary(req.user.id);
+      return res.json(summary);
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to load MEXC capability summary');
+    }
+  },
+);
+
+router.get(
+  '/mexc/consumers',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_READ),
+  async (req, res) => {
+    try {
+      const summary = await buildMexcConnectionSummary(req.user.id);
+      return res.json({
+        provider: CANONICAL_PROVIDER,
+        consumers: summary.consumers,
+        runtime: summary.runtime,
+      });
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to load MEXC consumers');
+    }
+  },
+);
+
+/**
+ * Capability verification orchestrator.
+ * Live private probes gated; Test Connection UI remains disabled until checkpoint approval.
+ * Body must not include credentials or base URLs.
+ */
+router.post(
+  '/mexc/verify-capabilities',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_TEST),
+  capabilityVerifyLimiter,
+  async (req, res) => {
+    try {
+      if (req.body && (req.body.apiKey || req.body.apiSecret || req.body.secret || req.body.baseUrl)) {
+        return connectionError(
+          res,
+          400,
+          CONNECTION_ERROR.CONNECTION_VALIDATION_FAILED,
+          'Credential or provider URL fields are not accepted on this route',
+        );
+      }
+
+      const scope = ['public', 'private_read', 'all_safe'].includes(req.body?.scope)
+        ? req.body.scope
+        : 'public';
+
+      // Reject any attempt to run write / test-order scopes
+      if (req.body?.includeTestOrder || req.body?.allowWrites) {
+        return connectionError(
+          res,
+          400,
+          CONNECTION_ERROR.CONNECTION_VALIDATION_FAILED,
+          'Write and Test New Order probes are not authorized on this route',
+        );
+      }
+
+      const result = await runMexcVerificationOrchestrator({
+        userId: req.user.id,
+        scope,
+        persist: false,
+        correlationId: req.get?.('x-correlation-id') || null,
+        ...requestMeta(req),
+      });
+      return res.status(result.httpStatus).json(result.body);
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to verify MEXC capabilities');
+    }
+  },
+);
+
+/**
+ * Explicit Tier-4 block probe for Wallet/Trading consumers (always denied).
+ */
+router.post(
+  '/mexc/tier4/:operation',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_READ),
+  mutationLimiter,
+  async (req, res) => {
+    const operation = String(req.params.operation || '');
+    const blocked = assertTier4Blocked(operation);
+    return res.status(403).json(blocked);
   },
 );
 
