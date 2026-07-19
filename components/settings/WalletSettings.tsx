@@ -10,6 +10,7 @@ import SecurityWidget from './wallet/SecurityWidget.tsx';
 import ColdWalletWidget from './wallet/ColdWalletWidget.tsx';
 import DeFiWidget from './wallet/DeFiWidget.tsx';
 import GeneralConfigWidget from './wallet/GeneralConfigWidget.tsx';
+import MexcWalletCapabilityBanner from './wallet/MexcWalletCapabilityBanner.tsx';
 import type { WalletSettingsData } from '../../types.ts';
 import { database } from '../../services/database.ts';
 
@@ -162,6 +163,7 @@ const WalletSettings: React.FC = () => {
 
     return (
         <div className="space-y-6">
+            <MexcWalletCapabilityBanner />
             {/* Trading Mode & Virtual Wallet Section */}
             <div className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 border border-blue-500/30 rounded-lg p-6">
                 <div className="flex flex-wrap justify-between items-center gap-4 mb-6">

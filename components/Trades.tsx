@@ -3,6 +3,8 @@ import { useLanguage } from '../context/LanguageContext.tsx';
 import ManualTrades from './trades/ManualTrades.tsx';
 import ProfessionalAutopilot from './trades/ProfessionalAutopilot.tsx';
 import Strategies from './trades/Strategies.tsx';
+import MexcSpotCapabilityPanel from './trading/MexcSpotCapabilityPanel.tsx';
+import MexcFuturesCapabilityPanel from './trading/MexcFuturesCapabilityPanel.tsx';
 import * as api from '../services/api.ts';
 
 type TradeView = 'manual' | 'autopilot' | 'strategies';
@@ -45,6 +47,11 @@ const Trades: React.FC = () => {
             <div>
                 <h1 className="text-2xl font-bold text-white">{t('advanced_trading_system')}</h1>
                 <p className="text-gray-400 mt-1">{t('advanced_trading_desc')}</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <MexcSpotCapabilityPanel />
+                <MexcFuturesCapabilityPanel />
             </div>
 
             <div className="border-b border-gray-800">
