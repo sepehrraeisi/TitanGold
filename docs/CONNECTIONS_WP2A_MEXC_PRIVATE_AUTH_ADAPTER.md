@@ -1,178 +1,176 @@
 # CONNECTIONS-WP2A — MEXC Private Authentication Adapter
 
 **Module:** Settings → Connections → MEXC  
-**Work Package:** CONNECTIONS-WP2A (including final runtime-provenance remediation)  
-**Environment:** Staging `https://titan.zala.ir`  
-**Engineering verdict (pre–Human QA):** **NEEDS MORE VERIFICATION**
+**Work Package:** CONNECTIONS-WP2A  
+**Environment:** Staging `https://titan.zala.ir`
 
 ---
 
-## Final status (before Human QA)
+## Final status
 
 | Item | Value |
 |------|--------|
-| Human QA | PENDING — CONN-A1 … CONN-A5 |
-| Engineering verdict | **NEEDS MORE VERIFICATION** |
-| WP2A adapter / contract / gate | Accepted (not reimplemented) |
-| Runtime provenance | Deployment-injected (env + generated manifest) |
-| WP2B / MEXC E2E | NOT STARTED |
-| Test Connection UI | Absent |
-| Real MEXC calls | Blocked unless `CONNECTIONS_PRIVATE_VERIFY_LIVE=true` |
+| CONNECTIONS-WP2A Engineering Verdict | **REAL WORKING** |
+| CONNECTIONS-WP2A Status | **CLOSED AND FROZEN** |
+| Human-QA verdict | **PASS** |
+| Full MEXC Connections Program | **OPEN** |
+| Next Outcome | MEXC End-to-End Program Slice |
+| Next Outcome Status | **NOT STARTED** |
+| Test Connection UI | Absent (not restored) |
+| Real MEXC calls during WP2A | None |
 
 ---
 
-## Baselines (do not conflate)
+## Human QA
+
+| Scenario | Result |
+|----------|--------|
+| CONN-A1 — UI Regression | **PASS** |
+| CONN-A2 — Secret and Gate Safety | **PASS** |
+| CONN-A3 — Authentication Contract | **PASS** |
+| CONN-A4 — Error Contract | **PASS** |
+| CONN-A5 — Runtime Regression | **PASS** |
+| Final Human-QA verdict | **PASS** |
+
+---
+
+## Baseline distinction
 
 | Kind | Value |
 |------|--------|
-| WP2A runtime implementation (adapter) | `864f95e` |
-| WP2A documentation commit | `8d320d8` |
-| Prior provenance owner fix | `8504609` |
-| Current documentation HEAD | see Git after push (not embedded as a self-hash here) |
+| WP2A adapter implementation | `864f95e` |
+| Runtime-provenance implementation | `bfd7e39` |
+| Pre-closeout documentation HEAD | `05a0a63` |
+| Active runtime implementation marker | `bfd7e39` |
+| Documentation closeout HEAD | recorded in the final closeout report (not embedded here) |
 | Served frontend bundle | `assets/index-zOmnvrQI.js` |
+| Environment | Staging |
 
-The **deployed runtime marker** is assigned at deploy time and may differ from documentation HEAD. Documentation-only commits must not change the deployed marker.
-
----
-
-## Official MEXC contract (accepted)
-
-See `docs/MEXC_PRIVATE_AUTH_CONTRACT.md`:
-
-- `GET https://api.mexc.com/api/v3/account`
-- `SPOT_ACCOUNT_READ`
-- `X-MEXC-APIKEY`
-- HMAC-SHA256 lowercase signature
-- timestamp milliseconds
-- `recvWindow` default `5000`, maximum &lt; `60000`
-- Weight(IP) 10 · rate note 2 times/s
-- Mapped codes `700001`–`700007`, HTTP `429`/`500`/`503`/`504`
-- Read-only / no-order purpose
-
-No real credentials or signed examples.
+Do not conflate runtime implementation commit, documentation HEAD, active runtime marker, or served frontend bundle.
 
 ---
 
-## Gate safety (accepted)
+## Authentication foundation
 
-When `CONNECTIONS_PRIVATE_VERIFY_LIVE` is unset/false:
-
-- `CONNECTION_PRIVATE_VERIFY_NOT_LIVE`
-- decrypt = 0 · signing = 0 · transport = 0 · persistence = 0
-- Connection `lastTestedAt` unchanged; `privateAuthVerified=false`
-
----
-
-## Runtime provenance RCA and final owner
-
-### Original stale marker (`a17ef46`)
-
-`health.js` captured `git rev-parse --short HEAD` once at module import. After a file-copy deploy onto a dirty tree whose HEAD was still `a17ef46`, the process kept reporting that SHA even after Git moved and WP2A sources were loaded.
-
-### Why a literal ecosystem hash is insufficient
-
-Storing `TITAN_RUNTIME_COMMIT=864f95e` inside tracked `ecosystem.config.json`:
-
-- becomes stale after the next backend implementation deploy
-- couples documentation/config Git history to a historical implementation SHA
-- is not recalculated by deployment
-
-### Final owner
-
-Preferred flow (Option A + durable generated manifest):
-
-1. Clean deployment worktree determines the backend implementation commit
-2. `scripts/deploy-backend-runtime-provenance.sh` writes **untracked** `backend/runtime-provenance.json`
-3. Same script exports `TITAN_RUNTIME_COMMIT` into the PM2 process environment and restarts **only** `titan-backend`
-4. Every cluster worker reads the same immutable value at startup
-5. Health and readiness report `commit`, `commitSource`, `provenanceVerified`, optional `deployedAt`
-
-Trusted resolution order (`backend/utils/runtimeProvenance.js`):
-
-1. `process.env.TITAN_RUNTIME_COMMIT`
-2. generated `runtime-provenance.json`
-3. otherwise `commit=unknown` / `source=unverified` (does **not** claim dirty Git HEAD is deployed)
-
-Tracked `ecosystem.config.json` must **not** contain a historical implementation hash.
+- Official MEXC private-authentication contract documented in `docs/MEXC_PRIVATE_AUTH_CONTRACT.md`
+- Read-only verification endpoint: `GET https://api.mexc.com/api/v3/account` (`SPOT_ACCOUNT_READ`)
+- Server-side HMAC-SHA256 signing implemented (lowercase signature)
+- Millisecond timestamp and `recvWindow` handling implemented (default `5000`, max &lt; `60000`)
+- Safe provider transport implemented (HTTPS allowlist, no redirects, bounded timeout/size, zero retries)
+- Normalized provider error contract implemented (`700001`–`700007`, HTTP `429`/`500`/`503`/`504`, sanitized)
+- No real credential used during WP2A
+- No real provider request made during WP2A
+- Test Connection remains absent
+- Current Connection remains **Configured · Not verified**
 
 ---
 
-## Architecture (adapter — unchanged)
+## Gate safety
 
-```
-POST /api/v1/connections/mexc/verify-private
-  → CONNECTIONS_TEST + rate limit
-  → live gate (default off)
-  → scoped decrypt → adapter → allowlisted HTTPS
-  → sanitized result + proposedTransition (persist default false)
-```
+When `CONNECTIONS_PRIVATE_VERIFY_LIVE` is absent/false:
+
+| Check | Result |
+|-------|--------|
+| Live private verification default | Disabled |
+| Decrypt call count | **0** |
+| Signing call count | **0** |
+| Provider transport call count | **0** |
+| Persistence call count | **0** |
+| Blocked result | Sanitized `CONNECTION_PRIVATE_VERIFY_NOT_LIVE` |
+| Secrets in logs / audit / responses / browser storage | None |
+
+---
+
+## Runtime provenance
+
+| Check | Result |
+|-------|--------|
+| Runtime implementation commit | `bfd7e39` |
+| Provenance assignment | Injected during deployment (`TITAN_RUNTIME_COMMIT` and/or generated `runtime-provenance.json`) |
+| Tracked `ecosystem.config.json` | Contains **no** historical implementation hash |
+| Health and readiness | Agree on `bfd7e39` |
+| Backend cluster workers | Same implementation commit |
+| Documentation-only commits | Do **not** change the runtime marker |
+| Missing trusted provenance | Reports `unknown` / `unverified` (does not claim dirty Git HEAD is deployed) |
+
+Deploy owner: `scripts/deploy-backend-runtime-provenance.sh`
+
+---
+
+## Regression (verified)
+
+| Check | Result |
+|-------|--------|
+| Browser QA | **PASS** |
+| English | **PASS** |
+| Persian | **PASS** |
+| RTL | **PASS** |
+| Secret prefill | None |
+| Test Connection | Absent |
+| Unsupported providers | Coming soon / به‌زودی |
+| Private verification request from UI | None |
+| Public Arbitrage | Continues updating |
+| Scheduler owner | `titan-engine-worker` |
+| Scheduler allowlist | `["arbitrage"]` |
+| Demo | Active |
+| Emergency Stop | Active |
+| Live | Impossible |
+| MEXC status / `lastTestedAt` | Unchanged (`lastTestedAt=2026-07-19T09:36:13.824Z`, `privateAuthVerified=false`) |
 
 ---
 
 ## Tests
 
-| Suite | Executed | Passed | Failed | Skipped | Retried | Env |
-|-------|----------|--------|--------|---------|---------|-----|
-| jest provenance + gate | 12 | 12 | 0 | 0 | 0 | jest/node |
-| jest WP2A adapter | 29 | 29 | 0 | 0 | 0 | jest/node |
-| jest WP1A service | 5 | 5 | 0 | 0 | 0 | jest/node |
-| vitest WP1A containment/R1/R2 | 20 | 20 | 0 | 0 | 0 | vitest |
-| **Total** | **66** | **66** | **0** | **0** | **0** | |
+| Metric | Value |
+|--------|--------|
+| Total executed | **66** |
+| Passed | **66** |
+| Failed | **0** |
+| Skipped | **0** |
+| Retried | **0** |
 
+Suites: jest provenance/gate, jest WP2A adapter, jest WP1A exchangeConnectionService, vitest WP1A containment/R1/R2.  
 No real provider requests.
 
 ---
 
-## Deployment / runtime verification checklist
+## Architecture (summary)
 
-| Item | Expectation |
-|------|-------------|
-| Restart | `titan-backend` only |
-| Workers | Same `commit` + `commitSource` |
-| Health ↔ readiness | Agree on commit/source |
-| Provenance source | `env:TITAN_RUNTIME_COMMIT` and/or `manifest:…` |
-| ecosystem tracked file | No literal implementation SHA |
-| MEXC Connection | Configured · Not verified; `lastTestedAt` unchanged |
-| FE bundle | `assets/index-zOmnvrQI.js` |
-| Scheduler | `titan-engine-worker` · `["arbitrage"]` |
-| Demo / Emergency Stop | Active; Live impossible |
+```
+POST /api/v1/connections/mexc/verify-private
+  → session + CONNECTIONS_TEST + rate limit
+  → live gate (default off)
+  → scoped decrypt → adapter → allowlisted HTTPS
+  → sanitized result + proposedTransition (persist default false)
+```
 
----
+Canonical files:
 
-## Remaining MEXC End-to-End / WP2B
-
-`CONNECTIONS-WP2B — Controlled Real MEXC Test Connection`
-
-- Controlled live gate enablement
-- Real persistence of verification outcomes
-- Optional Test Connection UI under capability + rate limit
-
-Do **not** begin automatically.
+- `backend/services/connections/providers/mexcPrivateAuthAdapter.js`
+- `backend/services/connections/providers/mexcSigning.js`
+- `backend/services/connections/providers/mexcSafeTransport.js`
+- `backend/services/connections/mexcErrorCatalog.js`
+- `backend/services/connections/connectionPrivateVerificationService.js`
+- `backend/utils/runtimeProvenance.js`
 
 ---
 
-## Human-QA handoff
+## Remaining MEXC program work
 
-### CONN-A1 — UI Regression
-Configured · Not verified · Test Connection absent · Manage available · EN/FA/RTL
+**Next approved outcome:** MEXC End-to-End Program Slice  
 
-### CONN-A2 — Secret and Gate Safety
-No Secret in browser/API DTO · gated route: no decrypt/signing/transport/persistence
+**Status:** NOT STARTED  
 
-### CONN-A3 — Authentication Contract
-Official MEXC contract documented · no real credential/provider request
+Includes (when separately authorized): controlled live verification, persistence of outcomes, Test Connection under capability/rate-limit, and related End-to-End program work.
 
-### CONN-A4 — Error Contract
-Official provider errors normalized and sanitized
-
-### CONN-A5 — Runtime Regression
-Deployment-injected provenance truthful · both workers agree · Scheduler/Arbitrage continue · Connection unchanged · Demo + Emergency Stop · Live impossible
+Do **not** begin automatically after this closeout.
 
 ---
 
-## Rollback
+## Rollback (reference)
 
-1. Revert provenance remediation commit(s)
-2. Remove generated `runtime-provenance.json` / clear PM2 `TITAN_RUNTIME_COMMIT` if needed
-3. Restart only `titan-backend`
-4. Confirm FE bundle unchanged
+1. Revert WP2A adapter and/or provenance commits as needed
+2. Redeploy prior backend sources
+3. Re-run `deploy-backend-runtime-provenance.sh` with the prior implementation commit
+4. Restart only `titan-backend`
+5. Confirm FE bundle and Connection status unchanged
