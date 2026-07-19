@@ -7,3 +7,5 @@ export * from './connectionCapabilityService.js';
 export * from './verificationOrchestrator.js';
 export * from './consumerGates.js';
 export * from './agentConsumerIntegration.js';
+export * from './canonicalClientOwnership.js';
+export * from './verificationSnapshotRollback.js';

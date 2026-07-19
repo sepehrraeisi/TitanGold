@@ -23,6 +23,8 @@ const CAPABILITY_META = Object.freeze({
     sideEffect: SIDE_EFFECT.NONE,
     defaultProviderSupport: PROVIDER_SUPPORT.SUPPORTED,
     safeVerification: 'public_probe',
+    credentialRequired: false,
+    humanLabel: 'Spot public market data',
   },
   [MEXC_CAPABILITY.MARKET_DATA_FUTURES_PUBLIC]: {
     group: CAPABILITY_GROUP.MARKET_DATA,
@@ -30,6 +32,8 @@ const CAPABILITY_META = Object.freeze({
     sideEffect: SIDE_EFFECT.NONE,
     defaultProviderSupport: PROVIDER_SUPPORT.SUPPORTED,
     safeVerification: 'public_probe',
+    credentialRequired: false,
+    humanLabel: 'Futures public market data',
   },
   [MEXC_CAPABILITY.PRIVATE_AUTH]: {
     group: CAPABILITY_GROUP.ACCOUNT,
@@ -62,9 +66,11 @@ const CAPABILITY_META = Object.freeze({
   [MEXC_CAPABILITY.SPOT_TRADE_TEST]: {
     group: CAPABILITY_GROUP.SPOT,
     rwClass: RW_CLASS.PRIVATE_WRITE,
-    sideEffect: SIDE_EFFECT.NONE,
+    sideEffect: SIDE_EFFECT.NON_EXECUTING_PRIVATE_VALIDATION,
     defaultProviderSupport: PROVIDER_SUPPORT.SUPPORTED,
-    safeVerification: 'not_safely_testable_until_approved',
+    safeVerification: 'deferred_private_non_executing_probe',
+    credentialRequired: true,
+    humanLabel: 'Spot Test New Order (non-executing)',
   },
   [MEXC_CAPABILITY.SPOT_TRADE_EXECUTE]: {
     group: CAPABILITY_GROUP.SPOT,
@@ -240,6 +246,8 @@ const CAPABILITY_META = Object.freeze({
     sideEffect: SIDE_EFFECT.READ_ONLY,
     defaultProviderSupport: PROVIDER_SUPPORT.UNKNOWN,
     safeVerification: 'not_safely_testable',
+    credentialRequired: true,
+    humanLabel: 'P2P read',
   },
   [MEXC_CAPABILITY.P2P_EXECUTE]: {
     group: CAPABILITY_GROUP.P2P,
@@ -247,13 +255,18 @@ const CAPABILITY_META = Object.freeze({
     sideEffect: SIDE_EFFECT.FINANCIAL_WRITE,
     defaultProviderSupport: PROVIDER_SUPPORT.UNKNOWN,
     safeVerification: 'not_safely_testable',
+    credentialRequired: true,
+    humanLabel: 'P2P execute',
   },
   [MEXC_CAPABILITY.ACCOUNT_EDIT]: {
     group: CAPABILITY_GROUP.ACCOUNT,
     rwClass: RW_CLASS.PRIVATE_WRITE,
     sideEffect: SIDE_EFFECT.ACCOUNT_MUTATION,
-    defaultProviderSupport: PROVIDER_SUPPORT.SUPPORTED,
+    defaultProviderSupport: PROVIDER_SUPPORT.UNKNOWN,
     safeVerification: 'not_safely_testable',
+    credentialRequired: true,
+    humanLabel: 'Account edit',
+    blockedReasonDefault: 'PROVIDER SUPPORT NOT VERIFIED — no verified official TitanGold endpoint/use case',
   },
 });
 
@@ -290,8 +303,12 @@ function deriveOperationalState({
   userDisabled = false,
 }) {
   if (userDisabled) return { state: OPERATIONAL_STATE.BLOCKED_BY_USER, reason: 'Disabled by user' };
+
   if (providerSupport === PROVIDER_SUPPORT.UNKNOWN) {
-    return { state: OPERATIONAL_STATE.BLOCKED_BY_PROVIDER, reason: 'PROVIDER SUPPORT NOT VERIFIED' };
+    return {
+      state: OPERATIONAL_STATE.BLOCKED_BY_PROVIDER_EVIDENCE,
+      reason: meta.blockedReasonDefault || 'PROVIDER SUPPORT NOT VERIFIED',
+    };
   }
   if (providerSupport === PROVIDER_SUPPORT.MAINTENANCE) {
     return { state: OPERATIONAL_STATE.BLOCKED_BY_PROVIDER, reason: 'Provider temporarily unavailable (maintenance)' };
@@ -302,6 +319,13 @@ function deriveOperationalState({
 
   if (meta.rwClass === RW_CLASS.PUBLIC) {
     return { state: OPERATIONAL_STATE.ENABLED, reason: null };
+  }
+
+  if (meta.safeVerification === 'deferred_private_non_executing_probe') {
+    return {
+      state: OPERATIONAL_STATE.DISABLED_PENDING_EXPLICIT_AUTHORIZATION,
+      reason: 'Deferred private non-executing probe — excluded from current read-only checkpoint',
+    };
   }
 
   if (meta.sideEffect === SIDE_EFFECT.FINANCIAL_WRITE || meta.sideEffect === SIDE_EFFECT.ACCOUNT_MUTATION) {
@@ -324,7 +348,7 @@ function deriveOperationalState({
     return { state: OPERATIONAL_STATE.BLOCKED_BY_PERMISSION, reason: 'API key permission denied' };
   }
 
-  if (verificationState === VERIFICATION_STATE.VERIFIED && keyGrant === KEY_GRANT.GRANTED) {
+  if (verificationState === VERIFICATION_STATE.VERIFIED && (keyGrant === KEY_GRANT.GRANTED || keyGrant === KEY_GRANT.NOT_APPLICABLE)) {
     return { state: OPERATIONAL_STATE.ENABLED, reason: null };
   }
 
@@ -365,15 +389,17 @@ export function buildCapabilityMatrix(opts = {}) {
 
     if (meta.safeVerification === 'not_safely_testable' || meta.safeVerification === 'not_safely_testable_until_approved') {
       verificationState = stored.verificationState || VERIFICATION_STATE.NOT_SAFELY_TESTABLE;
-      // Never infer key grant for mutating capabilities from auth alone
       if (!stored.keyGrant) keyGrant = KEY_GRANT.UNKNOWN;
     }
 
-    if (meta.rwClass === RW_CLASS.PUBLIC) {
-      keyGrant = KEY_GRANT.GRANTED;
-      if (!stored.verificationState) {
-        verificationState = VERIFICATION_STATE.NOT_TESTED;
-      }
+    if (meta.safeVerification === 'deferred_private_non_executing_probe') {
+      verificationState = stored.verificationState || VERIFICATION_STATE.DEFERRED_PRIVATE_NON_EXECUTING_PROBE;
+      if (!stored.keyGrant) keyGrant = KEY_GRANT.UNKNOWN;
+    }
+
+    if (meta.rwClass === RW_CLASS.PUBLIC || meta.credentialRequired === false) {
+      keyGrant = KEY_GRANT.NOT_APPLICABLE;
+      verificationState = stored.verificationState || VERIFICATION_STATE.AVAILABLE;
     }
 
     if (capabilityId === MEXC_CAPABILITY.PRIVATE_AUTH || capabilityId === MEXC_CAPABILITY.SPOT_ACCOUNT_READ) {
@@ -396,7 +422,10 @@ export function buildCapabilityMatrix(opts = {}) {
 
     if (!credentialsConfigured && meta.rwClass !== RW_CLASS.PUBLIC) {
       keyGrant = KEY_GRANT.UNKNOWN;
-      if (verificationState !== VERIFICATION_STATE.NOT_SAFELY_TESTABLE) {
+      if (
+        verificationState !== VERIFICATION_STATE.NOT_SAFELY_TESTABLE
+        && verificationState !== VERIFICATION_STATE.DEFERRED_PRIVATE_NON_EXECUTING_PROBE
+      ) {
         verificationState = VERIFICATION_STATE.NOT_TESTED;
       }
     }
@@ -414,6 +443,8 @@ export function buildCapabilityMatrix(opts = {}) {
 
     return {
       capabilityId,
+      humanLabel: meta.humanLabel || capabilityId.replace(/_/g, ' '),
+      credentialRequired: meta.credentialRequired !== false && meta.rwClass !== RW_CLASS.PUBLIC,
       group: meta.group,
       rwClass: meta.rwClass,
       sideEffect: meta.sideEffect,

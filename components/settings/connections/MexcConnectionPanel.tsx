@@ -52,9 +52,44 @@ function StatePill({
 
 function toneForOperational(state?: string) {
   if (state === 'enabled') return 'ok' as const;
-  if (state === 'disabled') return 'warn' as const;
+  if (state === 'disabled' || state === 'disabled_pending_explicit_authorization') return 'warn' as const;
   if (String(state || '').startsWith('blocked')) return 'bad' as const;
   return 'neutral' as const;
+}
+
+function formatDuration(iso: string | null | undefined, language: string): string {
+  if (!iso) return 'N/A';
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return 'N/A';
+  const diffMs = Math.max(0, Date.now() - then);
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (language === 'fa') {
+    if (days > 0) return `${days} روز`;
+    if (hours > 0) return `${hours} ساعت`;
+    if (minutes > 0) return `${minutes} دقیقه`;
+    return 'کمتر از یک دقیقه';
+  }
+  if (days > 0) return `${days}d`;
+  if (hours > 0) return `${hours}h`;
+  if (minutes > 0) return `${minutes}m`;
+  return '<1m';
+}
+
+function formatLocalizedDateTime(iso: string | null | undefined, language: string): string {
+  if (!iso) return 'N/A';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return 'N/A';
+  return d.toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function keyGrantLabel(keyGrant: string | undefined, t: (k: string) => string): string | null {
+  if (!keyGrant || keyGrant === 'not_applicable') return null;
+  return `${t('mexc_key_grant')}: ${keyGrant}`;
 }
 
 export default function MexcConnectionPanel({ connection, onChanged, onClose }: Props) {
@@ -66,6 +101,8 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [showTechnical, setShowTechnical] = useState(false);
 
   const dirty = Boolean(draft.apiKey.trim() || draft.apiSecret.trim());
   const canSave = Boolean(draft.apiKey.trim() && draft.apiSecret.trim()) && !saving;
@@ -102,6 +139,17 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
     }
     return map;
   }, [summary]);
+
+  const groupSummaries = useMemo(() => {
+    return GROUP_ORDER.filter((g) => grouped[g]?.length).map((group) => {
+      const caps = grouped[group];
+      const enabled = caps.filter((c) => c.operationalState === 'enabled').length;
+      const blocked = caps.filter((c) => String(c.operationalState || '').startsWith('blocked')).length;
+      const disabled = caps.length - enabled - blocked;
+      const topBlocked = caps.find((c) => c.blockedReason)?.blockedReason || null;
+      return { group, total: caps.length, enabled, blocked, disabled, topBlocked, caps };
+    });
+  }, [grouped]);
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -151,6 +199,13 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
 
   const overall = summary?.overallTruthfulState;
   const dir = language === 'fa' ? 'rtl' : 'ltr';
+  const credentialAge = formatDuration(summary?.connection?.credentialAgeHint, language);
+  const lastRotation = formatLocalizedDateTime(summary?.connection?.lastRotationAt, language);
+
+  // Primary consumers for concise view (not every wallet sub-function)
+  const primaryConsumers = (summary?.consumers || []).filter((c) =>
+    ['portfolio', 'arbitrage', 'spot_trading_read', 'futures_trading_read', 'wallet', 'risk_agents', 'market_data_agents'].includes(c.consumerId),
+  );
 
   return (
     <div
@@ -158,7 +213,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
       data-testid="mexc-connection-panel"
       dir={dir}
     >
-      {/* Provider summary */}
+      {/* Provider summary — single MEXC heading */}
       <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4 backdrop-blur-sm" aria-labelledby="mexc-summary-title">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -166,9 +221,9 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
               MEXC
             </h4>
             <p className="mt-1 text-xs text-slate-400" data-testid="mexc-overall-state">
-              {overall ? t(`mexc_state_${overall.code}`) !== `mexc_state_${overall.code}`
+              {overall ? (t(`mexc_state_${overall.code}`) !== `mexc_state_${overall.code}`
                 ? t(`mexc_state_${overall.code}`)
-                : overall.label : t('connections_configured_not_verified')}
+                : overall.label) : t('connections_configured_not_verified')}
             </p>
           </div>
           <StatePill
@@ -193,7 +248,9 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
           <div className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-500/10 via-slate-500/5 to-transparent p-3">
             <p className="mb-1 text-[11px] text-slate-300/80">{t('mexc_last_verified')}</p>
             <p className="text-sm font-semibold text-slate-100" data-testid="mexc-last-verified">
-              {summary?.connection?.lastVerifiedAt || 'N/A'}
+              {summary?.connection?.lastVerifiedAt
+                ? formatLocalizedDateTime(summary.connection.lastVerifiedAt, language)
+                : 'N/A'}
             </p>
           </div>
           <div className="rounded-xl border border-white/5 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-3">
@@ -262,9 +319,9 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
           </div>
         </div>
         <p className="mt-2 text-[11px] text-slate-500">{t('mexc_ip_restriction_guidance')}</p>
-        <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-500">
-          <span>{t('mexc_credential_age')}: {summary?.connection?.credentialAgeHint || 'N/A'}</span>
-          <span>{t('mexc_last_rotation')}: {summary?.connection?.lastRotationAt || 'N/A'}</span>
+        <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-500" data-testid="mexc-credential-meta">
+          <span data-testid="mexc-credential-age">{t('mexc_credential_age')}: {credentialAge}</span>
+          <span data-testid="mexc-last-rotation">{t('mexc_last_rotation')}: {lastRotation}</span>
         </div>
       </section>
 
@@ -286,44 +343,90 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
         </button>
       </section>
 
-      {/* Capability Matrix */}
+      {/* Capability Matrix — progressive disclosure */}
       <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-matrix-title">
-        <h4 id="mexc-matrix-title" className="text-sm font-semibold text-white">{t('mexc_capability_matrix')}</h4>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 id="mexc-matrix-title" className="text-sm font-semibold text-white">{t('mexc_capability_matrix')}</h4>
+          <button
+            type="button"
+            className="text-[11px] text-indigo-300 hover:text-indigo-200"
+            onClick={() => setShowTechnical((s) => !s)}
+            data-testid="mexc-matrix-technical-toggle"
+          >
+            {showTechnical ? t('mexc_hide_technical') : t('mexc_show_technical')}
+          </button>
+        </div>
         <p className="mt-1 text-xs text-slate-400">{t('mexc_capability_matrix_hint')}</p>
         {loading ? (
           <p className="mt-3 text-sm text-slate-400">{t('loading')}</p>
         ) : (
-          <div className="mt-3 space-y-4" data-testid="mexc-capability-matrix">
-            {GROUP_ORDER.filter((g) => grouped[g]?.length).map((group) => (
-              <div key={group}>
-                <h5 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">{group}</h5>
-                <div className="space-y-2">
-                  {grouped[group].map((cap) => (
-                    <div
-                      key={cap.capabilityId}
-                      className="rounded-lg border border-white/5 bg-slate-950/50 p-3"
-                      data-testid={`mexc-cap-${cap.capabilityId}`}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-sm text-slate-100">{cap.capabilityId}</span>
-                        <StatePill label={cap.operationalState} tone={toneForOperational(cap.operationalState)} />
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <StatePill label={`${t('mexc_provider')}: ${cap.providerSupport}`} tone="info" />
-                        <StatePill label={`${t('mexc_key_grant')}: ${cap.keyGrant}`} tone="neutral" />
-                        <StatePill label={`${t('mexc_verification_state')}: ${cap.verificationState}`} tone="neutral" />
-                      </div>
-                      {cap.blockedReason && (
-                        <p className="mt-2 text-xs text-amber-200/90">{cap.blockedReason}</p>
-                      )}
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        {t('mexc_last_checked')}: {cap.lastVerifiedAt || 'N/A'}
-                      </p>
+          <div className="mt-3 space-y-2" data-testid="mexc-capability-matrix">
+            {groupSummaries.map(({ group, total, enabled, blocked, disabled, topBlocked, caps }) => {
+              const open = Boolean(expandedGroups[group]);
+              return (
+                <div key={group} className="rounded-lg border border-white/5 bg-slate-950/40" data-testid={`mexc-cap-group-${group}`}>
+                  <button
+                    type="button"
+                    className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-start"
+                    onClick={() => setExpandedGroups((prev) => ({ ...prev, [group]: !prev[group] }))}
+                    aria-expanded={open}
+                    data-testid={`mexc-cap-group-toggle-${group}`}
+                  >
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-300">{group}</span>
+                    <span className="flex flex-wrap gap-1.5 text-[11px] text-slate-400">
+                      <StatePill label={`${total}`} tone="neutral" />
+                      <StatePill label={`${t('mexc_enabled_count')}: ${enabled}`} tone="ok" />
+                      <StatePill label={`${t('mexc_blocked_count')}: ${blocked}`} tone="bad" />
+                      <StatePill label={`${t('mexc_disabled_count')}: ${disabled}`} tone="warn" />
+                    </span>
+                  </button>
+                  {!open && topBlocked && (
+                    <p className="border-t border-white/5 px-3 py-2 text-[11px] text-amber-200/80" data-testid={`mexc-cap-group-blocked-${group}`}>
+                      {topBlocked}
+                    </p>
+                  )}
+                  {open && (
+                    <div className="space-y-2 border-t border-white/5 p-2">
+                      {caps.map((cap) => {
+                        const kg = keyGrantLabel(cap.keyGrant, t);
+                        return (
+                          <div
+                            key={cap.capabilityId}
+                            className="rounded-lg border border-white/5 bg-slate-950/50 p-3"
+                            data-testid={`mexc-cap-${cap.capabilityId}`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-sm text-slate-100">
+                                {(cap as any).humanLabel || cap.capabilityId.replace(/_/g, ' ')}
+                              </span>
+                              <StatePill label={cap.operationalState} tone={toneForOperational(cap.operationalState)} />
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              <StatePill label={`${t('mexc_provider')}: ${cap.providerSupport}`} tone="info" />
+                              {kg && <StatePill label={kg} tone="neutral" />}
+                              <StatePill label={`${t('mexc_verification_state')}: ${cap.verificationState}`} tone="neutral" />
+                            </div>
+                            {cap.blockedReason && open && (
+                              <p className="mt-2 text-xs text-amber-200/90">{cap.blockedReason}</p>
+                            )}
+                            {showTechnical && (
+                              <p className="mt-1 font-mono text-[10px] text-slate-500" data-testid={`mexc-cap-code-${cap.capabilityId}`}>
+                                {cap.capabilityId}
+                              </p>
+                            )}
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              {t('mexc_last_checked')}: {cap.lastVerifiedAt
+                                ? formatLocalizedDateTime(cap.lastVerifiedAt, language)
+                                : 'N/A'}
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -332,8 +435,8 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
       <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-consumers-title">
         <h4 id="mexc-consumers-title" className="text-sm font-semibold text-white">{t('mexc_consumers')}</h4>
         <div className="mt-3 space-y-2" data-testid="mexc-consumers">
-          {(summary?.consumers || []).map((c) => (
-            <div key={c.consumerId} className="rounded-lg border border-white/5 bg-slate-950/50 p-3">
+          {primaryConsumers.map((c) => (
+            <div key={c.consumerId} className="rounded-lg border border-white/5 bg-slate-950/50 p-3" data-testid={`mexc-consumer-${c.consumerId}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-slate-100">{c.displayName}</span>
                 <StatePill
@@ -341,9 +444,11 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                   tone={c.eligible ? 'ok' : 'bad'}
                 />
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">
-                {t('mexc_required')}: {(c.requiredCapabilities || []).join(', ')}
-              </p>
+              {showTechnical && (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {t('mexc_required')}: {(c.requiredCapabilities || []).join(', ')}
+                </p>
+              )}
               {c.blockedReason && <p className="mt-1 text-xs text-amber-200/90">{c.blockedReason}</p>}
             </div>
           ))}

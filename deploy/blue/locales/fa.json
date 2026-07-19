@@ -4689,5 +4689,11 @@
   "mexc_transfer_action": "انتقال (مسدود)",
   "mexc_manage_connection": "مدیریت اتصال MEXC",
   "mexc_spot_gates": "دروازه‌های قابلیت اسپات MEXC",
-  "mexc_futures_gates": "دروازه‌های قابلیت فیوچرز MEXC"
+  "mexc_futures_gates": "دروازه‌های قابلیت فیوچرز MEXC",
+  "mexc_show_technical": "نمایش جزئیات فنی",
+  "mexc_hide_technical": "پنهان‌سازی جزئیات فنی",
+  "mexc_enabled_count": "فعال",
+  "mexc_blocked_count": "مسدود",
+  "mexc_disabled_count": "غیرفعال",
+  "mexc_not_registered": "ثبت‌نشده — غیرواجد شرایط"
 }

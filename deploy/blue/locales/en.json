@@ -4873,5 +4873,11 @@
   "mexc_transfer_action": "Transfer (blocked)",
   "mexc_manage_connection": "Manage MEXC Connection",
   "mexc_spot_gates": "MEXC Spot capability gates",
-  "mexc_futures_gates": "MEXC Futures capability gates"
+  "mexc_futures_gates": "MEXC Futures capability gates",
+  "mexc_show_technical": "Show technical details",
+  "mexc_hide_technical": "Hide technical details",
+  "mexc_enabled_count": "Enabled",
+  "mexc_blocked_count": "Blocked",
+  "mexc_disabled_count": "Disabled",
+  "mexc_not_registered": "NOT REGISTERED — NOT ELIGIBLE"
 }

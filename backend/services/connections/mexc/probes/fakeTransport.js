@@ -47,7 +47,29 @@ export function createFakeMexcTransport(scenario = 'success') {
       return { ok: true, status: 200, json: path.includes('time') ? { serverTime: Date.now() } : {}, latencyMs: 5 };
     }
     if (path.includes('/api/v3/exchangeInfo')) {
-      return { ok: true, status: 200, json: { symbols: [{ symbol: 'BTCUSDT', status: 'ENABLED' }] }, latencyMs: 8 };
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          symbols: [
+            {
+              symbol: 'BTCUSDT',
+              status: 'ENABLED',
+              isSpotTradingAllowed: true,
+              isApiTradingAllowed: true,
+              permissions: ['SPOT'],
+            },
+            {
+              symbol: 'ETHUSDT',
+              status: 'ENABLED',
+              isSpotTradingAllowed: true,
+              isApiTradingAllowed: true,
+              permissions: ['SPOT'],
+            },
+          ],
+        },
+        latencyMs: 8,
+      };
     }
     if (path.includes('/api/v1/contract/ping') || path.includes('/api/v1/contract/detail')) {
       return { ok: true, status: 200, json: { success: true, code: 0, data: [] }, latencyMs: 8 };

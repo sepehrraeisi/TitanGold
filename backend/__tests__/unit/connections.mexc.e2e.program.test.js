@@ -121,7 +121,7 @@ describe('MEXC-E2E Consumers and Agents', () => {
     const matrix = buildCapabilityMatrix({ credentialsConfigured: true, privateAuthVerified: false });
     const consumers = evaluateAllConsumers(matrix);
     expect(consumers.find((c) => c.consumerId === 'wallet').eligible).toBe(false);
-    expect(consumers.find((c) => c.consumerId === 'spot_trading').eligible).toBe(false);
+    expect(consumers.find((c) => c.consumerId === 'spot_trading_read').eligible).toBe(false);
   });
 
   test('agent integration never allows credential read or parallel client', () => {
@@ -138,8 +138,8 @@ describe('MEXC-E2E Consumers and Agents', () => {
   test('consumer registry covers required modules', () => {
     const ids = MEXC_CONSUMERS.map((c) => c.id);
     expect(ids).toEqual(expect.arrayContaining([
-      'portfolio', 'arbitrage', 'market_data_agents', 'spot_trading',
-      'futures_trading', 'wallet', 'risk_agents',
+      'portfolio', 'arbitrage', 'market_data_agents', 'spot_trading_read',
+      'futures_trading_read', 'wallet', 'risk_agents',
     ]));
   });
 });

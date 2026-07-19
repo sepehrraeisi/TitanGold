@@ -3,6 +3,7 @@
  * Fake transports by default; real private probes gated.
  * Never returns raw provider bodies to the browser.
  * Never persists balances or private payloads as Connection metadata.
+ * Spot signing ≠ Futures signing.
  */
 
 import crypto from 'crypto';
@@ -24,6 +25,11 @@ import {
   MEXC_DEFAULT_RECV_WINDOW,
 } from '../providers/mexcSigning.js';
 import {
+  buildMexcFuturesAuthHeaders,
+  buildMexcFuturesRequestParamString,
+  MEXC_FUTURES_HOST,
+} from '../providers/mexcFuturesSigning.js';
+import {
   KEY_GRANT,
   VERIFICATION_STATE,
 } from './capabilityIds.js';
@@ -32,7 +38,14 @@ import {
   PROBE_RISK,
   FORBIDDEN_PROBES,
   listProbesByRisk,
+  getCheckpointReadOnlyProbes,
+  buildSpotProbeQueryParams,
+  MEMORY_ONLY_PROBE_FIELDS,
 } from './probes/probeCatalog.js';
+import {
+  selectSafeSpotProbeSymbol,
+  buildSafeSymbolPersistMeta,
+} from './probes/safeSymbolSelection.js';
 import {
   mapProviderCodeToHealthCategory,
   describeHealthCategory,
@@ -60,6 +73,14 @@ function assertNotForbidden(probe) {
   }
 }
 
+function isSpotPrivateAuth(auth) {
+  return auth === 'HMAC-SHA256' || auth === 'spot_v3_hmac';
+}
+
+function isFuturesPrivateAuth(auth) {
+  return auth === 'futures_signature' || auth === 'futures_contract_signature';
+}
+
 function sanitizeProbeResult(probe, outcome) {
   return {
     probeId: probe.id,
@@ -73,6 +94,10 @@ function sanitizeProbeResult(probe, outcome) {
     healthCategory: outcome.healthCategory || null,
     correctiveAction: outcome.correctiveAction || null,
     testedAt: outcome.testedAt,
+    countCategory: outcome.countCategory || null,
+    probeSafeSymbol: outcome.probeSafeSymbol || null,
+    // Explicit: never attach memory-only private payloads
+    memoryOnlyExcluded: MEMORY_ONLY_PROBE_FIELDS,
   };
 }
 
@@ -115,12 +140,13 @@ async function runPublicProbe(probe, { transport }) {
     return {
       success,
       verificationState: success ? VERIFICATION_STATE.VERIFIED : VERIFICATION_STATE.FAILED,
-      keyGrant: KEY_GRANT.GRANTED,
+      keyGrant: KEY_GRANT.NOT_APPLICABLE,
       latencyMs: res?.latencyMs ?? Date.now() - started,
       code: success ? null : 'PUBLIC_PROBE_FAILED',
       sanitizedReason: success ? null : 'Public market probe failed',
       healthCategory: success ? null : 'network',
       testedAt,
+      exchangeInfoJson: success && probe.id === 'spot_exchange_info' ? (res?.json || null) : null,
     };
   }
 
@@ -131,20 +157,89 @@ async function runPublicProbe(probe, { transport }) {
     timeoutMs: probe.timeoutMs,
     maxBytes: probe.maxResponseBytes,
   });
+  let exchangeInfoJson = null;
+  if (res.ok && probe.id === 'spot_exchange_info') {
+    try {
+      exchangeInfoJson = JSON.parse(res.bodyText || '{}');
+    } catch {
+      exchangeInfoJson = null;
+    }
+  }
   return {
     success: Boolean(res.ok),
     verificationState: res.ok ? VERIFICATION_STATE.VERIFIED : VERIFICATION_STATE.FAILED,
-    keyGrant: KEY_GRANT.GRANTED,
+    keyGrant: KEY_GRANT.NOT_APPLICABLE,
     latencyMs: res.latencyMs ?? Date.now() - started,
     code: res.ok ? null : 'PUBLIC_PROBE_FAILED',
     sanitizedReason: res.ok ? null : 'Public market probe failed',
     healthCategory: res.ok ? null : 'network',
     testedAt,
+    exchangeInfoJson,
   };
 }
 
-async function runPrivateReadProbe(probe, { apiKey, apiSecret, transport, now }) {
+function categorizeCount(arrOrObj) {
+  if (Array.isArray(arrOrObj)) return arrOrObj.length === 0 ? 'zero' : 'nonzero';
+  if (arrOrObj && Array.isArray(arrOrObj.data)) {
+    return arrOrObj.data.length === 0 ? 'zero' : 'nonzero';
+  }
+  return null;
+}
+
+async function runFuturesPrivateProbe(probe, { apiKey, apiSecret, transport, now }) {
   const testedAt = new Date().toISOString();
+  const reqTime = Math.trunc((now || (() => Date.now()))());
+  const requestParam = buildMexcFuturesRequestParamString(probe.fixedParams || {});
+  const { headers } = buildMexcFuturesAuthHeaders({
+    accessKey: apiKey,
+    secretKey: apiSecret,
+    reqTime,
+    requestParam,
+  });
+
+  if (!transport) {
+    return {
+      success: false,
+      verificationState: VERIFICATION_STATE.NOT_TESTED,
+      keyGrant: KEY_GRANT.UNKNOWN,
+      latencyMs: null,
+      code: 'FUTURES_PROBE_PENDING_AUTHORIZATION',
+      sanitizedReason: 'Futures private probe requires controlled read-only authorization',
+      healthCategory: 'runtime_blocked',
+      testedAt,
+    };
+  }
+
+  const res = await transport({
+    method: probe.method,
+    host: probe.host || MEXC_FUTURES_HOST,
+    path: probe.path,
+    query: probe.fixedParams || {},
+    headers,
+  });
+  const success = Boolean(res?.ok ?? (res?.status >= 200 && res?.status < 300));
+  const providerCode = res?.json?.code;
+  return {
+    success,
+    verificationState: success ? VERIFICATION_STATE.VERIFIED : VERIFICATION_STATE.FAILED,
+    keyGrant: success
+      ? KEY_GRANT.GRANTED
+      : (providerCode === 700007 || providerCode === 10002 ? KEY_GRANT.DENIED : KEY_GRANT.UNKNOWN),
+    latencyMs: res?.latencyMs ?? null,
+    code: success ? null : String(providerCode || 'PRIVATE_PROBE_FAILED'),
+    sanitizedReason: success ? null : 'Futures private read probe failed',
+    healthCategory: success ? null : mapProviderCodeToHealthCategory(providerCode),
+    testedAt,
+    countCategory: success ? categorizeCount(res?.json) : null,
+  };
+}
+
+async function runPrivateReadProbe(probe, { apiKey, apiSecret, transport, now, safeSymbol }) {
+  const testedAt = new Date().toISOString();
+
+  if (isFuturesPrivateAuth(probe.auth) || String(probe.host).includes('contract.mexc.com')) {
+    return runFuturesPrivateProbe(probe, { apiKey, apiSecret, transport, now });
+  }
 
   if (probe.path === '/api/v3/account') {
     const wp2aTransport = adaptCatalogTransportToWp2a(transport);
@@ -179,26 +274,25 @@ async function runPrivateReadProbe(probe, { apiKey, apiSecret, transport, now })
     };
   }
 
-  // Futures private live signing deferred to checkpoint (architecture ready; not executed)
-  if (String(probe.host).includes('contract.mexc.com') && !transport) {
+  if (probe.symbolSource === 'selected_safe_public_symbol' && !safeSymbol) {
     return {
       success: false,
-      verificationState: VERIFICATION_STATE.NOT_TESTED,
+      verificationState: VERIFICATION_STATE.FAILED,
       keyGrant: KEY_GRANT.UNKNOWN,
       latencyMs: null,
-      code: 'FUTURES_PROBE_PENDING_AUTHORIZATION',
-      sanitizedReason: 'Futures private probe requires controlled read-only authorization',
-      healthCategory: 'runtime_blocked',
+      code: 'SAFE_SYMBOL_UNAVAILABLE',
+      sanitizedReason: 'No allowlisted active API-enabled public Spot symbol selected',
+      healthCategory: 'validation',
       testedAt,
     };
   }
 
   const timestamp = Math.trunc((now || (() => Date.now()))());
-  const params = {
-    ...(probe.query || {}),
+  const params = buildSpotProbeQueryParams(probe, {
     timestamp,
     recvWindow: MEXC_DEFAULT_RECV_WINDOW,
-  };
+    safeSymbol,
+  });
   const total = buildMexcCanonicalQuery(params);
   const signature = signMexcTotalParams(apiSecret, total);
   const signedQuery = `${total}&signature=${signature}`;
@@ -224,9 +318,12 @@ async function runPrivateReadProbe(probe, { apiKey, apiSecret, transport, now })
       sanitizedReason: success ? null : 'Private read probe failed',
       healthCategory: success ? null : mapProviderCodeToHealthCategory(providerCode),
       testedAt,
+      countCategory: success ? categorizeCount(res?.json) : null,
+      probeSafeSymbol: safeSymbol || null,
     };
   }
 
+  // Live path — still gated by allowProviderCall / env; no call until authorized
   const url = buildE2EHttpsUrl(probe.host, probe.path, signedQuery);
   const res = await mexcE2ESafeFetch({
     url,
@@ -245,7 +342,7 @@ async function runPrivateReadProbe(probe, { apiKey, apiSecret, transport, now })
     json = null;
   }
   const providerCode = json?.code;
-  const success = Boolean(res.ok) && (providerCode == null || providerCode === 0 || json?.balances != null || Array.isArray(json));
+  const success = Boolean(res.ok) && (providerCode == null || providerCode === 0 || Array.isArray(json));
   return {
     success,
     verificationState: success ? VERIFICATION_STATE.VERIFIED : VERIFICATION_STATE.FAILED,
@@ -257,6 +354,8 @@ async function runPrivateReadProbe(probe, { apiKey, apiSecret, transport, now })
     sanitizedReason: success ? null : 'Private read probe failed',
     healthCategory: success ? null : mapProviderCodeToHealthCategory(providerCode),
     testedAt,
+    countCategory: success ? categorizeCount(json) : null,
+    probeSafeSymbol: safeSymbol || null,
   };
 }
 
@@ -266,6 +365,7 @@ async function persistSafeCapabilityResults({
   correlationId,
   results,
   persist,
+  safeSymbolMeta = null,
 }) {
   if (!persist || !connectionId) return { persisted: false, rows: 0 };
 
@@ -321,6 +421,24 @@ async function persistSafeCapabilityResults({
     rows += 1;
   }
 
+  // Persist only selected public safe symbol as Connection probe metadata (not private payloads)
+  if (safeSymbolMeta?.probeSafeSymbol) {
+    await query(
+      `UPDATE exchange_connections
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [
+        connectionId,
+        JSON.stringify({
+          mexcProbeSafeSymbol: safeSymbolMeta.probeSafeSymbol,
+          mexcProbeSafeSymbolSource: safeSymbolMeta.probeSafeSymbolSource,
+          mexcProbeSafeSymbolStatus: safeSymbolMeta.probeSafeSymbolStatus,
+        }),
+      ],
+    ).catch(() => {});
+  }
+
   return { persisted: true, rows };
 }
 
@@ -358,6 +476,9 @@ export async function runMexcVerificationOrchestrator(opts = {}) {
     probes = MEXC_PROBE_CATALOG.filter((p) => probeIds.includes(p.id));
   }
 
+  // SPOT_TRADE_TEST / Test New Order never in checkpoint
+  probes = probes.filter((p) => p.path !== '/api/v3/order/test' && p.id !== 'spot_trade_test');
+
   for (const probe of probes) assertNotForbidden(probe);
 
   const privateProbes = probes.filter((p) => p.risk >= PROBE_RISK.PRIVATE_READ);
@@ -385,6 +506,7 @@ export async function runMexcVerificationOrchestrator(opts = {}) {
         transportCount: 0,
         persisted: false,
         realSideEffectsPossible: false,
+        realProviderRequestOccurred: false,
       },
     };
   }
@@ -393,23 +515,53 @@ export async function runMexcVerificationOrchestrator(opts = {}) {
   let decryptCount = 0;
   let signCount = 0;
   let transportCount = 0;
+  let safeSymbol = null;
+  let safeSymbolMeta = null;
+  let exchangeInfoMemory = null;
 
   for (const probe of probes.filter((p) => p.risk === PROBE_RISK.PUBLIC)) {
     try {
       const outcome = await runPublicProbe(probe, { transport });
       transportCount += 1;
-      results.push(sanitizeProbeResult(probe, outcome));
+      if (probe.id === 'spot_exchange_info' && outcome.exchangeInfoJson) {
+        exchangeInfoMemory = outcome.exchangeInfoJson;
+        const selection = selectSafeSpotProbeSymbol(exchangeInfoMemory);
+        safeSymbolMeta = buildSafeSymbolPersistMeta(selection);
+        safeSymbol = selection.symbol;
+      }
+      const sanitized = sanitizeProbeResult(probe, {
+        ...outcome,
+        probeSafeSymbol: probe.id === 'spot_exchange_info' ? safeSymbol : null,
+      });
+      results.push(sanitized);
     } catch (err) {
       logger.warn('Public probe failed', { probeId: probe.id, message: err.message, correlationId: corr });
       results.push(sanitizeProbeResult(probe, {
         success: false,
         verificationState: VERIFICATION_STATE.FAILED,
-        keyGrant: KEY_GRANT.GRANTED,
+        keyGrant: KEY_GRANT.NOT_APPLICABLE,
         code: 'PUBLIC_PROBE_ERROR',
         sanitizedReason: 'Public market probe error',
         healthCategory: 'network',
         testedAt: new Date().toISOString(),
       }));
+    }
+  }
+
+  // If symbol-dependent private probes are requested without exchangeInfo in this run,
+  // require prior metadata or fail closed (never guess / never use balances).
+  const needSymbol = probes.some((p) => p.symbolSource === 'selected_safe_public_symbol');
+  if (needSymbol && !safeSymbol) {
+    const metaSym = connection?.metadata?.mexcProbeSafeSymbol
+      || (typeof connection?.metadata === 'string'
+        ? (() => { try { return JSON.parse(connection.metadata).mexcProbeSafeSymbol; } catch { return null; } })()
+        : null);
+    if (metaSym) {
+      safeSymbol = metaSym;
+      safeSymbolMeta = buildSafeSymbolPersistMeta({
+        symbol: metaSym,
+        reason: 'reused_persisted_public_probe_symbol',
+      });
     }
   }
 
@@ -430,7 +582,7 @@ export async function runMexcVerificationOrchestrator(opts = {}) {
         const countingTransport = transport
           ? async (req) => {
             transportCount += 1;
-            if (probe.auth === 'HMAC-SHA256' || probe.auth === 'futures_signature') {
+            if (isSpotPrivateAuth(probe.auth) || isFuturesPrivateAuth(probe.auth)) {
               signCount += 1;
             }
             return transport(req);
@@ -447,11 +599,15 @@ export async function runMexcVerificationOrchestrator(opts = {}) {
           apiSecret,
           transport: countingTransport,
           now,
+          safeSymbol,
         });
         results.push(sanitizeProbeResult(probe, outcome));
       }
     });
   }
+
+  // Drop memory-only exchangeInfo reference
+  exchangeInfoMemory = null;
 
   const persistResult = await persistSafeCapabilityResults({
     connectionId: connection?.id || null,
@@ -459,6 +615,7 @@ export async function runMexcVerificationOrchestrator(opts = {}) {
     correlationId: corr,
     results,
     persist: Boolean(persist && connection?.id),
+    safeSymbolMeta,
   });
 
   await writeConnectionAudit({
@@ -475,6 +632,7 @@ export async function runMexcVerificationOrchestrator(opts = {}) {
         code: r.code,
       })),
       persisted: persistResult.persisted,
+      probeSafeSymbol: safeSymbolMeta?.probeSafeSymbol || null,
     },
     ipAddress,
     userAgent,
@@ -492,14 +650,17 @@ export async function runMexcVerificationOrchestrator(opts = {}) {
       transportCount,
       persisted: persistResult.persisted,
       realSideEffectsPossible: false,
+      realProviderRequestOccurred: Boolean(live && !transport && transportCount > 0),
       excluded: FORBIDDEN_PROBES.map((f) => f.reason),
+      probeSafeSymbol: safeSymbolMeta?.probeSafeSymbol || null,
       note: 'No balances or raw provider payloads are returned or persisted',
+      memoryOnlyFields: MEMORY_ONLY_PROBE_FIELDS,
     },
   };
 }
 
 export function getCheckpointProposal(connectionDto) {
-  const privateProbes = MEXC_PROBE_CATALOG.filter((p) => p.requiresLiveGate);
+  const privateProbes = getCheckpointReadOnlyProbes();
   return {
     connection: {
       connectionId: connectionDto?.id || null,
@@ -509,43 +670,68 @@ export function getCheckpointProposal(connectionDto) {
       maskedKeyIdentifier: connectionDto?.maskedKeyIdentifier || null,
     },
     credentialSource: 'canonical encrypted server store (exchange_connections)',
-    proposedReadOnlyEndpoints: privateProbes.map((p, idx) => ({
-      order: idx + 1,
+    proposedReadOnlyEndpoints: privateProbes.map((p) => ({
+      order: p.checkpointOrder,
       probeId: p.id,
       capabilityId: p.capabilityId,
       method: p.method,
       host: p.host,
       path: p.path,
+      auth: p.auth,
+      headers: p.headers || null,
+      requiredParams: p.requiredParams || [],
+      fixedParams: p.fixedParams || null,
+      symbolSource: p.symbolSource || null,
       expectedPermission: p.officialPermission,
+      purpose: p.purpose,
       timeoutMs: p.timeoutMs,
       maxResponseBytes: p.maxResponseBytes,
-      query: p.query || null,
       persistFields: p.persistFields,
+      memoryOnlyFields: p.memoryOnlyFields,
     })),
+    safeSymbolSelection: {
+      source: 'public GET /api/v3/exchangeInfo',
+      allowlist: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT'],
+      persist: 'selected public symbol only',
+      neverFrom: ['private balances', 'guess'],
+    },
     excludedUntilSeparateApproval: [
-      'POST /api/v3/order/test (Spot Test New Order)',
+      'POST /api/v3/order/test (Spot Test New Order) — SPOT_TRADE_TEST deferred',
       'POST /api/v3/order',
+      'DELETE /api/v3/order',
+      'POST /api/v3/capital/deposit/address',
       'POST /api/v3/capital/withdraw',
       'POST /api/v3/capital/transfer',
+      'POST dust / internal transfer',
       'POST /api/v1/private/order/submit',
+      'Position setting changes',
+      'Account edits',
+      'P2P actions',
     ],
     statusTransitionOnSuccess: {
       PRIVATE_AUTH: 'authenticated / keyGrant=granted / verificationState=verified',
       otherPrivateReads: 'per-capability verified without granting unrelated write capabilities',
+      publicMarket: 'keyGrant=not_applicable / verification available or verified',
     },
     rollbackResetPlan: [
+      'Capture pre-probe snapshot via capturePreProbeSnapshot before any real probe',
+      'On failure: rollbackToCapabilitySnapshot restores prior capability-state transactionally',
+      'Mark verification run status=rolled_back or superseded',
+      'Append sanitized rollback evidence to mexc_capability_verifications (append-only)',
+      'NEVER DELETE verification-history rows',
+      'NEVER DELETE the Connection',
+      'NEVER alter encrypted credentials',
       'Set CONNECTIONS_CAPABILITY_VERIFY_LIVE=false and CONNECTIONS_PRIVATE_VERIFY_LIVE=false',
-      'DELETE FROM mexc_capability_verifications WHERE correlation_id = <id>',
-      'UPDATE mexc_connection_capability_state SET verification_state=not_tested, key_grant=unknown WHERE connection_id=<id>',
-      'No credential plaintext is ever written; rotation remains via Connections UI',
     ],
     proofNoFinancialMutation: {
       orchestratorForbiddenPaths: FORBIDDEN_PROBES,
       maxProbeRisk: 'PRIVATE_READ',
       testNewOrderIncluded: false,
+      spotTradeTestInCheckpoint: false,
       withdrawalIncluded: false,
       transferExecuteIncluded: false,
       futuresOrderIncluded: false,
+      checkpointProbeCount: privateProbes.length,
     },
     userNeedNotPasteSecret: true,
   };
