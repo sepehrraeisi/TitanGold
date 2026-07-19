@@ -309,3 +309,47 @@ Verdict target: `READY FOR CONTROLLED READ-ONLY AUTHORIZATION`
 Do not execute real private MEXC calls until explicit user approval.
 Do not ask the user to paste credentials into chat.
 
+
+## Engineering checkpoint status (pre real-provider)
+
+| Item | Value |
+|------|--------|
+| Program branch | `feat/mexc-end-to-end` |
+| `origin/main` HEAD | `5ff9008` |
+| Runtime implementation marker | `e436df4` |
+| Frontend bundle | `assets/index-CQAeHBq6.js` |
+| Environment | Staging `https://titan.zala.ir` |
+| Migration | `049_mexc_capability_states.sql` applied |
+| Live private verify gates | `CONNECTIONS_PRIVATE_VERIFY_LIVE` / `CONNECTIONS_CAPABILITY_VERIFY_LIVE` default **off** |
+| Test Connection UI | Disabled until authorization |
+| Real private MEXC calls | **None** |
+| Verdict | `READY FOR CONTROLLED READ-ONLY AUTHORIZATION` |
+
+### Proposed controlled read-only order
+
+1. `GET /api/v3/account` (`SPOT_ACCOUNT_READ`)
+2. `GET /api/v3/openOrders?symbol=BTCUSDT` (`SPOT_DEAL_READ`)
+3. `GET /api/v3/myTrades?symbol=BTCUSDT&limit=1` (`SPOT_ACCOUNT_READ`)
+4. `GET /api/v3/capital/config/getall` (`SPOT_WITHDRAW_READ`)
+5. `GET /api/v3/capital/deposit/hisrec?limit=1`
+6. `GET /api/v3/capital/withdraw/history?limit=1`
+7. `GET /api/v3/capital/transfer` (history read)
+8. `GET /api/v1/private/account/assets` (Futures)
+9. `GET /api/v1/private/position/open_positions` (Futures)
+
+Timeouts: 8000ms. Persistence: sanitized capability state only (no balances/raw bodies).
+Test New Order / withdrawals / transfers / orders: **excluded**.
+
+### Automated tests (executed)
+
+| Suite | Passed |
+|-------|--------|
+| `connections.mexc.e2e.program.test.js` | 17 |
+| WP2A private auth | included in 58 total |
+| WP2A provenance gate | included in 58 total |
+| **Total** | **58 passed / 0 failed** |
+
+### Browser QA (passive / fake states)
+
+Core Connections panel, matrix, consumers, disabled Test Connection, empty credentials, no secret leak, mobile/tablet/landscape, Spot/Futures gate panels, console: **PASS**.
+Persian/RTL switch and Wallet tab deep-nav: **NEEDS HUMAN-QA** (automation flaky on Settings sub-nav overlays).
