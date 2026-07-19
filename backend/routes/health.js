@@ -1,27 +1,23 @@
 import express from 'express';
 import { query } from '../database/db.js';
 import { getRedisInfo, isRedisAvailable } from '../utils/redis.js';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { logger } from '../services/logger.js';
 import { validateResponse } from '../middleware/validation.js';
 import { healthResponseSchema, readinessResponseSchema } from '../schemas/commonSchemas.js';
+import { getRuntimeProvenance } from '../utils/runtimeProvenance.js';
 // BACKEND-015: Import agent health check functions
 import {
   getAllAgentHealthStatus,
   getHealthSummary
 } from '../services/agents/registry.js';
 
-const execAsync = promisify(exec);
 const router = express.Router();
 
-// Get git commit hash
-let gitCommit = 'unknown';
-try {
-  const { stdout } = await execAsync('git rev-parse --short HEAD');
-  gitCommit = stdout.trim();
-} catch (error) {
-  logger.warn('Could not get git commit:', error.message);
+// Canonical provenance: prefer deploy-time TITAN_RUNTIME_COMMIT / GIT_COMMIT, else git repo root.
+const runtimeProvenance = getRuntimeProvenance();
+const gitCommit = runtimeProvenance.commit;
+if (gitCommit === 'unknown') {
+  logger.warn('Runtime provenance unavailable', { source: runtimeProvenance.source });
 }
 
 /**
@@ -36,6 +32,7 @@ router.get('/', validateResponse(healthResponseSchema), async (req, res) => {
       timestamp: new Date().toISOString(),
       version: process.env.npm_package_version || '1.0.0',
       commit: gitCommit,
+      commitSource: runtimeProvenance.source,
       uptime: process.uptime(),
       memory: {
         used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
@@ -189,6 +186,7 @@ router.get('/status', async (req, res) => {
       timestamp: new Date().toISOString(),
       version: process.env.npm_package_version || '1.0.0',
       commit: gitCommit,
+      commitSource: runtimeProvenance.source,
       uptime: Math.round(process.uptime()),
       memory: process.memoryUsage(),
       cpu: process.cpuUsage(),

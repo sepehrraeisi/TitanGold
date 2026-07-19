@@ -9,6 +9,7 @@ export const healthResponseSchema = z.object({
     timestamp: z.string().datetime(),
     version: z.string(),
     commit: z.string(),
+    commitSource: z.string().optional(),
     uptime: z.number(),
     memory: z.object({
         used: z.number(),
@@ -17,7 +18,7 @@ export const healthResponseSchema = z.object({
     }),
     node: z.string(),
     env: z.string(),
-});
+}).passthrough();
 
 /**
  * Readiness check response schema
