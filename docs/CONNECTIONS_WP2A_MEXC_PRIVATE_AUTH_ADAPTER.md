@@ -30,7 +30,7 @@
 | WP1A-R2 | `2a7ad99` |
 | WP1A docs | `efcf986` |
 | Served frontend bundle (unchanged) | `assets/index-zOmnvrQI.js` |
-| Implementation HEAD | recorded after push (this documentation closeout) |
+| Implementation HEAD | `8d320d8` (`8d320d85fb9cb94ef00f8455b0905dceb4a41eb4`) |
 | Runtime backend health marker | dirty original tree still reports `a17ef46` in `/api/v1/health` while WP2A sources are deployed into `/home/ubuntu/webapp/TitanGold/backend` |
 
 ---
