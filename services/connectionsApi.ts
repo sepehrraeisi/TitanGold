@@ -219,3 +219,97 @@ export async function removeLegacyInsecureCredentialKeys(): Promise<string[]> {
 
   return removed;
 }
+
+export interface MexcCapabilityRow {
+  capabilityId: string;
+  group: string;
+  providerSupport: string;
+  keyGrant: string;
+  verificationState: string;
+  operationalState: string;
+  blockedReason?: string | null;
+  lastVerifiedAt?: string | null;
+  lastFailureCode?: string | null;
+  sanitizedReason?: string | null;
+}
+
+export interface MexcConsumerRow {
+  consumerId: string;
+  displayName: string;
+  owningModule?: string;
+  requiredCapabilities: string[];
+  optionalCapabilities?: string[];
+  eligible: boolean;
+  blockedReason?: string | null;
+  publicPrivate?: string;
+  rwClass?: string;
+  sideEffectClass?: string;
+  fallbackBehavior?: string;
+}
+
+export interface MexcCapabilitySummary {
+  provider: string;
+  connection: {
+    connectionId?: string | null;
+    authState?: string;
+    configured?: boolean;
+    maskedKeyIdentifier?: string | null;
+    lastVerifiedAt?: string | null;
+    lastSanitizedFailure?: { code?: string; sanitizedReason?: string | null } | null;
+    credentialAgeHint?: string | null;
+    lastRotationAt?: string | null;
+  };
+  publicMarket?: {
+    spot?: { available?: boolean };
+    futures?: { available?: boolean };
+  };
+  privateAuthentication?: {
+    state?: string;
+    verified?: boolean;
+    isConnected?: boolean;
+  };
+  capabilityMatrix?: {
+    capabilities: MexcCapabilityRow[];
+  };
+  consumers?: MexcConsumerRow[];
+  usedByModules?: string[];
+  overallTruthfulState?: {
+    code: string;
+    label: string;
+    detail?: string | null;
+  };
+  runtime?: {
+    realSideEffectsAllowed?: boolean;
+    liveImpossible?: boolean;
+  };
+  verification?: {
+    testConnectionAvailable?: boolean;
+    reason?: string;
+  };
+}
+
+export async function fetchMexcCapabilitySummary(): Promise<MexcCapabilitySummary> {
+  const response = await authenticatedFetch('/v1/connections/mexc/capabilities', { method: 'GET' });
+  const body = await parseJson(response);
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent('titan_auth_expired'));
+  }
+  if (!response.ok) {
+    const mapped = mapConnectionApiError(response.status, body);
+    throw Object.assign(new Error(mapped.messageKey), { code: mapped.code });
+  }
+  return body as MexcCapabilitySummary;
+}
+
+export async function fetchMexcConsumers(): Promise<{ consumers: MexcConsumerRow[] }> {
+  const response = await authenticatedFetch('/v1/connections/mexc/consumers', { method: 'GET' });
+  const body = await parseJson(response);
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent('titan_auth_expired'));
+  }
+  if (!response.ok) {
+    const mapped = mapConnectionApiError(response.status, body);
+    throw Object.assign(new Error(mapped.messageKey), { code: mapped.code });
+  }
+  return body;
+}
