@@ -4787,5 +4787,6 @@
   "connections_coming_soon": "Coming soon",
   "connections_configure_mexc": "Configure",
   "connections_manage_mexc": "Manage",
-  "connections_provider_unavailable_hint": "Credential setup for this exchange is not available yet."
+  "connections_provider_unavailable_hint": "Credential setup for this exchange is not available yet.",
+  "connections_private_verification_unavailable": "Private credential verification is not available yet."
 }

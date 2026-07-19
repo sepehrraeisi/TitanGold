@@ -3,7 +3,6 @@ import { useLanguage } from '../../context/LanguageContext.tsx';
 import {
   fetchExchangeConnections,
   saveMexcConnection,
-  testMexcConnectionCanonical,
   deleteMexcConnection,
   detectLegacyInsecureCredentialKeys,
   removeLegacyInsecureCredentialKeys,
@@ -36,7 +35,6 @@ export default function MultiExchangeSettings() {
   const [expandedExchange, setExpandedExchange] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, DraftSecrets>>({});
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
-  const [testingExchange, setTestingExchange] = useState<string | null>(null);
   const [savingExchange, setSavingExchange] = useState<string | null>(null);
   const [messages, setMessages] = useState<Record<string, { type: 'success' | 'error' | 'info'; text: string }>>({});
   const [legacyKeys, setLegacyKeys] = useState<string[]>([]);
@@ -122,27 +120,6 @@ export default function MultiExchangeSettings() {
       }));
     } finally {
       setSavingExchange(null);
-      clearDraft(exchangeName);
-    }
-  };
-
-  const handleTestConnection = async (exchangeName: string) => {
-    if (!isConfigurableProvider(exchangeName)) return;
-    try {
-      setTestingExchange(exchangeName);
-      const result = await testMexcConnectionCanonical();
-      setMessages((prev) => ({
-        ...prev,
-        [exchangeName]: { type: 'info', text: t(result.messageKey || 'connections_untested') },
-      }));
-      await loadConnections();
-    } catch (error: any) {
-      setMessages((prev) => ({
-        ...prev,
-        [exchangeName]: { type: 'error', text: t(error?.message || 'connections_internal_error') },
-      }));
-    } finally {
-      setTestingExchange(null);
       clearDraft(exchangeName);
     }
   };
@@ -336,6 +313,14 @@ export default function MultiExchangeSettings() {
                     </div>
                   </div>
 
+                  <p
+                    className="text-sm text-gray-400"
+                    role="status"
+                    data-testid="connections-private-verification-unavailable"
+                  >
+                    {t('connections_private_verification_unavailable')}
+                  </p>
+
                   {messages[exchange] && (
                     <p
                       className={`text-sm ${
@@ -345,6 +330,7 @@ export default function MultiExchangeSettings() {
                             ? 'text-green-400'
                             : 'text-blue-300'
                       }`}
+                      data-testid={`connection-message-${exchange}`}
                     >
                       {messages[exchange].text}
                     </p>
@@ -355,17 +341,10 @@ export default function MultiExchangeSettings() {
                       type="button"
                       disabled={savingExchange === exchange}
                       onClick={() => handleSaveConnection(exchange)}
+                      data-testid={`connection-save-${exchange}`}
                       className="px-3 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
                     >
                       {t('save_changes')}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={testingExchange === exchange || !connection.configured}
-                      onClick={() => handleTestConnection(exchange)}
-                      className="px-3 py-2 rounded border border-gray-600 text-gray-200 text-sm disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
-                    >
-                      {t('test_connection')}
                     </button>
                     <button
                       type="button"
@@ -373,6 +352,7 @@ export default function MultiExchangeSettings() {
                         clearDraft(exchange);
                         setExpandedExchange(null);
                       }}
+                      data-testid={`connection-cancel-${exchange}`}
                       className="px-3 py-2 rounded border border-gray-700 text-gray-300 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
                     >
                       {t('cancel')}
@@ -381,6 +361,7 @@ export default function MultiExchangeSettings() {
                       <button
                         type="button"
                         onClick={() => handleDeleteConnection(exchange)}
+                        data-testid={`connection-delete-${exchange}`}
                         className="px-3 py-2 rounded border border-red-800 text-red-300 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
                       >
                         {t('delete')}

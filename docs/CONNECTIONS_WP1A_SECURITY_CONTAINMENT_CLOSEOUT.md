@@ -351,14 +351,114 @@ Zero-row → **Not configured** + **Configure** is proven by deterministic tests
 
 ---
 
+## WP1A-R2 — Remove Misleading Wallet UI and Test Connection
+
+### Human-QA defect
+
+1. Wallet Connections (MetaMask / WalletConnect / Cold Wallet) on Settings → Connections is not required.
+2. Active **Test Connection** implies private authentication is available, but only returns deferred untested messaging.
+
+### Wallet UI removal
+
+- `ConnectionsSettings` now renders only `MultiExchangeSettings`.
+- Wallet heading/cards removed from Connections.
+- Classification:
+  - Connections wallet block: **active only in Connections** → removed
+  - `WalletSettings` + `components/settings/wallet/*`: **shared / Settings → Wallet tab** → preserved
+  - API wallet helpers in `services/api.ts`: still used by Wallet tab / WalletManagement → preserved
+
+### Test Connection containment
+
+- Preferred approach: **active Test Connection button removed** from Manage panel.
+- UI no longer imports or calls `testMexcConnectionCanonical`.
+- Static localized status: `connections_private_verification_unavailable`
+  - EN: Private credential verification is not available yet.
+  - FA: تأیید اعتبارنامه خصوصی هنوز در دسترس نیست.
+- Backend deferred `/v1/connections/exchanges/MEXC/test` may remain for compatibility but is not presented as working private auth.
+
+### Manage workflow preserved
+
+- Status: Configured · Not verified
+- Manage opens with empty API Key / Secret drafts
+- Save / Cancel / Delete remain
+- Cancel and collapse clear transient drafts
+- No Connected / Authenticated claim
+
+### Tests (R2 + regression)
+
+| Suite | Executed | Passed | Failed | Skipped | Env |
+|-------|----------|--------|--------|---------|-----|
+| vitest R2 + R1 + containment | 20 | 20 | 0 | 0 | vitest |
+| jest `exchangeConnectionService.wp1a` | 5 | 5 | 0 | 0 | jest/node |
+
+### Deployment / Browser QA / served bundle
+
+| Item | Value |
+|------|--------|
+| Environment | Staging (`https://titan.zala.ir`) |
+| Build source | `/tmp/titangold-conn-wp1a-r2` |
+| Backend restart | **not required** (frontend-only) |
+| Served frontend bundle | `assets/index-zOmnvrQI.js` |
+| Health / Ready | ok |
+| Demo / Emergency Stop | `effectiveMode=demo`, `killSwitchActive=true` |
+| Worker acknowledgement | true |
+| Scheduler | `titan-engine-worker` · allowlist `["arbitrage"]` · running |
+| Protected files | untouched |
+
+#### Browser QA evidence (no credentials entered)
+
+| Check | Result |
+|-------|--------|
+| Exchange Connections present | VERIFIED |
+| Wallet Connections / MetaMask / WalletConnect / Cold Wallet absent | VERIFIED |
+| MEXC Configured · Not verified + Manage | VERIFIED |
+| Active Test Connection absent | VERIFIED |
+| Private verification unavailable copy EN/FA | VERIFIED |
+| Save / Cancel / Delete remain | VERIFIED |
+| Cancel clears transient drafts | VERIFIED |
+| Coming soon unsupported providers | VERIFIED |
+| Network DTO without secrets | VERIFIED |
+| No `/MEXC/test` UI fetch | VERIFIED |
+| Settings i18n Configuration / Clear Cache EN+FA | VERIFIED |
+| Arbitrage lastScan modern updating | VERIFIED |
+| Demo + Emergency Stop | VERIFIED |
+
+### R2 Human-QA handoff
+
+#### CONN-R1 — Truthful MEXC Status
+- Configured · Not verified remains; no Connected / Authenticated
+
+#### CONN-R2 — Product Copy
+- Private verification limitation clear; no internal WP names; EN/FA
+
+#### CONN-R3 — Settings i18n
+- Sidebar translations remain; no raw keys
+
+#### CONN-R4 — Unsupported Providers
+- Coming soon; no active setup
+
+#### CONN-R5 — MEXC Action
+- Manage works; Test Connection unavailable/uninvokable; no misleading toast; Save/Cancel/Delete remain
+
+#### CONN-R6 — Security and Scope
+- Wallet Connections removed from Connections; secret containment intact; Arbitrage public + Demo + Emergency Stop active
+
+### R2 Final engineering verdict (pre–Human QA)
+
+**NEEDS MORE VERIFICATION**
+
+### Remaining WP2 work
+
+Private MEXC authentication / real Test Connection contract remains deferred until WP1A Human QA PASS and CLOSED AND FROZEN.
+
+---
+
 ## Rollback
 
-1. Revert WP1A / WP1A-R1 commit(s) on `main`
+1. Revert WP1A / WP1A-R1 / WP1A-R2 commit(s) on `main`
 2. Redeploy prior frontend bundle + backend routes/services as needed
 3. Confirm served bundle marker
 
 ## Next
 
-Private MEXC authentication / Test Connection contract remains **deferred** until WP1A Human QA PASS and CLOSED AND FROZEN.
-
-Do **not** begin that work automatically after this remediation handoff.
+Do **not** begin private MEXC authentication or a full Connections redesign automatically after this remediation handoff.

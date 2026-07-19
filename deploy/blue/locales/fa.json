@@ -4645,5 +4645,6 @@
   "connections_coming_soon": "به‌زودی",
   "connections_configure_mexc": "پیکربندی",
   "connections_manage_mexc": "مدیریت",
-  "connections_provider_unavailable_hint": "راه‌اندازی اعتبارنامه برای این صرافی هنوز در دسترس نیست."
+  "connections_provider_unavailable_hint": "راه‌اندازی اعتبارنامه برای این صرافی هنوز در دسترس نیست.",
+  "connections_private_verification_unavailable": "تأیید اعتبارنامه خصوصی هنوز در دسترس نیست."
 }
