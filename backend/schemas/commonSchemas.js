@@ -10,6 +10,8 @@ export const healthResponseSchema = z.object({
     version: z.string(),
     commit: z.string(),
     commitSource: z.string().optional(),
+    provenanceVerified: z.boolean().optional(),
+    deployedAt: z.string().nullable().optional(),
     uptime: z.number(),
     memory: z.object({
         used: z.number(),
@@ -27,6 +29,10 @@ export const readinessResponseSchema = z.object({
     status: z.enum(['ok', 'degraded', 'error']),
     timestamp: z.string().datetime(),
     latencyMs: z.number().optional(),
+    commit: z.string().optional(),
+    commitSource: z.string().optional(),
+    provenanceVerified: z.boolean().optional(),
+    deployedAt: z.string().nullable().optional(),
     checks: z.record(z.object({
         status: z.enum(['ok', 'warning', 'degraded', 'error']),
         message: z.string(),

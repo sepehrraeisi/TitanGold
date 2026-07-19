@@ -13,11 +13,11 @@ import {
 
 const router = express.Router();
 
-// Canonical provenance: prefer deploy-time TITAN_RUNTIME_COMMIT / GIT_COMMIT, else git repo root.
+// Canonical provenance: deploy-injected TITAN_RUNTIME_COMMIT or generated runtime-provenance.json.
 const runtimeProvenance = getRuntimeProvenance();
 const gitCommit = runtimeProvenance.commit;
-if (gitCommit === 'unknown') {
-  logger.warn('Runtime provenance unavailable', { source: runtimeProvenance.source });
+if (gitCommit === 'unknown' || runtimeProvenance.verified === false) {
+  logger.warn('Runtime provenance unverified', { source: runtimeProvenance.source });
 }
 
 /**
@@ -33,6 +33,8 @@ router.get('/', validateResponse(healthResponseSchema), async (req, res) => {
       version: process.env.npm_package_version || '1.0.0',
       commit: gitCommit,
       commitSource: runtimeProvenance.source,
+      provenanceVerified: runtimeProvenance.verified === true,
+      deployedAt: runtimeProvenance.deployedAt || null,
       uptime: process.uptime(),
       memory: {
         used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
@@ -171,6 +173,10 @@ router.get('/ready', validateResponse(readinessResponseSchema), async (req, res)
 
   checks.status = allReady ? 'ok' : 'degraded';
   checks.latencyMs = Date.now() - started;
+  checks.commit = gitCommit;
+  checks.commitSource = runtimeProvenance.source;
+  checks.provenanceVerified = runtimeProvenance.verified === true;
+  checks.deployedAt = runtimeProvenance.deployedAt || null;
 
   res.status(allReady ? 200 : 503).json(checks);
 });
@@ -187,6 +193,8 @@ router.get('/status', async (req, res) => {
       version: process.env.npm_package_version || '1.0.0',
       commit: gitCommit,
       commitSource: runtimeProvenance.source,
+      provenanceVerified: runtimeProvenance.verified === true,
+      deployedAt: runtimeProvenance.deployedAt || null,
       uptime: Math.round(process.uptime()),
       memory: process.memoryUsage(),
       cpu: process.cpuUsage(),

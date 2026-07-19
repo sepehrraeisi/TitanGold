@@ -10,8 +10,7 @@
         "NODE_ENV": "production",
         "PORT": 5002,
         "DISABLE_ENGINES": "true",
-        "TELEGRAM_PUBLISHER_FORCE_DRY_RUN": "false",
-        "TITAN_RUNTIME_COMMIT": "864f95e"
+        "TELEGRAM_PUBLISHER_FORCE_DRY_RUN": "false"
       },
       "env_file": "/home/ubuntu/webapp/TitanGold/backend/.env",
       "error_file": "/home/ubuntu/.pm2/logs/titan-backend-error.log",

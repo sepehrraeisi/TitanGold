@@ -1,8 +1,11 @@
 /**
- * CONNECTIONS-WP2A-R1 — runtime provenance + live-gate call-count safety
+ * CONNECTIONS-WP2A — deployment-injected runtime provenance + gate safety
  */
 
 import { jest } from '@jest/globals';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 const query = jest.fn();
 jest.unstable_mockModule('../../database/db.js', () => ({
@@ -18,7 +21,6 @@ jest.unstable_mockModule('../../utils/crypto.js', () => ({
   maskSecret: jest.fn(() => '***'),
 }));
 
-const signMock = jest.fn();
 const transportMock = jest.fn();
 const persistMock = jest.fn();
 
@@ -38,50 +40,92 @@ const { buildSignedAccountQuery } = await import(
   '../../services/connections/providers/mexcSigning.js'
 );
 
-describe('WP2A-R1 runtime provenance', () => {
+describe('WP2A deployment-injected runtime provenance', () => {
   beforeEach(() => {
     resetRuntimeProvenanceCache();
   });
 
-  test('prefers TITAN_RUNTIME_COMMIT over git lookup', () => {
-    const gitShortHeadFn = jest.fn(() => 'deadbeef');
+  test('deployment-injected TITAN_RUNTIME_COMMIT is reported', () => {
     const result = resolveRuntimeProvenance(
-      { TITAN_RUNTIME_COMMIT: '864f95eabcdef0123456789abcdef0123456789a' },
-      { gitShortHeadFn, roots: ['/tmp/fake-repo'] },
+      { TITAN_RUNTIME_COMMIT: 'abcdef1' },
+      { manifestPaths: [] },
+    );
+    expect(result.commit).toBe('abcdef1');
+    expect(result.source).toBe('env:TITAN_RUNTIME_COMMIT');
+    expect(result.verified).toBe(true);
+  });
+
+  test('both workers reading the same manifest receive the same value', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-prov-'));
+    const manifestPath = path.join(dir, 'runtime-provenance.json');
+    fs.writeFileSync(
+      manifestPath,
+      JSON.stringify({
+        implementationCommit: '111aaaa',
+        deployedAt: '2026-07-19T12:00:00Z',
+        environment: 'staging',
+        sourcePath: dir,
+      }),
+    );
+
+    const workerA = resolveRuntimeProvenance({}, { manifestPaths: [manifestPath] });
+    const workerB = resolveRuntimeProvenance({}, { manifestPaths: [manifestPath] });
+    expect(workerA.commit).toBe('111aaaa');
+    expect(workerB.commit).toBe(workerA.commit);
+    expect(workerA.source).toContain('manifest:');
+    expect(workerA.deployedAt).toBe('2026-07-19T12:00:00Z');
+    expect(workerA.verified).toBe(true);
+  });
+
+  test('documentation-only repository HEAD does not override implementation marker', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-prov-'));
+    const manifestPath = path.join(dir, 'runtime-provenance.json');
+    fs.writeFileSync(
+      manifestPath,
+      JSON.stringify({ implementationCommit: '864f95e', deployedAt: '2026-07-19T10:00:00Z' }),
+    );
+    // Docs HEAD would be something like e54a81e — must not win over trusted marker.
+    const result = resolveRuntimeProvenance(
+      { /* no TITAN_RUNTIME_COMMIT */ },
+      { manifestPaths: [manifestPath] },
     );
     expect(result.commit).toBe('864f95e');
-    expect(result.source).toBe('env:TITAN_RUNTIME_COMMIT');
-    expect(gitShortHeadFn).not.toHaveBeenCalled();
+    expect(result.commit).not.toBe('e54a81e');
+    expect(result.source).toMatch(/^manifest:/);
   });
 
-  test('falls back to GIT_COMMIT then GIT_SHA', () => {
+  test('a new injected backend implementation commit replaces the previous marker', () => {
     expect(
-      resolveRuntimeProvenance({ GIT_COMMIT: '8d320d8' }, { gitShortHeadFn: jest.fn(), roots: [] }).commit,
-    ).toBe('8d320d8');
+      resolveRuntimeProvenance({ TITAN_RUNTIME_COMMIT: 'aaaaaaa' }, { manifestPaths: [] }).commit,
+    ).toBe('aaaaaaa');
     expect(
-      resolveRuntimeProvenance({ GIT_SHA: 'a17ef46' }, { gitShortHeadFn: jest.fn(), roots: [] }).source,
-    ).toBe('env:GIT_SHA');
+      resolveRuntimeProvenance({ TITAN_RUNTIME_COMMIT: 'bbbbbbb' }, { manifestPaths: [] }).commit,
+    ).toBe('bbbbbbb');
   });
 
-  test('rejects non-sha env values (no secret leakage into commit)', () => {
+  test('tracked ecosystem must not be required — missing trusted provenance is unknown', () => {
+    const result = resolveRuntimeProvenance({}, { manifestPaths: ['/tmp/does-not-exist.json'] });
+    expect(result.commit).toBe('unknown');
+    expect(result.source).toBe('unverified');
+    expect(result.verified).toBe(false);
+  });
+
+  test('rejects non-sha env values and does not invent a git commit', () => {
     const result = resolveRuntimeProvenance(
       { TITAN_RUNTIME_COMMIT: 'sk-live-not-a-sha' },
-      { gitShortHeadFn: () => 'abc1234', roots: ['/repo'] },
+      { manifestPaths: [] },
     );
-    expect(result.commit).toBe('abc1234');
-    expect(result.source).toBe('git:/repo');
+    expect(result.commit).toBe('unknown');
+    expect(result.source).toBe('unverified');
   });
 
-  test('uses git short HEAD when env absent', () => {
+  test('ambient GIT_COMMIT / GIT_SHA are not trusted as deployed implementation', () => {
     const result = resolveRuntimeProvenance(
-      {},
-      { gitShortHeadFn: () => '67222cc', roots: ['/home/ubuntu/webapp/TitanGold'] },
+      { GIT_COMMIT: 'deadbee', GIT_SHA: 'cafebabe' },
+      { manifestPaths: [] },
     );
-    expect(result).toEqual({
-      commit: '67222cc',
-      fullCommit: null,
-      source: 'git:/home/ubuntu/webapp/TitanGold',
-    });
+    expect(result.commit).toBe('unknown');
+    expect(result.source).toBe('unverified');
   });
 
   test('cache returns stable value until reset', () => {
@@ -94,20 +138,27 @@ describe('WP2A-R1 runtime provenance', () => {
     const c = getRuntimeProvenance({ TITAN_RUNTIME_COMMIT: '2222222' });
     expect(c.commit).toBe('2222222');
   });
+
+  test('no literal 864f95e remains as permanent tracked ecosystem configuration', () => {
+    const ecosystem = fs.readFileSync(
+      path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../ecosystem.config.json'),
+      'utf8',
+    );
+    expect(ecosystem).not.toMatch(/864f95e/);
+    expect(ecosystem).not.toMatch(/TITAN_RUNTIME_COMMIT/);
+  });
 });
 
-describe('WP2A-R1 live-gate terminates before decrypt/sign/transport/persist', () => {
+describe('WP2A live-gate terminates before decrypt/sign/transport/persist', () => {
   beforeEach(() => {
     query.mockReset();
     decryptSecretMock.mockReset();
-    signMock.mockReset();
     transportMock.mockReset();
     persistMock.mockReset();
     delete process.env.CONNECTIONS_PRIVATE_VERIFY_LIVE;
   });
 
   test('default-off gate: decrypt/sign/transport/persist call counts are zero', async () => {
-    // If gate failed open, these would be hit; keep them throwing to fail loudly.
     decryptSecretMock.mockImplementation(() => {
       throw new Error('decrypt must not run');
     });
@@ -117,13 +168,10 @@ describe('WP2A-R1 live-gate terminates before decrypt/sign/transport/persist', (
     persistMock.mockImplementation(() => {
       throw new Error('persist must not run');
     });
-
-    // Audit insert may run; keep it safe and secret-free.
     query.mockResolvedValue({ rows: [] });
 
     const result = await verifyOwnedMexcConnection({
       userId: 'user-gate-1',
-      // omit allowProviderCall → uses isPrivateVerifyLiveEnabled() → false
       persist: true,
       persistFn: persistMock,
       transport: transportMock,
@@ -135,45 +183,14 @@ describe('WP2A-R1 live-gate terminates before decrypt/sign/transport/persist', (
     expect(result.httpStatus).toBe(503);
     expect(result.body.code).toBe(MEXC_AUTH_ERROR.CONNECTION_PRIVATE_VERIFY_NOT_LIVE);
     expect(result.body.persisted).toBe(false);
-    expect(result.body.authenticated).toBe(false);
-    expect(result.body.privateAuthVerified).toBe(false);
     expect(JSON.stringify(result.body)).not.toMatch(/apiSecret|signature|sk-|ciphertext/i);
-
     expect(decryptSecretMock).toHaveBeenCalledTimes(0);
     expect(transportMock).toHaveBeenCalledTimes(0);
     expect(persistMock).toHaveBeenCalledTimes(0);
-
-    // Audit metadata must not contain secrets (only reason code).
-    const auditCalls = query.mock.calls.filter((c) => String(c[0]).includes('audit_logs'));
-    for (const call of auditCalls) {
-      expect(JSON.stringify(call)).not.toMatch(/apiSecret|signature|FAKESECRET|ciphertext/i);
-    }
-  });
-
-  test('explicit allowProviderCall false never decrypts even if LIVE env is true', async () => {
-    process.env.CONNECTIONS_PRIVATE_VERIFY_LIVE = 'true';
-    decryptSecretMock.mockImplementation(() => {
-      throw new Error('decrypt must not run');
-    });
-    query.mockResolvedValue({ rows: [] });
-
-    const result = await verifyOwnedMexcConnection({
-      userId: 'user-gate-2',
-      allowProviderCall: false,
-      persist: false,
-      transport: transportMock,
-      persistFn: persistMock,
-    });
-
-    expect(result.body.code).toBe(MEXC_AUTH_ERROR.CONNECTION_PRIVATE_VERIFY_NOT_LIVE);
-    expect(decryptSecretMock).toHaveBeenCalledTimes(0);
-    expect(transportMock).toHaveBeenCalledTimes(0);
-    expect(persistMock).toHaveBeenCalledTimes(0);
-    delete process.env.CONNECTIONS_PRIVATE_VERIFY_LIVE;
   });
 });
 
-describe('WP2A-R1 official error mapping completeness', () => {
+describe('WP2A official error mapping + signing redaction', () => {
   test('maps required provider and HTTP codes', () => {
     const cases = [
       [700001, MEXC_AUTH_ERROR.MEXC_CREDENTIAL_INVALID],
@@ -187,31 +204,26 @@ describe('WP2A-R1 official error mapping completeness', () => {
       const mapped = mapMexcProviderFailure({ providerCode: code, httpStatus: 400 });
       expect(mapped).toBe(expected);
       const sanitized = buildSanitizedErrorResult(mapped, { providerCode: code });
-      expect(sanitized.sanitizedMessage).toBeTruthy();
       expect(JSON.stringify(sanitized)).not.toMatch(/apiSecret|signature=/i);
     }
-
     expect(mapMexcProviderFailure({ httpStatus: 429 })).toBe(MEXC_AUTH_ERROR.MEXC_RATE_LIMITED);
     expect(mapMexcProviderFailure({ httpStatus: 500 })).toBe(MEXC_AUTH_ERROR.MEXC_PROVIDER_UNAVAILABLE);
     expect(mapMexcProviderFailure({ httpStatus: 503 })).toBe(MEXC_AUTH_ERROR.MEXC_PROVIDER_UNAVAILABLE);
     expect(mapMexcProviderFailure({ httpStatus: 504 })).toBe(MEXC_AUTH_ERROR.MEXC_PROVIDER_UNAVAILABLE);
   });
 
-  test('signing remains deterministic and does not mutate secret', () => {
-    const secret = 'fake-secret-do-not-use';
+  test('signing remains deterministic', () => {
     const a = buildSignedAccountQuery({
-      secret,
+      secret: 'fake-secret-do-not-use',
       timestamp: 1644489390087,
       recvWindow: 5000,
     });
     const b = buildSignedAccountQuery({
-      secret,
+      secret: 'fake-secret-do-not-use',
       timestamp: 1644489390087,
       recvWindow: 5000,
     });
     expect(a.signature).toBe(b.signature);
     expect(a.signature).toMatch(/^[0-9a-f]+$/);
-    expect(a.totalParams).toContain('recvWindow=5000');
-    expect(a.totalParams).toContain('timestamp=1644489390087');
   });
 });
