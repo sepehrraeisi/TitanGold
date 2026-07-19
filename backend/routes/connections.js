@@ -21,12 +21,14 @@ import {
   ConnectionServiceError,
   CANONICAL_PROVIDER,
 } from '../services/exchangeConnectionService.js';
+import { verifyOwnedMexcConnection } from '../services/connections/connectionPrivateVerificationService.js';
 import exchangesRouter from './exchanges.js';
 
 const router = express.Router();
 
 const mutationLimiter = rateLimit({ limit: 20, windowMs: 60_000 });
 const testLimiter = rateLimit({ limit: 10, windowMs: 60_000 });
+const privateVerifyLimiter = rateLimit({ limit: 5, windowMs: 60_000 });
 
 function mapAuthFailure(res, err) {
   // Do not expose raw middleware payloads as provider failures.
@@ -114,7 +116,7 @@ router.post(
   testLimiter,
   async (req, res) => {
     try {
-      // WP1A: ignore body secrets for private auth; do not call provider private APIs.
+      // WP1A deferred probe (no private provider call). Kept for compatibility.
       const result = await recordUntestedConnectionProbe({
         userId: req.user.id,
         provider: CANONICAL_PROVIDER,
@@ -123,6 +125,41 @@ router.post(
       return res.status(200).json(result);
     } catch (error) {
       return handleServiceError(res, error, 'Failed to test MEXC connection');
+    }
+  },
+);
+
+/**
+ * CONNECTIONS-WP2A — private authentication verify.
+ * Live provider call gated by CONNECTIONS_PRIVATE_VERIFY_LIVE (default off).
+ * Persistence disabled (persist=false). No client credentials or base URL accepted.
+ */
+router.post(
+  '/mexc/verify-private',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_TEST),
+  privateVerifyLimiter,
+  async (req, res) => {
+    try {
+      if (req.body && (req.body.apiKey || req.body.apiSecret || req.body.secret || req.body.baseUrl)) {
+        return connectionError(
+          res,
+          400,
+          CONNECTION_ERROR.CONNECTION_VALIDATION_FAILED,
+          'Credential or provider URL fields are not accepted on this route',
+        );
+      }
+
+      const result = await verifyOwnedMexcConnection({
+        userId: req.user.id,
+        provider: CANONICAL_PROVIDER,
+        persist: false,
+        correlationId: req.get?.('x-correlation-id') || null,
+        ...requestMeta(req),
+      });
+      return res.status(result.httpStatus).json(result.body);
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to verify MEXC connection privately');
     }
   },
 );

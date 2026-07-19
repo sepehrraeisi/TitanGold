@@ -5,7 +5,7 @@
  */
 
 import { query } from '../database/db.js';
-import { encryptSecret, isEncrypted, maskSecret } from '../utils/crypto.js';
+import { encryptSecret, decryptSecret, isEncrypted, maskSecret } from '../utils/crypto.js';
 import { logger } from './logger.js';
 import { CONNECTION_ERROR, CREDENTIAL_STATUS } from './connectionErrors.js';
 
@@ -224,6 +224,67 @@ export async function getConnectionForUser(userId, provider) {
     return toSafeConnectionDto(null, { providerFallback: name });
   }
   return toSafeConnectionDto(result.rows[0]);
+}
+
+/**
+ * CONNECTIONS-WP2A — load encrypted MEXC material for in-process verification only.
+ * Caller must clear returned plaintext after use. Never expose via HTTP.
+ */
+export async function loadEncryptedMexcRowForVerification(userId) {
+  const result = await query(
+    `SELECT id, user_id, exchange, api_key, api_secret, is_active, is_testnet, metadata
+     FROM exchange_connections
+     WHERE user_id = $1 AND exchange = $2
+     LIMIT 1`,
+    [userId, CANONICAL_PROVIDER],
+  );
+  if (result.rows.length === 0) return null;
+  return result.rows[0];
+}
+
+/**
+ * Decrypt MEXC credentials inside a scoped callback; plaintext is cleared afterward.
+ * @template T
+ * @param {object} row
+ * @param {(creds: { apiKey: string, apiSecret: string }) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+export async function withDecryptedMexcCredentials(row, fn) {
+  if (!row || !isEncrypted(row.api_key) || !isEncrypted(row.api_secret)) {
+    throw new ConnectionServiceError(
+      CONNECTION_ERROR.CONNECTION_SECRET_REENTRY_REQUIRED,
+      'Stored credentials require secure re-entry before verification',
+      409,
+    );
+  }
+
+  let apiKey;
+  let apiSecret;
+  try {
+    apiKey = decryptSecret(row.api_key);
+    apiSecret = decryptSecret(row.api_secret);
+  } catch {
+    throw new ConnectionServiceError(
+      'CONNECTION_DECRYPTION_FAILED',
+      'Stored credentials could not be unlocked securely',
+      500,
+    );
+  }
+
+  const creds = { apiKey, apiSecret };
+  try {
+    return await fn(creds);
+  } finally {
+    // Best-effort release of plaintext references
+    try {
+      creds.apiKey = '';
+      creds.apiSecret = '';
+      apiKey = '';
+      apiSecret = '';
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /**
