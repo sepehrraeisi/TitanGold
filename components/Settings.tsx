@@ -71,7 +71,7 @@ const Settings: React.FC<SettingsProps> = ({ initialTab, initialSubtab, onNaviga
       ? [
           {
             id: 'configuration' as SettingsTab,
-            label: t('settings_configuration') || 'Configuration',
+            label: t('settings_configuration'),
             icon: (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -192,7 +192,7 @@ const Settings: React.FC<SettingsProps> = ({ initialTab, initialSubtab, onNaviga
     },
     {
       id: 'cache',
-      label: t('clear_cache') || 'Clear Cache',
+      label: t('clear_cache'),
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"

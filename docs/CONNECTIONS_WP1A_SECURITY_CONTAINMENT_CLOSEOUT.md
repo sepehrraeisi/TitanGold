@@ -11,11 +11,11 @@
 
 | Item | Value |
 |------|--------|
-| Human QA | **PENDING** — CONN-S1 … CONN-S6 |
+| Human QA | **PENDING** — CONN-R1 … CONN-R6 (WP1A-R1 remediation) |
 | Engineering verdict | **NEEDS MORE VERIFICATION** |
-| CONNECTIONS-WP1A | Implemented + Staging deploy + Browser QA evidence; awaiting Human QA |
+| CONNECTIONS-WP1A | Security containment shipped; R1 truthfulness remediation deployed; awaiting Human QA |
 | Full Connections program | **NOT CLOSED** |
-| Next slice | `CONNECTIONS-WP2 — MEXC Private Authentication and Test Connection Contract` |
+| Next slice after Human QA PASS | MEXC private authentication (not started) |
 
 ---
 
@@ -223,14 +223,142 @@ Scoped commits on feature branch → push `main`. Isolated worktree clean after 
 
 ---
 
+## WP1A-R1 — Truthful Status and UI Containment
+
+### Interruption and resume preflight
+
+- Prior run blocked by execution-environment outage (`/bin/sh ENOENT` / missing worktree).
+- Resume: previous `/tmp/titangold-conn-wp1a-r1` was **prunable/missing**; no partial commits.
+- Fresh isolated worktree recreated from `origin/main` @ `b5d8927`.
+- Branch: `feat/connections-wp1a-r1-truth`
+- `origin/main` had **not** advanced beyond `b5d8927` at resume.
+- Original `/home/ubuntu/webapp/TitanGold` left dirty only for protected scripts (not reset/stashed).
+
+### Configured-state RCA (accepted)
+
+Admin Staging account has **one** canonical encrypted MEXC row in `exchange_connections`:
+
+- encrypted API key/secret present
+- `is_active = false`
+- API `configured = true`
+- `credentialStatus` pending / unverified
+
+Therefore the truthful UI status is **Configured · Not verified** with action **Manage**.
+
+Non-sources that must **not** create configured status (covered by unit tests):
+
+- server ENV credentials
+- public market reachability
+- legacy browser `titan_mexc_settings` presence
+- stale frontend inference
+
+Zero-row → **Not configured** + **Configure** is proven by deterministic tests (`connectionDisplayStatus`), without mutating Staging data.
+
+### Product copy cleanup
+
+- Removed visible internal Work-Package / slice names from Connections description.
+- Professional EN/FA copy explains public analytics vs private verified account access.
+
+### Settings i18n repair
+
+- Added canonical `settings_configuration` and `clear_cache` to blue/green EN/FA locale owners.
+- Settings sidebar no longer falls back to raw keys for those entries.
+
+### Unsupported providers
+
+- Binance / Bybit / KuCoin / Gate.io → **Coming soon**
+- No `+`, no credential panel, no mutation affordance.
+
+### MEXC action
+
+- Configured row → accessible **Manage** (`aria-label` includes MEXC)
+- No-row fixture → **Configure**
+- Does not claim Connected / Authenticated; does not repopulate secrets from storage.
+
+### Tests (R1 + WP1A regression)
+
+| Suite | Executed | Passed | Failed | Skipped | Retried | Env |
+|-------|----------|--------|--------|---------|---------|-----|
+| vitest `connections.wp1a.r1.truthfulness` + `connections.wp1a.containment` | 15 | 15 | 0 | 0 | 0 | node/vitest (worktree) |
+| jest `exchangeConnectionService.wp1a` | 5 | 5 | 0 | 0 | 0 | node + experimental-vm-modules |
+
+### Deployment (R1)
+
+| Item | Value |
+|------|--------|
+| Environment | Staging (`https://titan.zala.ir`) |
+| Build source | isolated worktree `/tmp/titangold-conn-wp1a-r1` |
+| Backend restart | **not required** (frontend-only R1) |
+| Worker / Scheduler restart | **not performed** |
+| Served frontend bundle | `assets/index-Dd3lHHeS.js` |
+| Health / Ready | `/api/health` + `/api/ready` → ok |
+| Demo / Emergency Stop | `effectiveMode=demo`, `killSwitchActive=true` |
+| Worker acknowledgement | `workerAcknowledged=true` |
+| Scheduler owner | `titan-engine-worker` |
+| Scheduler allowlist | `["arbitrage"]` |
+| Live | impossible under Demo + Kill Switch |
+| Protected files | untouched (`scripts/backup-db.sh`, backup-healthcheck, telegram-notify) |
+
+### Browser QA (Staging, no real credentials, no Test Connection)
+
+| Check | Result |
+|-------|--------|
+| MEXC status | **Configured · Not verified** VERIFIED |
+| MEXC action | **Manage** / `aria-label="Manage MEXC"` (FA: مدیریت MEXC) VERIFIED |
+| Connected / Authenticated claim | absent VERIFIED |
+| Credential fields on Manage | empty placeholders only; no secret repopulation VERIFIED |
+| Product copy | no `CONNECTIONS-WP*`; professional public-vs-private EN/FA VERIFIED |
+| Settings i18n | Configuration / Clear Cache (EN) and پیکربندی / پاک‌سازی کش (FA) VERIFIED; no raw keys |
+| Unsupported exchanges | Coming soon / به‌زودی; `role="status"`; no active `+` VERIFIED |
+| Network DTO | `apiKey`/`apiSecret` empty; no ciphertext; `isConnected=false` VERIFIED |
+| Browser storage | no new provider Secret writes; legacy key may remain until explicit cleanup; values not shown VERIFIED |
+| Arbitrage Scheduler | lastScan modern + updating; allowlist `[arbitrage]` VERIFIED |
+| Demo + Emergency Stop | active VERIFIED |
+| Dark theme | active VERIFIED |
+| Horizontal overflow | none observed (desktop) VERIFIED |
+| Tablet / mobile layout | Connections content readable; no horizontal overflow probe failure VERIFIED |
+| Global `dir=rtl` / IRANSans on Settings | **NOT VERIFIED as document-level** (FA labels verified; app shell RTL is page-local elsewhere) |
+| Keyboard focus-visible ring | code present (`focus-visible:outline-*`); harness Tab focus name VERIFIED; visual ring evidence partial |
+
+### Human-QA handoff (R1)
+
+#### CONN-R1 — Truthful MEXC Status
+- Current canonical row → Configured · Not verified + Manage
+- No Connected / Authenticated claim
+- Tests prove no-row → Not configured; ENV/public/legacy cannot create configured
+
+#### CONN-R2 — Product Copy
+- No internal WP names in product UI copy
+- Public vs private access explained (EN/FA)
+
+#### CONN-R3 — Settings i18n
+- No raw `settings_configuration` / `clear_cache`
+- EN/FA translated
+
+#### CONN-R4 — Unsupported Providers
+- Coming soon; no setup action; no credential form
+
+#### CONN-R5 — MEXC Action
+- Manage accessible; no-row uses Configure; no auth success claimed
+
+#### CONN-R6 — Security Regression
+- WP1A secret containment intact; no real credential / Test Connection in Browser QA
+- Public Arbitrage + Demo + Emergency Stop remain active
+
+### R1 Final engineering verdict (pre–Human QA)
+
+**NEEDS MORE VERIFICATION** — implementation, focused tests, Staging deploy, and Browser QA complete. Human QA must explicitly PASS CONN-R1 through CONN-R6 before closeout freeze.
+
+---
+
 ## Rollback
 
-1. Revert WP1A commit(s) on `main`
-2. Redeploy prior frontend bundle + backend routes/services
+1. Revert WP1A / WP1A-R1 commit(s) on `main`
+2. Redeploy prior frontend bundle + backend routes/services as needed
 3. Confirm served bundle marker
 
 ## Next
 
-`CONNECTIONS-WP2 — MEXC Private Authentication and Test Connection Contract`
+Private MEXC authentication / Test Connection contract remains **deferred** until WP1A Human QA PASS and CLOSED AND FROZEN.
 
-Do **not** begin WP2 until WP1A Human QA PASS and CLOSED AND FROZEN.
+Do **not** begin that work automatically after this remediation handoff.
