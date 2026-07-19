@@ -27,10 +27,12 @@ No user-supplied base URL is accepted by TitanGold.
 | Item | Value |
 |------|--------|
 | Method | `GET` |
+| Full URL | `https://api.mexc.com/api/v3/account` |
 | Path | `/api/v3/account` |
-| Purpose | Account Information |
+| Purpose | Account Information — **read-only credential verification** (no order placement) |
 | Required API permission | `SPOT_ACCOUNT_READ` |
-| Weight | IP weight 10; rate note: ~2 times/s for this endpoint |
+| Official weight | `Weight(IP): 10` |
+| Official account endpoint rate note | `rate limit: 2 times/s` |
 
 This is the safest official **read-only** private endpoint for proving that stored credentials can authenticate and read account metadata.
 
@@ -156,7 +158,10 @@ WP2A **does not** set `tradingPermission = verified` unless `canTrade === true`.
 | `700007` | No permission to access the endpoint | `MEXC_PERMISSION_INSUFFICIENT` |
 | `60005` / `730100` / unusual account | Account abnormal / unusual status | `MEXC_ACCOUNT_RESTRICTED` |
 | HTTP `429` | Too many requests / rate limit | `MEXC_RATE_LIMITED` |
-| HTTP `5xx` / empty / maintenance | Provider unavailable | `MEXC_PROVIDER_UNAVAILABLE` |
+| HTTP `500` | Internal / upstream failure | `MEXC_PROVIDER_UNAVAILABLE` |
+| HTTP `503` | Service unavailable / maintenance | `MEXC_PROVIDER_UNAVAILABLE` |
+| HTTP `504` | Gateway timeout | `MEXC_PROVIDER_UNAVAILABLE` |
+| Other HTTP `5xx` / empty body | Provider unavailable | `MEXC_PROVIDER_UNAVAILABLE` |
 
 Raw provider messages are never forwarded to the frontend. Safe code may be preserved when non-sensitive.
 

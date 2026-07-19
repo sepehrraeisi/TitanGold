@@ -1,7 +1,7 @@
 # CONNECTIONS-WP2A — MEXC Private Authentication Adapter
 
 **Module:** Settings → Connections → MEXC  
-**Work Package:** CONNECTIONS-WP2A  
+**Work Package:** CONNECTIONS-WP2A (+ R1 provenance/gate verification)  
 **Environment:** Staging `https://titan.zala.ir`  
 **Engineering verdict (pre–Human QA):** **NEEDS MORE VERIFICATION**
 
@@ -13,25 +13,23 @@
 |------|--------|
 | Human QA | PENDING — CONN-A1 … CONN-A5 |
 | Engineering verdict | **NEEDS MORE VERIFICATION** |
-| WP2A | Adapter + error contract + live-gated route shipped |
+| WP2A | Adapter + error contract + live-gated route |
+| WP2A-R1 | Runtime provenance owner + gate-safety proof |
 | WP2B | NOT STARTED |
 | Test Connection UI | Still absent (not restored) |
 | Real MEXC calls on Staging | Blocked unless `CONNECTIONS_PRIVATE_VERIFY_LIVE=true` |
 
 ---
 
-## Baselines
+## Baselines (do not conflate)
 
 | Kind | Value |
 |------|--------|
-| Start `origin/main` | `efcf986` |
-| WP1A security | `b5d8927` |
-| WP1A-R1 | `ae92737` |
-| WP1A-R2 | `2a7ad99` |
-| WP1A docs | `efcf986` |
-| Served frontend bundle (unchanged) | `assets/index-zOmnvrQI.js` |
-| Implementation HEAD | `8d320d8` (`8d320d85fb9cb94ef00f8455b0905dceb4a41eb4`) |
-| Runtime backend health marker | dirty original tree still reports `a17ef46` in `/api/v1/health` while WP2A sources are deployed into `/home/ubuntu/webapp/TitanGold/backend` |
+| WP2A runtime implementation | `864f95e` |
+| WP2A documentation commit | `8d320d8` |
+| Prior docs HEAD stamp (historical) | `67222cc` |
+| Repository HEAD after R1 | recorded by Git after push (not embedded here as a self-hash) |
+| Served frontend bundle | `assets/index-zOmnvrQI.js` |
 
 ---
 
@@ -44,7 +42,11 @@ Documented in `docs/MEXC_PRIVATE_AUTH_CONTRACT.md` from official Spot v3 docs on
 
 Selected verification endpoint: `GET https://api.mexc.com/api/v3/account` (`SPOT_ACCOUNT_READ`).
 
-Signing: HMAC-SHA256, lowercase hex signature, millisecond `timestamp`, default `recvWindow=5000`, header `X-MEXC-APIKEY`.
+Signing: HMAC-SHA256, lowercase hex signature, millisecond `timestamp`, default `recvWindow=5000`, maximum recvWindow **&lt; 60000**, header `X-MEXC-APIKEY`.
+
+Account endpoint official limit: `Weight(IP): 10`, rate note `2 times/s`. Purpose: read-only account information — **no order placement**.
+
+Mapped codes: `700001`, `700002`, `700003`, `700005`, `700006`, `700007`, HTTP `429`, `500`, `503`, `504`.
 
 No real credentials or real signed examples in docs.
 
@@ -64,52 +66,39 @@ POST /api/v1/connections/mexc/verify-private
   → audit without secrets
 ```
 
-Owners reused:
-
-- Encryption: `backend/utils/crypto.js`
-- Connection rows / DTO: `exchangeConnectionService.js`
-- Capabilities: `CONNECTIONS_TEST`
-- Audit: `audit_logs` via `writeConnectionAudit`
-
-Adapter does **not** own DB, encryption, frontend, or TitanGold auth.
-
-Key files:
-
-- `backend/services/connections/providers/mexcPrivateAuthAdapter.js`
-- `backend/services/connections/providers/mexcSigning.js`
-- `backend/services/connections/providers/mexcSafeTransport.js`
-- `backend/services/connections/mexcErrorCatalog.js`
-- `backend/services/connections/connectionPrivateVerificationService.js`
-- `backend/routes/connections.js` (`POST /mexc/verify-private`)
-
 ---
 
 ## Live gate (WP2A Staging safety)
 
 `CONNECTIONS_PRIVATE_VERIFY_LIVE` defaults unset/false.
 
-When false:
+When false / `allowProviderCall=false`:
 
-- Route returns `CONNECTION_PRIVATE_VERIFY_NOT_LIVE` (HTTP 503)
-- No decrypt of Staging secrets
-- No provider HTTP call
-- No status persistence (`persisted: false`)
-
-Automated tests inject `allowProviderCall: true` + fake `transport` only.
-
-Staging probe (engineering only, not Browser QA):
-
-- `POST /api/v1/connections/mexc/verify-private` → `503` / `CONNECTION_PRIVATE_VERIFY_NOT_LIVE`
-- Connection `lastTestedAt` remained `2026-07-19T09:36:13.824Z` (unchanged by WP2A)
-- `privateAuthVerified=false`, `isConnected=false`
+- Returns `CONNECTION_PRIVATE_VERIFY_NOT_LIVE` (HTTP 503)
+- Terminates **before** Secret decryption, signing, provider transport, DNS/TLS, status/last-tested persistence
+- Proven by WP2A-R1 deterministic tests: decrypt/sign/transport/persist call counts = 0
 
 ---
 
-## Error contract
+## Runtime provenance (WP2A-R1)
 
-Canonical categories in `mexcErrorCatalog.js` including credential/signature/timestamp/permission/IP/account/rate-limit/unavailable/timeout/network/response/decryption/disabled/not-configured/forbidden/internal/not-live.
+### RCA — why health previously reported `a17ef46`
 
-Raw provider messages never returned. Safe numeric provider codes may be preserved.
+| Finding | Detail |
+|---------|--------|
+| Owner | `backend/routes/health.js` captured `git rev-parse --short HEAD` once at module import |
+| Process cwd / script | PM2 `cwd=/home/ubuntu/webapp/TitanGold/backend`, script `server.js` |
+| Start time | Backend cluster workers started while original-tree HEAD was still `a17ef46` |
+| Later git move | Original tree HEAD advanced; in-memory `gitCommit` stayed stale |
+| Loaded WP2A source | Disk hashes for adapter/route/service matched `864f95e` (untracked/restored copies over staged deletes) |
+| Classification | **Health provenance owner defective** for file-copy deploys + **stale observability marker**; not a missing WP2A module load |
+
+### Fix
+
+- Canonical owner: `backend/utils/runtimeProvenance.js`
+- Prefer `TITAN_RUNTIME_COMMIT` / `GIT_COMMIT` / `GIT_SHA`, else git from repo root
+- Health/readiness expose `commit` + `commitSource`
+- Staging deploy sets `TITAN_RUNTIME_COMMIT=864f95e` and restarts **only** `titan-backend`
 
 ---
 
@@ -117,24 +106,13 @@ Raw provider messages never returned. Safe numeric provider codes may be preserv
 
 - `persist` defaults **false**
 - Real Staging Connection is not updated by WP2A
-- Proposed transitions: `authenticated` | `failed` | `permission_limited` | `verification_inconclusive`
-- Provider unavailable / timeout does **not** revoke credentials
-- Fake `persistFn` used only in tests; failures leave `persisted=false`
+- Proposed transitions only; WP2B owns real persistence
 
 ---
 
 ## Frontend
 
-No frontend changes. Served bundle remains `assets/index-zOmnvrQI.js`.
-
-UI remains:
-
-- Configured · Not verified (FA: پیکربندی‌شده · تأیید نشده)
-- Explanatory private-verification copy
-- No Test Connection button
-- Manage available
-- Unsupported providers Coming soon / به‌زودی
-- No Connected / Authenticated claim
+No frontend changes. UI remains Configured · Not verified / پیکربندی‌شده · تأیید نشده. No Test Connection.
 
 ---
 
@@ -142,41 +120,14 @@ UI remains:
 
 | Suite | Executed | Passed | Failed | Skipped | Retried | Env |
 |-------|----------|--------|--------|---------|---------|-----|
-| jest `connections.wp2a.mexcPrivateAuth` | 29 | 29 | 0 | 0 | 0 | jest/node |
-| jest `exchangeConnectionService.wp1a` | 5 | 5 | 0 | 0 | 0 | jest/node |
-| vitest WP1A containment + R1 + R2 | 20 | 20 | 0 | 0 | 0 | vitest |
+| jest WP2A-R1 provenance/gate | 9 | 9 | 0 | 0 | 0 | jest/node |
+| jest WP2A adapter | 29 | 29 | 0 | 0 | 0 | jest/node |
+| jest WP1A exchangeConnectionService | 5 | 5 | 0 | 0 | 0 | jest/node |
+| vitest WP1A containment/R1/R2 | 20 | 20 | 0 | 0 | 0 | vitest |
 
-**Totals:** executed 54 · passed 54 · failed 0 · skipped 0 · retried 0
+**Totals:** executed 63 · passed 63 · failed 0 · skipped 0 · retried 0
 
-No real provider requests in automated tests (fake credentials + injectable transport only).
-
----
-
-## Browser QA (regression-only)
-
-Method: Playwright against Staging (MCP browser unavailable in this session).
-
-| Check | Result |
-|-------|--------|
-| Connections opens | PASS |
-| MEXC Configured · Not verified | PASS |
-| Test Connection absent | PASS |
-| Manage available | PASS |
-| Coming soon for unsupported | PASS |
-| No Connected / Authenticated claim | PASS |
-| No Secret / full API key in Network | PASS |
-| No verify-private / mexc test from UI | PASS |
-| No severe Console errors | PASS |
-| Desktop / tablet / mobile screenshots | PASS |
-| Persian copy + Manage / به‌زودی | PASS |
-| Demo + Emergency Stop visible | PASS |
-
-Evidence screenshots (local engineering artifacts, not committed):
-
-- `/tmp/wp2a-conn-desktop-en.png`
-- `/tmp/wp2a-conn-tablet-en.png`
-- `/tmp/wp2a-conn-mobile-en.png`
-- `/tmp/wp2a-conn-desktop-fa.png`
+No real provider requests.
 
 ---
 
@@ -184,28 +135,24 @@ Evidence screenshots (local engineering artifacts, not committed):
 
 | Item | Value |
 |------|--------|
-| Deploy | backend source only into original runtime tree; restart `titan-backend` only |
+| Deploy | provenance owner + schemas; restart `titan-backend` only |
 | Worker / Scheduler | not restarted |
 | Served FE bundle | unchanged `assets/index-zOmnvrQI.js` |
-| Demo | active (`mode=demo`, `effectiveMode=demo`) |
-| Emergency Stop | active (`killSwitchActive=true`) |
-| Worker acknowledgement | `true` |
-| Live | impossible (`deploymentEngineEnabled=false`, Demo + Kill Switch) |
-| Scheduler owner | `titan-engine-worker` |
-| Scheduler allowlist | `["arbitrage"]` |
-| Scheduler | running; `lastSuccessAt` advancing |
+| Demo / Emergency Stop | remain active |
+| Scheduler | `titan-engine-worker` · `["arbitrage"]` |
 | Live verify env | unset (blocked) |
-| Protected unrelated files | not modified in scoped commits |
+| Runtime implementation marker | `TITAN_RUNTIME_COMMIT=864f95e` |
 
 ---
 
-## No-real-credential evidence
+## Remaining WP2B work
 
-- Official contract doc uses fake placeholders only
-- Tests use fake API key/secret strings and fake transport
-- Staging live gate prevents decrypt + provider call
-- Browser QA did not click Test Connection (button absent) and issued no verify-private from UI
-- Engineering route probe returned `CONNECTION_PRIVATE_VERIFY_NOT_LIVE` without persistence
+`CONNECTIONS-WP2B — Controlled Real MEXC Test Connection`
+
+- Controlled live gate enablement
+- Real persistence of verification outcomes
+- Optional Test Connection UI under capability + rate limit
+- Do not begin automatically
 
 ---
 
@@ -213,61 +160,34 @@ Evidence screenshots (local engineering artifacts, not committed):
 
 ### CONN-A1 — UI Regression
 - MEXC remains Configured · Not verified
-- No Connected / Authenticated
 - Test Connection absent
 - Manage available
 
 ### CONN-A2 — Secret Non-Exposure
-- No Secret / complete API key in Network responses
-- No new browser credential storage
-- Engineering tests confirm redaction
+- Safe Network DTO contains no Secret or full API key
+- Tests prove gated verification does not decrypt or contact provider
 
-### CONN-A3 — Authentication Contract Evidence
-- Official docs used; read-only endpoint; signing + timestamp/recvWindow
-- Deterministic fake-adapter tests
-- No real credential or provider request
+### CONN-A3 — Official Authentication Contract
+- Official endpoint, header, signing, timestamp and recvWindow documented
+- No real credential or provider request used
 
 ### CONN-A4 — Error Contract
-- Fake categorized responses for invalid credential, signature, timestamp, permission, IP, rate limit, unavailable, timeout
+- Official fake response codes mapped and sanitized
+- No raw provider payload returned
 
 ### CONN-A5 — Runtime Regression
-- Public Arbitrage Scheduler continues (`titan-engine-worker`, allowlist `["arbitrage"]`)
-- Demo + Emergency Stop active
-- Live impossible
-- Current Connection status unchanged (`lastTestedAt` unchanged; `privateAuthVerified=false`)
-
-Human QA must explicitly PASS CONN-A1 through CONN-A5.
-
----
-
-## Performance / operations
-
-| Metric | Value |
-|--------|--------|
-| Adapter timeout | 8000 ms |
-| Retry count | 0 |
-| Route rate limit | 5 / 60s (`privateVerifyLimiter`) |
-| Max response size | 64 KiB |
-| Fake-provider test latency | BASELINE NOT AVAILABLE (suite local) |
-| DB query count (verify path) | typically 2–3 reads + 1 audit when live-allowed |
-| Decrypt ops | 2 (key + secret) when provider call allowed; **0** when live gate blocks |
-| Log-volume impact | low (no provider body / signed query logging) |
-| p95 | BASELINE NOT AVAILABLE |
+- Backend runtime provenance verified (`864f95e` via env / commitSource)
+- Scheduler continues
+- Demo and Emergency Stop remain active
+- Current Connection status unchanged
+- Live remains impossible
 
 ---
 
 ## Rollback
 
-1. Revert WP2A commit(s) on `main`
-2. Redeploy prior backend connections sources
-3. Confirm `/mexc/verify-private` absent or remains gated
-4. Confirm FE bundle unchanged
-5. Confirm Scheduler owner/allowlist unchanged
-
----
-
-## Next slice
-
-`CONNECTIONS-WP2B — Controlled Real MEXC Test Connection`
-
-Do **not** begin WP2B automatically.
+1. Revert R1 provenance commits
+2. Redeploy prior `health.js` / remove `runtimeProvenance.js`
+3. Clear `TITAN_RUNTIME_COMMIT` if set
+4. Restart only `titan-backend`
+5. Confirm FE bundle unchanged
