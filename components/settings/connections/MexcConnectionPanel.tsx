@@ -8,8 +8,15 @@ import {
   type SafeConnectionDto,
 } from '../../../services/connectionsApi.ts';
 import {
-  translateAuthState,
-  translateConsumerName,
+  getAuthStateLabel,
+  getCapabilityLabel,
+  getConsumerLabel,
+  getGroupLabel,
+  getKeyGrantLabel,
+  getModuleLabel,
+  getOperationalStateLabel,
+  getProviderSupportLabel,
+  getVerificationLabel,
 } from '../../../utils/mexcDisplayLabels.ts';
 import {
   productStatusFromCapability,
@@ -135,13 +142,6 @@ function consumerEligibilityLabel(
     return { label: t('mexc_blocked'), tone: 'bad' };
   }
   return { label: t('mexc_limited'), tone: 'warn' };
-}
-
-function humanizeCapabilityId(id: string, t: (k: string) => string): string {
-  const key = `mexc_cap_label_${id}`;
-  const translated = t(key);
-  if (translated !== key) return translated;
-  return id.replace(/_/g, ' ');
 }
 
 export default function MexcConnectionPanel({ connection, onChanged, onClose }: Props) {
@@ -318,7 +318,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
       <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-expanded-summary">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p id="mexc-expanded-summary" className="sr-only">
-            MEXC details
+            {t('mexc_details')}
           </p>
           <StatePill
             label={overallLabel}
@@ -339,7 +339,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
           <div className="rounded-lg border border-white/5 bg-slate-950/50 p-3">
             <p className="mb-1 text-[11px] text-blue-300/80">{t('mexc_private_auth')}</p>
             <p className="text-sm font-semibold text-blue-100" data-testid="mexc-private-auth">
-              {translateAuthState(summary?.connection?.authState, t)}
+              {getAuthStateLabel(summary?.connection?.authState, t)}
             </p>
           </div>
         </div>
@@ -360,7 +360,8 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
 
         {(summary?.usedByModules?.length ?? 0) > 0 && (
           <p className="mt-2 text-xs text-slate-400" data-testid="mexc-used-by">
-            {t('mexc_used_by')}: {summary?.usedByModules?.join(', ')}
+            {t('mexc_used_by')}:{' '}
+            {(summary?.usedByModules || []).map((m) => getModuleLabel(m, t)).join(' · ')}
           </p>
         )}
       </section>
@@ -531,7 +532,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                     aria-expanded={open}
                     data-testid={`mexc-cap-group-toggle-${group}`}
                   >
-                    <span className="text-xs font-medium text-slate-200">{t(`mexc_group_${group.replace(/\s+/g, '_').toLowerCase()}`) !== `mexc_group_${group.replace(/\s+/g, '_').toLowerCase()}` ? t(`mexc_group_${group.replace(/\s+/g, '_').toLowerCase()}`) : group}</span>
+                    <span className="text-xs font-medium text-slate-200">{getGroupLabel(group, t)}</span>
                     <span className="flex flex-wrap gap-1.5 text-[11px] text-slate-400">
                       <StatePill label={`${total} ${t('mexc_capabilities_count')}`} tone="neutral" />
                       {available > 0 && <StatePill label={`${available} ${t('mexc_status_available').toLowerCase()}`} tone="ok" />}
@@ -558,7 +559,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <span className="text-sm text-slate-100">
-                                {(cap as any).humanLabel || humanizeCapabilityId(cap.capabilityId, t)}
+                                {getCapabilityLabel(cap.capabilityId, t)}
                               </span>
                               <StatePill label={productStatusLabel(status, t)} tone={toneForProductStatus(status)} />
                             </div>
@@ -572,19 +573,24 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                                 : t('mexc_never_checked')}
                             </p>
                             {showTechnical && (
-                              <div className="mt-2 space-y-1 border-t border-white/5 pt-2 font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-testid={`mexc-cap-tech-${cap.capabilityId}`}>
-                                <p data-testid={`mexc-cap-code-${cap.capabilityId}`}>{cap.capabilityId}</p>
+                              <div className="mt-2 space-y-1 border-t border-white/5 pt-2 text-[11px] text-slate-400" data-testid={`mexc-cap-tech-${cap.capabilityId}`}>
                                 <p>
-                                  {t('mexc_provider')}: {cap.providerSupport}
+                                  {t('mexc_provider')}: {getProviderSupportLabel(cap.providerSupport, t)}
                                 </p>
                                 <p>
-                                  {t('mexc_key_grant')}: {cap.keyGrant}
+                                  {t('mexc_key_grant')}: {getKeyGrantLabel(cap.keyGrant, t)}
                                 </p>
                                 <p>
-                                  {t('mexc_verification_state')}: {cap.verificationState}
+                                  {t('mexc_verification_state')}: {getVerificationLabel(cap.verificationState, t)}
                                 </p>
                                 <p>
-                                  {t('mexc_operational')}: {cap.operationalState}
+                                  {t('mexc_operational')}: {getOperationalStateLabel(cap.operationalState, t)}
+                                </p>
+                                <p className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true" data-testid={`mexc-cap-code-${cap.capabilityId}`}>
+                                  {t('mexc_technical_code')}: {cap.capabilityId}
+                                </p>
+                                <p className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-value="true">
+                                  {t('mexc_technical_value')}: {cap.verificationState}
                                 </p>
                               </div>
                             )}
@@ -619,7 +625,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-slate-100">
-                    {translateConsumerName(c.consumerId, c.displayName, t)}
+                    {getConsumerLabel(c.consumerId, c.displayName, t)}
                   </span>
                   <StatePill label={eligibility.label} tone={eligibility.tone} />
                 </div>
@@ -640,25 +646,38 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                   {consumerOpen ? t('mexc_hide_details') : t('mexc_show_details')}
                 </button>
                 {consumerOpen && (
-                  <div className="mt-2 space-y-1 text-[11px] text-slate-400" data-testid={`mexc-consumer-expanded-${c.consumerId}`}>
-                    <p>
-                      {t('mexc_required')}:{' '}
-                      {(c.requiredCapabilities || [])
-                        .map((id) => (showTechnical ? id : humanizeCapabilityId(id, t)))
-                        .join(showTechnical ? ', ' : ' · ')}
-                    </p>
+                  <div className="mt-2 space-y-2 text-[11px] text-slate-400" data-testid={`mexc-consumer-expanded-${c.consumerId}`}>
+                    <div>
+                      <p className="mb-1 font-medium text-slate-300">{t('mexc_required_capabilities')}</p>
+                      <ul className="space-y-1">
+                        {(c.requiredCapabilities || []).map((id) => (
+                          <li key={id} className="flex flex-wrap items-baseline gap-2">
+                            <span>{getCapabilityLabel(id, t)}</span>
+                            {showTechnical && (
+                              <span className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true">
+                                {id}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                     {(c.optionalCapabilities || []).length > 0 && (
-                      <p>
-                        {t('mexc_optional')}:{' '}
-                        {(c.optionalCapabilities || [])
-                          .map((id) => (showTechnical ? id : humanizeCapabilityId(id, t)))
-                          .join(showTechnical ? ', ' : ' · ')}
-                      </p>
-                    )}
-                    {showTechnical && c.blockedReason && (
-                      <p className="font-mono text-[10px] text-slate-500 ltr" dir="ltr">
-                        {c.blockedReason}
-                      </p>
+                      <div>
+                        <p className="mb-1 font-medium text-slate-300">{t('mexc_optional_capabilities')}</p>
+                        <ul className="space-y-1">
+                          {(c.optionalCapabilities || []).map((id) => (
+                            <li key={id} className="flex flex-wrap items-baseline gap-2">
+                              <span>{getCapabilityLabel(id, t)}</span>
+                              {showTechnical && (
+                                <span className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true">
+                                  {id}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
                 )}

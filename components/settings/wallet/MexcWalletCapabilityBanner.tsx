@@ -3,7 +3,7 @@ import { useLanguage } from '../../../context/LanguageContext.tsx';
 import { fetchMexcCapabilitySummary, type MexcCapabilitySummary } from '../../../services/connectionsApi.ts';
 import type { OnNavigateHandler } from '../../../types/navigation.ts';
 import { buildMexcManageNavigation } from '../../../utils/settingsNavigation.ts';
-import { translateAuthState } from '../../../utils/mexcDisplayLabels.ts';
+import { getAuthStateLabel } from '../../../utils/mexcDisplayLabels.ts';
 import {
   selectConsumerProductReason,
   translateReasonKind,
@@ -58,7 +58,7 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
     }
   };
 
-  const authLabel = translateAuthState(summary?.connection?.authState, t);
+  const authLabel = getAuthStateLabel(summary?.connection?.authState, t);
 
   return (
     <section
