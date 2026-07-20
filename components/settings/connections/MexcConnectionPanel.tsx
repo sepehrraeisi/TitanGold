@@ -316,24 +316,18 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
     >
       {/* Expanded provider details — no duplicate MEXC title; parent row owns heading */}
       <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-expanded-summary">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h4 id="mexc-expanded-summary" className="sr-only">
-              MEXC
-            </h4>
-            <p className="text-xs text-slate-400" data-testid="mexc-overall-state">
-              {overallLabel}
-            </p>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p id="mexc-expanded-summary" className="sr-only">
+            MEXC details
+          </p>
           <StatePill
-            label={
-              summary?.privateAuthentication?.verified
-                ? t('mexc_auth_authenticated')
-                : t('connections_configured_not_verified')
-            }
+            label={overallLabel}
             tone={summary?.privateAuthentication?.verified ? 'ok' : 'warn'}
           />
         </div>
+        <p className="sr-only" data-testid="mexc-overall-state">
+          {overallLabel}
+        </p>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-lg border border-white/5 bg-slate-950/50 p-3">
