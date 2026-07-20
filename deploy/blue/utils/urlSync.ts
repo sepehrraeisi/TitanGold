@@ -29,9 +29,12 @@ export function readStateFromURL(): URLState | null {
 
   if (!view) return null;
 
+  // Accept legacy `tab` alias used by some bookmarks and QA URLs
+  const settingsTab = params.get('settingsTab') || params.get('tab') || undefined;
+
   return {
     view,
-    settingsTab: params.get('settingsTab') || undefined,
+    settingsTab,
     settingsSubtab: params.get('settingsSubtab') || undefined,
   };
 }

@@ -159,6 +159,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           <Settings
             initialTab={navigationPayload?.settingsTab}
             initialSubtab={navigationPayload?.settingsSubtab}
+            onNavigate={handleNavigation}
             onNavigationComplete={() => setNavigationPayload(null)}
           />
         );

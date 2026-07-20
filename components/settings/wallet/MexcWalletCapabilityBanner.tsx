@@ -1,12 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../../context/LanguageContext.tsx';
 import { fetchMexcCapabilitySummary, type MexcCapabilitySummary } from '../../../services/connectionsApi.ts';
+import type { OnNavigateHandler } from '../../../types/navigation.ts';
+import { buildMexcManageNavigation } from '../../../utils/settingsNavigation.ts';
+import {
+  translateAuthState,
+  translateBlockedReason,
+} from '../../../utils/mexcDisplayLabels.ts';
+
+type Props = {
+  onNavigate?: OnNavigateHandler;
+};
 
 /**
  * Wallet uses canonical MEXC Connection — no duplicate credential form.
  * Tier-4 actions remain visibly disabled.
  */
-export default function MexcWalletCapabilityBanner() {
+export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
   const { t } = useLanguage();
   const [summary, setSummary] = useState<MexcCapabilitySummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +39,14 @@ export default function MexcWalletCapabilityBanner() {
   const walletConsumer = summary?.consumers?.find((c) => c.consumerId === 'wallet');
   const withdrawBlocked = true;
 
+  const handleManageConnection = () => {
+    if (onNavigate) {
+      onNavigate(buildMexcManageNavigation());
+    }
+  };
+
+  const authLabel = translateAuthState(summary?.connection?.authState, t);
+
   return (
     <section
       className="mb-4 rounded-xl border border-white/5 bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 p-4"
@@ -46,7 +64,7 @@ export default function MexcWalletCapabilityBanner() {
         <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
           <p className="text-[11px] text-slate-400">{t('mexc_connection_state')}</p>
           <p className="text-sm text-slate-100" data-testid="wallet-mexc-auth-state">
-            {summary?.connection?.authState?.replace(/_/g, ' ') || t('connections_not_configured')}
+            {summary ? authLabel : t('connections_not_configured')}
           </p>
         </div>
         <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
@@ -64,7 +82,9 @@ export default function MexcWalletCapabilityBanner() {
       </div>
 
       {walletConsumer?.blockedReason && (
-        <p className="mt-2 text-xs text-amber-200/90">{walletConsumer.blockedReason}</p>
+        <p className="mt-2 text-xs text-amber-200/90">
+          {translateBlockedReason(walletConsumer.blockedReason, t)}
+        </p>
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -88,13 +108,14 @@ export default function MexcWalletCapabilityBanner() {
         >
           {t('mexc_transfer_action')}
         </button>
-        <a
-          href="#settings-connections"
-          className="rounded-md border border-indigo-400/40 px-3 py-2 text-xs text-indigo-200 hover:bg-indigo-500/10"
+        <button
+          type="button"
+          onClick={handleManageConnection}
+          className="rounded-md border border-indigo-400/40 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-200 hover:bg-indigo-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
           data-testid="wallet-manage-connection-link"
         >
           {t('mexc_manage_connection')}
-        </a>
+        </button>
       </div>
     </section>
   );

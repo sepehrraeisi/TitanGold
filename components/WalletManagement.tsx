@@ -416,13 +416,13 @@ const WalletManagement: React.FC = () => {
                                         ))}
                                     {walletData.transactions.filter(tx => tx.exchange === selectedWallet.name).length === 0 && (
                                         <div className="text-center py-8 text-gray-400">
-                                            <p>{t('no_transactions_for_wallet') || 'No transactions found for this wallet'}</p>
+                                            <p>{t('no_transactions_for_wallet')}</p>
                                         </div>
                                     )}
                                 </div>
                             ) : (
                                 <div className="text-center py-8 text-gray-400">
-                                    <p>{t('no_transactions') || 'No transactions yet'}</p>
+                                    <p>{t('no_transactions')}</p>
                                 </div>
                             )}
                         </div>

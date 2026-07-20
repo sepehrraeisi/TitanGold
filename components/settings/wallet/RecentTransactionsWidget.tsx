@@ -27,7 +27,7 @@ const RecentTransactionsWidget: React.FC<RecentTransactionsWidgetProps> = ({ tra
       </div>
       {transactions.length === 0 ? (
         <div className="text-center py-4 text-sm text-gray-400">
-          {t('no_transactions') || 'No transactions yet'}
+          {t('no_transactions')}
         </div>
       ) : (
         <div className="space-y-3 text-sm">

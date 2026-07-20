@@ -13,6 +13,8 @@ import {
   isConfigurableProvider,
 } from '../../services/connectionDisplayStatus.ts';
 import MexcConnectionPanel from './connections/MexcConnectionPanel.tsx';
+import type { OnNavigateHandler } from '../../types/navigation.ts';
+import { isMexcManageDeepLink } from '../../utils/settingsNavigation.ts';
 
 const EXCHANGE_ICONS: Record<string, string> = {
   MEXC: '🟣',
@@ -22,11 +24,18 @@ const EXCHANGE_ICONS: Record<string, string> = {
   'Gate.io': '🔵',
 };
 
-export default function MultiExchangeSettings() {
+type Props = {
+  initialSubtab?: string;
+  onNavigate?: OnNavigateHandler;
+};
+
+export default function MultiExchangeSettings({ initialSubtab, onNavigate: _onNavigate }: Props) {
   const { t } = useLanguage();
   const [connections, setConnections] = useState<SafeConnectionDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedExchange, setExpandedExchange] = useState<string | null>(null);
+  const [expandedExchange, setExpandedExchange] = useState<string | null>(() =>
+    isMexcManageDeepLink(initialSubtab) ? 'MEXC' : null,
+  );
   const [messages, setMessages] = useState<Record<string, { type: 'success' | 'error' | 'info'; text: string }>>({});
   const [legacyKeys, setLegacyKeys] = useState<string[]>([]);
   const [removingLegacy, setRemovingLegacy] = useState(false);
@@ -52,6 +61,12 @@ export default function MultiExchangeSettings() {
     loadConnections();
     setLegacyKeys(detectLegacyInsecureCredentialKeys());
   }, [loadConnections]);
+
+  useEffect(() => {
+    if (isMexcManageDeepLink(initialSubtab)) {
+      setExpandedExchange('MEXC');
+    }
+  }, [initialSubtab]);
 
   const handleRemoveLegacy = async () => {
     if (!window.confirm(t('connections_legacy_remove_confirm'))) return;

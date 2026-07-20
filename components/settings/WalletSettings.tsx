@@ -12,9 +12,14 @@ import DeFiWidget from './wallet/DeFiWidget.tsx';
 import GeneralConfigWidget from './wallet/GeneralConfigWidget.tsx';
 import MexcWalletCapabilityBanner from './wallet/MexcWalletCapabilityBanner.tsx';
 import type { WalletSettingsData } from '../../types.ts';
+import type { OnNavigateHandler } from '../../types/navigation.ts';
 import { database } from '../../services/database.ts';
 
-const WalletSettings: React.FC = () => {
+type WalletSettingsProps = {
+  onNavigate?: OnNavigateHandler;
+};
+
+const WalletSettings: React.FC<WalletSettingsProps> = ({ onNavigate }) => {
     const { t } = useLanguage();
     const { isDemoMode } = useAppContext();
     const [isLoading, setIsLoading] = useState(true);
@@ -163,19 +168,19 @@ const WalletSettings: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <MexcWalletCapabilityBanner />
+            <MexcWalletCapabilityBanner onNavigate={onNavigate} />
             {/* Trading Mode & Virtual Wallet Section */}
             <div className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 border border-blue-500/30 rounded-lg p-6">
                 <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
                     <div>
                         <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                             {tradingMode === 'demo' ? '🎮' : '🔴'} 
-                            {t('trading_mode') || 'Trading Mode'}
+                            {t('trading_mode')}
                         </h2>
                         <p className="text-gray-300 text-sm mt-1">
                             {tradingMode === 'demo' 
-                                ? (t('demo_mode_desc') || 'Virtual funds for testing - No real money at risk')
-                                : (t('live_mode_desc') || 'Real trading with real funds')}
+                                ? t('demo_mode_desc')
+                                : t('live_mode_desc')}
                         </p>
                     </div>
                     <div className="flex items-center gap-4">
@@ -193,13 +198,13 @@ const WalletSettings: React.FC = () => {
                 {tradingMode === 'demo' && (
                     <div className="bg-black/30 rounded-lg p-6 space-y-4">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold text-white">{t('virtual_wallet') || '💰 Virtual Wallet'}</h3>
+                            <h3 className="text-xl font-semibold text-white">{t('virtual_wallet')}</h3>
                             <button
                                 onClick={handleResetDemoWallet}
                                 disabled={isResetting}
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors text-sm font-medium"
                             >
-                                {isResetting ? '...' : (t('reset_wallet') || '🔄 Reset Wallet')}
+                                {isResetting ? '...' : t('reset_wallet')}
                             </button>
                         </div>
                         
@@ -225,9 +230,9 @@ const WalletSettings: React.FC = () => {
                             <div className="flex items-start gap-3">
                                 <span className="text-2xl">ℹ️</span>
                                 <div className="flex-1">
-                                    <p className="text-yellow-300 font-medium">{t('demo_mode_notice') || 'Demo Mode Active'}</p>
+                                    <p className="text-yellow-300 font-medium">{t('demo_mode_notice')}</p>
                                     <p className="text-yellow-200/70 text-sm mt-1">
-                                        {t('demo_mode_notice_desc') || 'All trades are simulated. No real funds are used. Switch to LIVE mode from the header to trade with real money.'}
+                                        {t('demo_mode_notice_desc')}
                                     </p>
                                 </div>
                             </div>
@@ -342,16 +347,7 @@ const WalletSettings: React.FC = () => {
                     disabled={refreshing === 'all'}
                     className="bg-gray-700 hover:bg-gray-600 font-semibold py-2 px-4 rounded-lg disabled:opacity-50 transition-colors"
                 >
-                    {t('refresh_all') || 'Refresh All'}
-                </button>
-                <button 
-                    onClick={async () => {
-                        await loadData();
-                        alert(t('settings_saved') || 'Settings saved successfully!');
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 font-semibold py-2 px-4 rounded-lg transition-colors"
-                >
-                    {t('save_settings') || 'Save Settings'}
+                    {refreshing === 'all' ? '...' : t('refresh_all')}
                 </button>
             </div>
         </div>

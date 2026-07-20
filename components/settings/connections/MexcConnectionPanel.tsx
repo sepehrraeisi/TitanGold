@@ -7,6 +7,14 @@ import {
   type MexcCapabilitySummary,
   type SafeConnectionDto,
 } from '../../../services/connectionsApi.ts';
+import {
+  translateAuthState,
+  translateBlockedReason,
+  translateConsumerName,
+  translateOperationalState,
+  translateProviderSupport,
+  translateVerificationState,
+} from '../../../utils/mexcDisplayLabels.ts';
 
 interface DraftSecrets {
   apiKey: string;
@@ -103,6 +111,8 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [showTechnical, setShowTechnical] = useState(false);
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [expandedConsumers, setExpandedConsumers] = useState<Record<string, boolean>>({});
 
   const dirty = Boolean(draft.apiKey.trim() || draft.apiSecret.trim());
   const canSave = Boolean(draft.apiKey.trim() && draft.apiSecret.trim()) && !saving;
@@ -242,7 +252,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
           <div className="rounded-xl border border-white/5 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent p-3">
             <p className="mb-1 text-[11px] text-blue-300/80">{t('mexc_private_auth')}</p>
             <p className="text-sm font-semibold text-blue-100" data-testid="mexc-private-auth">
-              {summary?.connection?.authState?.replace(/_/g, ' ') || t('connections_not_configured')}
+              {translateAuthState(summary?.connection?.authState, t)}
             </p>
           </div>
           <div className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-500/10 via-slate-500/5 to-transparent p-3">
@@ -268,9 +278,25 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
         )}
       </section>
 
-      {/* Credential management */}
+      {/* Credential management — collapsed by default */}
       <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-cred-title">
-        <h4 id="mexc-cred-title" className="text-sm font-semibold text-white">{t('mexc_credentials')}</h4>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 id="mexc-cred-title" className="text-sm font-semibold text-white">{t('mexc_credentials')}</h4>
+          <button
+            type="button"
+            className="text-[11px] text-indigo-300 hover:text-indigo-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+            onClick={() => setCredentialsOpen((o) => !o)}
+            aria-expanded={credentialsOpen}
+            data-testid="mexc-credentials-toggle"
+          >
+            {credentialsOpen ? t('mexc_hide_credentials') : t('mexc_show_credentials')}
+          </button>
+        </div>
+        {!credentialsOpen && (
+          <p className="mt-2 text-xs text-slate-400">{t('mexc_credentials_collapsed_hint')}</p>
+        )}
+        {credentialsOpen && (
+          <>
         <p className="mt-1 text-xs text-slate-400">{t('mexc_credentials_hint')}</p>
         {connection.maskedKeyIdentifier && (
           <p className="mt-2 text-xs text-slate-400">
@@ -323,6 +349,8 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
           <span data-testid="mexc-credential-age">{t('mexc_credential_age')}: {credentialAge}</span>
           <span data-testid="mexc-last-rotation">{t('mexc_last_rotation')}: {lastRotation}</span>
         </div>
+          </>
+        )}
       </section>
 
       {/* Verification workflow — Test Connection gated */}
@@ -382,7 +410,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                   </button>
                   {!open && topBlocked && (
                     <p className="border-t border-white/5 px-3 py-2 text-[11px] text-amber-200/80" data-testid={`mexc-cap-group-blocked-${group}`}>
-                      {topBlocked}
+                      {translateBlockedReason(topBlocked, t)}
                     </p>
                   )}
                   {open && (
@@ -399,15 +427,15 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                               <span className="text-sm text-slate-100">
                                 {(cap as any).humanLabel || cap.capabilityId.replace(/_/g, ' ')}
                               </span>
-                              <StatePill label={cap.operationalState} tone={toneForOperational(cap.operationalState)} />
+                              <StatePill label={translateOperationalState(cap.operationalState, t)} tone={toneForOperational(cap.operationalState)} />
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1.5">
-                              <StatePill label={`${t('mexc_provider')}: ${cap.providerSupport}`} tone="info" />
+                              <StatePill label={`${t('mexc_provider')}: ${translateProviderSupport(cap.providerSupport, t)}`} tone="info" />
                               {kg && <StatePill label={kg} tone="neutral" />}
-                              <StatePill label={`${t('mexc_verification_state')}: ${cap.verificationState}`} tone="neutral" />
+                              <StatePill label={`${t('mexc_verification_state')}: ${translateVerificationState(cap.verificationState, t)}`} tone="neutral" />
                             </div>
                             {cap.blockedReason && open && (
-                              <p className="mt-2 text-xs text-amber-200/90">{cap.blockedReason}</p>
+                              <p className="mt-2 text-xs text-amber-200/90">{translateBlockedReason(cap.blockedReason, t, showTechnical)}</p>
                             )}
                             {showTechnical && (
                               <p className="mt-1 font-mono text-[10px] text-slate-500" data-testid={`mexc-cap-code-${cap.capabilityId}`}>
@@ -435,23 +463,42 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
       <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-consumers-title">
         <h4 id="mexc-consumers-title" className="text-sm font-semibold text-white">{t('mexc_consumers')}</h4>
         <div className="mt-3 space-y-2" data-testid="mexc-consumers">
-          {primaryConsumers.map((c) => (
+          {primaryConsumers.map((c) => {
+            const consumerOpen = Boolean(expandedConsumers[c.consumerId]);
+            return (
             <div key={c.consumerId} className="rounded-lg border border-white/5 bg-slate-950/50 p-3" data-testid={`mexc-consumer-${c.consumerId}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm text-slate-100">{c.displayName}</span>
+                <span className="text-sm text-slate-100">{translateConsumerName(c.consumerId, c.displayName, t)}</span>
                 <StatePill
                   label={c.eligible ? t('mexc_eligible') : t('mexc_blocked')}
                   tone={c.eligible ? 'ok' : 'bad'}
                 />
               </div>
-              {showTechnical && (
+              {c.blockedReason && (
+                <p className="mt-1 text-xs text-amber-200/90">
+                  {translateBlockedReason(c.blockedReason, t, showTechnical && consumerOpen)}
+                </p>
+              )}
+              {(c.blockedReason || showTechnical) && (
+                <button
+                  type="button"
+                  className="mt-2 text-[11px] text-indigo-300 hover:text-indigo-200"
+                  onClick={() => setExpandedConsumers((prev) => ({ ...prev, [c.consumerId]: !prev[c.consumerId] }))}
+                  data-testid={`mexc-consumer-details-${c.consumerId}`}
+                >
+                  {consumerOpen ? t('mexc_hide_details') : t('mexc_show_details')}
+                </button>
+              )}
+              {consumerOpen && showTechnical && (
                 <p className="mt-1 text-[11px] text-slate-500">
                   {t('mexc_required')}: {(c.requiredCapabilities || []).join(', ')}
                 </p>
               )}
-              {c.blockedReason && <p className="mt-1 text-xs text-amber-200/90">{c.blockedReason}</p>}
+              {consumerOpen && c.blockedReason && showTechnical && (
+                <p className="mt-1 font-mono text-[10px] text-slate-500">{c.blockedReason}</p>
+              )}
             </div>
-          ))}
+          );})}
         </div>
       </section>
 
@@ -480,24 +527,33 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
           type="button"
           onClick={handleCancel}
           data-testid="connection-cancel-MEXC"
-          className="rounded-md border border-white/10 px-3 py-2 text-sm text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+          className="rounded-md border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
         >
           {t('cancel')}
         </button>
-        {connection.configured && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            data-testid="connection-delete-MEXC"
-            className="rounded-md border border-red-500/40 px-3 py-2 text-sm text-red-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
-          >
-            {confirmDelete ? t('mexc_confirm_delete') : t('delete')}
-          </button>
-        )}
         {!dirty && (
           <span className="self-center text-[11px] text-slate-500">{t('mexc_save_disabled_hint')}</span>
         )}
       </div>
+
+      {connection.configured && (
+        <section
+          className="rounded-xl border border-red-500/30 bg-red-950/20 p-4"
+          aria-labelledby="mexc-danger-title"
+          data-testid="mexc-danger-zone"
+        >
+          <h4 id="mexc-danger-title" className="text-sm font-semibold text-red-200">{t('mexc_danger_zone')}</h4>
+          <p className="mt-1 text-xs text-red-200/70">{t('mexc_danger_zone_hint')}</p>
+          <button
+            type="button"
+            onClick={handleDelete}
+            data-testid="connection-delete-MEXC"
+            className="mt-3 rounded-md border border-red-500/50 bg-red-900/30 px-3 py-2 text-sm text-red-100 hover:bg-red-900/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
+          >
+            {confirmDelete ? t('mexc_confirm_delete') : t('delete')}
+          </button>
+        </section>
+      )}
     </div>
   );
 }
