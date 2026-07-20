@@ -3,10 +3,11 @@ import { useLanguage } from '../../../context/LanguageContext.tsx';
 import { fetchMexcCapabilitySummary, type MexcCapabilitySummary } from '../../../services/connectionsApi.ts';
 import type { OnNavigateHandler } from '../../../types/navigation.ts';
 import { buildMexcManageNavigation } from '../../../utils/settingsNavigation.ts';
+import { translateAuthState } from '../../../utils/mexcDisplayLabels.ts';
 import {
-  translateAuthState,
-  translateBlockedReason,
-} from '../../../utils/mexcDisplayLabels.ts';
+  selectConsumerProductReason,
+  translateReasonKind,
+} from '../../../utils/mexcReasonPriority.ts';
 
 type Props = {
   onNavigate?: OnNavigateHandler;
@@ -36,12 +37,24 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
     };
   }, []);
 
-  const walletConsumer = summary?.consumers?.find((c) => c.consumerId === 'wallet');
-  const withdrawBlocked = true;
+  const walletRead = summary?.consumers?.find((c) => c.consumerId === 'wallet');
+  const walletWithdraw = summary?.consumers?.find((c) => c.consumerId === 'wallet_withdrawal_execute');
+  const walletTransfer = summary?.consumers?.find((c) => c.consumerId === 'wallet_transfer_execute');
+
+  const primaryReasonKind = selectConsumerProductReason(
+    (walletWithdraw || walletTransfer || walletRead || { eligible: false, blockedReason: null }) as any,
+  );
 
   const handleManageConnection = () => {
     if (onNavigate) {
       onNavigate(buildMexcManageNavigation());
+    }
+  };
+
+  const onManageKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleManageConnection();
     }
   };
 
@@ -60,7 +73,7 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
 
       {error && <p className="mt-2 text-sm text-red-300">{t(error)}</p>}
 
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
           <p className="text-[11px] text-slate-400">{t('mexc_connection_state')}</p>
           <p className="text-sm text-slate-100" data-testid="wallet-mexc-auth-state">
@@ -68,31 +81,35 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
           </p>
         </div>
         <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
-          <p className="text-[11px] text-slate-400">{t('mexc_wallet_eligibility')}</p>
+          <p className="text-[11px] text-slate-400">{t('mexc_wallet_read_eligibility')}</p>
           <p className="text-sm text-slate-100" data-testid="wallet-mexc-eligibility">
-            {walletConsumer?.eligible ? t('mexc_eligible') : t('mexc_blocked')}
+            {walletRead?.eligible ? t('mexc_eligible') : t('mexc_limited')}
           </p>
         </div>
         <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
-          <p className="text-[11px] text-slate-400">{t('mexc_tier4_status')}</p>
-          <p className="text-sm text-amber-200" data-testid="wallet-mexc-tier4">
-            {withdrawBlocked ? t('mexc_tier4_blocked') : t('mexc_eligible')}
+          <p className="text-[11px] text-slate-400">{t('mexc_wallet_withdraw_eligibility')}</p>
+          <p className="text-sm text-amber-200" data-testid="wallet-mexc-withdraw">
+            {t('mexc_blocked')}
+          </p>
+        </div>
+        <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
+          <p className="text-[11px] text-slate-400">{t('mexc_wallet_transfer_eligibility')}</p>
+          <p className="text-sm text-amber-200" data-testid="wallet-mexc-transfer">
+            {t('mexc_blocked')}
           </p>
         </div>
       </div>
 
-      {walletConsumer?.blockedReason && (
-        <p className="mt-2 text-xs text-amber-200/90">
-          {translateBlockedReason(walletConsumer.blockedReason, t)}
-        </p>
-      )}
+      <p className="mt-2 text-xs text-amber-200/90" data-testid="wallet-mexc-primary-reason">
+        {translateReasonKind(primaryReasonKind === 'available' ? 'runtime_tier4' : primaryReasonKind, t)}
+      </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
           disabled
           aria-disabled="true"
-          title={t('mexc_tier4_blocked')}
+          title={t('mexc_reason_runtime_tier4')}
           className="cursor-not-allowed rounded-md bg-slate-700 px-3 py-2 text-xs text-slate-400"
           data-testid="wallet-withdraw-disabled"
         >
@@ -102,7 +119,7 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
           type="button"
           disabled
           aria-disabled="true"
-          title={t('mexc_tier4_blocked')}
+          title={t('mexc_reason_runtime_tier4')}
           className="cursor-not-allowed rounded-md bg-slate-700 px-3 py-2 text-xs text-slate-400"
           data-testid="wallet-transfer-disabled"
         >
@@ -111,6 +128,7 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
         <button
           type="button"
           onClick={handleManageConnection}
+          onKeyDown={onManageKeyDown}
           className="rounded-md border border-indigo-400/40 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-200 hover:bg-indigo-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
           data-testid="wallet-manage-connection-link"
         >

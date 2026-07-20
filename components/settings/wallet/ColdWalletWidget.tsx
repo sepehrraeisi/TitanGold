@@ -213,32 +213,46 @@ const ColdWalletWidget: React.FC = () => {
                     <StatBox label={t('today_transfers')} value={todayTransfers.toString()} />
                     <StatBox label={t('cold_wallet_balance')} value={`$${coldWalletBalance.toLocaleString()}`} />
                 </div>
-                <div className="grid grid-cols-4 gap-2 text-xs">
-                    <button 
-                        onClick={handleTestConnection}
-                        disabled={loading}
-                        className="p-2 bg-gray-700 hover:bg-gray-600 rounded-md disabled:opacity-50 transition-colors"
+                <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                    <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        title={t('wallet_control_coming_later')}
+                        className="cursor-not-allowed p-2 bg-gray-800/60 text-slate-400 rounded-md"
+                        data-testid="wallet-cold-test-coming-later"
                     >
-                        {loading ? '...' : t('test_cold_wallet_connection')}
+                        {t('test_cold_wallet_connection')} — {t('wallet_control_coming_later')}
                     </button>
-                    <button 
-                        onClick={handleInstantTransfer}
-                        disabled={transferring || !settings.autoTransfer}
-                        className="p-2 bg-purple-600 hover:bg-purple-700 rounded-md disabled:opacity-50 transition-colors"
+                    <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        title={t('wallet_control_blocked_tier4')}
+                        className="cursor-not-allowed p-2 bg-gray-800/60 text-slate-400 rounded-md"
+                        data-testid="wallet-cold-instant-blocked"
                     >
-                        {transferring ? '...' : t('instant_transfer')}
+                        {t('instant_transfer')} — {t('wallet_control_blocked_tier4')}
                     </button>
-                    <button 
-                        onClick={handleTransferHistory}
-                        className="p-2 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"
+                    <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        title={t('wallet_control_coming_later')}
+                        className="cursor-not-allowed p-2 bg-gray-800/60 text-slate-400 rounded-md"
+                        data-testid="wallet-cold-history-coming-later"
                     >
-                        {t('transfer_history')}
+                        {t('transfer_history')} — {t('wallet_control_coming_later')}
                     </button>
-                    <button 
-                        onClick={handleColdWalletReport}
-                        className="p-2 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"
+                    <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        title={t('wallet_control_coming_later')}
+                        className="cursor-not-allowed p-2 bg-gray-800/60 text-slate-400 rounded-md"
+                        data-testid="wallet-cold-report-coming-later"
                     >
-                        {t('cold_wallet_report')}
+                        {t('cold_wallet_report')} — {t('wallet_control_coming_later')}
                     </button>
                 </div>
             </div>

@@ -139,18 +139,30 @@ export default function MultiExchangeSettings({ initialSubtab, onNavigate: _onNa
           const statusText = t(connectionStatusMessageKey(displayStatus));
           const isMexc = isConfigurableProvider(exchange);
           const expanded = isMexc && expandedExchange === exchange;
-          const actionLabel = t(mexcPrimaryActionLabelKey(displayStatus));
+          const actionLabel = expanded
+            ? t('mexc_collapse_panel')
+            : t(mexcPrimaryActionLabelKey(displayStatus));
 
           return (
-            <div key={exchange} className="overflow-hidden rounded-lg border border-gray-800">
+            <div key={exchange} className="overflow-hidden rounded-lg border border-gray-800" data-mexc-expanded={expanded ? 'true' : 'false'}>
               <div className="flex items-center justify-between gap-3 p-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <span aria-hidden="true">{EXCHANGE_ICONS[exchange] || '⚪'}</span>
                   <div className="min-w-0">
-                    <div className="font-medium text-white">{exchange}</div>
-                    <div className="text-xs text-gray-400" data-testid={`connection-status-${exchange}`}>
-                      {statusText}
+                    <div className="font-medium text-white" data-testid={`connection-heading-${exchange}`}>
+                      {exchange}
                     </div>
+                    {/* One status line only — hide duplicate when panel is open (panel shows detail) */}
+                    {!expanded && (
+                      <div className="text-xs text-gray-400" data-testid={`connection-status-${exchange}`}>
+                        {statusText}
+                      </div>
+                    )}
+                    {expanded && isMexc && (
+                      <div className="text-xs text-gray-400" data-testid={`connection-status-${exchange}`}>
+                        {statusText}
+                      </div>
+                    )}
                   </div>
                 </div>
 

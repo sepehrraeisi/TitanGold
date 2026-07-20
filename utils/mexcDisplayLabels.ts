@@ -41,7 +41,9 @@ const CONSUMER_ID_KEYS: Record<string, string> = {
   spot_trading_execute: 'mexc_consumer_spot_execute',
   futures_trading_read: 'mexc_consumer_futures_read',
   futures_trading_execute: 'mexc_consumer_futures_execute',
-  wallet: 'mexc_consumer_wallet',
+  wallet: 'mexc_consumer_wallet_read',
+  wallet_withdrawal_execute: 'mexc_consumer_wallet_withdrawal',
+  wallet_transfer_execute: 'mexc_consumer_wallet_transfer',
   risk_agents: 'mexc_consumer_risk',
   market_data_agents: 'mexc_consumer_market_data',
 };
