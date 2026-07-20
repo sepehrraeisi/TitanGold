@@ -4994,7 +4994,7 @@
   "mexc_cap_WITHDRAWAL_HISTORY_READ": "Withdrawal history read",
   "mexc_cap_WITHDRAWAL_EXECUTE": "Withdrawal execute",
   "mexc_cap_WITHDRAWAL_CANCEL": "Withdrawal cancel",
-  "mexc_cap_DUST_READ": "Dust balance read",
+  "mexc_cap_DUST_READ": "Dust assets read",
   "mexc_cap_DUST_EXECUTE": "Dust convert execute",
   "mexc_cap_TRANSFER_READ": "Transfer read",
   "mexc_cap_TRANSFER_EXECUTE": "Transfer execute",
@@ -5006,7 +5006,7 @@
   "mexc_cap_SUBACCOUNT_MANAGE": "Sub-account manage",
   "mexc_cap_ACCOUNT_EDIT": "Account edit",
   "mexc_details": "MEXC connection details",
-  "mexc_cap_missing_label": "Missing label: {code}",
+  "mexc_cap_missing_label": "Missing capability label: {code}",
   "mexc_technical_code": "Technical code",
   "mexc_technical_value": "Technical value",
   "mexc_unavailable": "Unavailable",
@@ -5028,5 +5028,12 @@
   "mexc_auth_secret_reentry": "Secret re-entry required",
   "mexc_required_capabilities": "Required capabilities",
   "mexc_optional_capabilities": "Optional capabilities",
-  "mexc_blocked_capabilities": "Blocked capabilities"
+  "mexc_blocked_capabilities": "Blocked capabilities",
+  "mexc_cap_status_verified": "Verified",
+  "mexc_cap_status_not_verified": "Not verified",
+  "mexc_cap_status_awaiting_private": "Awaiting private connection verification",
+  "mexc_cap_status_provider_unverified": "Provider support not verified",
+  "mexc_cap_status_runtime_blocked": "Blocked by runtime controls",
+  "mexc_technical_verification_value": "Verification technical value",
+  "mexc_technical_operational_value": "Operational technical value"
 }

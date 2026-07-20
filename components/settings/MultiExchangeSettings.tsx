@@ -158,11 +158,6 @@ export default function MultiExchangeSettings({ initialSubtab, onNavigate: _onNa
                         {statusText}
                       </div>
                     )}
-                    {expanded && isMexc && (
-                      <div className="text-xs text-gray-400" data-testid={`connection-status-${exchange}`}>
-                        {statusText}
-                      </div>
-                    )}
                   </div>
                 </div>
 

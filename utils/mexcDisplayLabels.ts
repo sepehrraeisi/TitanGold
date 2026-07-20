@@ -229,6 +229,58 @@ export function getReasonLabel(reasonCode: string, t: TranslateFn): string {
   return labeled || t('mexc_blocked_generic_reason');
 }
 
+/**
+ * Concise per-capability status for consumer detail rows (product mode).
+ * Never returns raw capability codes or backend English prose.
+ */
+export function getCapabilityConsumerStatusLabel(
+  capabilityId: string,
+  cap:
+    | {
+        capabilityId?: string;
+        providerSupport?: string | null;
+        keyGrant?: string | null;
+        verificationState?: string | null;
+        operationalState?: string | null;
+        blockedReason?: string | null;
+      }
+    | null
+    | undefined,
+  t: TranslateFn,
+): string {
+  if (capabilityId === 'PRIVATE_AUTH') {
+    const verified =
+      cap?.verificationState === 'verified' ||
+      cap?.operationalState === 'enabled' ||
+      String(cap?.operationalState || '').includes('authenticated');
+    return verified ? t('mexc_cap_status_verified') : t('mexc_cap_status_not_verified');
+  }
+
+  if (!cap) return t('mexc_cap_status_awaiting_private');
+
+  const op = String(cap.operationalState || '').toLowerCase();
+  const verification = String(cap.verificationState || '').toLowerCase();
+  const provider = String(cap.providerSupport || '').toLowerCase();
+
+  if (op === 'enabled' || verification === 'verified' || verification === 'available') {
+    return t('mexc_status_available');
+  }
+  if (provider === 'unknown' || provider === 'unsupported') {
+    return t('mexc_cap_status_provider_unverified');
+  }
+  if (
+    op.includes('blocked_by_runtime') ||
+    op.includes('blocked_tier4') ||
+    verification === 'not_safely_testable'
+  ) {
+    return t('mexc_cap_status_runtime_blocked');
+  }
+  if (verification === 'not_tested' || op === 'disabled' || op.includes('pending')) {
+    return t('mexc_cap_status_awaiting_private');
+  }
+  return t('mexc_cap_status_awaiting_private');
+}
+
 /** @deprecated Prefer getAuthStateLabel */
 export function translateAuthState(value: string | null | undefined, t: TranslateFn): string {
   return getAuthStateLabel(value, t);

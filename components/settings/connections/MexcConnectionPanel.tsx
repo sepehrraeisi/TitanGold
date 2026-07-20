@@ -9,6 +9,7 @@ import {
 } from '../../../services/connectionsApi.ts';
 import {
   getAuthStateLabel,
+  getCapabilityConsumerStatusLabel,
   getCapabilityLabel,
   getConsumerLabel,
   getGroupLabel,
@@ -301,11 +302,20 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
     return PRIMARY_CONSUMER_IDS.map((id) => byId.get(id)).filter(Boolean) as typeof list;
   }, [summary]);
 
+  const overallStateKey = overall?.code ? `mexc_state_${overall.code}` : '';
   const overallLabel = overall
-    ? t(`mexc_state_${overall.code}`) !== `mexc_state_${overall.code}`
-      ? t(`mexc_state_${overall.code}`)
-      : overall.label
+    ? t(overallStateKey) !== overallStateKey
+      ? t(overallStateKey)
+      : getAuthStateLabel(overall.code, t)
     : t('connections_configured_not_verified');
+
+  const capabilityById = useMemo(() => {
+    const map = new Map<string, NonNullable<MexcCapabilitySummary['capabilityMatrix']>['capabilities'][number]>();
+    for (const cap of summary?.capabilityMatrix?.capabilities || []) {
+      map.set(cap.capabilityId, cap);
+    }
+    return map;
+  }, [summary]);
 
   return (
     <div
@@ -589,8 +599,11 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                                 <p className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true" data-testid={`mexc-cap-code-${cap.capabilityId}`}>
                                   {t('mexc_technical_code')}: {cap.capabilityId}
                                 </p>
+                                <p className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-value="true" data-testid={`mexc-cap-tech-value-${cap.capabilityId}`}>
+                                  {t('mexc_technical_verification_value')}: {cap.verificationState}
+                                </p>
                                 <p className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-value="true">
-                                  {t('mexc_technical_value')}: {cap.verificationState}
+                                  {t('mexc_technical_operational_value')}: {cap.operationalState}
                                 </p>
                               </div>
                             )}
@@ -649,33 +662,49 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                   <div className="mt-2 space-y-2 text-[11px] text-slate-400" data-testid={`mexc-consumer-expanded-${c.consumerId}`}>
                     <div>
                       <p className="mb-1 font-medium text-slate-300">{t('mexc_required_capabilities')}</p>
-                      <ul className="space-y-1">
-                        {(c.requiredCapabilities || []).map((id) => (
-                          <li key={id} className="flex flex-wrap items-baseline gap-2">
-                            <span>{getCapabilityLabel(id, t)}</span>
-                            {showTechnical && (
-                              <span className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true">
-                                {id}
-                              </span>
-                            )}
-                          </li>
-                        ))}
+                      <ul className="space-y-2">
+                        {(c.requiredCapabilities || []).map((id) => {
+                          const matrixCap = capabilityById.get(id);
+                          return (
+                            <li key={id} className="space-y-0.5" data-testid={`mexc-consumer-req-${c.consumerId}-${id}`}>
+                              <div className="flex flex-wrap items-baseline gap-2">
+                                <span className="text-slate-200">{getCapabilityLabel(id, t)}</span>
+                                {showTechnical && (
+                                  <span className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true">
+                                    {id}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-amber-200/80">
+                                {getCapabilityConsumerStatusLabel(id, matrixCap, t)}
+                              </p>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                     {(c.optionalCapabilities || []).length > 0 && (
                       <div>
                         <p className="mb-1 font-medium text-slate-300">{t('mexc_optional_capabilities')}</p>
-                        <ul className="space-y-1">
-                          {(c.optionalCapabilities || []).map((id) => (
-                            <li key={id} className="flex flex-wrap items-baseline gap-2">
-                              <span>{getCapabilityLabel(id, t)}</span>
-                              {showTechnical && (
-                                <span className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true">
-                                  {id}
-                                </span>
-                              )}
-                            </li>
-                          ))}
+                        <ul className="space-y-2">
+                          {(c.optionalCapabilities || []).map((id) => {
+                            const matrixCap = capabilityById.get(id);
+                            return (
+                              <li key={id} className="space-y-0.5" data-testid={`mexc-consumer-opt-${c.consumerId}-${id}`}>
+                                <div className="flex flex-wrap items-baseline gap-2">
+                                  <span className="text-slate-200">{getCapabilityLabel(id, t)}</span>
+                                  {showTechnical && (
+                                    <span className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true">
+                                      {id}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500">
+                                  {getCapabilityConsumerStatusLabel(id, matrixCap, t)}
+                                </p>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}

@@ -4780,7 +4780,7 @@
   "mexc_cap_SUBACCOUNT_MANAGE": "مدیریت حساب‌های فرعی",
   "mexc_cap_ACCOUNT_EDIT": "ویرایش اطلاعات حساب",
   "mexc_details": "جزئیات اتصال MEXC",
-  "mexc_cap_missing_label": "برچسب موجود نیست: {code}",
+  "mexc_cap_missing_label": "برچسب قابلیت موجود نیست: {code}",
   "mexc_technical_code": "کد فنی",
   "mexc_technical_value": "مقدار فنی",
   "mexc_unavailable": "در دسترس نیست",
@@ -4802,5 +4802,12 @@
   "mexc_auth_secret_reentry": "ورود مجدد رمز لازم است",
   "mexc_required_capabilities": "قابلیت‌های الزامی",
   "mexc_optional_capabilities": "قابلیت‌های اختیاری",
-  "mexc_blocked_capabilities": "قابلیت‌های مسدود"
+  "mexc_blocked_capabilities": "قابلیت‌های مسدود",
+  "mexc_cap_status_verified": "تأییدشده",
+  "mexc_cap_status_not_verified": "تأیید نشده",
+  "mexc_cap_status_awaiting_private": "در انتظار تأیید اتصال خصوصی",
+  "mexc_cap_status_provider_unverified": "پشتیبانی ارائه‌دهنده تأیید نشده",
+  "mexc_cap_status_runtime_blocked": "به‌دلیل کنترل‌های اجرایی مسدود است",
+  "mexc_technical_verification_value": "مقدار فنی تأیید",
+  "mexc_technical_operational_value": "مقدار فنی عملیاتی"
 }
