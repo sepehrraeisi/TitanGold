@@ -289,7 +289,15 @@ const Settings: React.FC<SettingsProps> = ({
             {tabs.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (onNavigate) {
+                    onNavigate({
+                      view: 'settings',
+                      settingsTab: tab.id,
+                    });
+                  }
+                }}
                 data-tab-id={tab.id}
                 data-testid={`settings-tab-${tab.id}`}
                 className={`w-full flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
