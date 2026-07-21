@@ -16,6 +16,8 @@ export type MexcReasonKind =
   | 'provider_maintenance'
   | 'provider_unavailable'
   | 'auth_pending'
+  | 'not_tested'
+  | 'key_permission_unverified'
   | 'key_denied'
   | 'key_unknown'
   | 'user_capability'
@@ -26,6 +28,7 @@ export type MexcReasonKind =
   | 'wallet_schema_warning'
   | 'wallet_consumer_limited'
   | 'wallet_verification_incomplete'
+  | 'wallet_permission_available_incomplete'
   | 'generic';
 
 export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
@@ -33,6 +36,8 @@ export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
   provider_maintenance: 'mexc_reason_provider_maintenance',
   provider_unavailable: 'mexc_reason_provider_unavailable',
   auth_pending: 'mexc_reason_auth_pending',
+  not_tested: 'mexc_reason_not_tested',
+  key_permission_unverified: 'mexc_reason_key_permission_unverified',
   key_denied: 'mexc_reason_key_denied',
   key_unknown: 'mexc_reason_key_unknown',
   user_capability: 'mexc_reason_user_capability',
@@ -43,6 +48,7 @@ export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
   wallet_schema_warning: 'mexc_reason_wallet_schema_warning',
   wallet_consumer_limited: 'mexc_reason_wallet_consumer_limited',
   wallet_verification_incomplete: 'mexc_reason_wallet_verification_incomplete',
+  wallet_permission_available_incomplete: 'mexc_reason_wallet_permission_available_incomplete',
   generic: 'mexc_blocked_generic_reason',
 };
 
@@ -59,6 +65,9 @@ export interface CapabilityLike {
   dataContractWarningCode?: string | null;
   sanitizedDataContractReason?: string | null;
   consumerReadiness?: string | null;
+  privateAuthVerified?: boolean | null;
+  directEndpointVerified?: boolean | null;
+  keyGrantEvidence?: string | null;
 }
 
 export interface ConsumerLike {
@@ -79,7 +88,13 @@ const PRIORITY: MexcReasonKind[] = [
   'account_use_case_unknown',
   'auth_pending',
   'key_denied',
+  'key_permission_unverified',
+  'not_tested',
   'key_unknown',
+  'wallet_permission_available_incomplete',
+  'wallet_verification_incomplete',
+  'wallet_schema_warning',
+  'wallet_consumer_limited',
   'user_capability',
   'runtime_tier4',
   'risk_confirmation',
@@ -105,6 +120,7 @@ export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
   const id = String(cap.capabilityId || '');
   const contract = String(cap.dataContractState || '').toLowerCase();
   const verification = String(cap.verificationState || '').toLowerCase();
+  const authVerified = cap.privateAuthVerified === true;
 
   if (op === 'enabled') {
     if (id === 'WALLET_CURRENCY_READ' && (contract === 'warning' || contract === 'incompatible')) {
@@ -114,10 +130,34 @@ export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
   }
 
   if (
+    id === 'WALLET_CURRENCY_READ'
+    && key === 'granted'
+    && (verification === 'verification_error' || cap.directEndpointVerified === false)
+  ) {
+    return 'wallet_permission_available_incomplete';
+  }
+
+  if (
     verification === 'verification_error'
     || /verification could not be completed/i.test(reason)
   ) {
     return 'wallet_verification_incomplete';
+  }
+
+  if (verification === 'not_tested' || /^Not yet tested$/i.test(reason)) {
+    if (!authVerified && /Private authentication has not been verified/i.test(reason)) {
+      return 'auth_pending';
+    }
+    if (authVerified || /Required API-key permission has not yet been verified/i.test(reason)) {
+      if (key === 'unknown' || /Required API-key permission has not yet been verified/i.test(reason)) {
+        return 'key_permission_unverified';
+      }
+      return 'not_tested';
+    }
+    if (/Private authentication has not been verified/i.test(reason)) {
+      return 'auth_pending';
+    }
+    return authVerified ? 'not_tested' : 'auth_pending';
   }
 
   if (provider === 'unknown' || /PROVIDER SUPPORT NOT VERIFIED/i.test(reason)) {
@@ -147,14 +187,30 @@ export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
     return 'key_denied';
   }
 
+  if (/Required API-key permission has not yet been verified/i.test(reason)) {
+    return 'key_permission_unverified';
+  }
+
+  if (/Not yet tested/i.test(reason)) {
+    return 'not_tested';
+  }
+
+  if (
+    /Private authentication has not been verified/i.test(reason)
+  ) {
+    return 'auth_pending';
+  }
+
   if (
     /Not verified|private capability remains disabled|private authentication|auth/i.test(reason)
     || op === 'disabled'
     || op === 'disabled_pending_explicit_authorization'
   ) {
-    // Prefer key_unknown when grant is unknown and private
     if (key === 'unknown' && /permission|keyGrant|API key/i.test(reason)) {
       return 'key_unknown';
+    }
+    if (authVerified) {
+      return key === 'unknown' ? 'key_permission_unverified' : 'not_tested';
     }
     if (provider === 'supported' || !provider) {
       return 'auth_pending';
@@ -199,12 +255,12 @@ export function selectCapabilityProductReason(cap: CapabilityLike): MexcReasonKi
 
 export function selectConsumerProductReason(consumer: ConsumerLike): MexcReasonKind {
   if (consumer.registered === false) return 'generic';
-  if (consumer.eligible) return 'available';
+  if (consumer.eligible && consumer.consumerReadiness !== 'limited') return 'available';
 
   if (
     consumer.limitedByDataContract
     || consumer.consumerReadiness === 'limited'
-    || /provider records are not yet supported|ساختارهای داده/i.test(String(consumer.blockedReason || ''))
+    || /provider records are not yet supported|ساختارهای داده|currency configuration is incomplete|پیکربندی نرمال/i.test(String(consumer.blockedReason || ''))
   ) {
     return 'wallet_consumer_limited';
   }
@@ -228,7 +284,16 @@ export function productStatusFromCapability(cap: CapabilityLike): 'available' | 
   if (kind === 'provider_unknown' || kind === 'provider_unavailable' || kind === 'account_use_case_unknown') {
     return 'unavailable';
   }
-  if (kind === 'auth_pending' || kind === 'key_unknown' || kind === 'wallet_verification_incomplete') return 'pending';
+  if (
+    kind === 'auth_pending'
+    || kind === 'key_unknown'
+    || kind === 'key_permission_unverified'
+    || kind === 'not_tested'
+    || kind === 'wallet_verification_incomplete'
+    || kind === 'wallet_permission_available_incomplete'
+  ) {
+    return 'pending';
+  }
   return 'blocked';
 }
 

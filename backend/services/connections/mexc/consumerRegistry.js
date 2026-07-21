@@ -297,17 +297,47 @@ export function evaluateConsumerEligibility(consumer, matrix) {
   let consumerReadiness = eligible ? 'ready' : 'blocked';
   let limitedByDataContract = false;
 
-  // Wallet product read requires normalized currency/network records.
-  // Access may be verified while consumer readiness remains limited.
+  // Wallet product read: permission may be granted while currency-config endpoint
+  // remains incomplete — surface Limited (not globally Blocked) when history/transfer
+  // reads remain available or data-contract is explicitly limited/warning.
   if (consumer.id === 'wallet') {
     const walletCap = byId.get(MEXC_CAPABILITY.WALLET_CURRENCY_READ);
+    const privateAuth = byId.get(MEXC_CAPABILITY.PRIVATE_AUTH);
+    const deposit = byId.get(MEXC_CAPABILITY.DEPOSIT_HISTORY_READ);
+    const withdrawal = byId.get(MEXC_CAPABILITY.WITHDRAWAL_HISTORY_READ);
+    const transfer = byId.get(MEXC_CAPABILITY.TRANSFER_READ);
+    const authOk = privateAuth?.verificationState === 'verified'
+      || matrix.privateAuthVerified === true;
+    const historyOk = [deposit, withdrawal, transfer].some(
+      (c) => c && c.operationalState === 'enabled' && c.verificationState === 'verified',
+    );
+    const limitedContract = walletCap
+      && (walletCap.consumerReadiness === 'limited'
+        || walletCap.dataContractState === 'warning'
+        || walletCap.dataContractState === 'incompatible');
+    const permissionGranted = walletCap?.keyGrant === 'granted';
+    const endpointIncomplete = walletCap
+      && (walletCap.verificationState === 'verification_error'
+        || walletCap.directEndpointVerified === false
+        || walletCap.verificationState === 'verified');
+
     if (
+      walletCap
+      && authOk
+      && permissionGranted
+      && endpointIncomplete
+      && (limitedContract || historyOk)
+    ) {
+      eligible = true;
+      limitedByDataContract = true;
+      consumerReadiness = 'limited';
+      blockedReasons.length = 0;
+      blockedReasons.push(WALLET_ACCESS_EVIDENCE_REASON.CONSUMER_LIMITED_EN);
+    } else if (
       walletCap
       && walletCap.verificationState === 'verified'
       && walletCap.keyGrant === 'granted'
-      && (walletCap.consumerReadiness === 'limited'
-        || walletCap.dataContractState === 'warning'
-        || walletCap.dataContractState === 'incompatible')
+      && limitedContract
     ) {
       eligible = false;
       limitedByDataContract = true;
@@ -333,7 +363,9 @@ export function evaluateConsumerEligibility(consumer, matrix) {
     eligible,
     consumerReadiness,
     limitedByDataContract,
-    blockedReason: eligible ? null : blockedReasons.join('; ') || 'Required capabilities not operational',
+    blockedReason: (eligible && !limitedByDataContract)
+      ? null
+      : blockedReasons.join('; ') || 'Required capabilities not operational',
     fallbackBehavior: consumer.fallbackBehavior,
     registered: true,
   };

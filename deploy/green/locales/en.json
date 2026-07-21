@@ -5002,5 +5002,18 @@
   "mexc_reason_wallet_consumer_limited": "Endpoint access is verified, but some provider records are not yet supported",
   "mexc_wallet_access_verified": "Access verified",
   "mexc_data_contract_state": "Data contract",
-  "mexc_technical_warning_code": "Warning code"
+  "mexc_technical_warning_code": "Warning code",
+  "mexc_reason_not_tested": "Not yet tested",
+  "mexc_reason_key_permission_unverified": "Required API-key permission has not yet been verified",
+  "mexc_reason_wallet_permission_available_incomplete": "Permission available — currency configuration verification is incomplete",
+  "mexc_wallet_permission_available": "Permission available",
+  "mexc_wallet_endpoint_incomplete": "Currency configuration verification is incomplete",
+  "mexc_wallet_structures_unsupported": "Some provider currency records are not yet supported",
+  "mexc_verification_incomplete_label": "Verification",
+  "mexc_never_successfully_verified": "Never successfully verified",
+  "mexc_key_grant_evidence": "Key grant evidence",
+  "mexc_last_attempt_at": "Last attempt",
+  "mexc_last_verified_at": "Last verified",
+  "mexc_last_attempt_failure": "Last attempt failure code",
+  "mexc_authenticated_capabilities_partial": "Authenticated · Capabilities partial"
 }

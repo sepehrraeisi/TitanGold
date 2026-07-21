@@ -348,21 +348,37 @@ function validateWalletItem(item, itemIndex, safe, counters) {
 
 function buildSafeMeta({ status, headers, transportMeta = {} }) {
   const normalizedHeaders = normalizeHeaderLookup(headers);
-  const contentType = normalizedHeaders['content-type'] || null;
-  const contentEncoding = normalizedHeaders['content-encoding'] || null;
+  const fromTransport = transportMeta.safeResponseMeta && typeof transportMeta.safeResponseMeta === 'object'
+    ? transportMeta.safeResponseMeta
+    : null;
+  const contentType = fromTransport?.sanitizedContentType
+    || normalizedHeaders['content-type']
+    || null;
+  const contentEncoding = fromTransport?.contentEncoding
+    || normalizedHeaders['content-encoding']
+    || null;
   const contentLengthRaw = normalizedHeaders['content-length'] || null;
-  const contentLength = Number.parseInt(String(contentLengthRaw || ''), 10);
-  const compressedBytes = transportMeta.compressedBytesRead
-    ?? (Number.isFinite(contentLength) ? contentLength : null);
-  const decompressedBytes = transportMeta.decompressedBytesProcessed ?? transportMeta.bodyBytes ?? null;
-  const httpStatus = status ?? null;
-  const httpOk = Number.isFinite(Number(httpStatus))
-    && Number(httpStatus) >= 200
-    && Number(httpStatus) < 300;
-  const contentTypeAccepted = !contentType
-    ? false
-    : /application\/json|\+json|text\/json/i.test(String(contentType));
+  const contentLength = fromTransport?.encodedContentLength
+    ?? Number.parseInt(String(contentLengthRaw || ''), 10);
+  // Fetch body bytes are decoded — never treat Content-Length as compressedBytesObserved.
+  const encodedBytesObserved = Number.isFinite(Number(transportMeta.encodedBytesObserved))
+    ? Number(transportMeta.encodedBytesObserved)
+    : (fromTransport?.encodedBytesObserved ?? null);
+  const decodedBytes = transportMeta.decodedBodyBytesProcessed
+    ?? transportMeta.decompressedBytesProcessed
+    ?? transportMeta.bodyBytes
+    ?? null;
+  const httpStatus = status ?? fromTransport?.status ?? null;
+  const httpOk = fromTransport?.httpOk === true
+    || (Number.isFinite(Number(httpStatus))
+      && Number(httpStatus) >= 200
+      && Number(httpStatus) < 300);
+  const contentTypeAccepted = fromTransport?.contentTypeAccepted === true
+    || (contentType
+      ? /application\/json|\+json|text\/json/i.test(String(contentType))
+      : false);
   return {
+    receivedHeaders: fromTransport?.receivedHeaders === true || Boolean(headers && Object.keys(normalizedHeaders).length),
     httpStatus,
     httpOk,
     contentType,
@@ -371,23 +387,30 @@ function buildSafeMeta({ status, headers, transportMeta = {} }) {
       ? String(contentType).split(';')[0].trim().slice(0, 64)
       : null,
     contentEncoding,
-    contentLengthPresent: Boolean(contentLengthRaw),
-    contentLengthCategory: Number.isFinite(contentLength)
+    contentLengthPresent: fromTransport?.contentLengthPresent ?? Boolean(contentLengthRaw),
+    encodedContentLength: Number.isFinite(contentLength) ? contentLength : null,
+    encodedContentLengthCategory: Number.isFinite(contentLength)
       ? categorizeWalletBodyBytes(contentLength)
+      : (fromTransport?.encodedContentLengthCategory || 'unknown'),
+    // Only when transport genuinely observed raw encoded bytes (Fetch: always null)
+    encodedBytesObserved: Number.isFinite(encodedBytesObserved) ? encodedBytesObserved : null,
+    // Decoded / decompressed body accounting
+    decodedBodyBytesProcessed: Number.isFinite(decodedBytes) ? decodedBytes : null,
+    decodedBodySizeCategory: Number.isFinite(decodedBytes)
+      ? categorizeWalletBodyBytes(decodedBytes)
       : 'unknown',
-    compressedBytesRead: Number.isFinite(compressedBytes) ? compressedBytes : null,
-    compressedByteCategory: Number.isFinite(compressedBytes)
-      ? categorizeWalletBodyBytes(compressedBytes)
+    decompressedBytesProcessed: Number.isFinite(decodedBytes) ? decodedBytes : null,
+    decompressedByteCategory: Number.isFinite(decodedBytes)
+      ? categorizeWalletBodyBytes(decodedBytes)
       : 'unknown',
-    decompressedBytesProcessed: Number.isFinite(decompressedBytes) ? decompressedBytes : null,
-    decompressedByteCategory: Number.isFinite(decompressedBytes)
-      ? categorizeWalletBodyBytes(decompressedBytes)
+    // Legacy aliases — these mean decoded body bytes, not compressed wire bytes
+    compressedBytesRead: null,
+    compressedByteCategory: 'unknown',
+    bodyBytes: Number.isFinite(decodedBytes) ? decodedBytes : null,
+    bodyByteCategory: Number.isFinite(decodedBytes)
+      ? categorizeWalletBodyBytes(decodedBytes)
       : 'unknown',
-    // legacy aliases used by older callers/tests
-    bodyBytes: Number.isFinite(decompressedBytes) ? decompressedBytes : null,
-    bodyByteCategory: Number.isFinite(decompressedBytes)
-      ? categorizeWalletBodyBytes(decompressedBytes)
-      : 'unknown',
+    bodyProcessingAbortLimit: null,
     topLevelType: 'unknown',
     itemCountCategory: null,
     networkItemCountCategory: null,
@@ -399,6 +422,9 @@ function buildSafeMeta({ status, headers, transportMeta = {} }) {
     reachedCurrencyOrNetworkStructure: false,
     schemaDriftCategories: [],
     schemaDriftCountCategory: 'zero',
+    redirectRejected: fromTransport?.redirectRejected === true,
+    tlsIntegrityPassed: fromTransport?.tlsIntegrityPassed !== false,
+    transportClient: transportMeta.transportClient || fromTransport?.transportClient || null,
   };
 }
 
@@ -452,38 +478,43 @@ export function validateWalletCurrencyRecordStrict(item) {
   return { accepted: true };
 }
 
+/**
+ * Early size hints from headers only.
+ * Content-Length with Content-Encoding is encoded length under Fetch — record category,
+ * do NOT claim a compressed limit was exceeded (encodedBytesObserved is unavailable).
+ * Without encoding, Content-Length may hint decoded size against the decompressed ceiling.
+ */
 function assertCompressedLimit(safe, headers) {
   const normalized = normalizeHeaderLookup(headers);
-  const encoding = String(normalized['content-encoding'] || '').toLowerCase();
-  const contentLength = Number.parseInt(String(normalized['content-length'] || ''), 10);
+  const encoding = String(safe.contentEncoding || normalized['content-encoding'] || '').toLowerCase();
+  const contentLength = Number.isFinite(safe.encodedContentLength)
+    ? safe.encodedContentLength
+    : Number.parseInt(String(normalized['content-length'] || ''), 10);
   const compressedLike = encoding.includes('gzip')
     || encoding.includes('br')
     || encoding.includes('deflate')
     || encoding.includes('compress');
-  if (compressedLike && Number.isFinite(contentLength) && contentLength > WALLET_COMPRESSED_MAX_BYTES) {
-    throw new WalletCurrencyConfigContractError(
-      WALLET_CURRENCY_ERROR.COMPRESSED_TOO_LARGE,
-      'Wallet compressed response exceeded defensive limit',
-      {
-        ...safe,
-        compressedBytesRead: contentLength,
-        compressedByteCategory: categorizeWalletBodyBytes(contentLength),
-        validationFailure: 'compressed.too_large',
-        abortLimit: 'compressed_bytes',
-      },
-    );
+
+  if (compressedLike && Number.isFinite(contentLength)) {
+    safe.encodedContentLength = contentLength;
+    safe.encodedContentLengthCategory = categorizeWalletBodyBytes(contentLength);
+    // Do not abort: Fetch does not expose raw encoded bytes before decompression.
+    return;
   }
-  // When Content-Length is present without encoding, treat as early decompressed bound signal
+
   if (!compressedLike && Number.isFinite(contentLength) && contentLength > WALLET_DECOMPRESSED_MAX_BYTES) {
     throw new WalletCurrencyConfigContractError(
       WALLET_CURRENCY_ERROR.DECOMPRESSED_TOO_LARGE,
-      'Wallet decompressed response exceeded defensive limit',
+      'Wallet decoded response exceeded defensive limit',
       {
         ...safe,
+        decodedBodyBytesProcessed: contentLength,
+        decodedBodySizeCategory: categorizeWalletBodyBytes(contentLength),
         decompressedBytesProcessed: contentLength,
         decompressedByteCategory: categorizeWalletBodyBytes(contentLength),
-        validationFailure: 'decompressed.content_length',
-        abortLimit: 'decompressed_bytes',
+        validationFailure: 'decoded.content_length',
+        abortLimit: 'decoded_body_bytes',
+        bodyProcessingAbortLimit: 'decoded_body_bytes',
       },
     );
   }
@@ -593,16 +624,19 @@ export async function parseWalletCurrencyConfigStream({
         decompressedBytes += buf.byteLength;
         safe.decompressedBytesProcessed = decompressedBytes;
         safe.decompressedByteCategory = categorizeWalletBodyBytes(decompressedBytes);
+        safe.decodedBodyBytesProcessed = decompressedBytes;
+        safe.decodedBodySizeCategory = categorizeWalletBodyBytes(decompressedBytes);
         safe.bodyBytes = decompressedBytes;
         safe.bodyByteCategory = safe.decompressedByteCategory;
         if (decompressedBytes > WALLET_DECOMPRESSED_MAX_BYTES) {
           cb(new WalletCurrencyConfigContractError(
             WALLET_CURRENCY_ERROR.DECOMPRESSED_TOO_LARGE,
-            'Wallet decompressed response exceeded defensive limit',
+            'Wallet decoded response exceeded defensive limit',
             {
               ...safe,
-              validationFailure: 'decompressed.too_large',
-              abortLimit: 'decompressed_bytes',
+              validationFailure: 'decoded.too_large',
+              abortLimit: 'decoded_body_bytes',
+              bodyProcessingAbortLimit: 'decoded_body_bytes',
             },
           ));
           return;

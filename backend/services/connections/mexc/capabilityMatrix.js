@@ -301,6 +301,7 @@ function deriveOperationalState({
   meta,
   runtimeAllowsSideEffects = false,
   userDisabled = false,
+  privateAuthVerified = false,
 }) {
   if (userDisabled) return { state: OPERATIONAL_STATE.BLOCKED_BY_USER, reason: 'Disabled by user' };
 
@@ -360,9 +361,30 @@ function deriveOperationalState({
     return { state: OPERATIONAL_STATE.DISABLED, reason: 'Verification could not be completed safely' };
   }
 
+  if (verificationState === VERIFICATION_STATE.NOT_TESTED) {
+    if (!privateAuthVerified) {
+      return {
+        state: OPERATIONAL_STATE.DISABLED,
+        reason: 'Private authentication has not been verified',
+      };
+    }
+    if (keyGrant === KEY_GRANT.UNKNOWN) {
+      return {
+        state: OPERATIONAL_STATE.DISABLED,
+        reason: 'Required API-key permission has not yet been verified',
+      };
+    }
+    return {
+      state: OPERATIONAL_STATE.DISABLED,
+      reason: 'Not yet tested',
+    };
+  }
+
   return {
     state: OPERATIONAL_STATE.DISABLED,
-    reason: 'Not verified — private capability remains disabled until safe verification succeeds',
+    reason: privateAuthVerified
+      ? 'Not yet tested'
+      : 'Private authentication has not been verified',
   };
 }
 
@@ -382,6 +404,7 @@ export function buildCapabilityMatrix(opts = {}) {
     runtimeAllowsSideEffects = false,
     userDisabled = false,
     walletDataContract = null,
+    providerPermissionEvidence = null,
   } = opts;
 
   const capabilities = MEXC_CAPABILITY_IDS.map((capabilityId) => {
@@ -442,6 +465,7 @@ export function buildCapabilityMatrix(opts = {}) {
       meta,
       runtimeAllowsSideEffects,
       userDisabled,
+      privateAuthVerified,
     });
 
     const inventory = listInventoryByCapability(capabilityId);
@@ -462,6 +486,8 @@ export function buildCapabilityMatrix(opts = {}) {
         consumerReadiness: 'not_applicable',
       };
 
+    const withdrawPerm = providerPermissionEvidence?.SPOT_WITHDRAW_READ || null;
+
     return {
       capabilityId,
       humanLabel: meta.humanLabel || capabilityId.replace(/_/g, ' '),
@@ -475,9 +501,22 @@ export function buildCapabilityMatrix(opts = {}) {
       operationalState,
       blockedReason,
       lastVerifiedAt: stored.lastVerifiedAt || null,
+      lastAttemptAt: stored.lastAttemptAt || null,
+      lastAttemptResult: stored.lastAttemptResult || null,
+      lastAttemptFailureCode: stored.lastAttemptFailureCode || stored.lastFailureCode || null,
       lastFailureCode: stored.lastFailureCode || null,
       sanitizedReason: stored.sanitizedReason || null,
       sourceOfEvidence: stored.sourceOfEvidence || null,
+      keyGrantEvidence: isWalletCurrency
+        ? (stored.keyGrantEvidence || withdrawPerm?.permissionCode || null)
+        : null,
+      keyGrantEvidenceType: isWalletCurrency
+        ? (stored.keyGrantEvidenceType || withdrawPerm?.evidenceType || null)
+        : null,
+      directEndpointVerified: isWalletCurrency
+        ? stored.directEndpointVerified === true
+        : null,
+      privateAuthVerified,
       dataContractState: contract.dataContractState,
       dataContractWarningCode: contract.dataContractWarningCode,
       sanitizedDataContractReason: contract.sanitizedDataContractReason,
@@ -499,7 +538,8 @@ export function buildCapabilityMatrix(opts = {}) {
     credentialsConfigured,
     privateAuthVerified,
     runtimeAllowsSideEffects: Boolean(runtimeAllowsSideEffects),
-    realSideEffectsAllowed: false, // program rule: never claim live side effects in this slice
+    realSideEffectsAllowed: false,
+    providerPermissionEvidence: providerPermissionEvidence || null,
     capabilities,
     byGroup: groupCapabilities(capabilities),
   };

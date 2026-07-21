@@ -132,11 +132,20 @@ function toneForProductStatus(status: string) {
 }
 
 function consumerEligibilityLabel(
-  consumer: { eligible?: boolean; registered?: boolean; sideEffectClass?: string },
+  consumer: {
+    eligible?: boolean;
+    registered?: boolean;
+    sideEffectClass?: string;
+    consumerReadiness?: string | null;
+    limitedByDataContract?: boolean;
+  },
   t: (k: string) => string,
 ): { label: string; tone: 'ok' | 'warn' | 'bad' | 'neutral' } {
   if (consumer.registered === false) {
     return { label: t('mexc_not_registered'), tone: 'neutral' };
+  }
+  if (consumer.consumerReadiness === 'limited' || consumer.limitedByDataContract) {
+    return { label: t('mexc_limited'), tone: 'warn' };
   }
   if (consumer.eligible) return { label: t('mexc_eligible'), tone: 'ok' };
   if (consumer.sideEffectClass === 'financial_write' || consumer.sideEffectClass === 'account_mutation') {
@@ -565,6 +574,12 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                           cap.capabilityId === 'WALLET_CURRENCY_READ'
                           && (cap.dataContractState === 'warning' || cap.dataContractState === 'incompatible'),
                         );
+                        const permissionIncomplete = Boolean(
+                          cap.capabilityId === 'WALLET_CURRENCY_READ'
+                          && cap.keyGrant === 'granted'
+                          && (cap.verificationState === 'verification_error'
+                            || cap.directEndpointVerified === false),
+                        );
                         return (
                           <div
                             key={cap.capabilityId}
@@ -577,22 +592,41 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                               </span>
                               <StatePill label={productStatusLabel(status, t)} tone={toneForProductStatus(status)} />
                             </div>
-                            {(status !== 'available' || schemaWarning) && (
+                            {(status !== 'available' || schemaWarning || permissionIncomplete) && (
                               <p className="mt-2 text-xs text-amber-200/90" data-testid={`mexc-cap-reason-${cap.capabilityId}`}>
-                                {translateReasonKind(schemaWarning ? 'wallet_schema_warning' : reasonKind, t)}
+                                {translateReasonKind(
+                                  permissionIncomplete
+                                    ? 'wallet_permission_available_incomplete'
+                                    : schemaWarning
+                                      ? 'wallet_schema_warning'
+                                      : reasonKind,
+                                  t,
+                                )}
                               </p>
                             )}
-                            {schemaWarning && (
+                            {permissionIncomplete && (
+                              <div className="mt-1 space-y-0.5 text-[11px] text-slate-400" data-testid={`mexc-cap-wallet-permission-${cap.capabilityId}`}>
+                                <p>{t('mexc_wallet_permission_available')}</p>
+                                <p>{t('mexc_wallet_endpoint_incomplete')}</p>
+                                <p>{t('mexc_wallet_structures_unsupported')}</p>
+                              </div>
+                            )}
+                            {schemaWarning && !permissionIncomplete && (
                               <p className="mt-1 text-[11px] text-slate-400" data-testid={`mexc-cap-access-${cap.capabilityId}`}>
                                 {t('mexc_wallet_access_verified')}
                               </p>
                             )}
-                            <p className="mt-1 text-[11px] text-slate-500">
+                            <p className="mt-1 text-[11px] text-slate-500" data-testid={`mexc-cap-last-checked-${cap.capabilityId}`}>
                               {t('mexc_last_checked')}:{' '}
-                              {cap.lastVerifiedAt
-                                ? formatLocalizedDateTime(cap.lastVerifiedAt, language, t)
+                              {(cap.lastAttemptAt || cap.lastVerifiedAt)
+                                ? formatLocalizedDateTime(cap.lastAttemptAt || cap.lastVerifiedAt, language, t)
                                 : t('mexc_never_checked')}
                             </p>
+                            {cap.capabilityId === 'WALLET_CURRENCY_READ' && (cap.lastAttemptAt || cap.lastFailureCode) && !cap.lastVerifiedAt && (
+                              <p className="mt-0.5 text-[11px] text-slate-500" data-testid={`mexc-cap-never-verified-${cap.capabilityId}`}>
+                                {t('mexc_verification_incomplete_label')}: {t('mexc_never_successfully_verified')}
+                              </p>
+                            )}
                             {showTechnical && (
                               <div className="mt-2 space-y-1 border-t border-white/5 pt-2 text-[11px] text-slate-400" data-testid={`mexc-cap-tech-${cap.capabilityId}`}>
                                 <p>
@@ -601,9 +635,31 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                                 <p>
                                   {t('mexc_key_grant')}: {getKeyGrantLabel(cap.keyGrant, t)}
                                 </p>
+                                {cap.keyGrantEvidence && (
+                                  <p data-testid={`mexc-cap-key-evidence-${cap.capabilityId}`}>
+                                    {t('mexc_key_grant_evidence')}: {cap.keyGrantEvidence}
+                                  </p>
+                                )}
                                 <p>
                                   {t('mexc_verification_state')}: {getVerificationLabel(cap.verificationState, t)}
                                 </p>
+                                <p>
+                                  {t('mexc_last_attempt_at')}:{' '}
+                                  {cap.lastAttemptAt
+                                    ? formatLocalizedDateTime(cap.lastAttemptAt, language, t)
+                                    : '—'}
+                                </p>
+                                <p>
+                                  {t('mexc_last_verified_at')}:{' '}
+                                  {cap.lastVerifiedAt
+                                    ? formatLocalizedDateTime(cap.lastVerifiedAt, language, t)
+                                    : 'null'}
+                                </p>
+                                {cap.lastAttemptFailureCode && (
+                                  <p>
+                                    {t('mexc_last_attempt_failure')}: {cap.lastAttemptFailureCode}
+                                  </p>
+                                )}
                                 <p>
                                   {t('mexc_operational')}: {getOperationalStateLabel(cap.operationalState, t)}
                                 </p>
@@ -663,7 +719,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                   </span>
                   <StatePill label={eligibility.label} tone={eligibility.tone} />
                 </div>
-                {!c.eligible && (
+                {(!c.eligible || c.consumerReadiness === 'limited' || c.limitedByDataContract) && (
                   <p className="mt-1 text-xs text-amber-200/90" data-testid={`mexc-consumer-reason-${c.consumerId}`}>
                     {translateReasonKind(reasonKind, t)}
                   </p>

@@ -332,8 +332,8 @@ describe('Wallet streaming currency config contract', () => {
     })).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.DECOMPRESSED_TOO_LARGE });
   }, 20000);
 
-  test('compressed Content-Length above 4 MiB aborts before parse', async () => {
-    await expect(parseWalletCurrencyConfigStream({
+  test('encoded Content-Length with gzip does not claim compressed abort under Fetch semantics', async () => {
+    const parsed = await parseWalletCurrencyConfigStream({
       status: 200,
       headers: {
         'content-type': 'application/json',
@@ -341,7 +341,12 @@ describe('Wallet streaming currency config contract', () => {
         'content-length': String(WALLET_COMPRESSED_MAX_BYTES + 1),
       },
       source: Readable.from([Buffer.from('[]', 'utf8')]),
-    })).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.COMPRESSED_TOO_LARGE });
+    });
+    expect(parsed.safe?.httpOk).toBe(true);
+    expect(parsed.safe.encodedContentLength).toBe(WALLET_COMPRESSED_MAX_BYTES + 1);
+    expect(parsed.safe.compressedBytesRead).toBeNull();
+    expect(parsed.safe.abortLimit).not.toBe('compressed_bytes');
+    expect(parsed.itemCountCategory || parsed.safe?.itemCountCategory || 'zero').toBeTruthy();
   });
 
   test('currency item limit aborts', async () => {

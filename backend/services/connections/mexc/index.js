@@ -1,3 +1,4 @@
+export * from './providerPermissionEvidence.js';
 export * from './capabilityIds.js';
 export * from './capabilityInventory.js';
 export * from './capabilityMatrix.js';

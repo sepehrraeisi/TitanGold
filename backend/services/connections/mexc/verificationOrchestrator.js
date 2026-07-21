@@ -321,9 +321,11 @@ async function runWalletCurrencyConfigProbe(probe, { apiKey, apiSecret, transpor
           headers: response.headers,
           source: response.stream,
           transportMeta: {
-            compressedBytesRead: response.contentLength,
+            safeResponseMeta: response.safeResponseMeta || null,
+            encodedContentLength: response.contentLength,
             truncated: response.truncated,
             latencyMs: response.latencyMs,
+            transportClient: response.transportClient || null,
             limitCategory: WALLET_DECOMPRESSED_MAX_BYTES,
           },
           onAbortStream: () => response.cancel?.(),
@@ -357,9 +359,13 @@ async function runWalletCurrencyConfigProbe(probe, { apiKey, apiSecret, transpor
         headers: streamed.headers,
         source: streamed.stream,
         transportMeta: {
-          compressedBytesRead: streamed.contentLength,
+          safeResponseMeta: streamed.safeResponseMeta || null,
+          encodedContentLength: streamed.contentLength,
+          encodedContentLengthCategory: streamed.encodedContentLengthCategory || null,
+          encodedBytesObserved: streamed.encodedBytesObserved,
           truncated: false,
           latencyMs: streamed.latencyMs,
+          transportClient: streamed.transportClient || null,
           limitCategory: WALLET_DECOMPRESSED_MAX_BYTES,
         },
         onAbortStream: () => streamed.cancel?.(),
@@ -400,14 +406,26 @@ async function runWalletCurrencyConfigProbe(probe, { apiKey, apiSecret, transpor
         : err.code === 'MEXC_RESPONSE_TOO_LARGE'
           ? WALLET_CURRENCY_ERROR.DECOMPRESSED_TOO_LARGE
           : err.code;
+      const meta = err.safeResponseMeta || err.extra?.safeResponseMeta || null;
       return buildWalletProbeFailure({
         probe,
         testedAt,
         code: mapped,
         safe: {
           ...(err.extra || {}),
+          ...(meta || {}),
+          httpStatus: meta?.status ?? err.extra?.httpStatus ?? null,
+          httpOk: meta?.httpOk ?? false,
+          contentTypeAccepted: meta?.contentTypeAccepted ?? false,
+          sanitizedContentType: meta?.sanitizedContentType ?? null,
+          contentEncoding: meta?.contentEncoding ?? null,
+          encodedContentLengthCategory: meta?.encodedContentLengthCategory ?? null,
+          decodedBodyBytesProcessed: err.extra?.decodedBodyBytesProcessed ?? null,
+          decodedBodySizeCategory: err.extra?.decodedBodySizeCategory ?? null,
+          bodyProcessingAbortLimit: err.extra?.bodyProcessingAbortLimit || 'decoded_body_bytes',
           validationFailure: err.code,
-          abortLimit: err.code,
+          abortLimit: err.extra?.bodyProcessingAbortLimit || err.code,
+          receivedHeaders: meta?.receivedHeaders === true,
         },
       });
     }

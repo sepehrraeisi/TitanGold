@@ -4607,7 +4607,7 @@
   "connections_private_verification_unavailable": "تأیید اعتبارنامه خصوصی هنوز در دسترس نیست.",
   "mexc_state_not_configured": "پیکربندی نشده",
   "mexc_state_configured_unverified": "پیکربندی‌شده · تأیید نشده",
-  "mexc_state_authenticated_capabilities_partial": "احراز هویت شده · قابلیت‌ها جزئی",
+  "mexc_state_authenticated_capabilities_partial": "احراز هویت‌شده · برخی قابلیت‌ها محدود هستند",
   "mexc_auth_authenticated": "احراز هویت شده",
   "mexc_public_market": "بازار عمومی",
   "mexc_private_auth": "احراز هویت خصوصی",
@@ -4818,5 +4818,18 @@
   "mexc_reason_wallet_consumer_limited": "دسترسی API تأیید شده است، اما برخی ساختارهای داده ارائه‌دهنده هنوز پشتیبانی نمی‌شوند",
   "mexc_wallet_access_verified": "دسترسی تأیید شد",
   "mexc_data_contract_state": "قرارداد داده",
-  "mexc_technical_warning_code": "کد هشدار"
+  "mexc_technical_warning_code": "کد هشدار",
+  "mexc_reason_not_tested": "هنوز آزمایش نشده است",
+  "mexc_reason_key_permission_unverified": "مجوز موردنیاز کلید API هنوز بررسی نشده است",
+  "mexc_reason_wallet_permission_available_incomplete": "مجوز موردنیاز در دسترس است — تأیید پیکربندی ارزها کامل نشده است",
+  "mexc_wallet_permission_available": "مجوز موردنیاز در دسترس است",
+  "mexc_wallet_endpoint_incomplete": "تأیید پیکربندی ارزها کامل نشده است",
+  "mexc_wallet_structures_unsupported": "برخی ساختارهای اطلاعات ارز ارائه‌دهنده هنوز پشتیبانی نمی‌شوند",
+  "mexc_verification_incomplete_label": "وضعیت تأیید",
+  "mexc_never_successfully_verified": "تاکنون با موفقیت تأیید نشده است",
+  "mexc_key_grant_evidence": "شواهد مجوز کلید",
+  "mexc_last_attempt_at": "آخرین تلاش",
+  "mexc_last_verified_at": "آخرین تأیید موفق",
+  "mexc_last_attempt_failure": "کد خطای آخرین تلاش",
+  "mexc_authenticated_capabilities_partial": "احراز هویت‌شده · برخی قابلیت‌ها محدود هستند"
 }

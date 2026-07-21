@@ -160,6 +160,7 @@ export function classifyWalletAccessEvidence(evidence = {}) {
     'Response-size limits did not abort',
     !/TOO_LARGE|ITEM_LIMIT|STRING_LIMIT|NESTING_LIMIT|PARSE_TIMEOUT/i.test(code)
       && abortLimit !== 'decompressed_bytes'
+      && abortLimit !== 'decoded_body_bytes'
       && abortLimit !== 'compressed_bytes'
       ? 'PROVEN'
       : 'FAILED',
@@ -273,7 +274,10 @@ export function buildSanitizedWalletProbeTelemetry(safe = {}, extras = {}) {
       ? s.schemaDriftCategories.filter((c) => WALLET_SAFE_DRIFT_CATEGORIES.includes(c))
       : [],
     schemaDriftCountCategory: s.schemaDriftCountCategory || 'zero',
-    decompressedByteCategory: s.decompressedByteCategory || null,
+    decompressedByteCategory: s.decompressedByteCategory || s.decodedBodySizeCategory || null,
+    decodedBodySizeCategory: s.decodedBodySizeCategory || s.decompressedByteCategory || null,
+    encodedContentLengthCategory: s.encodedContentLengthCategory || null,
+    bodyProcessingAbortLimit: s.bodyProcessingAbortLimit || s.abortLimit || null,
     itemCountCategory: s.itemCountCategory || null,
     networkItemCountCategory: s.networkItemCountCategory || null,
     testedAt: extras.testedAt || null,
