@@ -25,6 +25,7 @@ export type MexcReasonKind =
   | 'account_use_case_unknown'
   | 'wallet_schema_warning'
   | 'wallet_consumer_limited'
+  | 'wallet_verification_incomplete'
   | 'generic';
 
 export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
@@ -41,6 +42,7 @@ export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
   account_use_case_unknown: 'mexc_reason_account_use_case_unknown',
   wallet_schema_warning: 'mexc_reason_wallet_schema_warning',
   wallet_consumer_limited: 'mexc_reason_wallet_consumer_limited',
+  wallet_verification_incomplete: 'mexc_reason_wallet_verification_incomplete',
   generic: 'mexc_blocked_generic_reason',
 };
 
@@ -102,12 +104,20 @@ export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
   const reason = String(cap.blockedReason || '');
   const id = String(cap.capabilityId || '');
   const contract = String(cap.dataContractState || '').toLowerCase();
+  const verification = String(cap.verificationState || '').toLowerCase();
 
   if (op === 'enabled') {
     if (id === 'WALLET_CURRENCY_READ' && (contract === 'warning' || contract === 'incompatible')) {
       return 'wallet_schema_warning';
     }
     return 'available';
+  }
+
+  if (
+    verification === 'verification_error'
+    || /verification could not be completed/i.test(reason)
+  ) {
+    return 'wallet_verification_incomplete';
   }
 
   if (provider === 'unknown' || /PROVIDER SUPPORT NOT VERIFIED/i.test(reason)) {
@@ -218,7 +228,7 @@ export function productStatusFromCapability(cap: CapabilityLike): 'available' | 
   if (kind === 'provider_unknown' || kind === 'provider_unavailable' || kind === 'account_use_case_unknown') {
     return 'unavailable';
   }
-  if (kind === 'auth_pending' || kind === 'key_unknown') return 'pending';
+  if (kind === 'auth_pending' || kind === 'key_unknown' || kind === 'wallet_verification_incomplete') return 'pending';
   return 'blocked';
 }
 
