@@ -7,11 +7,18 @@
  * 4 wallet_currency_config  5 deposit_history  6 withdraw_history
  * 7 transfer_history  8 futures_assets  9 futures_open_positions
  *
+ * Future reordered continuation (after streaming remediation; do not auto-execute):
+ * 5 → 6 → 7 → 8 → 9 → 4 (Probes 1–3 excluded; Probe 4 last).
+ * Deposit/Withdraw History do NOT require successful Probe 4.
+ *
  * SPOT_TRADE_TEST / Test New Order is EXCLUDED from this checkpoint.
  */
 
 import { MEXC_CAPABILITY } from '../capabilityIds.js';
-import { WALLET_CURRENCY_RESPONSE_MAX_BYTES } from '../walletCurrencyConfigContract.js';
+import {
+  WALLET_DECOMPRESSED_MAX_BYTES,
+  WALLET_COMPRESSED_MAX_BYTES,
+} from '../walletCurrencyConfigContract.js';
 
 export const PROBE_RISK = Object.freeze({
   PUBLIC: 1,
@@ -177,9 +184,11 @@ export const MEXC_PROBE_CATALOG = Object.freeze([
     headers: ['X-MEXC-APIKEY'],
     requiredParams: ['timestamp', 'recvWindow'],
     officialPermission: 'SPOT_WITHDRAW_READ',
-    purpose: 'Wallet currency/network config availability evidence only',
+    purpose: 'Wallet currency/network config availability evidence only (streaming; no full-body buffer)',
     timeoutMs: 8000,
-    maxResponseBytes: WALLET_CURRENCY_RESPONSE_MAX_BYTES,
+    maxResponseBytes: WALLET_DECOMPRESSED_MAX_BYTES,
+    maxCompressedBytes: WALLET_COMPRESSED_MAX_BYTES,
+    streaming: true,
     persistFields: ['lastVerifiedAt', 'verificationState', 'keyGrant', 'lastFailureCode', 'sanitizedReason', 'latencyMs', 'providerAvailability'],
     memoryOnlyFields: ['completeCurrencyConfig', 'rawProviderBody'],
     requiresLiveGate: true,

@@ -53,14 +53,35 @@ import {
 import {
   buildE2EHttpsUrl,
   mexcE2ESafeFetch,
+  mexcE2ESafeFetchWalletStream,
   MexcE2ETransportError,
 } from './mexcE2ESafeTransport.js';
 import {
   parseWalletCurrencyConfigResponse,
+  parseWalletCurrencyConfigStream,
   WalletCurrencyConfigContractError,
   WALLET_CURRENCY_ERROR,
+  WALLET_DOMAIN_LOCAL_ERROR_CODES,
+  WALLET_COMPRESSED_MAX_BYTES,
+  WALLET_DECOMPRESSED_MAX_BYTES,
 } from './walletCurrencyConfigContract.js';
 import { query } from '../../../database/db.js';
+
+/** Future authorized continuation order — do not execute without explicit authorization. */
+export const MEXC_REORDERED_CONTINUATION_PROBE_IDS = Object.freeze([
+  'deposit_history',
+  'withdraw_history',
+  'transfer_history',
+  'futures_assets',
+  'futures_open_positions',
+  'wallet_currency_config',
+]);
+
+export const MEXC_REORDERED_CONTINUATION_EXCLUDES = Object.freeze([
+  'private_account',
+  'spot_open_orders',
+  'spot_my_trades',
+]);
 
 export function isCapabilityVerifyLiveEnabled(env = process.env) {
   return env.CONNECTIONS_CAPABILITY_VERIFY_LIVE === 'true'
@@ -206,7 +227,9 @@ const GLOBAL_FATAL_CODES = new Set([
   'MEXC_TIMEOUT',
   'MEXC_NETWORK_ERROR',
   'MEXC_REDIRECT_BLOCKED',
+  // Truncated / malformed remain globally fatal when transport integrity cannot be distinguished safely
   'MEXC_RESPONSE_TRUNCATED',
+  'MEXC_RESPONSE_MALFORMED',
   'CONNECTION_DECRYPTION_FAILED',
   'MEXC_RUNTIME_BLOCKED',
 ]);
@@ -232,26 +255,33 @@ function normalizeProbeResponse(res) {
 }
 
 function buildWalletProbeFailure({ probe, testedAt, code, safe = {}, providerCode = null }) {
-  const providerFailure = code === WALLET_CURRENCY_ERROR.PROVIDER_ERROR;
-  const normalizedCode = providerFailure
-    ? String(providerCode || 'PRIVATE_PROBE_FAILED')
-    : code;
+  const providerEnvelope = code === WALLET_CURRENCY_ERROR.PROVIDER_ERROR_ENVELOPE
+    || code === 'MEXC_PROVIDER_ERROR_ENVELOPE'
+    || code === 'MEXC_PROVIDER_ERROR';
   const providerDenied = providerCode === 700007;
+  const sizeFailure = [
+    WALLET_CURRENCY_ERROR.COMPRESSED_TOO_LARGE,
+    WALLET_CURRENCY_ERROR.DECOMPRESSED_TOO_LARGE,
+    WALLET_CURRENCY_ERROR.RESPONSE_TOO_LARGE,
+    'MEXC_RESPONSE_TOO_LARGE',
+  ].includes(String(code));
   return {
     success: false,
-    verificationState: providerFailure ? VERIFICATION_STATE.FAILED : VERIFICATION_STATE.VERIFICATION_ERROR,
+    verificationState: providerDenied ? VERIFICATION_STATE.FAILED : VERIFICATION_STATE.VERIFICATION_ERROR,
     keyGrant: providerDenied ? KEY_GRANT.DENIED : KEY_GRANT.UNKNOWN,
     latencyMs: safe.latencyMs ?? null,
-    code: normalizedCode,
-    sanitizedReason: providerFailure
+    code: providerDenied ? String(providerCode) : code,
+    sanitizedReason: providerDenied
       ? 'Wallet capability verification failed with provider evidence'
-      : 'Wallet capability verification could not be completed',
-    healthCategory: mapProviderCodeToHealthCategory(normalizedCode),
-    correctiveAction: providerFailure
+      : sizeFailure
+        ? 'Wallet capability verification could not be completed because the provider response exceeded the verification limit'
+        : 'Wallet capability verification could not be completed',
+    healthCategory: mapProviderCodeToHealthCategory(providerDenied ? String(providerCode) : code),
+    correctiveAction: providerDenied
       ? 'Review provider permission or provider state before retry'
-      : 'Remediate the Wallet response contract before a future authorized retry',
+      : 'Remediate the Wallet streaming response contract before a future authorized retry',
     testedAt,
-    providerAvailability: providerFailure ? null : 'available',
+    providerAvailability: providerDenied ? null : 'available',
     safeResponseEvidence: safe,
   };
 }
@@ -268,45 +298,72 @@ async function runWalletCurrencyConfigProbe(probe, { apiKey, apiSecret, transpor
   const signedQuery = `${total}&signature=${signature}`;
 
   try {
-    let response;
+    let contract;
     if (transport) {
-      response = normalizeProbeResponse(await transport({
+      // Fake/test transport may still return bodyText; route through streaming parser.
+      const response = normalizeProbeResponse(await transport({
         method: probe.method,
         host: probe.host,
         path: probe.path,
         query: params,
         headers: { 'X-MEXC-APIKEY': apiKey },
       }));
+      if (response.stream) {
+        contract = await parseWalletCurrencyConfigStream({
+          status: response.status,
+          headers: response.headers,
+          source: response.stream,
+          transportMeta: {
+            compressedBytesRead: response.contentLength,
+            truncated: response.truncated,
+            latencyMs: response.latencyMs,
+            limitCategory: WALLET_DECOMPRESSED_MAX_BYTES,
+          },
+          onAbortStream: () => response.cancel?.(),
+        });
+      } else {
+        contract = await parseWalletCurrencyConfigResponse({
+          status: response.status,
+          headers: response.headers,
+          bodyText: response.bodyText,
+          transportMeta: {
+            bodyBytes: response.bodyBytes,
+            truncated: response.truncated,
+            latencyMs: response.latencyMs,
+            limitCategory: WALLET_DECOMPRESSED_MAX_BYTES,
+          },
+        });
+      }
     } else {
-      response = await mexcE2ESafeFetch({
+      const streamed = await mexcE2ESafeFetchWalletStream({
         url: buildE2EHttpsUrl(probe.host, probe.path, signedQuery),
         method: 'GET',
         timeoutMs: probe.timeoutMs,
-        maxBytes: probe.maxResponseBytes,
+        compressedMaxBytes: WALLET_COMPRESSED_MAX_BYTES,
         headers: {
           'X-MEXC-APIKEY': apiKey,
           Accept: 'application/json',
         },
       });
+      contract = await parseWalletCurrencyConfigStream({
+        status: streamed.status,
+        headers: streamed.headers,
+        source: streamed.stream,
+        transportMeta: {
+          compressedBytesRead: streamed.contentLength,
+          truncated: false,
+          latencyMs: streamed.latencyMs,
+          limitCategory: WALLET_DECOMPRESSED_MAX_BYTES,
+        },
+        onAbortStream: () => streamed.cancel?.(),
+      });
     }
-
-    const contract = parseWalletCurrencyConfigResponse({
-      status: response.status,
-      headers: response.headers,
-      bodyText: response.bodyText,
-      transportMeta: {
-        bodyBytes: response.bodyBytes,
-        truncated: response.truncated,
-        limitCategory: probe.maxResponseBytes,
-        latencyMs: response.latencyMs,
-      },
-    });
 
     return {
       success: true,
       verificationState: VERIFICATION_STATE.VERIFIED,
       keyGrant: KEY_GRANT.GRANTED,
-      latencyMs: response.latencyMs,
+      latencyMs: contract.safe?.latencyMs ?? null,
       code: null,
       sanitizedReason: null,
       healthCategory: null,
@@ -326,19 +383,19 @@ async function runWalletCurrencyConfigProbe(probe, { apiKey, apiSecret, transpor
       });
     }
     if (err instanceof MexcE2ETransportError) {
+      const mapped = err.code === 'MEXC_RESPONSE_COMPRESSED_TOO_LARGE'
+        ? WALLET_CURRENCY_ERROR.COMPRESSED_TOO_LARGE
+        : err.code === 'MEXC_RESPONSE_TOO_LARGE'
+          ? WALLET_CURRENCY_ERROR.DECOMPRESSED_TOO_LARGE
+          : err.code;
       return buildWalletProbeFailure({
         probe,
         testedAt,
-        code: err.code,
+        code: mapped,
         safe: {
           ...(err.extra || {}),
-          validationFailure: err.code === 'MEXC_RESPONSE_TOO_LARGE'
-            ? 'transport.response_too_large'
-            : err.code === 'MEXC_RESPONSE_TRUNCATED'
-              ? 'transport.truncated'
-              : err.code === 'MEXC_REDIRECT_BLOCKED'
-                ? 'transport.redirect'
-                : 'transport.failure',
+          validationFailure: err.code,
+          abortLimit: err.code,
         },
       });
     }
@@ -346,13 +403,21 @@ async function runWalletCurrencyConfigProbe(probe, { apiKey, apiSecret, transpor
   }
 }
 
-function getProbeFailureDisposition(probe, outcome) {
+export function getProbeFailureDisposition(probe, outcome) {
   if (!outcome || outcome.success) return { stop: false, reason: null };
-  if (GLOBAL_FATAL_CODES.has(String(outcome.code || ''))) {
+  const code = String(outcome.code || '');
+  if (GLOBAL_FATAL_CODES.has(code)) {
     return { stop: true, reason: 'global_fatal' };
   }
-  if (probe.capabilityId === 'WALLET_CURRENCY_READ' && outcome.verificationState === VERIFICATION_STATE.VERIFICATION_ERROR) {
-    return { stop: true, reason: 'domain_local_wallet_contract' };
+  // Domain-local Wallet processing failures must not block Deposit/Withdraw/Transfer/Futures
+  if (
+    probe.capabilityId === 'WALLET_CURRENCY_READ'
+    && (
+      WALLET_DOMAIN_LOCAL_ERROR_CODES.has(code)
+      || outcome.verificationState === VERIFICATION_STATE.VERIFICATION_ERROR
+    )
+  ) {
+    return { stop: false, reason: 'domain_local_wallet' };
   }
   return { stop: false, reason: null };
 }

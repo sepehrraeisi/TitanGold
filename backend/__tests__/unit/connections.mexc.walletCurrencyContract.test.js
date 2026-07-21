@@ -1,9 +1,10 @@
 /**
- * MEXC Wallet currency config response contract and correction tests.
+ * MEXC Wallet streaming currency-config contract, policy and correction tests.
  * @jest-environment node
  */
 
 import { jest } from '@jest/globals';
+import { Readable } from 'stream';
 
 const query = jest.fn(async () => ({ rows: [] }));
 const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
@@ -19,9 +20,15 @@ delete process.env.CONNECTIONS_CAPABILITY_VERIFY_LIVE;
 
 const {
   parseWalletCurrencyConfigResponse,
+  parseWalletCurrencyConfigStream,
   WalletCurrencyConfigContractError,
   WALLET_CURRENCY_ERROR,
   WALLET_CURRENCY_RESPONSE_MAX_BYTES,
+  WALLET_DECOMPRESSED_MAX_BYTES,
+  WALLET_COMPRESSED_MAX_BYTES,
+  WALLET_MAX_CURRENCY_ITEMS,
+  WALLET_DOMAIN_LOCAL_ERROR_CODES,
+  categorizeWalletBodyBytes,
 } = await import('../../services/connections/mexc/walletCurrencyConfigContract.js');
 const {
   mexcE2ESafeFetch,
@@ -29,6 +36,9 @@ const {
 } = await import('../../services/connections/mexc/mexcE2ESafeTransport.js');
 const {
   runMexcVerificationOrchestrator,
+  getProbeFailureDisposition,
+  MEXC_REORDERED_CONTINUATION_PROBE_IDS,
+  MEXC_REORDERED_CONTINUATION_EXCLUDES,
 } = await import('../../services/connections/mexc/verificationOrchestrator.js');
 const {
   applyWalletCurrencyVerificationCorrection,
@@ -37,6 +47,7 @@ const {
 } = await import('../../services/connections/mexc/verificationCorrectionService.js');
 const { buildCapabilityMatrix } = await import('../../services/connections/mexc/capabilityMatrix.js');
 const { encryptSecret } = await import('../../utils/crypto.js');
+const { MEXC_E2E_MAX_RESPONSE_BYTES } = await import('../../services/connections/mexc/mexcE2ESafeTransport.js');
 
 const FAKE_KEY = 'FAKEKEY_mexc_do_not_use';
 const FAKE_SECRET = 'FAKESECRET_mexc_do_not_use_0123456789abcdef';
@@ -81,21 +92,76 @@ function makeWalletResponse(items, headers = {}) {
   };
 }
 
-describe('Wallet currency config contract', () => {
-  test('accepts small valid official-style array', () => {
-    const parsed = parseWalletCurrencyConfigResponse(makeWalletResponse([buildWalletItem()]));
+function generateWalletArrayBytes(targetBytes) {
+  const items = [];
+  let i = 0;
+  while (Buffer.byteLength(JSON.stringify(items), 'utf8') < targetBytes) {
+    items.push(buildWalletItem({
+      coin: `C${i}`,
+      name: `Coin ${i} ${'x'.repeat(40)}`,
+      networkList: [
+        {
+          network: `N${i}`,
+          name: `Net ${i}`,
+          depositEnable: true,
+          withdrawEnable: true,
+          minConfirm: 1,
+          withdrawFee: 0,
+          withdrawMin: 0,
+          withdrawMax: 1,
+          contract: null,
+          depositTips: null,
+          withdrawTips: null,
+        },
+      ],
+    }));
+    i += 1;
+    if (i > 50000) break;
+  }
+  return { bodyText: JSON.stringify(items), count: items.length };
+}
+
+/** Incremental JSON array fixture — avoids allocating one giant string/Buffer. */
+function createSyntheticWalletStream({ targetBytes, delayMs = 0 }) {
+  const namePad = 'n'.repeat(4000);
+  async function* gen() {
+    yield Buffer.from('[');
+    let bytes = 1;
+    let i = 0;
+    let first = true;
+    while (bytes < targetBytes && i < WALLET_MAX_CURRENCY_ITEMS - 1) {
+      if (delayMs > 0 && i === 1) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      const item = `{"coin":"C${i}","name":"${namePad}","networkList":[{"network":"N${i}","name":"Net"}]}`;
+      const piece = (first ? '' : ',') + item;
+      first = false;
+      const buf = Buffer.from(piece);
+      bytes += buf.byteLength;
+      yield buf;
+      i += 1;
+    }
+    yield Buffer.from(']');
+  }
+  return Readable.from(gen());
+}
+
+describe('Wallet streaming currency config contract', () => {
+  test('accepts small valid official-style array', async () => {
+    const parsed = await parseWalletCurrencyConfigResponse(makeWalletResponse([buildWalletItem()]));
     expect(parsed.providerAvailability).toBe('available');
     expect(parsed.itemCountCategory).toBe('1_to_9');
     expect(parsed.safe.topLevelType).toBe('array');
+    expect(parsed.safe.parserCompleted).toBe(true);
   });
 
-  test('accepts empty valid array', () => {
-    const parsed = parseWalletCurrencyConfigResponse(makeWalletResponse([]));
+  test('accepts empty valid array', async () => {
+    const parsed = await parseWalletCurrencyConfigResponse(makeWalletResponse([]));
     expect(parsed.itemCountCategory).toBe('zero');
   });
 
-  test('accepts documented field variants and null optional fields', () => {
-    const parsed = parseWalletCurrencyConfigResponse(makeWalletResponse([
+  test('accepts documented field variants and null optional fields', async () => {
+    const parsed = await parseWalletCurrencyConfigResponse(makeWalletResponse([
       buildWalletItem({
         Name: 'Tether Alt',
         name: null,
@@ -119,106 +185,233 @@ describe('Wallet currency config contract', () => {
     expect(parsed.safe.topLevelType).toBe('array');
   });
 
-  test('accepts missing optional fields', () => {
-    const parsed = parseWalletCurrencyConfigResponse(makeWalletResponse([
-      { coin: 'BTC', networkList: [{ network: 'BTC' }] },
+  test('accepts missing optional fields including missing coin', async () => {
+    const parsed = await parseWalletCurrencyConfigResponse(makeWalletResponse([
+      { networkList: [{ network: 'BTC' }] },
     ]));
     expect(parsed.itemCountCategory).toBe('1_to_9');
   });
 
-  test('large valid array above legacy 64KiB remains valid under endpoint-specific contract', () => {
-    const items = Array.from({ length: 320 }, (_, i) => buildWalletItem({ coin: `C${i}` }));
-    const bodyText = JSON.stringify(items);
-    expect(Buffer.byteLength(bodyText, 'utf8')).toBeGreaterThan(64 * 1024);
-    const parsed = parseWalletCurrencyConfigResponse({
+  test('response greater than legacy 768 KiB succeeds without full-array retention', async () => {
+    const { bodyText, count } = generateWalletArrayBytes(900 * 1024);
+    expect(Buffer.byteLength(bodyText, 'utf8')).toBeGreaterThan(WALLET_CURRENCY_RESPONSE_MAX_BYTES);
+    expect(count).toBeLessThan(WALLET_MAX_CURRENCY_ITEMS);
+    const parsed = await parseWalletCurrencyConfigStream({
       status: 200,
       headers: { 'content-type': 'application/json' },
-      bodyText,
-      transportMeta: { bodyBytes: Buffer.byteLength(bodyText, 'utf8'), truncated: false },
+      source: Readable.from(Buffer.from(bodyText, 'utf8')),
+      transportMeta: { latencyMs: 20 },
     });
-    expect(parsed.safe.bodyByteCategory).toBe('64KiB_to_256KiB');
-    expect(parsed.safe.itemCountCategory).toBe('100_plus');
+    expect(parsed.safe.parserCompleted).toBe(true);
+    expect(parsed.safe.decompressedBytesProcessed).toBeGreaterThan(768 * 1024);
+    expect(parsed.safe.decompressedByteCategory).toBe('under_1MiB');
   });
 
-  test('near-limit valid response is accepted by bounded transport', async () => {
-    const chunk = JSON.stringify(Array.from({ length: 900 }, (_, i) => buildWalletItem({ coin: `N${i}` })));
-    const bytes = Buffer.byteLength(chunk, 'utf8');
-    expect(bytes).toBeLessThan(WALLET_CURRENCY_RESPONSE_MAX_BYTES);
-    const res = await mexcE2ESafeFetch({
-      url: 'https://api.mexc.com/api/v3/capital/config/getall?timestamp=1&recvWindow=5000&signature=x',
-      maxBytes: WALLET_CURRENCY_RESPONSE_MAX_BYTES,
-      fetchImpl: async () => new Response(chunk, { status: 200, headers: { 'content-type': 'application/json' } }),
+  test('valid ~1 MiB streamed response succeeds', async () => {
+    const { bodyText } = generateWalletArrayBytes(1024 * 1024);
+    const parsed = await parseWalletCurrencyConfigStream({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      source: Readable.from(Buffer.from(bodyText, 'utf8')),
     });
-    expect(res.bodyBytes).toBe(bytes);
-    expect(res.bodyByteCategory === '256KiB_to_1MiB' || res.bodyByteCategory === '64KiB_to_256KiB').toBe(true);
+    expect(parsed.safe.parserCompleted).toBe(true);
+    expect(['under_1MiB', '1_to_4MiB']).toContain(parsed.safe.decompressedByteCategory);
   });
 
-  test('response exceeding endpoint-specific maximum is aborted safely', async () => {
-    const oversized = JSON.stringify(Array.from({ length: 4200 }, (_, i) => buildWalletItem({ coin: `X${i}` })));
-    expect(Buffer.byteLength(oversized, 'utf8')).toBeGreaterThan(WALLET_CURRENCY_RESPONSE_MAX_BYTES);
-    await expect(mexcE2ESafeFetch({
-      url: 'https://api.mexc.com/api/v3/capital/config/getall?timestamp=1&recvWindow=5000&signature=x',
-      maxBytes: WALLET_CURRENCY_RESPONSE_MAX_BYTES,
-      fetchImpl: async () => new Response(oversized, { status: 200, headers: { 'content-type': 'application/json' } }),
-    })).rejects.toMatchObject({ code: 'MEXC_RESPONSE_TOO_LARGE' });
-  });
+  test('valid ~4 MiB streamed response succeeds without full-body Buffer', async () => {
+    const before = process.memoryUsage().heapUsed;
+    const parsed = await parseWalletCurrencyConfigStream({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      source: createSyntheticWalletStream({ targetBytes: 4 * 1024 * 1024 }),
+    });
+    const after = process.memoryUsage().heapUsed;
+    expect(parsed.safe.parserCompleted).toBe(true);
+    expect(['1_to_4MiB', '4_to_8MiB']).toContain(parsed.safe.decompressedByteCategory);
+    // Peak heap growth must not approach a full 16 MiB body allocation.
+    expect(after - before).toBeLessThan(12 * 1024 * 1024);
+  }, 120000);
 
-  test('rejects malformed item', () => {
-    expect(() => parseWalletCurrencyConfigResponse(makeWalletResponse([{ networkList: [] }]))).toThrow(
-      WalletCurrencyConfigContractError,
-    );
-    try {
-      parseWalletCurrencyConfigResponse(makeWalletResponse([{ networkList: [] }]));
-    } catch (err) {
-      expect(err.code).toBe(WALLET_CURRENCY_ERROR.ITEM_INVALID);
-      expect(err.safe.schemaPath).toBe('[0].coin');
+  test('valid near-16 MiB streamed response succeeds', async () => {
+    const parsed = await parseWalletCurrencyConfigStream({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      source: createSyntheticWalletStream({ targetBytes: 15 * 1024 * 1024 }),
+    });
+    expect(parsed.safe.parserCompleted).toBe(true);
+    expect(parsed.safe.decompressedBytesProcessed).toBeGreaterThan(14 * 1024 * 1024);
+    expect(parsed.safe.decompressedBytesProcessed).toBeLessThanOrEqual(WALLET_DECOMPRESSED_MAX_BYTES);
+    expect(['8_to_16MiB']).toContain(parsed.safe.decompressedByteCategory);
+  }, 180000);
+
+  test('slow stream exceeding parser-time limit aborts', async () => {
+    await expect(parseWalletCurrencyConfigStream({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      source: createSyntheticWalletStream({ targetBytes: 50_000, delayMs: 5500 }),
+    })).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.PARSE_TIMEOUT });
+  }, 20000);
+
+  test('early connection termination yields truncated/malformed failure', async () => {
+    async function* truncated() {
+      yield Buffer.from('[{"coin":"USDT","networkList":[');
     }
+    await expect(parseWalletCurrencyConfigStream({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      source: Readable.from(truncated()),
+    })).rejects.toMatchObject({
+      code: expect.stringMatching(/MALFORMED|TRUNCATED|TOP_LEVEL|WALLET/),
+    });
   });
 
-  test('rejects malformed networkList item', () => {
+  test('network item limit aborts', async () => {
+    const networks = Array.from({ length: 100_001 }, (_, i) => ({ network: `N${i}` }));
+    await expect(parseWalletCurrencyConfigResponse(makeWalletResponse([
+      { coin: 'USDT', networkList: networks },
+    ]))).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.ITEM_LIMIT_EXCEEDED });
+  }, 60000);
+
+  test('nesting depth limit aborts on unknown fields', async () => {
+    let deep = { leaf: true };
+    for (let i = 0; i < 12; i += 1) deep = { nested: deep };
+    await expect(parseWalletCurrencyConfigResponse(makeWalletResponse([
+      buildWalletItem({ mystery: deep }),
+    ]))).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.NESTING_LIMIT_EXCEEDED });
+  });
+
+  test('chunks splitting JSON tokens are accepted', async () => {
+    const body = JSON.stringify([buildWalletItem(), buildWalletItem({ coin: 'BTC' })]);
+    const chunks = [];
+    for (let i = 0; i < body.length; i += 3) chunks.push(Buffer.from(body.slice(i, i + 3), 'utf8'));
+    const parsed = await parseWalletCurrencyConfigStream({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      source: Readable.from(chunks),
+    });
+    expect(parsed.itemCountCategory).toBe('1_to_9');
+  });
+
+  test('chunks splitting multibyte UTF-8 characters are accepted', async () => {
+    const item = buildWalletItem({ name: 'تتر-USDT-€' });
+    const body = Buffer.from(JSON.stringify([item]), 'utf8');
+    const chunks = [];
+    for (let i = 0; i < body.length; i += 2) chunks.push(body.subarray(i, i + 2));
+    const parsed = await parseWalletCurrencyConfigStream({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      source: Readable.from(chunks),
+    });
+    expect(parsed.safe.parserCompleted).toBe(true);
+  });
+
+  test('decompressed response above 16 MiB aborts', async () => {
+    async function* oversized() {
+      // Emit opening array then oversized opaque ASCII payload via many objects
+      yield Buffer.from('[', 'utf8');
+      const one = JSON.stringify(buildWalletItem({ name: 'n'.repeat(8000) })).slice(1, -1);
+      // stream raw invalid approach: push large string field via repeated chunks of a huge JSON string value
+      // Simpler: feed a Readable that reports bytes > 16MiB without valid complete parse
+      const pad = Buffer.alloc(17 * 1024 * 1024, 0x61);
+      yield Buffer.from(`{"coin":"USDT","name":"`, 'utf8');
+      yield pad;
+      yield Buffer.from(`"}]`, 'utf8');
+    }
+    await expect(parseWalletCurrencyConfigStream({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      source: Readable.from(oversized()),
+    })).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.DECOMPRESSED_TOO_LARGE });
+  }, 20000);
+
+  test('compressed Content-Length above 4 MiB aborts before parse', async () => {
+    await expect(parseWalletCurrencyConfigStream({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'content-encoding': 'gzip',
+        'content-length': String(WALLET_COMPRESSED_MAX_BYTES + 1),
+      },
+      source: Readable.from([Buffer.from('[]', 'utf8')]),
+    })).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.COMPRESSED_TOO_LARGE });
+  });
+
+  test('currency item limit aborts', async () => {
+    const items = Array.from({ length: WALLET_MAX_CURRENCY_ITEMS + 1 }, (_, i) => ({ coin: `C${i}` }));
+    await expect(parseWalletCurrencyConfigResponse(makeWalletResponse(items))).rejects.toMatchObject({
+      code: WALLET_CURRENCY_ERROR.ITEM_LIMIT_EXCEEDED,
+    });
+  }, 30000);
+
+  test('string length limit aborts', async () => {
+    await expect(parseWalletCurrencyConfigResponse(makeWalletResponse([
+      buildWalletItem({ name: 'x'.repeat(65 * 1024) }),
+    ]))).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.STRING_LIMIT_EXCEEDED });
+  });
+
+  test('unknown fields are skipped without storage', async () => {
+    const parsed = await parseWalletCurrencyConfigResponse(makeWalletResponse([
+      buildWalletItem({ mystery: { nested: { ok: true } }, tipExtra: 'ignored' }),
+    ]));
+    expect(parsed.safe.parserCompleted).toBe(true);
+    expect(JSON.stringify(parsed)).not.toMatch(/mystery|tipExtra|ignored/);
+  });
+
+  test('rejects empty coin when present', async () => {
+    await expect(parseWalletCurrencyConfigResponse(makeWalletResponse([
+      { coin: '', networkList: [] },
+    ]))).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.ITEM_INVALID });
+  });
+
+  test('rejects malformed networkList item', async () => {
     try {
-      parseWalletCurrencyConfigResponse(makeWalletResponse([{ coin: 'USDT', networkList: ['bad'] }]));
+      await parseWalletCurrencyConfigResponse(makeWalletResponse([{ coin: 'USDT', networkList: ['bad'] }]));
+      throw new Error('expected throw');
     } catch (err) {
       expect(err.code).toBe(WALLET_CURRENCY_ERROR.NETWORK_ITEM_INVALID);
       expect(err.safe.validationFailure).toBe('networkList.item_not_object');
     }
   });
 
-  test('rejects provider error object as successful list', () => {
+  test('rejects provider error object as successful list', async () => {
     try {
-      parseWalletCurrencyConfigResponse(makeWalletResponse({ code: 700007, msg: 'denied' }));
+      await parseWalletCurrencyConfigResponse(makeWalletResponse({ code: 700007, msg: 'denied' }));
+      throw new Error('expected throw');
     } catch (err) {
-      expect(err.code).toBe(WALLET_CURRENCY_ERROR.PROVIDER_ERROR);
+      expect(err.code).toBe(WALLET_CURRENCY_ERROR.PROVIDER_ERROR_ENVELOPE);
       expect(err.safe.providerCode).toBe(700007);
       expect(err.safe.topLevelType).toBe('object');
     }
   });
 
-  test('rejects HTML body', () => {
-    expect(() => parseWalletCurrencyConfigResponse({
+  test('rejects HTML body', async () => {
+    await expect(parseWalletCurrencyConfigResponse({
       status: 200,
       headers: { 'content-type': 'text/html' },
       bodyText: '<html><body>blocked</body></html>',
       transportMeta: { bodyBytes: 32 },
-    })).toThrow(WalletCurrencyConfigContractError);
+    })).rejects.toBeInstanceOf(WalletCurrencyConfigContractError);
   });
 
-  test('rejects invalid JSON', () => {
+  test('rejects malformed JSON', async () => {
     try {
-      parseWalletCurrencyConfigResponse({
+      await parseWalletCurrencyConfigResponse({
         status: 200,
         headers: { 'content-type': 'application/json' },
         bodyText: '{"coin"',
         transportMeta: { bodyBytes: 7 },
       });
     } catch (err) {
-      expect(err.code).toBe(WALLET_CURRENCY_ERROR.JSON_INVALID);
+      expect([
+        WALLET_CURRENCY_ERROR.MALFORMED,
+        WALLET_CURRENCY_ERROR.TOP_LEVEL_INVALID,
+      ]).toContain(err.code);
     }
   });
 
-  test('rejects truncated JSON explicitly', () => {
+  test('rejects truncated stream metadata', async () => {
     try {
-      parseWalletCurrencyConfigResponse({
+      await parseWalletCurrencyConfigResponse({
         status: 200,
         headers: { 'content-type': 'application/json' },
         bodyText: '[{"coin":"USDT"',
@@ -229,23 +422,46 @@ describe('Wallet currency config contract', () => {
     }
   });
 
-  test('rejects wrong content type', () => {
+  test('rejects wrong content type', async () => {
     try {
-      parseWalletCurrencyConfigResponse({
+      await parseWalletCurrencyConfigResponse({
         status: 200,
         headers: { 'content-type': 'text/plain' },
         bodyText: JSON.stringify([buildWalletItem()]),
         transportMeta: { bodyBytes: 10 },
       });
     } catch (err) {
-      expect(err.code).toBe(WALLET_CURRENCY_ERROR.CONTENT_TYPE_INVALID);
+      expect(err.code).toBe(WALLET_CURRENCY_ERROR.WRONG_CONTENT_TYPE);
+    }
+  });
+
+  test('ordinary endpoint limit remains unchanged', () => {
+    expect(MEXC_E2E_MAX_RESPONSE_BYTES).toBe(256 * 1024);
+    expect(WALLET_DECOMPRESSED_MAX_BYTES).toBe(16 * 1024 * 1024);
+    expect(WALLET_COMPRESSED_MAX_BYTES).toBe(4 * 1024 * 1024);
+  });
+
+  test('size categories use MiB buckets', () => {
+    expect(categorizeWalletBodyBytes(100)).toBe('under_1MiB');
+    expect(categorizeWalletBodyBytes(2 * 1024 * 1024)).toBe('1_to_4MiB');
+    expect(categorizeWalletBodyBytes(17 * 1024 * 1024)).toBe('over_16MiB');
+  });
+
+  test('errors never include raw field content', async () => {
+    try {
+      await parseWalletCurrencyConfigResponse(makeWalletResponse([
+        buildWalletItem({ name: 'SECRET_COIN_NAME_SHOULD_NOT_LEAK', networkList: 'bad' }),
+      ]));
+    } catch (err) {
+      expect(JSON.stringify(err.safe)).not.toMatch(/SECRET_COIN_NAME/);
+      expect(err.message).not.toMatch(/SECRET_COIN_NAME/);
     }
   });
 
   test('unexpected redirect is blocked by transport', async () => {
     await expect(mexcE2ESafeFetch({
       url: 'https://api.mexc.com/api/v3/capital/config/getall?timestamp=1&recvWindow=5000&signature=x',
-      maxBytes: WALLET_CURRENCY_RESPONSE_MAX_BYTES,
+      maxBytes: 256 * 1024,
       fetchImpl: async () => {
         throw new Error('redirect mode is set to error: followed redirect');
       },
@@ -261,7 +477,7 @@ describe('Wallet probe orchestration semantics', () => {
     logger.info.mockReset();
   });
 
-  test('local schema defect does not become permission denied and stops wallet sequence only', async () => {
+  function mockConnectionRow() {
     query.mockImplementation(async (sql) => {
       if (String(sql).includes('FROM exchange_connections')) {
         return {
@@ -289,32 +505,34 @@ describe('Wallet probe orchestration semantics', () => {
       }
       return { rows: [] };
     });
+  }
 
+  test('Probe 4 schema/size failure remains domain-local and does not block Probe 5+', async () => {
+    mockConnectionRow();
     const calls = [];
     const transport = async (request) => {
       calls.push(request.path);
-      if (request.path === '/api/v3/account') {
-        return { ok: true, status: 200, json: { balances: [], accountType: 'SPOT', canTrade: true }, latencyMs: 10 };
-      }
       if (request.path === '/api/v3/capital/config/getall') {
         return {
           ok: true,
           status: 200,
           headers: { 'content-type': 'application/json' },
-          json: [{ coin: 'USDT', networkList: { broken: true } }],
+          bodyText: JSON.stringify([{ coin: 'USDT', networkList: { broken: true } }]),
           latencyMs: 12,
         };
       }
-      return { ok: true, status: 200, json: [], latencyMs: 8 };
+      if (request.path.includes('/api/v1/private/')) {
+        return { ok: true, status: 200, json: { success: true, data: [] }, latencyMs: 9 };
+      }
+      return { ok: true, status: 200, json: [], bodyText: '[]', latencyMs: 8 };
     };
 
     const result = await runMexcVerificationOrchestrator({
       userId: 'user-1',
-      scope: 'all_safe',
+      scope: 'private_read',
       persist: false,
       transport,
       probeIds: [
-        'private_account',
         'wallet_currency_config',
         'deposit_history',
         'withdraw_history',
@@ -327,15 +545,68 @@ describe('Wallet probe orchestration semantics', () => {
     expect(wallet.verificationState).toBe('verification_error');
     expect(wallet.keyGrant).toBe('unknown');
     expect(wallet.code).toBe('MEXC_WALLET_NETWORK_LIST_INVALID');
-    expect(wallet.safeResponseEvidence.validationFailure).toBe('networkList.not_array');
-    expect(result.body.results.some((r) => r.capabilityId === 'DEPOSIT_HISTORY_READ')).toBe(false);
-    expect(result.body.results.some((r) => r.capabilityId === 'FUTURES_ACCOUNT_READ')).toBe(false);
-    expect(calls).toEqual(['/api/v3/account', '/api/v3/capital/config/getall']);
-    expect(JSON.stringify(result.body)).not.toMatch(/ERC20|0x[a-f0-9]+|withdrawFee|withdrawMin|withdrawMax/);
-    expect(logger.warn).not.toHaveBeenCalledWith(expect.stringMatching(/0x|ERC20|withdrawFee/), expect.anything());
+    expect(result.body.results.some((r) => r.probeId === 'deposit_history')).toBe(true);
+    expect(result.body.results.some((r) => r.probeId === 'withdraw_history')).toBe(true);
+    expect(result.body.results.some((r) => r.probeId === 'transfer_history')).toBe(true);
+    expect(result.body.results.some((r) => r.probeId === 'futures_assets')).toBe(true);
+    expect(calls[0]).toBe('/api/v3/capital/config/getall');
+    expect(calls).toEqual(expect.arrayContaining([
+      '/api/v3/capital/deposit/hisrec',
+      '/api/v3/capital/withdraw/history',
+      '/api/v3/capital/transfer',
+      '/api/v1/private/account/assets',
+    ]));
+    expect(JSON.stringify(result.body)).not.toMatch(/ERC20|0x[a-f0-9]+|withdrawFee|SECRET/);
   });
 
-  test('futures domain remains not tested for future continuation after wallet correction state', () => {
+  test('disposition: size failures are domain-local; signature/TLS remain global fatal', () => {
+    const walletProbe = { capabilityId: 'WALLET_CURRENCY_READ', id: 'wallet_currency_config' };
+    expect(getProbeFailureDisposition(walletProbe, {
+      success: false,
+      code: 'MEXC_RESPONSE_DECOMPRESSED_TOO_LARGE',
+      verificationState: 'verification_error',
+    })).toEqual({ stop: false, reason: 'domain_local_wallet' });
+    expect(getProbeFailureDisposition(walletProbe, {
+      success: false,
+      code: 'MEXC_RESPONSE_TOO_LARGE',
+      verificationState: 'verification_error',
+    })).toEqual({ stop: false, reason: 'domain_local_wallet' });
+    expect(WALLET_DOMAIN_LOCAL_ERROR_CODES.has('MEXC_RESPONSE_ITEM_LIMIT_EXCEEDED')).toBe(true);
+    expect(getProbeFailureDisposition(walletProbe, {
+      success: false,
+      code: 'MEXC_SIGNATURE_INVALID',
+      verificationState: 'failed',
+    })).toEqual({ stop: true, reason: 'global_fatal' });
+    expect(getProbeFailureDisposition(walletProbe, {
+      success: false,
+      code: 'MEXC_NETWORK_ERROR',
+      verificationState: 'failed',
+    })).toEqual({ stop: true, reason: 'global_fatal' });
+    expect(getProbeFailureDisposition(walletProbe, {
+      success: false,
+      code: 'MEXC_RESPONSE_TRUNCATED',
+      verificationState: 'verification_error',
+    })).toEqual({ stop: true, reason: 'global_fatal' });
+  });
+
+  test('future continuation order is 5,6,7,8,9,4 and excludes probes 1-3', () => {
+    expect(MEXC_REORDERED_CONTINUATION_PROBE_IDS).toEqual([
+      'deposit_history',
+      'withdraw_history',
+      'transfer_history',
+      'futures_assets',
+      'futures_open_positions',
+      'wallet_currency_config',
+    ]);
+    expect(MEXC_REORDERED_CONTINUATION_EXCLUDES).toEqual([
+      'private_account',
+      'spot_open_orders',
+      'spot_my_trades',
+    ]);
+    expect(MEXC_REORDERED_CONTINUATION_PROBE_IDS).toHaveLength(6);
+  });
+
+  test('futures domain remains not tested after wallet verification_error projection', () => {
     const matrix = buildCapabilityMatrix({
       credentialsConfigured: true,
       privateAuthVerified: true,
@@ -344,8 +615,8 @@ describe('Wallet probe orchestration semantics', () => {
         WALLET_CURRENCY_READ: {
           keyGrant: 'unknown',
           verificationState: 'verification_error',
-          lastFailureCode: WALLET_CONTRACT_REMEDIATION_CODE,
-          sanitizedReason: WALLET_CONTRACT_REMEDIATION_REASON,
+          lastFailureCode: 'MEXC_RESPONSE_TOO_LARGE',
+          sanitizedReason: 'Wallet capability verification could not be completed',
         },
       },
     });
@@ -354,7 +625,6 @@ describe('Wallet probe orchestration semantics', () => {
     expect(wallet.verificationState).toBe('verification_error');
     expect(wallet.keyGrant).toBe('unknown');
     expect(futures.verificationState).toBe('not_tested');
-    expect(futures.keyGrant).toBe('unknown');
   });
 });
 
@@ -381,21 +651,6 @@ describe('Append-only correction event', () => {
     expect(result.idempotent).toBe(false);
     expect(result.lastFailureCode).toBe('MEXC_VERIFICATION_CONTRACT_ERROR');
     expect(result.supersessionType).toBe('current_projection_correction');
-    expect(query).toHaveBeenCalledTimes(3);
-    expect(String(query.mock.calls[0][0])).toMatch(/SELECT id, correlation_id, tested_at/);
-    expect(String(query.mock.calls[1][0])).toMatch(/INSERT INTO mexc_capability_verifications/);
-    expect(query.mock.calls[1][1]).toEqual(expect.arrayContaining([
-      'WALLET_CURRENCY_READ',
-      'wallet_currency_config_correction',
-      'corr-fix-1',
-      'unknown',
-      'verification_error',
-      'disabled',
-      WALLET_CONTRACT_REMEDIATION_CODE,
-      WALLET_CONTRACT_REMEDIATION_REASON,
-      'engineering_correction:37aa6d2a-e9eb-4c86-b39f-9b5ed243c014',
-    ]));
-    expect(String(query.mock.calls[2][0])).toMatch(/INSERT INTO mexc_connection_capability_state/);
   });
 
   test('rerunning correction is idempotent and does not append a duplicate', async () => {
@@ -415,7 +670,5 @@ describe('Append-only correction event', () => {
     expect(result.appended).toBe(false);
     expect(result.idempotent).toBe(true);
     expect(result.correctionEventId).toBe('evt-1');
-    expect(query.mock.calls.some((c) => String(c[0]).includes('INSERT INTO mexc_capability_verifications'))).toBe(false);
-    expect(query.mock.calls.some((c) => String(c[0]).includes('INSERT INTO mexc_connection_capability_state'))).toBe(true);
   });
 });

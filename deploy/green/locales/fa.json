@@ -4726,6 +4726,7 @@
   "mexc_reason_provider_unavailable": "توسط ارائه‌دهنده پشتیبانی نمی‌شود",
   "mexc_reason_auth_pending": "احراز هویت خصوصی تأیید نشده است",
   "mexc_reason_wallet_verification_incomplete": "تأیید قابلیت‌های کیف پول کامل نشد",
+  "mexc_reason_wallet_response_limit": "تأیید قابلیت‌های کیف پول کامل نشد چون پاسخ ارائه‌دهنده از حد مجاز تأیید بزرگ‌تر بود",
   "mexc_reason_key_denied": "مجوز کلید API رد شده است",
   "mexc_reason_key_unknown": "مجوز کلید API تأیید نشده است",
   "mexc_reason_user_capability": "قابلیت موردنیاز TitanGold موجود نیست",

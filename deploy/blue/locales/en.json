@@ -4952,6 +4952,7 @@
   "mexc_reason_provider_unavailable": "Not supported by the provider",
   "mexc_reason_auth_pending": "Private authentication has not been verified",
   "mexc_reason_wallet_verification_incomplete": "Wallet capability verification could not be completed",
+  "mexc_reason_wallet_response_limit": "Wallet capability verification could not be completed because the provider response exceeded the verification limit",
   "mexc_reason_key_denied": "API key permission was denied",
   "mexc_reason_key_unknown": "API key permission has not been verified",
   "mexc_reason_user_capability": "Required TitanGold capability is missing",

@@ -183,3 +183,140 @@ export async function mexcE2ESafeFetch({
     if (signal) signal.removeEventListener('abort', onAbort);
   }
 }
+
+/**
+ * Wallet-only streaming fetch: does NOT assemble a full body Buffer/string.
+ * Returns a Node Readable of decompressed bytes plus abort handle and headers.
+ * Compressed ceiling checked via Content-Length when Content-Encoding is present.
+ */
+export async function mexcE2ESafeFetchWalletStream({
+  url,
+  method = 'GET',
+  headers = {},
+  timeoutMs = MEXC_E2E_DEFAULT_TIMEOUT_MS,
+  signal = null,
+  fetchImpl = globalThis.fetch,
+  compressedMaxBytes = 4 * 1024 * 1024,
+} = {}) {
+  assertSafeUrl(url);
+  if (typeof fetchImpl !== 'function') {
+    throw new MexcE2ETransportError('MEXC_NETWORK_ERROR', 'fetch implementation unavailable');
+  }
+  if (String(method || 'GET').toUpperCase() !== 'GET') {
+    throw new MexcE2ETransportError('MEXC_RUNTIME_BLOCKED', 'Only GET is allowed on E2E live transport');
+  }
+
+  const { Readable } = await import('stream');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  }
+
+  const started = Date.now();
+  try {
+    const response = await fetchImpl(url, {
+      method: 'GET',
+      headers,
+      redirect: 'error',
+      signal: controller.signal,
+    });
+    const responseHeaders = Object.fromEntries(response.headers?.entries?.() || []);
+    const contentLengthRaw = responseHeaders['content-length'] || responseHeaders['Content-Length'] || null;
+    const contentLength = Number.parseInt(String(contentLengthRaw || ''), 10);
+    const contentEncoding = String(
+      responseHeaders['content-encoding'] || responseHeaders['Content-Encoding'] || '',
+    ).toLowerCase();
+    const compressedLike = /gzip|br|deflate|compress/.test(contentEncoding);
+    if (compressedLike && Number.isFinite(contentLength) && contentLength > compressedMaxBytes) {
+      try { response.body?.cancel?.(); } catch { /* ignore */ }
+      throw new MexcE2ETransportError('MEXC_RESPONSE_COMPRESSED_TOO_LARGE', 'Provider compressed response exceeds bound', {
+        contentLength,
+        contentLengthPresent: true,
+        contentEncoding,
+        compressedBytesRead: contentLength,
+        limitBytes: compressedMaxBytes,
+      });
+    }
+
+    const reader = response.body?.getReader?.();
+    let cancelled = false;
+    const cancel = async () => {
+      cancelled = true;
+      try { await reader?.cancel?.(); } catch { /* ignore */ }
+      try { controller.abort(); } catch { /* ignore */ }
+    };
+
+    async function* byteChunks() {
+      let wireBytes = 0;
+      if (!reader) {
+        const text = await response.text();
+        const buf = Buffer.from(text, 'utf8');
+        wireBytes = buf.byteLength;
+        if (compressedLike && wireBytes > compressedMaxBytes) {
+          throw new MexcE2ETransportError('MEXC_RESPONSE_COMPRESSED_TOO_LARGE', 'Provider compressed response exceeds bound', {
+            compressedBytesRead: wireBytes,
+            contentLengthPresent: Boolean(contentLengthRaw),
+            contentEncoding,
+            limitBytes: compressedMaxBytes,
+          });
+        }
+        yield buf;
+        return;
+      }
+      while (!cancelled) {
+        let chunk;
+        try {
+          chunk = await reader.read();
+        } catch {
+          throw new MexcE2ETransportError('MEXC_RESPONSE_TRUNCATED', 'Provider response stream truncated', {
+            truncated: true,
+          });
+        }
+        const { done, value } = chunk;
+        if (done) break;
+        const buf = Buffer.from(value);
+        wireBytes += buf.byteLength;
+        if (compressedLike && wireBytes > compressedMaxBytes) {
+          try { await reader.cancel?.(); } catch { /* ignore */ }
+          throw new MexcE2ETransportError('MEXC_RESPONSE_COMPRESSED_TOO_LARGE', 'Provider compressed response exceeds bound', {
+            compressedBytesRead: wireBytes,
+            contentLengthPresent: Boolean(contentLengthRaw),
+            contentEncoding,
+            limitBytes: compressedMaxBytes,
+          });
+        }
+        yield buf;
+      }
+    }
+
+    return {
+      status: response.status,
+      headers: responseHeaders,
+      contentType: responseHeaders['content-type'] || responseHeaders['Content-Type'] || null,
+      contentLength: Number.isFinite(contentLength) ? contentLength : null,
+      contentLengthPresent: Boolean(contentLengthRaw),
+      contentEncoding: contentEncoding || null,
+      stream: Readable.from(byteChunks()),
+      cancel,
+      latencyMs: Date.now() - started,
+      ok: response.status >= 200 && response.status < 300,
+      // Explicit: no bodyText / no full buffer
+      bodyText: null,
+    };
+  } catch (err) {
+    if (err instanceof MexcE2ETransportError) throw err;
+    if (err?.name === 'AbortError') {
+      throw new MexcE2ETransportError('MEXC_TIMEOUT', 'Provider request timed out');
+    }
+    if (/redirect/i.test(String(err?.message || ''))) {
+      throw new MexcE2ETransportError('MEXC_REDIRECT_BLOCKED', 'Provider redirect rejected');
+    }
+    throw new MexcE2ETransportError('MEXC_NETWORK_ERROR', 'Provider network error');
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', onAbort);
+  }
+}

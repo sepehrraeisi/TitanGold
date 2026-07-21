@@ -325,7 +325,10 @@ export function translateBlockedReason(
   }
   if (/maintenance|temporarily unavailable/i.test(reason)) return t('mexc_reason_provider_maintenance');
   if (/private.*verif|not verified|unverified/i.test(reason)) return t('mexc_reason_auth_pending');
-  if (/Wallet capability verification could not be completed|Verification could not be completed safely/i.test(reason)) {
+  if (/Wallet capability verification could not be completed|Verification could not be completed safely|provider response exceeded the verification limit/i.test(reason)) {
+    if (/exceeded the verification limit/i.test(reason)) {
+      return t('mexc_reason_wallet_response_limit');
+    }
     return t('mexc_reason_wallet_verification_incomplete');
   }
   if (/Required capabilities not operational/i.test(reason)) return t('mexc_blocked_capabilities_reason');
