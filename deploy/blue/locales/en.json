@@ -4908,6 +4908,7 @@
   "mexc_verify_verified": "Verified",
   "mexc_verify_unverified": "Unverified",
   "mexc_verify_failed": "Failed",
+  "mexc_verify_verification_error": "Verification incomplete",
   "mexc_verify_pending": "Pending",
   "mexc_verify_na": "Not applicable",
   "mexc_consumer_portfolio": "Portfolio",
@@ -4950,6 +4951,7 @@
   "mexc_reason_provider_maintenance": "Temporarily unavailable from the provider",
   "mexc_reason_provider_unavailable": "Not supported by the provider",
   "mexc_reason_auth_pending": "Private authentication has not been verified",
+  "mexc_reason_wallet_verification_incomplete": "Wallet capability verification could not be completed",
   "mexc_reason_key_denied": "API key permission was denied",
   "mexc_reason_key_unknown": "API key permission has not been verified",
   "mexc_reason_user_capability": "Required TitanGold capability is missing",
@@ -5034,6 +5036,7 @@
   "mexc_cap_status_awaiting_private": "Awaiting private connection verification",
   "mexc_cap_status_provider_unverified": "Provider support not verified",
   "mexc_cap_status_runtime_blocked": "Blocked by runtime controls",
+  "mexc_cap_status_verification_incomplete": "Wallet capability verification could not be completed",
   "mexc_technical_verification_value": "Verification technical value",
   "mexc_technical_operational_value": "Operational technical value"
 }

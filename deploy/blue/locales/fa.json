@@ -4724,6 +4724,7 @@
   "mexc_verify_verified": "تأییدشده",
   "mexc_verify_unverified": "تأیید نشده",
   "mexc_verify_failed": "ناموفق",
+  "mexc_verify_verification_error": "تأیید کامل نشد",
   "mexc_verify_pending": "در انتظار",
   "mexc_verify_na": "کاربرد ندارد",
   "mexc_consumer_portfolio": "پورتفولیو",
@@ -4766,6 +4767,7 @@
   "mexc_reason_provider_maintenance": "موقتاً از سمت ارائه‌دهنده در دسترس نیست",
   "mexc_reason_provider_unavailable": "توسط ارائه‌دهنده پشتیبانی نمی‌شود",
   "mexc_reason_auth_pending": "احراز هویت خصوصی تأیید نشده است",
+  "mexc_reason_wallet_verification_incomplete": "تأیید قابلیت‌های کیف پول کامل نشد",
   "mexc_reason_key_denied": "مجوز کلید API رد شده است",
   "mexc_reason_key_unknown": "مجوز کلید API تأیید نشده است",
   "mexc_reason_user_capability": "قابلیت موردنیاز TitanGold موجود نیست",
@@ -4850,6 +4852,7 @@
   "mexc_cap_status_awaiting_private": "در انتظار تأیید اتصال خصوصی",
   "mexc_cap_status_provider_unverified": "پشتیبانی ارائه‌دهنده تأیید نشده",
   "mexc_cap_status_runtime_blocked": "به‌دلیل کنترل‌های اجرایی مسدود است",
+  "mexc_cap_status_verification_incomplete": "تأیید قابلیت‌های کیف پول کامل نشد",
   "mexc_technical_verification_value": "مقدار فنی تأیید",
   "mexc_technical_operational_value": "مقدار فنی عملیاتی"
 }

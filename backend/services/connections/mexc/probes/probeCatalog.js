@@ -11,6 +11,7 @@
  */
 
 import { MEXC_CAPABILITY } from '../capabilityIds.js';
+import { WALLET_CURRENCY_RESPONSE_MAX_BYTES } from '../walletCurrencyConfigContract.js';
 
 export const PROBE_RISK = Object.freeze({
   PUBLIC: 1,
@@ -178,7 +179,7 @@ export const MEXC_PROBE_CATALOG = Object.freeze([
     officialPermission: 'SPOT_WITHDRAW_READ',
     purpose: 'Wallet currency/network config availability evidence only',
     timeoutMs: 8000,
-    maxResponseBytes: 1_000_000,
+    maxResponseBytes: WALLET_CURRENCY_RESPONSE_MAX_BYTES,
     persistFields: ['lastVerifiedAt', 'verificationState', 'keyGrant', 'lastFailureCode', 'sanitizedReason', 'latencyMs', 'providerAvailability'],
     memoryOnlyFields: ['completeCurrencyConfig', 'rawProviderBody'],
     requiresLiveGate: true,

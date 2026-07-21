@@ -119,6 +119,7 @@ const VERIFICATION_STATE_KEYS: Record<string, string> = {
   verified: 'mexc_verify_verified',
   unverified: 'mexc_verify_unverified',
   failed: 'mexc_verify_failed',
+  verification_error: 'mexc_verify_verification_error',
   pending: 'mexc_verify_pending',
   not_tested: 'mexc_verify_not_tested',
   not_safely_testable: 'mexc_verify_not_safely_testable',
@@ -275,6 +276,9 @@ export function getCapabilityConsumerStatusLabel(
   ) {
     return t('mexc_cap_status_runtime_blocked');
   }
+  if (verification === 'verification_error') {
+    return t('mexc_cap_status_verification_incomplete');
+  }
   if (verification === 'not_tested' || op === 'disabled' || op.includes('pending')) {
     return t('mexc_cap_status_awaiting_private');
   }
@@ -321,6 +325,9 @@ export function translateBlockedReason(
   }
   if (/maintenance|temporarily unavailable/i.test(reason)) return t('mexc_reason_provider_maintenance');
   if (/private.*verif|not verified|unverified/i.test(reason)) return t('mexc_reason_auth_pending');
+  if (/Wallet capability verification could not be completed|Verification could not be completed safely/i.test(reason)) {
+    return t('mexc_reason_wallet_verification_incomplete');
+  }
   if (/Required capabilities not operational/i.test(reason)) return t('mexc_blocked_capabilities_reason');
   if (technical) return reason;
   const segments = reason.split(';').map((s) => s.trim()).filter(Boolean);
@@ -353,4 +360,4 @@ export const CANONICAL_CAPABILITY_CODE_PATTERN =
   /\b(MARKET_DATA_SPOT_PUBLIC|MARKET_DATA_FUTURES_PUBLIC|PRIVATE_AUTH|SPOT_ACCOUNT_READ|SPOT_ORDER_READ|SPOT_TRADE_HISTORY_READ|SPOT_TRADE_TEST|SPOT_TRADE_EXECUTE|SPOT_ORDER_CANCEL|FUTURES_ACCOUNT_READ|FUTURES_POSITION_READ|FUTURES_ORDER_READ|FUTURES_TRADE_EXECUTE|FUTURES_ORDER_CANCEL|FUTURES_POSITION_SETTINGS_WRITE|WALLET_CURRENCY_READ|DEPOSIT_ADDRESS_READ|DEPOSIT_ADDRESS_GENERATE|DEPOSIT_HISTORY_READ|WITHDRAWAL_ADDRESS_READ|WITHDRAWAL_HISTORY_READ|WITHDRAWAL_EXECUTE|WITHDRAWAL_CANCEL|DUST_READ|DUST_EXECUTE|TRANSFER_READ|TRANSFER_EXECUTE|INTERNAL_TRANSFER_READ|INTERNAL_TRANSFER_EXECUTE|P2P_READ|P2P_EXECUTE|SUBACCOUNT_READ|SUBACCOUNT_MANAGE|ACCOUNT_EDIT)\b/;
 
 export const RAW_ENUM_PATTERN =
-  /\b(not_applicable|not_tested|deferred_private_non_executing_probe|disabled_pending_explicit_authorization|not_safely_testable|blocked_by_runtime|blocked_by_provider|blocked_by_provider_evidence|blocked_by_permission|blocked_by_risk|blocked_by_user)\b/;
+  /\b(not_applicable|not_tested|verification_error|deferred_private_non_executing_probe|disabled_pending_explicit_authorization|not_safely_testable|blocked_by_runtime|blocked_by_provider|blocked_by_provider_evidence|blocked_by_permission|blocked_by_risk|blocked_by_user)\b/;

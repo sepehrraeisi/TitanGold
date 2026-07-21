@@ -110,10 +110,10 @@ const CATALOG = Object.freeze({
     severity: 'medium',
   },
   [MEXC_HEALTH_CATEGORY.INVALID_RESPONSE]: {
-    userMeaning: 'Provider returned an unexpected response',
+    userMeaning: 'Verification response could not be mapped safely',
     retryable: true,
-    correctiveAction: 'Retry later; contact support if persistent',
-    auditCategory: 'provider',
+    correctiveAction: 'Review the response contract and retry only after remediation or renewed authorization',
+    auditCategory: 'verification',
     severity: 'medium',
   },
   [MEXC_HEALTH_CATEGORY.DISABLED_CAPABILITY]: {
@@ -176,6 +176,16 @@ export function mapProviderCodeToHealthCategory(normalizedCode) {
   if (code.includes('TIMESTAMP') || code.includes('700003') || code.includes('700002')) return MEXC_HEALTH_CATEGORY.TIMESTAMP;
   if (code.includes('RATE') || code.includes('429')) return MEXC_HEALTH_CATEGORY.RATE_LIMIT;
   if (code.includes('TIMEOUT')) return MEXC_HEALTH_CATEGORY.TIMEOUT;
+  if (
+    code.includes('RESPONSE')
+    || code.includes('CONTENT_TYPE')
+    || code.includes('JSON_INVALID')
+    || code.includes('TOP_LEVEL')
+    || code.includes('WALLET_')
+    || code.includes('REDIRECT')
+  ) {
+    return MEXC_HEALTH_CATEGORY.INVALID_RESPONSE;
+  }
   if (code.includes('NETWORK')) return MEXC_HEALTH_CATEGORY.NETWORK;
   if (code.includes('MAINTENANCE') || code.includes('503')) return MEXC_HEALTH_CATEGORY.PROVIDER_MAINTENANCE;
   if (code.includes('AUTH') || code.includes('700001')) return MEXC_HEALTH_CATEGORY.AUTHENTICATION;

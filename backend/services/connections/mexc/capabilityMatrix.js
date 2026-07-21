@@ -356,6 +356,10 @@ function deriveOperationalState({
     return { state: OPERATIONAL_STATE.DISABLED, reason: 'Last verification failed' };
   }
 
+  if (verificationState === VERIFICATION_STATE.VERIFICATION_ERROR) {
+    return { state: OPERATIONAL_STATE.DISABLED, reason: 'Verification could not be completed safely' };
+  }
+
   return {
     state: OPERATIONAL_STATE.DISABLED,
     reason: 'Not verified — private capability remains disabled until safe verification succeeds',

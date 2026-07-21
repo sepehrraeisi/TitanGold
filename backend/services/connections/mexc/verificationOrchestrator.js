@@ -53,7 +53,13 @@ import {
 import {
   buildE2EHttpsUrl,
   mexcE2ESafeFetch,
+  MexcE2ETransportError,
 } from './mexcE2ESafeTransport.js';
+import {
+  parseWalletCurrencyConfigResponse,
+  WalletCurrencyConfigContractError,
+  WALLET_CURRENCY_ERROR,
+} from './walletCurrencyConfigContract.js';
 import { query } from '../../../database/db.js';
 
 export function isCapabilityVerifyLiveEnabled(env = process.env) {
@@ -95,7 +101,9 @@ function sanitizeProbeResult(probe, outcome) {
     correctiveAction: outcome.correctiveAction || null,
     testedAt: outcome.testedAt,
     countCategory: outcome.countCategory || null,
+    providerAvailability: outcome.providerAvailability || null,
     probeSafeSymbol: outcome.probeSafeSymbol || null,
+    safeResponseEvidence: outcome.safeResponseEvidence || null,
     // Explicit: never attach memory-only private payloads
     memoryOnlyExcluded: MEMORY_ONLY_PROBE_FIELDS,
   };
@@ -186,6 +194,169 @@ function categorizeCount(arrOrObj) {
   return null;
 }
 
+const GLOBAL_FATAL_CODES = new Set([
+  'MEXC_SIGNATURE_INVALID',
+  'MEXC_SIGNATURE_REJECTED',
+  'MEXC_TIMESTAMP_INVALID',
+  'MEXC_CREDENTIAL_INVALID',
+  'MEXC_IP_RESTRICTED',
+  'MEXC_ACCOUNT_RESTRICTED',
+  'MEXC_RATE_LIMITED',
+  'MEXC_PROVIDER_UNAVAILABLE',
+  'MEXC_TIMEOUT',
+  'MEXC_NETWORK_ERROR',
+  'MEXC_REDIRECT_BLOCKED',
+  'MEXC_RESPONSE_TRUNCATED',
+  'CONNECTION_DECRYPTION_FAILED',
+  'MEXC_RUNTIME_BLOCKED',
+]);
+
+function normalizeProbeResponse(res) {
+  if (!res) return { status: null, headers: {}, bodyText: '', latencyMs: null };
+  const bodyText = typeof res.bodyText === 'string'
+    ? res.bodyText
+    : JSON.stringify(res.json ?? {});
+  return {
+    status: res.status ?? (res.ok ? 200 : 400),
+    headers: res.headers || {},
+    bodyText,
+    latencyMs: res.latencyMs ?? null,
+    bodyBytes: res.bodyBytes ?? Buffer.byteLength(bodyText, 'utf8'),
+    contentType: res.contentType ?? res.headers?.['content-type'] ?? res.headers?.['Content-Type'] ?? null,
+    contentLength: res.contentLength ?? null,
+    contentLengthPresent: res.contentLengthPresent ?? false,
+    bodyByteCategory: res.bodyByteCategory ?? null,
+    truncated: Boolean(res.truncated),
+    ok: Boolean(res.ok ?? (res.status >= 200 && res.status < 300)),
+  };
+}
+
+function buildWalletProbeFailure({ probe, testedAt, code, safe = {}, providerCode = null }) {
+  const providerFailure = code === WALLET_CURRENCY_ERROR.PROVIDER_ERROR;
+  const normalizedCode = providerFailure
+    ? String(providerCode || 'PRIVATE_PROBE_FAILED')
+    : code;
+  const providerDenied = providerCode === 700007;
+  return {
+    success: false,
+    verificationState: providerFailure ? VERIFICATION_STATE.FAILED : VERIFICATION_STATE.VERIFICATION_ERROR,
+    keyGrant: providerDenied ? KEY_GRANT.DENIED : KEY_GRANT.UNKNOWN,
+    latencyMs: safe.latencyMs ?? null,
+    code: normalizedCode,
+    sanitizedReason: providerFailure
+      ? 'Wallet capability verification failed with provider evidence'
+      : 'Wallet capability verification could not be completed',
+    healthCategory: mapProviderCodeToHealthCategory(normalizedCode),
+    correctiveAction: providerFailure
+      ? 'Review provider permission or provider state before retry'
+      : 'Remediate the Wallet response contract before a future authorized retry',
+    testedAt,
+    providerAvailability: providerFailure ? null : 'available',
+    safeResponseEvidence: safe,
+  };
+}
+
+async function runWalletCurrencyConfigProbe(probe, { apiKey, apiSecret, transport, now }) {
+  const testedAt = new Date().toISOString();
+  const timestamp = Math.trunc((now || (() => Date.now()))());
+  const params = buildSpotProbeQueryParams(probe, {
+    timestamp,
+    recvWindow: MEXC_DEFAULT_RECV_WINDOW,
+  });
+  const total = buildMexcCanonicalQuery(params);
+  const signature = signMexcTotalParams(apiSecret, total);
+  const signedQuery = `${total}&signature=${signature}`;
+
+  try {
+    let response;
+    if (transport) {
+      response = normalizeProbeResponse(await transport({
+        method: probe.method,
+        host: probe.host,
+        path: probe.path,
+        query: params,
+        headers: { 'X-MEXC-APIKEY': apiKey },
+      }));
+    } else {
+      response = await mexcE2ESafeFetch({
+        url: buildE2EHttpsUrl(probe.host, probe.path, signedQuery),
+        method: 'GET',
+        timeoutMs: probe.timeoutMs,
+        maxBytes: probe.maxResponseBytes,
+        headers: {
+          'X-MEXC-APIKEY': apiKey,
+          Accept: 'application/json',
+        },
+      });
+    }
+
+    const contract = parseWalletCurrencyConfigResponse({
+      status: response.status,
+      headers: response.headers,
+      bodyText: response.bodyText,
+      transportMeta: {
+        bodyBytes: response.bodyBytes,
+        truncated: response.truncated,
+        limitCategory: probe.maxResponseBytes,
+        latencyMs: response.latencyMs,
+      },
+    });
+
+    return {
+      success: true,
+      verificationState: VERIFICATION_STATE.VERIFIED,
+      keyGrant: KEY_GRANT.GRANTED,
+      latencyMs: response.latencyMs,
+      code: null,
+      sanitizedReason: null,
+      healthCategory: null,
+      testedAt,
+      providerAvailability: contract.providerAvailability,
+      countCategory: contract.itemCountCategory,
+      safeResponseEvidence: contract.safe,
+    };
+  } catch (err) {
+    if (err instanceof WalletCurrencyConfigContractError) {
+      return buildWalletProbeFailure({
+        probe,
+        testedAt,
+        code: err.code,
+        safe: err.safe,
+        providerCode: err.safe?.providerCode ?? null,
+      });
+    }
+    if (err instanceof MexcE2ETransportError) {
+      return buildWalletProbeFailure({
+        probe,
+        testedAt,
+        code: err.code,
+        safe: {
+          ...(err.extra || {}),
+          validationFailure: err.code === 'MEXC_RESPONSE_TOO_LARGE'
+            ? 'transport.response_too_large'
+            : err.code === 'MEXC_RESPONSE_TRUNCATED'
+              ? 'transport.truncated'
+              : err.code === 'MEXC_REDIRECT_BLOCKED'
+                ? 'transport.redirect'
+                : 'transport.failure',
+        },
+      });
+    }
+    throw err;
+  }
+}
+
+function getProbeFailureDisposition(probe, outcome) {
+  if (!outcome || outcome.success) return { stop: false, reason: null };
+  if (GLOBAL_FATAL_CODES.has(String(outcome.code || ''))) {
+    return { stop: true, reason: 'global_fatal' };
+  }
+  if (probe.capabilityId === 'WALLET_CURRENCY_READ' && outcome.verificationState === VERIFICATION_STATE.VERIFICATION_ERROR) {
+    return { stop: true, reason: 'domain_local_wallet_contract' };
+  }
+  return { stop: false, reason: null };
+}
+
 async function runFuturesPrivateProbe(probe, { apiKey, apiSecret, transport, now }) {
   const testedAt = new Date().toISOString();
   const reqTime = Math.trunc((now || (() => Date.now()))());
@@ -274,6 +445,10 @@ async function runPrivateReadProbe(probe, { apiKey, apiSecret, transport, now, s
     };
   }
 
+  if (probe.path === '/api/v3/capital/config/getall') {
+    return runWalletCurrencyConfigProbe(probe, { apiKey, apiSecret, transport, now });
+  }
+
   if (probe.symbolSource === 'selected_safe_public_symbol' && !safeSymbol) {
     return {
       success: false,
@@ -298,27 +473,33 @@ async function runPrivateReadProbe(probe, { apiKey, apiSecret, transport, now, s
   const signedQuery = `${total}&signature=${signature}`;
 
   if (transport) {
-    const res = await transport({
+    const res = normalizeProbeResponse(await transport({
       method: probe.method,
       host: probe.host,
       path: probe.path,
       query: params,
       headers: { 'X-MEXC-APIKEY': apiKey },
-    });
-    const success = Boolean(res?.ok ?? (res?.status >= 200 && res?.status < 300));
-    const providerCode = res?.json?.code;
+    }));
+    let json = null;
+    try {
+      json = JSON.parse(res.bodyText || '{}');
+    } catch {
+      json = null;
+    }
+    const providerCode = json?.code;
+    const success = Boolean(res.ok) && (providerCode == null || providerCode === 0 || Array.isArray(json));
     return {
       success,
       verificationState: success ? VERIFICATION_STATE.VERIFIED : VERIFICATION_STATE.FAILED,
       keyGrant: success
         ? KEY_GRANT.GRANTED
         : (providerCode === 700007 ? KEY_GRANT.DENIED : KEY_GRANT.UNKNOWN),
-      latencyMs: res?.latencyMs ?? null,
+      latencyMs: res.latencyMs ?? null,
       code: success ? null : String(providerCode || 'PRIVATE_PROBE_FAILED'),
       sanitizedReason: success ? null : 'Private read probe failed',
       healthCategory: success ? null : mapProviderCodeToHealthCategory(providerCode),
       testedAt,
-      countCategory: success ? categorizeCount(res?.json) : null,
+      countCategory: success ? categorizeCount(json) : null,
       probeSafeSymbol: safeSymbol || null,
     };
   }
@@ -602,6 +783,8 @@ export async function runMexcVerificationOrchestrator(opts = {}) {
           safeSymbol,
         });
         results.push(sanitizeProbeResult(probe, outcome));
+        const disposition = getProbeFailureDisposition(probe, outcome);
+        if (disposition.stop) break;
       }
     });
   }

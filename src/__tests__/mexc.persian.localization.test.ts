@@ -68,6 +68,7 @@ function renderPersianProductDom(t: (k: string) => string): string {
     getProviderSupportLabel('supported', t),
     getKeyGrantLabel('not_applicable', t),
     getVerificationLabel('not_tested', t),
+    getVerificationLabel('verification_error', t),
     getVerificationLabel('deferred_private_non_executing_probe', t),
     getVerificationLabel('not_safely_testable', t),
     getOperationalStateLabel('disabled_pending_explicit_authorization', t),
@@ -127,6 +128,7 @@ describe('MEXC enum localization', () => {
   const enums: Array<[string, (v: string, t: any) => string, string]> = [
     ['not_applicable', getKeyGrantLabel, 'به کلید API نیاز ندارد'],
     ['not_tested', getVerificationLabel, 'آزمایش نشده'],
+    ['verification_error', getVerificationLabel, 'تأیید کامل نشد'],
     ['deferred_private_non_executing_probe', getVerificationLabel, 'آزمون خصوصی بدون اجرا تا دریافت مجوز به تعویق افتاده است'],
     ['disabled_pending_explicit_authorization', getOperationalStateLabel, 'تا دریافت مجوز صریح غیرفعال است'],
     ['not_safely_testable', getVerificationLabel, 'امکان آزمون ایمن ندارد'],
@@ -173,6 +175,13 @@ describe('Product copy FA', () => {
         t,
       ),
     ).toBe('در انتظار تأیید اتصال خصوصی');
+    expect(
+      getCapabilityConsumerStatusLabel(
+        'WALLET_CURRENCY_READ',
+        { verificationState: 'verification_error', operationalState: 'disabled' },
+        t,
+      ),
+    ).toBe('تأیید قابلیت‌های کیف پول کامل نشد');
   });
 });
 

@@ -9,6 +9,16 @@ export const MEXC_E2E_ALLOWED_HOSTS = Object.freeze(['api.mexc.com', 'contract.m
 export const MEXC_E2E_DEFAULT_TIMEOUT_MS = 8_000;
 export const MEXC_E2E_MAX_RESPONSE_BYTES = 256 * 1024;
 
+function categorizeBodyBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return 'unknown';
+  if (bytes < 1024) return 'under_1KiB';
+  if (bytes < 16 * 1024) return '1KiB_to_16KiB';
+  if (bytes < 64 * 1024) return '16KiB_to_64KiB';
+  if (bytes < 256 * 1024) return '64KiB_to_256KiB';
+  if (bytes < 1024 * 1024) return '256KiB_to_1MiB';
+  return '1MiB_plus';
+}
+
 export class MexcE2ETransportError extends Error {
   constructor(code, message, extra = {}) {
     super(message);
@@ -90,31 +100,72 @@ export async function mexcE2ESafeFetch({
 
     const reader = response.body?.getReader?.();
     let bodyText = '';
+    const responseHeaders = Object.fromEntries(response.headers?.entries?.() || []);
+    const contentLengthRaw = responseHeaders['content-length'] || responseHeaders['Content-Length'] || null;
+    const contentLength = Number.parseInt(String(contentLengthRaw || ''), 10);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      if (reader) {
+        try { reader.cancel(); } catch { /* ignore */ }
+      }
+      throw new MexcE2ETransportError('MEXC_RESPONSE_TOO_LARGE', 'Provider response exceeds bounded limit', {
+        contentLength,
+        contentLengthPresent: true,
+        bodyByteCategory: categorizeBodyBytes(contentLength),
+        limitBytes: maxBytes,
+      });
+    }
+
+    let total = 0;
     if (reader) {
       const chunks = [];
-      let total = 0;
       while (true) {
-        const { done, value } = await reader.read();
+        let chunk;
+        try {
+          chunk = await reader.read();
+        } catch {
+          throw new MexcE2ETransportError('MEXC_RESPONSE_TRUNCATED', 'Provider response stream truncated', {
+            bodyBytes: total,
+            bodyByteCategory: categorizeBodyBytes(total),
+            limitBytes: maxBytes,
+            truncated: true,
+          });
+        }
+        const { done, value } = chunk;
         if (done) break;
         total += value.byteLength || value.length || 0;
         if (total > maxBytes) {
           try { reader.cancel(); } catch { /* ignore */ }
-          throw new MexcE2ETransportError('MEXC_RESPONSE_INVALID', 'Provider response too large');
+          throw new MexcE2ETransportError('MEXC_RESPONSE_TOO_LARGE', 'Provider response exceeds bounded limit', {
+            bodyBytes: total,
+            bodyByteCategory: categorizeBodyBytes(total),
+            limitBytes: maxBytes,
+          });
         }
         chunks.push(Buffer.from(value));
       }
       bodyText = Buffer.concat(chunks).toString('utf8');
     } else {
       bodyText = await response.text();
-      if (Buffer.byteLength(bodyText, 'utf8') > maxBytes) {
-        throw new MexcE2ETransportError('MEXC_RESPONSE_INVALID', 'Provider response too large');
+      total = Buffer.byteLength(bodyText, 'utf8');
+      if (total > maxBytes) {
+        throw new MexcE2ETransportError('MEXC_RESPONSE_TOO_LARGE', 'Provider response exceeds bounded limit', {
+          bodyBytes: total,
+          bodyByteCategory: categorizeBodyBytes(total),
+          limitBytes: maxBytes,
+        });
       }
     }
 
     return {
       status: response.status,
-      headers: Object.fromEntries(response.headers?.entries?.() || []),
+      headers: responseHeaders,
       bodyText,
+      bodyBytes: total || Buffer.byteLength(bodyText, 'utf8'),
+      contentType: responseHeaders['content-type'] || responseHeaders['Content-Type'] || null,
+      contentLength: Number.isFinite(contentLength) ? contentLength : null,
+      contentLengthPresent: Boolean(contentLengthRaw),
+      bodyByteCategory: categorizeBodyBytes(total || Buffer.byteLength(bodyText, 'utf8')),
+      truncated: false,
       latencyMs: Date.now() - started,
       ok: response.status >= 200 && response.status < 300,
     };
@@ -122,6 +173,9 @@ export async function mexcE2ESafeFetch({
     if (err instanceof MexcE2ETransportError) throw err;
     if (err?.name === 'AbortError') {
       throw new MexcE2ETransportError('MEXC_TIMEOUT', 'Provider request timed out');
+    }
+    if (/redirect/i.test(String(err?.message || ''))) {
+      throw new MexcE2ETransportError('MEXC_REDIRECT_BLOCKED', 'Provider redirect rejected');
     }
     throw new MexcE2ETransportError('MEXC_NETWORK_ERROR', 'Provider network error');
   } finally {

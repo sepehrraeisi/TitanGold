@@ -70,6 +70,7 @@ export const KEY_GRANT = Object.freeze({
 export const VERIFICATION_STATE = Object.freeze({
   VERIFIED: 'verified',
   FAILED: 'failed',
+  VERIFICATION_ERROR: 'verification_error',
   NOT_TESTED: 'not_tested',
   NOT_SAFELY_TESTABLE: 'not_safely_testable',
   DEFERRED_PRIVATE_NON_EXECUTING_PROBE: 'deferred_private_non_executing_probe',
