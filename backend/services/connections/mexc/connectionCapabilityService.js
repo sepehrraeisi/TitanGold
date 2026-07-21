@@ -12,7 +12,26 @@ import { buildCapabilityMatrix } from './capabilityMatrix.js';
 import { evaluateAllConsumers } from './consumerRegistry.js';
 import { getCheckpointProposal } from './verificationOrchestrator.js';
 import { MEXC_INVENTORY_META, getUnverifiedProviderSupportRows } from './capabilityInventory.js';
+import { buildWalletDataContractProjection } from './walletAccessEvidence.js';
 
+async function loadWalletDataContract(connectionId) {
+  if (!connectionId) return null;
+  try {
+    const { rows } = await query(
+      `SELECT metadata FROM exchange_connections WHERE id = $1 LIMIT 1`,
+      [connectionId],
+    );
+    const rawMeta = rows[0]?.metadata;
+    const meta = typeof rawMeta === 'string'
+      ? JSON.parse(rawMeta || '{}')
+      : (rawMeta && typeof rawMeta === 'object' ? rawMeta : {});
+    const raw = meta.mexcWalletDataContract;
+    if (!raw || typeof raw !== 'object') return null;
+    return buildWalletDataContractProjection(raw);
+  } catch {
+    return null;
+  }
+}
 async function loadStoredCapabilityStates(connectionId, ownerId) {
   if (!connectionId) return {};
   try {
@@ -71,6 +90,7 @@ export function getRuntimeSideEffectFlags() {
 export async function buildMexcConnectionSummary(userId) {
   const connection = await getConnectionForUser(userId, CANONICAL_PROVIDER);
   const storedStates = await loadStoredCapabilityStates(connection?.id, userId);
+  const walletDataContract = await loadWalletDataContract(connection?.id);
   const runtime = getRuntimeSideEffectFlags();
 
   // privateAuthVerified remains false in DTO until live verify authorized;
@@ -86,6 +106,7 @@ export async function buildMexcConnectionSummary(userId) {
     userDisabled: connection.enabled === false && connection.configured === false
       ? false
       : false,
+    walletDataContract,
   });
 
   const consumers = evaluateAllConsumers(matrix);

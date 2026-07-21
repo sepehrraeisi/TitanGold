@@ -4813,5 +4813,10 @@
   "mexc_cap_status_runtime_blocked": "به‌دلیل کنترل‌های اجرایی مسدود است",
   "mexc_cap_status_verification_incomplete": "تأیید قابلیت‌های کیف پول کامل نشد",
   "mexc_technical_verification_value": "مقدار فنی تأیید",
-  "mexc_technical_operational_value": "مقدار فنی عملیاتی"
+  "mexc_technical_operational_value": "مقدار فنی عملیاتی",
+  "mexc_reason_wallet_schema_warning": "برخی ساختارهای اختیاری پاسخ ارائه‌دهنده هنوز پشتیبانی نمی‌شوند",
+  "mexc_reason_wallet_consumer_limited": "دسترسی API تأیید شده است، اما برخی ساختارهای داده ارائه‌دهنده هنوز پشتیبانی نمی‌شوند",
+  "mexc_wallet_access_verified": "دسترسی تأیید شد",
+  "mexc_data_contract_state": "قرارداد داده",
+  "mexc_technical_warning_code": "کد هشدار"
 }

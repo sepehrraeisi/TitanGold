@@ -231,6 +231,11 @@ export interface MexcCapabilityRow {
   lastVerifiedAt?: string | null;
   lastFailureCode?: string | null;
   sanitizedReason?: string | null;
+  dataContractState?: string | null;
+  dataContractWarningCode?: string | null;
+  sanitizedDataContractReason?: string | null;
+  lastDataContractCheckedAt?: string | null;
+  consumerReadiness?: string | null;
 }
 
 export interface MexcConsumerRow {
@@ -245,6 +250,8 @@ export interface MexcConsumerRow {
   rwClass?: string;
   sideEffectClass?: string;
   fallbackBehavior?: string;
+  consumerReadiness?: string | null;
+  limitedByDataContract?: boolean;
 }
 
 export interface MexcCapabilitySummary {

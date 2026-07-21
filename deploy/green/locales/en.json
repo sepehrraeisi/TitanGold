@@ -4997,5 +4997,10 @@
   "mexc_cap_status_runtime_blocked": "Blocked by runtime controls",
   "mexc_cap_status_verification_incomplete": "Wallet capability verification could not be completed",
   "mexc_technical_verification_value": "Verification technical value",
-  "mexc_technical_operational_value": "Operational technical value"
+  "mexc_technical_operational_value": "Operational technical value",
+  "mexc_reason_wallet_schema_warning": "Some optional provider response structures are not yet supported",
+  "mexc_reason_wallet_consumer_limited": "Endpoint access is verified, but some provider records are not yet supported",
+  "mexc_wallet_access_verified": "Access verified",
+  "mexc_data_contract_state": "Data contract",
+  "mexc_technical_warning_code": "Warning code"
 }

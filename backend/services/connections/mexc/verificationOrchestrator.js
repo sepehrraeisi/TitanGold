@@ -65,6 +65,10 @@ import {
   WALLET_COMPRESSED_MAX_BYTES,
   WALLET_DECOMPRESSED_MAX_BYTES,
 } from './walletCurrencyConfigContract.js';
+import {
+  buildSanitizedWalletProbeTelemetry,
+  buildWalletDataContractProjection,
+} from './walletAccessEvidence.js';
 import { query } from '../../../database/db.js';
 
 /** Future authorized continuation order — do not execute without explicit authorization. */
@@ -125,6 +129,9 @@ function sanitizeProbeResult(probe, outcome) {
     providerAvailability: outcome.providerAvailability || null,
     probeSafeSymbol: outcome.probeSafeSymbol || null,
     safeResponseEvidence: outcome.safeResponseEvidence || null,
+    dataContractState: outcome.dataContractState || null,
+    dataContractWarningCode: outcome.dataContractWarningCode || null,
+    sanitizedDataContractReason: outcome.sanitizedDataContractReason || null,
     // Explicit: never attach memory-only private payloads
     memoryOnlyExcluded: MEMORY_ONLY_PROBE_FIELDS,
   };
@@ -365,12 +372,17 @@ async function runWalletCurrencyConfigProbe(probe, { apiKey, apiSecret, transpor
       keyGrant: KEY_GRANT.GRANTED,
       latencyMs: contract.safe?.latencyMs ?? null,
       code: null,
-      sanitizedReason: null,
+      sanitizedReason: contract.dataContractWarningCode
+        ? 'Endpoint access verified'
+        : null,
       healthCategory: null,
       testedAt,
       providerAvailability: contract.providerAvailability,
       countCategory: contract.itemCountCategory,
       safeResponseEvidence: contract.safe,
+      dataContractState: contract.dataContractState || 'ready',
+      dataContractWarningCode: contract.dataContractWarningCode || null,
+      sanitizedDataContractReason: contract.sanitizedDataContractReason || null,
     };
   } catch (err) {
     if (err instanceof WalletCurrencyConfigContractError) {
@@ -665,6 +677,11 @@ async function persistSafeCapabilityResults({
       ],
     );
     rows += 1;
+    await persistWalletProbeSanitizedMetadata({
+      connectionId,
+      result,
+      correlationId,
+    });
   }
 
   // Persist only selected public safe symbol as Connection probe metadata (not private payloads)
@@ -686,6 +703,35 @@ async function persistSafeCapabilityResults({
   }
 
   return { persisted: true, rows };
+}
+
+async function persistWalletProbeSanitizedMetadata({ connectionId, result, correlationId }) {
+  if (!connectionId || !result || result.capabilityId !== 'WALLET_CURRENCY_READ') return;
+  const telemetry = buildSanitizedWalletProbeTelemetry(result.safeResponseEvidence || {}, {
+    testedAt: result.testedAt,
+    runId: correlationId,
+    code: result.code,
+    dataContractState: result.dataContractState || null,
+    dataContractWarningCode: result.dataContractWarningCode || null,
+  });
+  const payload = {
+    mexcWalletLastProbeEvidence: telemetry,
+  };
+  if (result.success && result.dataContractState) {
+    payload.mexcWalletDataContract = buildWalletDataContractProjection({
+      dataContractState: result.dataContractState,
+      dataContractWarningCode: result.dataContractWarningCode || null,
+      sanitizedDataContractReason: result.sanitizedDataContractReason || null,
+      lastDataContractCheckedAt: result.testedAt,
+    });
+  }
+  await query(
+    `UPDATE exchange_connections
+     SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [connectionId, JSON.stringify(payload)],
+  ).catch(() => {});
 }
 
 export async function runMexcVerificationOrchestrator(opts = {}) {

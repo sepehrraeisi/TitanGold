@@ -381,6 +381,7 @@ export function buildCapabilityMatrix(opts = {}) {
     privateAuthVerified = false,
     runtimeAllowsSideEffects = false,
     userDisabled = false,
+    walletDataContract = null,
   } = opts;
 
   const capabilities = MEXC_CAPABILITY_IDS.map((capabilityId) => {
@@ -444,6 +445,22 @@ export function buildCapabilityMatrix(opts = {}) {
     });
 
     const inventory = listInventoryByCapability(capabilityId);
+    const isWalletCurrency = capabilityId === MEXC_CAPABILITY.WALLET_CURRENCY_READ;
+    const contract = isWalletCurrency
+      ? (walletDataContract || {
+        dataContractState: stored.dataContractState || 'unknown',
+        dataContractWarningCode: stored.dataContractWarningCode || null,
+        sanitizedDataContractReason: stored.sanitizedDataContractReason || null,
+        lastDataContractCheckedAt: stored.lastDataContractCheckedAt || null,
+        consumerReadiness: stored.consumerReadiness || 'unknown',
+      })
+      : {
+        dataContractState: 'not_applicable',
+        dataContractWarningCode: null,
+        sanitizedDataContractReason: null,
+        lastDataContractCheckedAt: null,
+        consumerReadiness: 'not_applicable',
+      };
 
     return {
       capabilityId,
@@ -461,6 +478,11 @@ export function buildCapabilityMatrix(opts = {}) {
       lastFailureCode: stored.lastFailureCode || null,
       sanitizedReason: stored.sanitizedReason || null,
       sourceOfEvidence: stored.sourceOfEvidence || null,
+      dataContractState: contract.dataContractState,
+      dataContractWarningCode: contract.dataContractWarningCode,
+      sanitizedDataContractReason: contract.sanitizedDataContractReason,
+      lastDataContractCheckedAt: contract.lastDataContractCheckedAt,
+      consumerReadiness: contract.consumerReadiness,
       inventoryEndpoints: inventory.map((r) => ({
         name: r.name,
         method: r.method,

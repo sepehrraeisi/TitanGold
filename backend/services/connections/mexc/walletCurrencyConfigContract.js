@@ -46,6 +46,7 @@ export const WALLET_CURRENCY_ERROR = Object.freeze({
   RESPONSE_TRUNCATED: 'MEXC_RESPONSE_TRUNCATED',
   WRONG_CONTENT_TYPE: 'MEXC_RESPONSE_WRONG_CONTENT_TYPE',
   PROVIDER_ERROR_ENVELOPE: 'MEXC_PROVIDER_ERROR_ENVELOPE',
+  PROVIDER_SCHEMA_DRIFT: 'MEXC_WALLET_PROVIDER_SCHEMA_DRIFT',
   // Compatibility aliases used by older tests / prior run codes
   HTML_RESPONSE: 'MEXC_HTML_RESPONSE',
   CONTENT_TYPE_INVALID: 'MEXC_RESPONSE_WRONG_CONTENT_TYPE',
@@ -73,6 +74,7 @@ export const WALLET_DOMAIN_LOCAL_ERROR_CODES = Object.freeze(new Set([
   WALLET_CURRENCY_ERROR.ITEM_INVALID,
   WALLET_CURRENCY_ERROR.NETWORK_LIST_INVALID,
   WALLET_CURRENCY_ERROR.NETWORK_ITEM_INVALID,
+  WALLET_CURRENCY_ERROR.PROVIDER_SCHEMA_DRIFT,
   WALLET_CURRENCY_ERROR.HTML_RESPONSE,
   WALLET_CURRENCY_ERROR.RESPONSE_TOO_LARGE,
 ]));
@@ -353,9 +355,21 @@ function buildSafeMeta({ status, headers, transportMeta = {} }) {
   const compressedBytes = transportMeta.compressedBytesRead
     ?? (Number.isFinite(contentLength) ? contentLength : null);
   const decompressedBytes = transportMeta.decompressedBytesProcessed ?? transportMeta.bodyBytes ?? null;
+  const httpStatus = status ?? null;
+  const httpOk = Number.isFinite(Number(httpStatus))
+    && Number(httpStatus) >= 200
+    && Number(httpStatus) < 300;
+  const contentTypeAccepted = !contentType
+    ? false
+    : /application\/json|\+json|text\/json/i.test(String(contentType));
   return {
-    httpStatus: status ?? null,
+    httpStatus,
+    httpOk,
     contentType,
+    contentTypeAccepted,
+    sanitizedContentType: contentType
+      ? String(contentType).split(';')[0].trim().slice(0, 64)
+      : null,
     contentEncoding,
     contentLengthPresent: Boolean(contentLengthRaw),
     contentLengthCategory: Number.isFinite(contentLength)
@@ -382,12 +396,22 @@ function buildSafeMeta({ status, headers, transportMeta = {} }) {
     transportTruncated: Boolean(transportMeta.truncated),
     limitCategory: transportMeta.limitCategory || null,
     latencyMs: transportMeta.latencyMs ?? null,
+    reachedCurrencyOrNetworkStructure: false,
+    schemaDriftCategories: [],
+    schemaDriftCountCategory: 'zero',
   };
 }
 
 function assertContentType(safe, headers) {
   const contentType = String(safe.contentType || '').toLowerCase();
-  if (contentType && !contentType.includes('application/json') && !contentType.includes('+json') && !contentType.includes('text/json')) {
+  if (!contentType) {
+    throw new WalletCurrencyConfigContractError(
+      WALLET_CURRENCY_ERROR.WRONG_CONTENT_TYPE,
+      'Wallet response content type missing',
+      { ...safe, validationFailure: 'content_type.missing', abortLimit: 'content_type' },
+    );
+  }
+  if (!contentType.includes('application/json') && !contentType.includes('+json') && !contentType.includes('text/json')) {
     throw new WalletCurrencyConfigContractError(
       WALLET_CURRENCY_ERROR.WRONG_CONTENT_TYPE,
       'Wallet response content type invalid',
@@ -395,6 +419,37 @@ function assertContentType(safe, headers) {
     );
   }
   void headers;
+}
+
+function categorizeDriftCount(count) {
+  if (!Number.isFinite(count) || count <= 0) return 'zero';
+  if (count < 10) return '1_to_9';
+  if (count < 100) return '10_to_99';
+  return '100_plus';
+}
+
+function classifySemanticDrift(err) {
+  const failure = String(err?.safe?.validationFailure || '');
+  if (failure === 'networkList.item_not_object') return 'network_item_non_object';
+  if (failure === 'networkList.not_array') return 'network_list_non_array';
+  if (failure.startsWith('wallet_item') || failure.startsWith('networkList.') || failure.startsWith('coin') || failure.startsWith('name')) {
+    return 'object_missing_expected_fields';
+  }
+  if (err?.code === WALLET_CURRENCY_ERROR.NETWORK_ITEM_INVALID) return 'network_item_non_object';
+  if (err?.code === WALLET_CURRENCY_ERROR.NETWORK_LIST_INVALID) return 'network_list_non_array';
+  if (err?.code === WALLET_CURRENCY_ERROR.ITEM_INVALID) return 'object_missing_expected_fields';
+  return 'object_missing_expected_fields';
+}
+
+/**
+ * Strict consumer-data validation — rejects malformed records for product use.
+ * Never silently normalizes unknown provider shapes into deposit/withdraw options.
+ */
+export function validateWalletCurrencyRecordStrict(item) {
+  const counters = { currencyItems: 0, networkItems: 0 };
+  const safe = buildSafeMeta({ status: 200, headers: { 'content-type': 'application/json' } });
+  validateWalletItem(item, 0, safe, counters);
+  return { accepted: true };
 }
 
 function assertCompressedLimit(safe, headers) {
@@ -449,12 +504,26 @@ export async function parseWalletCurrencyConfigStream({
   source,
   transportMeta = {},
   onAbortStream = null,
+  verificationOnly = true,
 } = {}) {
   const { Transform } = await import('stream');
   const safe = buildSafeMeta({ status, headers, transportMeta });
   const abortStream = () => {
     try { onAbortStream?.(); } catch { /* ignore */ }
   };
+
+  if (!safe.httpOk) {
+    abortStream();
+    throw new WalletCurrencyConfigContractError(
+      WALLET_CURRENCY_ERROR.MALFORMED,
+      'Wallet response HTTP status was not successful',
+      {
+        ...safe,
+        validationFailure: 'http.not_2xx',
+        abortLimit: 'http_status',
+      },
+    );
+  }
 
   if (safe.transportTruncated) {
     abortStream();
@@ -553,13 +622,20 @@ export async function parseWalletCurrencyConfigStream({
   ]);
 
   const counters = { currencyItems: 0, networkItems: 0 };
+  const driftCounts = Object.create(null);
   let topLevelIsArray = false;
+  let acceptedItems = 0;
 
   const destroyAll = () => {
     abortStream();
     try { readable.destroy?.(); } catch { /* ignore */ }
     try { limitTransform.destroy?.(); } catch { /* ignore */ }
     try { pipeline.destroy?.(); } catch { /* ignore */ }
+  };
+
+  const noteDrift = (category) => {
+    const key = String(category || 'object_missing_expected_fields');
+    driftCounts[key] = (driftCounts[key] || 0) + 1;
   };
 
   try {
@@ -579,7 +655,27 @@ export async function parseWalletCurrencyConfigStream({
           },
         );
       }
-      validateWalletItem(data.value, counters.currencyItems - 1, safe, counters);
+      try {
+        validateWalletItem(data.value, counters.currencyItems - 1, safe, counters);
+        safe.reachedCurrencyOrNetworkStructure = true;
+        acceptedItems += 1;
+      } catch (itemErr) {
+        if (
+          verificationOnly
+          && itemErr instanceof WalletCurrencyConfigContractError
+          && [
+            WALLET_CURRENCY_ERROR.ITEM_INVALID,
+            WALLET_CURRENCY_ERROR.NETWORK_LIST_INVALID,
+            WALLET_CURRENCY_ERROR.NETWORK_ITEM_INVALID,
+          ].includes(itemErr.code)
+        ) {
+          safe.reachedCurrencyOrNetworkStructure = true;
+          noteDrift(classifySemanticDrift(itemErr));
+          // discard without storing values
+        } else {
+          throw itemErr;
+        }
+      }
       data.value = null;
     }
   } catch (err) {
@@ -610,6 +706,8 @@ export async function parseWalletCurrencyConfigStream({
     try { pipeline.destroy?.(); } catch { /* ignore */ }
   }
 
+  const driftCategories = Object.keys(driftCounts).sort();
+  const driftTotal = driftCategories.reduce((n, k) => n + driftCounts[k], 0);
   safe.topLevelType = 'array';
   safe.itemCountCategory = categorizeItemCount(counters.currencyItems);
   safe.networkItemCountCategory = categorizeItemCount(counters.networkItems);
@@ -618,11 +716,24 @@ export async function parseWalletCurrencyConfigStream({
   safe.decompressedByteCategory = categorizeWalletBodyBytes(decompressedBytes);
   safe.bodyBytes = decompressedBytes;
   safe.bodyByteCategory = safe.decompressedByteCategory;
+  safe.schemaDriftCategories = driftCategories;
+  safe.schemaDriftCountCategory = categorizeDriftCount(driftTotal);
+  safe.acceptedItemCountCategory = categorizeItemCount(acceptedItems);
+
+  const dataContractWarning = driftTotal > 0;
 
   return {
     itemCountCategory: safe.itemCountCategory,
     networkItemCountCategory: safe.networkItemCountCategory,
     providerAvailability: 'available',
+    accessVerified: true,
+    dataContractState: dataContractWarning ? 'warning' : 'ready',
+    dataContractWarningCode: dataContractWarning
+      ? WALLET_CURRENCY_ERROR.PROVIDER_SCHEMA_DRIFT
+      : null,
+    sanitizedDataContractReason: dataContractWarning
+      ? 'Provider response contained an unrecognized optional record shape'
+      : null,
     safe,
   };
 }
@@ -682,5 +793,6 @@ export async function parseWalletCurrencyConfigResponse({
       decompressedBytesProcessed: 0,
       bodyBytes: transportMeta.bodyBytes ?? Buffer.byteLength(text, 'utf8'),
     },
+    verificationOnly: transportMeta.verificationOnly !== false,
   });
 }

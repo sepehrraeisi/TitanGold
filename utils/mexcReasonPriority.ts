@@ -23,6 +23,8 @@ export type MexcReasonKind =
   | 'risk_confirmation'
   | 'available'
   | 'account_use_case_unknown'
+  | 'wallet_schema_warning'
+  | 'wallet_consumer_limited'
   | 'generic';
 
 export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
@@ -37,6 +39,8 @@ export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
   risk_confirmation: 'mexc_reason_risk_confirmation',
   available: 'mexc_reason_available',
   account_use_case_unknown: 'mexc_reason_account_use_case_unknown',
+  wallet_schema_warning: 'mexc_reason_wallet_schema_warning',
+  wallet_consumer_limited: 'mexc_reason_wallet_consumer_limited',
   generic: 'mexc_blocked_generic_reason',
 };
 
@@ -49,6 +53,10 @@ export interface CapabilityLike {
   blockedReason?: string | null;
   sideEffect?: string | null;
   rwClass?: string | null;
+  dataContractState?: string | null;
+  dataContractWarningCode?: string | null;
+  sanitizedDataContractReason?: string | null;
+  consumerReadiness?: string | null;
 }
 
 export interface ConsumerLike {
@@ -58,6 +66,8 @@ export interface ConsumerLike {
   sideEffectClass?: string | null;
   requiredCapabilities?: string[];
   registered?: boolean;
+  consumerReadiness?: string | null;
+  limitedByDataContract?: boolean;
 }
 
 const PRIORITY: MexcReasonKind[] = [
@@ -91,8 +101,14 @@ export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
   const key = String(cap.keyGrant || '').toLowerCase();
   const reason = String(cap.blockedReason || '');
   const id = String(cap.capabilityId || '');
+  const contract = String(cap.dataContractState || '').toLowerCase();
 
-  if (op === 'enabled') return 'available';
+  if (op === 'enabled') {
+    if (id === 'WALLET_CURRENCY_READ' && (contract === 'warning' || contract === 'incompatible')) {
+      return 'wallet_schema_warning';
+    }
+    return 'available';
+  }
 
   if (provider === 'unknown' || /PROVIDER SUPPORT NOT VERIFIED/i.test(reason)) {
     if (id === 'ACCOUNT_EDIT' || /ACCOUNT_EDIT|no verified official/i.test(reason)) {
@@ -175,6 +191,14 @@ export function selectConsumerProductReason(consumer: ConsumerLike): MexcReasonK
   if (consumer.registered === false) return 'generic';
   if (consumer.eligible) return 'available';
 
+  if (
+    consumer.limitedByDataContract
+    || consumer.consumerReadiness === 'limited'
+    || /provider records are not yet supported|ساختارهای داده/i.test(String(consumer.blockedReason || ''))
+  ) {
+    return 'wallet_consumer_limited';
+  }
+
   const side = String(consumer.sideEffectClass || '');
   if (side === 'financial_write' || side === 'account_mutation') {
     // Execution consumers: prefer Tier-4 unless provider unknown dominates the text
@@ -190,7 +214,7 @@ export function selectConsumerProductReason(consumer: ConsumerLike): MexcReasonK
 
 export function productStatusFromCapability(cap: CapabilityLike): 'available' | 'pending' | 'blocked' | 'unavailable' {
   const kind = classifyCapabilityReason(cap);
-  if (kind === 'available') return 'available';
+  if (kind === 'available' || kind === 'wallet_schema_warning') return 'available';
   if (kind === 'provider_unknown' || kind === 'provider_unavailable' || kind === 'account_use_case_unknown') {
     return 'unavailable';
   }

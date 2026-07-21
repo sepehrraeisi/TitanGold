@@ -561,6 +561,10 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                       {caps.map((cap) => {
                         const status = productStatusFromCapability(cap);
                         const reasonKind = selectCapabilityProductReason(cap);
+                        const schemaWarning = Boolean(
+                          cap.capabilityId === 'WALLET_CURRENCY_READ'
+                          && (cap.dataContractState === 'warning' || cap.dataContractState === 'incompatible'),
+                        );
                         return (
                           <div
                             key={cap.capabilityId}
@@ -573,8 +577,15 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                               </span>
                               <StatePill label={productStatusLabel(status, t)} tone={toneForProductStatus(status)} />
                             </div>
-                            {status !== 'available' && (
-                              <p className="mt-2 text-xs text-amber-200/90">{translateReasonKind(reasonKind, t)}</p>
+                            {(status !== 'available' || schemaWarning) && (
+                              <p className="mt-2 text-xs text-amber-200/90" data-testid={`mexc-cap-reason-${cap.capabilityId}`}>
+                                {translateReasonKind(schemaWarning ? 'wallet_schema_warning' : reasonKind, t)}
+                              </p>
+                            )}
+                            {schemaWarning && (
+                              <p className="mt-1 text-[11px] text-slate-400" data-testid={`mexc-cap-access-${cap.capabilityId}`}>
+                                {t('mexc_wallet_access_verified')}
+                              </p>
                             )}
                             <p className="mt-1 text-[11px] text-slate-500">
                               {t('mexc_last_checked')}:{' '}
@@ -596,6 +607,16 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                                 <p>
                                   {t('mexc_operational')}: {getOperationalStateLabel(cap.operationalState, t)}
                                 </p>
+                                {cap.dataContractState && cap.dataContractState !== 'not_applicable' && (
+                                  <p data-testid={`mexc-cap-data-contract-${cap.capabilityId}`}>
+                                    {t('mexc_data_contract_state')}: {cap.dataContractState}
+                                  </p>
+                                )}
+                                {cap.dataContractWarningCode && (
+                                  <p className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true" data-testid={`mexc-cap-warning-code-${cap.capabilityId}`}>
+                                    {t('mexc_technical_warning_code')}: {cap.dataContractWarningCode}
+                                  </p>
+                                )}
                                 <p className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true" data-testid={`mexc-cap-code-${cap.capabilityId}`}>
                                   {t('mexc_technical_code')}: {cap.capabilityId}
                                 </p>

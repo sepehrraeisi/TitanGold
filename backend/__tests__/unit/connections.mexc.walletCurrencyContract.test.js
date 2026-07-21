@@ -75,7 +75,14 @@ function buildWalletItem(overrides = {}) {
   };
 }
 
-function makeWalletResponse(items, headers = {}) {
+function makeWalletResponse(items, headersOrMeta = {}) {
+  const isMeta = headersOrMeta && (
+    Object.prototype.hasOwnProperty.call(headersOrMeta, 'verificationOnly')
+    || Object.prototype.hasOwnProperty.call(headersOrMeta, 'truncated')
+    || Object.prototype.hasOwnProperty.call(headersOrMeta, 'headers')
+  );
+  const headers = isMeta ? (headersOrMeta.headers || {}) : headersOrMeta;
+  const metaExtras = isMeta ? headersOrMeta : {};
   const bodyText = typeof items === 'string' ? items : JSON.stringify(items);
   return {
     status: 200,
@@ -88,6 +95,7 @@ function makeWalletResponse(items, headers = {}) {
       bodyBytes: Buffer.byteLength(bodyText, 'utf8'),
       truncated: false,
       latencyMs: 15,
+      ...metaExtras,
     },
   };
 }
@@ -357,20 +365,43 @@ describe('Wallet streaming currency config contract', () => {
     expect(JSON.stringify(parsed)).not.toMatch(/mystery|tipExtra|ignored/);
   });
 
-  test('rejects empty coin when present', async () => {
-    await expect(parseWalletCurrencyConfigResponse(makeWalletResponse([
-      { coin: '', networkList: [] },
-    ]))).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.ITEM_INVALID });
+  test('rejects empty coin when present in strict mode', async () => {
+    await expect(parseWalletCurrencyConfigResponse(makeWalletResponse(
+      [{ coin: '', networkList: [] }],
+      { verificationOnly: false },
+    ))).rejects.toMatchObject({ code: WALLET_CURRENCY_ERROR.ITEM_INVALID });
   });
 
-  test('rejects malformed networkList item', async () => {
+  test('verification-only treats empty coin as schema drift without failing access', async () => {
+    const parsed = await parseWalletCurrencyConfigResponse(makeWalletResponse([{ coin: '', networkList: [] }]));
+    expect(parsed.accessVerified).toBe(true);
+    expect(parsed.dataContractState).toBe('warning');
+    expect(parsed.dataContractWarningCode).toBe(WALLET_CURRENCY_ERROR.PROVIDER_SCHEMA_DRIFT);
+    expect(parsed.safe.parserCompleted).toBe(true);
+    expect(parsed.safe.httpOk).toBe(true);
+    expect(parsed.safe.contentTypeAccepted).toBe(true);
+  });
+
+  test('rejects malformed networkList item in strict mode', async () => {
     try {
-      await parseWalletCurrencyConfigResponse(makeWalletResponse([{ coin: 'USDT', networkList: ['bad'] }]));
+      await parseWalletCurrencyConfigResponse(makeWalletResponse(
+        [{ coin: 'USDT', networkList: ['bad'] }],
+        { verificationOnly: false },
+      ));
       throw new Error('expected throw');
     } catch (err) {
       expect(err.code).toBe(WALLET_CURRENCY_ERROR.NETWORK_ITEM_INVALID);
       expect(err.safe.validationFailure).toBe('networkList.item_not_object');
     }
+  });
+
+  test('verification-only network item drift verifies access with schema warning', async () => {
+    const parsed = await parseWalletCurrencyConfigResponse(makeWalletResponse([{ coin: 'USDT', networkList: ['bad'] }]));
+    expect(parsed.accessVerified).toBe(true);
+    expect(parsed.dataContractState).toBe('warning');
+    expect(parsed.dataContractWarningCode).toBe(WALLET_CURRENCY_ERROR.PROVIDER_SCHEMA_DRIFT);
+    expect(parsed.safe.schemaDriftCategories).toContain('network_item_non_object');
+    expect(JSON.stringify(parsed)).not.toMatch(/USDT|bad|ERC20/);
   });
 
   test('rejects provider error object as successful list', async () => {
@@ -448,14 +479,11 @@ describe('Wallet streaming currency config contract', () => {
   });
 
   test('errors never include raw field content', async () => {
-    try {
-      await parseWalletCurrencyConfigResponse(makeWalletResponse([
-        buildWalletItem({ name: 'SECRET_COIN_NAME_SHOULD_NOT_LEAK', networkList: 'bad' }),
-      ]));
-    } catch (err) {
-      expect(JSON.stringify(err.safe)).not.toMatch(/SECRET_COIN_NAME/);
-      expect(err.message).not.toMatch(/SECRET_COIN_NAME/);
-    }
+    const parsed = await parseWalletCurrencyConfigResponse(makeWalletResponse([
+      buildWalletItem({ name: 'SECRET_COIN_NAME_SHOULD_NOT_LEAK', networkList: 'bad' }),
+    ]));
+    expect(parsed.accessVerified).toBe(true);
+    expect(JSON.stringify(parsed)).not.toMatch(/SECRET_COIN_NAME/);
   });
 
   test('unexpected redirect is blocked by transport', async () => {
@@ -507,7 +535,7 @@ describe('Wallet probe orchestration semantics', () => {
     });
   }
 
-  test('Probe 4 schema/size failure remains domain-local and does not block Probe 5+', async () => {
+  test('Probe 4 schema drift remains domain-local and verifies access without blocking Probe 5+', async () => {
     mockConnectionRow();
     const calls = [];
     const transport = async (request) => {
@@ -542,9 +570,11 @@ describe('Wallet probe orchestration semantics', () => {
     });
 
     const wallet = result.body.results.find((r) => r.probeId === 'wallet_currency_config');
-    expect(wallet.verificationState).toBe('verification_error');
-    expect(wallet.keyGrant).toBe('unknown');
-    expect(wallet.code).toBe('MEXC_WALLET_NETWORK_LIST_INVALID');
+    expect(wallet.verificationState).toBe('verified');
+    expect(wallet.keyGrant).toBe('granted');
+    expect(wallet.dataContractState).toBe('warning');
+    expect(wallet.dataContractWarningCode).toBe('MEXC_WALLET_PROVIDER_SCHEMA_DRIFT');
+    expect(wallet.sanitizedReason).toBe('Endpoint access verified');
     expect(result.body.results.some((r) => r.probeId === 'deposit_history')).toBe(true);
     expect(result.body.results.some((r) => r.probeId === 'withdraw_history')).toBe(true);
     expect(result.body.results.some((r) => r.probeId === 'transfer_history')).toBe(true);

@@ -5,6 +5,7 @@
  */
 
 import { MEXC_CAPABILITY, SIDE_EFFECT, RW_CLASS } from './capabilityIds.js';
+import { WALLET_ACCESS_EVIDENCE_REASON } from './walletAccessEvidence.js';
 
 export const MEXC_CONSUMERS = Object.freeze([
   {
@@ -293,6 +294,32 @@ export function evaluateConsumerEligibility(consumer, matrix) {
     }
   }
 
+  let consumerReadiness = eligible ? 'ready' : 'blocked';
+  let limitedByDataContract = false;
+
+  // Wallet product read requires normalized currency/network records.
+  // Access may be verified while consumer readiness remains limited.
+  if (consumer.id === 'wallet') {
+    const walletCap = byId.get(MEXC_CAPABILITY.WALLET_CURRENCY_READ);
+    if (
+      walletCap
+      && walletCap.verificationState === 'verified'
+      && walletCap.keyGrant === 'granted'
+      && (walletCap.consumerReadiness === 'limited'
+        || walletCap.dataContractState === 'warning'
+        || walletCap.dataContractState === 'incompatible')
+    ) {
+      eligible = false;
+      limitedByDataContract = true;
+      consumerReadiness = 'limited';
+      blockedReasons.length = 0;
+      blockedReasons.push(WALLET_ACCESS_EVIDENCE_REASON.CONSUMER_LIMITED_EN);
+    }
+  }
+
+  // Deposit / withdrawal history / transfer / futures consumers remain independent
+  // of WALLET_CURRENCY_READ schema warnings (no shared readiness coupling).
+
   return {
     consumerId: consumer.id,
     displayName: consumer.displayName,
@@ -304,6 +331,8 @@ export function evaluateConsumerEligibility(consumer, matrix) {
     rwClass: consumer.rwClass,
     sideEffectClass: consumer.sideEffectClass,
     eligible,
+    consumerReadiness,
+    limitedByDataContract,
     blockedReason: eligible ? null : blockedReasons.join('; ') || 'Required capabilities not operational',
     fallbackBehavior: consumer.fallbackBehavior,
     registered: true,
