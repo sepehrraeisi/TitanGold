@@ -28,6 +28,8 @@ type SettingsTab =
 type SettingsProps = {
   initialTab?: string;
   initialSubtab?: string;
+  initialProvider?: string;
+  initialSection?: string;
   onNavigate?: OnNavigateHandler;
   onNavigationComplete?: () => void;
 };
@@ -35,13 +37,20 @@ type SettingsProps = {
 const Settings: React.FC<SettingsProps> = ({
   initialTab,
   initialSubtab,
+  initialProvider,
+  initialSection,
   onNavigate,
   onNavigationComplete,
 }) => {
   const { t } = useLanguage();
   const { user } = useAppContext();
   const userRole = user?.role || 'Trader';
-  const deepLinkRef = React.useRef({ tab: initialTab, subtab: initialSubtab });
+  const deepLinkRef = React.useRef({
+    tab: initialTab,
+    subtab: initialSubtab,
+    provider: initialProvider,
+    section: initialSection,
+  });
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     (deepLinkRef.current.tab as SettingsTab) || 'profile',
   );
@@ -50,12 +59,24 @@ const Settings: React.FC<SettingsProps> = ({
   React.useEffect(() => {
     if (initialTab && initialTab !== activeTab) {
       setActiveTab(initialTab as SettingsTab);
-      deepLinkRef.current = { tab: initialTab, subtab: initialSubtab };
+      deepLinkRef.current = {
+        tab: initialTab,
+        subtab: initialSubtab,
+        provider: initialProvider,
+        section: initialSection,
+      };
       if (onNavigationComplete) {
         onNavigationComplete();
       }
+    } else if (initialTab === activeTab) {
+      deepLinkRef.current = {
+        tab: initialTab,
+        subtab: initialSubtab,
+        provider: initialProvider,
+        section: initialSection,
+      };
     }
-  }, [initialTab, initialSubtab, activeTab, onNavigationComplete]);
+  }, [initialTab, initialSubtab, initialProvider, initialSection, activeTab, onNavigationComplete]);
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     {
@@ -258,6 +279,8 @@ const Settings: React.FC<SettingsProps> = ({
         return (
           <ConnectionsSettings
             initialSubtab={deepLinkRef.current.subtab || initialSubtab}
+            initialProvider={deepLinkRef.current.provider || initialProvider}
+            initialSection={deepLinkRef.current.section || initialSection}
             onNavigate={onNavigate}
           />
         );

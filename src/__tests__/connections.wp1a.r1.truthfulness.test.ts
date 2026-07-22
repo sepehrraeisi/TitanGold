@@ -47,15 +47,26 @@ describe('connectionDisplayStatus ownership', () => {
     expect(status).toBe('not_configured');
   });
 
-  it('unsupported providers are coming_soon without configure action semantics', () => {
+  it('unsupported providers are not_available_yet without configure action semantics', () => {
     for (const provider of ['Binance', 'Bybit', 'KuCoin', 'Gate.io']) {
       const status = deriveConnectionDisplayStatus({
         provider,
-        configured: true, // even if somehow true, UI treats non-MEXC as coming soon
+        configured: true, // even if somehow true, UI treats non-MEXC as not available yet
       });
-      expect(status).toBe('coming_soon');
-      expect(connectionStatusMessageKey(status)).toBe('connections_coming_soon');
+      expect(status).toBe('not_available_yet');
+      expect(connectionStatusMessageKey(status)).toBe('connections_not_available_yet');
     }
+  });
+
+  it('authenticated + configured never returns configured_not_verified', () => {
+    const status = deriveConnectionDisplayStatus({
+      provider: 'MEXC',
+      configured: true,
+      privateAuthVerified: true,
+    });
+    expect(status).toBe('authenticated_capabilities_partial');
+    expect(connectionStatusMessageKey(status)).toBe('mexc_state_authenticated_capabilities_partial');
+    expect(mexcPrimaryActionLabelKey(status)).toBe('connections_manage_mexc');
   });
 
   it('stale frontend flags cannot override missing backend configured metadata', () => {
@@ -89,7 +100,7 @@ describe('product copy and i18n', () => {
       expect(data.settings_configuration).not.toBe('settings_configuration');
       expect(data.clear_cache).not.toBe('clear_cache');
       expect(data.connections_configured_not_verified).toMatch(/Not verified|تأیید نشده/);
-      expect(data.connections_coming_soon).toBeTruthy();
+      expect(data.connections_not_available_yet).toBeTruthy();
       expect(data.connections_manage_mexc).toBeTruthy();
       expect(data.connections_configure_mexc).toBeTruthy();
     }
@@ -109,8 +120,9 @@ describe('product copy and i18n', () => {
     expect(src).not.toMatch(/localStorage\.getItem\(['"]token['"]\)/);
     expect(src).toMatch(/mexcPrimaryActionLabelKey/);
     expect(src).toMatch(/deriveConnectionDisplayStatus/);
-    expect(helper).toMatch(/coming_soon/);
-    expect(helper).toMatch(/connections_coming_soon/);
+    expect(helper).toMatch(/not_available_yet/);
+    expect(helper).toMatch(/connections_not_available_yet/);
+    expect(helper).not.toMatch(/coming_soon/);
     expect(src).not.toMatch(/>\s*\+\s*</); // no bare + text node
     expect(src).not.toMatch(/CONNECTIONS-WP/);
   });

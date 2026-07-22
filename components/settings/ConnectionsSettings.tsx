@@ -9,13 +9,25 @@ import type { OnNavigateHandler } from '../../types/navigation.ts';
  */
 type Props = {
   initialSubtab?: string;
+  initialProvider?: string;
+  initialSection?: string;
   onNavigate?: OnNavigateHandler;
 };
 
-const ConnectionsSettings: React.FC<Props> = ({ initialSubtab, onNavigate }) => {
+const ConnectionsSettings: React.FC<Props> = ({
+  initialSubtab,
+  initialProvider,
+  initialSection,
+  onNavigate,
+}) => {
   return (
     <div className="space-y-6">
-      <MultiExchangeSettings initialSubtab={initialSubtab} onNavigate={onNavigate} />
+      <MultiExchangeSettings
+        initialSubtab={initialSubtab}
+        initialProvider={initialProvider}
+        initialSection={initialSection}
+        onNavigate={onNavigate}
+      />
     </div>
   );
 };

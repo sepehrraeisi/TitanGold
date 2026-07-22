@@ -3,7 +3,7 @@ import { useLanguage } from '../../../context/LanguageContext.tsx';
 import { fetchMexcCapabilitySummary, type MexcCapabilitySummary } from '../../../services/connectionsApi.ts';
 import type { OnNavigateHandler } from '../../../types/navigation.ts';
 import { buildMexcManageNavigation } from '../../../utils/settingsNavigation.ts';
-import { getAuthStateLabel } from '../../../utils/mexcDisplayLabels.ts';
+import { buildMexcProviderSummary } from '../../../utils/mexcProviderSummary.ts';
 import {
   selectConsumerProductReason,
   translateReasonKind,
@@ -37,6 +37,18 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
     };
   }, []);
 
+  const projection = summary
+    ? buildMexcProviderSummary({
+      connection: {
+        provider: 'MEXC',
+        configured: summary.connection?.configured,
+        privateAuthVerified: summary.privateAuthentication?.verified,
+        maskedKeyIdentifier: summary.connection?.maskedKeyIdentifier,
+      },
+      summary,
+    })
+    : null;
+
   const walletRead = summary?.consumers?.find((c) => c.consumerId === 'wallet');
   const walletWithdraw = summary?.consumers?.find((c) => c.consumerId === 'wallet_withdrawal_execute');
   const walletTransfer = summary?.consumers?.find((c) => c.consumerId === 'wallet_transfer_execute');
@@ -58,7 +70,7 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
 
   const handleManageConnection = () => {
     if (onNavigate) {
-      onNavigate(buildMexcManageNavigation());
+      onNavigate(buildMexcManageNavigation('overview'));
     }
   };
 
@@ -69,7 +81,10 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
     }
   };
 
-  const authLabel = getAuthStateLabel(summary?.connection?.authState, t);
+  const authLabel = projection
+    ? t(projection.overallStatusLabelKey)
+    : t('connections_not_configured');
+
   const readEligibilityLabel = walletLimited
     ? t('mexc_limited')
     : walletRead?.eligible
@@ -93,7 +108,7 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
         <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
           <p className="text-[11px] text-slate-400">{t('mexc_connection_state')}</p>
           <p className="text-sm text-slate-100" data-testid="wallet-mexc-auth-state">
-            {summary ? authLabel : t('connections_not_configured')}
+            {authLabel}
           </p>
         </div>
         <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">

@@ -29,8 +29,11 @@ describe('MEXC manage deep-link contract', () => {
       view: 'settings',
       settingsTab: SETTINGS_TAB_CONNECTIONS,
       settingsSubtab: MEXC_MANAGE_SUBTAB,
+      provider: 'mexc',
+      section: 'overview',
     });
     expect(isMexcManageDeepLink(MEXC_MANAGE_SUBTAB)).toBe(true);
+    expect(isMexcManageDeepLink(null, 'mexc')).toBe(true);
     expect(isMexcManageDeepLink('other')).toBe(false);
   });
 
@@ -40,6 +43,8 @@ describe('MEXC manage deep-link contract', () => {
       view: 'settings',
       settingsTab: 'connections',
       settingsSubtab: 'mexc-manage',
+      provider: 'mexc',
+      section: 'overview',
     });
   });
 
@@ -47,11 +52,13 @@ describe('MEXC manage deep-link contract', () => {
     const original = window.location.href;
     history.replaceState(null, '', '/?view=settings&tab=wallet');
     expect(readStateFromURL()?.settingsTab).toBe('wallet');
-    history.replaceState(null, '', '/?view=settings&settingsTab=connections&settingsSubtab=mexc-manage');
+    history.replaceState(null, '', '/?view=settings&settingsTab=connections&settingsSubtab=mexc-manage&provider=mexc&section=overview');
     expect(readStateFromURL()).toEqual({
       view: 'settings',
       settingsTab: 'connections',
       settingsSubtab: 'mexc-manage',
+      provider: 'mexc',
+      section: 'overview',
     });
     history.replaceState(null, '', original);
   });
@@ -73,7 +80,7 @@ describe('Wallet Manage MEXC wiring', () => {
 
   it('MultiExchangeSettings auto-expands MEXC for mexc-manage subtab', () => {
     const multi = read('components/settings/MultiExchangeSettings.tsx');
-    expect(multi).toMatch(/isMexcManageDeepLink\(initialSubtab\)/);
+    expect(multi).toMatch(/isMexcManageDeepLink\(initialSubtab,\s*initialProvider\)/);
     expect(multi).toMatch(/setExpandedExchange\('MEXC'\)/);
   });
 

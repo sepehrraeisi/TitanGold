@@ -119,10 +119,12 @@ describe('Panel defaults and credential scoping', () => {
     const credOpenIdx = panel.lastIndexOf('credentialsOpen &&', actionsIdx);
     expect(credOpenIdx).toBeGreaterThan(-1);
     expect(actionsIdx).toBeGreaterThan(credOpenIdx);
-    // No footer save outside credentials block
-    const dangerIdx = panel.indexOf('mexc-danger-zone');
-    const between = panel.slice(panel.indexOf('{message &&'), dangerIdx);
-    expect(between).not.toMatch(/connection-save-MEXC/);
+    // Save only inside credentials section; danger zone has delete only
+    const dangerBlock = panel.slice(
+      panel.indexOf('mexc-danger-zone'),
+      panel.indexOf('connection-delete-MEXC') + 40,
+    );
+    expect(dangerBlock).not.toMatch(/connection-save-MEXC/);
   });
 
   it('technical mode gates raw enums and capability codes', () => {
@@ -133,7 +135,9 @@ describe('Panel defaults and credential scoping', () => {
   });
 
   it('includes separate read and execution consumers', () => {
+    const shared = read('components/settings/connections/mexcPanelShared.tsx');
     const panel = read('components/settings/connections/MexcConnectionPanel.tsx');
+    expect(panel).toMatch(/PRIMARY_CONSUMER_IDS/);
     for (const id of [
       'spot_trading_read',
       'spot_trading_execute',
@@ -142,7 +146,7 @@ describe('Panel defaults and credential scoping', () => {
       'wallet_withdrawal_execute',
       'wallet_transfer_execute',
     ]) {
-      expect(panel).toContain(`'${id}'`);
+      expect(shared).toContain(`'${id}'`);
     }
   });
 

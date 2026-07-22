@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import {
   fetchExchangeConnections,
+  fetchMexcCapabilitySummary,
   detectLegacyInsecureCredentialKeys,
   removeLegacyInsecureCredentialKeys,
+  type MexcCapabilitySummary,
   type SafeConnectionDto,
 } from '../../services/connectionsApi.ts';
 import {
@@ -14,7 +16,11 @@ import {
 } from '../../services/connectionDisplayStatus.ts';
 import MexcConnectionPanel from './connections/MexcConnectionPanel.tsx';
 import type { OnNavigateHandler } from '../../types/navigation.ts';
-import { isMexcManageDeepLink } from '../../utils/settingsNavigation.ts';
+import {
+  buildMexcManageNavigation,
+  isMexcManageDeepLink,
+} from '../../utils/settingsNavigation.ts';
+import { buildMexcProviderSummary } from '../../utils/mexcProviderSummary.ts';
 
 const EXCHANGE_ICONS: Record<string, string> = {
   MEXC: '🟣',
@@ -26,19 +32,62 @@ const EXCHANGE_ICONS: Record<string, string> = {
 
 type Props = {
   initialSubtab?: string;
+  initialProvider?: string;
+  initialSection?: string;
   onNavigate?: OnNavigateHandler;
 };
 
-export default function MultiExchangeSettings({ initialSubtab, onNavigate: _onNavigate }: Props) {
-  const { t } = useLanguage();
+function formatCardDate(iso: string | null | undefined, language: string, t: (k: string) => string): string {
+  if (!iso) return t('mexc_never');
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return t('mexc_never');
+  return d.toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function walletDataLabel(readiness: string, t: (k: string) => string): string {
+  if (readiness === 'ready') return t('mexc_status_available') || 'Ready';
+  if (readiness === 'limited') return t('mexc_limited') || 'Limited';
+  if (readiness === 'blocked') return t('mexc_blocked') || 'Blocked';
+  return t('mexc_unknown') || 'Unknown';
+}
+
+function publicMarketLabel(status: string, t: (k: string) => string): string {
+  if (status === 'available') return t('mexc_available');
+  if (status === 'unavailable') return t('mexc_status_unavailable');
+  return t('mexc_unknown');
+}
+
+function privateAccessLabel(status: string, t: (k: string) => string): string {
+  if (status === 'authenticated' || status === 'verified') {
+    return t('mexc_authenticated') || 'Authenticated';
+  }
+  if (status === 'unverified' || status === 'pending') {
+    return t('mexc_status_pending');
+  }
+  if (status === 'failed') return t('mexc_status_blocked');
+  return t('connections_not_configured');
+}
+
+export default function MultiExchangeSettings({
+  initialSubtab,
+  initialProvider,
+  initialSection,
+  onNavigate,
+}: Props) {
+  const { t, language } = useLanguage();
   const [connections, setConnections] = useState<SafeConnectionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedExchange, setExpandedExchange] = useState<string | null>(() =>
-    isMexcManageDeepLink(initialSubtab) ? 'MEXC' : null,
+    (isMexcManageDeepLink(initialSubtab, initialProvider) ? 'MEXC' : null),
   );
   const [messages, setMessages] = useState<Record<string, { type: 'success' | 'error' | 'info'; text: string }>>({});
   const [legacyKeys, setLegacyKeys] = useState<string[]>([]);
   const [removingLegacy, setRemovingLegacy] = useState(false);
+  const [mexcSummary, setMexcSummary] = useState<MexcCapabilitySummary | null>(null);
+  const [mexcSummaryLoading, setMexcSummaryLoading] = useState(false);
 
   const loadConnections = useCallback(async () => {
     try {
@@ -63,10 +112,35 @@ export default function MultiExchangeSettings({ initialSubtab, onNavigate: _onNa
   }, [loadConnections]);
 
   useEffect(() => {
-    if (isMexcManageDeepLink(initialSubtab)) {
+    if (isMexcManageDeepLink(initialSubtab, initialProvider)) {
       setExpandedExchange('MEXC');
     }
-  }, [initialSubtab]);
+  }, [initialSubtab, initialProvider]);
+
+  useEffect(() => {
+    const mexc = connections.find(
+      (c) => isConfigurableProvider(c.provider || c.exchange),
+    );
+    if (!mexc) {
+      setMexcSummary(null);
+      return;
+    }
+    let cancelled = false;
+    setMexcSummaryLoading(true);
+    (async () => {
+      try {
+        const data = await fetchMexcCapabilitySummary();
+        if (!cancelled) setMexcSummary(data);
+      } catch {
+        if (!cancelled) setMexcSummary(null);
+      } finally {
+        if (!cancelled) setMexcSummaryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connections]);
 
   const handleRemoveLegacy = async () => {
     if (!window.confirm(t('connections_legacy_remove_confirm'))) return;
@@ -84,7 +158,15 @@ export default function MultiExchangeSettings({ initialSubtab, onNavigate: _onNa
   };
 
   const openMexcPanel = (exchange: string) => {
-    setExpandedExchange((prev) => (prev === exchange ? null : exchange));
+    const next = expandedExchange === exchange ? null : exchange;
+    setExpandedExchange(next);
+    if (onNavigate) {
+      if (next === 'MEXC') {
+        onNavigate(buildMexcManageNavigation(initialSection || 'overview'));
+      } else {
+        onNavigate({ view: 'settings', settingsTab: 'connections' });
+      }
+    }
   };
 
   if (loading) {
@@ -128,17 +210,42 @@ export default function MultiExchangeSettings({ initialSubtab, onNavigate: _onNa
       <div className="space-y-3 p-6">
         {connections.map((connection) => {
           const exchange = connection.provider || connection.exchange || '';
+          const isMexc = isConfigurableProvider(exchange);
+          const expanded = isMexc && expandedExchange === exchange;
+
+          const projection = isMexc
+            ? buildMexcProviderSummary({ connection, summary: mexcSummary })
+            : null;
+
           const displayStatus = deriveConnectionDisplayStatus({
             provider: exchange,
             configured: connection.configured,
             secretReentryRequired: connection.secretReentryRequired,
+            privateAuthVerified: connection.privateAuthVerified,
+            overallStatusCode: mexcSummary?.overallTruthfulState?.code,
+            status: connection.status,
+            credentialStatus: connection.credentialStatus,
             legacyBrowserKeyPresent: legacyKeys.length > 0,
             envCredentialsPresent: true,
             publicMarketReachable: true,
           });
-          const statusText = t(connectionStatusMessageKey(displayStatus));
-          const isMexc = isConfigurableProvider(exchange);
-          const expanded = isMexc && expandedExchange === exchange;
+
+          // While loading summary for authenticated connection, never flash "Configured · Not verified"
+          const awaitingAuthProjection =
+            isMexc
+            && connection.configured
+            && (connection.privateAuthVerified === true || mexcSummaryLoading)
+            && mexcSummaryLoading
+            && !mexcSummary;
+
+          const statusText = awaitingAuthProjection
+            ? ''
+            : t(
+              projection
+                ? projection.overallStatusLabelKey
+                : connectionStatusMessageKey(displayStatus),
+            );
+
           const actionLabel = expanded
             ? t('mexc_collapse_panel')
             : t(mexcPrimaryActionLabelKey(displayStatus));
@@ -152,11 +259,34 @@ export default function MultiExchangeSettings({ initialSubtab, onNavigate: _onNa
                     <div className="font-medium text-white" data-testid={`connection-heading-${exchange}`}>
                       {exchange}
                     </div>
-                    {/* One status line only — hide duplicate when panel is open (panel shows detail) */}
                     {!expanded && (
                       <div className="text-xs text-gray-400" data-testid={`connection-status-${exchange}`}>
-                        {statusText}
+                        {awaitingAuthProjection ? (
+                          <span className="inline-block h-3 w-40 animate-pulse rounded bg-slate-700/60" aria-hidden="true" />
+                        ) : (
+                          statusText
+                        )}
                       </div>
+                    )}
+                    {!expanded && isMexc && projection && !awaitingAuthProjection && (
+                      <ul className="mt-2 space-y-0.5 text-[11px] text-slate-400" data-testid="mexc-collapsed-summary">
+                        <li>
+                          {t('mexc_card_public_market')}: {publicMarketLabel(projection.publicMarketStatus, t)}
+                        </li>
+                        <li>
+                          {t('mexc_card_private_access')}: {privateAccessLabel(projection.privateAuthenticationStatus, t)}
+                        </li>
+                        <li>
+                          {t('mexc_card_verified_reads')}: {projection.verifiedPrivateReadCount}
+                        </li>
+                        <li>
+                          {t('mexc_card_wallet_data')}: {walletDataLabel(projection.walletReadiness, t)}
+                        </li>
+                        <li>
+                          {t('mexc_latest_successful_verification')}:{' '}
+                          {formatCardDate(projection.lastSuccessfulVerificationAt, language, t)}
+                        </li>
+                      </ul>
                     )}
                   </div>
                 </div>
@@ -189,6 +319,8 @@ export default function MultiExchangeSettings({ initialSubtab, onNavigate: _onNa
                   connection={connection}
                   onChanged={loadConnections}
                   onClose={() => setExpandedExchange(null)}
+                  onNavigate={onNavigate}
+                  initialSection={initialSection}
                 />
               )}
             </div>

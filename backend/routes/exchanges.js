@@ -45,6 +45,7 @@ function requestMeta(req) {
 function toLegacyCompatibleDto(dto) {
   return {
     exchange: dto.provider,
+    provider: dto.provider,
     // Never return stored secrets or ciphertext
     apiKey: dto.maskedKeyIdentifier || '',
     apiSecret: '',
@@ -57,7 +58,10 @@ function toLegacyCompatibleDto(dto) {
     credentialStatus: dto.credentialStatus,
     status: dto.status,
     secretReentryRequired: dto.secretReentryRequired,
-    privateAuthVerified: false,
+    privateAuthVerified: Boolean(dto.privateAuthVerified),
+    maskedKeyIdentifier: dto.maskedKeyIdentifier || null,
+    createdAt: dto.createdAt || null,
+    updatedAt: dto.updatedAt || null,
     id: dto.id,
   };
 }
