@@ -31,7 +31,8 @@ jobs:
         env:
           POSTGRES_DB: titangold_test
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          # Disposable runner-local DB only — no password, trust auth.
+          POSTGRES_HOST_AUTH_METHOD: trust
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -59,7 +60,7 @@ jobs:
 
       - name: Bootstrap disposable schema + migration tracking
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/titangold_test
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test
         run: |
           # Apply base schema, then register migration history (CI design of
           # migrate:setup). Do not rewrite migration files or touch Staging/Prod.
@@ -70,14 +71,14 @@ jobs:
 
       - name: Check migration status
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/titangold_test
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test
         run: |
           cd backend
           npm run migrate:status
 
       - name: Run backend unit tests against migrated schema
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/titangold_test
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test
           NODE_ENV: test
         run: |
           cd backend

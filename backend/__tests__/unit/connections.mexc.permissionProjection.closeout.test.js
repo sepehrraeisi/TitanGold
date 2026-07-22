@@ -391,19 +391,32 @@ describe('projection and reason selection', () => {
   });
 
   test('privateAuthVerified consistent across DTO and matrix when store says verified', () => {
+    // Synthetic low-entropy fixtures only — never real credentials.
+    // Shape matches isEncrypted() (iv:body:tag hex) so DTO projection stays on the
+    // encrypted-storage path; values are derived from obvious unit-test labels.
+    const asSyntheticEncrypted = (label) => {
+      const hex = (s) => [...s].map((c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+      return `${hex('iv')}:${hex(label)}:${hex('tg')}`;
+    };
+    const unitTestApiKey = asSyntheticEncrypted('unit-test-api-key');
+    const unitTestSecret = asSyntheticEncrypted('unit-test-secret');
+
     const dto = toSafeConnectionDto({
       id: 'e2995df0-af35-4d10-bf23-0ea517a6c272',
       exchange: 'MEXC',
-      api_key: 'aabbccddeeff0011:2233445566778899:aabbccddeeff00112233445566778899',
-      api_secret: 'ffeeddccbbaa9988:7766554433221100:ffeeddccbbaa99887766554433221100',
+      api_key: unitTestApiKey,
+      api_secret: unitTestSecret,
       is_active: true,
       is_testnet: false,
-      metadata: { keyHint: '***Gz2b', encryptionVersion: 1, credentialStatus: 'configured_unverified' },
+      metadata: { keyHint: '***TEST', encryptionVersion: 1, credentialStatus: 'configured_unverified' },
       created_at: '2026-07-18T20:18:41.770Z',
       updated_at: '2026-07-21T14:00:49.766Z',
     }, { privateAuthVerified: true });
     expect(dto.privateAuthVerified).toBe(true);
     expect(dto.credentialStatus).toBe('authenticated');
+    // Projection must never leak the synthetic storage blobs into the safe DTO.
+    expect(JSON.stringify(dto)).not.toContain(unitTestApiKey);
+    expect(JSON.stringify(dto)).not.toContain(unitTestSecret);
 
     const matrix = buildCapabilityMatrix({
       credentialsConfigured: true,
