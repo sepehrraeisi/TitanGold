@@ -67,7 +67,7 @@ describe('MEXC manage deep-link contract', () => {
 describe('Wallet Manage MEXC wiring', () => {
   it('banner uses onNavigate instead of dead hash link', () => {
     const banner = read('components/settings/wallet/MexcWalletCapabilityBanner.tsx');
-    expect(banner).toMatch(/buildMexcManageNavigation/);
+    expect(banner).toMatch(/navigateToConnectionSection/);
     expect(banner).not.toMatch(/href="#settings-connections"/);
     expect(banner).toMatch(/onNavigate\?: OnNavigateHandler/);
   });

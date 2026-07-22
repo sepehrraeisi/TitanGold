@@ -17,8 +17,8 @@ import {
 import MexcConnectionPanel from './connections/MexcConnectionPanel.tsx';
 import type { OnNavigateHandler } from '../../types/navigation.ts';
 import {
-  buildMexcManageNavigation,
   isMexcManageDeepLink,
+  navigateToConnectionSection,
 } from '../../utils/settingsNavigation.ts';
 import { buildMexcProviderSummary } from '../../utils/mexcProviderSummary.ts';
 
@@ -162,7 +162,7 @@ export default function MultiExchangeSettings({
     setExpandedExchange(next);
     if (onNavigate) {
       if (next === 'MEXC') {
-        onNavigate(buildMexcManageNavigation(initialSection || 'overview'));
+        navigateToConnectionSection(onNavigate, 'mexc', initialSection || 'overview');
       } else {
         onNavigate({ view: 'settings', settingsTab: 'connections' });
       }

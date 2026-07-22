@@ -29,11 +29,11 @@ import {
 } from '../../../utils/mexcReasonPriority.ts';
 import { buildMexcProviderSummary } from '../../../utils/mexcProviderSummary.ts';
 import {
-  buildMexcManageNavigation,
+  navigateToConnectionSection,
   normalizeMexcManageSection,
+  readConnectionSectionFromUrl,
   type MexcManageSection,
 } from '../../../utils/settingsNavigation.ts';
-import { readStateFromURL } from '../../../utils/urlSync.ts';
 import type { OnNavigateHandler } from '../../../types/navigation.ts';
 import ActionButton from '../../ui/action-button.tsx';
 import MexcDeleteConfirmDialog from './MexcDeleteConfirmDialog.tsx';
@@ -104,7 +104,7 @@ export default function MexcConnectionPanel({
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [expandedConsumers, setExpandedConsumers] = useState<Record<string, boolean>>({});
   const [activeSection, setActiveSection] = useState<MexcManageSection>(() =>
-    normalizeMexcManageSection(initialSection || readStateFromURL()?.section),
+    readConnectionSectionFromUrl(initialSection),
   );
   const [historyFilter, setHistoryFilter] = useState<(typeof HISTORY_FILTERS)[number]>('all');
   const [historyItems, setHistoryItems] = useState<MexcVerificationHistoryItem[]>([]);
@@ -137,11 +137,12 @@ export default function MexcConnectionPanel({
 
   useEffect(() => {
     const syncFromUrl = () => {
-      const section = normalizeMexcManageSection(readStateFromURL()?.section || initialSection);
+      const section = readConnectionSectionFromUrl(initialSection);
       setActiveSection((prev) => {
         if (prev !== section) {
           clearDraftSecrets(setDraft, setShowSecrets);
           setCredentialsOpen(false);
+          setDeleteDialogOpen(false);
         }
         return section;
       });
@@ -151,8 +152,19 @@ export default function MexcConnectionPanel({
     return () => window.removeEventListener('popstate', syncFromUrl);
   }, [initialSection]);
 
+  // One-shot: rewrite invalid/legacy section aliases to the canonical URL value.
   useEffect(() => {
-    if (activeSection !== 'history') return;
+    if (!onNavigate || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('section');
+    if (!raw) return;
+    const normalized = normalizeMexcManageSection(raw);
+    if (raw === normalized) return;
+    navigateToConnectionSection(onNavigate, 'mexc', normalized);
+  }, [onNavigate]);
+
+  useEffect(() => {
+    if (activeSection !== 'verification-history') return;
     let cancelled = false;
     setHistoryLoading(true);
     (async () => {
@@ -173,18 +185,20 @@ export default function MexcConnectionPanel({
     };
   }, [activeSection, historyFilter, t]);
 
-  const navigateSection = (section: string) => {
-    const normalized = normalizeMexcManageSection(section);
-    if (normalized !== activeSection) {
-      clearDraftSecrets(setDraft, setShowSecrets);
-      setCredentialsOpen(false);
-      setConfirmDelete(false);
-    }
-    setActiveSection(normalized);
-    if (onNavigate) {
-      onNavigate(buildMexcManageNavigation(normalized));
-    }
-  };
+  const navigateSection = useCallback(
+    (section: string) => {
+      const normalized = normalizeMexcManageSection(section);
+      if (normalized !== activeSection) {
+        clearDraftSecrets(setDraft, setShowSecrets);
+        setCredentialsOpen(false);
+        setDeleteDialogOpen(false);
+      }
+      // Optimistic UI; URL remains source of truth via onNavigate + popstate/sync.
+      setActiveSection(normalized);
+      navigateToConnectionSection(onNavigate, 'mexc', normalized);
+    },
+    [activeSection, onNavigate],
+  );
 
   const projection = useMemo(
     () => buildMexcProviderSummary({ connection, summary }),
@@ -313,8 +327,8 @@ export default function MexcConnectionPanel({
       { id: 'credentials', label: t('mexc_section_credentials') },
       { id: 'capabilities', label: t('mexc_section_capabilities') },
       { id: 'consumers', label: t('mexc_section_consumers') },
-      { id: 'history', label: t('mexc_section_history') },
-      { id: 'danger', label: t('mexc_section_danger'), activeVariant: 'warning' as const },
+      { id: 'verification-history', label: t('mexc_section_history') },
+      { id: 'danger-zone', label: t('mexc_section_danger'), activeVariant: 'warning' as const },
     ],
     [t],
   );
@@ -335,6 +349,7 @@ export default function MexcConnectionPanel({
         activeId={activeSection}
         onChange={navigateSection}
         ariaLabel={t('mexc_sections_nav')}
+        dir={dir}
       />
 
       {activeSection === 'overview' && (
@@ -868,11 +883,11 @@ export default function MexcConnectionPanel({
         </section>
       )}
 
-      {activeSection === 'history' && (
+      {activeSection === 'verification-history' && (
         <section
-          id="mexc-panel-history"
+          id="mexc-panel-verification-history"
           role="tabpanel"
-          aria-labelledby="mexc-tab-history"
+          aria-labelledby="mexc-tab-verification-history"
           className="rounded-xl border border-white/5 bg-slate-900/60 p-4"
           data-testid="mexc-section-history"
         >
@@ -1001,11 +1016,11 @@ export default function MexcConnectionPanel({
         </section>
       )}
 
-      {activeSection === 'danger' && connection.configured && (
+      {activeSection === 'danger-zone' && connection.configured && (
         <section
-          id="mexc-panel-danger"
+          id="mexc-panel-danger-zone"
           role="tabpanel"
-          aria-labelledby="mexc-tab-danger"
+          aria-labelledby="mexc-tab-danger-zone"
           className="rounded-xl border border-red-500/30 bg-red-950/20 p-4"
           data-testid="mexc-danger-zone"
         >

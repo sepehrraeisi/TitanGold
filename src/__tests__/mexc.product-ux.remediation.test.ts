@@ -162,7 +162,7 @@ describe('Wallet truthfulness', () => {
     expect(banner).toMatch(/wallet-mexc-withdraw/);
     expect(banner).toMatch(/wallet-mexc-transfer/);
     expect(banner).toMatch(/onKeyDown/);
-    expect(banner).toMatch(/buildMexcManageNavigation/);
+    expect(banner).toMatch(/navigateToConnectionSection/);
   });
 
   it('placeholder wallet controls are disabled with truthful labels', () => {

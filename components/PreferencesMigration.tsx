@@ -25,6 +25,17 @@ const PreferencesMigrationModal: React.FC<MigrationModalProps> = ({ onComplete, 
         errors: string[];
     } | null>(null);
 
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !migrating) {
+                e.preventDefault();
+                onSkip();
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [migrating, onSkip]);
+
     const handleMigrate = async () => {
         setMigrating(true);
         setProgress(10);

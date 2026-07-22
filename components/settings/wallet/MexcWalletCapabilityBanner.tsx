@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../../context/LanguageContext.tsx';
 import { fetchMexcCapabilitySummary, type MexcCapabilitySummary } from '../../../services/connectionsApi.ts';
 import type { OnNavigateHandler } from '../../../types/navigation.ts';
-import { buildMexcManageNavigation } from '../../../utils/settingsNavigation.ts';
+import { navigateToConnectionSection } from '../../../utils/settingsNavigation.ts';
 import { buildMexcProviderSummary } from '../../../utils/mexcProviderSummary.ts';
 import {
   selectConsumerProductReason,
@@ -69,9 +69,7 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
     );
 
   const handleManageConnection = () => {
-    if (onNavigate) {
-      onNavigate(buildMexcManageNavigation('overview'));
-    }
+    navigateToConnectionSection(onNavigate, 'mexc', 'overview');
   };
 
   const onManageKeyDown = (e: React.KeyboardEvent) => {

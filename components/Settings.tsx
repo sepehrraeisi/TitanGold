@@ -278,9 +278,9 @@ const Settings: React.FC<SettingsProps> = ({
       case 'connections':
         return (
           <ConnectionsSettings
-            initialSubtab={deepLinkRef.current.subtab || initialSubtab}
-            initialProvider={deepLinkRef.current.provider || initialProvider}
-            initialSection={deepLinkRef.current.section || initialSection}
+            initialSubtab={initialSubtab || deepLinkRef.current.subtab}
+            initialProvider={initialProvider || deepLinkRef.current.provider}
+            initialSection={initialSection || deepLinkRef.current.section}
             onNavigate={onNavigate}
           />
         );

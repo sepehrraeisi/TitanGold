@@ -152,8 +152,11 @@ describe('urlSync provider/section roundtrip', () => {
 describe('settingsNavigation sections', () => {
   it('normalizes invalid section to overview', () => {
     expect(normalizeMexcManageSection('nope')).toBe('overview');
-    expect(normalizeMexcManageSection('history')).toBe('history');
-    expect(MEXC_MANAGE_SECTIONS).toContain('danger');
+    expect(normalizeMexcManageSection('history')).toBe('verification-history');
+    expect(normalizeMexcManageSection('danger')).toBe('danger-zone');
+    expect(normalizeMexcManageSection('verification-history')).toBe('verification-history');
+    expect(MEXC_MANAGE_SECTIONS).toContain('danger-zone');
+    expect(MEXC_MANAGE_SECTIONS).toContain('verification-history');
     expect(isMexcManageDeepLink('mexc-manage')).toBe(true);
     expect(isMexcManageDeepLink(undefined, 'mexc')).toBe(true);
   });
@@ -164,7 +167,7 @@ describe('source containment', () => {
     const multi = read('components/settings/MultiExchangeSettings.tsx');
     const panel = read('components/settings/connections/MexcConnectionPanel.tsx');
     const display = read('services/connectionDisplayStatus.ts');
-    expect(multi).toMatch(/buildMexcManageNavigation/);
+    expect(multi).toMatch(/navigateToConnectionSection/);
     expect(multi).toMatch(/not_available_yet|connections_not_available_yet|buildMexcProviderSummary/);
     expect(panel).toMatch(/ConnectionsSectionNav/);
     expect(panel).toMatch(/mexc_section_overview|normalizeMexcManageSection/);

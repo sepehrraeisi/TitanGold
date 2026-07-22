@@ -188,11 +188,13 @@ export function ConnectionsSectionNav({
   activeId,
   onChange,
   ariaLabel,
+  dir = 'ltr',
 }: {
   items: ConnectionsSectionItem[];
   activeId: string;
   onChange: (id: string) => void;
   ariaLabel: string;
+  dir?: 'ltr' | 'rtl';
 }) {
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const ids = items.map((i) => i.id);
@@ -201,8 +203,10 @@ export function ConnectionsSectionNav({
     let next = idx;
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
-      const dir = e.key === 'ArrowRight' ? 1 : -1;
-      next = (idx + dir + ids.length) % ids.length;
+      // ARIA tabs: ArrowRight advances in LTR; reverse in RTL.
+      const forward = dir === 'rtl' ? e.key === 'ArrowLeft' : e.key === 'ArrowRight';
+      const step = forward ? 1 : -1;
+      next = (idx + step + ids.length) % ids.length;
     } else if (e.key === 'Home') {
       e.preventDefault();
       next = 0;
@@ -213,15 +217,18 @@ export function ConnectionsSectionNav({
       return;
     }
     onChange(ids[next]);
-    const el = document.getElementById(`mexc-tab-${ids[next]}`);
-    el?.focus();
+    window.requestAnimationFrame(() => {
+      document.getElementById(`mexc-tab-${ids[next]}`)?.focus();
+    });
   };
 
   return (
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className="mb-2 flex gap-2 overflow-x-auto border-b border-white/10 no-scrollbar md:gap-4"
+      aria-orientation="horizontal"
+      data-testid="mexc-section-tablist"
+      className="relative z-10 mb-2 flex gap-2 overflow-x-auto border-b border-white/10 no-scrollbar pointer-events-auto md:gap-4"
       onKeyDown={onKeyDown}
     >
       {items.map((item) => {
@@ -238,14 +245,12 @@ export function ConnectionsSectionNav({
             aria-selected={isActive}
             aria-controls={`mexc-panel-${item.id}`}
             tabIndex={isActive ? 0 : -1}
-            onClick={() => onChange(item.id)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onChange(item.id);
-              }
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onChange(item.id);
             }}
-            className={`whitespace-nowrap border-b-2 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
+            className={`pointer-events-auto min-h-11 whitespace-nowrap border-b-2 px-1 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
               isActive ? activeClass : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
             data-testid={`mexc-section-tab-${item.id}`}
