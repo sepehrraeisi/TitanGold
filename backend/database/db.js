@@ -5,33 +5,30 @@ import { logger } from '../services/logger.js';
 
 dotenv.config();
 
-// Connection pool configuration (DATABASE-005)
-const poolConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT) || 5432,  // PostgreSQL is on port 5433
-  database: process.env.DB_NAME || 'titangold_db',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || '',
-  
-  // Pool size configuration (DATABASE-005)
-  max: parseInt(process.env.DB_POOL_MAX) || 20,  // Maximum pool size (configurable via env)
-  min: parseInt(process.env.DB_POOL_MIN) || 2,   // Minimum pool size
-  
-  // Timeout configuration (DATABASE-005)
-  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT) || 30000,  // 30 seconds
-  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT) || 2000,  // 2 seconds
-  maxLifetimeSeconds: parseInt(process.env.DB_POOL_MAX_LIFETIME) || 3600,  // 1 hour (60 * 60)
-  
-  // Connection leak detection (DATABASE-005)
-  allowExitOnIdle: false,  // Keep pool alive even if all connections are idle
-  
-  // SSL Configuration
+// Shared pool tuning (DATABASE-005). Prefer DATABASE_URL when set (CI / migrate tooling);
+// otherwise fall back to discrete DB_* vars used by local/runtime configs.
+const poolTuning = {
+  max: parseInt(process.env.DB_POOL_MAX) || 20,
+  min: parseInt(process.env.DB_POOL_MIN) || 2,
+  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT) || 30000,
+  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT) || 2000,
+  maxLifetimeSeconds: parseInt(process.env.DB_POOL_MAX_LIFETIME) || 3600,
+  allowExitOnIdle: false,
   ssl: process.env.DB_SSL === 'true' ? {
     rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
-    // For localhost with self-signed cert, we need to allow unauthorized
-    // In production with proper certs, set DB_SSL_REJECT_UNAUTHORIZED=true
   } : false,
 };
+
+const poolConfig = process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL, ...poolTuning }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 5432,
+      database: process.env.DB_NAME || 'titangold_db',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || '',
+      ...poolTuning,
+    };
 
 // Create PostgreSQL connection pool
 const pool = new Pool(poolConfig);

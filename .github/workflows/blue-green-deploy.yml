@@ -47,7 +47,7 @@ on:
         default: false
 
 env:
-  NODE_VERSION: '18.x'
+  NODE_VERSION: '20.x'
   BLUE_PORT: 5002
   GREEN_PORT: 5003
 
@@ -76,6 +76,7 @@ jobs:
         run: |
           npm ci
           cd backend && npm ci
+        # root/backend .npmrc set legacy-peer-deps for known peer mismatches
       
       - name: Run backend tests
         run: cd backend && npm test -- --passWithNoTests
@@ -90,12 +91,13 @@ jobs:
       
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: |
             backend/coverage/
             coverage/
+          if-no-files-found: ignore
 
   # =========================================================================
   # Build and Package
@@ -134,7 +136,7 @@ jobs:
             backend/ dist/ package.json package-lock.json
       
       - name: Upload deployment package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deployment-package
           path: deployment-package.tar.gz
@@ -160,7 +162,7 @@ jobs:
           sparse-checkout-cone-mode: false
       
       - name: Download deployment package
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: deployment-package
       
