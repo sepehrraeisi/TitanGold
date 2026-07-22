@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../../../context/LanguageContext.tsx';
 import {
   fetchMexcCapabilitySummary,
@@ -35,6 +35,8 @@ import {
 } from '../../../utils/settingsNavigation.ts';
 import { readStateFromURL } from '../../../utils/urlSync.ts';
 import type { OnNavigateHandler } from '../../../types/navigation.ts';
+import ActionButton from '../../ui/action-button.tsx';
+import MexcDeleteConfirmDialog from './MexcDeleteConfirmDialog.tsx';
 import {
   ConnectionsSectionNav,
   GROUP_ORDER,
@@ -50,6 +52,21 @@ import {
   type DraftSecrets,
 } from './mexcPanelShared.tsx';
 
+const TrashIcon = (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 20 20"
+    fill="currentColor"
+    className="h-4 w-4 shrink-0"
+    aria-hidden="true"
+  >
+    <path
+      fillRule="evenodd"
+      d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.341 9.397A2.75 2.75 0 006.996 18h6.008a2.75 2.75 0 002.641-2.652l.341-9.397.149.022a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193v-.443A2.75 2.75 0 0011.25 1h-2.5zM10 4c.784 0 1.559.022 2.325.064V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.314C8.441 4.022 9.216 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z"
+      clipRule="evenodd"
+    />
+  </svg>
+);
 interface Props {
   connection: SafeConnectionDto;
   onChanged: () => Promise<void> | void;
@@ -79,7 +96,9 @@ export default function MexcConnectionPanel({
   const [showSecrets, setShowSecrets] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [showTechnical, setShowTechnical] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
@@ -241,21 +260,30 @@ export default function MexcConnectionPanel({
     setCredentialsOpen(false);
   };
 
-  const handleDelete = async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
+  const openDeleteDialog = () => {
+    setDeleteDialogOpen(true);
+  };
+
+  const closeDeleteDialog = () => {
+    if (deleting) return;
+    setDeleteDialogOpen(false);
+    window.setTimeout(() => deleteTriggerRef.current?.focus(), 0);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deleting) return;
     try {
+      setDeleting(true);
       await deleteMexcConnection();
       clearDraftSecrets(setDraft, setShowSecrets);
+      setDeleteDialogOpen(false);
       setMessage({ type: 'info', text: t('connection_deleted') });
       await onChanged();
       onClose();
     } catch (error: any) {
       setMessage({ type: 'error', text: t(error?.message || 'connections_internal_error') });
     } finally {
-      setConfirmDelete(false);
+      setDeleting(false);
     }
   };
 
@@ -981,21 +1009,43 @@ export default function MexcConnectionPanel({
           className="rounded-xl border border-red-500/30 bg-red-950/20 p-4"
           data-testid="mexc-danger-zone"
         >
-          <h4 id="mexc-danger-title" className="text-sm font-semibold text-red-200">
-            {t('mexc_danger_zone')}
-          </h4>
-          <p className="mt-1 text-xs text-red-200/70">{t('mexc_danger_zone_hint')}</p>
-          <button
-            type="button"
-            onClick={handleDelete}
-            aria-label={confirmDelete ? t('mexc_confirm_delete') : t('delete')}
-            data-testid="connection-delete-MEXC"
-            className="mt-3 rounded-md border border-red-500/50 bg-red-900/30 px-3 py-2 text-sm text-red-100 hover:bg-red-900/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
-          >
-            {confirmDelete ? t('mexc_confirm_delete') : t('delete')}
-          </button>
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0 max-w-xl">
+              <h4 id="mexc-danger-title" className="text-sm font-semibold text-red-200">
+                {t('mexc_danger_zone')}
+              </h4>
+              <p className="mt-1 text-xs leading-relaxed text-red-200/70">
+                {t('mexc_danger_zone_hint')}
+              </p>
+            </div>
+            <ActionButton
+              ref={deleteTriggerRef}
+              variant="danger"
+              size="md"
+              icon={TrashIcon}
+              onClick={openDeleteDialog}
+              disabled={deleteDialogOpen || deleting}
+              aria-label={t('mexc_delete_connection')}
+              data-testid="connection-delete-MEXC"
+              className="w-full shrink-0 md:w-auto"
+            >
+              {t('mexc_delete_connection')}
+            </ActionButton>
+          </div>
         </section>
       )}
+
+      <MexcDeleteConfirmDialog
+        open={deleteDialogOpen}
+        providerName="MEXC"
+        confirming={deleting}
+        title={t('mexc_delete_dialog_title')}
+        description={t('mexc_delete_dialog_body')}
+        confirmLabel={t('mexc_delete_connection')}
+        cancelLabel={t('cancel')}
+        onCancel={closeDeleteDialog}
+        onConfirm={handleDeleteConfirm}
+      />
 
       {message && (
         <p

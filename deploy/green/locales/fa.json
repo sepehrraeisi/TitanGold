@@ -4876,5 +4876,8 @@
   "mexc_view_consumers": "مشاهده مصرف‌کنندگان",
   "mexc_overview_consumers_summary": "{registered} ثبت‌شده · {eligible} واجد شرایط · {limited} محدود · {blocked} مسدود",
   "mexc_history_current_wallet_title": "وضعیت فعلی کیف پول",
-  "mexc_history_current_wallet_summary": "مجوز در دسترس · تأیید مستقیم ناقص · مصرف‌کننده محدود"
+  "mexc_history_current_wallet_summary": "مجوز در دسترس · تأیید مستقیم ناقص · مصرف‌کننده محدود",
+  "mexc_delete_connection": "حذف اتصال",
+  "mexc_delete_dialog_title": "اتصال MEXC حذف شود؟",
+  "mexc_delete_dialog_body": "با این کار اعتبارنامه‌های ذخیره‌شده MEXC از TitanGold حذف می‌شوند. این عمل قابل بازگشت نیست."
 }

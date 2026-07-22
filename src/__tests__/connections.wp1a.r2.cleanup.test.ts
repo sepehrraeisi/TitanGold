@@ -66,7 +66,7 @@ describe('CONNECTIONS-WP1A-R2 Test Connection containment', () => {
     expect(panel).toMatch(/mexc_verification_locked_detail|mexc_verification_gated/);
     expect(panel).toMatch(/save_changes|mexc_rotate_credentials/);
     expect(panel).toMatch(/cancel/);
-    expect(panel).toMatch(/\bdelete\b/);
+    expect(panel).toMatch(/mexc_delete_connection|MexcDeleteConfirmDialog/);
   });
 
   it('does not include internal work-package names in verification copy', () => {

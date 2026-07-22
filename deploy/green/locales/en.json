@@ -5060,5 +5060,8 @@
   "mexc_view_consumers": "View consumers",
   "mexc_overview_consumers_summary": "{registered} registered · {eligible} eligible · {limited} limited · {blocked} blocked",
   "mexc_history_current_wallet_title": "Current Wallet state",
-  "mexc_history_current_wallet_summary": "Permission available · Direct verification incomplete · Consumer limited"
+  "mexc_history_current_wallet_summary": "Permission available · Direct verification incomplete · Consumer limited",
+  "mexc_delete_connection": "Delete connection",
+  "mexc_delete_dialog_title": "Delete MEXC connection?",
+  "mexc_delete_dialog_body": "This removes the stored MEXC credentials from TitanGold. This action cannot be undone."
 }
