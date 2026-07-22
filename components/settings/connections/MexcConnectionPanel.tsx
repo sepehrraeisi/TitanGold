@@ -428,12 +428,12 @@ export default function MexcConnectionPanel({
             data-testid="mexc-verification-locked"
           >
             <h4 id="mexc-verify-title" className="text-sm font-semibold text-amber-100">
-              {t('mexc_verification')}
-            </h4>
-            <p className="mt-2 text-sm text-amber-50/90" data-testid="connections-private-verification-unavailable">
               {t('mexc_verification_locked_title')}
+            </h4>
+            <p className="mt-2 text-xs text-amber-100/70" data-testid="connections-private-verification-unavailable">
+              {t('mexc_verification_locked_detail')}
             </p>
-            <p className="mt-1 text-xs text-amber-100/70" data-testid="mexc-verification-locked-detail">
+            <p className="sr-only" data-testid="mexc-verification-locked-detail">
               {t('mexc_verification_locked_detail')}
             </p>
           </section>
