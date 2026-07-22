@@ -40,10 +40,21 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
   const walletRead = summary?.consumers?.find((c) => c.consumerId === 'wallet');
   const walletWithdraw = summary?.consumers?.find((c) => c.consumerId === 'wallet_withdrawal_execute');
   const walletTransfer = summary?.consumers?.find((c) => c.consumerId === 'wallet_transfer_execute');
-
-  const primaryReasonKind = selectConsumerProductReason(
-    (walletWithdraw || walletTransfer || walletRead || { eligible: false, blockedReason: null }) as any,
+  const capabilityById = new Map(
+    (summary?.capabilityMatrix?.capabilities || []).map((cap) => [cap.capabilityId, cap]),
   );
+
+  const walletLimited = Boolean(
+    walletRead
+    && (walletRead.consumerReadiness === 'limited' || walletRead.limitedByDataContract),
+  );
+
+  const primaryReasonKind = walletLimited
+    ? selectConsumerProductReason(walletRead as any, capabilityById)
+    : selectConsumerProductReason(
+      (walletWithdraw || walletTransfer || walletRead || { eligible: false, blockedReason: null }) as any,
+      capabilityById,
+    );
 
   const handleManageConnection = () => {
     if (onNavigate) {
@@ -59,6 +70,11 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
   };
 
   const authLabel = getAuthStateLabel(summary?.connection?.authState, t);
+  const readEligibilityLabel = walletLimited
+    ? t('mexc_limited')
+    : walletRead?.eligible
+      ? t('mexc_eligible')
+      : t('mexc_limited');
 
   return (
     <section
@@ -83,7 +99,7 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
         <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
           <p className="text-[11px] text-slate-400">{t('mexc_wallet_read_eligibility')}</p>
           <p className="text-sm text-slate-100" data-testid="wallet-mexc-eligibility">
-            {walletRead?.eligible ? t('mexc_eligible') : t('mexc_limited')}
+            {readEligibilityLabel}
           </p>
         </div>
         <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3">
@@ -100,9 +116,21 @@ export default function MexcWalletCapabilityBanner({ onNavigate }: Props) {
         </div>
       </div>
 
-      <p className="mt-2 text-xs text-amber-200/90" data-testid="wallet-mexc-primary-reason">
-        {translateReasonKind(primaryReasonKind === 'available' ? 'runtime_tier4' : primaryReasonKind, t)}
-      </p>
+      <div className="mt-2 space-y-1" data-testid="wallet-mexc-primary-reason">
+        <p className="text-xs text-amber-200/90">
+          {translateReasonKind(
+            walletLimited
+              ? 'wallet_consumer_limited'
+              : primaryReasonKind === 'available'
+                ? 'runtime_tier4'
+                : primaryReasonKind,
+            t,
+          )}
+        </p>
+        {walletLimited && (
+          <p className="text-[11px] text-slate-400">{t('mexc_wallet_structures_unsupported')}</p>
+        )}
+      </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button

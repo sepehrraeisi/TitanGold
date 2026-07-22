@@ -14,17 +14,17 @@ import {
   getConsumerLabel,
   getGroupLabel,
   getKeyGrantLabel,
-  getModuleLabel,
   getOperationalStateLabel,
   getProviderSupportLabel,
   getVerificationLabel,
 } from '../../../utils/mexcDisplayLabels.ts';
 import {
+  formatUsedBySummary,
   productStatusFromCapability,
   selectCapabilityProductReason,
   selectConsumerProductReason,
+  selectGroupProductReason,
   translateReasonKind,
-  type MexcReasonKind,
 } from '../../../utils/mexcReasonPriority.ts';
 
 interface DraftSecrets {
@@ -212,35 +212,13 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
       let pending = 0;
       let blocked = 0;
       let unavailable = 0;
-      const reasonKinds: MexcReasonKind[] = [];
       for (const cap of caps) {
         const status = productStatusFromCapability(cap);
         if (status === 'available') available += 1;
         else if (status === 'pending') pending += 1;
         else if (status === 'unavailable') unavailable += 1;
         else blocked += 1;
-        if (status !== 'available') {
-          reasonKinds.push(selectCapabilityProductReason(cap));
-        }
       }
-      const primaryKind = reasonKinds.length
-        ? reasonKinds.slice().sort((a, b) => {
-            const order: MexcReasonKind[] = [
-              'provider_unknown',
-              'provider_maintenance',
-              'provider_unavailable',
-              'account_use_case_unknown',
-              'auth_pending',
-              'key_denied',
-              'key_unknown',
-              'user_capability',
-              'runtime_tier4',
-              'risk_confirmation',
-              'generic',
-            ];
-            return order.indexOf(a) - order.indexOf(b);
-          })[0]
-        : null;
       return {
         group,
         total: caps.length,
@@ -248,11 +226,21 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
         pending,
         blocked,
         unavailable,
-        primaryKind,
+        primaryKind: selectGroupProductReason(caps),
         caps,
       };
     });
   }, [grouped]);
+
+  const usedBySummary = useMemo(() => {
+    const list = summary?.usedByConsumers?.length
+      ? summary.usedByConsumers
+      : (summary?.consumers || []).map((c) => ({
+          consumerId: c.consumerId,
+          displayName: c.displayName,
+        }));
+    return formatUsedBySummary(list, t, getConsumerLabel, 8);
+  }, [summary, t]);
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -365,22 +353,29 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
 
         <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-500">
           <span data-testid="mexc-last-verified">
-            {t('mexc_last_verified')}:{' '}
+            {t('mexc_latest_successful_verification')}:{' '}
             {summary?.connection?.lastVerifiedAt
               ? formatLocalizedDateTime(summary.connection.lastVerifiedAt, language, t)
               : t('mexc_never')}
           </span>
-          {summary?.connection?.lastSanitizedFailure?.code && (
-            <span data-testid="mexc-last-failure" className="font-mono ltr" dir="ltr">
+          {summary?.connection?.lastSanitizedFailure?.code && !showTechnical && (
+            <span data-testid="mexc-last-failure-safe">
+              {summary.connection.lastSanitizedFailure.capabilityId === 'WALLET_CURRENCY_READ'
+                || /MEXC_(RESPONSE|WALLET)_/i.test(String(summary.connection.lastSanitizedFailure.code))
+                ? t('mexc_currency_verification_attempt_incomplete')
+                : t('mexc_verification_attempt_incomplete_generic')}
+            </span>
+          )}
+          {summary?.connection?.lastSanitizedFailure?.code && showTechnical && (
+            <span data-testid="mexc-last-failure" className="font-mono ltr" dir="ltr" data-technical-code="true">
               {t('mexc_last_failure')}: {summary.connection.lastSanitizedFailure.code}
             </span>
           )}
         </div>
 
-        {(summary?.usedByModules?.length ?? 0) > 0 && (
+        {usedBySummary.total > 0 && (
           <p className="mt-2 text-xs text-slate-400" data-testid="mexc-used-by">
-            {t('mexc_used_by')}:{' '}
-            {(summary?.usedByModules || []).map((m) => getModuleLabel(m, t)).join(' · ')}
+            {t(usedBySummary.labelKey)}: {usedBySummary.text}
           </p>
         )}
       </section>
@@ -606,14 +601,13 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                             )}
                             {permissionIncomplete && (
                               <div className="mt-1 space-y-0.5 text-[11px] text-slate-400" data-testid={`mexc-cap-wallet-permission-${cap.capabilityId}`}>
-                                <p>{t('mexc_wallet_permission_available')}</p>
-                                <p>{t('mexc_wallet_endpoint_incomplete')}</p>
+                                <p>{t('mexc_reason_wallet_permission_available_incomplete')}</p>
                                 <p>{t('mexc_wallet_structures_unsupported')}</p>
                               </div>
                             )}
                             {schemaWarning && !permissionIncomplete && (
                               <p className="mt-1 text-[11px] text-slate-400" data-testid={`mexc-cap-access-${cap.capabilityId}`}>
-                                {t('mexc_wallet_access_verified')}
+                                {t('mexc_wallet_structures_unsupported')}
                               </p>
                             )}
                             <p className="mt-1 text-[11px] text-slate-500" data-testid={`mexc-cap-last-checked-${cap.capabilityId}`}>
@@ -656,7 +650,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
                                     : 'null'}
                                 </p>
                                 {cap.lastAttemptFailureCode && (
-                                  <p>
+                                  <p className="font-mono text-[10px] text-slate-500 ltr" dir="ltr" data-technical-code="true" data-testid={`mexc-cap-failure-code-${cap.capabilityId}`}>
                                     {t('mexc_last_attempt_failure')}: {cap.lastAttemptFailureCode}
                                   </p>
                                 )}
@@ -705,7 +699,7 @@ export default function MexcConnectionPanel({ connection, onChanged, onClose }: 
           {primaryConsumers.map((c) => {
             const consumerOpen = Boolean(expandedConsumers[c.consumerId]);
             const eligibility = consumerEligibilityLabel(c as any, t);
-            const reasonKind = selectConsumerProductReason(c as any);
+            const reasonKind = selectConsumerProductReason(c as any, capabilityById);
             return (
               <div
                 key={c.consumerId}

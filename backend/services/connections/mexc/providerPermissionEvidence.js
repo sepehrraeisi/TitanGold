@@ -52,14 +52,16 @@ export const WALLET_PERMISSION_VOLUME_WARNING = 'MEXC_WALLET_PROVIDER_SCHEMA_OR_
 export const WALLET_PERMISSION_VOLUME_REASON = Object.freeze({
   EN: 'Endpoint permission is available, but the full provider currency configuration is not yet supported safely',
   FA: 'مجوز خواندن در دسترس است، اما پیکربندی کامل ارزهای ارائه‌دهنده هنوز به‌صورت ایمن پشتیبانی نمی‌شود',
-  PERMISSION_AVAILABLE_EN: 'Permission available',
-  PERMISSION_AVAILABLE_FA: 'مجوز موردنیاز در دسترس است',
-  ENDPOINT_INCOMPLETE_EN: 'Currency configuration verification is incomplete',
-  ENDPOINT_INCOMPLETE_FA: 'تأیید پیکربندی ارزها کامل نشده است',
-  STRUCTURES_EN: 'Some provider currency records are not yet supported',
-  STRUCTURES_FA: 'برخی ساختارهای اطلاعات ارز ارائه‌دهنده هنوز پشتیبانی نمی‌شوند',
-  CONSUMER_LIMITED_EN: 'Wallet read permission is available, but normalized currency configuration is incomplete',
-  CONSUMER_LIMITED_FA: 'مجوز خواندن کیف پول در دسترس است، اما پیکربندی نرمال‌شده ارزها کامل نیست',
+  PERMISSION_AVAILABLE_EN: 'Required API permission is available',
+  PERMISSION_AVAILABLE_FA: 'مجوز موردنیاز API در دسترس است',
+  ENDPOINT_INCOMPLETE_EN: 'Direct currency-configuration verification is incomplete',
+  ENDPOINT_INCOMPLETE_FA: 'تأیید مستقیم پیکربندی ارزها کامل نشده است',
+  STRUCTURES_EN: 'Some provider currency structures are not yet safely supported.',
+  STRUCTURES_FA: 'برخی ساختارهای اطلاعات ارز ارائه‌دهنده هنوز به‌صورت ایمن پشتیبانی نمی‌شوند.',
+  CONSUMER_LIMITED_EN:
+    'Required API permission is available, but direct currency-configuration verification is incomplete.',
+  CONSUMER_LIMITED_FA:
+    'مجوز موردنیاز API در دسترس است، اما تأیید مستقیم پیکربندی ارزها کامل نشده است.',
 });
 
 export const SHARED_PERMISSION_PROJECTION_CORRECTION = Object.freeze({

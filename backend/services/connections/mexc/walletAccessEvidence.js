@@ -36,8 +36,13 @@ export const WALLET_ACCESS_EVIDENCE_REASON = Object.freeze({
   ACCESS_VERIFIED_FA: 'دسترسی تأیید شد',
   STRUCTURES_UNSUPPORTED_EN: 'Some optional provider response structures are not yet supported',
   STRUCTURES_UNSUPPORTED_FA: 'برخی ساختارهای اختیاری پاسخ ارائه‌دهنده هنوز پشتیبانی نمی‌شوند',
-  CONSUMER_LIMITED_EN: 'Endpoint access is verified, but some provider records are not yet supported',
-  CONSUMER_LIMITED_FA: 'دسترسی API تأیید شده است، اما برخی ساختارهای داده ارائه‌دهنده هنوز پشتیبانی نمی‌شوند',
+  CONSUMER_LIMITED_EN:
+    'Required API permission is available, but direct currency-configuration verification is incomplete.',
+  CONSUMER_LIMITED_FA:
+    'مجوز موردنیاز API در دسترس است، اما تأیید مستقیم پیکربندی ارزها کامل نشده است.',
+  CONSUMER_LIMITED_SECONDARY_EN: 'Some provider currency structures are not yet safely supported.',
+  CONSUMER_LIMITED_SECONDARY_FA:
+    'برخی ساختارهای اطلاعات ارز ارائه‌دهنده هنوز به‌صورت ایمن پشتیبانی نمی‌شوند.',
 });
 
 /**

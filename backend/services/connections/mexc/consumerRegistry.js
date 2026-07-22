@@ -294,6 +294,24 @@ export function evaluateConsumerEligibility(consumer, matrix) {
     }
   }
 
+  // Read-only Futures consumer: cite missing order-read, never runtime execution gates.
+  if (consumer.id === 'futures_trading_read') {
+    const account = byId.get(MEXC_CAPABILITY.FUTURES_ACCOUNT_READ);
+    const position = byId.get(MEXC_CAPABILITY.FUTURES_POSITION_READ);
+    const orderRead = byId.get(MEXC_CAPABILITY.FUTURES_ORDER_READ);
+    const accountOk = account?.verificationState === 'verified' || account?.operationalState === 'enabled';
+    const positionOk = position?.verificationState === 'verified' || position?.operationalState === 'enabled';
+    const orderPending = !orderRead
+      || orderRead.operationalState !== 'enabled'
+      || orderRead.verificationState === 'not_tested';
+    if (accountOk && positionOk && orderPending) {
+      blockedReasons.length = 0;
+      blockedReasons.push(
+        'Account and position access are verified; order-read access has not yet been tested.',
+      );
+    }
+  }
+
   let consumerReadiness = eligible ? 'ready' : 'blocked';
   let limitedByDataContract = false;
 

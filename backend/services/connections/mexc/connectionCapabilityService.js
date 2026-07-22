@@ -220,7 +220,15 @@ export async function buildMexcConnectionSummary(userId) {
     },
     capabilityMatrix: matrix,
     consumers,
-    usedByModules: consumers.filter((c) => c.eligible || c.consumerReadiness === 'limited').map((c) => c.displayName),
+    // Deterministic Used-by: all canonical registered consumers (same registry as consumer contracts).
+    // UI may collapse long lists; do not silently mix eligible-only without an explicit label.
+    usedByModules: consumers.map((c) => c.displayName),
+    usedByConsumers: consumers.map((c) => ({
+      consumerId: c.consumerId,
+      displayName: c.displayName,
+      eligible: c.eligible,
+      consumerReadiness: c.consumerReadiness,
+    })),
     inventoryMeta: MEXC_INVENTORY_META,
     providerSupportNotVerified: getUnverifiedProviderSupportRows().map((r) => r.name),
     providerPermissionEvidence: projectionMeta.providerPermissionEvidence,

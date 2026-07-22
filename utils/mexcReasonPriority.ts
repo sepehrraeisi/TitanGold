@@ -29,6 +29,10 @@ export type MexcReasonKind =
   | 'wallet_consumer_limited'
   | 'wallet_verification_incomplete'
   | 'wallet_permission_available_incomplete'
+  | 'spot_trade_test_authorization'
+  | 'futures_order_read_pending'
+  | 'futures_read_partial'
+  | 'currency_verification_attempt_incomplete'
   | 'generic';
 
 export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
@@ -49,6 +53,10 @@ export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
   wallet_consumer_limited: 'mexc_reason_wallet_consumer_limited',
   wallet_verification_incomplete: 'mexc_reason_wallet_verification_incomplete',
   wallet_permission_available_incomplete: 'mexc_reason_wallet_permission_available_incomplete',
+  spot_trade_test_authorization: 'mexc_reason_spot_trade_test_authorization',
+  futures_order_read_pending: 'mexc_reason_futures_order_read_pending',
+  futures_read_partial: 'mexc_reason_futures_read_partial',
+  currency_verification_attempt_incomplete: 'mexc_currency_verification_attempt_incomplete',
   generic: 'mexc_blocked_generic_reason',
 };
 
@@ -72,6 +80,7 @@ export interface CapabilityLike {
 
 export interface ConsumerLike {
   consumerId?: string;
+  displayName?: string | null;
   eligible?: boolean;
   blockedReason?: string | null;
   sideEffectClass?: string | null;
@@ -90,9 +99,13 @@ const PRIORITY: MexcReasonKind[] = [
   'key_denied',
   'key_permission_unverified',
   'not_tested',
+  'futures_order_read_pending',
+  'futures_read_partial',
+  'spot_trade_test_authorization',
   'key_unknown',
   'wallet_permission_available_incomplete',
   'wallet_verification_incomplete',
+  'currency_verification_attempt_incomplete',
   'wallet_schema_warning',
   'wallet_consumer_limited',
   'user_capability',
@@ -112,6 +125,25 @@ export function selectBestReason(kinds: MexcReasonKind[]): MexcReasonKind {
   return kinds.slice().sort((a, b) => rank(a) - rank(b))[0];
 }
 
+function isVerifiedCap(cap: CapabilityLike | null | undefined): boolean {
+  if (!cap) return false;
+  return cap.verificationState === 'verified' || cap.operationalState === 'enabled';
+}
+
+function resolveCapabilityReasonForId(cap: CapabilityLike): MexcReasonKind {
+  const id = String(cap.capabilityId || '');
+  if (id === 'SPOT_TRADE_TEST') {
+    return 'spot_trade_test_authorization';
+  }
+  if (id === 'FUTURES_ORDER_READ') {
+    const base = classifyCapabilityReason(cap);
+    if (base === 'not_tested' || base === 'key_permission_unverified' || base === 'key_unknown' || base === 'auth_pending') {
+      return 'futures_order_read_pending';
+    }
+  }
+  return classifyCapabilityReason(cap);
+}
+
 export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
   const provider = String(cap.providerSupport || '').toLowerCase();
   const op = String(cap.operationalState || '').toLowerCase();
@@ -121,6 +153,10 @@ export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
   const contract = String(cap.dataContractState || '').toLowerCase();
   const verification = String(cap.verificationState || '').toLowerCase();
   const authVerified = cap.privateAuthVerified === true;
+
+  if (id === 'SPOT_TRADE_TEST') {
+    return 'spot_trade_test_authorization';
+  }
 
   if (op === 'enabled') {
     if (id === 'WALLET_CURRENCY_READ' && (contract === 'warning' || contract === 'incompatible')) {
@@ -145,6 +181,7 @@ export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
   }
 
   if (verification === 'not_tested' || /^Not yet tested$/i.test(reason)) {
+    if (id === 'FUTURES_ORDER_READ') return 'futures_order_read_pending';
     if (!authVerified && /Private authentication has not been verified/i.test(reason)) {
       return 'auth_pending';
     }
@@ -192,7 +229,7 @@ export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
   }
 
   if (/Not yet tested/i.test(reason)) {
-    return 'not_tested';
+    return id === 'FUTURES_ORDER_READ' ? 'futures_order_read_pending' : 'not_tested';
   }
 
   if (
@@ -206,6 +243,9 @@ export function classifyCapabilityReason(cap: CapabilityLike): MexcReasonKind {
     || op === 'disabled'
     || op === 'disabled_pending_explicit_authorization'
   ) {
+    if (id === 'SPOT_TRADE_TEST' || op === 'disabled_pending_explicit_authorization') {
+      return 'spot_trade_test_authorization';
+    }
     if (key === 'unknown' && /permission|keyGrant|API key/i.test(reason)) {
       return 'key_unknown';
     }
@@ -240,6 +280,12 @@ export function classifyFromBlockedReasonText(reason: string | null | undefined)
     if (/Tier-4|runtime gates|Live side effects/i.test(seg)) return 'runtime_tier4';
     if (/permission denied/i.test(seg)) return 'key_denied';
     if (/keyGrant unknown|API key.*unknown/i.test(seg)) return 'key_unknown';
+    if (/FUTURES_ORDER_READ|order-read access has not yet been tested/i.test(seg)) {
+      return 'futures_order_read_pending';
+    }
+    if (/Required API permission is available|permission domain is granted|direct currency-configuration/i.test(seg)) {
+      return 'wallet_consumer_limited';
+    }
     if (/Not verified|private capability|auth/i.test(seg)) return 'auth_pending';
     if (/risk|confirmation/i.test(seg)) return 'risk_confirmation';
     if (/missing from matrix|user/i.test(seg)) return 'user_capability';
@@ -250,24 +296,90 @@ export function classifyFromBlockedReasonText(reason: string | null | undefined)
 }
 
 export function selectCapabilityProductReason(cap: CapabilityLike): MexcReasonKind {
-  return classifyCapabilityReason(cap);
+  return resolveCapabilityReasonForId(cap);
 }
 
-export function selectConsumerProductReason(consumer: ConsumerLike): MexcReasonKind {
+/**
+ * Group summary reason from the highest-priority unresolved capability in the group.
+ * Prefer pending/incomplete capabilities over blocked/unavailable execute gates so
+ * group copy reflects the next useful verification gap (e.g. FUTURES_ORDER_READ).
+ */
+export function selectGroupProductReason(caps: CapabilityLike[]): MexcReasonKind | null {
+  const unresolved = (caps || []).filter((cap) => productStatusFromCapability(cap) !== 'available');
+  if (!unresolved.length) return null;
+
+  const pending = unresolved.filter((cap) => productStatusFromCapability(cap) === 'pending');
+  const pool = pending.length ? pending : unresolved;
+
+  const ranked = pool.slice().sort((a, b) => {
+    const ra = rank(selectCapabilityProductReason(a));
+    const rb = rank(selectCapabilityProductReason(b));
+    if (ra !== rb) return ra - rb;
+    return String(a.capabilityId || '').localeCompare(String(b.capabilityId || ''));
+  });
+
+  return selectCapabilityProductReason(ranked[0]);
+}
+
+function lookupCap(
+  capabilityById: Map<string, CapabilityLike> | Record<string, CapabilityLike> | undefined,
+  id: string,
+): CapabilityLike | undefined {
+  if (!capabilityById) return undefined;
+  if (capabilityById instanceof Map) return capabilityById.get(id);
+  return capabilityById[id];
+}
+
+export function selectConsumerProductReason(
+  consumer: ConsumerLike,
+  capabilityById?: Map<string, CapabilityLike> | Record<string, CapabilityLike>,
+): MexcReasonKind {
   if (consumer.registered === false) return 'generic';
   if (consumer.eligible && consumer.consumerReadiness !== 'limited') return 'available';
 
   if (
     consumer.limitedByDataContract
     || consumer.consumerReadiness === 'limited'
-    || /provider records are not yet supported|ساختارهای داده|currency configuration is incomplete|پیکربندی نرمال/i.test(String(consumer.blockedReason || ''))
+    || /provider records are not yet supported|ساختارهای داده|currency configuration is incomplete|پیکربندی نرمال|Required API permission is available|مجوز موردنیاز API/i.test(String(consumer.blockedReason || ''))
   ) {
     return 'wallet_consumer_limited';
   }
 
+  const consumerId = String(consumer.consumerId || '');
+  const isFuturesRead = consumerId === 'futures_trading_read'
+    || /Futures Trading \(read\)|Futures Trading — Read/i.test(String(consumer.displayName || ''));
+
+  if (isFuturesRead) {
+    const account = lookupCap(capabilityById, 'FUTURES_ACCOUNT_READ');
+    const position = lookupCap(capabilityById, 'FUTURES_POSITION_READ');
+    const orderRead = lookupCap(capabilityById, 'FUTURES_ORDER_READ');
+    const orderPending = !orderRead
+      || productStatusFromCapability(orderRead) !== 'available'
+      || orderRead.verificationState === 'not_tested';
+    if (isVerifiedCap(account) && isVerifiedCap(position) && orderPending) {
+      return 'futures_read_partial';
+    }
+    if (orderPending) return 'futures_order_read_pending';
+  }
+
+  // Read-only consumers: never prefer runtime/Live/Kill Switch wording
   const side = String(consumer.sideEffectClass || '');
+  if (side === 'read_only' || side === 'none') {
+    const required = consumer.requiredCapabilities || [];
+    const unresolvedRequired = required
+      .map((id) => lookupCap(capabilityById, id))
+      .filter((cap): cap is CapabilityLike => Boolean(cap) && productStatusFromCapability(cap) !== 'available');
+    if (unresolvedRequired.length) {
+      return selectGroupProductReason(unresolvedRequired) || classifyFromBlockedReasonText(consumer.blockedReason);
+    }
+    const fromText = classifyFromBlockedReasonText(consumer.blockedReason);
+    if (fromText === 'runtime_tier4') {
+      return 'not_tested';
+    }
+    return fromText;
+  }
+
   if (side === 'financial_write' || side === 'account_mutation') {
-    // Execution consumers: prefer Tier-4 unless provider unknown dominates the text
     const fromText = classifyFromBlockedReasonText(consumer.blockedReason);
     if (fromText === 'provider_unknown' || fromText === 'provider_maintenance' || fromText === 'account_use_case_unknown') {
       return fromText;
@@ -291,6 +403,10 @@ export function productStatusFromCapability(cap: CapabilityLike): 'available' | 
     || kind === 'not_tested'
     || kind === 'wallet_verification_incomplete'
     || kind === 'wallet_permission_available_incomplete'
+    || kind === 'futures_order_read_pending'
+    || kind === 'futures_read_partial'
+    || kind === 'spot_trade_test_authorization'
+    || kind === 'currency_verification_attempt_incomplete'
   ) {
     return 'pending';
   }
@@ -301,4 +417,27 @@ export function translateReasonKind(kind: MexcReasonKind, t: (k: string) => stri
   const key = MEXC_REASON_I18N[kind] || MEXC_REASON_I18N.generic;
   const translated = t(key);
   return translated === key ? t('mexc_blocked_generic_reason') : translated;
+}
+
+/** Deterministic Used-by labels from canonical consumer list with optional collapse. */
+export function formatUsedBySummary(
+  consumers: Array<{ consumerId?: string; displayName?: string | null }>,
+  t: (k: string) => string,
+  getLabel: (consumerId: string, displayName: string | undefined, t: (k: string) => string) => string,
+  maxVisible = 8,
+): { labelKey: string; text: string; total: number } {
+  const labels = (consumers || []).map((c) => getLabel(String(c.consumerId || ''), c.displayName || undefined, t));
+  const unique = labels.filter(Boolean);
+  if (unique.length <= maxVisible) {
+    return { labelKey: 'mexc_used_by', text: unique.join(' · '), total: unique.length };
+  }
+  const shown = unique.slice(0, maxVisible);
+  const more = unique.length - shown.length;
+  const moreLabel = t('mexc_used_by_more');
+  const moreText = moreLabel === 'mexc_used_by_more' ? `+${more} more` : `+${more} ${moreLabel}`;
+  return {
+    labelKey: 'mexc_used_by',
+    text: `${shown.join(' · ')} · ${moreText}`,
+    total: unique.length,
+  };
 }

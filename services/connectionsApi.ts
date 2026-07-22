@@ -262,7 +262,11 @@ export interface MexcCapabilitySummary {
     configured?: boolean;
     maskedKeyIdentifier?: string | null;
     lastVerifiedAt?: string | null;
-    lastSanitizedFailure?: { code?: string; sanitizedReason?: string | null } | null;
+    lastSanitizedFailure?: {
+      capabilityId?: string | null;
+      code?: string;
+      sanitizedReason?: string | null;
+    } | null;
     credentialAgeHint?: string | null;
     lastRotationAt?: string | null;
   };
@@ -280,6 +284,12 @@ export interface MexcCapabilitySummary {
   };
   consumers?: MexcConsumerRow[];
   usedByModules?: string[];
+  usedByConsumers?: Array<{
+    consumerId: string;
+    displayName: string;
+    eligible?: boolean;
+    consumerReadiness?: string | null;
+  }>;
   overallTruthfulState?: {
     code: string;
     label: string;
