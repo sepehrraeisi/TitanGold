@@ -118,7 +118,7 @@ describe('Wallet and MEXC i18n completeness', () => {
 describe('MEXC panel UX containment', () => {
   it('verification remains gated and delete is in danger zone', () => {
     const panel = read('components/settings/connections/MexcConnectionPanel.tsx');
-    expect(panel).toMatch(/mexc-test-connection-disabled/);
+    expect(panel).toMatch(/mexc-verification-locked|mexc-test-connection-disabled/);
     expect(panel).toMatch(/mexc-danger-zone/);
     expect(panel).toMatch(/mexc-credentials-toggle/);
     expect(panel).not.toMatch(/testMexcConnection/);

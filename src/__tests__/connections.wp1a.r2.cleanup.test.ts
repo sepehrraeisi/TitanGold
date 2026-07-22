@@ -62,8 +62,8 @@ describe('CONNECTIONS-WP1A-R2 Test Connection containment', () => {
     const panel = read('components/settings/connections/MexcConnectionPanel.tsx');
     expect(multi).not.toMatch(/testMexcConnectionCanonical/);
     expect(multi).not.toMatch(/handleTestConnection/);
-    expect(panel).toMatch(/mexc-test-connection-disabled/);
-    expect(panel).toMatch(/mexc_verification_gated/);
+    expect(panel).toMatch(/mexc-verification-locked|mexc_verification_locked_title/);
+    expect(panel).toMatch(/mexc_verification_locked_detail|mexc_verification_gated/);
     expect(panel).toMatch(/save_changes|mexc_rotate_credentials/);
     expect(panel).toMatch(/cancel/);
     expect(panel).toMatch(/\bdelete\b/);

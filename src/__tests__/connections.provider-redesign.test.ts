@@ -166,7 +166,7 @@ describe('source containment', () => {
     const display = read('services/connectionDisplayStatus.ts');
     expect(multi).toMatch(/buildMexcManageNavigation/);
     expect(multi).toMatch(/not_available_yet|connections_not_available_yet|buildMexcProviderSummary/);
-    expect(panel).toMatch(/DataHubSubTabBar/);
+    expect(panel).toMatch(/ConnectionsSectionNav/);
     expect(panel).toMatch(/mexc_section_overview|normalizeMexcManageSection/);
     expect(panel).toMatch(/apiSecret:\s*['"]['"]/);
     expect(panel).toMatch(/clearDraftSecrets|apiKey:\s*['"]['"]/);

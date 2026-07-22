@@ -259,7 +259,7 @@ export default function MultiExchangeSettings({
                     <div className="font-medium text-white" data-testid={`connection-heading-${exchange}`}>
                       {exchange}
                     </div>
-                    {!expanded && (
+                    {!expanded && isMexc && (
                       <div className="text-xs text-gray-400" data-testid={`connection-status-${exchange}`}>
                         {awaitingAuthProjection ? (
                           <span className="inline-block h-3 w-40 animate-pulse rounded bg-slate-700/60" aria-hidden="true" />

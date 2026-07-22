@@ -32,6 +32,8 @@ export type MexcReasonKind =
   | 'spot_trade_test_authorization'
   | 'futures_order_read_pending'
   | 'futures_read_partial'
+  | 'internal_transfer_read_pending'
+  | 'subaccount_read_pending'
   | 'currency_verification_attempt_incomplete'
   | 'generic';
 
@@ -56,6 +58,8 @@ export const MEXC_REASON_I18N: Record<MexcReasonKind, string> = {
   spot_trade_test_authorization: 'mexc_reason_spot_trade_test_authorization',
   futures_order_read_pending: 'mexc_reason_futures_order_read_pending',
   futures_read_partial: 'mexc_reason_futures_read_partial',
+  internal_transfer_read_pending: 'mexc_reason_internal_transfer_read_pending',
+  subaccount_read_pending: 'mexc_reason_subaccount_read_pending',
   currency_verification_attempt_incomplete: 'mexc_currency_verification_attempt_incomplete',
   generic: 'mexc_blocked_generic_reason',
 };
@@ -97,13 +101,16 @@ const PRIORITY: MexcReasonKind[] = [
   'account_use_case_unknown',
   'auth_pending',
   'key_denied',
-  'key_permission_unverified',
-  'not_tested',
+  // Domain-primary pending reads outrank generic key-permission siblings in the same group
+  'wallet_permission_available_incomplete',
+  'internal_transfer_read_pending',
+  'subaccount_read_pending',
   'futures_order_read_pending',
   'futures_read_partial',
+  'key_permission_unverified',
+  'not_tested',
   'spot_trade_test_authorization',
   'key_unknown',
-  'wallet_permission_available_incomplete',
   'wallet_verification_incomplete',
   'currency_verification_attempt_incomplete',
   'wallet_schema_warning',
@@ -114,6 +121,15 @@ const PRIORITY: MexcReasonKind[] = [
   'available',
   'generic',
 ];
+
+/** Prefer these unresolved capabilities when summarizing a group */
+const GROUP_PRIMARY_CAPABILITY_IDS = [
+  'WALLET_CURRENCY_READ',
+  'INTERNAL_TRANSFER_READ',
+  'SUBACCOUNT_READ',
+  'FUTURES_ORDER_READ',
+  'SPOT_TRADE_TEST',
+] as const;
 
 function rank(kind: MexcReasonKind): number {
   const i = PRIORITY.indexOf(kind);
@@ -130,6 +146,15 @@ function isVerifiedCap(cap: CapabilityLike | null | undefined): boolean {
   return cap.verificationState === 'verified' || cap.operationalState === 'enabled';
 }
 
+function isPendingReadBase(base: MexcReasonKind): boolean {
+  return (
+    base === 'not_tested'
+    || base === 'key_permission_unverified'
+    || base === 'key_unknown'
+    || base === 'auth_pending'
+  );
+}
+
 function resolveCapabilityReasonForId(cap: CapabilityLike): MexcReasonKind {
   const id = String(cap.capabilityId || '');
   if (id === 'SPOT_TRADE_TEST') {
@@ -137,9 +162,15 @@ function resolveCapabilityReasonForId(cap: CapabilityLike): MexcReasonKind {
   }
   if (id === 'FUTURES_ORDER_READ') {
     const base = classifyCapabilityReason(cap);
-    if (base === 'not_tested' || base === 'key_permission_unverified' || base === 'key_unknown' || base === 'auth_pending') {
-      return 'futures_order_read_pending';
-    }
+    if (isPendingReadBase(base)) return 'futures_order_read_pending';
+  }
+  if (id === 'INTERNAL_TRANSFER_READ') {
+    const base = classifyCapabilityReason(cap);
+    if (isPendingReadBase(base)) return 'internal_transfer_read_pending';
+  }
+  if (id === 'SUBACCOUNT_READ') {
+    const base = classifyCapabilityReason(cap);
+    if (isPendingReadBase(base)) return 'subaccount_read_pending';
   }
   return classifyCapabilityReason(cap);
 }
@@ -311,6 +342,11 @@ export function selectGroupProductReason(caps: CapabilityLike[]): MexcReasonKind
   const pending = unresolved.filter((cap) => productStatusFromCapability(cap) === 'pending');
   const pool = pending.length ? pending : unresolved;
 
+  const primary = pool.find((cap) =>
+    GROUP_PRIMARY_CAPABILITY_IDS.includes(String(cap.capabilityId || '') as (typeof GROUP_PRIMARY_CAPABILITY_IDS)[number]),
+  );
+  if (primary) return selectCapabilityProductReason(primary);
+
   const ranked = pool.slice().sort((a, b) => {
     const ra = rank(selectCapabilityProductReason(a));
     const rb = rank(selectCapabilityProductReason(b));
@@ -405,6 +441,8 @@ export function productStatusFromCapability(cap: CapabilityLike): 'available' | 
     || kind === 'wallet_permission_available_incomplete'
     || kind === 'futures_order_read_pending'
     || kind === 'futures_read_partial'
+    || kind === 'internal_transfer_read_pending'
+    || kind === 'subaccount_read_pending'
     || kind === 'spot_trade_test_authorization'
     || kind === 'currency_verification_attempt_incomplete'
   ) {

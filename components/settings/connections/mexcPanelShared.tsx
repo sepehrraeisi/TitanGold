@@ -120,3 +120,140 @@ export function consumerEligibilityLabel(
   }
   return { label: t('mexc_limited'), tone: 'warn' };
 }
+
+export function summarizePrimaryConsumers(
+  consumers: Array<{
+    consumerId?: string;
+    eligible?: boolean;
+    registered?: boolean;
+    sideEffectClass?: string;
+    consumerReadiness?: string | null;
+    limitedByDataContract?: boolean;
+  }>,
+): { registered: number; eligible: number; limited: number; blocked: number } {
+  const byId = new Map(consumers.map((c) => [String(c.consumerId || ''), c]));
+  let eligible = 0;
+  let limited = 0;
+  let blocked = 0;
+  for (const id of PRIMARY_CONSUMER_IDS) {
+    const c = byId.get(id);
+    if (!c || c.registered === false) {
+      blocked += 1;
+      continue;
+    }
+    if (c.consumerReadiness === 'limited' || c.limitedByDataContract) {
+      limited += 1;
+    } else if (c.eligible) {
+      eligible += 1;
+    } else if (
+      c.sideEffectClass === 'financial_write'
+      || c.sideEffectClass === 'account_mutation'
+    ) {
+      blocked += 1;
+    } else {
+      limited += 1;
+    }
+  }
+  return { registered: PRIMARY_CONSUMER_IDS.length, eligible, limited, blocked };
+}
+
+/** Product credential status — never expose raw lowercase enums in normal view */
+export function credentialStatusProductLabel(
+  raw: string | null | undefined,
+  authenticated: boolean,
+  t: (k: string) => string,
+): string {
+  if (authenticated || /authenticated/i.test(String(raw || ''))) {
+    return t('mexc_authenticated');
+  }
+  const value = String(raw || '').trim();
+  if (!value) return t('connections_not_configured');
+  if (/^[a-z0-9_]+$/i.test(value) && value === value.toLowerCase()) {
+    // Raw enum guard — map known values, otherwise fall back to configured/not configured
+    if (value.includes('reentry')) return t('connections_secret_reentry_required');
+    if (value.includes('configured')) return t('connections_configured_not_verified');
+    return t('connections_not_configured');
+  }
+  return value;
+}
+
+export type ConnectionsSectionItem = {
+  id: string;
+  label: string;
+  activeVariant?: 'default' | 'warning';
+};
+
+export function ConnectionsSectionNav({
+  items,
+  activeId,
+  onChange,
+  ariaLabel,
+}: {
+  items: ConnectionsSectionItem[];
+  activeId: string;
+  onChange: (id: string) => void;
+  ariaLabel: string;
+}) {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const ids = items.map((i) => i.id);
+    const idx = ids.indexOf(activeId);
+    if (idx < 0) return;
+    let next = idx;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const dir = e.key === 'ArrowRight' ? 1 : -1;
+      next = (idx + dir + ids.length) % ids.length;
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      next = 0;
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      next = ids.length - 1;
+    } else {
+      return;
+    }
+    onChange(ids[next]);
+    const el = document.getElementById(`mexc-tab-${ids[next]}`);
+    el?.focus();
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      className="mb-2 flex gap-2 overflow-x-auto border-b border-white/10 no-scrollbar md:gap-4"
+      onKeyDown={onKeyDown}
+    >
+      {items.map((item) => {
+        const isActive = activeId === item.id;
+        const activeClass = item.activeVariant === 'warning'
+          ? 'border-amber-500 text-amber-300'
+          : 'border-indigo-400 text-indigo-200';
+        return (
+          <button
+            key={item.id}
+            id={`mexc-tab-${item.id}`}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            aria-controls={`mexc-panel-${item.id}`}
+            tabIndex={isActive ? 0 : -1}
+            onClick={() => onChange(item.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onChange(item.id);
+              }
+            }}
+            className={`whitespace-nowrap border-b-2 pb-2 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
+              isActive ? activeClass : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+            data-testid={`mexc-section-tab-${item.id}`}
+          >
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

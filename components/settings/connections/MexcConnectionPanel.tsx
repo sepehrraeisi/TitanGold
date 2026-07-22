@@ -21,7 +21,6 @@ import {
   getVerificationLabel,
 } from '../../../utils/mexcDisplayLabels.ts';
 import {
-  formatUsedBySummary,
   productStatusFromCapability,
   selectCapabilityProductReason,
   selectConsumerProductReason,
@@ -36,15 +35,17 @@ import {
 } from '../../../utils/settingsNavigation.ts';
 import { readStateFromURL } from '../../../utils/urlSync.ts';
 import type { OnNavigateHandler } from '../../../types/navigation.ts';
-import { DataHubSubTabBar } from '../../ai/AIManager/tabs/DataHub/dataHubUi.tsx';
 import {
+  ConnectionsSectionNav,
   GROUP_ORDER,
   PRIMARY_CONSUMER_IDS,
   StatePill,
   consumerEligibilityLabel,
+  credentialStatusProductLabel,
   formatDuration,
   formatLocalizedDateTime,
   productStatusLabel,
+  summarizePrimaryConsumers,
   toneForProductStatus,
   type DraftSecrets,
 } from './mexcPanelShared.tsx';
@@ -209,15 +210,10 @@ export default function MexcConnectionPanel({
     });
   }, [grouped]);
 
-  const usedBySummary = useMemo(() => {
-    const list = summary?.usedByConsumers?.length
-      ? summary.usedByConsumers
-      : (summary?.consumers || []).map((c) => ({
-          consumerId: c.consumerId,
-          displayName: c.displayName,
-        }));
-    return formatUsedBySummary(list, t, getConsumerLabel, 8);
-  }, [summary, t]);
+  const consumerCounts = useMemo(
+    () => summarizePrimaryConsumers(summary?.consumers || []),
+    [summary],
+  );
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -306,16 +302,21 @@ export default function MexcConnectionPanel({
       data-active-section={activeSection}
       dir={dir}
     >
-      <DataHubSubTabBar
+      <ConnectionsSectionNav
         items={sectionItems}
         activeId={activeSection}
         onChange={navigateSection}
         ariaLabel={t('mexc_sections_nav')}
-        className="mb-2"
       />
 
       {activeSection === 'overview' && (
-        <section className="space-y-3" aria-labelledby="mexc-overview-title" data-testid="mexc-section-overview">
+        <section
+          id="mexc-panel-overview"
+          role="tabpanel"
+          aria-labelledby="mexc-tab-overview"
+          className="space-y-3"
+          data-testid="mexc-section-overview"
+        >
           <h4 id="mexc-overview-title" className="sr-only">{t('mexc_section_overview')}</h4>
           <div className="rounded-xl border border-white/5 bg-slate-900/60 p-4">
             <p className="sr-only">{t('mexc_details')}</p>
@@ -398,35 +399,55 @@ export default function MexcConnectionPanel({
             )}
           </div>
 
-          {usedBySummary.total > 0 && (
-            <p className="text-xs text-slate-400" data-testid="mexc-used-by">
-              {t(usedBySummary.labelKey)}: {usedBySummary.text}
-            </p>
-          )}
-
-          <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-verify-title">
-            <h4 id="mexc-verify-title" className="text-sm font-semibold text-white">
-              {t('mexc_verification')}
-            </h4>
-            <p className="mt-1 text-xs text-slate-400" data-testid="connections-private-verification-unavailable">
-              {t('mexc_verification_gated')}
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-slate-900/60 p-4"
+            data-testid="mexc-consumer-summary"
+          >
+            <p className="text-xs text-slate-300">
+              {t('mexc_overview_consumers_summary', {
+                registered: String(consumerCounts.registered),
+                eligible: String(consumerCounts.eligible),
+                limited: String(consumerCounts.limited),
+                blocked: String(consumerCounts.blocked),
+              })}
             </p>
             <button
               type="button"
-              disabled
-              aria-disabled="true"
-              title={t('mexc_verification_gated')}
-              className="mt-3 cursor-not-allowed rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-400"
-              data-testid="mexc-test-connection-disabled"
+              className="rounded-md border border-indigo-400/40 bg-indigo-500/10 px-3 py-1.5 text-xs text-indigo-200 hover:bg-indigo-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+              onClick={() => navigateSection('consumers')}
+              aria-label={t('mexc_view_consumers')}
+              data-testid="mexc-view-consumers"
             >
-              {t('mexc_test_connection')}
+              {t('mexc_view_consumers')}
             </button>
+          </div>
+
+          <section
+            className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-4"
+            aria-labelledby="mexc-verify-title"
+            data-testid="mexc-verification-locked"
+          >
+            <h4 id="mexc-verify-title" className="text-sm font-semibold text-amber-100">
+              {t('mexc_verification')}
+            </h4>
+            <p className="mt-2 text-sm text-amber-50/90" data-testid="connections-private-verification-unavailable">
+              {t('mexc_verification_locked_title')}
+            </p>
+            <p className="mt-1 text-xs text-amber-100/70" data-testid="mexc-verification-locked-detail">
+              {t('mexc_verification_locked_detail')}
+            </p>
           </section>
         </section>
       )}
 
       {activeSection === 'credentials' && (
-        <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-cred-title" data-testid="mexc-section-credentials">
+        <section
+          id="mexc-panel-credentials"
+          role="tabpanel"
+          aria-labelledby="mexc-tab-credentials"
+          className="rounded-xl border border-white/5 bg-slate-900/60 p-4"
+          data-testid="mexc-section-credentials"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 id="mexc-cred-title" className="text-sm font-semibold text-white">
               {t('mexc_credentials')}
@@ -449,6 +470,25 @@ export default function MexcConnectionPanel({
             </button>
           </div>
 
+          <div
+            className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2"
+            data-testid="mexc-credential-status-row"
+          >
+            <span className="text-xs text-slate-400">{t('mexc_credential_status')}</span>
+            <StatePill
+              label={credentialStatusProductLabel(
+                connection.credentialStatus || connection.status || summary?.connection?.authState,
+                Boolean(connection.privateAuthVerified || summary?.privateAuthentication?.verified),
+                t,
+              )}
+              tone={
+                connection.privateAuthVerified || summary?.privateAuthentication?.verified
+                  ? 'ok'
+                  : 'warn'
+              }
+            />
+          </div>
+
           <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-500" data-testid="mexc-credential-meta">
             <span data-testid="mexc-credential-age">
               {t('mexc_credential_age')}: {credentialAge}
@@ -457,15 +497,12 @@ export default function MexcConnectionPanel({
               {t('mexc_last_rotation')}: {lastRotation}
             </span>
             {projection.maskedKeyIdentifier && (
-              <span className="font-mono ltr" dir="ltr">
+              <span className="font-mono ltr" dir="ltr" data-testid="mexc-masked-key">
                 {t('connections_masked_key')}: {projection.maskedKeyIdentifier}
               </span>
             )}
           </div>
           <p className="mt-2 text-[11px] text-slate-500">{t('mexc_ip_restriction_guidance')}</p>
-          <p className="mt-1 text-xs text-slate-400">
-            {connection.credentialStatus || connection.status || t('connections_not_configured')}
-          </p>
 
           {!credentialsOpen && (
             <p className="mt-2 text-xs text-slate-400">{t('mexc_credentials_collapsed_hint')}</p>
@@ -542,27 +579,17 @@ export default function MexcConnectionPanel({
               </div>
             </>
           )}
-
-          <div className="mt-4 border-t border-white/5 pt-3">
-            <p className="text-xs text-slate-400" data-testid="connections-private-verification-unavailable">
-              {t('mexc_verification_gated')}
-            </p>
-            <button
-              type="button"
-              disabled
-              aria-disabled="true"
-              title={t('mexc_verification_gated')}
-              className="mt-2 cursor-not-allowed rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-400"
-              data-testid="mexc-test-connection-disabled"
-            >
-              {t('mexc_test_connection')}
-            </button>
-          </div>
         </section>
       )}
 
       {activeSection === 'capabilities' && (
-        <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-matrix-title" data-testid="mexc-section-capabilities">
+        <section
+          id="mexc-panel-capabilities"
+          role="tabpanel"
+          aria-labelledby="mexc-tab-capabilities"
+          className="rounded-xl border border-white/5 bg-slate-900/60 p-4"
+          data-testid="mexc-section-capabilities"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 id="mexc-matrix-title" className="text-sm font-semibold text-white">
               {t('mexc_capability_matrix')}
@@ -724,7 +751,13 @@ export default function MexcConnectionPanel({
       )}
 
       {activeSection === 'consumers' && (
-        <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-consumers-title" data-testid="mexc-section-consumers">
+        <section
+          id="mexc-panel-consumers"
+          role="tabpanel"
+          aria-labelledby="mexc-tab-consumers"
+          className="rounded-xl border border-white/5 bg-slate-900/60 p-4"
+          data-testid="mexc-section-consumers"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 id="mexc-consumers-title" className="text-sm font-semibold text-white">
               {t('mexc_consumers')}
@@ -808,7 +841,13 @@ export default function MexcConnectionPanel({
       )}
 
       {activeSection === 'history' && (
-        <section className="rounded-xl border border-white/5 bg-slate-900/60 p-4" aria-labelledby="mexc-history-title" data-testid="mexc-section-history">
+        <section
+          id="mexc-panel-history"
+          role="tabpanel"
+          aria-labelledby="mexc-tab-history"
+          className="rounded-xl border border-white/5 bg-slate-900/60 p-4"
+          data-testid="mexc-section-history"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 id="mexc-history-title" className="text-sm font-semibold text-white">
               {t('mexc_section_history')}
@@ -824,14 +863,23 @@ export default function MexcConnectionPanel({
             </button>
           </div>
 
-          <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-500">
-            <span>
-              {t('mexc_latest_successful_verification')}:{' '}
-              {formatLocalizedDateTime(projection.lastSuccessfulVerificationAt, language, t)}
-            </span>
-            <span>
-              {t('mexc_last_attempt')}: {formatLocalizedDateTime(projection.lastAttemptAt, language, t)}
-            </span>
+          <div
+            className="mt-3 rounded-lg border border-white/5 bg-slate-950/50 p-3"
+            data-testid="mexc-history-current-wallet"
+          >
+            <p className="text-xs font-medium text-slate-200">{t('mexc_history_current_wallet_title')}</p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              {t('mexc_history_current_wallet_summary')}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-500">
+              <span>
+                {t('mexc_latest_successful_verification')}:{' '}
+                {formatLocalizedDateTime(projection.lastSuccessfulVerificationAt, language, t)}
+              </span>
+              <span>
+                {t('mexc_last_attempt')}: {formatLocalizedDateTime(projection.lastAttemptAt, language, t)}
+              </span>
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label={t('mexc_section_history')}>
@@ -841,12 +889,19 @@ export default function MexcConnectionPanel({
                 type="button"
                 role="tab"
                 aria-selected={historyFilter === f}
-                className={`rounded-md border px-2 py-1 text-[11px] ${
+                tabIndex={historyFilter === f ? 0 : -1}
+                className={`rounded-md border px-2 py-1 text-[11px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
                   historyFilter === f
                     ? 'border-indigo-400/50 bg-indigo-500/10 text-indigo-200'
                     : 'border-white/10 text-slate-400 hover:bg-white/5'
                 }`}
                 onClick={() => setHistoryFilter(f)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setHistoryFilter(f);
+                  }
+                }}
                 data-testid={`mexc-history-filter-${f}`}
               >
                 {t(`mexc_history_filter_${f}`)}
@@ -920,8 +975,10 @@ export default function MexcConnectionPanel({
 
       {activeSection === 'danger' && connection.configured && (
         <section
+          id="mexc-panel-danger"
+          role="tabpanel"
+          aria-labelledby="mexc-tab-danger"
           className="rounded-xl border border-red-500/30 bg-red-950/20 p-4"
-          aria-labelledby="mexc-danger-title"
           data-testid="mexc-danger-zone"
         >
           <h4 id="mexc-danger-title" className="text-sm font-semibold text-red-200">
@@ -931,6 +988,7 @@ export default function MexcConnectionPanel({
           <button
             type="button"
             onClick={handleDelete}
+            aria-label={confirmDelete ? t('mexc_confirm_delete') : t('delete')}
             data-testid="connection-delete-MEXC"
             className="mt-3 rounded-md border border-red-500/50 bg-red-900/30 px-3 py-2 text-sm text-red-100 hover:bg-red-900/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
           >

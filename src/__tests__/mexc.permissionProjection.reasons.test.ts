@@ -87,7 +87,7 @@ describe('MEXC final product semantics', () => {
     expect(enText).not.toMatch(/Endpoint access is verified/i);
     expect(faText).not.toMatch(/دسترسی API تأیید شده/);
     expect(enText).toMatch(/Required API permission is available/i);
-    expect(enText).toMatch(/direct currency-configuration verification is incomplete/i);
+    expect(enText).toMatch(/direct currency-configuration verification remains incomplete/i);
     expect(faText).toMatch(/مجوز موردنیاز API در دسترس است/);
   });
 
@@ -237,9 +237,93 @@ describe('MEXC final product semantics', () => {
         blockedReason: 'Tier-4 runtime gates',
       },
     ]);
-    expect(kind).toBe('key_permission_unverified');
+    expect(kind).toBe('internal_transfer_read_pending');
     expect(kind).not.toBe('auth_pending');
     expect(kind).not.toBe('runtime_tier4');
+    expect(translateReasonKind(kind!, tEn)).toMatch(/Internal-transfer read access has not yet been tested/i);
+    expect(translateReasonKind(kind!, tFa)).toMatch(/انتقال‌های داخلی/);
+  });
+
+  it('Wallet group prefers currency-config incomplete over sibling key-permission unverified', () => {
+    const kind = selectGroupProductReason([
+      {
+        capabilityId: 'WALLET_CURRENCY_READ',
+        keyGrant: 'granted',
+        verificationState: 'verification_error',
+        operationalState: 'disabled',
+        directEndpointVerified: false,
+        dataContractState: 'warning',
+        privateAuthVerified: true,
+      },
+      {
+        capabilityId: 'DEPOSIT_ADDRESS_READ',
+        keyGrant: 'unknown',
+        verificationState: 'not_tested',
+        operationalState: 'disabled',
+        privateAuthVerified: true,
+        blockedReason: 'Required API-key permission has not yet been verified',
+      },
+      {
+        capabilityId: 'WITHDRAWAL_EXECUTE',
+        verificationState: 'not_safely_testable',
+        operationalState: 'blocked_by_runtime',
+        blockedReason: 'Tier-4 runtime gates',
+      },
+    ]);
+    expect(kind).toBe('wallet_permission_available_incomplete');
+    expect(translateReasonKind(kind!, tEn)).toMatch(/Required API permission is available/i);
+    expect(translateReasonKind(kind!, tEn)).not.toMatch(/API-key permission has not yet been verified/i);
+    expect(translateReasonKind(kind!, tFa)).toMatch(/مجوز موردنیاز API در دسترس است/);
+  });
+
+  it('Account group cites SUBACCOUNT_READ pending', () => {
+    const kind = selectGroupProductReason([
+      {
+        capabilityId: 'PRIVATE_AUTH',
+        verificationState: 'verified',
+        operationalState: 'enabled',
+        keyGrant: 'granted',
+      },
+      {
+        capabilityId: 'SUBACCOUNT_READ',
+        verificationState: 'not_tested',
+        operationalState: 'disabled',
+        keyGrant: 'unknown',
+        privateAuthVerified: true,
+        blockedReason: 'Required API-key permission has not yet been verified',
+      },
+      {
+        capabilityId: 'ACCOUNT_EDIT',
+        providerSupport: 'unknown',
+        verificationState: 'not_safely_testable',
+        operationalState: 'blocked_by_provider_evidence',
+        blockedReason: 'PROVIDER SUPPORT NOT VERIFIED',
+      },
+    ]);
+    expect(kind).toBe('subaccount_read_pending');
+    expect(translateReasonKind(kind!, tEn)).toMatch(/Sub-account read access has not yet been tested/i);
+    expect(translateReasonKind(kind!, tFa)).toMatch(/حساب‌های فرعی/);
+  });
+
+  it('P2P group keeps provider support unverified', () => {
+    const kind = selectGroupProductReason([
+      {
+        capabilityId: 'P2P_READ',
+        providerSupport: 'unknown',
+        verificationState: 'not_safely_testable',
+        operationalState: 'blocked_by_provider_evidence',
+        blockedReason: 'PROVIDER SUPPORT NOT VERIFIED',
+      },
+      {
+        capabilityId: 'P2P_EXECUTE',
+        providerSupport: 'unknown',
+        verificationState: 'not_safely_testable',
+        operationalState: 'blocked_by_provider_evidence',
+        blockedReason: 'PROVIDER SUPPORT NOT VERIFIED',
+      },
+    ]);
+    expect(kind).toBe('provider_unknown');
+    expect(translateReasonKind(kind!, tEn)).toMatch(/Official provider API support has not been verified/i);
   });
 
   it('Used-by summary follows canonical consumer registry labels and collapses', () => {
