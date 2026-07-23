@@ -30,6 +30,74 @@ export const REJECTION_REASONS = Object.freeze({
   NOT_EXECUTABLE_ARBITRAGE: 'NOT_EXECUTABLE_ARBITRAGE',
 });
 
+/** Canonical read-only opportunity lifecycle (no submitted/filled/executed). */
+export const OPPORTUNITY_LIFECYCLE = Object.freeze({
+  DETECTED: 'detected',
+  VALIDATED: 'validated',
+  REJECTED: 'rejected',
+  EXPIRED: 'expired',
+  SIMULATED: 'simulated',
+  BLOCKED: 'blocked',
+});
+
+/**
+ * Map a spread candidate or rejection row to canonical lifecycle state.
+ * @param {object|null} candidate
+ * @param {{ demoMode?: boolean, killSwitchActive?: boolean }} [ctx]
+ */
+export function mapOpportunityLifecycle(candidate, ctx = {}) {
+  if (!candidate || typeof candidate !== 'object') {
+    return OPPORTUNITY_LIFECYCLE.BLOCKED;
+  }
+  if (candidate.lifecycle && Object.values(OPPORTUNITY_LIFECYCLE).includes(candidate.lifecycle)) {
+    return candidate.lifecycle;
+  }
+  if (candidate.classification === 'rejected_candidate') {
+    return OPPORTUNITY_LIFECYCLE.REJECTED;
+  }
+  if (ctx.killSwitchActive || ctx.demoMode) {
+    if (candidate.classification === 'spread_candidate') {
+      const net = Number(candidate.netSpreadPct ?? candidate.netProfitUSDT);
+      if (Number.isFinite(net) && net > 0) {
+        return OPPORTUNITY_LIFECYCLE.VALIDATED;
+      }
+      return OPPORTUNITY_LIFECYCLE.DETECTED;
+    }
+    return OPPORTUNITY_LIFECYCLE.BLOCKED;
+  }
+  if (candidate.classification === 'spread_candidate') {
+    return OPPORTUNITY_LIFECYCLE.DETECTED;
+  }
+  return OPPORTUNITY_LIFECYCLE.BLOCKED;
+}
+
+export function annotateCandidatesWithLifecycle(candidates = [], ctx = {}) {
+  return candidates.map((c) => ({
+    ...c,
+    lifecycle: mapOpportunityLifecycle(c, ctx),
+  }));
+}
+
+export function aggregateLifecycleMetrics(candidates = [], rejected = [], ctx = {}) {
+  const all = [
+    ...annotateCandidatesWithLifecycle(candidates, ctx),
+    ...annotateCandidatesWithLifecycle(rejected, ctx),
+  ];
+  const counts = {
+    detected: 0,
+    validated: 0,
+    rejected: 0,
+    expired: 0,
+    simulated: 0,
+    blocked: 0,
+  };
+  for (const row of all) {
+    const key = row.lifecycle;
+    if (key && counts[key] != null) counts[key] += 1;
+  }
+  return counts;
+}
+
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -168,6 +236,10 @@ export function normalizeScanResult(raw, _options = {}) {
         ? Math.max(...qualified.map((q) => toNum(q.expectedProfitBps) ?? Number.NEGATIVE_INFINITY))
         : null;
 
+    const lifecycleCtx = { demoMode: true, killSwitchActive: true };
+    const annotatedCandidates = annotateCandidatesWithLifecycle(candidates, lifecycleCtx);
+    const annotatedRejected = annotateCandidatesWithLifecycle(rejected, lifecycleCtx);
+
     return {
       classification: 'modern',
       legacy: false,
@@ -194,9 +266,10 @@ export function normalizeScanResult(raw, _options = {}) {
         averageScore: avg,
         unit: 'score_0_100',
       },
-      candidates,
-      rejectedCandidates: rejected,
+      candidates: annotatedCandidates,
+      rejectedCandidates: annotatedRejected,
       qualifiedOpportunities: qualified,
+      lifecycleMetrics: aggregateLifecycleMetrics(candidates, rejected, lifecycleCtx),
       unsupportedStrategies: Array.isArray(raw.unsupportedStrategies) ? raw.unsupportedStrategies : [],
       execution: { supported: false, realizedProfitUSDT: null },
       error: Boolean(raw.error),

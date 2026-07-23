@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
-import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
+import { lifecycleLabelKey } from '../../utils/agentStatusProjection.ts';
 import * as api from '../../services/api.ts';
 import {
     BTN_ACTION_BLUE,
@@ -1083,6 +1083,11 @@ const CandidateRow: React.FC<{
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
                 <p className="text-xs uppercase text-emerald-400">{strategyLabel(candidate, t)}</p>
+                {(candidate as { lifecycle?: string }).lifecycle && (
+                    <span className="inline-flex mt-1 rounded-md border border-white/10 px-2 py-0.5 text-[11px] text-slate-200">
+                        {t(lifecycleLabelKey((candidate as { lifecycle?: string }).lifecycle))}
+                    </span>
+                )}
                 <p className="text-white font-semibold">
                     {(candidate.path || []).join(' → ') || candidate.symbol || NA(t)}
                 </p>
