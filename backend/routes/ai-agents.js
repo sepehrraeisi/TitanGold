@@ -53,6 +53,17 @@ import {
 
 const router = express.Router();
 
+/** Persisted last run — ai_decisions or last_active_at only; never updated_at alone. */
+function resolveAgentLastRecordedAt(agent, decisionStats = {}) {
+  const fromDecisions = decisionStats.last_completed_at || null;
+  const fromActive = agent?.last_active_at || null;
+  const total = parseInt(decisionStats.total, 10) || 0;
+  if (fromDecisions) return fromDecisions;
+  if (total > 0 && fromActive) return fromActive;
+  if (fromActive) return fromActive;
+  return null;
+}
+
 // ============================================================================
 // Production++ Helpers for AI Routes
 // ============================================================================
@@ -100,7 +111,7 @@ const transformAgent = (agent, decisionStats = { total: 0, successful: 0, learni
     status: mappedStatus,
     decisions: parseInt(decisionStats.total, 10),
     capabilities,
-    lastUpdate: agent.updated_at || agent.created_at,
+    lastUpdate: resolveAgentLastRecordedAt(agent, decisionStats),
     // Additional fields for compatibility
     type: agent.type,
     is_enabled: agent.is_enabled,
@@ -134,8 +145,7 @@ const transformAgent = (agent, decisionStats = { total: 0, successful: 0, learni
     const lastScanAt =
       decisionStats.last_completed_at ||
       agent.last_active_at ||
-      agent.updated_at ||
-      agent.created_at;
+      null;
     return {
       ...baseMetrics,
       accuracy: null,
@@ -1389,7 +1399,8 @@ router.get('/', authenticate, validateQuery(listAgentsQuerySchema), validateResp
         agent_id,
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE was_successful = true) as successful,
-        EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))/3600 as learning_hours
+        EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))/3600 as learning_hours,
+        MAX(created_at) as last_completed_at
       FROM ai_decisions
       GROUP BY agent_id`
     );

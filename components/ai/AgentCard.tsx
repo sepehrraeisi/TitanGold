@@ -69,6 +69,11 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   });
   const purpose = agent.role || t('agent_purpose_fallback') || 'Agent';
   const accuracy = formatAccuracy(agent.accuracy, t('not_available') || 'N/A');
+  const isScheduledNow =
+    productStatus.primaryState === 'operational' || productStatus.primaryState === 'scheduled';
+  const lastRunLabel = isScheduledNow
+    ? (t('last_run') || 'Last run')
+    : (t('agent_last_recorded_run') || 'Last recorded run');
   const lastRun = formatLastRun(agent.lastUpdate, t('never_run') || 'Never');
   const decisionsLabel = t('results_count') || 'Results';
   const resultsHint =
@@ -125,10 +130,14 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
       <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('agent_metrics') || 'Agent metrics'}>
         <MetricCard
-          label={t('last_run') || 'Last Run'}
+          label={lastRunLabel}
           value={lastRun}
           color="blue"
-          valueTooltip={lastRun}
+          valueTooltip={
+            isScheduledNow
+              ? lastRun
+              : (t('agent_last_recorded_run_hint') || 'Last persisted run record; not current scheduled activity.')
+          }
           valueState={lastRun === (t('never_run') || 'Never') || lastRun === 'Never' ? 'unavailable' : 'loaded'}
         />
         <div title={resultsHint}>

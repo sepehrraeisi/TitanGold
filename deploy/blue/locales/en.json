@@ -4674,6 +4674,8 @@
   "open_agent": "Open Agent",
   "never_run": "Never",
   "last_run": "Last run",
+  "agent_last_recorded_run": "Last recorded run",
+  "agent_last_recorded_run_hint": "Last persisted run record; not current scheduled activity.",
   "results_count": "Results",
   "execution_type": "Type",
   "execution_kind_analytical": "Analytical",

@@ -10,6 +10,7 @@ import {
   shellOperationalStatusLabelKeyFromAgent,
 } from './agentCardMeta.ts';
 import { useAgentExecutionGate } from '../../../hooks/useAgentExecutionGate.ts';
+import { resolveAgentProductStatus } from '../../../utils/agentProductStatus.ts';
 import { SecondaryButton } from '../AIManager/tabs/DataHub/dataHubUi.tsx';
 
 export interface AgentControlShellProps {
@@ -165,6 +166,12 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
   const brokerValue = brokerConnected
     ? t('online') || 'Online'
     : t('offline') || 'Offline';
+  const lastRunLabelKey = resolveAgentProductStatus(agent, gateContext).primaryState;
+  const isScheduledNow =
+    lastRunLabelKey === 'operational' || lastRunLabelKey === 'scheduled';
+  const lastRunHeading = isScheduledNow
+    ? (t('last_run') || 'Last run')
+    : (t('agent_last_recorded_run') || 'Last recorded run');
   const lastRunLabel = t('never_run') || 'Never';
   const lastRunValue = formatLastRun(agent.lastUpdate, lastRunLabel);
   const lastRunIsTechnical = Boolean(agent.lastUpdate) && lastRunValue !== lastRunLabel;
@@ -241,7 +248,7 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
                 className="px-2 py-0.5 rounded-full border border-border text-muted-foreground"
                 data-testid="agent-shell-last-run"
               >
-                {t('last_run')}:{' '}
+                {lastRunHeading}:{' '}
                 {lastRunIsTechnical ? (
                   <AgentTechnicalLtr>{lastRunValue}</AgentTechnicalLtr>
                 ) : (

@@ -4490,6 +4490,8 @@
   "open_agent": "باز کردن عامل",
   "never_run": "هرگز",
   "last_run": "آخرین اجرا",
+  "agent_last_recorded_run": "آخرین اجرای ثبت‌شده",
+  "agent_last_recorded_run_hint": "آخرین اجرای ذخیره‌شده؛ فعالیت زمان‌بندی‌شدهٔ فعلی نیست.",
   "results_count": "نتایج",
   "execution_type": "نوع",
   "execution_kind_analytical": "تحلیلی",
