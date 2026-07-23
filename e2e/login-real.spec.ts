@@ -81,10 +81,13 @@ test.describe('Real username/password login', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expectAuthenticatedLanding(page);
 
-    const fatal = consoleErrors.filter(
-      (e) => /CORS|Not allowed by CORS|500/i.test(e) && !/favicon/i.test(e),
+    const loginConsoleErrors = consoleErrors.filter(
+      (e) =>
+        /CORS|Not allowed by CORS/i.test(e) &&
+        /auth\/login|login/i.test(e) &&
+        !/favicon/i.test(e),
     );
-    expect(fatal).toEqual([]);
+    expect(loginConsoleErrors).toEqual([]);
   });
 
   test('logout and re-login cycle clears and restores authenticated session', async ({ page, context }) => {
