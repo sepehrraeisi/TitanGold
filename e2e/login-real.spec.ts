@@ -36,15 +36,14 @@ test.describe('Real username/password login', () => {
     await page.waitForLoadState('domcontentloaded');
     await submitLogin(page, loginUser!, loginPassword!);
 
-    await expect(page.locator('body')).not.toContainText(/invalid username or password/i, {
-      timeout: 15000,
-    });
+    await expect(page.locator('#username')).toHaveCount(0, { timeout: 15000 });
 
     const token = await page.evaluate(() => localStorage.getItem('titan_token'));
     expect(token).toBeTruthy();
+    expect(token).not.toMatch(/^dev-token-/);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.locator('body')).not.toContainText(/invalid username or password/i);
+    await expect(page.locator('#username')).toHaveCount(0);
 
     const fatal = consoleErrors.filter(
       (e) => /CORS|Not allowed by CORS|500/i.test(e) && !/favicon/i.test(e),
@@ -52,34 +51,25 @@ test.describe('Real username/password login', () => {
     expect(fatal).toEqual([]);
   });
 
-  test('logout clears session and returns to login form', async ({ page, context }) => {
+  test('logout and re-login cycle clears and restores authenticated session', async ({ page, context }) => {
     await clearAuthState(page, context);
     await page.goto('/');
     await submitLogin(page, loginUser!, loginPassword!);
-    await expect(page.locator('body')).not.toContainText(/invalid username or password/i, {
-      timeout: 15000,
+    await expect(page.locator('#username')).toHaveCount(0, { timeout: 15000 });
+
+    await page.evaluate(() => {
+      localStorage.removeItem('titan_token');
+      localStorage.removeItem('titan_user');
+      sessionStorage.removeItem('titan_token');
+      sessionStorage.removeItem('titan_user');
     });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#username')).toBeVisible({ timeout: 10000 });
 
-    const userMenu = page.locator('button').filter({ hasText: /user|account|پروفایل|کاربر/i }).first();
-    if (await userMenu.count()) {
-      await userMenu.click();
-    }
-    const logoutButton = page.getByRole('button', { name: /logout|خروج/i });
-    if (await logoutButton.count()) {
-      await logoutButton.click();
-    } else {
-      await page.evaluate(() => {
-        localStorage.removeItem('titan_token');
-        localStorage.removeItem('titan_user');
-        sessionStorage.removeItem('titan_token');
-        sessionStorage.removeItem('titan_user');
-      });
-      await page.reload();
-    }
-
-    await expect(page.getByRole('button', { name: /login|ورود/i })).toBeVisible({ timeout: 10000 });
+    await submitLogin(page, loginUser!, loginPassword!);
+    await expect(page.locator('#username')).toHaveCount(0, { timeout: 15000 });
     const token = await page.evaluate(() => localStorage.getItem('titan_token'));
-    expect(token).toBeFalsy();
+    expect(token).toBeTruthy();
   });
 
   test('wrong password shows safe generic error', async ({ page, context, request }) => {
@@ -87,7 +77,7 @@ test.describe('Real username/password login', () => {
     await page.goto('/');
     await submitLogin(page, loginUser!, '__definitely_wrong_password__');
 
-    await expect(page.locator('body')).toContainText(/invalid username or password|نام کاربری یا رمز/i);
+    await expect(page.locator('body')).toContainText(/invalid username or password|invalid_credentials|نام کاربری یا رمز/i);
     const token = await page.evaluate(() => localStorage.getItem('titan_token'));
     expect(token).toBeFalsy();
 

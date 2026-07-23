@@ -51,6 +51,9 @@ export default defineConfig({
       url: 'http://127.0.0.1:3010',
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
+      env: {
+        VITE_DISABLE_DEV_LOGIN_FALLBACK: 'true',
+      },
     },
   ],
 });
