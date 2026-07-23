@@ -61,6 +61,8 @@ async function main() {
     console.log('RUN_LOGIN_E2E=1');
     console.log('PLAYWRIGHT_LOGIN_PASSWORD=<masked>');
   }
+
+  await pool.end();
 }
 
 main().catch((err) => {
