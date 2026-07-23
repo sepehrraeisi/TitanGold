@@ -17,7 +17,9 @@ import {
   getArbitrageScanCountsByAgentIds,
   normalizeScanResult,
 } from '../services/arbitrageScanContract.js';
-import { rateLimit } from '../middleware/rateLimit.js';
+import { readAnalyticalSchedulerStatus } from '../services/analyticalSchedulerStatus.js';
+import { buildAgentStatusProjection } from '../services/agentStatusProjection.js';
+import { getRuntimeExecutionState } from '../services/runtimeExecutionStateService.js';
 import { contentNegotiation } from '../middleware/contentNegotiation.js';
 import { getCache, setCache, buildCacheKey, invalidateAgentCache } from '../services/cache.js';
 
@@ -1431,7 +1433,41 @@ router.get('/', authenticate, validateQuery(listAgentsQuerySchema), validateResp
     }
 
     // Map DB fields to UI contract using a shared helper
-    const agents = result.rows.map(agent => transformAgent(agent, decisionsMap.get(agent.id)));
+    const schedRead = await readAnalyticalSchedulerStatus();
+    const allowlist = schedRead.status?.allowlist || [];
+    const schedulerRunning = Boolean(schedRead.status?.isRunning);
+    let killSwitchActive = true;
+    let effectiveMode = 'demo';
+    try {
+      const runtimeView = await getRuntimeExecutionState({ preferCache: true });
+      killSwitchActive = Boolean(runtimeView?.killSwitchActive ?? true);
+      effectiveMode = runtimeView?.globalMode || 'demo';
+    } catch {
+      /* fail-closed */
+    }
+
+    const agents = result.rows.map((row) => {
+      const agent = transformAgent(row, decisionsMap.get(row.id));
+      const safeParse = (value) => {
+        if (!value) return {};
+        if (typeof value === 'object') return value;
+        try { return JSON.parse(value); } catch { return {}; }
+      };
+      return {
+        ...agent,
+        statusProjection: buildAgentStatusProjection({
+          agent: {
+            ...row,
+            config: safeParse(row.config),
+            metadata: safeParse(row.metadata),
+          },
+          allowlist,
+          schedulerRunning,
+          killSwitchActive,
+          effectiveMode,
+        }),
+      };
+    });
 
     // Wrap in { agents: [...] } for UI compatibility
     res.json({ agents });

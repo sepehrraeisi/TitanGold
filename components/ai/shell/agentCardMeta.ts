@@ -3,6 +3,11 @@
  * Side-effect classification comes from the same registry vocabulary as backend.
  */
 
+import {
+  resolveOperationalPresentation,
+  type AgentWithProjection,
+} from '../../utils/agentStatusProjection.ts';
+
 export type AgentExecutionKind = 'analytical' | 'provider' | 'simulation' | 'live_capable';
 
 export type AgentOperationalState = 'ready' | 'running' | 'paused' | 'error' | 'unavailable';
@@ -25,6 +30,15 @@ export function mapAgentOperationalState(status?: string | null): AgentOperation
   if (s === 'inactive' || s === 'paused' || s === 'idle') return 'paused';
   if (s === 'error' || s === 'failed') return 'error';
   return 'unavailable';
+}
+
+/** Prefer canonical statusProjection when present on agent payload. */
+export function mapAgentOperationalStateFromAgent(agent: AgentWithProjection | null | undefined): AgentOperationalState {
+  return resolveOperationalPresentation(agent).state;
+}
+
+export function shellOperationalStatusLabelKeyFromAgent(agent: AgentWithProjection | null | undefined): string {
+  return resolveOperationalPresentation(agent).labelKey;
 }
 
 export function formatLastRun(iso?: string | null, neverLabel = 'Never'): string {

@@ -1,0 +1,55 @@
+---
+description: TitanGold dynamic active-work authority — Agents and Arbitrage completion
+alwaysApply: true
+---
+
+# TitanGold Current Active Work (Rule 02)
+
+Current outcome:
+Complete the Agents platform audit, canonical status contract, Scheduler ownership
+verification, and Arbitrage read-only opportunity lifecycle on main baseline.
+
+Current area:
+Agents → Arbitrage (primary); Agents shell (shared)
+
+Current program slice:
+AGENTS-ARBITRAGE-COMPLETION — Program Slice
+
+Engineering status:
+IN PROGRESS
+
+Human-QA status:
+PENDING — target READY FOR AGENTS AND ARBITRAGE HUMAN QA
+
+Expected baseline:
+- Source branch: `feat/agents-arbitrage-completion` from `origin/main`
+- Main merge baseline: `6972dd5223f4aab15dea21f8e24b71101a77cf0a`
+- Connections / MEXC-E2E: **CLOSED AND FROZEN**
+- Scheduler allowlist: `["arbitrage"]` only — do not expand
+- Demo + Emergency Stop remain active; Live impossible
+
+Authorized scope:
+- Agent registry and canonical status DTO/projection
+- Scheduler ownership tests and observability (read-only runtime checks)
+- Arbitrage read-only pipeline, lifecycle, product UI, metrics, tests
+- Tier-1/Tier-2 related fixes inside this outcome
+
+Hard boundaries:
+- Do not continue on `feat/mexc-end-to-end`
+- Do not modify protected dirty original worktree
+- Do not call MEXC or access credentials
+- Do not enable Tier-4 or Live execution
+- Do not expand Scheduler allowlist
+- Do not delete `feat/mexc-end-to-end`
+- Connections reopen only for reproduced production defect
+
+Acceptance criteria:
+- Full Agent inventory and classifications documented
+- One canonical Agent status contract (no collapsed Active badge)
+- Scheduler single-owner verified with tests
+- Arbitrage lifecycle: detected/validated/rejected/expired/simulated/blocked
+- Integration tests pass; safety preserved
+- Staging deploy with provenance when implementation commits land
+
+Next transition:
+Human QA → explicit merge authorization

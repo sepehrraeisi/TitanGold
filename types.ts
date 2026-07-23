@@ -867,6 +867,22 @@ export interface AIAgent {
   name: string;
   role: string;
   status: 'active' | 'inactive' | 'training';
+  statusProjection?: {
+    agentKey: string;
+    registered: boolean;
+    configured: boolean;
+    enabled: boolean;
+    allowlisted: boolean;
+    scheduled: boolean;
+    running: boolean;
+    healthy: boolean;
+    dataReady: boolean;
+    consumerRegistered: boolean;
+    consumerEligible: boolean;
+    executionEligible: boolean;
+    lastRunStatus: string;
+    schedulerOwner: string;
+  };
 
   // ML-specific metrics (null for rule-based agents like fundamental)
   accuracy?: number | null;

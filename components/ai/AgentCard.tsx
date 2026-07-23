@@ -5,7 +5,8 @@ import {
   formatAccuracy,
   formatLastRun,
   getAgentExecutionKind,
-  mapAgentOperationalState,
+  mapAgentOperationalStateFromAgent,
+  shellOperationalStatusLabelKeyFromAgent,
 } from './shell/agentCardMeta.ts';
 import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import {
@@ -53,7 +54,8 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   const { dryRunForced, killSwitchActive, liveBlockReason, blockReason } = useAgentExecutionGate();
   const key = agent.agent_key || '';
   const kind = getAgentExecutionKind(key);
-  const state = mapAgentOperationalState(agent.status);
+  const state = mapAgentOperationalStateFromAgent(agent);
+  const stateLabelKey = shellOperationalStatusLabelKeyFromAgent(agent);
   const purpose = agent.role || t('agent_purpose_fallback') || 'Agent';
   const accuracy = formatAccuracy(agent.accuracy, t('not_available') || 'N/A');
   const lastRun = formatLastRun(agent.lastUpdate, t('never_run') || 'Never');
@@ -92,7 +94,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             {agent.name}
           </h3>
           <StatusPill
-            label={t(STATE_I18N[state]) || state}
+            label={t(stateLabelKey) || t(STATE_I18N[state]) || state}
             variant={STATE_PILL[state] || 'neutral'}
             className="shrink-0 uppercase tracking-wide"
           />
