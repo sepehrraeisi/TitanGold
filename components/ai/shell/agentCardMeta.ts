@@ -6,7 +6,7 @@
 import {
   resolveOperationalPresentation,
   type AgentWithProjection,
-} from '../../utils/agentStatusProjection.ts';
+} from '../../../utils/agentStatusProjection.ts';
 
 export type AgentExecutionKind = 'analytical' | 'provider' | 'simulation' | 'live_capable';
 

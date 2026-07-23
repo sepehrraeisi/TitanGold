@@ -20,6 +20,7 @@ import {
 import { readAnalyticalSchedulerStatus } from '../services/analyticalSchedulerStatus.js';
 import { buildAgentStatusProjection } from '../services/agentStatusProjection.js';
 import { getRuntimeExecutionState } from '../services/runtimeExecutionStateService.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import { contentNegotiation } from '../middleware/contentNegotiation.js';
 import { getCache, setCache, buildCacheKey, invalidateAgentCache } from '../services/cache.js';
 
