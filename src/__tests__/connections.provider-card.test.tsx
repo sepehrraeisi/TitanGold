@@ -68,6 +68,7 @@ describe('Provider list card — source structure', () => {
   it('placeholder providers use shared shell without Manage action', () => {
     const card = read('components/settings/connections/ProviderListCard.tsx');
     expect(card).toMatch(/connection-unavailable-/);
+    expect(card).toMatch(/statusText && isMexc &&/);
     expect(card).not.toMatch(/connections_configure/);
   });
 });
@@ -118,13 +119,22 @@ describe('Provider list card — render', () => {
     expect(onAction).toHaveBeenCalledTimes(1);
   });
 
-  it('renders placeholder provider once with unavailable status', () => {
+  const FUTURE_PROVIDERS = ['Binance', 'Bybit', 'KuCoin', 'Gate.io'] as const;
+
+  function countVisibleUnavailablePills(card: HTMLElement): number {
+    return Array.from(card.querySelectorAll('span.inline-flex.items-center.rounded-md.border')).filter(
+      (el) => !el.closest('.sr-only'),
+    ).length;
+  }
+
+  it.each(FUTURE_PROVIDERS)('renders %s with exactly one visible unavailable badge (EN)', (exchange) => {
+    const label = tEn('connections_not_available_yet');
     render(
       <ExchangeProviderListItem
-        exchange="Binance"
+        exchange={exchange}
         isMexc={false}
         expanded={false}
-        statusText={tEn('connections_not_available_yet')}
+        statusText={label}
         statusTone="neutral"
         actionLabel=""
         onAction={() => {}}
@@ -133,10 +143,59 @@ describe('Provider list card — render', () => {
       />,
     );
 
-    expect(screen.getByTestId('provider-list-card-Binance')).toBeTruthy();
-    expect(screen.getByTestId('connection-unavailable-Binance')).toBeTruthy();
-    expect(screen.queryByTestId('connection-action-Binance')).toBeNull();
+    const card = screen.getByTestId(`provider-list-card-${exchange}`);
+    expect(card).toBeTruthy();
+    expect(screen.getByTestId(`connection-unavailable-${exchange}`)).toBeTruthy();
+    expect(screen.queryByTestId(`connection-status-${exchange}`)).toBeNull();
+    expect(countVisibleUnavailablePills(card)).toBe(1);
+    expect(card.textContent?.match(new RegExp(label, 'g'))?.length).toBe(2);
+    expect(screen.queryByTestId(`connection-action-${exchange}`)).toBeNull();
     expect(screen.queryByTestId('mexc-collapsed-summary')).toBeNull();
+  });
+
+  it.each(FUTURE_PROVIDERS)('renders %s with exactly one visible unavailable badge (FA RTL)', (exchange) => {
+    const label = tFa('connections_not_available_yet');
+    render(
+      <ExchangeProviderListItem
+        exchange={exchange}
+        isMexc={false}
+        expanded={false}
+        statusText={label}
+        statusTone="neutral"
+        actionLabel=""
+        onAction={() => {}}
+        language="fa"
+        t={tFa}
+        dir="rtl"
+      />,
+    );
+
+    const card = screen.getByTestId(`provider-list-card-${exchange}`);
+    expect(card.getAttribute('dir')).toBe('rtl');
+    expect(countVisibleUnavailablePills(card)).toBe(1);
+    expect(screen.queryByTestId(`connection-status-${exchange}`)).toBeNull();
+    expect(screen.queryByTestId(`connection-action-${exchange}`)).toBeNull();
+  });
+
+  it.each(FUTURE_PROVIDERS)('renders %s once on mobile-width layout', (exchange) => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+    const label = tEn('connections_not_available_yet');
+    render(
+      <ExchangeProviderListItem
+        exchange={exchange}
+        isMexc={false}
+        expanded={false}
+        statusText={label}
+        statusTone="neutral"
+        actionLabel=""
+        onAction={() => {}}
+        language="en"
+        t={tEn}
+      />,
+    );
+
+    const card = screen.getByTestId(`provider-list-card-${exchange}`);
+    expect(countVisibleUnavailablePills(card)).toBe(1);
   });
 
   it('applies RTL direction for FA cards', () => {

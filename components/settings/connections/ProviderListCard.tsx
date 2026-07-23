@@ -211,7 +211,7 @@ export function ExchangeProviderListItem({
                 >
                   {exchange}
                 </h4>
-                {!awaitingAuthProjection && statusText && (
+                {!awaitingAuthProjection && statusText && isMexc && (
                   <StatePill label={statusText} tone={statusTone} />
                 )}
                 {awaitingAuthProjection && (
