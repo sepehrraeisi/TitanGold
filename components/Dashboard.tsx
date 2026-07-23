@@ -44,11 +44,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     const urlState = readStateFromURL();
     if (urlState) {
       setActiveView(urlState.view);
-      if (urlState.settingsTab || urlState.settingsSubtab) {
+      if (urlState.settingsTab || urlState.settingsSubtab || urlState.provider || urlState.section) {
         setNavigationPayload({
           view: urlState.view,
           settingsTab: urlState.settingsTab,
           settingsSubtab: urlState.settingsSubtab,
+          provider: urlState.provider,
+          section: urlState.section,
         });
       } else {
         // Explicitly clear payload when URL has no settingsTab/settingsSubtab
@@ -73,11 +75,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       const urlState = readStateFromURL();
       if (urlState) {
         setActiveView(urlState.view);
-        if (urlState.settingsTab || urlState.settingsSubtab) {
+        if (urlState.settingsTab || urlState.settingsSubtab || urlState.provider || urlState.section) {
           setNavigationPayload({
             view: urlState.view,
             settingsTab: urlState.settingsTab,
             settingsSubtab: urlState.settingsSubtab,
+            provider: urlState.provider,
+            section: urlState.section,
           });
         } else {
           setNavigationPayload(null);
@@ -159,6 +163,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           <Settings
             initialTab={navigationPayload?.settingsTab}
             initialSubtab={navigationPayload?.settingsSubtab}
+            initialProvider={navigationPayload?.provider}
+            initialSection={navigationPayload?.section}
+            onNavigate={handleNavigation}
             onNavigationComplete={() => setNavigationPayload(null)}
           />
         );

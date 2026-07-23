@@ -13,7 +13,8 @@ export default function MexcFuturesCapabilityPanel() {
 
   const caps = summary?.capabilityMatrix?.capabilities || [];
   const byId = Object.fromEntries(caps.map((c) => [c.capabilityId, c]));
-  const consumer = summary?.consumers?.find((c) => c.consumerId === 'futures_trading');
+  const consumer = summary?.consumers?.find((c) => c.consumerId === 'futures_trading_read');
+  const executeConsumer = summary?.consumers?.find((c) => c.consumerId === 'futures_trading_execute');
   const exec = byId.FUTURES_TRADE_EXECUTE;
 
   return (
@@ -33,7 +34,8 @@ export default function MexcFuturesCapabilityPanel() {
         </li>
         <li>Docs verified: 2026-07-19</li>
         <li>Spot credentials do not grant Futures permission</li>
-        <li>Consumer eligibility: {consumer?.eligible ? t('mexc_eligible') : t('mexc_blocked')}</li>
+        <li>Read experience: {consumer?.eligible ? t('mexc_eligible') : t('mexc_blocked')}</li>
+        <li>Execute: {executeConsumer?.eligible ? t('mexc_eligible') : t('mexc_blocked')}</li>
       </ul>
       {consumer?.blockedReason && <p className="mt-2 text-xs text-amber-200">{consumer.blockedReason}</p>}
     </section>

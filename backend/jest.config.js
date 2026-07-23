@@ -83,7 +83,9 @@ export default {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/coverage/',
-    '/dist/'
+    '/dist/',
+    // Lives outside backend package; requires telegram-collector local deps.
+    '<rootDir>/__tests__/unit/telegramCollectorAuth.test.js',
   ],
   
   // Watch mode ignore patterns

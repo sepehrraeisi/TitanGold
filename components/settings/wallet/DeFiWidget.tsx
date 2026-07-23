@@ -176,7 +176,7 @@ interface DeFiCardProps {
 const DeFiCard: React.FC<DeFiCardProps> = ({ title, subTitle, onClick, positions = 0, totalValue = 0 }) => {
     const { t } = useLanguage();
     return (
-        <div className="bg-gray-800/50 p-4 rounded-lg text-center hover:bg-gray-800/70 transition-colors cursor-pointer" onClick={onClick}>
+        <div className="bg-gray-800/50 p-4 rounded-lg text-center" data-testid="wallet-defi-card">
             <p className="font-bold text-white">{title}</p>
             {subTitle && <p className="text-xs text-gray-400 mt-1">{subTitle}</p>}
             {positions > 0 && (
@@ -184,14 +184,15 @@ const DeFiCard: React.FC<DeFiCardProps> = ({ title, subTitle, onClick, positions
                 {positions} {t('positions') || 'positions'} • ${totalValue.toLocaleString()}
               </div>
             )}
-            <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClick();
-                }}
-                className="mt-3 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold py-1 px-4 rounded-md transition-colors"
+            <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                title={t('wallet_control_demo_only')}
+                className="mt-3 cursor-not-allowed bg-gray-700 text-slate-400 text-xs font-semibold py-1 px-4 rounded-md"
+                data-testid="wallet-defi-manage-demo-only"
             >
-                {t('manage')}
+                {t('manage')} — {t('wallet_control_demo_only')}
             </button>
         </div>
     );

@@ -35,6 +35,8 @@ export interface SafeConnectionDto {
   lastSyncAt?: string | null;
   secretReentryRequired?: boolean;
   privateAuthVerified?: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   permissions?: string[];
   accountInfo?: Record<string, unknown>;
 }
@@ -231,6 +233,11 @@ export interface MexcCapabilityRow {
   lastVerifiedAt?: string | null;
   lastFailureCode?: string | null;
   sanitizedReason?: string | null;
+  dataContractState?: string | null;
+  dataContractWarningCode?: string | null;
+  sanitizedDataContractReason?: string | null;
+  lastDataContractCheckedAt?: string | null;
+  consumerReadiness?: string | null;
 }
 
 export interface MexcConsumerRow {
@@ -245,6 +252,8 @@ export interface MexcConsumerRow {
   rwClass?: string;
   sideEffectClass?: string;
   fallbackBehavior?: string;
+  consumerReadiness?: string | null;
+  limitedByDataContract?: boolean;
 }
 
 export interface MexcCapabilitySummary {
@@ -255,7 +264,11 @@ export interface MexcCapabilitySummary {
     configured?: boolean;
     maskedKeyIdentifier?: string | null;
     lastVerifiedAt?: string | null;
-    lastSanitizedFailure?: { code?: string; sanitizedReason?: string | null } | null;
+    lastSanitizedFailure?: {
+      capabilityId?: string | null;
+      code?: string;
+      sanitizedReason?: string | null;
+    } | null;
     credentialAgeHint?: string | null;
     lastRotationAt?: string | null;
   };
@@ -273,6 +286,12 @@ export interface MexcCapabilitySummary {
   };
   consumers?: MexcConsumerRow[];
   usedByModules?: string[];
+  usedByConsumers?: Array<{
+    consumerId: string;
+    displayName: string;
+    eligible?: boolean;
+    consumerReadiness?: string | null;
+  }>;
   overallTruthfulState?: {
     code: string;
     label: string;
@@ -312,4 +331,47 @@ export async function fetchMexcConsumers(): Promise<{ consumers: MexcConsumerRow
     throw Object.assign(new Error(mapped.messageKey), { code: mapped.code });
   }
   return body;
+}
+
+export interface MexcVerificationHistoryItem {
+  id: string;
+  capabilityId?: string | null;
+  probeId?: string | null;
+  correlationId?: string | null;
+  verificationState?: string | null;
+  operationalState?: string | null;
+  keyGrant?: string | null;
+  providerSupport?: string | null;
+  lastFailureCode?: string | null;
+  sanitizedReason?: string | null;
+  sourceOfEvidence?: string | null;
+  latencyMs?: number | null;
+  testedAt?: string | null;
+  createdAt?: string | null;
+  runStatus?: string | null;
+  outcome?: 'verified' | 'warning' | 'failed' | 'corrected' | 'incomplete' | string;
+  isCorrection?: boolean;
+}
+
+export async function fetchMexcVerificationHistory(
+  filter?: string,
+): Promise<{ items: MexcVerificationHistoryItem[]; total: number; filter?: string }> {
+  const qs = filter ? `?filter=${encodeURIComponent(filter)}` : '';
+  const response = await authenticatedFetch(
+    `/v1/connections/mexc/verification-history${qs}`,
+    { method: 'GET' },
+  );
+  const body = await parseJson(response);
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent('titan_auth_expired'));
+  }
+  if (!response.ok) {
+    const mapped = mapConnectionApiError(response.status, body);
+    throw Object.assign(new Error(mapped.messageKey), { code: mapped.code });
+  }
+  return {
+    items: Array.isArray(body.items) ? body.items : [],
+    total: Number(body.total) || 0,
+    filter: body.filter,
+  };
 }

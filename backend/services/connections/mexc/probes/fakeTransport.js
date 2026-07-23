@@ -43,43 +43,65 @@ export function createFakeMexcTransport(scenario = 'success') {
 
     // success defaults by path
     const path = request.path || '';
+    const jsonOk = (json, latencyMs = 10) => ({
+      ok: true,
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      contentType: 'application/json',
+      json,
+      bodyText: JSON.stringify(json),
+      latencyMs,
+    });
+
     if (path.includes('/api/v3/ping') || path.includes('/api/v3/time')) {
-      return { ok: true, status: 200, json: path.includes('time') ? { serverTime: Date.now() } : {}, latencyMs: 5 };
+      return jsonOk(path.includes('time') ? { serverTime: Date.now() } : {}, 5);
     }
     if (path.includes('/api/v3/exchangeInfo')) {
-      return { ok: true, status: 200, json: { symbols: [{ symbol: 'BTCUSDT', status: 'ENABLED' }] }, latencyMs: 8 };
+      return jsonOk({
+        symbols: [
+          {
+            symbol: 'BTCUSDT',
+            status: 'ENABLED',
+            isSpotTradingAllowed: true,
+            isApiTradingAllowed: true,
+            permissions: ['SPOT'],
+          },
+          {
+            symbol: 'ETHUSDT',
+            status: 'ENABLED',
+            isSpotTradingAllowed: true,
+            isApiTradingAllowed: true,
+            permissions: ['SPOT'],
+          },
+        ],
+      }, 8);
     }
     if (path.includes('/api/v1/contract/ping') || path.includes('/api/v1/contract/detail')) {
-      return { ok: true, status: 200, json: { success: true, code: 0, data: [] }, latencyMs: 8 };
+      return jsonOk({ success: true, code: 0, data: [] }, 8);
     }
     if (path.includes('/api/v3/account')) {
-      return {
-        ok: true,
-        status: 200,
-        json: {
-          canTrade: true,
-          canWithdraw: false,
-          canDeposit: true,
-          accountType: 'SPOT',
-          balances: [],
-        },
-        latencyMs: 15,
-      };
+      return jsonOk({
+        canTrade: true,
+        canWithdraw: false,
+        canDeposit: true,
+        accountType: 'SPOT',
+        balances: [],
+      }, 15);
     }
     if (path.includes('/api/v3/openOrders') || path.includes('/api/v3/myTrades') || path.includes('/api/v3/allOrders')) {
-      return { ok: true, status: 200, json: [], latencyMs: 12 };
+      return jsonOk([], 12);
     }
     if (path.includes('/api/v3/capital/config/getall')) {
-      return { ok: true, status: 200, json: [{ coin: 'USDT', networkList: [] }], latencyMs: 14 };
+      return jsonOk([{ coin: 'USDT', networkList: [] }], 14);
     }
     if (path.includes('/api/v3/capital/deposit') || path.includes('/api/v3/capital/withdraw/history') || path.includes('/api/v3/capital/transfer')) {
-      return { ok: true, status: 200, json: [], latencyMs: 14 };
+      return jsonOk([], 14);
     }
     if (path.includes('/api/v1/private/account/assets') || path.includes('/api/v1/private/position/open_positions')) {
-      return { ok: true, status: 200, json: { success: true, code: 0, data: [] }, latencyMs: 16 };
+      return jsonOk({ success: true, code: 0, data: [] }, 16);
     }
 
-    return { ok: true, status: 200, json: { success: true }, latencyMs: 10 };
+    return jsonOk({ success: true }, 10);
   }
 
   transport.calls = calls;

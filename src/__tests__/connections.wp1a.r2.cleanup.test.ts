@@ -58,16 +58,15 @@ describe('CONNECTIONS-WP1A-R2 wallet removal', () => {
 
 describe('CONNECTIONS-WP1A-R2 Test Connection containment', () => {
   it('removes active Test Connection control and API invocation from Manage panel', () => {
-    const src = read('components/settings/MultiExchangeSettings.tsx');
-    expect(src).not.toMatch(/testMexcConnectionCanonical/);
-    expect(src).not.toMatch(/handleTestConnection/);
-    expect(src).not.toMatch(/t\('test_connection'\)/);
-    expect(src).not.toMatch(/testingExchange/);
-    expect(src).toMatch(/connections_private_verification_unavailable/);
-    expect(src).toMatch(/connections-private-verification-unavailable/);
-    expect(src).toMatch(/save_changes/);
-    expect(src).toMatch(/cancel/);
-    expect(src).toMatch(/\bdelete\b/);
+    const multi = read('components/settings/MultiExchangeSettings.tsx');
+    const panel = read('components/settings/connections/MexcConnectionPanel.tsx');
+    expect(multi).not.toMatch(/testMexcConnectionCanonical/);
+    expect(multi).not.toMatch(/handleTestConnection/);
+    expect(panel).toMatch(/mexc-verification-locked|mexc_verification_locked_title/);
+    expect(panel).toMatch(/mexc_verification_locked_detail|mexc_verification_gated/);
+    expect(panel).toMatch(/save_changes|mexc_rotate_credentials/);
+    expect(panel).toMatch(/cancel/);
+    expect(panel).toMatch(/mexc_delete_connection|MexcDeleteConfirmDialog/);
   });
 
   it('does not include internal work-package names in verification copy', () => {
@@ -83,11 +82,11 @@ describe('CONNECTIONS-WP1A-R2 Test Connection containment', () => {
 
 describe('CONNECTIONS-WP1A-R2 Manage workflow regression (source)', () => {
   it('keeps Manage panel credential draft clearing and no secret prefill pattern', () => {
-    const src = read('components/settings/MultiExchangeSettings.tsx');
-    expect(src).toMatch(/clearDraft/);
-    expect(src).toMatch(/openMexcPanel/);
-    expect(src).toMatch(/drafts\[exchange\] \|\| \{ apiKey: '', apiSecret: '' \}/);
-    expect(src).not.toMatch(/value=\{connection\.(apiKey|apiSecret)/);
-    expect(src).toMatch(/Configured|connections_configured_not_verified|connectionStatusMessageKey/);
+    const multi = read('components/settings/MultiExchangeSettings.tsx');
+    const panel = read('components/settings/connections/MexcConnectionPanel.tsx');
+    expect(multi).toMatch(/openMexcPanel/);
+    expect(panel).toMatch(/apiKey: '', apiSecret: ''/);
+    expect(panel).not.toMatch(/value=\{connection\.(apiKey|apiSecret)/);
+    expect(multi).toMatch(/connectionStatusMessageKey/);
   });
 });

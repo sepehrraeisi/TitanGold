@@ -24,6 +24,7 @@ import {
 import { verifyOwnedMexcConnection } from '../services/connections/connectionPrivateVerificationService.js';
 import { buildMexcConnectionSummary, assertTier4Blocked } from '../services/connections/mexc/connectionCapabilityService.js';
 import { runMexcVerificationOrchestrator } from '../services/connections/mexc/verificationOrchestrator.js';
+import { listSanitizedVerificationHistory } from '../services/connections/mexc/verificationHistoryService.js';
 import exchangesRouter from './exchanges.js';
 
 const router = express.Router();
@@ -218,6 +219,31 @@ router.get(
       });
     } catch (error) {
       return handleServiceError(res, error, 'Failed to load MEXC consumers');
+    }
+  },
+);
+
+/**
+ * Sanitized verification history — safe fields only (no secrets / raw payloads).
+ */
+router.get(
+  '/mexc/verification-history',
+  authenticate,
+  requireCapability(CAP.CONNECTIONS_READ),
+  async (req, res) => {
+    try {
+      const connection = await getConnectionForUser(req.user.id, CANONICAL_PROVIDER);
+      if (!connection?.configured || !connection?.id) {
+        return res.json({ items: [], total: 0, filter: String(req.query.filter || 'all') });
+      }
+      const history = await listSanitizedVerificationHistory(
+        connection.id,
+        req.user.id,
+        { filter: req.query.filter },
+      );
+      return res.json(history);
+    } catch (error) {
+      return handleServiceError(res, error, 'Failed to load MEXC verification history');
     }
   },
 );

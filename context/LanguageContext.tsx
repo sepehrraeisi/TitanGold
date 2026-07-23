@@ -13,12 +13,46 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
+const LANGUAGE_STORAGE_KEY = 'titan_language';
+
+function readStoredLanguage(): Language {
+  try {
+    const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    if (stored === 'fa' || stored === 'en') return stored;
+  } catch {
+    // ignore storage failures
+  }
+  return 'en';
+}
+
+function applyDocumentLanguage(language: Language): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = language;
+  document.documentElement.dir = language === 'fa' ? 'rtl' : 'ltr';
+  document.documentElement.classList.toggle('lang-fa', language === 'fa');
+  document.documentElement.classList.toggle('lang-en', language === 'en');
+}
+
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [language, setLanguage] = useState<Language>('en');
+  const [language, setLanguageState] = useState<Language>(() => readStoredLanguage());
   const [translations] = useState<{ [key in Language]: Translations }>({
     en: enTranslations as Translations,
     fa: faTranslations as Translations,
   });
+
+  const setLanguage = useCallback((next: Language) => {
+    setLanguageState(next);
+    try {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
+    } catch {
+      // ignore storage failures
+    }
+    applyDocumentLanguage(next);
+  }, []);
+
+  useEffect(() => {
+    applyDocumentLanguage(language);
+  }, [language]);
 
   const t = useCallback((key: string, options?: { [key: string]: string | number }): string => {
     let translation = translations[language]?.[key] || key;

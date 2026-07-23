@@ -13,7 +13,8 @@ export default function MexcSpotCapabilityPanel() {
 
   const caps = summary?.capabilityMatrix?.capabilities || [];
   const byId = Object.fromEntries(caps.map((c) => [c.capabilityId, c]));
-  const consumer = summary?.consumers?.find((c) => c.consumerId === 'spot_trading');
+  const consumer = summary?.consumers?.find((c) => c.consumerId === 'spot_trading_read');
+  const executeConsumer = summary?.consumers?.find((c) => c.consumerId === 'spot_trading_execute');
 
   return (
     <section
@@ -28,7 +29,8 @@ export default function MexcSpotCapabilityPanel() {
         <li>Trade history: {byId.SPOT_TRADE_HISTORY_READ?.operationalState || 'disabled'}</li>
         <li>Test order: blocked pending separate approval</li>
         <li>Real order / cancel: blocked (Tier-4)</li>
-        <li>Consumer eligibility: {consumer?.eligible ? t('mexc_eligible') : t('mexc_blocked')}</li>
+        <li>Read experience: {consumer?.eligible ? t('mexc_eligible') : t('mexc_blocked')}</li>
+        <li>Execute: {executeConsumer?.eligible ? t('mexc_eligible') : t('mexc_blocked')}</li>
       </ul>
       {consumer?.blockedReason && <p className="mt-2 text-xs text-amber-200">{consumer.blockedReason}</p>}
     </section>

@@ -315,41 +315,52 @@ Do not ask the user to paste credentials into chat.
 | Item | Value |
 |------|--------|
 | Program branch | `feat/mexc-end-to-end` |
-| `origin/main` HEAD | `5ff9008` |
-| Runtime implementation marker | `e436df4` |
-| Frontend bundle | `assets/index-CQAeHBq6.js` |
+| Remediation | Consolidated Pre-Authorization Remediation (same Program Slice) |
+| Runtime implementation marker | *(set after deploy)* |
+| Frontend bundle | *(set after deploy)* |
 | Environment | Staging `https://titan.zala.ir` |
-| Migration | `049_mexc_capability_states.sql` applied |
+| Migrations | `049` + `050_mexc_capability_snapshots_rollback.sql` |
 | Live private verify gates | `CONNECTIONS_PRIVATE_VERIFY_LIVE` / `CONNECTIONS_CAPABILITY_VERIFY_LIVE` default **off** |
 | Test Connection UI | Disabled until authorization |
 | Real private MEXC calls | **None** |
+| Spot/Futures signing | Separated adapters (`mexcSigning.js` / `mexcFuturesSigning.js`) |
+| Legacy private `mexc.js` | Fail-closed; public ccxt credential-free |
+| Public keyGrant | `not_applicable` (no Key: granted) |
+| SPOT_TRADE_TEST | Deferred; excluded from checkpoint |
+| ACCOUNT_EDIT / P2P | `providerSupport=unknown` / blocked_by_provider_evidence |
 | Verdict | `READY FOR CONTROLLED READ-ONLY AUTHORIZATION` |
 
-### Proposed controlled read-only order
+### Proposed controlled read-only order (9 probes)
 
-1. `GET /api/v3/account` (`SPOT_ACCOUNT_READ`)
-2. `GET /api/v3/openOrders?symbol=BTCUSDT` (`SPOT_DEAL_READ`)
-3. `GET /api/v3/myTrades?symbol=BTCUSDT&limit=1` (`SPOT_ACCOUNT_READ`)
-4. `GET /api/v3/capital/config/getall` (`SPOT_WITHDRAW_READ`)
-5. `GET /api/v3/capital/deposit/hisrec?limit=1`
-6. `GET /api/v3/capital/withdraw/history?limit=1`
-7. `GET /api/v3/capital/transfer` (history read)
-8. `GET /api/v1/private/account/assets` (Futures)
-9. `GET /api/v1/private/position/open_positions` (Futures)
+1. `GET /api/v3/account` — auth + SPOT_ACCOUNT_READ evidence (no balance persist)
+2. `GET /api/v3/openOrders` — `symbol=<selected safe public symbol>`, timestamp, recvWindow
+3. `GET /api/v3/myTrades` — symbol + `limit=1` + timestamp + recvWindow
+4. `GET /api/v3/capital/config/getall` — capability/provider metadata only
+5. `GET /api/v3/capital/deposit/hisrec` — bounded window, `limit=1` (no address/memo/txId/amount)
+6. `GET /api/v3/capital/withdraw/history` — bounded window, `limit=1` (no address/memo/txId/amount)
+7. `GET /api/v3/capital/transfer` — `fromAccountType=SPOT&toAccountType=FUTURES&page=1&size=1`
+8. `GET /api/v1/private/account/assets` — Futures signer (no balances)
+9. `GET /api/v1/private/position/open_positions` — Futures signer (no position details)
 
-Timeouts: 8000ms. Persistence: sanitized capability state only (no balances/raw bodies).
-Test New Order / withdrawals / transfers / orders: **excluded**.
+Safe-symbol: public `exchangeInfo` + allowlist; never from balances/guess.
+SPOT_TRADE_TEST / Test New Order / withdrawals / transfers execute / orders: **excluded**.
+
+### Persistence / rollback
+
+- Pre-probe snapshot via `capturePreProbeSnapshot`
+- Verification history append-only (`mexc_capability_verifications`)
+- `rollbackToCapabilitySnapshot` restores capability state; marks run `rolled_back`/`superseded`
+- Never delete history rows / Connection / encrypted credentials
 
 ### Automated tests (executed)
 
-| Suite | Passed |
+| Suite | Result |
 |-------|--------|
-| `connections.mexc.e2e.program.test.js` | 17 |
-| WP2A private auth | included in 58 total |
-| WP2A provenance gate | included in 58 total |
-| **Total** | **58 passed / 0 failed** |
+| `connections.mexc.e2e.program.test.js` | PASS |
+| `connections.mexc.e2e.remediation.test.js` | PASS (17) |
+| `connections.wp2a.mexcPrivateAuth.test.js` | PASS |
+| **Total** | **63 passed / 0 failed** |
 
-### Browser QA (passive / fake states)
+### Browser QA (remediation)
 
-Core Connections panel, matrix, consumers, disabled Test Connection, empty credentials, no secret leak, mobile/tablet/landscape, Spot/Futures gate panels, console: **PASS**.
-Persian/RTL switch and Wallet tab deep-nav: **NEEDS HUMAN-QA** (automation flaky on Settings sub-nav overlays).
+Progressive Capability Matrix, credential age duration, localized rotation, Wallet `settings-tab-wallet`, FA/RTL review: evidence collected at deploy time.

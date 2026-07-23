@@ -22,6 +22,8 @@ export type NavigationPayload = {
   view: ViewKey;
   settingsTab?: string;
   settingsSubtab?: string;
+  provider?: string;
+  section?: string;
 };
 
 export type NavigationTarget = ViewKey | NavigationPayload;

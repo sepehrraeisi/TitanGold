@@ -11,6 +11,7 @@ import EmailSettings from './settings/EmailSettings.tsx';
 import UsersSettings from './settings/UsersSettings.tsx';
 import ConfigurationSettings from './settings/ConfigurationSettings.tsx';
 import CacheSettings from './settings/CacheSettings.tsx';
+import type { OnNavigateHandler } from '../types/navigation.ts';
 
 type SettingsTab =
   | 'profile'
@@ -27,25 +28,55 @@ type SettingsTab =
 type SettingsProps = {
   initialTab?: string;
   initialSubtab?: string;
+  initialProvider?: string;
+  initialSection?: string;
+  onNavigate?: OnNavigateHandler;
   onNavigationComplete?: () => void;
 };
 
-const Settings: React.FC<SettingsProps> = ({ initialTab, initialSubtab, onNavigationComplete }) => {
+const Settings: React.FC<SettingsProps> = ({
+  initialTab,
+  initialSubtab,
+  initialProvider,
+  initialSection,
+  onNavigate,
+  onNavigationComplete,
+}) => {
   const { t } = useLanguage();
   const { user } = useAppContext();
   const userRole = user?.role || 'Trader';
-  const [activeTab, setActiveTab] = useState<SettingsTab>((initialTab as SettingsTab) || 'profile');
+  const deepLinkRef = React.useRef({
+    tab: initialTab,
+    subtab: initialSubtab,
+    provider: initialProvider,
+    section: initialSection,
+  });
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    (deepLinkRef.current.tab as SettingsTab) || 'profile',
+  );
 
-  // Auto-navigate to initial tab when provided
+  // Auto-navigate to initial tab when provided (preserve subtab for Connections deep link)
   React.useEffect(() => {
     if (initialTab && initialTab !== activeTab) {
       setActiveTab(initialTab as SettingsTab);
-      // Notify parent that navigation is complete (no setTimeout needed!)
+      deepLinkRef.current = {
+        tab: initialTab,
+        subtab: initialSubtab,
+        provider: initialProvider,
+        section: initialSection,
+      };
       if (onNavigationComplete) {
         onNavigationComplete();
       }
+    } else if (initialTab === activeTab) {
+      deepLinkRef.current = {
+        tab: initialTab,
+        subtab: initialSubtab,
+        provider: initialProvider,
+        section: initialSection,
+      };
     }
-  }, [initialTab, activeTab, onNavigationComplete]);
+  }, [initialTab, initialSubtab, initialProvider, initialSection, activeTab, onNavigationComplete]);
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     {
@@ -245,9 +276,16 @@ const Settings: React.FC<SettingsProps> = ({ initialTab, initialSubtab, onNaviga
           <ConfigurationSettings initialSubtab={initialSubtab} />
         ) : null;
       case 'connections':
-        return <ConnectionsSettings />;
+        return (
+          <ConnectionsSettings
+            initialSubtab={initialSubtab || deepLinkRef.current.subtab}
+            initialProvider={initialProvider || deepLinkRef.current.provider}
+            initialSection={initialSection || deepLinkRef.current.section}
+            onNavigate={onNavigate}
+          />
+        );
       case 'wallet':
-        return <WalletSettings />;
+        return <WalletSettings onNavigate={onNavigate} />;
       case 'notifications':
         return <NotificationsSettings />;
       case 'email':
@@ -274,8 +312,17 @@ const Settings: React.FC<SettingsProps> = ({ initialTab, initialSubtab, onNaviga
             {tabs.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (onNavigate) {
+                    onNavigate({
+                      view: 'settings',
+                      settingsTab: tab.id,
+                    });
+                  }
+                }}
                 data-tab-id={tab.id}
+                data-testid={`settings-tab-${tab.id}`}
                 className={`w-full flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                   activeTab === tab.id
                     ? 'bg-blue-600/20 text-blue-300'

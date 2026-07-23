@@ -8,7 +8,11 @@ on:
       - 'components/**'
       - 'src/**'
       - 'playwright.config.ts'
+      - 'playwright.ci.config.ts'
       - 'package.json'
+      - 'package-lock.json'
+      - '.npmrc'
+      - '.github/workflows/e2e-tests.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
@@ -16,39 +20,46 @@ on:
       - 'components/**'
       - 'src/**'
       - 'playwright.config.ts'
+      - 'playwright.ci.config.ts'
       - 'package.json'
+      - 'package-lock.json'
+      - '.npmrc'
+      - '.github/workflows/e2e-tests.yml'
 
 jobs:
   e2e-tests:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    
+    # Vite 7 / Playwright CI stack requires Node 20.19+.
     strategy:
       fail-fast: false
       matrix:
         node-version: [20.x]
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-      
+          cache-dependency-path: package-lock.json
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
-      
-      - name: Run Playwright tests
-        run: npm run test:e2e
+
+      - name: Run PR-safe Playwright suite
+        run: npx playwright test --config=playwright.ci.config.ts
         env:
           CI: true
-      
+          # No live MEXC / credentials in PR E2E
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3010
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -56,7 +67,8 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 30
-      
+          if-no-files-found: ignore
+
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
@@ -64,3 +76,4 @@ jobs:
           name: playwright-screenshots
           path: e2e/screenshots/
           retention-days: 7
+          if-no-files-found: ignore

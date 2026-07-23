@@ -105,11 +105,15 @@ const SecurityWidget: React.FC<SecurityWidgetProps> = ({ controls, onToggle }) =
                 >
                     {saving ? t('saving') || 'Saving...' : t('save_security_settings') || 'Save Security Settings'}
                 </button>
-                <button 
-                    onClick={handleBackupWallets}
-                    className="w-full bg-orange-600 hover:bg-orange-700 font-semibold py-2 rounded-lg transition-colors"
+                <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    title={t('wallet_control_coming_later')}
+                    className="w-full cursor-not-allowed bg-gray-800/70 font-semibold py-2 rounded-lg text-slate-400"
+                    data-testid="wallet-backup-coming-later"
                 >
-                    {t('backup_wallets')}
+                    {t('backup_wallets')} — {t('wallet_control_coming_later')}
                 </button>
             </div>
         </div>

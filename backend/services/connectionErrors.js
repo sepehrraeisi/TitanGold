@@ -19,6 +19,7 @@ export const CREDENTIAL_STATUS = Object.freeze({
   CONFIGURED_UNVERIFIED: 'configured_unverified',
   SECRET_REENTRY_REQUIRED: 'secret_reentry_required',
   AUTHENTICATION_PENDING: 'authentication_pending',
+  AUTHENTICATED: 'authenticated',
 });
 
 export function connectionError(res, status, code, message, extra = {}) {

@@ -75,8 +75,10 @@ async function writeAudit({ userId, action, entityId, newValue = {}, ipAddress =
 
 /**
  * Safe metadata DTO — never includes secrets or ciphertext.
+ * @param {object|null} row
+ * @param {{ providerFallback?: string|null, privateAuthVerified?: boolean }} [opts]
  */
-export function toSafeConnectionDto(row, { providerFallback = null } = {}) {
+export function toSafeConnectionDto(row, { providerFallback = null, privateAuthVerified = false } = {}) {
   const provider = row?.exchange || providerFallback || null;
   if (!row) {
     return {
@@ -118,11 +120,14 @@ export function toSafeConnectionDto(row, { providerFallback = null } = {}) {
   }
 
   const configured = storageMode === 'encrypted' && !secretReentryRequired;
-  // WP1A: never treat a row as privately authenticated / Connected.
+  // Never a single "Connected" boolean for private ops.
   const isConnected = false;
-  const enabled = configured && row.is_active === true && !secretReentryRequired
-    ? false // force not-active for private ops until WP2
-    : false;
+  const enabled = false;
+  const authVerified = Boolean(privateAuthVerified);
+  // Canonical auth projection: capability-store PRIVATE_AUTH overrides legacy hardcoded false.
+  if (authVerified && configured && !secretReentryRequired) {
+    credentialStatus = CREDENTIAL_STATUS.AUTHENTICATED;
+  }
 
   return {
     id: row.id,
@@ -135,7 +140,7 @@ export function toSafeConnectionDto(row, { providerFallback = null } = {}) {
     status: credentialStatus,
     credentialStatus,
     maskedKeyIdentifier: secretReentryRequired ? null : (meta.keyHint || null),
-    permissions: Array.isArray(row.permissions) ? [] : [], // strip legacy inferred permissions until WP2
+    permissions: Array.isArray(row.permissions) ? [] : [],
     lastTestedAt: meta.lastTestedAt || null,
     lastSuccessAt: meta.lastSuccessAt || null,
     lastErrorCategory: meta.lastErrorCategory || null,
@@ -144,8 +149,7 @@ export function toSafeConnectionDto(row, { providerFallback = null } = {}) {
     updatedAt: row.updated_at || null,
     encryptionVersion: configured ? (meta.encryptionVersion || ENCRYPTION_VERSION) : null,
     secretReentryRequired,
-    privateAuthVerified: false,
-    // Compatibility aliases used by existing UI (truthful)
+    privateAuthVerified: authVerified,
     isActive: false,
     lastSyncAt: row.last_sync_at || null,
   };
@@ -192,11 +196,33 @@ export async function listConnectionsForUser(userId) {
     [userId],
   );
 
+  const authByConnection = new Map();
+  const ids = result.rows.map((r) => r.id).filter(Boolean);
+  if (ids.length) {
+    try {
+      const authRows = await query(
+        `SELECT connection_id, verification_state
+         FROM mexc_connection_capability_state
+         WHERE owner_id = $1
+           AND capability_id = 'PRIVATE_AUTH'
+           AND connection_id = ANY($2::uuid[])`,
+        [userId, ids],
+      );
+      for (const row of authRows.rows) {
+        authByConnection.set(row.connection_id, row.verification_state === 'verified');
+      }
+    } catch {
+      // Capability store unavailable (migration pending / unit mock) — DTO stays unverified.
+    }
+  }
+
   const byProvider = new Map(result.rows.map((r) => [r.exchange, r]));
   return LISTED_PROVIDERS.map((provider) => {
     const row = byProvider.get(provider);
     if (!row) return toSafeConnectionDto(null, { providerFallback: provider });
-    return toSafeConnectionDto(row);
+    return toSafeConnectionDto(row, {
+      privateAuthVerified: authByConnection.get(row.id) === true,
+    });
   });
 }
 
@@ -223,7 +249,23 @@ export async function getConnectionForUser(userId, provider) {
   if (result.rows.length === 0) {
     return toSafeConnectionDto(null, { providerFallback: name });
   }
-  return toSafeConnectionDto(result.rows[0]);
+  let privateAuthVerified = false;
+  try {
+    const auth = await query(
+      `SELECT verification_state
+       FROM mexc_connection_capability_state
+       WHERE connection_id = $1
+         AND owner_id = $2
+         AND capability_id = 'PRIVATE_AUTH'
+       LIMIT 1`,
+      [result.rows[0].id, userId],
+    );
+    privateAuthVerified = auth.rows[0]?.verification_state === 'verified';
+  } catch {
+    // Table missing or test mock without capability store — leave false.
+    privateAuthVerified = false;
+  }
+  return toSafeConnectionDto(result.rows[0], { privateAuthVerified });
 }
 
 /**
@@ -238,7 +280,7 @@ export async function loadEncryptedMexcRowForVerification(userId) {
      LIMIT 1`,
     [userId, CANONICAL_PROVIDER],
   );
-  if (result.rows.length === 0) return null;
+  if (!result?.rows?.length) return null;
   return result.rows[0];
 }
 

@@ -1,12 +1,12 @@
 /**
  * URL Sync Utility - Minimal & Controlled
- * 
+ *
  * Syncs navigation state with URL query parameters for:
  * - Browser back/forward support
  * - Deep linking / shareable URLs
  * - Reproducible QA testing
- * 
- * Scope: Only view, settingsTab, settingsSubtab
+ *
+ * Scope: view, settingsTab, settingsSubtab, provider, section
  * No complex routing, no internal AI state
  */
 
@@ -16,6 +16,8 @@ export interface URLState {
   view: ViewKey;
   settingsTab?: string;
   settingsSubtab?: string;
+  provider?: string;
+  section?: string;
 }
 
 /**
@@ -29,10 +31,15 @@ export function readStateFromURL(): URLState | null {
 
   if (!view) return null;
 
+  // Accept legacy `tab` alias used by some bookmarks and QA URLs
+  const settingsTab = params.get('settingsTab') || params.get('tab') || undefined;
+
   return {
     view,
-    settingsTab: params.get('settingsTab') || undefined,
+    settingsTab,
     settingsSubtab: params.get('settingsSubtab') || undefined,
+    provider: params.get('provider') || undefined,
+    section: params.get('section') || undefined,
   };
 }
 
@@ -54,6 +61,14 @@ export function writeStateToURL(state: URLState, replace: boolean = false): void
     params.set('settingsSubtab', state.settingsSubtab);
   }
 
+  if (state.provider) {
+    params.set('provider', state.provider);
+  }
+
+  if (state.section) {
+    params.set('section', state.section);
+  }
+
   const newURL = `${window.location.pathname}?${params.toString()}`;
 
   if (replace) {
@@ -71,6 +86,8 @@ export function payloadToURLState(payload: NavigationPayload): URLState {
     view: payload.view,
     settingsTab: payload.settingsTab,
     settingsSubtab: payload.settingsSubtab,
+    provider: payload.provider,
+    section: payload.section,
   };
 }
 
@@ -88,8 +105,10 @@ export function isURLStateEqual(a: URLState | null, b: URLState | null): boolean
   if (!a || !b) return a === b;
 
   return (
-    a.view === b.view &&
-    a.settingsTab === b.settingsTab &&
-    a.settingsSubtab === b.settingsSubtab
+    a.view === b.view
+    && a.settingsTab === b.settingsTab
+    && a.settingsSubtab === b.settingsSubtab
+    && a.provider === b.provider
+    && a.section === b.section
   );
 }

@@ -63,8 +63,11 @@ describe('Crypto Utility Tests', () => {
             const encrypted = cryptoUtils.encryptSecret(plain);
             const parts = encrypted.split(':');
 
-            // Tamper with the ciphertext (middle part)
-            const tampered = `${parts[0]}:${parts[1].replace('a', 'b')}:${parts[2]}`;
+            // Flip first ciphertext nibble so auth-tag verification must fail
+            // (string replace of 'a'→'b' can be a no-op when that char is absent).
+            const cipher = parts[1];
+            const flipped = (cipher[0] === '0' ? '1' : '0') + cipher.slice(1);
+            const tampered = `${parts[0]}:${flipped}:${parts[2]}`;
 
             expect(() => cryptoUtils.decryptSecret(tampered)).toThrow();
         });

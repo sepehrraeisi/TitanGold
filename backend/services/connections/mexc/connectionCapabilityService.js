@@ -12,7 +12,52 @@ import { buildCapabilityMatrix } from './capabilityMatrix.js';
 import { evaluateAllConsumers } from './consumerRegistry.js';
 import { getCheckpointProposal } from './verificationOrchestrator.js';
 import { MEXC_INVENTORY_META, getUnverifiedProviderSupportRows } from './capabilityInventory.js';
+import { buildWalletDataContractProjection } from './walletAccessEvidence.js';
 
+async function loadWalletDataContract(connectionId) {
+  if (!connectionId) return null;
+  try {
+    const { rows } = await query(
+      `SELECT metadata FROM exchange_connections WHERE id = $1 LIMIT 1`,
+      [connectionId],
+    );
+    const rawMeta = rows[0]?.metadata;
+    const meta = typeof rawMeta === 'string'
+      ? JSON.parse(rawMeta || '{}')
+      : (rawMeta && typeof rawMeta === 'object' ? rawMeta : {});
+    const raw = meta.mexcWalletDataContract;
+    if (!raw || typeof raw !== 'object') return null;
+    return buildWalletDataContractProjection(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function loadConnectionProjectionMeta(connectionId) {
+  if (!connectionId) {
+    return { walletDataContract: null, providerPermissionEvidence: null, walletCurrencyProjection: null, lastProbeEvidence: null };
+  }
+  try {
+    const { rows } = await query(
+      `SELECT metadata FROM exchange_connections WHERE id = $1 LIMIT 1`,
+      [connectionId],
+    );
+    const rawMeta = rows[0]?.metadata;
+    const meta = typeof rawMeta === 'string'
+      ? JSON.parse(rawMeta || '{}')
+      : (rawMeta && typeof rawMeta === 'object' ? rawMeta : {});
+    return {
+      walletDataContract: meta.mexcWalletDataContract
+        ? buildWalletDataContractProjection(meta.mexcWalletDataContract)
+        : null,
+      providerPermissionEvidence: meta.mexcProviderPermissionEvidence || null,
+      walletCurrencyProjection: meta.mexcWalletCurrencyProjection || null,
+      lastProbeEvidence: meta.mexcWalletLastProbeEvidence || null,
+    };
+  } catch {
+    return { walletDataContract: null, providerPermissionEvidence: null, walletCurrencyProjection: null, lastProbeEvidence: null };
+  }
+}
 async function loadStoredCapabilityStates(connectionId, ownerId) {
   if (!connectionId) return {};
   try {
@@ -71,12 +116,33 @@ export function getRuntimeSideEffectFlags() {
 export async function buildMexcConnectionSummary(userId) {
   const connection = await getConnectionForUser(userId, CANONICAL_PROVIDER);
   const storedStates = await loadStoredCapabilityStates(connection?.id, userId);
+  const projectionMeta = await loadConnectionProjectionMeta(connection?.id);
+  const walletDataContract = projectionMeta.walletDataContract;
   const runtime = getRuntimeSideEffectFlags();
 
-  // privateAuthVerified remains false in DTO until live verify authorized;
-  // honour stored PRIVATE_AUTH verification if present from fake/persisted tests
+  // Canonical auth: capability-store PRIVATE_AUTH verified (never invent from legacy flags alone).
   const privateAuthFromStore = storedStates.PRIVATE_AUTH?.verificationState === 'verified';
-  const privateAuthVerified = Boolean(connection.privateAuthVerified || privateAuthFromStore);
+  const privateAuthVerified = Boolean(privateAuthFromStore || connection.privateAuthVerified);
+
+  // Enrich WALLET_CURRENCY_READ with attempt / permission projection from metadata.
+  if (storedStates.WALLET_CURRENCY_READ) {
+    const w = storedStates.WALLET_CURRENCY_READ;
+    const wp = projectionMeta.walletCurrencyProjection || {};
+    const probe = projectionMeta.lastProbeEvidence || {};
+    w.lastAttemptAt = wp.lastAttemptAt || probe.testedAt || probe.lastAttemptAt || w.lastAttemptAt || null;
+    w.lastAttemptResult = wp.lastAttemptResult || (w.verificationState === 'verification_error' ? 'verification_error' : null);
+    w.lastAttemptFailureCode = wp.lastAttemptFailureCode || probe.errorCode || w.lastFailureCode || null;
+    w.keyGrantEvidence = wp.keyGrantEvidence || probe.keyGrantEvidence || null;
+    w.keyGrantEvidenceType = wp.keyGrantEvidenceType || null;
+    w.directEndpointVerified = wp.directEndpointVerified === true;
+    if (walletDataContract) {
+      w.dataContractState = walletDataContract.dataContractState;
+      w.dataContractWarningCode = walletDataContract.dataContractWarningCode;
+      w.sanitizedDataContractReason = walletDataContract.sanitizedDataContractReason;
+      w.consumerReadiness = walletDataContract.consumerReadiness;
+      w.lastDataContractCheckedAt = walletDataContract.lastDataContractCheckedAt;
+    }
+  }
 
   const matrix = buildCapabilityMatrix({
     storedStates,
@@ -86,6 +152,8 @@ export async function buildMexcConnectionSummary(userId) {
     userDisabled: connection.enabled === false && connection.configured === false
       ? false
       : false,
+    walletDataContract,
+    providerPermissionEvidence: projectionMeta.providerPermissionEvidence,
   });
 
   const consumers = evaluateAllConsumers(matrix);
@@ -118,7 +186,7 @@ export async function buildMexcConnectionSummary(userId) {
       displayName: 'MEXC',
       configured: Boolean(connection.configured),
       enabled: Boolean(connection.enabled),
-      credentialStatus: connection.credentialStatus,
+      credentialStatus: privateAuthVerified ? 'authenticated' : connection.credentialStatus,
       authState,
       providerAvailability: PROVIDER_AVAILABILITY.AVAILABLE,
       maskedKeyIdentifier: connection.maskedKeyIdentifier,
@@ -130,6 +198,7 @@ export async function buildMexcConnectionSummary(userId) {
       lastVerifiedAt: lastVerified,
       lastSuccessAt: connection.lastSuccessAt || lastVerified,
       lastSanitizedFailure: lastFailure,
+      privateAuthVerified,
     },
     publicMarket: {
       spot: {
@@ -147,14 +216,22 @@ export async function buildMexcConnectionSummary(userId) {
     privateAuthentication: {
       state: authState,
       verified: privateAuthVerified,
-      // Explicit: not a single "connected" boolean
       isConnected: false,
     },
     capabilityMatrix: matrix,
     consumers,
-    usedByModules: consumers.filter((c) => c.eligible).map((c) => c.displayName),
+    // Deterministic Used-by: all canonical registered consumers (same registry as consumer contracts).
+    // UI may collapse long lists; do not silently mix eligible-only without an explicit label.
+    usedByModules: consumers.map((c) => c.displayName),
+    usedByConsumers: consumers.map((c) => ({
+      consumerId: c.consumerId,
+      displayName: c.displayName,
+      eligible: c.eligible,
+      consumerReadiness: c.consumerReadiness,
+    })),
     inventoryMeta: MEXC_INVENTORY_META,
     providerSupportNotVerified: getUnverifiedProviderSupportRows().map((r) => r.name),
+    providerPermissionEvidence: projectionMeta.providerPermissionEvidence,
     runtime,
     verification: {
       testConnectionAvailable: false,

@@ -64,22 +64,28 @@ export const KEY_GRANT = Object.freeze({
   GRANTED: 'granted',
   DENIED: 'denied',
   UNKNOWN: 'unknown',
+  NOT_APPLICABLE: 'not_applicable',
 });
 
 export const VERIFICATION_STATE = Object.freeze({
   VERIFIED: 'verified',
   FAILED: 'failed',
+  VERIFICATION_ERROR: 'verification_error',
   NOT_TESTED: 'not_tested',
   NOT_SAFELY_TESTABLE: 'not_safely_testable',
+  DEFERRED_PRIVATE_NON_EXECUTING_PROBE: 'deferred_private_non_executing_probe',
+  AVAILABLE: 'available',
 });
 
 export const OPERATIONAL_STATE = Object.freeze({
   ENABLED: 'enabled',
   DISABLED: 'disabled',
+  DISABLED_PENDING_EXPLICIT_AUTHORIZATION: 'disabled_pending_explicit_authorization',
   BLOCKED_BY_RUNTIME: 'blocked_by_runtime',
   BLOCKED_BY_USER: 'blocked_by_user',
   BLOCKED_BY_PERMISSION: 'blocked_by_permission',
   BLOCKED_BY_PROVIDER: 'blocked_by_provider',
+  BLOCKED_BY_PROVIDER_EVIDENCE: 'blocked_by_provider_evidence',
 });
 
 export const AUTH_STATE = Object.freeze({
@@ -106,6 +112,7 @@ export const SIDE_EFFECT = Object.freeze({
   READ_ONLY: 'read_only',
   FINANCIAL_WRITE: 'financial_write',
   ACCOUNT_MUTATION: 'account_mutation',
+  NON_EXECUTING_PRIVATE_VALIDATION: 'non_executing_private_validation',
 });
 
 export const RW_CLASS = Object.freeze({

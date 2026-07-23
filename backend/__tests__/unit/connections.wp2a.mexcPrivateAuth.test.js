@@ -297,44 +297,46 @@ describe('WP2A verification service persistence separation', () => {
   function mockConfiguredRow() {
     const encKey = encryptSecret(FAKE_KEY);
     const encSecret = encryptSecret(FAKE_SECRET);
-    // getConnectionForUser
-    query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: '11111111-1111-1111-1111-111111111111',
-          user_id: 'user-1',
-          exchange: 'MEXC',
-          api_key: encKey,
-          api_secret: encSecret,
-          is_active: false,
-          is_testnet: false,
-          metadata: {
-            encryptionVersion: 1,
-            credentialStatus: 'configured_unverified',
-            keyHint: '***_use',
-            privateAuthVerified: false,
-          },
-          permissions: [],
-          account_info: {},
-        },
-      ],
+    const connectionRow = {
+      id: '11111111-1111-1111-1111-111111111111',
+      user_id: 'user-1',
+      exchange: 'MEXC',
+      api_key: encKey,
+      api_secret: encSecret,
+      is_active: false,
+      is_testnet: false,
+      metadata: {
+        encryptionVersion: 1,
+        credentialStatus: 'configured_unverified',
+        keyHint: '***_use',
+        privateAuthVerified: false,
+      },
+      permissions: [],
+      account_info: {},
+    };
+    query.mockImplementation(async (sql) => {
+      const text = String(sql || '');
+      if (text.includes('mexc_connection_capability_state')) {
+        return { rows: [] };
+      }
+      if (text.includes('FROM exchange_connections') && text.includes('api_secret') && text.includes('account_info')) {
+        return { rows: [connectionRow] };
+      }
+      if (text.includes('FROM exchange_connections') && text.includes('api_secret')) {
+        return {
+          rows: [{
+            id: connectionRow.id,
+            user_id: connectionRow.user_id,
+            exchange: 'MEXC',
+            api_key: encKey,
+            api_secret: encSecret,
+            is_active: false,
+            metadata: { credentialStatus: 'configured_unverified' },
+          }],
+        };
+      }
+      return { rows: [] };
     });
-    // loadEncryptedMexcRowForVerification
-    query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: '11111111-1111-1111-1111-111111111111',
-          user_id: 'user-1',
-          exchange: 'MEXC',
-          api_key: encKey,
-          api_secret: encSecret,
-          is_active: false,
-          metadata: { credentialStatus: 'configured_unverified' },
-        },
-      ],
-    });
-    // audit
-    query.mockResolvedValue({ rows: [] });
   }
 
   test('live gate blocks without decrypt when CONNECTIONS_PRIVATE_VERIFY_LIVE unset', async () => {
@@ -513,29 +515,36 @@ describe('WP2A verification service persistence separation', () => {
   test('disabled metadata fails closed', async () => {
     const encKey = encryptSecret(FAKE_KEY);
     const encSecret = encryptSecret(FAKE_SECRET);
-    query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: '11111111-1111-1111-1111-111111111111',
-          exchange: 'MEXC',
-          api_key: encKey,
-          api_secret: encSecret,
-          is_active: false,
-          metadata: { credentialStatus: 'configured_unverified', disabled: true, keyHint: '***' },
-          permissions: [],
-          account_info: {},
-        },
-      ],
-    });
-    query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: '11111111-1111-1111-1111-111111111111',
-          api_key: encKey,
-          api_secret: encSecret,
-          metadata: { disabled: true },
-        },
-      ],
+    const connectionRow = {
+      id: '11111111-1111-1111-1111-111111111111',
+      exchange: 'MEXC',
+      api_key: encKey,
+      api_secret: encSecret,
+      is_active: false,
+      is_testnet: false,
+      metadata: { credentialStatus: 'configured_unverified', disabled: true, keyHint: '***' },
+      permissions: [],
+      account_info: {},
+    };
+    query.mockImplementation(async (sql) => {
+      const text = String(sql || '');
+      if (text.includes('mexc_connection_capability_state')) {
+        return { rows: [] };
+      }
+      if (text.includes('FROM exchange_connections') && text.includes('account_info')) {
+        return { rows: [connectionRow] };
+      }
+      if (text.includes('FROM exchange_connections')) {
+        return {
+          rows: [{
+            id: connectionRow.id,
+            api_key: encKey,
+            api_secret: encSecret,
+            metadata: { disabled: true },
+          }],
+        };
+      }
+      return { rows: [] };
     });
     const result = await verifyOwnedMexcConnection({
       userId: 'user-1',

@@ -1,40 +1,31 @@
 /**
  * Agent consumer eligibility against canonical MEXC capability matrix.
  * Agents must not read credentials or create parallel MEXC clients.
+ * Generic "Other Agents: Eligible" is removed — unregistered agents are NOT ELIGIBLE.
  */
 
-import { MEXC_CONSUMERS, evaluateConsumerEligibility } from './consumerRegistry.js';
+import {
+  MEXC_CONSUMERS,
+  evaluateConsumerEligibility,
+  resolveAgentConsumerEligibility,
+  UNREGISTERED_AGENT_STATUS,
+} from './consumerRegistry.js';
 
-const AGENT_CONSUMER_IDS = new Set([
+/** Explicitly registered Agent consumer contracts only */
+const AGENT_CONSUMER_IDS = Object.freeze([
   'arbitrage',
   'market_data_agents',
   'risk_agents',
-  'other_agents',
-  'spot_trading',
-  'futures_trading',
-  'wallet',
-  'portfolio',
 ]);
 
 export function listAgentMexcConsumers() {
-  return MEXC_CONSUMERS.filter((c) => AGENT_CONSUMER_IDS.has(c.id));
+  return MEXC_CONSUMERS.filter((c) => AGENT_CONSUMER_IDS.includes(c.id));
 }
 
 export function evaluateAgentMexcEligibility(matrix, agentConsumerId) {
-  const consumer = MEXC_CONSUMERS.find((c) => c.id === agentConsumerId);
-  if (!consumer) {
-    return {
-      consumerId: agentConsumerId,
-      eligible: false,
-      blockedReason: 'Unknown consumer',
-      mayReadCredentials: false,
-      mayCreateParallelClient: false,
-      bypassRuntimeForbidden: true,
-    };
-  }
-  const base = evaluateConsumerEligibility(consumer, matrix);
+  const resolved = resolveAgentConsumerEligibility(matrix, agentConsumerId);
   return {
-    ...base,
+    ...resolved,
     mayReadCredentials: false,
     mayCreateParallelClient: false,
     bypassRuntimeForbidden: true,
@@ -45,3 +36,9 @@ export function evaluateAgentMexcEligibility(matrix, agentConsumerId) {
 export function buildAgentIntegrationStatus(matrix) {
   return listAgentMexcConsumers().map((c) => evaluateAgentMexcEligibility(matrix, c.id));
 }
+
+export function evaluateUnregisteredAgent(matrix, agentId) {
+  return evaluateAgentMexcEligibility(matrix, agentId || 'unknown_agent');
+}
+
+export { UNREGISTERED_AGENT_STATUS };

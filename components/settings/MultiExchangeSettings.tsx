@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import {
   fetchExchangeConnections,
+  fetchMexcCapabilitySummary,
   detectLegacyInsecureCredentialKeys,
   removeLegacyInsecureCredentialKeys,
+  type MexcCapabilitySummary,
   type SafeConnectionDto,
 } from '../../services/connectionsApi.ts';
 import {
@@ -13,23 +15,42 @@ import {
   isConfigurableProvider,
 } from '../../services/connectionDisplayStatus.ts';
 import MexcConnectionPanel from './connections/MexcConnectionPanel.tsx';
+import {
+  ExchangeProviderListItem,
+  toneForDisplayStatus,
+} from './connections/ProviderListCard.tsx';
+import type { OnNavigateHandler } from '../../types/navigation.ts';
+import {
+  isMexcManageDeepLink,
+  navigateToConnectionSection,
+} from '../../utils/settingsNavigation.ts';
+import { buildMexcProviderSummary } from '../../utils/mexcProviderSummary.ts';
 
-const EXCHANGE_ICONS: Record<string, string> = {
-  MEXC: '🟣',
-  Binance: '🟡',
-  Bybit: '🟠',
-  KuCoin: '🟢',
-  'Gate.io': '🔵',
+type Props = {
+  initialSubtab?: string;
+  initialProvider?: string;
+  initialSection?: string;
+  onNavigate?: OnNavigateHandler;
 };
 
-export default function MultiExchangeSettings() {
-  const { t } = useLanguage();
+export default function MultiExchangeSettings({
+  initialSubtab,
+  initialProvider,
+  initialSection,
+  onNavigate,
+}: Props) {
+  const { t, language } = useLanguage();
+  const dir = language === 'fa' ? 'rtl' : 'ltr';
   const [connections, setConnections] = useState<SafeConnectionDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedExchange, setExpandedExchange] = useState<string | null>(null);
+  const [expandedExchange, setExpandedExchange] = useState<string | null>(() =>
+    (isMexcManageDeepLink(initialSubtab, initialProvider) ? 'MEXC' : null),
+  );
   const [messages, setMessages] = useState<Record<string, { type: 'success' | 'error' | 'info'; text: string }>>({});
   const [legacyKeys, setLegacyKeys] = useState<string[]>([]);
   const [removingLegacy, setRemovingLegacy] = useState(false);
+  const [mexcSummary, setMexcSummary] = useState<MexcCapabilitySummary | null>(null);
+  const [mexcSummaryLoading, setMexcSummaryLoading] = useState(false);
 
   const loadConnections = useCallback(async () => {
     try {
@@ -53,6 +74,37 @@ export default function MultiExchangeSettings() {
     setLegacyKeys(detectLegacyInsecureCredentialKeys());
   }, [loadConnections]);
 
+  useEffect(() => {
+    if (isMexcManageDeepLink(initialSubtab, initialProvider)) {
+      setExpandedExchange('MEXC');
+    }
+  }, [initialSubtab, initialProvider]);
+
+  useEffect(() => {
+    const mexc = connections.find(
+      (c) => isConfigurableProvider(c.provider || c.exchange),
+    );
+    if (!mexc) {
+      setMexcSummary(null);
+      return;
+    }
+    let cancelled = false;
+    setMexcSummaryLoading(true);
+    (async () => {
+      try {
+        const data = await fetchMexcCapabilitySummary();
+        if (!cancelled) setMexcSummary(data);
+      } catch {
+        if (!cancelled) setMexcSummary(null);
+      } finally {
+        if (!cancelled) setMexcSummaryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connections]);
+
   const handleRemoveLegacy = async () => {
     if (!window.confirm(t('connections_legacy_remove_confirm'))) return;
     setRemovingLegacy(true);
@@ -69,22 +121,30 @@ export default function MultiExchangeSettings() {
   };
 
   const openMexcPanel = (exchange: string) => {
-    setExpandedExchange((prev) => (prev === exchange ? null : exchange));
+    const next = expandedExchange === exchange ? null : exchange;
+    setExpandedExchange(next);
+    if (onNavigate) {
+      if (next === 'MEXC') {
+        navigateToConnectionSection(onNavigate, 'mexc', initialSection || 'overview');
+      } else {
+        onNavigate({ view: 'settings', settingsTab: 'connections' });
+      }
+    }
   };
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-gray-800 bg-[#161B22] p-6 text-gray-400">
+      <div className="rounded-xl border border-white/5 bg-slate-950/70 p-6 text-sm text-slate-400">
         {t('loading')}
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-gray-800 bg-[#161B22]">
-      <div className="border-b border-gray-800 p-6">
-        <h3 className="text-lg font-semibold text-white">{t('exchange_connections')}</h3>
-        <p className="mt-1 text-sm text-gray-400">{t('exchange_connections_desc')}</p>
+    <div className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 shadow-lg">
+      <div className="border-b border-white/10 p-4 md:p-6">
+        <h3 className="text-sm font-semibold text-foreground md:text-base">{t('exchange_connections')}</h3>
+        <p className="mt-1 text-xs text-slate-400">{t('exchange_connections_desc')}</p>
       </div>
 
       {legacyKeys.length > 0 && (
@@ -110,66 +170,74 @@ export default function MultiExchangeSettings() {
         </div>
       )}
 
-      <div className="space-y-3 p-6">
+      <div className="space-y-3 p-4 md:p-6">
         {connections.map((connection) => {
           const exchange = connection.provider || connection.exchange || '';
+          const isMexc = isConfigurableProvider(exchange);
+          const expanded = isMexc && expandedExchange === exchange;
+
+          const projection = isMexc
+            ? buildMexcProviderSummary({ connection, summary: mexcSummary })
+            : null;
+
           const displayStatus = deriveConnectionDisplayStatus({
             provider: exchange,
             configured: connection.configured,
             secretReentryRequired: connection.secretReentryRequired,
+            privateAuthVerified: connection.privateAuthVerified,
+            overallStatusCode: mexcSummary?.overallTruthfulState?.code,
+            status: connection.status,
+            credentialStatus: connection.credentialStatus,
             legacyBrowserKeyPresent: legacyKeys.length > 0,
             envCredentialsPresent: true,
             publicMarketReachable: true,
           });
-          const statusText = t(connectionStatusMessageKey(displayStatus));
-          const isMexc = isConfigurableProvider(exchange);
-          const expanded = isMexc && expandedExchange === exchange;
-          const actionLabel = t(mexcPrimaryActionLabelKey(displayStatus));
+
+          const awaitingAuthProjection =
+            isMexc
+            && connection.configured
+            && (connection.privateAuthVerified === true || mexcSummaryLoading)
+            && mexcSummaryLoading
+            && !mexcSummary;
+
+          const statusText = awaitingAuthProjection
+            ? ''
+            : t(
+              projection
+                ? projection.overallStatusLabelKey
+                : connectionStatusMessageKey(displayStatus),
+            );
+
+          const actionLabel = expanded
+            ? t('mexc_collapse_panel')
+            : t(mexcPrimaryActionLabelKey(displayStatus));
 
           return (
-            <div key={exchange} className="overflow-hidden rounded-lg border border-gray-800">
-              <div className="flex items-center justify-between gap-3 p-4">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span aria-hidden="true">{EXCHANGE_ICONS[exchange] || '⚪'}</span>
-                  <div className="min-w-0">
-                    <div className="font-medium text-white">{exchange}</div>
-                    <div className="text-xs text-gray-400" data-testid={`connection-status-${exchange}`}>
-                      {statusText}
-                    </div>
-                  </div>
-                </div>
-
-                {isMexc ? (
-                  <button
-                    type="button"
-                    className="shrink-0 rounded border border-gray-600 px-3 py-1.5 text-sm text-gray-100 hover:bg-[#0D111C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
-                    aria-label={`${actionLabel} ${exchange}`}
-                    aria-expanded={expanded}
-                    data-testid={`connection-action-${exchange}`}
-                    onClick={() => openMexcPanel(exchange)}
-                  >
-                    {actionLabel}
-                  </button>
-                ) : (
-                  <span
-                    className="shrink-0 rounded border border-gray-800 px-2 py-1 text-xs text-gray-500"
-                    role="status"
-                    aria-label={`${exchange}: ${statusText}`}
-                    data-testid={`connection-unavailable-${exchange}`}
-                  >
-                    {statusText}
-                  </span>
-                )}
-              </div>
-
+            <ExchangeProviderListItem
+              key={exchange}
+              exchange={exchange}
+              isMexc={isMexc}
+              expanded={expanded}
+              statusText={statusText}
+              statusTone={toneForDisplayStatus(displayStatus)}
+              actionLabel={actionLabel}
+              onAction={() => openMexcPanel(exchange)}
+              awaitingAuthProjection={awaitingAuthProjection}
+              projection={projection}
+              language={language}
+              t={t}
+              dir={dir}
+            >
               {expanded && (
                 <MexcConnectionPanel
                   connection={connection}
                   onChanged={loadConnections}
                   onClose={() => setExpandedExchange(null)}
+                  onNavigate={onNavigate}
+                  initialSection={initialSection}
                 />
               )}
-            </div>
+            </ExchangeProviderListItem>
           );
         })}
       </div>
