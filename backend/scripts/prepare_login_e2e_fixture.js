@@ -6,7 +6,7 @@
 import fs from 'fs';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-import { query } from '../database/db.js';
+import pool, { query } from '../database/db.js';
 
 const FIXTURE_EMAIL = 'e2e-login-fixture@titangold.test';
 const FIXTURE_USERNAME = 'e2e_login_fixture';
