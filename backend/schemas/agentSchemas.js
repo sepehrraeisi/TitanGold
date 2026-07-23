@@ -95,7 +95,28 @@ export const baseAgentResponseSchema = z.object({
   lastUpdate: z.union([z.string(), z.date()]).optional().nullable(),
   trainingProgress: z.number().optional().nullable(),
   learningTime: z.string().optional().nullable(),
-  knowledgeSize: z.string().optional().nullable()
+  knowledgeSize: z.string().optional().nullable(),
+  statusProjection: z
+    .object({
+      agentKey: z.string(),
+      registered: z.boolean(),
+      configured: z.boolean(),
+      enabled: z.boolean(),
+      allowlisted: z.boolean(),
+      scheduled: z.boolean(),
+      running: z.boolean(),
+      healthy: z.boolean(),
+      dataReady: z.boolean(),
+      consumerRegistered: z.boolean(),
+      consumerEligible: z.boolean(),
+      executionEligible: z.boolean(),
+      executionEligibleWhenLive: z.boolean().optional(),
+      liveCapable: z.boolean().optional(),
+      sideEffectClass: z.string().optional(),
+      lastRunStatus: z.string(),
+      schedulerOwner: z.string(),
+    })
+    .optional(),
 });
 
 export const agentResponseSchema = baseAgentResponseSchema.extend({
