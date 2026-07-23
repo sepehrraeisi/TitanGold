@@ -19,6 +19,7 @@ import {
 } from '../services/arbitrageScanContract.js';
 import { readAnalyticalSchedulerStatus } from '../services/analyticalSchedulerStatus.js';
 import { buildAgentStatusProjection } from '../services/agentStatusProjection.js';
+import { buildAgentProductStatus } from '../services/agentProductStatus.js';
 import { getRuntimeExecutionState } from '../services/runtimeExecutionStateService.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { contentNegotiation } from '../middleware/contentNegotiation.js';
@@ -1470,8 +1471,16 @@ router.get('/', authenticate, validateQuery(listAgentsQuerySchema), validateResp
       };
     });
 
+    const agentsWithProductStatus = agents.map((agent) => ({
+      ...agent,
+      productStatus: buildAgentProductStatus(agent.statusProjection, {
+        killSwitchActive,
+        effectiveMode,
+      }),
+    }));
+
     // Wrap in { agents: [...] } for UI compatibility
-    res.json({ agents });
+    res.json({ agents: agentsWithProductStatus });
   } catch (error) {
     logger.error('Failed to fetch AI agents:', error);
     // If database is unavailable, return empty array instead of error

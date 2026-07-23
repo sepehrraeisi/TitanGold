@@ -883,6 +883,13 @@ export interface AIAgent {
     lastRunStatus: string;
     schedulerOwner: string;
   };
+  productStatus?: {
+    primaryState: string;
+    primaryLabelKey: string;
+    tone: string;
+    primaryReasonKey: string | null;
+    safeDetails: string[];
+  };
 
   // ML-specific metrics (null for rule-based agents like fundamental)
   accuracy?: number | null;

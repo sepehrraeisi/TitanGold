@@ -38,6 +38,11 @@ const translations = {
     agent_state_unavailable: 'Unavailable',
     agent_state_scheduled: 'Scheduled',
     agent_state_allowlisted: 'Allowlisted',
+    agent_product_limited: 'Limited',
+    agent_product_blocked: 'Blocked',
+    agent_product_operational: 'Operational',
+    agent_reason_not_scheduled: 'Not scheduled',
+    agent_reason_execution_disabled_runtime: 'Financial execution is disabled in the current runtime',
     sort_by_name: 'Name',
     sort_by_last_run: 'Last Run',
     sort_by_status: 'Status',
@@ -86,6 +91,11 @@ const translations = {
     agent_state_unavailable: 'ناموجود',
     agent_state_scheduled: 'زمان‌بندی‌شده',
     agent_state_allowlisted: 'در لیست مجاز',
+    agent_product_limited: 'محدود',
+    agent_product_blocked: 'مسدود',
+    agent_product_operational: 'عملیاتی',
+    agent_reason_not_scheduled: 'زمان‌بندی نشده',
+    agent_reason_execution_disabled_runtime: 'اجرای مالی در runtime فعلی غیرفعال است',
     sort_by_name: 'نام',
     sort_by_last_run: 'آخرین اجرا',
     sort_by_status: 'وضعیت',
@@ -420,7 +430,7 @@ describe('AIAgents Component', () => {
       expect(screen.getByText('loading')).toBeInTheDocument();
     });
 
-    it('renders mapped operational status badges', async () => {
+    it('renders canonical product status badges without misleading Active', async () => {
       const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
       mockFetchAIAgents.mockResolvedValue(mockAgents);
 
@@ -430,9 +440,10 @@ describe('AIAgents Component', () => {
         expect(screen.queryByTestId('agents-loading-skeleton')).not.toBeInTheDocument();
       });
 
-      expect(screen.getAllByText('Ready').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Paused').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByTestId('agent-status-technical')).toHaveTextContent('Limited');
+      expect(screen.getByTestId('agent-status-trend')).toHaveTextContent('Running');
+      expect(screen.getByTestId('agent-status-risk')).toHaveTextContent('Paused');
+      expect(screen.queryByText('Active')).not.toBeInTheDocument();
     });
 
     it('renders compact safety summary', async () => {
@@ -610,7 +621,7 @@ describe('AIAgents Component', () => {
         expect(screen.getByTestId('agents-results-count')).toHaveTextContent('Showing 3 agents');
       });
 
-      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'ready' } });
+      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'running' } });
       await waitFor(() => {
         expect(screen.getByTestId('agents-results-count')).toHaveTextContent('1 agent found');
       });
@@ -660,7 +671,7 @@ describe('AIAgents Component', () => {
         expect(screen.getByTestId('agents-results-count')).toHaveTextContent('نمایش 3 عامل');
       });
 
-      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'ready' } });
+      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'running' } });
       await waitFor(() => {
         expect(screen.getByTestId('agents-results-count')).toHaveTextContent('۱ عامل پیدا شد');
       });
@@ -719,7 +730,8 @@ describe('AIAgents Component', () => {
           scheduled: key === 'arbitrage',
           consumerRegistered: key === 'arbitrage',
           consumerEligible: key === 'arbitrage',
-          dataReady: key === 'arbitrage',
+          dataReady: key === 'arbitrage' ? false : false,
+          lastRunStatus: key === 'arbitrage' ? 'never' : 'unknown',
         }),
       }));
     }
@@ -733,8 +745,11 @@ describe('AIAgents Component', () => {
       });
 
       expect(screen.getByTestId('agent-card-arbitrage')).toBeInTheDocument();
-      expect(screen.getAllByText('Scheduled')).toHaveLength(1);
+      expect(screen.getByTestId('agent-status-arbitrage')).toHaveTextContent('Scheduled');
+      expect(screen.getAllByText('Limited').length).toBe(13);
+      expect(screen.getByTestId('agent-status-order')).toHaveTextContent('Blocked');
       expect(screen.queryByText('Allowlisted')).not.toBeInTheDocument();
+      expect(screen.queryByText('Active')).not.toBeInTheDocument();
     });
 
     it('fail-closed unknown agent shows Unavailable, not Active', async () => {

@@ -4,9 +4,10 @@
  */
 
 import {
-  resolveOperationalPresentation,
+  resolveAgentProductStatus,
   type AgentWithProjection,
-} from '../../../utils/agentStatusProjection.ts';
+} from '../../../utils/agentProductStatus.ts';
+import type { ProductStatusContext } from '../../../utils/agentProductStatus.ts';
 
 export type AgentExecutionKind = 'analytical' | 'provider' | 'simulation' | 'live_capable';
 
@@ -32,13 +33,39 @@ export function mapAgentOperationalState(status?: string | null): AgentOperation
   return 'unavailable';
 }
 
-/** Prefer canonical statusProjection when present on agent payload. */
-export function mapAgentOperationalStateFromAgent(agent: AgentWithProjection | null | undefined): AgentOperationalState {
-  return resolveOperationalPresentation(agent).state;
+/** Canonical product status for cards, headers, and filters. */
+export function resolveAgentProductStatusFromAgent(
+  agent: AgentWithProjection | null | undefined,
+  context: ProductStatusContext = {},
+) {
+  return resolveAgentProductStatus(agent, context);
 }
 
-export function shellOperationalStatusLabelKeyFromAgent(agent: AgentWithProjection | null | undefined): string {
-  return resolveOperationalPresentation(agent).labelKey;
+/** Legacy operational bucket for filters — derived from product status only. */
+export function mapAgentOperationalStateFromAgent(
+  agent: AgentWithProjection | null | undefined,
+  context: ProductStatusContext = {},
+): AgentOperationalState {
+  const product = resolveAgentProductStatus(agent, context);
+  if (product.primaryState === 'running') return 'running';
+  if (product.primaryState === 'error' || product.primaryState === 'blocked') return 'error';
+  if (product.primaryState === 'operational' || product.primaryState === 'scheduled') return 'ready';
+  if (product.primaryState === 'paused' || product.primaryState === 'limited') return 'paused';
+  return 'unavailable';
+}
+
+export function shellOperationalStatusLabelKeyFromAgent(
+  agent: AgentWithProjection | null | undefined,
+  context: ProductStatusContext = {},
+): string {
+  return resolveAgentProductStatus(agent, context).primaryLabelKey;
+}
+
+export function shellOperationalReasonKeyFromAgent(
+  agent: AgentWithProjection | null | undefined,
+  context: ProductStatusContext = {},
+): string | null {
+  return resolveAgentProductStatus(agent, context).primaryReasonKey;
 }
 
 export function formatLastRun(iso?: string | null, neverLabel = 'Never'): string {

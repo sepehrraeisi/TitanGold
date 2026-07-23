@@ -35,24 +35,6 @@ export function getAgentStatusProjection(agent: AgentWithProjection | null | und
   return agent?.statusProjection ?? null;
 }
 
-/** Primary operational pill — prefers canonical projection over raw status. */
-export function resolveOperationalPresentation(agent: AgentWithProjection | null | undefined): {
-  state: 'ready' | 'running' | 'paused' | 'error' | 'unavailable';
-  labelKey: string;
-} {
-  const p = getAgentStatusProjection(agent);
-  if (p) {
-    if (!p.registered) return { state: 'unavailable', labelKey: 'agent_state_unavailable' };
-    if (p.running) return { state: 'running', labelKey: 'agent_state_running' };
-    if (!p.enabled) return { state: 'paused', labelKey: 'agent_state_paused' };
-    if (!p.healthy) return { state: 'error', labelKey: 'agent_state_error' };
-    if (p.scheduled) return { state: 'ready', labelKey: 'agent_state_scheduled' };
-    if (p.allowlisted && !p.scheduled) return { state: 'ready', labelKey: 'agent_state_allowlisted' };
-    return { state: 'ready', labelKey: 'active' };
-  }
-  return { state: 'unavailable', labelKey: 'agent_state_unavailable' };
-}
-
 export function formatSchedulerOwnership(projection?: AgentStatusProjection | null): string {
   return projection?.schedulerOwner || 'titan-engine-worker';
 }
@@ -66,3 +48,13 @@ export function lifecycleLabelKey(lifecycle?: string | null): string {
   }
   return 'arbitrage_lifecycle_blocked';
 }
+
+export {
+  resolveAgentProductStatus,
+  resolveOperationalPresentation,
+  mapProductStateToFilterBucket,
+  type AgentProductStatus,
+  type AgentProductPrimaryState,
+  type AgentProductTone,
+  type ProductStatusContext,
+} from './agentProductStatus.ts';

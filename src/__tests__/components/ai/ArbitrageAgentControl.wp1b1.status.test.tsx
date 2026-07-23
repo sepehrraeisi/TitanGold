@@ -26,6 +26,8 @@ const translations: Record<string, string> = {
   agent_state_running: 'Running',
   agent_state_error: 'Error',
   agent_state_unavailable: 'Unavailable',
+  agent_state_scheduled: 'Scheduled',
+  agent_reason_awaiting_first_run: 'Awaiting first scheduled run',
   dry_run_badge: 'Dry Run',
   mode_active_short: 'Active',
   broker_disconnected: 'Broker offline',
@@ -83,6 +85,22 @@ const agent = {
   decisions: 12,
   role: 'Arbitrage Scanner',
   lastUpdate: '2026-07-16T10:23:02.000Z',
+  statusProjection: {
+    agentKey: 'arbitrage',
+    registered: true,
+    configured: true,
+    enabled: true,
+    allowlisted: true,
+    scheduled: true,
+    running: false,
+    healthy: true,
+    dataReady: false,
+    consumerRegistered: true,
+    consumerEligible: true,
+    executionEligible: false,
+    lastRunStatus: 'never',
+    schedulerOwner: 'titan-engine-worker',
+  },
 } as any;
 
 const baseConfig = {
@@ -161,13 +179,13 @@ describe('ARB-WP1B-1 header status presentation', () => {
     sendAgentControlCommand.mockResolvedValue({ ok: true });
   });
 
-  it('shows one Active status, one Dry Run mode, and clean Broker Offline', async () => {
+  it('shows Scheduled status, one Dry Run mode, and clean Broker Offline', async () => {
     render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
     await waitFor(() => expect(screen.getByTestId('arb-overview')).toBeTruthy());
 
     const shellText = screen.getByTestId('agent-control-shell').textContent || '';
 
-    expect(screen.getByTestId('agent-shell-status').textContent).toBe('Active');
+    expect(screen.getByTestId('agent-shell-status').textContent).toBe('Scheduled');
     expect(screen.getByTestId('agent-shell-effective-mode').textContent).toBe('Dry Run');
     expect(screen.getByTestId('agent-shell-execution-kind').textContent).toBe('Provider');
 
@@ -217,6 +235,8 @@ describe('ARB-WP1B-1 header status presentation (Persian)', () => {
     translations.live_side_effects_blocked = 'اثرات جانبی زنده مسدود است.';
     translations.close = 'بستن';
     translations.run_scan = 'اجرای اسکن';
+    translations.agent_state_scheduled = 'زمان‌بندی‌شده';
+    translations.agent_reason_awaiting_first_run = 'در انتظار اولین اجرای زمان‌بندی‌شده';
 
     vi.clearAllMocks();
     fetchArbitrageAgentData.mockResolvedValue({
@@ -251,7 +271,7 @@ describe('ARB-WP1B-1 header status presentation (Persian)', () => {
     render(<ArbitrageAgentControl agent={agent} onClose={() => {}} onUpdate={() => {}} />);
     await waitFor(() => expect(screen.getByTestId('agent-shell-status')).toBeTruthy());
 
-    expect(screen.getByTestId('agent-shell-status').textContent).toBe('فعال');
+    expect(screen.getByTestId('agent-shell-status').textContent).toBe('زمان‌بندی‌شده');
     expect(screen.getByTestId('agent-shell-effective-mode').textContent).toBe('اجرای آزمایشی');
     expect(screen.getByTestId('agent-shell-execution-kind').textContent).toBe('ارائه‌دهنده');
 

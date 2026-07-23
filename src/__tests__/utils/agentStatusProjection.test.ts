@@ -5,7 +5,7 @@ import {
 } from '../../../utils/agentStatusProjection.ts';
 
 describe('agentStatusProjection frontend', () => {
-  it('does not collapse allowlisted and scheduled into one state', () => {
+  it('does not collapse enabled into Active for unscheduled agents', () => {
     const scheduled = resolveOperationalPresentation({
       statusProjection: {
         agentKey: 'arbitrage',
@@ -16,30 +16,30 @@ describe('agentStatusProjection frontend', () => {
         scheduled: true,
         running: false,
         healthy: true,
-        dataReady: true,
+        dataReady: false,
         consumerRegistered: true,
         consumerEligible: true,
         executionEligible: false,
         executionEligibleWhenLive: false,
         liveCapable: false,
         sideEffectClass: 'external_read',
-        lastRunStatus: 'success',
+        lastRunStatus: 'never',
         schedulerOwner: 'titan-engine-worker',
       },
     });
     expect(scheduled.labelKey).toBe('agent_state_scheduled');
 
-    const allowlistedOnly = resolveOperationalPresentation({
+    const limited = resolveOperationalPresentation({
       statusProjection: {
         agentKey: 'technical',
         registered: true,
         configured: true,
         enabled: true,
-        allowlisted: true,
+        allowlisted: false,
         scheduled: false,
         running: false,
         healthy: true,
-        dataReady: false,
+        dataReady: true,
         consumerRegistered: false,
         consumerEligible: false,
         executionEligible: false,
@@ -50,7 +50,8 @@ describe('agentStatusProjection frontend', () => {
         schedulerOwner: 'titan-engine-worker',
       },
     });
-    expect(allowlistedOnly.labelKey).toBe('agent_state_allowlisted');
+    expect(limited.labelKey).toBe('agent_product_limited');
+    expect(limited.reasonKey).toBe('agent_reason_not_scheduled');
   });
 
   it('maps lifecycle keys for product UI', () => {

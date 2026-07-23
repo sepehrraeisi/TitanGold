@@ -117,6 +117,24 @@ export const baseAgentResponseSchema = z.object({
       schedulerOwner: z.string(),
     })
     .optional(),
+  productStatus: z
+    .object({
+      primaryState: z.enum([
+        'unavailable',
+        'blocked',
+        'limited',
+        'operational',
+        'scheduled',
+        'running',
+        'paused',
+        'error',
+      ]),
+      primaryLabelKey: z.string(),
+      tone: z.enum(['success', 'info', 'warning', 'error', 'neutral']),
+      primaryReasonKey: z.string().nullable(),
+      safeDetails: z.array(z.string()),
+    })
+    .optional(),
 });
 
 export const agentResponseSchema = baseAgentResponseSchema.extend({

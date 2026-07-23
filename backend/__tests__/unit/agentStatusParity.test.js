@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from '@jest/globals';
 import { buildAgentStatusProjection } from '../../services/agentStatusProjection.js';
+import { buildAgentProductStatus } from '../../services/agentProductStatus.js';
 import { listAgentKeys } from '../../services/agents/registry.js';
 
 describe('agentStatusParity', () => {
@@ -58,19 +59,31 @@ describe('agentStatusParity', () => {
     expect(p.consumerEligible).toBe(false);
   });
 
-  it('running is true only for active running/training status', () => {
-    const running = buildAgentStatusProjection({
-      agent: { agent_key: 'technical', status: 'running', is_enabled: true, config: { a: 1 }, metadata: {} },
-      allowlist: [],
-      schedulerRunning: false,
-    });
-    expect(running.running).toBe(true);
-
-    const idle = buildAgentStatusProjection({
-      agent: { agent_key: 'technical', status: 'active', is_enabled: true, config: { a: 1 }, metadata: {} },
-      allowlist: [],
-      schedulerRunning: false,
-    });
-    expect(idle.running).toBe(false);
+  it('API productStatus matches projection semantics for all canonical agents', () => {
+    for (const key of listAgentKeys()) {
+      const projection = buildAgentStatusProjection({
+        agent: {
+          agent_key: key,
+          status: 'active',
+          is_enabled: true,
+          config: key === 'arbitrage' ? { symbols: ['BTCUSDT'] } : { x: 1 },
+          metadata: key === 'arbitrage' ? { last_result: { status: 'completed' } } : {},
+          last_active_at: key === 'arbitrage' ? new Date().toISOString() : null,
+        },
+        ...baseCtx,
+      });
+      const product = buildAgentProductStatus(projection, {
+        killSwitchActive: true,
+        effectiveMode: 'demo',
+      });
+      if (key === 'arbitrage') {
+        expect(['scheduled', 'operational']).toContain(product.primaryState);
+      } else if (key === 'order') {
+        expect(product.primaryState).toBe('blocked');
+      } else {
+        expect(product.primaryState).toBe('limited');
+      }
+      expect(product.primaryLabelKey).not.toBe('active');
+    }
   });
 });
