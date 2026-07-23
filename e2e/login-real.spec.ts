@@ -6,6 +6,7 @@ import { test, expect } from '@playwright/test';
 const loginUser = process.env.PLAYWRIGHT_LOGIN_USER;
 const loginPassword = process.env.PLAYWRIGHT_LOGIN_PASSWORD;
 const runLoginE2e = process.env.RUN_LOGIN_E2E === '1';
+const loginHeading = /Welcome to Titan/i;
 
 async function clearAuthState(page: import('@playwright/test').Page, context: import('@playwright/test').BrowserContext) {
   await context.clearCookies();
@@ -15,10 +16,36 @@ async function clearAuthState(page: import('@playwright/test').Page, context: im
   });
 }
 
+async function waitForLoginForm(page: import('@playwright/test').Page) {
+  await expect(page.getByRole('heading', { name: loginHeading })).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('#username')).toBeVisible();
+}
+
 async function submitLogin(page: import('@playwright/test').Page, username: string, password: string) {
   await page.locator('#username').fill(username);
   await page.locator('#password').fill(password);
   await page.getByRole('button', { name: /login|ورود/i }).click();
+}
+
+async function submitLoginAndAwaitResponse(
+  page: import('@playwright/test').Page,
+  username: string,
+  password: string,
+) {
+  await waitForLoginForm(page);
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/v1/auth/login') &&
+      response.request().method() === 'POST',
+    { timeout: 30000 },
+  );
+  await submitLogin(page, username, password);
+  return responsePromise;
+}
+
+async function expectAuthenticatedLanding(page: import('@playwright/test').Page) {
+  await expect(page.getByRole('heading', { name: loginHeading })).not.toBeVisible({ timeout: 15000 });
+  await expect(page.locator('#username')).toHaveCount(0);
 }
 
 test.describe('Real username/password login', () => {
@@ -34,16 +61,18 @@ test.describe('Real username/password login', () => {
 
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
-    await submitLogin(page, loginUser!, loginPassword!);
 
-    await expect(page.locator('#username')).toHaveCount(0, { timeout: 15000 });
+    const loginResponse = await submitLoginAndAwaitResponse(page, loginUser!, loginPassword!);
+    expect(loginResponse.status()).toBe(200);
+
+    await expectAuthenticatedLanding(page);
 
     const token = await page.evaluate(() => localStorage.getItem('titan_token'));
     expect(token).toBeTruthy();
     expect(token).not.toMatch(/^dev-token-/);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#username')).toHaveCount(0);
+    await expectAuthenticatedLanding(page);
 
     const fatal = consoleErrors.filter(
       (e) => /CORS|Not allowed by CORS|500/i.test(e) && !/favicon/i.test(e),
@@ -54,8 +83,11 @@ test.describe('Real username/password login', () => {
   test('logout and re-login cycle clears and restores authenticated session', async ({ page, context }) => {
     await clearAuthState(page, context);
     await page.goto('/');
-    await submitLogin(page, loginUser!, loginPassword!);
-    await expect(page.locator('#username')).toHaveCount(0, { timeout: 15000 });
+    await page.waitForLoadState('domcontentloaded');
+
+    const firstLogin = await submitLoginAndAwaitResponse(page, loginUser!, loginPassword!);
+    expect(firstLogin.status()).toBe(200);
+    await expectAuthenticatedLanding(page);
 
     await page.evaluate(() => {
       localStorage.removeItem('titan_token');
@@ -64,10 +96,12 @@ test.describe('Real username/password login', () => {
       sessionStorage.removeItem('titan_user');
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#username')).toBeVisible({ timeout: 10000 });
+    await waitForLoginForm(page);
 
-    await submitLogin(page, loginUser!, loginPassword!);
-    await expect(page.locator('#username')).toHaveCount(0, { timeout: 15000 });
+    const secondLogin = await submitLoginAndAwaitResponse(page, loginUser!, loginPassword!);
+    expect(secondLogin.status()).toBe(200);
+    await expectAuthenticatedLanding(page);
+
     const token = await page.evaluate(() => localStorage.getItem('titan_token'));
     expect(token).toBeTruthy();
   });
@@ -75,7 +109,14 @@ test.describe('Real username/password login', () => {
   test('wrong password shows safe generic error', async ({ page, context, request }) => {
     await clearAuthState(page, context);
     await page.goto('/');
-    await submitLogin(page, loginUser!, '__definitely_wrong_password__');
+    await page.waitForLoadState('domcontentloaded');
+
+    const loginResponse = await submitLoginAndAwaitResponse(
+      page,
+      loginUser!,
+      '__definitely_wrong_password__',
+    );
+    expect(loginResponse.status()).toBe(401);
 
     await expect(page.locator('body')).toContainText(/invalid username or password|invalid_credentials|نام کاربری یا رمز/i);
     const token = await page.evaluate(() => localStorage.getItem('titan_token'));

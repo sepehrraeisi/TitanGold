@@ -76,8 +76,6 @@ app.use(cacheHeaders);
 // CORS configuration (API-006)
 import { resolveCorsAllowedOrigins } from './utils/corsOrigins.js';
 
-const allowedOrigins = resolveCorsAllowedOrigins();
-
 const corsOptions = {
   // Dynamic origin validation with whitelist
   origin: function (origin, callback) {
@@ -88,7 +86,7 @@ const corsOptions = {
 
     // Normalize origin (remove trailing slash for comparison)
     const normalizedOrigin = origin.replace(/\/$/, '');
-    const normalizedWhitelist = allowedOrigins.map(o => o.replace(/\/$/, ''));
+    const normalizedWhitelist = resolveCorsAllowedOrigins().map((o) => o.replace(/\/$/, ''));
 
     // Check if origin is in whitelist
     if (normalizedWhitelist.includes(normalizedOrigin)) {

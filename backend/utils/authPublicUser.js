@@ -4,6 +4,10 @@
  */
 export function toPublicAuthUser(row) {
   if (!row) return row;
-  const { password_hash: _passwordHash, ...publicUser } = row;
+  const {
+    password_hash: _passwordHash,
+    is_active: _isActive,
+    ...publicUser
+  } = row;
   return publicUser;
 }

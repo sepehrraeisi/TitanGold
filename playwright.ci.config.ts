@@ -32,7 +32,7 @@ export default defineConfig({
         'cd backend && NODE_ENV=development PORT=5002 DISABLE_ENGINES=true DB_SSL=false node server.js',
       url: 'http://127.0.0.1:5002/api/v1/health',
       reuseExistingServer: !process.env.CI,
-      timeout: 120 * 1000,
+      timeout: 180 * 1000,
       env: {
         DATABASE_URL:
           process.env.DATABASE_URL ||
@@ -53,6 +53,7 @@ export default defineConfig({
       timeout: 120 * 1000,
       env: {
         VITE_DISABLE_DEV_LOGIN_FALLBACK: 'true',
+        VITE_API_PROXY_TARGET: 'http://127.0.0.1:5002',
       },
     },
   ],

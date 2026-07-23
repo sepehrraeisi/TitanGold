@@ -21,10 +21,18 @@ let fixtureUserId = null;
 let fixturePassword = '';
 
 describe('Auth login integration', () => {
+  const savedEnv = {};
+
   beforeAll(async () => {
+    for (const key of ['JWT_SECRET', 'TITAN_DEPLOY_ENV', 'CORS_ALLOWED_ORIGINS']) {
+      savedEnv[key] = process.env[key];
+    }
     if (!process.env.JWT_SECRET) {
       process.env.JWT_SECRET = 'test-jwt-secret';
     }
+    process.env.TITAN_DEPLOY_ENV = 'staging';
+    process.env.CORS_ALLOWED_ORIGINS =
+      'http://127.0.0.1:3010,http://localhost:3010,http://localhost:3000';
     fixturePassword = `fixture-${crypto.randomUUID()}`;
     const passwordHash = await bcrypt.hash(fixturePassword, 10);
     const result = await query(
@@ -45,12 +53,19 @@ describe('Auth login integration', () => {
       await query('DELETE FROM user_sessions WHERE user_id = $1', [fixtureUserId]).catch(() => {});
       await query('DELETE FROM users WHERE id = $1', [fixtureUserId]).catch(() => {});
     }
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
   }, 30000);
 
   it('valid disposable user login succeeds', async () => {
     const response = await request(app)
       .post('/api/v1/auth/login')
-      .set('Origin', 'http://localhost:3000')
+      .set('Origin', 'http://127.0.0.1:3010')
       .send({ username: FIXTURE_USERNAME, password: fixturePassword });
 
     expect(response.status).toBe(200);

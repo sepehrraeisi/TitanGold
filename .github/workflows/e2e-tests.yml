@@ -91,18 +91,23 @@ jobs:
       - name: Prepare disposable login fixture
         run: |
           cd backend
-          node scripts/prepare_login_e2e_fixture.js --quiet-secrets
+          node scripts/prepare_login_e2e_fixture.js --quiet-secrets --output-file .e2e-login.env
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run PR-safe Playwright suite
-        run: npx playwright test --config=playwright.ci.config.ts
+        run: |
+          set -a
+          source backend/.e2e-login.env
+          set +a
+          npx playwright test --config=playwright.ci.config.ts
         env:
           CI: true
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3010
           RUN_LOGIN_E2E: '1'
           VITE_DISABLE_DEV_LOGIN_FALLBACK: 'true'
+          VITE_API_PROXY_TARGET: 'http://127.0.0.1:5002'
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
