@@ -135,6 +135,10 @@ const AIAgents: React.FC = () => {
             if (message.type === 'agent_update' && message.data) {
                 const agentData = message.data;
                 if (agentData.agent_id) {
+                    const completedAt =
+                        agentData.completed_at ||
+                        agentData.result?.completed_at ||
+                        (agentData.event === 'execution_completed' ? message.timestamp : null);
                     setAgents(prev => prev.map(a => {
                         if (a.id === agentData.agent_id) {
                             return {
@@ -143,7 +147,7 @@ const AIAgents: React.FC = () => {
                                 accuracy: agentData.result?.confidence != null
                                     ? agentData.result.confidence * 100
                                     : a.accuracy,
-                                lastUpdate: new Date().toISOString(),
+                                ...(completedAt ? { lastUpdate: completedAt } : {}),
                             };
                         }
                         return a;

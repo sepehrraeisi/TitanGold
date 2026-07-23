@@ -4106,7 +4106,7 @@ const sanitizeAIAgents = (raw: unknown): AIAgent[] => {
             knowledgeSize: toNumber(anyItem.knowledgeSize, 0),
             level: anyItem.level === 'Advanced' || anyItem.level === 'Intermediate' ? anyItem.level : 'Expert',
             capabilities: Array.isArray(anyItem.capabilities) ? anyItem.capabilities.map((c: any) => String(c)) : [],
-            lastUpdate: anyItem.lastUpdate || new Date().toISOString(),
+            lastUpdate: anyItem.lastUpdate ?? null,
         };
 
         if (

@@ -90,11 +90,14 @@ pm2 save >/dev/null
 
 echo "Restarted titan-backend with guarded environment (Scheduler untouched)."
 
-# Post-restart health verification
-sleep 2
+# Post-restart health verification (allow slow cold start)
+sleep 5
 if ! curl -sf "$HEALTH_URL" >/dev/null; then
-  echo "ERROR: backend health check failed after restart: $HEALTH_URL" >&2
-  exit 1
+  sleep 3
+  if ! curl -sf "$HEALTH_URL" >/dev/null; then
+    echo "ERROR: backend health check failed after restart: $HEALTH_URL" >&2
+    exit 1
+  fi
 fi
 
 HEALTH_JSON="$(curl -sf "$HEALTH_URL")"

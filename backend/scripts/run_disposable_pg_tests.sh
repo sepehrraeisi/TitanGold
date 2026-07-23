@@ -6,8 +6,9 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BACKEND="$ROOT/backend"
 CONTAINER="${TITAN_TEST_PG_CONTAINER:-titangold-test-pg-$$}"
 PORT="${TITAN_TEST_PG_PORT:-55432}"
-DATABASE_URL="postgresql://postgres@127.0.0.1:${PORT}/titangold_test"
-export DATABASE_URL NODE_ENV=test
+DATABASE_URL="postgresql://postgres@127.0.0.1:${PORT}/titangold_test?sslmode=disable"
+export DATABASE_URL NODE_ENV=test DB_SSL=false
+unset DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD PGSSLMODE
 
 cleanup() {
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true

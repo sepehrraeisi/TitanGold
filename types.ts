@@ -901,7 +901,7 @@ export interface AIAgent {
   decisions: number;
   level: 'Expert' | 'Advanced' | 'Intermediate';
   capabilities: string[];
-  lastUpdate: string;
+  lastUpdate: string | null;
 
   // Fundamental-specific metrics
   totalAnalyses?: number;
