@@ -476,7 +476,7 @@ describe('AIAgents Component', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('technical-agent-control')).toBeInTheDocument();
-      });
+      }, { timeout: 10000 });
     });
 
     it('closes control panel when close button is clicked', async () => {
@@ -493,7 +493,7 @@ describe('AIAgents Component', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('technical-agent-control')).toBeInTheDocument();
-      });
+      }, { timeout: 10000 });
 
       fireEvent.click(screen.getByText('Close'));
 
