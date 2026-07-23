@@ -16,10 +16,10 @@ Current program slice:
 AGENTS-ARBITRAGE-COMPLETION — Program Slice
 
 Engineering status:
-IN PROGRESS
+VERIFICATION COMPLETE — READY FOR PR REVIEW
 
 Human-QA status:
-PENDING — target READY FOR AGENTS AND ARBITRAGE HUMAN QA
+PASS — Agents list + Arbitrage panel (EN/FA, staging)
 
 Expected baseline:
 - Source branch: `feat/agents-arbitrage-completion` from `origin/main`
