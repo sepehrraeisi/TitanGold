@@ -53,7 +53,7 @@ export function buildAgentStatusProjection({
       consumerEligible = true;
     } else if (consumerRegistered) {
       consumerEligible = false;
-    } else if (resolveAgentConsumerEligibility(mexcMatrix, agentKey)?.code === UNREGISTERED_AGENT_STATUS.code) {
+    } else if (mexcMatrix && resolveAgentConsumerEligibility(mexcMatrix, agentKey)?.code === UNREGISTERED_AGENT_STATUS.code) {
       consumerRegistered = false;
       consumerEligible = false;
     }

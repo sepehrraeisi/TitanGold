@@ -40,6 +40,17 @@ describe('agentStatusProjection', () => {
     expect(projection.consumerRegistered).toBe(false);
   });
 
+  it('fail-closed for portfolio consumer id collision without capability matrix', () => {
+    const projection = buildAgentStatusProjection({
+      agent: { agent_key: 'portfolio', status: 'active', is_enabled: true, config: {}, metadata: {} },
+      allowlist: [],
+      mexcMatrix: null,
+    });
+    expect(projection.registered).toBe(true);
+    expect(projection.consumerRegistered).toBe(false);
+    expect(projection.consumerEligible).toBe(false);
+  });
+
   it('canonical registry has no duplicate keys', () => {
     const keys = [
       'technical', 'risk', 'sentiment', 'pattern', 'price_prediction', 'arbitrage',

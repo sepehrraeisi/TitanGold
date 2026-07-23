@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
+import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import { lifecycleLabelKey } from '../../utils/agentStatusProjection.ts';
 import * as api from '../../services/api.ts';
 import {
