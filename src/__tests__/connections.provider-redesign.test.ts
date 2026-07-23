@@ -168,7 +168,8 @@ describe('source containment', () => {
     const panel = read('components/settings/connections/MexcConnectionPanel.tsx');
     const display = read('services/connectionDisplayStatus.ts');
     expect(multi).toMatch(/navigateToConnectionSection/);
-    expect(multi).toMatch(/not_available_yet|connections_not_available_yet|buildMexcProviderSummary/);
+    expect(multi).toMatch(/ExchangeProviderListItem|ProviderListCard/);
+    expect(multi).toMatch(/buildMexcProviderSummary/);
     expect(panel).toMatch(/ConnectionsSectionNav/);
     expect(panel).toMatch(/mexc_section_overview|normalizeMexcManageSection/);
     expect(panel).toMatch(/apiSecret:\s*['"]['"]/);

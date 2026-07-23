@@ -32,9 +32,9 @@ describe('Connections polish — placeholders and credentials', () => {
   it('future-provider status key is not_available_yet once', () => {
     expect(connectionStatusMessageKey('not_available_yet')).toBe('connections_not_available_yet');
     const list = read('components/settings/MultiExchangeSettings.tsx');
-    expect(list).toMatch(/connection-unavailable/);
-    // subtitle status only for MEXC
-    expect(list).toMatch(/!expanded && isMexc/);
+    const card = read('components/settings/connections/ProviderListCard.tsx');
+    expect(card).toMatch(/connection-unavailable-/);
+    expect(list).toMatch(/ExchangeProviderListItem/);
     expect(list).not.toMatch(/Coming soon/);
   });
 
