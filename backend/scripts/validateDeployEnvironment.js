@@ -82,8 +82,8 @@ export function validateDeployEnvironment(env = process.env, options = {}) {
       NODE_ENV: nodeEnv,
       TITAN_DEPLOY_ENV: deployEnv,
       TITAN_RUNTIME_COMMIT: runtimeCommit ? runtimeCommit.slice(0, 7) : '(missing)',
-      JWT_SECRET: jwtSecretPresent ? 'present' : 'missing',
-      CORS_ALLOWED_ORIGINS: corsOrigins.length ? 'configured' : 'missing',
+      auth_secret: jwtSecretPresent ? 'present' : 'missing',
+      cors_origins: corsOrigins.length ? 'configured' : 'missing',
       STAGING_ORIGIN_ALLOWED: stagingOriginAllowed ? 'yes' : 'no',
     },
   };

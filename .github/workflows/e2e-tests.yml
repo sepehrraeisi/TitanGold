@@ -1,3 +1,4 @@
+# PR-safe E2E workflow — disposable PostgreSQL + backend + login fixture.
 name: E2E Tests
 
 on:
@@ -7,6 +8,7 @@ on:
       - 'e2e/**'
       - 'components/**'
       - 'src/**'
+      - 'backend/**'
       - 'playwright.config.ts'
       - 'playwright.ci.config.ts'
       - 'package.json'
@@ -19,6 +21,7 @@ on:
       - 'e2e/**'
       - 'components/**'
       - 'src/**'
+      - 'backend/**'
       - 'playwright.config.ts'
       - 'playwright.ci.config.ts'
       - 'package.json'
@@ -30,11 +33,32 @@ jobs:
   e2e-tests:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    # Vite 7 / Playwright CI stack requires Node 20.19+.
     strategy:
       fail-fast: false
       matrix:
         node-version: [20.x]
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: titangold_test
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test?sslmode=disable
+      DB_SSL: 'false'
+      JWT_SECRET: test
+      TITAN_DEPLOY_ENV: staging
+      CORS_ALLOWED_ORIGINS: http://127.0.0.1:3010,http://localhost:3010
 
     steps:
       - name: Checkout code
@@ -45,10 +69,29 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         run: npm ci
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Bootstrap disposable schema for login E2E
+        run: |
+          cd backend
+          node scripts/ci_apply_base_schema.js
+          npm run migrate:setup
+          npm run migrate:up
+
+      - name: Prepare disposable login fixture
+        run: |
+          cd backend
+          node scripts/prepare_login_e2e_fixture.js --quiet-secrets
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
@@ -57,8 +100,8 @@ jobs:
         run: npx playwright test --config=playwright.ci.config.ts
         env:
           CI: true
-          # No live MEXC / credentials in PR E2E
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3010
+          RUN_LOGIN_E2E: '1'
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

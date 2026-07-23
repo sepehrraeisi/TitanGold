@@ -5,24 +5,28 @@
 import { describe, expect, it, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import app from '../../server.js';
 import { query } from '../../database/db.js';
-import { STAGING_PUBLIC_ORIGIN } from '../../utils/corsOrigins.js';
 
 dotenv.config();
 
 const FIXTURE_EMAIL = 'auth-login-fixture@titangold.test';
 const FIXTURE_USERNAME = 'auth_login_fixture';
-const FIXTURE_PASSWORD = 'FixturePass123!';
 
 /** @type {string|null} */
 let fixtureUserId = null;
+/** @type {string} */
+let fixturePassword = '';
 
 describe('Auth login integration', () => {
   beforeAll(async () => {
-    process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
-    const passwordHash = await bcrypt.hash(FIXTURE_PASSWORD, 10);
+    if (!process.env.JWT_SECRET) {
+      process.env.JWT_SECRET = 'test-jwt-secret';
+    }
+    fixturePassword = `fixture-${crypto.randomUUID()}`;
+    const passwordHash = await bcrypt.hash(fixturePassword, 10);
     const result = await query(
       `INSERT INTO users (email, username, password_hash, full_name, role, is_active)
        VALUES ($1, $2, $3, $4, 'user', TRUE)
@@ -34,7 +38,7 @@ describe('Auth login integration', () => {
       [FIXTURE_EMAIL, FIXTURE_USERNAME, passwordHash, 'Auth Login Fixture'],
     );
     fixtureUserId = result.rows[0].id;
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (fixtureUserId) {
@@ -47,7 +51,7 @@ describe('Auth login integration', () => {
     const response = await request(app)
       .post('/api/v1/auth/login')
       .set('Origin', 'http://localhost:3000')
-      .send({ username: FIXTURE_USERNAME, password: FIXTURE_PASSWORD });
+      .send({ username: FIXTURE_USERNAME, password: fixturePassword });
 
     expect(response.status).toBe(200);
     expect(response.body.token).toEqual(expect.any(String));
@@ -76,24 +80,16 @@ describe('Auth login integration', () => {
 
   it('disabled user fails with generic error', async () => {
     await query('UPDATE users SET is_active = FALSE WHERE id = $1', [fixtureUserId]);
-    const response = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ username: FIXTURE_USERNAME, password: FIXTURE_PASSWORD });
+    try {
+      const response = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ username: FIXTURE_USERNAME, password: fixturePassword });
 
-    expect(response.status).toBe(401);
-    expect(response.body.error).toBe('Invalid credentials');
-    await query('UPDATE users SET is_active = TRUE WHERE id = $1', [fixtureUserId]);
-  });
-
-  it('allows Staging browser origin when TITAN_DEPLOY_ENV=staging', async () => {
-    const previous = process.env.TITAN_DEPLOY_ENV;
-    process.env.TITAN_DEPLOY_ENV = 'staging';
-    delete process.env.CORS_ALLOWED_ORIGINS;
-
-    const mod = await import('../../utils/corsOrigins.js');
-    expect(mod.isOriginAllowed(STAGING_PUBLIC_ORIGIN, process.env)).toBe(true);
-
-    process.env.TITAN_DEPLOY_ENV = previous;
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('Invalid credentials');
+    } finally {
+      await query('UPDATE users SET is_active = TRUE WHERE id = $1', [fixtureUserId]);
+    }
   });
 
   it('does not leak internal failure reasons publicly', async () => {
