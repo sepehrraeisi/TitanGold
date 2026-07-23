@@ -10,8 +10,8 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLogin, errorKey }) => {
   const { t } = useLanguage();
-  const [username, setUsername] = useState('admin');  // Changed to existing backend user
-  const [password, setPassword] = useState('Admin123!');  // Changed to existing backend password
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showRegister, setShowRegister] = useState(false);
   const [registerData, setRegisterData] = useState({ name: '', username: '', email: '', password: '', confirmPassword: '' });
   const [isRegistering, setIsRegistering] = useState(false);

@@ -18,7 +18,7 @@ export const loginWithBackend = async (username: string, password: string): Prom
     console.log('🔐 Login attempt:', { username, passLength: password.length });
     
     // Call real backend API
-    const response = await fetch(`${BACKEND_API_URL}/auth/login`, {
+    const response = await fetch(`${BACKEND_API_URL}/v1/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -38,11 +38,15 @@ export const loginWithBackend = async (username: string, password: string): Prom
     }
 
     const data = await response.json();
-    console.log('✅ Login successful:', data);
+    console.log('✅ Login successful:', { username: data.user?.username });
 
-    // Extract user data from backend response
     const backendUser = data.user;
     const token = data.token;
+
+    if (!token || !backendUser?.id) {
+      console.error('❌ Login response missing token or user');
+      return null;
+    }
 
     // Map backend role to frontend role
     const roleMap: { [key: string]: 'Admin' | 'Trader' | 'Viewer' } = {
@@ -87,7 +91,7 @@ export const registerWithBackend = async (
   try {
     console.log('📝 Register attempt:', { email, username, full_name });
     
-    const response = await fetch(`${BACKEND_API_URL}/auth/register`, {
+    const response = await fetch(`${BACKEND_API_URL}/v1/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

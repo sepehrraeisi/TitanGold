@@ -6,8 +6,19 @@ import { authenticate } from '../middleware/auth.js';
 import { logger } from '../services/logger.js';
 import { validateBody, validateResponse } from '../middleware/validation.js';
 import { registerBodySchema, loginBodySchema, authResponseSchema } from '../schemas/authSchemas.js';
+import { toPublicAuthUser } from '../utils/authPublicUser.js';
 
 const router = express.Router();
+
+const LOGIN_FAILURE = 'Invalid credentials';
+
+function logLoginRejection(reason, username) {
+  logger.warn('Login rejected', {
+    category: 'auth_login',
+    reason,
+    identifierLength: String(username || '').length,
+  });
+}
 
 // Generate JWT token
 const generateToken = (userId) => {
@@ -89,7 +100,7 @@ router.post('/register', validateBody(registerBodySchema), validateResponse(auth
     );
 
     res.status(201).json({
-      user: result,
+      user: toPublicAuthUser(result),
       token,
       refreshToken
     });
@@ -109,22 +120,39 @@ router.post('/login', validateBody(loginBodySchema), validateResponse(authRespon
 
     // Find user by username or email
     const userResult = await query(
-      `SELECT id, email, username, full_name, password_hash, role, created_at
+      `SELECT id, email, username, full_name, password_hash, role, created_at, is_active
        FROM users 
        WHERE (username = $1 OR email = $1)`,
       [username]
     );
 
     if (userResult.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      logLoginRejection('user_not_found', username);
+      return res.status(401).json({ error: LOGIN_FAILURE });
     }
 
     const user = userResult.rows[0];
 
+    if (user.is_active === false) {
+      logLoginRejection('account_disabled', username);
+      return res.status(401).json({ error: LOGIN_FAILURE });
+    }
+
+    if (!user.password_hash) {
+      logLoginRejection('unsupported_hash', username);
+      return res.status(401).json({ error: LOGIN_FAILURE });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      logger.error('Login blocked: auth_secret_missing', { category: 'auth_login' });
+      return res.status(503).json({ error: 'Authentication temporarily unavailable' });
+    }
+
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      logLoginRejection('password_mismatch', username);
+      return res.status(401).json({ error: LOGIN_FAILURE });
     }
 
     // Generate tokens
@@ -146,7 +174,7 @@ router.post('/login', validateBody(loginBodySchema), validateResponse(authRespon
     );
 
     res.json({
-      user,
+      user: toPublicAuthUser(user),
       token,
       refreshToken
     });
