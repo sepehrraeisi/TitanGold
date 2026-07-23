@@ -17,11 +17,8 @@ export default defineConfig({
       'deploy/**',
       'backend/**',
       'e2e/**',
-      // Agents baseline suites currently timeout/flake under CI jsdom workers.
-      // Connections closeout CI validates Connections/MEXC suites below; Agents
-      // remain covered by their dedicated Human-QA baselines.
+      // Legacy flaky suites — restored in vitest.agents.config.ts for closeout runs.
       'src/__tests__/components/ai/TrendAgentControl.test.tsx',
-      'src/__tests__/components/ai/AIAgents.test.tsx',
       'src/__tests__/components/ai/ArbitrageAgentControl.wp1a.test.tsx',
       'src/__tests__/components/ai/ArbitrageAgentControl.wp1b1.test.tsx',
     ],

@@ -19,6 +19,7 @@
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest __tests__/unit",
     "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest __tests__/integration",
+    "test:disposable-pg": "bash scripts/run_disposable_pg_tests.sh",
     "test:ci": "NODE_OPTIONS=--experimental-vm-modules jest --ci --coverage --maxWorkers=2",
     "test:verbose": "NODE_OPTIONS=--experimental-vm-modules jest --verbose",
     "test:debug": "NODE_OPTIONS=--experimental-vm-modules node --inspect-brk node_modules/.bin/jest --runInBand"

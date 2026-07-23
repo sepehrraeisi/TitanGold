@@ -122,6 +122,8 @@ function calculateNetProfit(spread, volumeUSDT, config) {
   };
 }
 
+export { calculateSpread, calculateNetProfit };
+
 function calculateRiskScore(spread, volume24h, depth, config) {
   let risk = 0;
   if (spread > 2.0) risk += 30;
