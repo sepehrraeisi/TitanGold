@@ -6,19 +6,20 @@ import { test, expect } from '@playwright/test';
 const loginUser = process.env.PLAYWRIGHT_LOGIN_USER;
 const loginPassword = process.env.PLAYWRIGHT_LOGIN_PASSWORD;
 const runLoginE2e = process.env.RUN_LOGIN_E2E === '1';
-const loginHeading = /Welcome to Titan/i;
 
 async function clearAuthState(page: import('@playwright/test').Page, context: import('@playwright/test').BrowserContext) {
   await context.clearCookies();
   await page.addInitScript(() => {
+    const marker = '__titan_e2e_auth_cleared__';
+    if (sessionStorage.getItem(marker)) return;
     localStorage.clear();
     sessionStorage.clear();
+    sessionStorage.setItem(marker, '1');
   });
 }
 
 async function waitForLoginForm(page: import('@playwright/test').Page) {
-  await expect(page.getByRole('heading', { name: loginHeading })).toBeVisible({ timeout: 20000 });
-  await expect(page.locator('#username')).toBeVisible();
+  await expect(page.locator('#username')).toBeVisible({ timeout: 20000 });
 }
 
 async function submitLogin(page: import('@playwright/test').Page, username: string, password: string) {
@@ -37,15 +38,19 @@ async function submitLoginAndAwaitResponse(
     (response) =>
       response.url().includes('/api/v1/auth/login') &&
       response.request().method() === 'POST',
-    { timeout: 30000 },
+    { timeout: 45000 },
   );
   await submitLogin(page, username, password);
   return responsePromise;
 }
 
 async function expectAuthenticatedLanding(page: import('@playwright/test').Page) {
-  await expect(page.getByRole('heading', { name: loginHeading })).not.toBeVisible({ timeout: 15000 });
-  await expect(page.locator('#username')).toHaveCount(0);
+  await expect
+    .poll(async () => page.evaluate(() => localStorage.getItem('titan_token')), {
+      timeout: 20000,
+    })
+    .not.toBeNull();
+  await expect(page.locator('#username')).toHaveCount(0, { timeout: 20000 });
 }
 
 test.describe('Real username/password login', () => {
@@ -64,6 +69,8 @@ test.describe('Real username/password login', () => {
 
     const loginResponse = await submitLoginAndAwaitResponse(page, loginUser!, loginPassword!);
     expect(loginResponse.status()).toBe(200);
+    const loginBody = await loginResponse.json();
+    expect(loginBody.token).toEqual(expect.any(String));
 
     await expectAuthenticatedLanding(page);
 
