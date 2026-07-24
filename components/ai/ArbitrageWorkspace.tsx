@@ -63,6 +63,8 @@ export interface ArbitrageWorkspaceProps {
     agent: AIAgent;
     initialSection?: ArbitrageAgentSection;
     initialRunId?: string;
+    /** When true, rendered inside AgentControlShell popup (no standalone page chrome). */
+    embedded?: boolean;
     onBack: () => void;
     onNavigate?: OnNavigateHandler;
     onUpdate: (agent: AIAgent) => void;
@@ -72,6 +74,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     agent,
     initialSection = 'overview',
     initialRunId,
+    embedded = false,
     onBack,
     onNavigate,
     onUpdate,
@@ -93,6 +96,9 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     const [isScanning, setIsScanning] = useState(false);
     const [isMonitoringPending, setIsMonitoringPending] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [tabError, setTabError] = useState<string | null>(null);
+    const [settingsLoadState, setSettingsLoadState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+    const [settingsError, setSettingsError] = useState<string | null>(null);
     const scanPendingRef = useRef(false);
 
     const navigateSection = useCallback(
@@ -117,17 +123,36 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         try {
             const data = await api.fetchArbitrageOverview(agent.id);
             setOverview(data);
-            setSettingsDraft(data.settings);
+            if (data.settings) {
+                setSettingsDraft(data.settings);
+                setSettingsLoadState('loaded');
+            }
             if (!selectedRunId && data.latestRun?.runId) {
                 setSelectedRunId(data.latestRun.runId);
             }
         } catch (error) {
             console.error('Failed to load arbitrage overview:', error);
+            setOverview(null);
             setLoadError(t('arbitrage_overview_error_help') || 'Failed to load overview data.');
         } finally {
             setIsLoading(false);
         }
     }, [agent.id, selectedRunId, t]);
+
+    const loadSettings = useCallback(async () => {
+        setSettingsLoadState('loading');
+        setSettingsError(null);
+        try {
+            const saved = await api.fetchArbitrageSettings(agent.id);
+            setSettingsDraft(saved);
+            setSettingsLoadState('loaded');
+            setOverview(prev => (prev ? { ...prev, settings: saved } : prev));
+        } catch (error) {
+            console.error('Failed to load arbitrage settings:', error);
+            setSettingsError(t('load_failed') || 'Failed to load settings.');
+            setSettingsLoadState('error');
+        }
+    }, [agent.id, t]);
 
     useEffect(() => {
         void loadOverview();
@@ -143,6 +168,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
 
     const loadTabData = useCallback(async () => {
         setTabLoading(true);
+        setTabError(null);
         try {
             if (activeTab === 'candidates') {
                 const data = await api.fetchArbitrageCandidates(agent.id, {
@@ -151,8 +177,8 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                 setCandidates(data);
             } else if (activeTab === 'history') {
                 const data = await api.fetchArbitrageRuns(agent.id, { page: runsPage, pageSize: 10 });
-                setRuns(data.items);
-                setRunsTotal(data.pagination.total);
+                setRuns(data.items ?? []);
+                setRunsTotal(data.pagination?.total ?? 0);
                 if (selectedRunId) {
                     const detail = await api.fetchArbitrageRunDetail(agent.id, selectedRunId);
                     setRunDetail(detail);
@@ -162,13 +188,19 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             } else if (activeTab === 'integration') {
                 const data = await api.fetchArbitrageIntegrations(agent.id);
                 setIntegrations(data);
+            } else if (activeTab === 'settings') {
+                await loadSettings();
             }
         } catch (error) {
             console.error('Failed to load arbitrage tab data:', error);
+            setTabError(t('load_failed') || 'Failed to load section data.');
+            if (activeTab === 'history') {
+                setRuns([]);
+            }
         } finally {
             setTabLoading(false);
         }
-    }, [activeTab, agent.id, overview?.latestRun?.runId, runsPage, selectedRunId]);
+    }, [activeTab, agent.id, overview?.latestRun?.runId, runsPage, selectedRunId, loadSettings, t]);
 
     useEffect(() => {
         if (isLoading) return;
@@ -248,7 +280,10 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         }
     };
 
-    const monitoringActive = overview?.settings?.monitoringState === 'active';
+    const monitoringState = overview?.settings?.monitoringState;
+    const monitoringStateKnown = monitoringState === 'active' || monitoringState === 'paused';
+    const monitoringActive = monitoringState === 'active';
+    const hasHistoricalScans = (overview?.totalScanRuns ?? 0) > 0;
     const product = overview?.product;
     const latestRun = overview?.latestRun;
     const funnel = latestRun?.funnel || {};
@@ -263,58 +298,63 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     }, [overview?.settings, settingsDraft]);
 
     return (
-        <div className="space-y-5" data-testid="arb-workspace">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0 space-y-2">
-                    <SecondaryButton
-                        type="button"
-                        data-testid="arb-workspace-back"
-                        onClick={onBack}
-                        aria-label={t('back_to_agents') || 'Back to agents'}
-                    >
-                        {t('back_to_agents') || 'Back to agents'}
-                    </SecondaryButton>
-                    <div>
-                        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
-                            {product?.displayName || t('strategy_mexc_spot_spread_monitor') || 'MEXC Spot Spread Monitor'}
-                        </h1>
-                        <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-                            {product?.description ||
-                                t('arbitrage_agent_desc') ||
-                                'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'}
-                        </p>
-                    </div>
-                    {product?.unavailableModes?.length ? (
-                        <div className="flex flex-wrap gap-2" data-testid="arb-unavailable-modes">
-                            {product.unavailableModes.map(item => (
-                                <StatusPill
-                                    key={item.mode}
-                                    label={`${item.label} — ${t('unavailable') || item.state}`}
-                                    variant="warning"
-                                />
-                            ))}
+        <div className="space-y-5" data-testid={embedded ? 'arb-workspace-embedded' : 'arb-workspace'}>
+            {!embedded ? (
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 space-y-2">
+                        <SecondaryButton
+                            type="button"
+                            data-testid="arb-workspace-back"
+                            onClick={onBack}
+                            aria-label={t('back_to_agents') || 'Back to agents'}
+                        >
+                            {t('back_to_agents') || 'Back to agents'}
+                        </SecondaryButton>
+                        <div>
+                            <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+                                {product?.displayName || t('strategy_mexc_spot_spread_monitor') || 'MEXC Spot Spread Monitor'}
+                            </h1>
+                            <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
+                                {product?.description ||
+                                    t('arbitrage_agent_desc') ||
+                                    'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'}
+                            </p>
                         </div>
-                    ) : null}
+                        {product?.unavailableModes?.length ? (
+                            <div className="flex flex-wrap gap-2" data-testid="arb-unavailable-modes">
+                                {product.unavailableModes.map(item => (
+                                    <StatusPill
+                                        key={item.mode}
+                                        label={`${item.label} — ${t('unavailable') || item.state}`}
+                                        variant="warning"
+                                    />
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <PrimaryButton
-                        type="button"
-                        data-testid="arb-run-analytical-scan"
-                        data-variant="primary"
-                        onClick={handleRunScan}
-                        disabled={isScanning || agent.status !== 'active'}
-                        aria-busy={isScanning}
-                        aria-label={
-                            isScanning
-                                ? t('scanning') || 'Scanning...'
-                                : t('run_analytical_scan') || 'Run analytical scan'
-                        }
-                    >
-                        {isScanning
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <PrimaryButton
+                    type="button"
+                    data-testid="arb-run-analytical-scan"
+                    data-variant="primary"
+                    onClick={handleRunScan}
+                    disabled={isScanning || agent.status !== 'active'}
+                    aria-busy={isScanning}
+                    aria-label={
+                        isScanning
                             ? t('scanning') || 'Scanning...'
-                            : t('run_analytical_scan') || 'Run analytical scan'}
-                    </PrimaryButton>
-                    {monitoringActive ? (
+                            : t('run_analytical_scan') || 'Run analytical scan'
+                    }
+                >
+                    {isScanning
+                        ? t('scanning') || 'Scanning...'
+                        : t('run_analytical_scan') || 'Run analytical scan'}
+                </PrimaryButton>
+                {monitoringStateKnown ? (
+                    monitoringActive ? (
                         <button
                             type="button"
                             data-testid="arb-pause-monitoring"
@@ -342,8 +382,13 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                                 ? t('loading') || 'Loading...'
                                 : t('resume_monitoring') || 'Resume monitoring'}
                         </button>
-                    )}
-                </div>
+                    )
+                ) : (
+                    <StatusPill
+                        label={t('arbitrage_overview_data_unavailable') || 'Monitoring state unavailable'}
+                        variant="warning"
+                    />
+                )}
             </div>
 
             <div className="px-1">
@@ -399,11 +444,20 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                         onRetry={() => void loadOverview()}
                         retryLabel={t('retry') || 'Retry'}
                     />
+                ) : tabError ? (
+                    <DataHubAlert
+                        variant="error"
+                        message={tabError}
+                        onRetry={() => void loadTabData()}
+                        retryLabel={t('retry') || 'Retry'}
+                    />
                 ) : activeTab === 'overview' ? (
                     <OverviewSection
                         overview={overview}
                         latestRun={latestRun}
                         funnel={funnel}
+                        hasHistoricalScans={hasHistoricalScans}
+                        loadFailed={Boolean(loadError)}
                         t={t}
                         onOpenTab={navigateSection}
                     />
@@ -414,11 +468,12 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                         spreadCandidates={spreadCandidates}
                         rejectedCandidates={rejectedCandidates}
                         qualifiedCandidates={qualifiedCandidates}
+                        failed={Boolean(tabError)}
                         t={t}
                     />
                 ) : activeTab === 'history' ? (
                     <HistorySection
-                        runs={runs}
+                        runs={runs ?? []}
                         total={runsTotal}
                         page={runsPage}
                         runDetail={runDetail}
@@ -428,21 +483,26 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                             setSelectedRunId(runId);
                             navigateSection('history', runId);
                         }}
+                        onRetry={() => void loadTabData()}
+                        failed={Boolean(tabError)}
                         t={t}
                     />
                 ) : activeTab === 'profitRisk' ? (
-                    <ProfitRiskSection overview={overview} t={t} />
-                ) : activeTab === 'settings' && settingsDraft ? (
+                    <ProfitRiskSection overview={overview} latestRun={latestRun} t={t} />
+                ) : activeTab === 'settings' ? (
                     <SettingsSection
                         settings={settingsDraft}
                         dirty={settingsDirty}
-                        loading={tabLoading}
+                        loading={settingsLoadState === 'loading' || tabLoading}
+                        loadState={settingsLoadState}
+                        error={settingsError}
                         onChange={setSettingsDraft}
                         onSave={handleSaveSettings}
+                        onRetry={() => void loadSettings()}
                         t={t}
                     />
                 ) : activeTab === 'integration' ? (
-                    <IntegrationSection integrations={integrations} t={t} />
+                    <IntegrationSection integrations={integrations} failed={Boolean(tabError)} t={t} />
                 ) : null}
             </div>
         </div>
@@ -453,17 +513,28 @@ const OverviewSection: React.FC<{
     overview: ArbitrageCoreOverview | null;
     latestRun: ArbitrageCoreRunSummary | null | undefined;
     funnel: Record<string, number>;
+    hasHistoricalScans: boolean;
+    loadFailed: boolean;
     t: (key: string) => string;
     onOpenTab: (tab: WorkspaceTab, runId?: string) => void;
-}> = ({ overview, latestRun, funnel, t, onOpenTab }) => (
+}> = ({ overview, latestRun, funnel, hasHistoricalScans, loadFailed, t, onOpenTab }) => {
+    const scanStatusLabel = loadFailed
+        ? t('arbitrage_overview_data_unavailable') || 'Data unavailable'
+        : !hasHistoricalScans
+          ? t('arbitrage_overview_never_scanned') || 'Never scanned'
+          : latestRun?.status === 'failed'
+            ? t('arbitrage_overview_scan_failed') || 'Scan failed'
+            : latestRun?.status || t('completed') || 'Completed';
+
+    return (
     <div className="space-y-5" data-testid="arb-overview">
         <DataHubSectionHeader
             title={t('arbitrage_overview_latest_scan') || 'Latest Scan'}
             subtitle={overview?.interpretation || t('arbitrage_overview_interpretation_compact')}
             actions={
                 <StatusPill
-                    label={latestRun?.status || t('arbitrage_overview_never_scanned') || 'Never scanned'}
-                    variant={latestRun?.status === 'failed' ? 'error' : 'info'}
+                    label={scanStatusLabel}
+                    variant={latestRun?.status === 'failed' ? 'error' : loadFailed ? 'warning' : 'info'}
                 />
             }
         />
@@ -504,18 +575,26 @@ const OverviewSection: React.FC<{
                 {t('arbitrage_overview_adjust_settings') || 'Review settings'}
             </SecondaryButton>
         </div>
-        <p className="text-xs text-muted-foreground">
-            {t('total_scans') || 'Total scans'}: {overview?.totalScanRuns ?? 0}
+        <p className="text-xs text-muted-foreground" data-testid="arb-overview-total-scans">
+            {t('total_scans') || 'Total scans'}: {loadFailed ? t('not_available') || 'N/A' : overview?.totalScanRuns ?? 0}
         </p>
     </div>
-);
+    );
+};
 
 const CandidatesSection: React.FC<{
     spreadCandidates: ArbitrageSpreadCandidate[];
     rejectedCandidates: ArbitrageSpreadCandidate[];
     qualifiedCandidates: ArbitrageSpreadCandidate[];
+    failed?: boolean;
     t: (key: string) => string;
-}> = ({ spreadCandidates, rejectedCandidates, qualifiedCandidates, t }) => (
+}> = ({ spreadCandidates, rejectedCandidates, qualifiedCandidates, failed, t }) => {
+    if (failed) {
+        return (
+            <EmptyBlock message={t('arbitrage_overview_data_unavailable') || 'Candidate data unavailable.'} />
+        );
+    }
+    return (
     <div className="space-y-6">
         <SectionBlock title={t('qualified_opportunities') || 'Qualified opportunities'}>
             {qualifiedCandidates.length ? (
@@ -539,7 +618,8 @@ const CandidatesSection: React.FC<{
             )}
         </SectionBlock>
     </div>
-);
+    );
+};
 
 const HistorySection: React.FC<{
     runs: ArbitrageCoreRunSummary[];
@@ -549,16 +629,39 @@ const HistorySection: React.FC<{
     selectedRunId?: string;
     onPage: (page: number) => void;
     onSelectRun: (runId: string) => void;
+    onRetry: () => void;
+    failed?: boolean;
     t: (key: string) => string;
-}> = ({ runs, total, page, runDetail, selectedRunId, onPage, onSelectRun, t }) => (
+}> = ({ runs, total, page, runDetail, selectedRunId, onPage, onSelectRun, onRetry, failed, t }) => {
+    const safeRuns = Array.isArray(runs) ? runs : [];
+    const symbolsRequested = runDetail?.symbolsRequested ?? [];
+    const symbolsEvaluated = runDetail?.symbolsEvaluated ?? [];
+    const rejectionEntries = Object.entries(runDetail?.rejectionSummary ?? {});
+
+    if (failed) {
+        return (
+            <DataHubAlert
+                variant="error"
+                message={t('load_failed') || 'Failed to load scan history.'}
+                onRetry={onRetry}
+                retryLabel={t('retry') || 'Retry'}
+            />
+        );
+    }
+
+    return (
     <div className="space-y-4">
         <SectionBlock title={t('tab_scan_history') || 'Scan history'}>
-            <p className="text-xs text-gray-400 mb-3">
+            <p className="text-xs text-gray-400 mb-3" data-testid="arb-history-total">
                 {t('total_scans') || 'Total scans'}: {total}
             </p>
-            {runs.length ? (
+            <p className="text-xs text-muted-foreground mb-3">
+                {t('arbitrage_history_analytical_only') ||
+                    'Analytical scan history only. Execution history and realized profit are unavailable.'}
+            </p>
+            {safeRuns.length ? (
                 <div className="space-y-3">
-                    {runs.map(item => (
+                    {safeRuns.map(item => (
                         <button
                             key={item.runId}
                             type="button"
@@ -604,26 +707,76 @@ const HistorySection: React.FC<{
                 <p className="text-sm text-gray-300">
                     {t('duration') || 'Duration'}: {runDetail.durationMs ?? NA(t)} ms
                 </p>
+                <p className="text-sm text-gray-300">
+                    {t('monitored_symbols') || 'Symbols requested'}: {symbolsRequested.length}
+                </p>
+                <p className="text-sm text-gray-300">
+                    {t('symbols_evaluated') || 'Symbols evaluated'}: {symbolsEvaluated.length}
+                </p>
+                {rejectionEntries.length ? (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                        {rejectionEntries.map(([reason, count]) => (
+                            <StatusPill key={reason} label={`${reason}: ${count}`} variant="warning" />
+                        ))}
+                    </div>
+                ) : null}
             </SectionBlock>
         ) : null}
     </div>
-);
+    );
+};
 
 const ProfitRiskSection: React.FC<{
     overview: ArbitrageCoreOverview | null;
+    latestRun: ArbitrageCoreRunSummary | null | undefined;
     t: (key: string) => string;
-}> = ({ overview, t }) => (
-    <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+}> = ({ overview, latestRun, t }) => {
+    const funnel = latestRun?.funnel ?? {};
+    const rejectionEntries = Object.entries(latestRun?.rejectionSummary ?? {});
+    const settings = overview?.settings;
+
+    return (
+    <div className="space-y-4" data-testid="arb-profit-risk">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             <MetricBlock
                 label={t('total_scans') || 'Total scans'}
                 value={overview?.totalScanRuns ?? 0}
             />
             <MetricBlock
-                label={t('execution_support') || 'Execution'}
-                value={t('execution_unsupported') || 'Not supported'}
+                label={t('qualified_opportunities') || 'Qualified opportunities'}
+                value={funnel.qualified ?? 0}
+            />
+            <MetricBlock
+                label={t('rejected_candidates') || 'Rejected candidates'}
+                value={funnel.rejected ?? 0}
+            />
+            <MetricBlock
+                label={t('assumed_fees_bps') || 'Assumed fees (bps)'}
+                value={settings?.assumedFeesBps != null ? settings.assumedFeesBps : NA(t)}
+            />
+            <MetricBlock
+                label={t('assumed_slippage_bps') || 'Assumed slippage (bps)'}
+                value={settings?.assumedSlippageBps != null ? settings.assumedSlippageBps : NA(t)}
+            />
+            <MetricBlock
+                label={t('min_profit_bps') || 'Minimum net spread (bps)'}
+                value={settings?.minimumNetSpreadBps != null ? settings.minimumNetSpreadBps : NA(t)}
             />
         </div>
+        {rejectionEntries.length ? (
+            <SectionBlock title={t('rejection_summary') || 'Rejection distribution'}>
+                <div className="flex flex-wrap gap-2">
+                    {rejectionEntries.map(([reason, count]) => (
+                        <StatusPill key={reason} label={`${reason}: ${count}`} variant="warning" />
+                    ))}
+                </div>
+            </SectionBlock>
+        ) : (
+            <p className="text-sm text-gray-400">
+                {t('arbitrage_no_rejection_summary') ||
+                    'No rejection distribution available for the latest run.'}
+            </p>
+        )}
         <p className="text-sm text-gray-400">
             {t('arbitrage_risk_score_help') ||
                 'Risk score is a 0–100 analytical score (lower is better). It is not a percentage probability.'}
@@ -635,17 +788,42 @@ const ProfitRiskSection: React.FC<{
             />
         </div>
     </div>
-);
+    );
+};
 
 const SettingsSection: React.FC<{
-    settings: ArbitrageCoreSettings;
+    settings: ArbitrageCoreSettings | null;
     dirty: boolean;
     loading: boolean;
+    loadState: 'idle' | 'loading' | 'loaded' | 'error';
+    error: string | null;
     onChange: (next: ArbitrageCoreSettings) => void;
     onSave: () => void;
+    onRetry: () => void;
     t: (key: string) => string;
-}> = ({ settings, dirty, loading, onChange, onSave, t }) => (
-    <div className="space-y-6">
+}> = ({ settings, dirty, loading, loadState, error, onChange, onSave, onRetry, t }) => {
+    if (loadState === 'loading' || (loadState === 'idle' && !settings)) {
+        return <p className="text-sm text-muted-foreground">{t('loading') || 'Loading...'}</p>;
+    }
+    if (loadState === 'error' || !settings) {
+        return (
+            <DataHubAlert
+                variant="error"
+                message={error || t('load_failed') || 'Failed to load settings.'}
+                onRetry={onRetry}
+                retryLabel={t('retry') || 'Retry'}
+            />
+        );
+    }
+
+    return (
+    <div className="space-y-6" data-testid="arb-settings">
+        {settings.isDefault ? (
+            <DataHubAlert
+                variant="warning"
+                message={t('arbitrage_settings_defaults_not_saved') || 'Defaults not yet saved'}
+            />
+        ) : null}
         <SectionBlock title={t('arbitrage_active_monitor') || 'Active monitor'}>
             <p className="text-sm text-emerald-300 mb-3">
                 {t('strategy_mexc_spot_spread_monitor') || 'MEXC spot spread monitor'}
@@ -715,33 +893,55 @@ const SettingsSection: React.FC<{
             </PrimaryButton>
         </div>
     </div>
-);
+    );
+};
 
 const IntegrationSection: React.FC<{
-    integrations: ArbitrageCoreIntegrations | null;
+    integrations: (ArbitrageCoreIntegrations & { items?: import('../../services/arbitrageCoreClient.ts').ArbitrageIntegrationItem[] }) | null;
+    failed?: boolean;
     t: (key: string) => string;
-}> = ({ integrations, t }) => (
+}> = ({ integrations, failed, t }) => {
+    if (failed || !integrations) {
+        return (
+            <EmptyBlock
+                message={t('arbitrage_overview_data_unavailable') || 'Integration status unavailable.'}
+            />
+        );
+    }
+
+    const items = integrations.items ?? [];
+
+    return (
     <SectionBlock title={t('tab_integration') || 'Integrations'}>
-        <div className="space-y-3 text-sm text-gray-300">
-            <p>
-                <span className="text-gray-500">{t('data_sources') || 'Data sources'}:</span>{' '}
-                {(integrations?.dataSources || ['MEXC spot (public market data)']).join(', ')}
-            </p>
-            <p className="text-amber-300">
-                {t('arbitrage_integration_truth') ||
-                    'Binance, Gate, futures, settlement, and live execution integrations are not active for this agent.'}
-            </p>
-            <p>
-                {t('execution_support') || 'Execution'}: {t('execution_unsupported') || 'Not supported'}
-            </p>
-            {(integrations?.unavailableIntegrations || []).map(item => (
-                <p key={item} className="text-xs text-muted-foreground">
-                    {item}
-                </p>
+        <div className="space-y-3">
+            {items.map(item => (
+                <div key={item.id} className="bg-gray-900/40 border border-gray-800 rounded-xl p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-white">{item.label}</p>
+                        <StatusPill label={item.state} variant={item.state === 'available' ? 'info' : 'warning'} />
+                    </div>
+                    {item.owner ? (
+                        <p className="text-xs text-gray-500 mt-1">
+                            {t('owner') || 'Owner'}: {item.owner}
+                        </p>
+                    ) : null}
+                    {item.safeReason ? (
+                        <p className="text-xs text-gray-400 mt-1">{item.safeReason}</p>
+                    ) : item.state === 'unavailable' ? (
+                        <p className="text-xs text-gray-400 mt-1">
+                            {t('arbitrage_overview_data_unavailable') || 'Status unavailable'}
+                        </p>
+                    ) : null}
+                </div>
             ))}
         </div>
+        <p className="text-xs text-amber-300 mt-4">
+            {t('arbitrage_integration_truth') ||
+                'Binance, Gate, futures, settlement, and live execution integrations are not active for this agent.'}
+        </p>
     </SectionBlock>
-);
+    );
+};
 
 const CandidateCard: React.FC<{
     candidate: ArbitrageSpreadCandidate;

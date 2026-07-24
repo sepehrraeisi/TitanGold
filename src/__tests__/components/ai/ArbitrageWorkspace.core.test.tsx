@@ -41,6 +41,7 @@ const fetchArbitrageOverview = vi.fn();
 const fetchArbitrageCandidates = vi.fn();
 const fetchArbitrageRuns = vi.fn();
 const fetchArbitrageRunDetail = vi.fn();
+const fetchArbitrageSettings = vi.fn();
 const fetchArbitrageIntegrations = vi.fn();
 const updateArbitrageCoreSettings = vi.fn();
 const runArbitrageAnalyticalScan = vi.fn();
@@ -53,6 +54,7 @@ vi.mock('../../../../services/api.ts', () => ({
   fetchArbitrageRuns: (...args: unknown[]) => fetchArbitrageRuns(...args),
   fetchArbitrageRunDetail: (...args: unknown[]) => fetchArbitrageRunDetail(...args),
   fetchArbitrageIntegrations: (...args: unknown[]) => fetchArbitrageIntegrations(...args),
+  fetchArbitrageSettings: (...args: unknown[]) => fetchArbitrageSettings(...args),
   updateArbitrageCoreSettings: (...args: unknown[]) => updateArbitrageCoreSettings(...args),
   runArbitrageAnalyticalScan: (...args: unknown[]) => runArbitrageAnalyticalScan(...args),
   updateArbitrageMonitoringState: (...args: unknown[]) => updateArbitrageMonitoringState(...args),
@@ -104,6 +106,7 @@ describe('ArbitrageWorkspace core', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchArbitrageOverview.mockResolvedValue(overview);
+    fetchArbitrageSettings.mockResolvedValue(overview.settings);
     fetchArbitrageCandidates.mockResolvedValue({
       runId: 'run-1',
       spreadCandidates: [],
