@@ -1,72 +1,72 @@
 ---
-description: TitanGold dynamic active-work authority — post-merge scheduler incident closeout
+description: TitanGold dynamic active-work authority — Arbitrage Agent full product completion
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Close the post-merge Scheduler incident, land Scheduler-safe backend deployment
-guards, and complete post-merge Human QA for authentication and Agents/Arbitrage
-browser navigation on main @ `2e5e493`.
+Complete the Arbitrage Agent as a truthful, read-only analytical product — MEXC
+spot bid/ask spread monitor first — with full tabs, canonical domain contracts,
+persistence audit, security hardening, performance targets, observability, and
+Human QA. Do not treat Arbitrage as closed or frozen.
 
 Current area:
-Deployment safety · Scheduler ownership · Post-merge verification
+Agents → Arbitrage (sole active Agent outcome)
 
 Current program slice:
-POST-MERGE-SCHEDULER-INCIDENT — Remediation + Closeout
+ARBITRAGE-FULL-PRODUCT — Program Slice
 
 Risk tier:
-Tier 3 — Scheduler/runtime safety remediation
+Tier 2 analytical product (Tier-4/Live execution remains blocked)
 
 Engineering status:
-HOTFIX IN REVIEW — `fix/postmerge-scheduler-deploy-guard`
+DISCOVERY COMPLETE — IMPLEMENTATION NOT STARTED
 
 Human-QA status:
-PENDING — user must confirm clean-browser login/logout/re-login cycle
+NOT STARTED — required before PR and before any Arbitrage freeze claim
 
 Expected baseline:
-- Main merge baseline: `2e5e493676f223836a910a0ee57c8197afeef00b`
-- Runtime marker: `2e5e493`
-- Scheduler owner: `titan-engine-worker` (single owner, do not restart)
+- Main baseline: `566b412e181004c591e68ba34f2f4464712de0c4`
+- Runtime marker: `566b412` (Scheduler-safe deploy guard active)
+- Branch: `feat/arbitrage-agent-full-product` from exact `origin/main`
+- Scheduler owner: `titan-engine-worker` (single owner — do not restart)
 - Scheduler allowlist: `["arbitrage"]` only — do not expand
 - Demo + Emergency Stop remain active; Live impossible
 
 Authorized scope:
-- PM2 deployment guard hardening (`titan-backend` only)
-- Deployment regression tests (mocked PM2 harness)
-- Scheduler recovery verification (read-only, no worker restart)
-- Post-merge browser smoke evidence
-- Canonical Rule 02 update for incident closeout
+- Arbitrage-only registry, backend, API, UI, tests, observability
+- Canonical scan/candidate/settings contracts (read-only analytical)
+- Settings persistence, pause/resume monitoring (not PM2 Scheduler restart)
+- Manual analytical scan with authorization and idempotency
+- Dedicated-table design and migration **proposal only** until explicit approval
+- EN/FA/RTL, mobile, accessibility for Arbitrage workspace
+- Performance/load tests with synthetic data only
 
 Hard boundaries:
-- Do not start the next Agent outcome
-- Do not call MEXC or access exchange credentials
-- Do not execute financial actions
+- Do not start work on any other Agent until this outcome completes
+- Do not call new provider endpoints without explicit stop + authorization
+- Do not access exchange credentials
+- Do not place orders or enable Tier-4/Live execution
 - Do not expand Scheduler allowlist
 - Do not restart or delete `titan-engine-worker`
-- Do not deploy guard by manually editing runtime files
-- Do not merge hotfix PR without review
+- Do not label Arbitrage closed/frozen until user approves final Human QA
+- Do not open PR until all tabs functionally complete and tests green
+- Do not apply new Staging migrations without explicit migration approval
 
-Freeze status (pending incident closeout PASS):
-- Agents Platform canonical registry — **CLOSED pending scheduler-safety PR**
-- Arbitrage read-only workflow — **CLOSED pending scheduler-safety PR**
-- Authentication/CORS deployment regression — **CLOSED**
-- Deployment environment guard — **ACTIVE BASELINE** (being extended with PM2 guard)
-
-Documented limitations:
-- Invalid direct Agent UI route uses safe SPA redirect (API fail-closed preserved)
-- Only Arbitrage is allowlisted; other Agents remain Limited
-- Tier-4 / Live blocked
+Product truth:
+- Operational mode today: **single-venue MEXC spot bid/ask spread monitoring**
+- Triangular, cross-exchange, futures/spot basis: **unavailable** until explicitly implemented
+- Auto Execute operational setting: **not permitted** in this read-only Agent
 
 Acceptance criteria:
-- RCA for accidental Scheduler restart documented
-- Backend deploy cannot target Scheduler or wildcard PM2 verbs
-- Guard tests pass (`failed=0`, `environment-blocked=0`)
-- Scheduler owner=1, allowlist unchanged, 3 normal ticks verified
-- User confirms post-merge login/logout/re-login
-- Actual browser navigation smoke for Agents + Arbitrage (EN/FA)
-- Hotfix PR open to main (not merged)
+- Truth audit and capability map complete (done)
+- All tabs functionally complete with server-side pagination/filtering where required
+- Database ownership proven; migration approved/applied only when required
+- Security, performance, and observability targets met
+- Automated tests green (`failed=0`, `environment-blocked=0`)
+- Consolidated Human QA PASS (EN/FA, desktop/tablet/mobile)
+- No provider/private financial side effects
 
 Next transition:
-**READY FOR SCHEDULER-SAFETY PR REVIEW** → merge hotfix → resume Agents/Arbitrage freeze closeout
+Implementation phases → **READY FOR ARBITRAGE FULL PRODUCT HUMAN QA** → user-approved PR
