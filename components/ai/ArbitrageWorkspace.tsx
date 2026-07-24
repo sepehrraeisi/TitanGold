@@ -14,22 +14,23 @@ import type {
     ArbitrageMonitoringState,
 } from '../../services/api.ts';
 import {
-    BTN_ACTION_BLUE,
-    BTN_WARNING,
-    DATAHUB_SHELL,
-    FOCUS_RING,
     PrimaryButton,
     SecondaryButton,
     DataHubAlert,
-    DataHubSectionHeader,
-    MetricCard as DataHubMetricCard,
     StatusPill,
 } from './AIManager/tabs/DataHub/dataHubUi.tsx';
+import {
+    AgentActionBar,
+    AgentContentSurface,
+    AgentPrimaryAction,
+    AgentProductDialog,
+    AgentSecondaryAction,
+    AgentSectionHeader,
+    AgentSectionNavigation,
+} from './product/index.ts';
+import ArbitrageOverviewSection from './arbitrage/ArbitrageOverviewSection.tsx';
+import { formatRejectionReason } from '../../utils/arbitrageReasonLabels.ts';
 
-const btnClass = (base: string) =>
-    `${base} ${FOCUS_RING} inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors`.trim();
-
-type WorkspaceTab = ArbitrageAgentSection;
 
 const TAB_ITEMS: Array<{ id: WorkspaceTab; labelKey: string }> = [
     { id: 'overview', labelKey: 'tab_overview' },
@@ -297,173 +298,116 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         return JSON.stringify(settingsDraft) !== JSON.stringify(overview.settings);
     }, [overview?.settings, settingsDraft]);
 
-    return (
-        <div className="space-y-5" data-testid={embedded ? 'arb-workspace-embedded' : 'arb-workspace'}>
-            {!embedded ? (
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 space-y-2">
-                        <SecondaryButton
-                            type="button"
-                            data-testid="arb-workspace-back"
-                            onClick={onBack}
-                            aria-label={t('back_to_agents') || 'Back to agents'}
-                        >
-                            {t('back_to_agents') || 'Back to agents'}
-                        </SecondaryButton>
-                        <div>
-                            <h1 className="text-xl sm:text-2xl font-bold text-foreground">
-                                {product?.displayName || t('strategy_mexc_spot_spread_monitor') || 'MEXC Spot Spread Monitor'}
-                            </h1>
-                            <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-                                {product?.description ||
-                                    t('arbitrage_agent_desc') ||
-                                    'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'}
-                            </p>
-                        </div>
-                        {product?.unavailableModes?.length ? (
-                            <div className="flex flex-wrap gap-2" data-testid="arb-unavailable-modes">
-                                {product.unavailableModes.map(item => (
-                                    <StatusPill
-                                        key={item.mode}
-                                        label={`${item.label} — ${t('unavailable') || item.state}`}
-                                        variant="warning"
-                                    />
-                                ))}
-                            </div>
-                        ) : null}
-                    </div>
-                </div>
-            ) : null}
+    const sectionTabs = TAB_ITEMS.map(tab => ({
+        id: tab.id,
+        label: t(tab.labelKey),
+    }));
 
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <PrimaryButton
-                    type="button"
-                    data-testid="arb-run-analytical-scan"
-                    data-variant="primary"
-                    onClick={handleRunScan}
-                    disabled={isScanning || agent.status !== 'active'}
-                    aria-busy={isScanning}
-                    aria-label={
-                        isScanning
-                            ? t('scanning') || 'Scanning...'
-                            : t('run_analytical_scan') || 'Run analytical scan'
-                    }
-                >
-                    {isScanning
+    const actionBar = (
+        <AgentActionBar>
+            <AgentPrimaryAction
+                label={
+                    isScanning
                         ? t('scanning') || 'Scanning...'
-                        : t('run_analytical_scan') || 'Run analytical scan'}
-                </PrimaryButton>
-                {monitoringStateKnown ? (
-                    monitoringActive ? (
-                        <button
-                            type="button"
-                            data-testid="arb-pause-monitoring"
-                            data-variant="warning"
-                            onClick={handleMonitoringToggle}
-                            disabled={isMonitoringPending}
-                            aria-busy={isMonitoringPending}
-                            className={btnClass(BTN_WARNING)}
-                        >
-                            {isMonitoringPending
+                        : t('run_analytical_scan') || 'Run analytical scan'
+                }
+                onClick={handleRunScan}
+                disabled={isScanning || agent.status !== 'active'}
+                loading={isScanning}
+                testId="arb-run-analytical-scan"
+            />
+            {monitoringStateKnown ? (
+                monitoringActive ? (
+                    <AgentSecondaryAction
+                        label={
+                            isMonitoringPending
                                 ? t('loading') || 'Loading...'
-                                : t('pause_monitoring') || 'Pause monitoring'}
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            data-testid="arb-resume-monitoring"
-                            data-variant="action-blue"
-                            onClick={handleMonitoringToggle}
-                            disabled={isMonitoringPending}
-                            aria-busy={isMonitoringPending}
-                            className={btnClass(BTN_ACTION_BLUE)}
-                        >
-                            {isMonitoringPending
-                                ? t('loading') || 'Loading...'
-                                : t('resume_monitoring') || 'Resume monitoring'}
-                        </button>
-                    )
-                ) : (
-                    <StatusPill
-                        label={t('arbitrage_overview_data_unavailable') || 'Monitoring state unavailable'}
+                                : t('pause_monitoring') || 'Pause monitoring'
+                        }
+                        onClick={handleMonitoringToggle}
+                        disabled={isMonitoringPending}
+                        loading={isMonitoringPending}
                         variant="warning"
+                        testId="arb-pause-monitoring"
                     />
-                )}
-            </div>
+                ) : (
+                    <AgentSecondaryAction
+                        label={
+                            isMonitoringPending
+                                ? t('loading') || 'Loading...'
+                                : t('resume_monitoring') || 'Resume monitoring'
+                        }
+                        onClick={handleMonitoringToggle}
+                        disabled={isMonitoringPending}
+                        loading={isMonitoringPending}
+                        testId="arb-resume-monitoring"
+                    />
+                )
+            ) : (
+                <StatusPill
+                    label={t('arbitrage_overview_data_unavailable') || 'Monitoring state unavailable'}
+                    variant="warning"
+                />
+            )}
+        </AgentActionBar>
+    );
 
-            <div className="px-1">
-                <p className="text-xs text-amber-300/90 mb-3">
-                    {t('arbitrage_analytical_mode_banner') ||
-                        'Analytical mode: MEXC spot bid/ask spread monitor. Not executable multi-leg arbitrage. No live orders.'}
-                </p>
-                <div
-                    className="flex flex-nowrap sm:flex-wrap gap-2 pb-3 overflow-x-auto overscroll-x-contain"
-                    role="tablist"
-                    aria-label={t('arbitrage_tabs') || 'Arbitrage tabs'}
-                    data-testid="arb-tablist"
-                >
-                    {TAB_ITEMS.map(tab => {
-                        const selected = activeTab === tab.id;
-                        return (
-                            <button
-                                key={tab.id}
-                                type="button"
-                                role="tab"
-                                id={`arb-tab-${tab.id}`}
-                                aria-selected={selected}
-                                aria-controls={`arb-panel-${tab.id}`}
-                                data-testid={`arb-tab-${tab.id}`}
-                                tabIndex={selected ? 0 : -1}
-                                onClick={() => navigateSection(tab.id, selectedRunId)}
-                                className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${FOCUS_RING} ${
-                                    selected
-                                        ? 'bg-purple-600/20 border-purple-500/60 text-purple-300'
-                                        : 'border-slate-600/70 bg-slate-900/70 text-slate-300 hover:border-purple-400/50'
-                                }`}
-                            >
-                                {t(tab.labelKey)}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
+    const sectionNavigation = (
+        <AgentSectionNavigation
+            tabs={sectionTabs}
+            activeTab={activeTab}
+            onTabChange={tabId => navigateSection(tabId as WorkspaceTab, selectedRunId)}
+            ariaLabel={t('arbitrage_tabs') || 'Arbitrage tabs'}
+            testId="arb-tablist"
+            idPrefix="arb"
+        />
+    );
 
-            <div
-                className={`${DATAHUB_SHELL} p-4 sm:p-6`}
-                role="tabpanel"
-                id={`arb-panel-${activeTab}`}
-                aria-labelledby={`arb-tab-${activeTab}`}
-                data-testid="arb-tab-panel"
-            >
-                {isLoading ? (
+    const renderTabPanel = () => (
+        <div
+            role="tabpanel"
+            id={`arb-panel-${activeTab}`}
+            aria-labelledby={`arb-tab-${activeTab}`}
+            data-testid="arb-tab-panel"
+        >
+            {activeTab === 'overview' ? (
+                <ArbitrageOverviewSection
+                    overview={overview}
+                    isLoading={isLoading}
+                    loadError={loadError}
+                    onRetry={() => void loadOverview()}
+                    onOpenTab={navigateSection}
+                    t={t}
+                />
+            ) : isLoading ? (
+                <AgentContentSurface>
                     <p className="text-sm text-muted-foreground">{t('loading') || 'Loading...'}</p>
-                ) : loadError ? (
+                </AgentContentSurface>
+            ) : loadError && activeTab !== 'settings' ? (
+                <AgentContentSurface>
                     <DataHubAlert
                         variant="error"
                         message={loadError}
                         onRetry={() => void loadOverview()}
                         retryLabel={t('retry') || 'Retry'}
                     />
-                ) : tabError ? (
+                </AgentContentSurface>
+            ) : tabError ? (
+                <AgentContentSurface>
                     <DataHubAlert
                         variant="error"
                         message={tabError}
                         onRetry={() => void loadTabData()}
                         retryLabel={t('retry') || 'Retry'}
                     />
-                ) : activeTab === 'overview' ? (
-                    <OverviewSection
-                        overview={overview}
-                        latestRun={latestRun}
-                        funnel={funnel}
-                        hasHistoricalScans={hasHistoricalScans}
-                        loadFailed={Boolean(loadError)}
-                        t={t}
-                        onOpenTab={navigateSection}
-                    />
-                ) : tabLoading && activeTab !== 'settings' ? (
+                </AgentContentSurface>
+            ) : tabLoading && activeTab !== 'settings' ? (
+                <AgentContentSurface>
                     <p className="text-sm text-muted-foreground">{t('loading') || 'Loading...'}</p>
-                ) : activeTab === 'candidates' ? (
+                </AgentContentSurface>
+            ) : activeTab === 'candidates' ? (
+                <AgentContentSurface>
+                    <AgentSectionHeader title={t('tab_arbitrage_candidates') || 'Candidates'} />
                     <CandidatesSection
                         spreadCandidates={spreadCandidates}
                         rejectedCandidates={rejectedCandidates}
@@ -471,7 +415,10 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                         failed={Boolean(tabError)}
                         t={t}
                     />
-                ) : activeTab === 'history' ? (
+                </AgentContentSurface>
+            ) : activeTab === 'history' ? (
+                <AgentContentSurface>
+                    <AgentSectionHeader title={t('tab_scan_history') || 'Scan history'} />
                     <HistorySection
                         runs={runs ?? []}
                         total={runsTotal}
@@ -487,9 +434,15 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                         failed={Boolean(tabError)}
                         t={t}
                     />
-                ) : activeTab === 'profitRisk' ? (
+                </AgentContentSurface>
+            ) : activeTab === 'profitRisk' ? (
+                <AgentContentSurface>
+                    <AgentSectionHeader title={t('tab_profit_risk') || 'Profit & Risk'} />
                     <ProfitRiskSection overview={overview} latestRun={latestRun} t={t} />
-                ) : activeTab === 'settings' ? (
+                </AgentContentSurface>
+            ) : activeTab === 'settings' ? (
+                <AgentContentSurface>
+                    <AgentSectionHeader title={t('tab_settings') || 'Settings'} />
                     <SettingsSection
                         settings={settingsDraft}
                         dirty={settingsDirty}
@@ -501,84 +454,80 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                         onRetry={() => void loadSettings()}
                         t={t}
                     />
-                ) : activeTab === 'integration' ? (
+                </AgentContentSurface>
+            ) : activeTab === 'integration' ? (
+                <AgentContentSurface>
+                    <AgentSectionHeader title={t('tab_integration') || 'Integrations'} />
                     <IntegrationSection integrations={integrations} failed={Boolean(tabError)} t={t} />
-                ) : null}
-            </div>
+                </AgentContentSurface>
+            ) : null}
         </div>
     );
-};
 
-const OverviewSection: React.FC<{
-    overview: ArbitrageCoreOverview | null;
-    latestRun: ArbitrageCoreRunSummary | null | undefined;
-    funnel: Record<string, number>;
-    hasHistoricalScans: boolean;
-    loadFailed: boolean;
-    t: (key: string) => string;
-    onOpenTab: (tab: WorkspaceTab, runId?: string) => void;
-}> = ({ overview, latestRun, funnel, hasHistoricalScans, loadFailed, t, onOpenTab }) => {
-    const scanStatusLabel = loadFailed
-        ? t('arbitrage_overview_data_unavailable') || 'Data unavailable'
-        : !hasHistoricalScans
-          ? t('arbitrage_overview_never_scanned') || 'Never scanned'
-          : latestRun?.status === 'failed'
-            ? t('arbitrage_overview_scan_failed') || 'Scan failed'
-            : latestRun?.status || t('completed') || 'Completed';
+    if (embedded) {
+        return (
+            <AgentProductDialog
+                agent={agent}
+                onClose={onBack}
+                closeTestId="arb-popup-close"
+                purpose={
+                    product?.description ||
+                    t('arbitrage_agent_desc') ||
+                    'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'
+                }
+                latestRunAt={latestRun?.completedAt || latestRun?.startedAt || overview?.historicalSummary?.latestSuccessfulRunAt}
+                monitoringState={monitoringState}
+                safetyProductNote={
+                    t('arbitrage_analytical_mode_banner') ||
+                    'Analytical mode: MEXC spot bid/ask spread monitor. Not executable multi-leg arbitrage. No live orders.'
+                }
+                actionBar={actionBar}
+                sectionNavigation={sectionNavigation}
+            >
+                {renderTabPanel()}
+            </AgentProductDialog>
+        );
+    }
 
     return (
-    <div className="space-y-5" data-testid="arb-overview">
-        <DataHubSectionHeader
-            title={t('arbitrage_overview_latest_scan') || 'Latest Scan'}
-            subtitle={overview?.interpretation || t('arbitrage_overview_interpretation_compact')}
-            actions={
-                <StatusPill
-                    label={scanStatusLabel}
-                    variant={latestRun?.status === 'failed' ? 'error' : loadFailed ? 'warning' : 'info'}
-                />
-            }
-        />
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            <DataHubMetricCard
-                label={t('last_scan_at') || 'Last scan'}
-                value={formatTimestamp(latestRun?.completedAt || latestRun?.startedAt, t)}
-                color="blue"
-                valueState={latestRun ? 'loaded' : 'unavailable'}
-            />
-            <DataHubMetricCard
-                label={t('spread_candidates') || 'Spread candidates'}
-                value={funnel.analyticalCandidates ?? funnel.spreadCandidates ?? 0}
-                color="purple"
-                valueState={(funnel.analyticalCandidates ?? 0) === 0 ? 'zero' : 'loaded'}
-            />
-            <DataHubMetricCard
-                label={t('rejected_candidates') || 'Rejected candidates'}
-                value={funnel.rejected ?? 0}
-                color="amber"
-                valueState={(funnel.rejected ?? 0) === 0 ? 'zero' : 'loaded'}
-            />
-            <DataHubMetricCard
-                label={t('qualified_opportunities') || 'Qualified opportunities'}
-                value={funnel.qualified ?? 0}
-                color="emerald"
-                valueState={(funnel.qualified ?? 0) === 0 ? 'zero' : 'loaded'}
-            />
+        <div className="space-y-5" data-testid="arb-workspace">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-2">
+                    <SecondaryButton
+                        type="button"
+                        data-testid="arb-workspace-back"
+                        onClick={onBack}
+                        aria-label={t('back_to_agents') || 'Back to agents'}
+                    >
+                        {t('back_to_agents') || 'Back to agents'}
+                    </SecondaryButton>
+                    <div>
+                        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+                            {product?.displayName || t('strategy_mexc_spot_spread_monitor') || 'MEXC Spot Spread Monitor'}
+                        </h1>
+                        <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
+                            {product?.description ||
+                                t('arbitrage_agent_desc') ||
+                                'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'}
+                        </p>
+                    </div>
+                    {product?.unavailableModes?.length ? (
+                        <div className="flex flex-wrap gap-2" data-testid="arb-unavailable-modes">
+                            {product.unavailableModes.map(item => (
+                                <StatusPill
+                                    key={item.mode}
+                                    label={`${item.label} — ${t('unavailable') || item.state}`}
+                                    variant="warning"
+                                />
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            </div>
+            {actionBar}
+            {sectionNavigation}
+            {renderTabPanel()}
         </div>
-        <div className="flex flex-wrap gap-2">
-            <SecondaryButton type="button" onClick={() => onOpenTab('candidates', latestRun?.runId)}>
-                {t('arbitrage_overview_review_candidates') || 'Review candidates'}
-            </SecondaryButton>
-            <SecondaryButton type="button" onClick={() => onOpenTab('history', latestRun?.runId)}>
-                {t('arbitrage_overview_view_scan_history') || 'View scan history'}
-            </SecondaryButton>
-            <SecondaryButton type="button" onClick={() => onOpenTab('settings')}>
-                {t('arbitrage_overview_adjust_settings') || 'Review settings'}
-            </SecondaryButton>
-        </div>
-        <p className="text-xs text-muted-foreground" data-testid="arb-overview-total-scans">
-            {t('total_scans') || 'Total scans'}: {loadFailed ? t('not_available') || 'N/A' : overview?.totalScanRuns ?? 0}
-        </p>
-    </div>
     );
 };
 
@@ -656,8 +605,8 @@ const HistorySection: React.FC<{
                 {t('total_scans') || 'Total scans'}: {total}
             </p>
             <p className="text-xs text-muted-foreground mb-3">
-                {t('arbitrage_history_analytical_only') ||
-                    'Analytical scan history only. Execution history and realized profit are unavailable.'}
+                {t('arb_history_analytical_only_product') ||
+                    'Scan history shows analytical monitoring runs only. Execution history and realized profit are unavailable.'}
             </p>
             {safeRuns.length ? (
                 <div className="space-y-3">
@@ -716,7 +665,11 @@ const HistorySection: React.FC<{
                 {rejectionEntries.length ? (
                     <div className="flex flex-wrap gap-2 mt-2">
                         {rejectionEntries.map(([reason, count]) => (
-                            <StatusPill key={reason} label={`${reason}: ${count}`} variant="warning" />
+                            <StatusPill
+                                key={reason}
+                                label={`${formatRejectionReason(reason, t)}: ${count}`}
+                                variant="warning"
+                            />
                         ))}
                     </div>
                 ) : null}
@@ -872,8 +825,7 @@ const SettingsSection: React.FC<{
                 <li>{t('arbitrage_unsupported_auto_execute') || 'Auto Execute — Not supported'}</li>
             </ul>
             <p className="text-xs text-amber-300 mt-3" data-testid="arb-execution-supported-false">
-                {t('execution_support') || 'Execution'}: {t('execution_unsupported') || 'Not supported'} (
-                executionSupported=false)
+                {t('execution_support') || 'Execution'}: {t('execution_unsupported') || 'Not supported'}
             </p>
         </SectionBlock>
         <label className="flex items-center gap-2 text-sm text-gray-300">
@@ -962,7 +914,8 @@ const CandidateCard: React.FC<{
         </div>
         {showRejection && candidate.rejectionReason ? (
             <p className="text-xs text-rose-300 mt-2">
-                {t('rejection_reason') || 'Rejection'}: {candidate.rejectionReason}
+                {t('rejection_reason') || 'Rejection'}:{' '}
+                {formatRejectionReason(candidate.rejectionReason, t)}
             </p>
         ) : null}
     </div>
