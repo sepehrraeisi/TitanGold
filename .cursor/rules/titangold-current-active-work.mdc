@@ -15,13 +15,13 @@ Current area:
 Agents → Arbitrage (sole active Agent outcome)
 
 Current program slice:
-ARBITRAGE-FULL-PRODUCT — Program Slice
+ARBITRAGE-CORE — Truthful Product Workspace, Canonical Contracts and Operational Controls
 
 Risk tier:
 Tier 2 analytical product (Tier-4/Live execution remains blocked)
 
 Engineering status:
-DISCOVERY COMPLETE — IMPLEMENTATION NOT STARTED
+ARBITRAGE-CORE IMPLEMENTED — READY FOR ARBITRAGE CORE HUMAN QA (not full product closeout)
 
 Human-QA status:
 NOT STARTED — required before PR and before any Arbitrage freeze claim
