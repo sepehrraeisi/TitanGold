@@ -120,7 +120,7 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
         data-testid={testId}
         data-agent-key={agent.agent_key}
         data-scroll-owner="agent-product-body"
-        className={`${AGENT_PRODUCT_TOKENS.dialogBg} ${AGENT_PRODUCT_TOKENS.dialogBorder} ${AGENT_PRODUCT_TOKENS.dialogRadius} ${AGENT_PRODUCT_TOKENS.mobileFullScreen} ${AGENT_PRODUCT_TOKENS.dialogMaxWidth} ${AGENT_PRODUCT_TOKENS.dialogMaxHeight} w-full overflow-hidden flex flex-col shadow-2xl ${panelLangClass}`}
+        className={`${AGENT_PRODUCT_TOKENS.surfaces.dialogShell} ${AGENT_PRODUCT_TOKENS.dialogRadius} ${AGENT_PRODUCT_TOKENS.mobileFullScreen} ${AGENT_PRODUCT_TOKENS.dialogMaxWidth} ${AGENT_PRODUCT_TOKENS.dialogMaxHeight} w-full overflow-hidden flex flex-col shadow-2xl ${panelLangClass}`}
         style={panelFontStyle}
         onClick={e => e.stopPropagation()}
       >
@@ -133,9 +133,19 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
           monitoringState={monitoringState}
         />
         <AgentSafetyBanner agent={agent} productNote={safetyProductNote} />
-        {actionBar}
-        {sectionNavigation}
-        <div className={AGENT_PRODUCT_TOKENS.scrollOwner} data-testid="agent-product-body">
+        {(actionBar || sectionNavigation) && (
+          <div
+            className={`shrink-0 ${AGENT_PRODUCT_TOKENS.surfaces.toolbarChrome}`}
+            data-testid="agent-product-toolbar"
+          >
+            {actionBar}
+            {sectionNavigation}
+          </div>
+        )}
+        <div
+          className={`${AGENT_PRODUCT_TOKENS.scrollOwner} ${AGENT_PRODUCT_TOKENS.surfaces.contentCanvas}`}
+          data-testid="agent-product-body"
+        >
           <div className={`${AGENT_PRODUCT_TOKENS.contentGutter} py-4`}>{children}</div>
         </div>
       </div>

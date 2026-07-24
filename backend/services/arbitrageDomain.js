@@ -189,6 +189,54 @@ export function mapRawCandidateToDto(raw, { runId, mode = ANALYTICAL_MODES.SINGL
   };
 }
 
+/**
+ * Resolve scan duration from stored execution_time_ms or timestamps.
+ * Never fabricates zero when duration is unknown.
+ */
+export function resolveScanDurationMs({ durationMs, startedAt, completedAt } = {}) {
+  const stored = toNum(durationMs);
+  if (stored != null && stored > 0) {
+    return { durationMs: stored, durationAvailability: 'measured' };
+  }
+
+  if (startedAt && completedAt) {
+    const startMs = new Date(startedAt).getTime();
+    const endMs = new Date(completedAt).getTime();
+    if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+      if (endMs > startMs) {
+        return { durationMs: endMs - startMs, durationAvailability: 'measured' };
+      }
+      if (endMs === startMs) {
+        return { durationMs: 0, durationAvailability: 'sub_ms' };
+      }
+    }
+  }
+
+  if (stored === 0) {
+    return { durationMs: 0, durationAvailability: 'sub_ms' };
+  }
+
+  return { durationMs: null, durationAvailability: 'unavailable' };
+}
+
+export function enrichRunTimingSummary(historicalSummary = {}, latestRun = null) {
+  const latestRunAt = latestRun?.completedAt || latestRun?.startedAt || null;
+  const latestCompletedRunAt =
+    latestRun?.status === SCAN_RUN_STATUS.COMPLETED ? latestRunAt : null;
+  let latestSuccessfulRunAt = historicalSummary.latestSuccessfulRunAt || null;
+
+  if (latestRun?.status === SCAN_RUN_STATUS.COMPLETED) {
+    latestSuccessfulRunAt = latestRun.completedAt || latestRun.startedAt || latestSuccessfulRunAt;
+  }
+
+  return {
+    ...historicalSummary,
+    latestRunAt,
+    latestCompletedRunAt,
+    latestSuccessfulRunAt,
+  };
+}
+
 export function buildScanRunDto({
   runId,
   agentId,
@@ -206,6 +254,7 @@ export function buildScanRunDto({
   rawOutput = {},
   failureReason = null,
 }) {
+  const resolvedDuration = resolveScanDurationMs({ durationMs, startedAt, completedAt });
   const candidates = rawOutput.candidates || [];
   const rejected = rawOutput.rejectedCandidates || [];
   const qualified = rawOutput.qualifiedOpportunities || [];
@@ -228,7 +277,8 @@ export function buildScanRunDto({
     trigger,
     startedAt: toIso(startedAt),
     completedAt: toIso(completedAt),
-    durationMs: toNum(durationMs),
+    durationMs: resolvedDuration.durationMs,
+    durationAvailability: resolvedDuration.durationAvailability,
     status,
     dryRun: dryRun !== false,
     runtimeMode,
@@ -410,10 +460,26 @@ export function buildArbitrageOverviewSnapshot({
 }) {
   const product = getProductIdentity();
   const interpretation = buildOverviewInterpretation({ latestRun, settings, historicalSummary });
+  const enrichedHistorical = enrichRunTimingSummary(historicalSummary, latestRun);
+  const resolvedLatest = latestRun
+    ? {
+        ...latestRun,
+        ...resolveScanDurationMs({
+          durationMs: latestRun.durationMs,
+          startedAt: latestRun.startedAt,
+          completedAt: latestRun.completedAt,
+        }),
+      }
+    : null;
 
   return {
     generatedAt,
     snapshotAt: generatedAt,
+    runTiming: {
+      latestRunAt: enrichedHistorical.latestRunAt,
+      latestCompletedRunAt: enrichedHistorical.latestCompletedRunAt,
+      latestSuccessfulRunAt: enrichedHistorical.latestSuccessfulRunAt,
+    },
     productState: {
       productMode: product.activeMode,
       productName: product.displayName,
@@ -424,14 +490,15 @@ export function buildArbitrageOverviewSnapshot({
       emergencyStop: runtimeState?.killSwitchActive === true,
       executionSupported: false,
     },
-    latestRun: latestRun
+    latestRun: resolvedLatest
       ? {
-          latestRunId: latestRun.runId,
-          latestRunTrigger: latestRun.trigger,
-          latestRunStatus: latestRun.status,
-          startedAt: latestRun.startedAt,
-          completedAt: latestRun.completedAt,
-          durationMs: latestRun.durationMs,
+          latestRunId: resolvedLatest.runId,
+          latestRunTrigger: resolvedLatest.trigger,
+          latestRunStatus: resolvedLatest.status,
+          startedAt: resolvedLatest.startedAt,
+          completedAt: resolvedLatest.completedAt,
+          durationMs: resolvedLatest.durationMs,
+          durationAvailability: resolvedLatest.durationAvailability,
           symbolsRequested: latestRun.symbolsRequested || [],
           symbolsEvaluated: latestRun.symbolsEvaluated || [],
           dataFreshnessMs: latestRun.sourceFreshnessMs,
@@ -441,12 +508,12 @@ export function buildArbitrageOverviewSnapshot({
           qualifiedCandidates: latestRun.funnel?.qualified ?? 0,
           expiredCandidates: latestRun.funnel?.expired ?? 0,
           blockedCandidates: latestRun.funnel?.blocked ?? 0,
-          funnel: latestRun.funnel || {},
-          rejectionSummary: latestRun.rejectionSummary || {},
-          failureReason: latestRun.failureReason || null,
+          funnel: resolvedLatest.funnel || {},
+          rejectionSummary: resolvedLatest.rejectionSummary || {},
+          failureReason: resolvedLatest.failureReason || null,
         }
       : null,
-    historicalSummary,
+    historicalSummary: enrichedHistorical,
     configurationSummary: {
       monitoredSymbolCount: settings?.monitoredSymbols?.length || 0,
       minimumGrossSpreadBps: settings?.minimumGrossSpreadBps,
@@ -472,7 +539,7 @@ export function mapDecisionRowToScanRun(row, agentId) {
   const startedAt = row.created_at;
   const durationMs = row.execution_time_ms;
   const completedAt = durationMs && startedAt
-    ? new Date(new Date(startedAt).getTime() + durationMs).toISOString()
+    ? new Date(new Date(startedAt).getTime() + Number(durationMs)).toISOString()
     : startedAt;
 
   return buildScanRunDto({

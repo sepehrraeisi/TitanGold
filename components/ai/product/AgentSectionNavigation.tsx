@@ -7,6 +7,7 @@ export type AgentSectionTab = {
   label: string;
 };
 
+/** Section tabs — single subtle divider below navigation (not above). */
 export const AgentSectionNavigation: React.FC<{
   tabs: AgentSectionTab[];
   activeTab: string;
@@ -16,7 +17,7 @@ export const AgentSectionNavigation: React.FC<{
   idPrefix?: string;
 }> = ({ tabs, activeTab, onTabChange, ariaLabel, testId = 'agent-section-nav', idPrefix = 'agent' }) => (
   <div
-    className={`${AGENT_PRODUCT_TOKENS.contentGutter} shrink-0 border-b border-border pb-3`}
+    className={`${AGENT_PRODUCT_TOKENS.contentGutter} shrink-0 pb-3 border-b ${AGENT_PRODUCT_TOKENS.surfaces.divider}`}
     data-testid={testId}
   >
     <div
@@ -39,8 +40,8 @@ export const AgentSectionNavigation: React.FC<{
             onClick={() => onTabChange(tab.id)}
             className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${FOCUS_RING} ${
               selected
-                ? 'bg-purple-600/20 border-purple-500/60 text-purple-300'
-                : 'border-slate-600/70 bg-slate-900/70 text-slate-300 hover:border-purple-400/50'
+                ? 'bg-purple-600/20 border-purple-500/40 text-purple-300'
+                : 'border-white/5 bg-slate-950/70 text-slate-300 hover:border-purple-400/40'
             }`}
           >
             {tab.label}

@@ -475,7 +475,12 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                     t('arbitrage_agent_desc') ||
                     'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'
                 }
-                latestRunAt={latestRun?.completedAt || latestRun?.startedAt || overview?.historicalSummary?.latestSuccessfulRunAt}
+                latestRunAt={
+                    overview?.runTiming?.latestRunAt ||
+                    latestRun?.completedAt ||
+                    latestRun?.startedAt ||
+                    null
+                }
                 monitoringState={monitoringState}
                 safetyProductNote={
                     t('arbitrage_analytical_mode_banner') ||

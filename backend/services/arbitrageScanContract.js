@@ -423,9 +423,15 @@ export async function countArbitrageScans(agentId) {
 export async function fetchArbitrageHistoricalSummary(agentId) {
   const result = await query(
     `SELECT COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE was_successful = true)::int AS successful,
+            COUNT(*) FILTER (
+              WHERE was_successful IS NOT FALSE
+                AND COALESCE(output_data->>'error', 'false') NOT IN ('true', '1')
+            )::int AS successful,
             COUNT(*) FILTER (WHERE was_successful = false)::int AS failed,
-            MAX(created_at) FILTER (WHERE was_successful = true) AS latest_success,
+            MAX(created_at) FILTER (
+              WHERE was_successful IS NOT FALSE
+                AND COALESCE(output_data->>'error', 'false') NOT IN ('true', '1')
+            ) AS latest_success,
             MAX(created_at) FILTER (WHERE was_successful = false) AS latest_failed
      FROM ai_decisions
      WHERE agent_id = $1 AND decision_type = $2`,

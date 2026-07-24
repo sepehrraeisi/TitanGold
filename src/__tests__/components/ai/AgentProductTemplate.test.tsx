@@ -2,6 +2,8 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { AgentProductDialog } from '../../../../components/ai/product/AgentProductDialog.tsx';
+import { AgentActionBar } from '../../../../components/ai/product/AgentActionBar.tsx';
+import { AgentSectionNavigation } from '../../../../components/ai/product/AgentSectionNavigation.tsx';
 
 vi.mock('../../../../context/LanguageContext.tsx', () => ({
   useLanguage: () => ({
@@ -19,15 +21,20 @@ vi.mock('../../../../context/LanguageContext.tsx', () => ({
         execution_support: 'Execution',
         execution_unsupported: 'Unavailable',
         live_side_effects_blocked: 'Live side effects are blocked.',
-        execution_kind_analytical: 'Analytical',
+        execution_kind_provider: 'Provider',
         agent_state_ready: 'Ready',
+        agent_state_label: 'Agent state',
+        monitoring_state: 'Monitoring',
+        monitoring_active: 'Monitoring active',
+        provider_mode_label: 'Provider mode',
+        arb_provider_public_market: 'Public market',
         last_run: 'Last run',
         never_run: 'Never',
-        monitoring_active: 'Monitoring active',
         arbitrage_execution_blocked_product: 'Execution blocked for analytical monitor.',
         arbitrage_analytical_mode_banner: 'Analytical mode banner',
         run_analytical_scan: 'Run analytical scan',
         tab_overview: 'Overview',
+        operational: 'Operational',
       })[key] ?? key,
     language: 'en',
   }),
@@ -50,8 +57,8 @@ const agent = {
   role: 'Analytical monitor',
 } as any;
 
-describe('Agent Product Template V1', () => {
-  it('renders dialog shell with safety banner and scroll owner', () => {
+describe('Agent Product Template polish', () => {
+  it('renders status grid and separated last-run metadata', () => {
     render(
       <AgentProductDialog
         agent={agent}
@@ -59,21 +66,57 @@ describe('Agent Product Template V1', () => {
         purpose="Analytical monitor"
         latestRunAt="2026-07-24T10:00:00.000Z"
         monitoringState="active"
-        actionBar={<div data-testid="fixture-action-bar">Actions</div>}
-        sectionNavigation={<div data-testid="fixture-section-nav">Nav</div>}
+        actionBar={
+          <AgentActionBar>
+            <button type="button">Run</button>
+          </AgentActionBar>
+        }
+        sectionNavigation={
+          <AgentSectionNavigation
+            tabs={[{ id: 'overview', label: 'Overview' }]}
+            activeTab="overview"
+            onTabChange={() => {}}
+            ariaLabel="Tabs"
+          />
+        }
       >
-        <div data-testid="fixture-content">Content</div>
+        <div>Content</div>
       </AgentProductDialog>,
     );
 
-    expect(screen.getByTestId('agent-product-dialog')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-product-header')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-safety-banner')).toBeInTheDocument();
-    expect(screen.getByTestId('fixture-action-bar')).toBeInTheDocument();
-    expect(screen.getByTestId('fixture-section-nav')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-product-body')).toBeInTheDocument();
-    expect(screen.getByTestId('fixture-content')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-product-status-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-status-agent-state')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-status-monitoring')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-status-runtime')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-status-provider-mode')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-product-last-run-meta')).toBeInTheDocument();
     expect(screen.getByTestId('agent-product-last-run')).toHaveTextContent('2026');
+  });
+
+  it('uses one toolbar divider and avoids pure-white border classes on action bar', () => {
+    render(
+      <AgentProductDialog
+        agent={agent}
+        onClose={() => {}}
+        actionBar={<AgentActionBar testId="action-bar-under-test"><span>Run</span></AgentActionBar>}
+        sectionNavigation={
+          <AgentSectionNavigation
+            tabs={[{ id: 'overview', label: 'Overview' }]}
+            activeTab="overview"
+            onTabChange={() => {}}
+            ariaLabel="Tabs"
+            testId="nav-under-test"
+          />
+        }
+      >
+        <div>Body</div>
+      </AgentProductDialog>,
+    );
+
+    const actionBar = screen.getByTestId('action-bar-under-test');
+    expect(actionBar.className).not.toMatch(/border-b/);
+    expect(screen.getByTestId('nav-under-test').className).toMatch(/border-white\/5/);
+    expect(screen.getByTestId('agent-product-toolbar')).toBeTruthy();
   });
 
   it('calls onClose when Close is clicked', () => {

@@ -7,6 +7,7 @@ import {
   buildOverviewInterpretation,
   buildScanRunDto,
   MONITORING_STATE,
+  resolveScanDurationMs,
 } from '../../services/arbitrageDomain.js';
 
 describe('arbitrage overview snapshot', () => {
@@ -99,5 +100,49 @@ describe('arbitrage overview snapshot', () => {
     });
     expect(interpretation.safeReasonCodes).toContain('monitoring_paused');
     expect(interpretation.primaryMessage).toContain('paused');
+  });
+
+  it('resolves duration from timestamps when execution_time_ms is zero', () => {
+    const resolved = resolveScanDurationMs({
+      durationMs: 0,
+      startedAt: '2026-07-24T10:00:00.000Z',
+      completedAt: '2026-07-24T10:00:05.000Z',
+    });
+    expect(resolved.durationAvailability).toBe('measured');
+    expect(resolved.durationMs).toBe(5000);
+  });
+
+  it('marks completed zero-qualified latest run as successful in run timing', () => {
+    const completedZeroQualified = buildScanRunDto({
+      runId: 'run-zero-qualified',
+      agentId: agent.id,
+      trigger: 'scheduled',
+      startedAt: '2026-07-24T11:00:00.000Z',
+      completedAt: '2026-07-24T11:00:02.000Z',
+      durationMs: 2000,
+      status: 'completed',
+      symbolsRequested: ['BTCUSDT'],
+      symbolsEvaluated: ['BTCUSDT'],
+      rawOutput: {
+        candidates: [],
+        rejectedCandidates: [{ symbol: 'BTCUSDT', rejectionReason: 'NON_POSITIVE_NET' }],
+        qualifiedOpportunities: [],
+      },
+    });
+
+    const snapshot = buildArbitrageOverviewSnapshot({
+      agent,
+      settings,
+      latestRun: completedZeroQualified,
+      historicalSummary: { ...historicalSummary, latestSuccessfulRunAt: null },
+      recentRuns: [],
+      schedulerState: { status: 'running' },
+      runtimeState: { globalMode: 'demo', killSwitchActive: true },
+      generatedAt: '2026-07-24T11:00:03.000Z',
+    });
+
+    expect(snapshot.runTiming.latestSuccessfulRunAt).toBe('2026-07-24T11:00:02.000Z');
+    expect(snapshot.latestRun.durationAvailability).toBe('measured');
+    expect(snapshot.latestRun.qualifiedCandidates).toBe(0);
   });
 });

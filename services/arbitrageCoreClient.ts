@@ -106,6 +106,17 @@ function parseHistoricalSummary(raw: unknown) {
         manualRuns: asNumber(h.manualRuns, 0),
         latestSuccessfulRunAt: h.latestSuccessfulRunAt ? String(h.latestSuccessfulRunAt) : null,
         latestFailedRunAt: h.latestFailedRunAt ? String(h.latestFailedRunAt) : null,
+        latestRunAt: h.latestRunAt ? String(h.latestRunAt) : null,
+        latestCompletedRunAt: h.latestCompletedRunAt ? String(h.latestCompletedRunAt) : null,
+    };
+}
+
+function parseRunTiming(raw: unknown) {
+    const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    return {
+        latestRunAt: r.latestRunAt ? String(r.latestRunAt) : null,
+        latestCompletedRunAt: r.latestCompletedRunAt ? String(r.latestCompletedRunAt) : null,
+        latestSuccessfulRunAt: r.latestSuccessfulRunAt ? String(r.latestSuccessfulRunAt) : null,
     };
 }
 
@@ -195,6 +206,12 @@ function parseLatestRun(raw: unknown) {
             symbolsEvaluated: asStringArray(latest.symbolsEvaluated),
             sourceFreshnessMs:
                 latest.dataFreshnessMs != null ? asNumber(latest.dataFreshnessMs) : null,
+            durationAvailability:
+                latest.durationAvailability === 'measured' ||
+                latest.durationAvailability === 'sub_ms' ||
+                latest.durationAvailability === 'unavailable'
+                    ? latest.durationAvailability
+                    : undefined,
             failureReason: latest.failureReason ? String(latest.failureReason) : null,
         };
     }
@@ -220,6 +237,7 @@ export function parseArbitrageOverviewEnvelope(raw: unknown): ArbitrageCoreOverv
     return {
         generatedAt: overview.generatedAt ? String(overview.generatedAt) : overview.snapshotAt ? String(overview.snapshotAt) : null,
         snapshotAt: overview.snapshotAt ? String(overview.snapshotAt) : overview.generatedAt ? String(overview.generatedAt) : null,
+        runTiming: overview.runTiming ? parseRunTiming(overview.runTiming) : undefined,
         productState: overview.productState ? parseProductState(overview.productState) : undefined,
         product: {
             agentKey: String(product.agentKey ?? 'arbitrage'),
@@ -257,6 +275,12 @@ function parseRunSummary(raw: Record<string, unknown>) {
         durationMs: raw.durationMs != null ? asNumber(raw.durationMs) : null,
         dryRun: raw.dryRun !== false,
         runtimeMode: raw.runtimeMode ? String(raw.runtimeMode) : 'demo',
+        durationAvailability:
+            raw.durationAvailability === 'measured' ||
+            raw.durationAvailability === 'sub_ms' ||
+            raw.durationAvailability === 'unavailable'
+                ? raw.durationAvailability
+                : undefined,
         funnel: raw.funnel && typeof raw.funnel === 'object' ? (raw.funnel as Record<string, number>) : {},
         rejectionSummary:
             raw.rejectionSummary && typeof raw.rejectionSummary === 'object'

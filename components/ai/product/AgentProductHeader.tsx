@@ -5,13 +5,13 @@ import { AgentTechnicalLtr } from '../shell/AgentControlShell.tsx';
 import {
   effectiveExecutionModeLabelKey,
   getAgentExecutionKind,
-  shellOperationalReasonKeyFromAgent,
   shellOperationalStatusLabelKeyFromAgent,
 } from '../shell/agentCardMeta.ts';
 import { useAgentExecutionGate } from '../../../hooks/useAgentExecutionGate.ts';
 import { resolveAgentProductStatus } from '../../../utils/agentProductStatus.ts';
 import type { AIAgent } from '../../../types.ts';
 import { AGENT_PRODUCT_TOKENS } from './agentProductTokens.ts';
+import { AgentStatusItem } from './AgentStatusItem.tsx';
 
 export type AgentProductHeaderProps = {
   agent: AIAgent;
@@ -45,27 +45,38 @@ export const AgentProductHeader: React.FC<AgentProductHeaderProps> = ({
   const kind = getAgentExecutionKind(agent.agent_key);
   const gateContext = { killSwitchActive, effectiveMode };
   const stateLabelKey = shellOperationalStatusLabelKeyFromAgent(agent, gateContext);
-  const reasonKey = shellOperationalReasonKeyFromAgent(agent, gateContext);
   const effectiveModeKey = effectiveExecutionModeLabelKey(effectiveMode);
-  const operationalLabel = t(stateLabelKey) || stateLabelKey;
-  const reasonLabel = reasonKey ? t(reasonKey) : null;
-  const effectiveModeLabel =
-    t(effectiveModeKey) ||
-    (effectiveModeKey === 'execution_mode_dry_run'
-      ? 'Dry Run'
-      : effectiveModeKey === 'execution_mode_live'
-        ? 'Live'
-        : 'Demo');
-  const lastRunLabel = t('never_run') || 'Never';
-  const lastRunValue = formatLatestRun(latestRunAt, lastRunLabel);
-  const lastRunIsTechnical = Boolean(latestRunAt) && lastRunValue !== lastRunLabel;
+  const productStatus = resolveAgentProductStatus(agent, gateContext);
+
+  const agentStateLabel = t(stateLabelKey) || stateLabelKey;
+  const agentStateTone =
+    productStatus.primaryState === 'blocked' || killSwitchActive
+      ? 'danger'
+      : productStatus.primaryState === 'operational' || productStatus.primaryState === 'scheduled'
+        ? 'success'
+        : 'warning';
+
   const monitoringLabel =
     monitoringState === 'paused'
       ? t('pause_monitoring') || 'Paused'
       : monitoringState === 'active'
-        ? t('monitoring_active') || 'Monitoring active'
-        : null;
-  const productStatus = resolveAgentProductStatus(agent, gateContext);
+        ? t('monitoring_active') || 'Active'
+        : t('unavailable') || 'Unavailable';
+  const monitoringTone =
+    monitoringState === 'active' ? 'success' : monitoringState === 'paused' ? 'warning' : 'neutral';
+
+  const runtimeLabel =
+    t(effectiveModeKey) ||
+    (effectiveMode === 'live' ? 'Live' : effectiveMode === 'demo' ? 'Demo' : 'Dry Run');
+
+  const providerLabel =
+    kind === 'provider'
+      ? t('arb_provider_public_market') || 'Public market'
+      : t(`execution_kind_${kind}`) || kind;
+
+  const lastRunLabel = t('never_run') || 'Never';
+  const lastRunValue = formatLatestRun(latestRunAt, lastRunLabel);
+  const lastRunIsTechnical = Boolean(latestRunAt) && lastRunValue !== lastRunLabel;
   const lastRunHeading =
     productStatus.primaryState === 'operational' || productStatus.primaryState === 'scheduled'
       ? t('last_run') || 'Last run'
@@ -73,47 +84,64 @@ export const AgentProductHeader: React.FC<AgentProductHeaderProps> = ({
 
   return (
     <header
-      className={`shrink-0 z-10 bg-[#12161c]/95 border-b border-border ${AGENT_PRODUCT_TOKENS.headerPadding} flex flex-wrap gap-3 items-start justify-between`}
+      className={`shrink-0 z-10 ${AGENT_PRODUCT_TOKENS.surfaces.headerChrome} border-b ${AGENT_PRODUCT_TOKENS.surfaces.divider} ${AGENT_PRODUCT_TOKENS.headerPadding} flex flex-wrap gap-3 items-start justify-between`}
       data-testid="agent-product-header"
     >
-      <div className="min-w-0 flex-1 space-y-1">
-        <h2 className={`${AGENT_PRODUCT_TOKENS.titleLg} text-white truncate`}>{agent.name}</h2>
-        <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
-          {purpose || agent.role}
-        </p>
-        <div className="flex flex-wrap gap-2 text-[10px] sm:text-[11px]" data-testid="agent-product-status-row">
-          <span className="px-2 py-0.5 rounded-full border border-border text-muted-foreground">
-            {operationalLabel}
-          </span>
-          {reasonLabel ? (
-            <span
-              className="px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground/90"
-              title={reasonLabel}
-            >
-              {reasonLabel}
+      <div className="min-w-0 flex-1 space-y-3">
+        <div className="space-y-1">
+          <h2 className={`${AGENT_PRODUCT_TOKENS.titleLg} text-white truncate`}>{agent.name}</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
+            {purpose || agent.role}
+          </p>
+        </div>
+
+        <div
+          className="grid grid-cols-2 lg:grid-cols-4 gap-2"
+          data-testid="agent-product-status-grid"
+        >
+          <AgentStatusItem
+            label={t('agent_state_label') || 'Agent state'}
+            value={agentStateLabel}
+            tone={agentStateTone}
+            testId="agent-status-agent-state"
+          />
+          <AgentStatusItem
+            label={t('monitoring_state') || 'Monitoring'}
+            value={monitoringLabel}
+            tone={monitoringTone}
+            testId="agent-status-monitoring"
+          />
+          <AgentStatusItem
+            label={t('runtime_mode') || 'Runtime'}
+            value={runtimeLabel}
+            tone="info"
+            testId="agent-status-runtime"
+          />
+          <AgentStatusItem
+            label={t('provider_mode_label') || 'Provider mode'}
+            value={providerLabel}
+            tone="neutral"
+            testId="agent-status-provider-mode"
+          />
+        </div>
+
+        <div
+          className={`pt-2 border-t ${AGENT_PRODUCT_TOKENS.surfaces.divider}`}
+          data-testid="agent-product-last-run-meta"
+        >
+          <p className="text-[11px] text-muted-foreground">
+            <span className={AGENT_PRODUCT_TOKENS.labelSm.replace('uppercase ', '')}>
+              {lastRunHeading}:{' '}
             </span>
-          ) : null}
-          {monitoringLabel ? (
-            <span className="px-2 py-0.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-100">
-              {monitoringLabel}
-            </span>
-          ) : null}
-          <span className="px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-100">
-            {effectiveModeLabel}
-          </span>
-          <span className="px-2 py-0.5 rounded-full border border-border text-muted-foreground">
-            {t(`execution_kind_${kind}`) || kind}
-          </span>
-          <span className="px-2 py-0.5 rounded-full border border-border text-muted-foreground">
-            {lastRunHeading}:{' '}
             {lastRunIsTechnical ? (
               <AgentTechnicalLtr data-testid="agent-product-last-run">{lastRunValue}</AgentTechnicalLtr>
             ) : (
-              lastRunValue
+              <span data-testid="agent-product-last-run">{lastRunValue}</span>
             )}
-          </span>
+          </p>
         </div>
       </div>
+
       <div className="flex items-center gap-2 flex-wrap shrink-0 max-w-full justify-end">
         {primaryAction}
         <SecondaryButton

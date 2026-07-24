@@ -8036,6 +8036,7 @@ export interface ArbitrageCoreRunSummary {
     status?: string;
     trigger?: string;
     durationMs?: number | null;
+    durationAvailability?: 'measured' | 'sub_ms' | 'unavailable';
     funnel?: Record<string, number>;
     sourceFreshnessMs?: number | null;
 }
@@ -8059,6 +8060,14 @@ export interface ArbitrageCoreHistoricalSummary {
     manualRuns: number;
     latestSuccessfulRunAt: string | null;
     latestFailedRunAt: string | null;
+    latestRunAt?: string | null;
+    latestCompletedRunAt?: string | null;
+}
+
+export interface ArbitrageCoreRunTiming {
+    latestRunAt: string | null;
+    latestCompletedRunAt: string | null;
+    latestSuccessfulRunAt: string | null;
 }
 
 export interface ArbitrageCoreConfigurationSummary {
@@ -8081,6 +8090,7 @@ export interface ArbitrageCoreInterpretation {
 export interface ArbitrageCoreOverview {
     generatedAt?: string | null;
     snapshotAt?: string | null;
+    runTiming?: ArbitrageCoreRunTiming;
     productState?: ArbitrageCoreOverviewProductState;
     product: ArbitrageCoreProductIdentity;
     settings: ArbitrageCoreSettings;

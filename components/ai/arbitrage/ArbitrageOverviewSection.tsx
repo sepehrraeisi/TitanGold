@@ -12,6 +12,7 @@ import {
   AgentContentSurface,
   AgentEmptyState,
   AgentErrorState,
+  AgentListRow,
   AgentLoadingState,
   AgentMetricGrid,
   AgentSectionHeader,
@@ -22,6 +23,10 @@ import {
   formatRejectionReason,
   FUNNEL_METRIC_DEFINITIONS,
 } from '../../../utils/arbitrageReasonLabels.ts';
+import {
+  formatScanDuration,
+  resolveLatestSuccessfulRunAt,
+} from '../../../utils/arbitrageScanTiming.ts';
 import type { ArbitrageAgentSection } from '../../../types/navigation.ts';
 
 const NA = (t: (k: string) => string) => t('not_available') || 'N/A';
@@ -31,12 +36,6 @@ const formatTimestamp = (value: string | null | undefined, t: (k: string) => str
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return NA(t);
   return d.toLocaleString();
-};
-
-const formatDuration = (ms: number | null | undefined, t: (k: string) => string) => {
-  if (ms == null || !Number.isFinite(ms)) return NA(t);
-  if (ms < 1000) return `${ms} ms`;
-  return `${(ms / 1000).toFixed(1)} s`;
 };
 
 const formatBps = (value: number | null | undefined, t: (k: string) => string) => {
@@ -94,6 +93,9 @@ export const ArbitrageOverviewSection: React.FC<ArbitrageOverviewSectionProps> =
   const productState = overview.productState;
   const monitoringPaused = overview.settings?.monitoringState === 'paused';
   const hasHistoricalScans = (historical?.totalScanRuns ?? overview.totalScanRuns) > 0;
+  const latestSuccessfulAt =
+    overview.runTiming?.latestSuccessfulRunAt ||
+    resolveLatestSuccessfulRunAt(historical, latestRun);
   const interpretationText = formatInterpretationMessage(overview.interpretation, t);
   const rejectionEntries = Object.entries(latestRun?.rejectionSummary ?? {}).sort((a, b) => b[1] - a[1]);
 
@@ -172,9 +174,9 @@ export const ArbitrageOverviewSection: React.FC<ArbitrageOverviewSectionProps> =
             {
               id: 'latest-success',
               label: t('arb_overview_latest_successful_scan') || 'Latest successful scan',
-              value: formatTimestamp(historical?.latestSuccessfulRunAt, t),
+              value: formatTimestamp(latestSuccessfulAt, t),
               color: 'blue',
-              valueState: historical?.latestSuccessfulRunAt ? 'loaded' : 'unavailable',
+              valueState: latestSuccessfulAt ? 'loaded' : 'unavailable',
             },
             {
               id: 'execution',
@@ -239,8 +241,10 @@ export const ArbitrageOverviewSection: React.FC<ArbitrageOverviewSectionProps> =
                 {
                   id: 'duration',
                   label: t('duration') || 'Duration',
-                  value: formatDuration(latestRun?.durationMs, t),
+                  value: formatScanDuration(latestRun, t),
                   color: 'purple',
+                  valueState:
+                    latestRun?.durationAvailability === 'unavailable' ? 'unavailable' : 'loaded',
                 },
                 {
                   id: 'trigger',
@@ -318,28 +322,26 @@ export const ArbitrageOverviewSection: React.FC<ArbitrageOverviewSectionProps> =
         {overview.recentRuns?.length ? (
           <div className="space-y-2">
             {overview.recentRuns.slice(0, 10).map((run: ArbitrageCoreRunSummary) => (
-              <div
-                key={run.runId}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-slate-950/40 px-3 py-2 text-sm"
-                data-testid={`arb-overview-recent-${run.runId}`}
-              >
-                <span>
-                  <AgentTechnicalLtr>
-                    {formatTimestamp(run.completedAt || run.startedAt, t)}
-                  </AgentTechnicalLtr>
-                  {' · '}
-                  {run.status === 'failed'
-                    ? t('arbitrage_overview_scan_failed') || 'Failed'
-                    : t('completed') || 'Completed'}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {t('qualified_opportunities') || 'Qualified'}: {run.funnel?.qualified ?? 0}
-                  {' · '}
-                  {t('rejected_candidates') || 'Rejected'}: {run.funnel?.rejected ?? 0}
-                  {' · '}
-                  {formatDuration(run.durationMs, t)}
-                </span>
-              </div>
+              <AgentListRow key={run.runId} testId={`arb-overview-recent-${run.runId}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <AgentTechnicalLtr>
+                      {formatTimestamp(run.completedAt || run.startedAt, t)}
+                    </AgentTechnicalLtr>
+                    {' · '}
+                    {run.status === 'failed'
+                      ? t('arbitrage_overview_scan_failed') || 'Failed'
+                      : t('completed') || 'Completed'}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {t('qualified_opportunities') || 'Qualified'}: {run.funnel?.qualified ?? 0}
+                    {' · '}
+                    {t('rejected_candidates') || 'Rejected'}: {run.funnel?.rejected ?? 0}
+                    {' · '}
+                    {formatScanDuration(run, t)}
+                  </span>
+                </div>
+              </AgentListRow>
             ))}
           </div>
         ) : (
