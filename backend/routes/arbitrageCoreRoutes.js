@@ -64,11 +64,11 @@ router.get(
       const agent = await requireArbitrageAgent(req, res);
       if (!agent) return;
 
-      const [overview, scheduler, runtime] = await Promise.all([
-        getArbitrageOverview(agent.id),
+      const [scheduler, runtime] = await Promise.all([
         readAnalyticalSchedulerStatus(),
         getRuntimeExecutionState({ preferCache: true }),
       ]);
+      const overview = await getArbitrageOverview(agent.id, { scheduler, runtime });
 
       return res.json({
         ok: true,

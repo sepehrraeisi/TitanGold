@@ -8,6 +8,7 @@ import { normalizeArbitrageConfig } from './normalizeArbitrageConfig.js';
 import {
   ARBITRAGE_DECISION_TYPE,
   buildScanRunDto,
+  buildArbitrageOverviewSnapshot,
   buildSettingsDto,
   deriveInterpretation,
   getProductIdentity,
@@ -21,7 +22,12 @@ import {
 import { readAnalyticalSchedulerStatus } from './analyticalSchedulerStatus.js';
 import { isRedisAvailable } from '../utils/redis.js';
 import { withScanLock } from './arbitrageScanLock.js';
-import { fetchArbitrageScanHistory, countArbitrageScans } from './arbitrageScanContract.js';
+import {
+  fetchArbitrageHistoricalSummary,
+  fetchArbitrageScanHistory,
+  fetchLatestArbitrageScanRow,
+  fetchRecentArbitrageScanRows,
+} from './arbitrageScanContract.js';
 import { writeExecutionAudit } from './agentExecutionService.js';
 import { logger } from './logger.js';
 
@@ -147,25 +153,55 @@ export async function executeArbitrageAnalyticalScan({
   });
 }
 
-export async function getArbitrageOverview(agentId) {
+function parseJsonField(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+function mapRecentRunSummary(row, agentId) {
+  const scanRun = mapDecisionRowToScanRun(
+    {
+      id: row.id,
+      created_at: row.created_at,
+      execution_time_ms: row.execution_time_ms,
+      output_data: parseJsonField(row.output_data),
+      input_data: parseJsonField(row.input_data),
+      was_successful: row.was_successful,
+    },
+    agentId,
+  );
+  return {
+    runId: scanRun.runId,
+    startedAt: scanRun.startedAt,
+    completedAt: scanRun.completedAt,
+    status: scanRun.status,
+    trigger: scanRun.trigger,
+    durationMs: scanRun.durationMs,
+    dryRun: scanRun.dryRun,
+    runtimeMode: scanRun.runtimeMode,
+    funnel: scanRun.funnel,
+    rejectionSummary: scanRun.rejectionSummary,
+  };
+}
+
+export async function getArbitrageOverview(agentId, { scheduler = {}, runtime = {} } = {}) {
   const agent = await loadArbitrageAgent(agentId);
   if (!agent) return null;
 
   const settings = buildSettingsDto(normalizeArbitrageConfig(agent.config || {}), {
     updatedAt: agent.updated_at,
   });
-  const counts = await countArbitrageScans(agent.id);
-  const history = await fetchArbitrageScanHistory(agent.id, { page: 1, pageSize: 5 });
 
-  const latestRow = history.items[0]
-    ? {
-        id: history.items[0].id,
-        created_at: history.items[0].createdAt,
-        execution_time_ms: history.items[0].executionTimeMs,
-        output_data: history.items[0].raw || history.items[0],
-        input_data: {},
-      }
-    : null;
+  const [historicalSummary, latestRow, recentRows] = await Promise.all([
+    fetchArbitrageHistoricalSummary(agent.id),
+    fetchLatestArbitrageScanRow(agent.id),
+    fetchRecentArbitrageScanRows(agent.id, 10),
+  ]);
 
   const latestRun = latestRow
     ? mapDecisionRowToScanRun(
@@ -173,27 +209,26 @@ export async function getArbitrageOverview(agentId) {
           id: latestRow.id,
           created_at: latestRow.created_at,
           execution_time_ms: latestRow.execution_time_ms,
-          output_data: latestRow.output_data,
-          input_data: latestRow.input_data,
+          output_data: parseJsonField(latestRow.output_data),
+          input_data: parseJsonField(latestRow.input_data),
+          was_successful: latestRow.was_successful,
         },
         agent.id,
       )
     : null;
 
-  return {
-    product: getProductIdentity(),
+  const recentRuns = recentRows.map((row) => mapRecentRunSummary(row, agent.id));
+
+  return buildArbitrageOverviewSnapshot({
+    agent,
     settings,
-    totalScanRuns: counts.total,
     latestRun,
-    recentRuns: history.items.slice(0, 5).map((item) => ({
-      runId: item.id,
-      startedAt: item.createdAt,
-      status: item.status || 'completed',
-      trigger: item.trigger || 'scheduled',
-      funnel: item.candidateStats || {},
-    })),
-    interpretation: deriveInterpretation(latestRun, settings),
-  };
+    historicalSummary,
+    recentRuns,
+    schedulerState: scheduler,
+    runtimeState: runtime,
+    generatedAt: new Date().toISOString(),
+  });
 }
 
 export async function updateMonitoringState({ agentId, monitoringState, user }) {
@@ -240,16 +275,6 @@ export async function updateMonitoringState({ agentId, monitoringState, user }) 
   });
 
   return buildSettingsDto(config, { updatedAt: config.settingsUpdatedAt, updatedBy: user?.id || null });
-}
-
-function parseJsonField(value) {
-  if (!value) return {};
-  if (typeof value === 'object') return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return {};
-  }
 }
 
 function applySettingsInputToConfig(currentConfig, input = {}) {

@@ -341,25 +341,128 @@ export function validatePagination({ page = 1, pageSize = DEFAULT_PAGE_SIZE } = 
 }
 
 export function deriveInterpretation(scanRun, settings) {
+  return buildOverviewInterpretation({ latestRun: scanRun, settings }).primaryMessage;
+}
+
+export function buildOverviewInterpretation({ latestRun, settings, historicalSummary } = {}) {
+  const safeReasonCodes = [];
+  let primaryMessage = 'Latest analytical scan completed successfully.';
+  const rejectionSummary = latestRun?.rejectionSummary || {};
+
   if (settings?.monitoringState === MONITORING_STATE.PAUSED) {
-    return 'Monitoring is paused; no scheduled scans will run.';
+    primaryMessage = 'Monitoring is paused; no scheduled scans will run.';
+    safeReasonCodes.push('monitoring_paused');
+    return { primaryMessage, safeReasonCodes, rejectionSummary };
   }
-  if (!scanRun) {
-    return 'No analytical scan has completed yet.';
+
+  if (!latestRun && (historicalSummary?.totalScanRuns || 0) === 0) {
+    primaryMessage = 'No analytical scan has completed yet.';
+    safeReasonCodes.push('no_scan_history');
+    return { primaryMessage, safeReasonCodes, rejectionSummary };
   }
-  if (scanRun.status === SCAN_RUN_STATUS.FAILED) {
-    return scanRun.failureReason
-      ? `Latest scan failed: ${scanRun.failureReason}`
+
+  if (!latestRun && (historicalSummary?.totalScanRuns || 0) > 0) {
+    primaryMessage = 'Historical scans exist, but the latest run snapshot is unavailable.';
+    safeReasonCodes.push('latest_run_unavailable');
+    return { primaryMessage, safeReasonCodes, rejectionSummary };
+  }
+
+  if (latestRun?.status === SCAN_RUN_STATUS.FAILED) {
+    primaryMessage = latestRun.failureReason
+      ? `Latest scan failed: ${latestRun.failureReason}`
       : 'Latest scan failed.';
+    safeReasonCodes.push('latest_scan_failed');
+    return { primaryMessage, safeReasonCodes, rejectionSummary };
   }
-  const funnel = scanRun.funnel || {};
-  if (funnel.analyticalCandidates === 0 && funnel.rejected > 0) {
-    return 'All evaluated symbols were rejected because net spread or liquidity thresholds were not met.';
+
+  const funnel = latestRun?.funnel || {};
+  const rejected = funnel.rejected || 0;
+  const topReason = Object.entries(rejectionSummary).sort((a, b) => b[1] - a[1])[0];
+
+  if (rejected > 0 && topReason) {
+    primaryMessage = `${rejected} observation(s) were rejected because estimated net spread was not positive.`;
+    safeReasonCodes.push(String(topReason[0]));
+  } else if (funnel.qualified === 0 && funnel.analyticalCandidates > 0) {
+    primaryMessage =
+      'Monitoring is active, but no candidate met the configured net-spread threshold.';
+    safeReasonCodes.push('no_qualified_candidates');
+  } else if (funnel.analyticalCandidates === 0 && rejected > 0) {
+    primaryMessage =
+      'All evaluated symbols were rejected because net spread or liquidity thresholds were not met.';
+    safeReasonCodes.push('all_symbols_rejected');
+  } else if ((latestRun?.sourceFreshnessMs || 0) > (settings?.maximumDataAgeMs || 30000)) {
+    primaryMessage = 'The latest scan used stale market data for one or more symbols.';
+    safeReasonCodes.push('stale_market_data');
   }
-  if (funnel.qualified === 0 && funnel.analyticalCandidates > 0) {
-    return 'No candidate passed the configured minimum net spread.';
-  }
-  return 'Latest analytical scan completed successfully.';
+
+  return { primaryMessage, safeReasonCodes, rejectionSummary };
+}
+
+export function buildArbitrageOverviewSnapshot({
+  agent,
+  settings,
+  latestRun,
+  historicalSummary,
+  recentRuns = [],
+  schedulerState = {},
+  runtimeState = {},
+  generatedAt = new Date().toISOString(),
+}) {
+  const product = getProductIdentity();
+  const interpretation = buildOverviewInterpretation({ latestRun, settings, historicalSummary });
+
+  return {
+    generatedAt,
+    snapshotAt: generatedAt,
+    productState: {
+      productMode: product.activeMode,
+      productName: product.displayName,
+      monitoringState: settings?.monitoringState || MONITORING_STATE.ACTIVE,
+      agentStatus: agent?.status || 'inactive',
+      schedulerState: schedulerState?.status || 'unknown',
+      runtimeMode: runtimeState?.globalMode || 'demo',
+      emergencyStop: runtimeState?.killSwitchActive === true,
+      executionSupported: false,
+    },
+    latestRun: latestRun
+      ? {
+          latestRunId: latestRun.runId,
+          latestRunTrigger: latestRun.trigger,
+          latestRunStatus: latestRun.status,
+          startedAt: latestRun.startedAt,
+          completedAt: latestRun.completedAt,
+          durationMs: latestRun.durationMs,
+          symbolsRequested: latestRun.symbolsRequested || [],
+          symbolsEvaluated: latestRun.symbolsEvaluated || [],
+          dataFreshnessMs: latestRun.sourceFreshnessMs,
+          rawObservations: latestRun.funnel?.rawObservations ?? 0,
+          spreadCandidates: latestRun.funnel?.analyticalCandidates ?? 0,
+          rejectedCandidates: latestRun.funnel?.rejected ?? 0,
+          qualifiedCandidates: latestRun.funnel?.qualified ?? 0,
+          expiredCandidates: latestRun.funnel?.expired ?? 0,
+          blockedCandidates: latestRun.funnel?.blocked ?? 0,
+          funnel: latestRun.funnel || {},
+          rejectionSummary: latestRun.rejectionSummary || {},
+          failureReason: latestRun.failureReason || null,
+        }
+      : null,
+    historicalSummary,
+    configurationSummary: {
+      monitoredSymbolCount: settings?.monitoredSymbols?.length || 0,
+      minimumGrossSpreadBps: settings?.minimumGrossSpreadBps,
+      minimumNetSpreadBps: settings?.minimumNetSpreadBps,
+      assumedFeesBps: settings?.assumedFeesBps,
+      assumedSlippageBps: settings?.assumedSlippageBps,
+      maximumDataAgeMs: settings?.maximumDataAgeMs,
+      settingsVersion: settings?.version ?? 1,
+      settingsUpdatedAt: settings?.updatedAt ?? null,
+    },
+    interpretation,
+    product,
+    settings,
+    totalScanRuns: historicalSummary?.totalScanRuns ?? 0,
+    recentRuns,
+  };
 }
 
 export function mapDecisionRowToScanRun(row, agentId) {
@@ -379,7 +482,10 @@ export function mapDecisionRowToScanRun(row, agentId) {
     startedAt,
     completedAt,
     durationMs,
-    status: output.error ? SCAN_RUN_STATUS.FAILED : SCAN_RUN_STATUS.COMPLETED,
+    status:
+      output.error || row.was_successful === false
+        ? SCAN_RUN_STATUS.FAILED
+        : SCAN_RUN_STATUS.COMPLETED,
     dryRun: output.dryRun !== false,
     runtimeMode: input.input?.effective_mode || output.runtimeMode || 'demo',
     schedulerOwner: output.schedulerOwner || 'titan-engine-worker',

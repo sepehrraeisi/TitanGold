@@ -8035,16 +8035,61 @@ export interface ArbitrageCoreRunSummary {
     completedAt?: string | null;
     status?: string;
     trigger?: string;
+    durationMs?: number | null;
     funnel?: Record<string, number>;
+    sourceFreshnessMs?: number | null;
+}
+
+export interface ArbitrageCoreOverviewProductState {
+    productMode: string;
+    productName: string;
+    monitoringState: string;
+    agentStatus: string;
+    schedulerState: string;
+    runtimeMode: string;
+    emergencyStop: boolean;
+    executionSupported: false;
+}
+
+export interface ArbitrageCoreHistoricalSummary {
+    totalScanRuns: number;
+    successfulRuns: number;
+    failedRuns: number;
+    scheduledRuns: number;
+    manualRuns: number;
+    latestSuccessfulRunAt: string | null;
+    latestFailedRunAt: string | null;
+}
+
+export interface ArbitrageCoreConfigurationSummary {
+    monitoredSymbolCount: number;
+    minimumGrossSpreadBps: number | null;
+    minimumNetSpreadBps: number | null;
+    assumedFeesBps: number | null;
+    assumedSlippageBps: number | null;
+    maximumDataAgeMs: number | null;
+    settingsVersion: number;
+    settingsUpdatedAt: string | null;
+}
+
+export interface ArbitrageCoreInterpretation {
+    primaryMessage: string;
+    safeReasonCodes: string[];
+    rejectionSummary: Record<string, number>;
 }
 
 export interface ArbitrageCoreOverview {
+    generatedAt?: string | null;
+    snapshotAt?: string | null;
+    productState?: ArbitrageCoreOverviewProductState;
     product: ArbitrageCoreProductIdentity;
     settings: ArbitrageCoreSettings;
     totalScanRuns: number;
+    historicalSummary?: ArbitrageCoreHistoricalSummary;
+    configurationSummary?: ArbitrageCoreConfigurationSummary;
     latestRun: ArbitrageCoreRunSummary | null;
     recentRuns: ArbitrageCoreRunSummary[];
-    interpretation?: string | null;
+    interpretation?: string | ArbitrageCoreInterpretation | null;
 }
 
 export interface ArbitrageCoreCandidatesResponse {

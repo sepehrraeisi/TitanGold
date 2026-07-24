@@ -420,6 +420,64 @@ export async function countArbitrageScans(agentId) {
   };
 }
 
+export async function fetchArbitrageHistoricalSummary(agentId) {
+  const result = await query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE was_successful = true)::int AS successful,
+            COUNT(*) FILTER (WHERE was_successful = false)::int AS failed,
+            MAX(created_at) FILTER (WHERE was_successful = true) AS latest_success,
+            MAX(created_at) FILTER (WHERE was_successful = false) AS latest_failed
+     FROM ai_decisions
+     WHERE agent_id = $1 AND decision_type = $2`,
+    [agentId, ARBITRAGE_DECISION_TYPE],
+  );
+  const triggerResult = await query(
+    `SELECT COUNT(*) FILTER (
+              WHERE COALESCE(input_data->>'trigger', 'scheduled') = 'scheduled'
+            )::int AS scheduled,
+            COUNT(*) FILTER (WHERE input_data->>'trigger' = 'manual')::int AS manual
+     FROM ai_decisions
+     WHERE agent_id = $1 AND decision_type = $2`,
+    [agentId, ARBITRAGE_DECISION_TYPE],
+  );
+  const row = result.rows[0] || {};
+  const triggers = triggerResult.rows[0] || {};
+  return {
+    totalScanRuns: row.total || 0,
+    successfulRuns: row.successful || 0,
+    failedRuns: row.failed || 0,
+    scheduledRuns: triggers.scheduled || 0,
+    manualRuns: triggers.manual || 0,
+    latestSuccessfulRunAt: asIso(row.latest_success),
+    latestFailedRunAt: asIso(row.latest_failed),
+  };
+}
+
+export async function fetchLatestArbitrageScanRow(agentId) {
+  const result = await query(
+    `SELECT id, input_data, output_data, created_at, execution_time_ms, was_successful
+     FROM ai_decisions
+     WHERE agent_id = $1 AND decision_type = $2
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [agentId, ARBITRAGE_DECISION_TYPE],
+  );
+  return result.rows[0] || null;
+}
+
+export async function fetchRecentArbitrageScanRows(agentId, limit = 10) {
+  const safeLimit = Math.min(20, Math.max(1, parseInt(String(limit), 10) || 10));
+  const result = await query(
+    `SELECT id, input_data, output_data, created_at, execution_time_ms, was_successful
+     FROM ai_decisions
+     WHERE agent_id = $1 AND decision_type = $2
+     ORDER BY created_at DESC, id DESC
+     LIMIT $3`,
+    [agentId, ARBITRAGE_DECISION_TYPE, safeLimit],
+  );
+  return result.rows;
+}
+
 /**
  * Grouped scan counts for many agents — avoids N+1 on Agents list.
  */

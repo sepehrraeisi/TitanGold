@@ -10,15 +10,38 @@ describe('arbitrageCoreClient contract parsing', () => {
         const parsed = parseArbitrageOverviewEnvelope({
             ok: true,
             overview: {
+                generatedAt: '2026-07-24T10:01:00.000Z',
                 totalScanRuns: 1753,
-                latestRun: { runId: 'abc', status: 'completed', funnel: { rejected: 3 } },
+                historicalSummary: {
+                    totalScanRuns: 1753,
+                    successfulRuns: 1740,
+                    failedRuns: 13,
+                    scheduledRuns: 1700,
+                    manualRuns: 53,
+                    latestSuccessfulRunAt: '2026-07-24T10:00:05.000Z',
+                    latestFailedRunAt: null,
+                },
+                latestRun: {
+                    latestRunId: 'abc',
+                    latestRunStatus: 'completed',
+                    trigger: 'scheduled',
+                    funnel: { rejected: 3, analyticalCandidates: 1, qualified: 0 },
+                    rejectionSummary: { NON_POSITIVE_NET: 3 },
+                },
+                interpretation: {
+                    primaryMessage: 'Three observations were rejected.',
+                    safeReasonCodes: ['NON_POSITIVE_NET'],
+                    rejectionSummary: { NON_POSITIVE_NET: 3 },
+                },
                 settings: { monitoringState: 'active', monitoredSymbols: ['BTCUSDT'] },
                 product: { displayName: 'MEXC Spot Spread Monitor', agentKey: 'arbitrage' },
             },
         });
         expect(parsed.totalScanRuns).toBe(1753);
         expect(parsed.latestRun?.runId).toBe('abc');
+        expect(parsed.historicalSummary?.totalScanRuns).toBe(1753);
         expect(parsed.settings.monitoringState).toBe('active');
+        expect(parsed.generatedAt).toBe('2026-07-24T10:01:00.000Z');
     });
 
     it('unwraps runs envelope and defaults missing pagination fields', () => {

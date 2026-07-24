@@ -96,6 +96,111 @@ function groupCandidates(
     return { runId, spreadCandidates, rejectedCandidates, qualifiedCandidates };
 }
 
+function parseHistoricalSummary(raw: unknown) {
+    const h = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    return {
+        totalScanRuns: asNumber(h.totalScanRuns, -1),
+        successfulRuns: asNumber(h.successfulRuns, 0),
+        failedRuns: asNumber(h.failedRuns, 0),
+        scheduledRuns: asNumber(h.scheduledRuns, 0),
+        manualRuns: asNumber(h.manualRuns, 0),
+        latestSuccessfulRunAt: h.latestSuccessfulRunAt ? String(h.latestSuccessfulRunAt) : null,
+        latestFailedRunAt: h.latestFailedRunAt ? String(h.latestFailedRunAt) : null,
+    };
+}
+
+function parseConfigurationSummary(raw: unknown) {
+    const c = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    return {
+        monitoredSymbolCount: asNumber(c.monitoredSymbolCount, 0),
+        minimumGrossSpreadBps: c.minimumGrossSpreadBps != null ? asNumber(c.minimumGrossSpreadBps) : null,
+        minimumNetSpreadBps: c.minimumNetSpreadBps != null ? asNumber(c.minimumNetSpreadBps) : null,
+        assumedFeesBps: c.assumedFeesBps != null ? asNumber(c.assumedFeesBps) : null,
+        assumedSlippageBps: c.assumedSlippageBps != null ? asNumber(c.assumedSlippageBps) : null,
+        maximumDataAgeMs: c.maximumDataAgeMs != null ? asNumber(c.maximumDataAgeMs) : null,
+        settingsVersion: asNumber(c.settingsVersion, 1),
+        settingsUpdatedAt: c.settingsUpdatedAt ? String(c.settingsUpdatedAt) : null,
+    };
+}
+
+function parseProductState(raw: unknown) {
+    const p = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    return {
+        productMode: String(p.productMode ?? 'single_venue_spread_monitoring'),
+        productName: String(p.productName ?? 'MEXC Spot Spread Monitor'),
+        monitoringState: String(p.monitoringState ?? 'active'),
+        agentStatus: String(p.agentStatus ?? 'inactive'),
+        schedulerState: String(p.schedulerState ?? 'unknown'),
+        runtimeMode: String(p.runtimeMode ?? 'demo'),
+        emergencyStop: Boolean(p.emergencyStop),
+        executionSupported: false as const,
+    };
+}
+
+function parseInterpretation(raw: unknown): string | import('./api.ts').ArbitrageCoreInterpretation | null {
+    if (raw == null) return null;
+    if (typeof raw === 'string') return raw;
+    if (typeof raw !== 'object') return null;
+    const i = raw as Record<string, unknown>;
+    return {
+        primaryMessage: String(i.primaryMessage ?? ''),
+        safeReasonCodes: asStringArray(i.safeReasonCodes),
+        rejectionSummary:
+            i.rejectionSummary && typeof i.rejectionSummary === 'object'
+                ? (i.rejectionSummary as Record<string, number>)
+                : {},
+    };
+}
+
+function parseLatestRun(raw: unknown) {
+    if (!raw || typeof raw !== 'object') return null;
+    const latest = raw as Record<string, unknown>;
+    if (latest.latestRunId || latest.runId) {
+        const funnel =
+            latest.funnel && typeof latest.funnel === 'object'
+                ? (latest.funnel as Record<string, number>)
+                : {
+                      symbolsRequested: asNumber(latest.symbolsRequested, 0),
+                      symbolsEvaluated: asNumber(latest.symbolsEvaluated, 0),
+                      rawObservations: asNumber(latest.rawObservations, 0),
+                      analyticalCandidates: asNumber(latest.spreadCandidates, 0),
+                      rejected: asNumber(latest.rejectedCandidates, 0),
+                      qualified: asNumber(latest.qualifiedCandidates, 0),
+                      expired: asNumber(latest.expiredCandidates, 0),
+                      blocked: asNumber(latest.blockedCandidates, 0),
+                  };
+        return {
+            runId: String(latest.latestRunId ?? latest.runId ?? ''),
+            startedAt: latest.startedAt ? String(latest.startedAt) : null,
+            completedAt: latest.completedAt ? String(latest.completedAt) : null,
+            status: latest.latestRunStatus
+                ? String(latest.latestRunStatus)
+                : latest.status
+                  ? String(latest.status)
+                  : 'completed',
+            trigger: latest.latestRunTrigger
+                ? String(latest.latestRunTrigger)
+                : latest.trigger
+                  ? String(latest.trigger)
+                  : 'scheduled',
+            durationMs: latest.durationMs != null ? asNumber(latest.durationMs) : null,
+            dryRun: latest.dryRun !== false,
+            runtimeMode: latest.runtimeMode ? String(latest.runtimeMode) : 'demo',
+            funnel,
+            rejectionSummary:
+                latest.rejectionSummary && typeof latest.rejectionSummary === 'object'
+                    ? (latest.rejectionSummary as Record<string, number>)
+                    : {},
+            symbolsRequested: asStringArray(latest.symbolsRequested),
+            symbolsEvaluated: asStringArray(latest.symbolsEvaluated),
+            sourceFreshnessMs:
+                latest.dataFreshnessMs != null ? asNumber(latest.dataFreshnessMs) : null,
+            failureReason: latest.failureReason ? String(latest.failureReason) : null,
+        };
+    }
+    return parseRunSummary(latest);
+}
+
 export function parseArbitrageOverviewEnvelope(raw: unknown): ArbitrageCoreOverview {
     if (!raw || typeof raw !== 'object') {
         throw new ArbitrageContractError('Overview response is not an object');
@@ -108,8 +213,14 @@ export function parseArbitrageOverviewEnvelope(raw: unknown): ArbitrageCoreOverv
 
     const settings = (overview.settings ?? {}) as Record<string, unknown>;
     const product = (overview.product ?? {}) as Record<string, unknown>;
+    const historicalSummary = parseHistoricalSummary(overview.historicalSummary);
+    const totalFromHistory =
+        historicalSummary.totalScanRuns >= 0 ? historicalSummary.totalScanRuns : asNumber(overview.totalScanRuns, -1);
 
     return {
+        generatedAt: overview.generatedAt ? String(overview.generatedAt) : overview.snapshotAt ? String(overview.snapshotAt) : null,
+        snapshotAt: overview.snapshotAt ? String(overview.snapshotAt) : overview.generatedAt ? String(overview.generatedAt) : null,
+        productState: overview.productState ? parseProductState(overview.productState) : undefined,
         product: {
             agentKey: String(product.agentKey ?? 'arbitrage'),
             displayName: String(product.displayName ?? 'MEXC Spot Spread Monitor'),
@@ -123,12 +234,16 @@ export function parseArbitrageOverviewEnvelope(raw: unknown): ArbitrageCoreOverv
             executionEligible: false,
         },
         settings: parseArbitrageSettingsEnvelope({ settings }),
-        totalScanRuns: asNumber(overview.totalScanRuns, -1),
-        latestRun: overview.latestRun ? parseRunSummary(overview.latestRun as Record<string, unknown>) : null,
+        totalScanRuns: totalFromHistory,
+        historicalSummary,
+        configurationSummary: overview.configurationSummary
+            ? parseConfigurationSummary(overview.configurationSummary)
+            : undefined,
+        latestRun: overview.latestRun ? parseLatestRun(overview.latestRun) : null,
         recentRuns: Array.isArray(overview.recentRuns)
             ? overview.recentRuns.map(r => parseRunSummary(r as Record<string, unknown>))
             : [],
-        interpretation: overview.interpretation != null ? String(overview.interpretation) : null,
+        interpretation: parseInterpretation(overview.interpretation),
     };
 }
 
@@ -149,6 +264,7 @@ function parseRunSummary(raw: Record<string, unknown>) {
                 : {},
         symbolsRequested: asStringArray(raw.symbolsRequested),
         symbolsEvaluated: asStringArray(raw.symbolsEvaluated),
+        sourceFreshnessMs: raw.sourceFreshnessMs != null ? asNumber(raw.sourceFreshnessMs) : raw.dataFreshnessMs != null ? asNumber(raw.dataFreshnessMs) : null,
         failureReason: raw.failureReason ? String(raw.failureReason) : null,
     };
 }
