@@ -19,6 +19,7 @@ import {
   annotateCandidatesWithLifecycle,
   aggregateLifecycleMetrics,
 } from '../arbitrageScanContract.js';
+import { buildFunnelCounts } from '../arbitrageDomain.js';
 
 const mexcCircuitBreaker = circuitBreakerManager.getBreaker('mexc-api', {
   failureThreshold: 5,
@@ -422,6 +423,17 @@ export async function run(params) {
     const annotatedCandidates = annotateCandidatesWithLifecycle(candidates, lifecycleCtx);
     const annotatedRejected = annotateCandidatesWithLifecycle(rejectedCandidates, lifecycleCtx);
     const lifecycleMetrics = aggregateLifecycleMetrics(candidates, rejectedCandidates, lifecycleCtx);
+    const symbolsRequested = Array.isArray(config?.symbols) ? config.symbols : ['BTCUSDT', 'ETHUSDT'];
+    const funnel = buildFunnelCounts({
+      symbolsRequested,
+      symbolsEvaluated: symbolsRequested,
+      rawObservations: symbolsRequested.length,
+      analyticalCandidates: candidates.length,
+      rejected: rejectedCandidates.length,
+      qualified: 0,
+      expired: 0,
+      blocked: 0,
+    });
 
     const scored = [...candidates, ...rejectedCandidates].filter((c) => Number.isFinite(c.riskScore));
     const avgRiskScore =
@@ -479,6 +491,7 @@ export async function run(params) {
       rejectedCandidates: annotatedRejected.slice(0, 50),
       qualifiedOpportunities: [],
       lifecycleMetrics,
+      funnel,
       unsupportedStrategies,
       // Intentionally empty — same-market spreads are not opportunities
       opportunities: [],
