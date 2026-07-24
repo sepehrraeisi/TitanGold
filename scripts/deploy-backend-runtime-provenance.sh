@@ -87,17 +87,56 @@ if [[ -f "$RUNTIME_ENV_FILE" ]]; then
   CORS_FROM_ENV="$(grep -E '^CORS_ALLOWED_ORIGINS=' "$RUNTIME_ENV_FILE" | tail -1 | cut -d= -f2- | sed 's/^["'\'' ]//; s/["'\'' ]$//' || true)"
 fi
 
-# Inject canonical Staging env into PM2 (explicit values, not ambient shell).
-cd "$RUNTIME_DIR"
-DEPLOY_CMD=(env NODE_ENV="$INTENDED_NODE_ENV" TITAN_DEPLOY_ENV="$INTENDED_DEPLOY_ENV" TITAN_RUNTIME_COMMIT="$IMPL_COMMIT")
-if [[ -n "$CORS_FROM_ENV" ]]; then
-  DEPLOY_CMD+=(CORS_ALLOWED_ORIGINS="$CORS_FROM_ENV")
+# Guarded PM2 restart — exact titan-backend target only; Scheduler fingerprint must remain stable.
+SCHEDULER_BEFORE="$(pm2 jlist 2>/dev/null | python3 -c "
+import json,sys
+procs=json.load(sys.stdin)
+workers=[p for p in procs if p.get('name')=='titan-engine-worker']
+if len(workers)!=1:
+  print('MISSING')
+  raise SystemExit(0)
+w=workers[0]
+print(f\"{w.get('pid')}:{w.get('pm2_env',{}).get('pm_uptime')}\")
+" 2>/dev/null || echo 'MISSING')"
+
+if [[ "$SCHEDULER_BEFORE" == "MISSING" || "$SCHEDULER_BEFORE" != *:* ]]; then
+  echo "ERROR: Scheduler fingerprint unavailable before deploy — aborting before PM2 mutation." >&2
+  exit 1
 fi
-"${DEPLOY_CMD[@]}" pm2 restart titan-backend --update-env
 
-pm2 save >/dev/null
+cd "$RUNTIME_DIR"
+GUARD_ARGS=(
+  node "$BACKEND_DIR/scripts/pm2DeployGuardCli.js" restart-backend
+  --node-env "$INTENDED_NODE_ENV"
+  --deploy-env "$INTENDED_DEPLOY_ENV"
+  --runtime-commit "$IMPL_COMMIT"
+)
+if [[ -n "$CORS_FROM_ENV" ]]; then
+  GUARD_ARGS+=(--cors-origins "$CORS_FROM_ENV")
+fi
 
-echo "Restarted titan-backend with guarded environment (Scheduler untouched)."
+if ! "${GUARD_ARGS[@]}"; then
+  echo "ERROR: guarded PM2 backend restart failed — Scheduler must remain untouched." >&2
+  exit 1
+fi
+
+SCHEDULER_AFTER="$(pm2 jlist 2>/dev/null | python3 -c "
+import json,sys
+procs=json.load(sys.stdin)
+workers=[p for p in procs if p.get('name')=='titan-engine-worker']
+if len(workers)!=1:
+  print('MISSING')
+  raise SystemExit(0)
+w=workers[0]
+print(f\"{w.get('pid')}:{w.get('pm2_env',{}).get('pm_uptime')}\")
+" 2>/dev/null || echo 'MISSING')"
+
+if [[ "$SCHEDULER_AFTER" != "$SCHEDULER_BEFORE" ]]; then
+  echo "ERROR: Scheduler PID/start time changed during backend deploy." >&2
+  exit 1
+fi
+
+echo "Restarted titan-backend with guarded PM2 targeting (Scheduler fingerprint unchanged)."
 
 # Post-restart health verification (allow slow cold start)
 sleep 5
