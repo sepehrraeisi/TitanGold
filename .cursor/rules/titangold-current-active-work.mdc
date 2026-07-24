@@ -1,55 +1,72 @@
 ---
-description: TitanGold dynamic active-work authority — Agents and Arbitrage completion
+description: TitanGold dynamic active-work authority — post-merge scheduler incident closeout
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Complete the Agents platform audit, canonical status contract, Scheduler ownership
-verification, and Arbitrage read-only opportunity lifecycle on main baseline.
+Close the post-merge Scheduler incident, land Scheduler-safe backend deployment
+guards, and complete post-merge Human QA for authentication and Agents/Arbitrage
+browser navigation on main @ `2e5e493`.
 
 Current area:
-Agents → Arbitrage (primary); Agents shell (shared)
+Deployment safety · Scheduler ownership · Post-merge verification
 
 Current program slice:
-AGENTS-ARBITRAGE-COMPLETION — Program Slice
+POST-MERGE-SCHEDULER-INCIDENT — Remediation + Closeout
+
+Risk tier:
+Tier 3 — Scheduler/runtime safety remediation
 
 Engineering status:
-VERIFICATION COMPLETE — READY FOR PR REVIEW
+HOTFIX IN REVIEW — `fix/postmerge-scheduler-deploy-guard`
 
 Human-QA status:
-PASS — Agents list + Arbitrage panel (EN/FA, staging)
+PENDING — user must confirm clean-browser login/logout/re-login cycle
 
 Expected baseline:
-- Source branch: `feat/agents-arbitrage-completion` from `origin/main`
-- Main merge baseline: `6972dd5223f4aab15dea21f8e24b71101a77cf0a`
-- Connections / MEXC-E2E: **CLOSED AND FROZEN**
+- Main merge baseline: `2e5e493676f223836a910a0ee57c8197afeef00b`
+- Runtime marker: `2e5e493`
+- Scheduler owner: `titan-engine-worker` (single owner, do not restart)
 - Scheduler allowlist: `["arbitrage"]` only — do not expand
 - Demo + Emergency Stop remain active; Live impossible
 
 Authorized scope:
-- Agent registry and canonical status DTO/projection
-- Scheduler ownership tests and observability (read-only runtime checks)
-- Arbitrage read-only pipeline, lifecycle, product UI, metrics, tests
-- Tier-1/Tier-2 related fixes inside this outcome
+- PM2 deployment guard hardening (`titan-backend` only)
+- Deployment regression tests (mocked PM2 harness)
+- Scheduler recovery verification (read-only, no worker restart)
+- Post-merge browser smoke evidence
+- Canonical Rule 02 update for incident closeout
 
 Hard boundaries:
-- Do not continue on `feat/mexc-end-to-end`
-- Do not modify protected dirty original worktree
-- Do not call MEXC or access credentials
-- Do not enable Tier-4 or Live execution
+- Do not start the next Agent outcome
+- Do not call MEXC or access exchange credentials
+- Do not execute financial actions
 - Do not expand Scheduler allowlist
-- Do not delete `feat/mexc-end-to-end`
-- Connections reopen only for reproduced production defect
+- Do not restart or delete `titan-engine-worker`
+- Do not deploy guard by manually editing runtime files
+- Do not merge hotfix PR without review
+
+Freeze status (pending incident closeout PASS):
+- Agents Platform canonical registry — **CLOSED pending scheduler-safety PR**
+- Arbitrage read-only workflow — **CLOSED pending scheduler-safety PR**
+- Authentication/CORS deployment regression — **CLOSED**
+- Deployment environment guard — **ACTIVE BASELINE** (being extended with PM2 guard)
+
+Documented limitations:
+- Invalid direct Agent UI route uses safe SPA redirect (API fail-closed preserved)
+- Only Arbitrage is allowlisted; other Agents remain Limited
+- Tier-4 / Live blocked
 
 Acceptance criteria:
-- Full Agent inventory and classifications documented
-- One canonical Agent status contract (no collapsed Active badge)
-- Scheduler single-owner verified with tests
-- Arbitrage lifecycle: detected/validated/rejected/expired/simulated/blocked
-- Integration tests pass; safety preserved
-- Staging deploy with provenance when implementation commits land
+- RCA for accidental Scheduler restart documented
+- Backend deploy cannot target Scheduler or wildcard PM2 verbs
+- Guard tests pass (`failed=0`, `environment-blocked=0`)
+- Scheduler owner=1, allowlist unchanged, 3 normal ticks verified
+- User confirms post-merge login/logout/re-login
+- Actual browser navigation smoke for Agents + Arbitrage (EN/FA)
+- Hotfix PR open to main (not merged)
 
 Next transition:
-Human QA → explicit merge authorization
+**READY FOR SCHEDULER-SAFETY PR REVIEW** → merge hotfix → resume Agents/Arbitrage freeze closeout
