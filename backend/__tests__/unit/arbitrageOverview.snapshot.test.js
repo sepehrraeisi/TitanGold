@@ -7,6 +7,7 @@ import {
   buildOverviewInterpretation,
   buildScanRunDto,
   MONITORING_STATE,
+  resolveDataFreshness,
   resolveScanDurationMs,
 } from '../../services/arbitrageDomain.js';
 
@@ -102,14 +103,64 @@ describe('arbitrage overview snapshot', () => {
     expect(interpretation.primaryMessage).toContain('paused');
   });
 
-  it('resolves duration from timestamps when execution_time_ms is zero', () => {
+  it('resolves duration from timestamps when execution_time_ms is zero but timestamps differ', () => {
     const resolved = resolveScanDurationMs({
       durationMs: 0,
       startedAt: '2026-07-24T10:00:00.000Z',
       completedAt: '2026-07-24T10:00:05.000Z',
     });
+    expect(resolved.durationAvailability).toBe('sub_ms');
+    expect(resolved.durationMs).toBe(0);
+  });
+
+  it('does not fabricate sub-ms duration from same-second timestamps', () => {
+    const resolved = resolveScanDurationMs({
+      durationMs: null,
+      startedAt: '2026-07-24T10:00:00.000Z',
+      completedAt: '2026-07-24T10:00:00.000Z',
+    });
+    expect(resolved.durationAvailability).toBe('unavailable');
+    expect(resolved.durationReason).toBe('insufficient_timestamp_precision');
+  });
+
+  it('marks unavailable duration when execution_time_ms is missing', () => {
+    const resolved = resolveScanDurationMs({
+      durationMs: null,
+      startedAt: '2026-07-24T10:00:00.000Z',
+      completedAt: null,
+    });
+    expect(resolved.durationAvailability).toBe('unavailable');
+    expect(resolved.durationReason).toBe('duration_not_recorded');
+  });
+
+  it('derives timestamp-based duration when precision supports it', () => {
+    const resolved = resolveScanDurationMs({
+      durationMs: null,
+      startedAt: '2026-07-24T10:00:00.000Z',
+      completedAt: '2026-07-24T10:00:05.000Z',
+    });
     expect(resolved.durationAvailability).toBe('measured');
     expect(resolved.durationMs).toBe(5000);
+  });
+
+  it('resolves measured freshness from candidate timestamps', () => {
+    const freshness = resolveDataFreshness({
+      scanStartedAt: '2026-07-24T10:00:10.000Z',
+      rawOutput: {
+        rejectedCandidates: [{ timestamp: '2026-07-24T10:00:07.500Z' }],
+      },
+    });
+    expect(freshness.dataFreshnessState).toBe('measured');
+    expect(freshness.dataFreshnessMs).toBe(2500);
+  });
+
+  it('reports unavailable freshness with reason when source timestamps are missing', () => {
+    const freshness = resolveDataFreshness({
+      scanStartedAt: '2026-07-24T10:00:10.000Z',
+      rawOutput: { rejectedCandidates: [{ symbol: 'BTCUSDT' }] },
+    });
+    expect(freshness.dataFreshnessState).toBe('unavailable');
+    expect(freshness.dataFreshnessReason).toBe('source_timestamps_not_recorded');
   });
 
   it('marks completed zero-qualified latest run as successful in run timing', () => {

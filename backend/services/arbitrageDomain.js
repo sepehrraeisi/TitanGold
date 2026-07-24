@@ -102,6 +102,7 @@ function toIso(value) {
 }
 
 function toNum(value) {
+  if (value == null || value === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -189,34 +190,119 @@ export function mapRawCandidateToDto(raw, { runId, mode = ANALYTICAL_MODES.SINGL
   };
 }
 
+export const DURATION_UNAVAILABLE_REASONS = Object.freeze({
+  NOT_RECORDED: 'duration_not_recorded',
+  INSUFFICIENT_TIMESTAMP_PRECISION: 'insufficient_timestamp_precision',
+});
+
+export const DATA_FRESHNESS_UNAVAILABLE_REASONS = Object.freeze({
+  SOURCE_TIMESTAMPS_NOT_RECORDED: 'source_timestamps_not_recorded',
+  SCAN_START_UNAVAILABLE: 'scan_start_unavailable',
+});
+
 /**
  * Resolve scan duration from stored execution_time_ms or timestamps.
- * Never fabricates zero when duration is unknown.
+ * Never fabricates sub-millisecond timing from missing or same-second data.
  */
 export function resolveScanDurationMs({ durationMs, startedAt, completedAt } = {}) {
   const stored = toNum(durationMs);
   if (stored != null && stored > 0) {
-    return { durationMs: stored, durationAvailability: 'measured' };
+    return {
+      durationMs: stored,
+      durationAvailability: 'measured',
+      durationReason: null,
+    };
+  }
+
+  if (stored === 0) {
+    return {
+      durationMs: 0,
+      durationAvailability: 'sub_ms',
+      durationReason: null,
+    };
   }
 
   if (startedAt && completedAt) {
     const startMs = new Date(startedAt).getTime();
     const endMs = new Date(completedAt).getTime();
-    if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
-      if (endMs > startMs) {
-        return { durationMs: endMs - startMs, durationAvailability: 'measured' };
-      }
-      if (endMs === startMs) {
-        return { durationMs: 0, durationAvailability: 'sub_ms' };
-      }
+    if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs) {
+      return {
+        durationMs: endMs - startMs,
+        durationAvailability: 'measured',
+        durationReason: null,
+      };
+    }
+    if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs === startMs) {
+      return {
+        durationMs: null,
+        durationAvailability: 'unavailable',
+        durationReason: DURATION_UNAVAILABLE_REASONS.INSUFFICIENT_TIMESTAMP_PRECISION,
+      };
     }
   }
 
-  if (stored === 0) {
-    return { durationMs: 0, durationAvailability: 'sub_ms' };
+  return {
+    durationMs: null,
+    durationAvailability: 'unavailable',
+    durationReason: DURATION_UNAVAILABLE_REASONS.NOT_RECORDED,
+  };
+}
+
+function collectCandidateSourceTimestamps(rawOutput = {}) {
+  const pools = [
+    ...(rawOutput.candidates || []),
+    ...(rawOutput.rejectedCandidates || []),
+    ...(rawOutput.qualifiedOpportunities || []),
+  ];
+  const timestamps = [];
+  for (const item of pools) {
+    const ts = item?.timestamp || item?.observedAt;
+    if (!ts) continue;
+    const sourceMs = new Date(ts).getTime();
+    if (Number.isFinite(sourceMs)) timestamps.push(sourceMs);
+  }
+  return timestamps;
+}
+
+/**
+ * Resolve data freshness from persisted candidate source timestamps.
+ * Does not fabricate freshness from scan completion time.
+ */
+export function resolveDataFreshness({ rawOutput = {}, scanStartedAt } = {}) {
+  const referenceMs = scanStartedAt ? new Date(scanStartedAt).getTime() : NaN;
+  if (!Number.isFinite(referenceMs)) {
+    return {
+      dataFreshnessState: 'unavailable',
+      dataFreshnessMs: null,
+      dataFreshnessReason: DATA_FRESHNESS_UNAVAILABLE_REASONS.SCAN_START_UNAVAILABLE,
+    };
   }
 
-  return { durationMs: null, durationAvailability: 'unavailable' };
+  const sourceTimestamps = collectCandidateSourceTimestamps(rawOutput);
+  if (sourceTimestamps.length === 0) {
+    return {
+      dataFreshnessState: 'unavailable',
+      dataFreshnessMs: null,
+      dataFreshnessReason: DATA_FRESHNESS_UNAVAILABLE_REASONS.SOURCE_TIMESTAMPS_NOT_RECORDED,
+    };
+  }
+
+  const agesMs = sourceTimestamps
+    .map(sourceMs => referenceMs - sourceMs)
+    .filter(age => Number.isFinite(age) && age >= 0);
+  if (agesMs.length === 0) {
+    return {
+      dataFreshnessState: 'unavailable',
+      dataFreshnessMs: null,
+      dataFreshnessReason: DATA_FRESHNESS_UNAVAILABLE_REASONS.SOURCE_TIMESTAMPS_NOT_RECORDED,
+    };
+  }
+
+  return {
+    dataFreshnessState: 'measured',
+    dataFreshnessMs: Math.round(Math.max(...agesMs)),
+    dataFreshnessReason: null,
+  };
 }
 
 export function enrichRunTimingSummary(historicalSummary = {}, latestRun = null) {
@@ -255,6 +341,14 @@ export function buildScanRunDto({
   failureReason = null,
 }) {
   const resolvedDuration = resolveScanDurationMs({ durationMs, startedAt, completedAt });
+  const resolvedFreshness =
+    sourceFreshnessMs != null
+      ? {
+          dataFreshnessState: 'measured',
+          dataFreshnessMs: toNum(sourceFreshnessMs),
+          dataFreshnessReason: null,
+        }
+      : resolveDataFreshness({ rawOutput, scanStartedAt: startedAt });
   const candidates = rawOutput.candidates || [];
   const rejected = rawOutput.rejectedCandidates || [];
   const qualified = rawOutput.qualifiedOpportunities || [];
@@ -279,13 +373,17 @@ export function buildScanRunDto({
     completedAt: toIso(completedAt),
     durationMs: resolvedDuration.durationMs,
     durationAvailability: resolvedDuration.durationAvailability,
+    durationReason: resolvedDuration.durationReason,
+    dataFreshnessState: resolvedFreshness.dataFreshnessState,
+    dataFreshnessMs: resolvedFreshness.dataFreshnessMs,
+    dataFreshnessReason: resolvedFreshness.dataFreshnessReason,
+    sourceFreshnessMs: resolvedFreshness.dataFreshnessMs,
     status,
     dryRun: dryRun !== false,
     runtimeMode,
     schedulerOwner,
     symbolsRequested,
     symbolsEvaluated,
-    sourceFreshnessMs,
     funnel,
     spreadCandidates: funnel.analyticalCandidates,
     rejectedCandidates: funnel.rejected,
@@ -440,7 +538,11 @@ export function buildOverviewInterpretation({ latestRun, settings, historicalSum
     primaryMessage =
       'All evaluated symbols were rejected because net spread or liquidity thresholds were not met.';
     safeReasonCodes.push('all_symbols_rejected');
-  } else if ((latestRun?.sourceFreshnessMs || 0) > (settings?.maximumDataAgeMs || 30000)) {
+  } else if (
+    latestRun?.dataFreshnessState === 'measured' &&
+    (latestRun?.dataFreshnessMs || latestRun?.sourceFreshnessMs || 0) >
+      (settings?.maximumDataAgeMs || 30000)
+  ) {
     primaryMessage = 'The latest scan used stale market data for one or more symbols.';
     safeReasonCodes.push('stale_market_data');
   }
@@ -469,8 +571,22 @@ export function buildArbitrageOverviewSnapshot({
           startedAt: latestRun.startedAt,
           completedAt: latestRun.completedAt,
         }),
+        ...(latestRun.dataFreshnessState
+          ? {
+              dataFreshnessState: latestRun.dataFreshnessState,
+              dataFreshnessMs: latestRun.dataFreshnessMs,
+              dataFreshnessReason: latestRun.dataFreshnessReason,
+            }
+          : resolveDataFreshness({
+              rawOutput: latestRun.rawOutput || {},
+              scanStartedAt: latestRun.startedAt,
+            })),
       }
     : null;
+
+  const resolvedRecentRuns = recentRuns.map(run =>
+    enrichRecentRunTelemetry(run),
+  );
 
   return {
     generatedAt,
@@ -499,9 +615,13 @@ export function buildArbitrageOverviewSnapshot({
           completedAt: resolvedLatest.completedAt,
           durationMs: resolvedLatest.durationMs,
           durationAvailability: resolvedLatest.durationAvailability,
+          durationReason: resolvedLatest.durationReason,
           symbolsRequested: latestRun.symbolsRequested || [],
           symbolsEvaluated: latestRun.symbolsEvaluated || [],
-          dataFreshnessMs: latestRun.sourceFreshnessMs,
+          dataFreshnessState: resolvedLatest.dataFreshnessState,
+          dataFreshnessMs: resolvedLatest.dataFreshnessMs,
+          dataFreshnessReason: resolvedLatest.dataFreshnessReason,
+          sourceFreshnessMs: resolvedLatest.dataFreshnessMs,
           rawObservations: latestRun.funnel?.rawObservations ?? 0,
           spreadCandidates: latestRun.funnel?.analyticalCandidates ?? 0,
           rejectedCandidates: latestRun.funnel?.rejected ?? 0,
@@ -528,7 +648,33 @@ export function buildArbitrageOverviewSnapshot({
     product,
     settings,
     totalScanRuns: historicalSummary?.totalScanRuns ?? 0,
-    recentRuns,
+    recentRuns: resolvedRecentRuns,
+  };
+}
+
+export function enrichRecentRunTelemetry(run = {}) {
+  const duration = resolveScanDurationMs({
+    durationMs: run.durationMs,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+  });
+  const freshness =
+    run.dataFreshnessState != null
+      ? {
+          dataFreshnessState: run.dataFreshnessState,
+          dataFreshnessMs: run.dataFreshnessMs ?? null,
+          dataFreshnessReason: run.dataFreshnessReason ?? null,
+        }
+      : resolveDataFreshness({
+          rawOutput: run.rawOutput || {},
+          scanStartedAt: run.startedAt,
+        });
+
+  return {
+    ...run,
+    ...duration,
+    ...freshness,
+    sourceFreshnessMs: freshness.dataFreshnessMs,
   };
 }
 
@@ -538,9 +684,11 @@ export function mapDecisionRowToScanRun(row, agentId) {
   const symbols = input.config?.symbols || output.config?.symbols || [];
   const startedAt = row.created_at;
   const durationMs = row.execution_time_ms;
-  const completedAt = durationMs && startedAt
-    ? new Date(new Date(startedAt).getTime() + Number(durationMs)).toISOString()
-    : startedAt;
+  const storedDuration = toNum(durationMs);
+  const completedAt =
+    storedDuration != null && storedDuration > 0 && startedAt
+      ? new Date(new Date(startedAt).getTime() + storedDuration).toISOString()
+      : output.completedAt || output.finishedAt || null;
 
   return buildScanRunDto({
     runId: row.id,

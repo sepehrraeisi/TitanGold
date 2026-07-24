@@ -8037,6 +8037,10 @@ export interface ArbitrageCoreRunSummary {
     trigger?: string;
     durationMs?: number | null;
     durationAvailability?: 'measured' | 'sub_ms' | 'unavailable';
+    durationReason?: string | null;
+    dataFreshnessState?: 'measured' | 'unavailable';
+    dataFreshnessMs?: number | null;
+    dataFreshnessReason?: string | null;
     funnel?: Record<string, number>;
     sourceFreshnessMs?: number | null;
 }

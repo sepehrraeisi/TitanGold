@@ -195,6 +195,12 @@ function parseLatestRun(raw: unknown) {
                   ? String(latest.trigger)
                   : 'scheduled',
             durationMs: latest.durationMs != null ? asNumber(latest.durationMs) : null,
+            durationAvailability:
+                latest.durationAvailability === 'measured' ||
+                latest.durationAvailability === 'sub_ms' ||
+                latest.durationAvailability === 'unavailable'
+                    ? latest.durationAvailability
+                    : undefined,
             dryRun: latest.dryRun !== false,
             runtimeMode: latest.runtimeMode ? String(latest.runtimeMode) : 'demo',
             funnel,
@@ -206,12 +212,16 @@ function parseLatestRun(raw: unknown) {
             symbolsEvaluated: asStringArray(latest.symbolsEvaluated),
             sourceFreshnessMs:
                 latest.dataFreshnessMs != null ? asNumber(latest.dataFreshnessMs) : null,
-            durationAvailability:
-                latest.durationAvailability === 'measured' ||
-                latest.durationAvailability === 'sub_ms' ||
-                latest.durationAvailability === 'unavailable'
-                    ? latest.durationAvailability
-                    : undefined,
+            dataFreshnessState:
+                latest.dataFreshnessState === 'measured' || latest.dataFreshnessState === 'unavailable'
+                    ? latest.dataFreshnessState
+                    : latest.dataFreshnessMs != null
+                      ? 'measured'
+                      : 'unavailable',
+            dataFreshnessMs:
+                latest.dataFreshnessMs != null ? asNumber(latest.dataFreshnessMs) : null,
+            dataFreshnessReason: latest.dataFreshnessReason ? String(latest.dataFreshnessReason) : null,
+            durationReason: latest.durationReason ? String(latest.durationReason) : null,
             failureReason: latest.failureReason ? String(latest.failureReason) : null,
         };
     }
@@ -281,6 +291,20 @@ function parseRunSummary(raw: Record<string, unknown>) {
             raw.durationAvailability === 'unavailable'
                 ? raw.durationAvailability
                 : undefined,
+        durationReason: raw.durationReason ? String(raw.durationReason) : null,
+        dataFreshnessState:
+            raw.dataFreshnessState === 'measured' || raw.dataFreshnessState === 'unavailable'
+                ? raw.dataFreshnessState
+                : raw.dataFreshnessMs != null || raw.sourceFreshnessMs != null
+                  ? 'measured'
+                  : 'unavailable',
+        dataFreshnessMs:
+            raw.dataFreshnessMs != null
+                ? asNumber(raw.dataFreshnessMs)
+                : raw.sourceFreshnessMs != null
+                  ? asNumber(raw.sourceFreshnessMs)
+                  : null,
+        dataFreshnessReason: raw.dataFreshnessReason ? String(raw.dataFreshnessReason) : null,
         funnel: raw.funnel && typeof raw.funnel === 'object' ? (raw.funnel as Record<string, number>) : {},
         rejectionSummary:
             raw.rejectionSummary && typeof raw.rejectionSummary === 'object'

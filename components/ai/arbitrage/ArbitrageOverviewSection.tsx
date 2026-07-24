@@ -24,23 +24,33 @@ import {
   FUNNEL_METRIC_DEFINITIONS,
 } from '../../../utils/arbitrageReasonLabels.ts';
 import {
+  formatDataFreshness,
+  formatDurationReason,
+  formatFreshnessReason,
   formatScanDuration,
   resolveLatestSuccessfulRunAt,
 } from '../../../utils/arbitrageScanTiming.ts';
 import type { ArbitrageAgentSection } from '../../../types/navigation.ts';
 
-const NA = (t: (k: string) => string) => t('not_available') || 'N/A';
-
 const formatTimestamp = (value: string | null | undefined, t: (k: string) => string) => {
-  if (!value) return NA(t);
+  if (!value) return t('arb_timestamp_unavailable') || 'Timestamp unavailable';
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return NA(t);
+  if (Number.isNaN(d.getTime())) return t('arb_timestamp_unavailable') || 'Timestamp unavailable';
   return d.toLocaleString();
 };
 
 const formatBps = (value: number | null | undefined, t: (k: string) => string) => {
-  if (value == null || Number.isNaN(Number(value))) return NA(t);
+  if (value == null || Number.isNaN(Number(value))) {
+    return t('arb_spread_threshold_unavailable') || 'Threshold unavailable';
+  }
   return `${Number(value).toFixed(2)} bps`;
+};
+
+const formatCount = (value: number | null | undefined, t: (k: string) => string) => {
+  if (value == null || Number.isNaN(Number(value))) {
+    return t('arb_metric_unavailable') || 'Unavailable';
+  }
+  return String(value);
 };
 
 export type ArbitrageOverviewSectionProps = {
@@ -245,13 +255,14 @@ export const ArbitrageOverviewSection: React.FC<ArbitrageOverviewSectionProps> =
                   color: 'purple',
                   valueState:
                     latestRun?.durationAvailability === 'unavailable' ? 'unavailable' : 'loaded',
+                  title: formatDurationReason(latestRun?.durationReason, t),
                 },
                 {
                   id: 'trigger',
                   label: t('arb_overview_scan_trigger') || 'Trigger',
                   value: latestRun?.trigger
                     ? t(`arb_trigger_${latestRun.trigger}`) || latestRun.trigger
-                    : NA(t),
+                    : t('arb_trigger_unknown') || 'Trigger unavailable',
                   color: 'blue',
                 },
                 {
@@ -263,11 +274,11 @@ export const ArbitrageOverviewSection: React.FC<ArbitrageOverviewSectionProps> =
                 {
                   id: 'freshness',
                   label: t('arb_overview_data_freshness') || 'Data freshness',
-                  value:
-                    latestRun?.sourceFreshnessMs != null
-                      ? `${latestRun.sourceFreshnessMs} ms`
-                      : NA(t),
+                  value: formatDataFreshness(latestRun, t),
                   color: 'amber',
+                  valueState:
+                    latestRun?.dataFreshnessState === 'unavailable' ? 'unavailable' : 'loaded',
+                  title: formatFreshnessReason(latestRun?.dataFreshnessReason, t),
                 },
               ]}
             />
@@ -348,11 +359,11 @@ export const ArbitrageOverviewSection: React.FC<ArbitrageOverviewSectionProps> =
           <AgentEmptyState message={t('arbitrage_overview_never_scanned') || 'Never scanned'} />
         )}
         <p className="text-xs text-muted-foreground" data-testid="arb-overview-total-scans">
-          {t('total_scans') || 'Total scans'}: {historical?.totalScanRuns ?? overview.totalScanRuns}
+          {t('total_scans') || 'Total scans'}: {formatCount(historical?.totalScanRuns ?? overview.totalScanRuns, t)}
           {' · '}
-          {t('arb_overview_successful_runs') || 'Successful'}: {historical?.successfulRuns ?? NA(t)}
+          {t('arb_overview_successful_runs') || 'Successful'}: {formatCount(historical?.successfulRuns, t)}
           {' · '}
-          {t('arb_overview_failed_runs') || 'Failed'}: {historical?.failedRuns ?? NA(t)}
+          {t('arb_overview_failed_runs') || 'Failed'}: {formatCount(historical?.failedRuns, t)}
         </p>
       </AgentContentSurface>
 
@@ -374,7 +385,11 @@ export const ArbitrageOverviewSection: React.FC<ArbitrageOverviewSectionProps> =
             {config.monitoredSymbolCount} {t('symbols') || 'symbols'},{' '}
             {t('minimum_net_spread') || 'Min net'} {formatBps(config.minimumNetSpreadBps, t)},{' '}
             {t('arb_overview_max_data_age') || 'Max data age'}{' '}
-            <AgentTechnicalLtr>{config.maximumDataAgeMs ?? NA(t)} ms</AgentTechnicalLtr>
+            <AgentTechnicalLtr>
+              {config.maximumDataAgeMs != null
+                ? `${config.maximumDataAgeMs} ms`
+                : t('arb_metric_unavailable') || 'Unavailable'}
+            </AgentTechnicalLtr>
           </p>
         ) : null}
       </AgentContentSurface>
