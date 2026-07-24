@@ -32,6 +32,9 @@ import { logger } from '../services/logger.js';
 import { webhookDispatcher } from '../services/webhookDispatcher.js';
 import * as experiments from '../services/experiments.js'; // BACKEND-022: A/B testing
 import { notifyAgentStarted, notifyAgentCompleted, notifyAgentFailed } from '../websocket/server.js'; // BACKEND-023: WebSocket updates
+import arbitrageCoreRouter from './arbitrageCoreRoutes.js';
+import { executeArbitrageAnalyticalScan } from '../services/arbitrageRunService.js';
+import { sanitizeConfigForWrite, MONITORING_STATE } from '../services/arbitrageDomain.js';
 import { validateBody, validateParams, validateQuery, validateResponse } from '../middleware/validation.js';
 import {
   listAgentsQuerySchema,
@@ -554,6 +557,53 @@ async function runAgentViaRegistry(req, res) {
     const sideEffectsSuppressed = executionPolicy.sideEffectsSuppressed;
     req.executionPolicy = executionPolicy;
 
+    if (agent.agent_key === 'arbitrage') {
+      const scanResult = await executeArbitrageAnalyticalScan({
+        agentId: agent.id,
+        trigger: input?.trigger === 'scheduled' ? 'scheduled' : 'manual',
+        user: req.user,
+        configOverride: config || {},
+        runtimeMode: executionPolicy.effectiveMode,
+        schedulerOwner: input?.schedulerOwner || 'manual-api',
+      });
+
+      if (scanResult.skipped) {
+        return res.json({
+          ok: true,
+          skipped: true,
+          reason: scanResult.reason,
+          agent_id: agent.id,
+          agent_key: 'arbitrage',
+          policy: sanitizePolicy(executionPolicy),
+        });
+      }
+
+      const uiResult = transformAgentResultForUI(agent.agent_key, scanResult.raw);
+      const safeIndicators = Array.isArray(uiResult?.indicators) ? uiResult.indicators : [];
+
+      return res.json({
+        ok: true,
+        agent_id: agent.id,
+        agent_key: agent.agent_key,
+        policy: sanitizePolicy(executionPolicy),
+        execution: {
+          requested_mode: executionPolicy.requestedMode,
+          effective_mode: executionPolicy.effectiveMode,
+          side_effects_suppressed: sideEffectsSuppressed,
+          suppression_reason: executionPolicy.suppressionReason,
+        },
+        scanRun: scanResult.scanRun,
+        candidates: scanResult.candidates,
+        ...uiResult,
+        indicators: safeIndicators,
+        result: {
+          ...uiResult,
+          scanRun: scanResult.scanRun,
+          indicators: safeIndicators,
+        },
+      });
+    }
+
     // BACKEND-022: Check for active A/B test experiments
     let experimentData = null;
     let assignedVariant = null;
@@ -955,13 +1005,16 @@ router.patch('/:id/config', authenticateStrict, requireCapability(CAP.AI_AGENT_C
     // Normalize to ensure all required fields exist
     let normalizedConfig;
     if (agent_key === 'arbitrage') {
-      normalizedConfig = normalizeArbitrageConfig(mergedConfig);
-      // ARB-WP1A: preserve stored autoExecute preference; never treat it as operational.
-      // UI must not enable Live auto-execution for this non-live-capable agent.
-      if (normalizedConfig.execution) {
-        normalizedConfig.execution.autoExecute = existingConfig?.execution?.autoExecute === true;
-        normalizedConfig.execution.autoExecuteSupported = false;
+      if (config?.execution?.autoExecute === true || mergedConfig?.execution?.autoExecute === true) {
+        return sendError(res, 'VALIDATION_ERROR', 'Auto Execute is unsupported and cannot be enabled', 400);
       }
+      normalizedConfig = normalizeArbitrageConfig(mergedConfig);
+      normalizedConfig = sanitizeConfigForWrite(normalizedConfig);
+      if (!normalizedConfig.monitoringState) {
+        normalizedConfig.monitoringState =
+          normalizedConfig.enabled === false ? MONITORING_STATE.PAUSED : MONITORING_STATE.ACTIVE;
+      }
+      normalizedConfig.enabled = normalizedConfig.monitoringState === MONITORING_STATE.ACTIVE;
       // Keep unsupported strategy flags disabled in persisted operational sense
       if (Array.isArray(normalizedConfig.strategies)) {
         normalizedConfig.strategies = normalizedConfig.strategies.map((s) => {
@@ -1032,6 +1085,9 @@ router.patch('/:id/config', authenticateStrict, requireCapability(CAP.AI_AGENT_C
 });
 
 
+
+// ARB-CORE: Canonical analytical product routes
+router.use('/:id/arbitrage', arbitrageCoreRouter);
 
 // ARB-WP1A: Paginated canonical scan history from ai_decisions
 router.get(

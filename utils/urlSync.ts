@@ -10,7 +10,23 @@
  * No complex routing, no internal AI state
  */
 
-import { ViewKey, NavigationPayload } from '../types/navigation';
+import { ViewKey, NavigationPayload, ArbitrageAgentSection } from '../types/navigation';
+
+const ARBITRAGE_SECTIONS = new Set<ArbitrageAgentSection>([
+  'overview',
+  'candidates',
+  'history',
+  'profitRisk',
+  'settings',
+  'integration',
+]);
+
+function parseAgentSection(value: string | null): ArbitrageAgentSection | undefined {
+  if (!value) return undefined;
+  return ARBITRAGE_SECTIONS.has(value as ArbitrageAgentSection)
+    ? (value as ArbitrageAgentSection)
+    : undefined;
+}
 
 export interface URLState {
   view: ViewKey;
@@ -18,6 +34,9 @@ export interface URLState {
   settingsSubtab?: string;
   provider?: string;
   section?: string;
+  agentId?: string;
+  agentSection?: ArbitrageAgentSection;
+  runId?: string;
 }
 
 /**
@@ -40,6 +59,9 @@ export function readStateFromURL(): URLState | null {
     settingsSubtab: params.get('settingsSubtab') || undefined,
     provider: params.get('provider') || undefined,
     section: params.get('section') || undefined,
+    agentId: params.get('agentId') || undefined,
+    agentSection: parseAgentSection(params.get('agentSection')),
+    runId: params.get('runId') || undefined,
   };
 }
 
@@ -69,6 +91,18 @@ export function writeStateToURL(state: URLState, replace: boolean = false): void
     params.set('section', state.section);
   }
 
+  if (state.agentId) {
+    params.set('agentId', state.agentId);
+  }
+
+  if (state.agentSection) {
+    params.set('agentSection', state.agentSection);
+  }
+
+  if (state.runId) {
+    params.set('runId', state.runId);
+  }
+
   const newURL = `${window.location.pathname}?${params.toString()}`;
 
   if (replace) {
@@ -88,6 +122,9 @@ export function payloadToURLState(payload: NavigationPayload): URLState {
     settingsSubtab: payload.settingsSubtab,
     provider: payload.provider,
     section: payload.section,
+    agentId: payload.agentId,
+    agentSection: payload.agentSection,
+    runId: payload.runId,
   };
 }
 
@@ -110,5 +147,8 @@ export function isURLStateEqual(a: URLState | null, b: URLState | null): boolean
     && a.settingsSubtab === b.settingsSubtab
     && a.provider === b.provider
     && a.section === b.section
+    && a.agentId === b.agentId
+    && a.agentSection === b.agentSection
+    && a.runId === b.runId
   );
 }

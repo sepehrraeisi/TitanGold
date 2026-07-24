@@ -7995,6 +7995,183 @@ const buildOpportunityHistoryEntries = (
     return [...newEntries, ...(currentHistory || [])].slice(0, 40);
 };
 
+export type ArbitrageMonitoringState = 'active' | 'paused';
+
+export interface ArbitrageCoreProductIdentity {
+    agentKey: string;
+    displayName: string;
+    description: string;
+    activeMode: string;
+    activeModeLabel: string;
+    unavailableModes: Array<{ mode: string; label: string; state: string }>;
+    executionSupported: false;
+    executionEligible: false;
+}
+
+export interface ArbitrageCoreSettings {
+    monitoredSymbols: string[];
+    minimumGrossSpreadBps?: number | null;
+    minimumNetSpreadBps?: number | null;
+    assumedFeesBps?: number | null;
+    assumedSlippageBps?: number | null;
+    minimumLiquidity?: number | null;
+    maximumDataAgeMs?: number | null;
+    scanIntervalSeconds?: number | null;
+    monitoringState: ArbitrageMonitoringState;
+    notificationPreference: boolean;
+    notificationDeliveryAvailable?: boolean;
+    version?: number;
+    updatedAt?: string | null;
+    updatedBy?: string | null;
+    executionSupported: false;
+    executionEligible: false;
+    legacyExecutionPreferenceIgnored?: boolean;
+}
+
+export interface ArbitrageCoreRunSummary {
+    runId: string;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    status?: string;
+    trigger?: string;
+    funnel?: Record<string, number>;
+}
+
+export interface ArbitrageCoreOverview {
+    product: ArbitrageCoreProductIdentity;
+    settings: ArbitrageCoreSettings;
+    totalScanRuns: number;
+    latestRun: ArbitrageCoreRunSummary | null;
+    recentRuns: ArbitrageCoreRunSummary[];
+    interpretation?: string | null;
+}
+
+export interface ArbitrageCoreCandidatesResponse {
+    runId: string | null;
+    spreadCandidates: import('../types.ts').ArbitrageSpreadCandidate[];
+    rejectedCandidates: import('../types.ts').ArbitrageSpreadCandidate[];
+    qualifiedCandidates: import('../types.ts').ArbitrageSpreadCandidate[];
+}
+
+export interface ArbitrageCoreRunsResponse {
+    items: ArbitrageCoreRunSummary[];
+    pagination: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+        hasMore: boolean;
+    };
+}
+
+export interface ArbitrageCoreRunDetail extends ArbitrageCoreRunSummary {
+    durationMs?: number | null;
+    dryRun?: boolean;
+    runtimeMode?: string;
+    symbolsRequested?: string[];
+    symbolsEvaluated?: string[];
+    rejectionSummary?: Record<string, number>;
+    failureReason?: string | null;
+}
+
+export interface ArbitrageCoreIntegrations {
+    dataSources: string[];
+    executionSupported: false;
+    executionEligible: false;
+    unavailableIntegrations: string[];
+    shareWithRisk?: boolean;
+    shareWithPortfolio?: boolean;
+    forwardToArtemis?: boolean;
+}
+
+async function arbitrageCoreRequest<T>(
+    agentId: string,
+    path: string,
+    options: RequestInit = {},
+): Promise<T> {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        const authError = new Error('Authentication required');
+        (authError as Error & { status?: number }).status = 401;
+        throw authError;
+    }
+
+    const response = await fetch(`/api/ai-agents/${agentId}/arbitrage/${path}`, {
+        ...options,
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            ...(options.headers || {}),
+        },
+    });
+
+    if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const error = new Error(
+            body?.error?.message || body?.message || `Arbitrage request failed: ${response.status}`,
+        );
+        (error as Error & { status?: number }).status = response.status;
+        throw error;
+    }
+
+    return response.json() as Promise<T>;
+}
+
+export const fetchArbitrageOverview = async (agentId: string): Promise<ArbitrageCoreOverview> =>
+    arbitrageCoreRequest<ArbitrageCoreOverview>(agentId, 'overview');
+
+export const fetchArbitrageCandidates = async (
+    agentId: string,
+    opts: { runId?: string } = {},
+): Promise<ArbitrageCoreCandidatesResponse> => {
+    const query = opts.runId ? `?runId=${encodeURIComponent(opts.runId)}` : '';
+    return arbitrageCoreRequest<ArbitrageCoreCandidatesResponse>(agentId, `candidates${query}`);
+};
+
+export const fetchArbitrageRuns = async (
+    agentId: string,
+    opts: { page?: number; pageSize?: number } = {},
+): Promise<ArbitrageCoreRunsResponse> => {
+    const page = opts.page || 1;
+    const pageSize = opts.pageSize || 20;
+    return arbitrageCoreRequest<ArbitrageCoreRunsResponse>(
+        agentId,
+        `runs?page=${page}&pageSize=${pageSize}`,
+    );
+};
+
+export const fetchArbitrageRunDetail = async (
+    agentId: string,
+    runId: string,
+): Promise<ArbitrageCoreRunDetail> =>
+    arbitrageCoreRequest<ArbitrageCoreRunDetail>(agentId, `runs/${encodeURIComponent(runId)}`);
+
+export const fetchArbitrageIntegrations = async (agentId: string): Promise<ArbitrageCoreIntegrations> =>
+    arbitrageCoreRequest<ArbitrageCoreIntegrations>(agentId, 'integrations');
+
+export const updateArbitrageCoreSettings = async (
+    agentId: string,
+    settings: Partial<ArbitrageCoreSettings>,
+): Promise<ArbitrageCoreSettings> =>
+    arbitrageCoreRequest<ArbitrageCoreSettings>(agentId, 'settings', {
+        method: 'PATCH',
+        body: JSON.stringify(settings),
+    });
+
+export const runArbitrageAnalyticalScan = async (
+    agentId: string,
+): Promise<{ scanRun: ArbitrageCoreRunDetail; candidates?: ArbitrageCoreCandidatesResponse }> =>
+    arbitrageCoreRequest(agentId, 'scan', { method: 'POST', body: JSON.stringify({ trigger: 'manual' }) });
+
+export const updateArbitrageMonitoringState = async (
+    agentId: string,
+    monitoringState: ArbitrageMonitoringState,
+): Promise<ArbitrageCoreSettings> =>
+    arbitrageCoreRequest<ArbitrageCoreSettings>(agentId, 'monitoring', {
+        method: 'PATCH',
+        body: JSON.stringify({ monitoringState }),
+    });
+
 export const fetchArbitrageAgentData = async (agentId: string): Promise<{
     config: ArbitrageConfig | null;
     metrics: ArbitrageMetrics | null;

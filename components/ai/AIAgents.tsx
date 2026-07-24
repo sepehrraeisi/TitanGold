@@ -1,7 +1,9 @@
-import React, { useState, useEffect, Suspense, useMemo } from 'react';
+import React, { useState, useEffect, Suspense, useMemo, useCallback } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import { AIAgent } from '../../types.ts';
+import type { ArbitrageAgentSection, OnNavigateHandler } from '../../types/navigation.ts';
+import { AGENT_KEYS } from '../../constants/agentKeys.ts';
 import ErrorBoundary from '../ErrorBoundary.tsx';
 import { getAgentControl } from './agentRegistry.ts';
 import { AgentLoadingSpinner } from '../ui/LoadingSpinner';
@@ -13,6 +15,7 @@ import { useCapabilities } from '../../hooks/useCapabilities.ts';
 import { AgentCard } from './AgentCard.tsx';
 import { mapAgentOperationalStateFromAgent } from './shell/agentCardMeta.ts';
 import { mapProductStateToFilterBucket, resolveAgentProductStatus } from '../../utils/agentProductStatus.ts';
+import ArbitrageWorkspace from './ArbitrageWorkspace.tsx';
 import {
   BTN_SECONDARY,
   DataHubAlert,
@@ -24,6 +27,29 @@ import Skeleton from '../ui/skeleton';
 
 type StatusFilter = 'all' | 'ready' | 'paused' | 'error' | 'running';
 type SortMode = 'name' | 'last_run' | 'status';
+
+const ARBITRAGE_SECTIONS = new Set<ArbitrageAgentSection>([
+  'overview',
+  'candidates',
+  'history',
+  'profitRisk',
+  'settings',
+  'integration',
+]);
+
+function parseAgentSection(value?: string): ArbitrageAgentSection {
+  if (value && ARBITRAGE_SECTIONS.has(value as ArbitrageAgentSection)) {
+    return value as ArbitrageAgentSection;
+  }
+  return 'overview';
+}
+
+type AIAgentsProps = {
+  onNavigate?: OnNavigateHandler;
+  initialAgentId?: string;
+  initialAgentSection?: string;
+  initialRunId?: string;
+};
 
 function getAgentsResultsLabel(
   t: (key: string, options?: { [key: string]: string | number }) => string,
@@ -73,7 +99,12 @@ const AgentsShellSkeleton: React.FC<{ count?: number }> = ({ count = 6 }) => (
   </div>
 );
 
-const AIAgents: React.FC = () => {
+const AIAgents: React.FC<AIAgentsProps> = ({
+  onNavigate,
+  initialAgentId,
+  initialAgentSection,
+  initialRunId,
+}) => {
     const { t } = useLanguage();
     const { runtime, loading: runtimeLoading } = useExecutionRuntime();
     const { has: hasCapability } = useCapabilities();
@@ -82,6 +113,11 @@ const AIAgents: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [agents, setAgents] = useState<AIAgent[]>([]);
     const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
+    const [workspaceAgentId, setWorkspaceAgentId] = useState<string | undefined>(initialAgentId);
+    const [workspaceSection, setWorkspaceSection] = useState<ArbitrageAgentSection>(
+      parseAgentSection(initialAgentSection),
+    );
+    const [workspaceRunId, setWorkspaceRunId] = useState<string | undefined>(initialRunId);
     const [error, setError] = useState<string | null>(null);
 
     const [searchTerm, setSearchTerm] = useState('');
@@ -108,10 +144,53 @@ const AIAgents: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    useEffect(() => {
+        if (initialAgentId) setWorkspaceAgentId(initialAgentId);
+    }, [initialAgentId]);
+
+    useEffect(() => {
+        if (initialAgentSection) setWorkspaceSection(parseAgentSection(initialAgentSection));
+    }, [initialAgentSection]);
+
+    useEffect(() => {
+        if (initialRunId) setWorkspaceRunId(initialRunId);
+    }, [initialRunId]);
+
+    useEffect(() => {
+        if (!workspaceAgentId || agents.length === 0) return;
+        const match = agents.find(a => a.id === workspaceAgentId);
+        if (match && match.agent_key !== AGENT_KEYS.ARBITRAGE) {
+            setWorkspaceAgentId(undefined);
+            setSelectedAgent(match);
+        }
+    }, [agents, workspaceAgentId]);
+
     const handleAgentUpdate = (updatedAgent: AIAgent) => {
         setAgents(prev => prev.map(a => a.id === updatedAgent.id ? updatedAgent : a));
         setSelectedAgent(prev => prev && prev.id === updatedAgent.id ? updatedAgent : prev);
     };
+
+    const handleOpenAgent = useCallback(
+      (agent: AIAgent) => {
+        if (agent.agent_key === AGENT_KEYS.ARBITRAGE) {
+          setWorkspaceAgentId(agent.id);
+          setWorkspaceSection('overview');
+          setWorkspaceRunId(undefined);
+          setSelectedAgent(null);
+          onNavigate?.({ view: 'ai', agentId: agent.id, agentSection: 'overview' });
+          return;
+        }
+        setWorkspaceAgentId(undefined);
+        setSelectedAgent(agent);
+      },
+      [onNavigate],
+    );
+
+    const handleWorkspaceBack = useCallback(() => {
+      setWorkspaceAgentId(undefined);
+      setWorkspaceRunId(undefined);
+      onNavigate?.({ view: 'ai' });
+    }, [onNavigate]);
 
     const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token') || undefined;
 
@@ -211,6 +290,11 @@ const AIAgents: React.FC = () => {
         return list;
     }, [filteredAgents, sortMode, killSwitchActive, effectiveMode]);
 
+    const workspaceAgent = useMemo(
+      () => agents.find(a => a.id === workspaceAgentId && a.agent_key === AGENT_KEYS.ARBITRAGE) || null,
+      [agents, workspaceAgentId],
+    );
+
     if (isLoading) {
         return <AgentsShellSkeleton count={6} />;
     }
@@ -234,6 +318,19 @@ const AIAgents: React.FC = () => {
         ? t('try_different_search')
         : t('no_agents_found');
     const resultsLabel = getAgentsResultsLabel(t, sortedAgents.length, agents.length, hasActiveFilters);
+
+    if (workspaceAgent) {
+      return (
+        <ArbitrageWorkspace
+          agent={workspaceAgent}
+          initialSection={workspaceSection}
+          initialRunId={workspaceRunId}
+          onBack={handleWorkspaceBack}
+          onNavigate={onNavigate}
+          onUpdate={handleAgentUpdate}
+        />
+      );
+    }
 
     return (
         <>
@@ -349,7 +446,7 @@ const AIAgents: React.FC = () => {
                         <AgentCard
                             key={agent.id}
                             agent={agent}
-                            onOpen={() => setSelectedAgent(agent)}
+                            onOpen={() => handleOpenAgent(agent)}
                             canOpen={canRead}
                         />
                     ))}
@@ -390,6 +487,7 @@ const AIAgents: React.FC = () => {
                             agent={selectedAgent}
                             onClose={() => setSelectedAgent(null)}
                             onUpdate={handleAgentUpdate}
+                            onNavigate={onNavigate}
                         />
                     </Suspense>
                 </ErrorBoundary>

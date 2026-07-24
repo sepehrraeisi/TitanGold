@@ -14,9 +14,17 @@ type AITab = 'manager' | 'agents' | 'training' | 'analytics' | 'config' | 'topic
 
 type Props = {
   onNavigate?: OnNavigateHandler;
+  initialAgentId?: string;
+  initialAgentSection?: string;
+  initialRunId?: string;
 };
 
-const AICenter: React.FC<Props> = ({ onNavigate }) => {
+const AICenter: React.FC<Props> = ({
+  onNavigate,
+  initialAgentId,
+  initialAgentSection,
+  initialRunId,
+}) => {
   const { t } = useLanguage();
   // Changed from 'manager' to 'agents' - new UI with registry support
   const [activeTab, setActiveTab] = useState<AITab>('agents');
@@ -52,7 +60,14 @@ const AICenter: React.FC<Props> = ({ onNavigate }) => {
       case 'manager':
         return <AIManager onNavigate={onNavigate} />;
       case 'agents':
-        return <AIAgents />;
+        return (
+          <AIAgents
+            onNavigate={onNavigate}
+            initialAgentId={initialAgentId}
+            initialAgentSection={initialAgentSection}
+            initialRunId={initialRunId}
+          />
+        );
       case 'training':
         return <TrainingCenter />;
       case 'analytics':

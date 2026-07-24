@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
+import type { OnNavigateHandler } from '../../types/navigation.ts';
 import { lifecycleLabelKey } from '../../utils/agentStatusProjection.ts';
 import * as api from '../../services/api.ts';
 import {
@@ -180,9 +181,10 @@ interface ArbitrageAgentControlProps {
     agent: AIAgent;
     onClose: () => void;
     onUpdate: (agent: AIAgent) => void;
+    onNavigate?: OnNavigateHandler;
 }
 
-const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, onClose, onUpdate }) => {
+const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, onClose, onUpdate, onNavigate }) => {
     const { t } = useLanguage();
     const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<ArbitrageTab>('overview');
@@ -235,6 +237,12 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
     useEffect(() => {
         void loadData();
     }, [loadData]);
+
+    useEffect(() => {
+        if (!onNavigate) return;
+        onNavigate({ view: 'ai', agentId: agent.id, agentSection: 'overview' });
+        onClose();
+    }, [agent.id, onClose, onNavigate]);
 
     const handleRunScan = async () => {
         if (scanPendingRef.current || isScanning) return;
@@ -313,6 +321,10 @@ const ArbitrageAgentControl: React.FC<ArbitrageAgentControlProps> = ({ agent, on
         () => scan?.qualifiedOpportunities ?? [],
         [scan],
     );
+
+    if (onNavigate) {
+        return null;
+    }
 
     return (
         <AgentControlShell

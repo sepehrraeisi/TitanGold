@@ -15,6 +15,7 @@
 
 import { lazy, ComponentType } from 'react';
 import { AIAgent } from '../../types.ts';
+import type { OnNavigateHandler } from '../../types/navigation.ts';
 import { AGENT_KEYS, AgentKeyType, toRegistryKey } from '../../constants/agentKeys';
 
 // Define the component props interface
@@ -22,6 +23,7 @@ export interface AgentControlProps {
   agent: AIAgent;
   onClose: () => void;
   onUpdate: (agent: AIAgent) => void;
+  onNavigate?: OnNavigateHandler;
 }
 
 // Define agent registry entry type
