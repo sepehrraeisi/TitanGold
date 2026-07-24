@@ -38,7 +38,8 @@ jobs:
           - 5432:5432
 
     env:
-      DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test
+      DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test?sslmode=disable
+      DB_SSL: 'false'
       NODE_ENV: test
 
     steps:
@@ -59,7 +60,8 @@ jobs:
 
     - name: Prepare schema for DB-touching unit tests
       env:
-        DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test
+        DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test?sslmode=disable
+        DB_SSL: 'false'
       run: |
         # Base product schema for disposable CI DB, then register migration history.
         cd backend

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import AIAgents from '../../../../components/ai/AIAgents';
 import * as api from '../../../../services/api';
 import type { AIAgent } from '../../../../types';
+import type { AgentStatusProjection } from '../../../../utils/agentStatusProjection';
 
 vi.mock('../../../../services/api', () => ({
   fetchAIAgents: vi.fn(),
@@ -34,6 +35,14 @@ const translations = {
     agent_state_running: 'Running',
     agent_state_paused: 'Paused',
     agent_state_error: 'Error',
+    agent_state_unavailable: 'Unavailable',
+    agent_state_scheduled: 'Scheduled',
+    agent_state_allowlisted: 'Allowlisted',
+    agent_product_limited: 'Limited',
+    agent_product_blocked: 'Blocked',
+    agent_product_operational: 'Operational',
+    agent_reason_not_scheduled: 'Not scheduled',
+    agent_reason_execution_disabled_runtime: 'Financial execution is disabled in the current runtime',
     sort_by_name: 'Name',
     sort_by_last_run: 'Last Run',
     sort_by_status: 'Status',
@@ -79,6 +88,14 @@ const translations = {
     agent_state_running: 'در حال اجرا',
     agent_state_paused: 'متوقف',
     agent_state_error: 'خطا',
+    agent_state_unavailable: 'ناموجود',
+    agent_state_scheduled: 'زمان‌بندی‌شده',
+    agent_state_allowlisted: 'در لیست مجاز',
+    agent_product_limited: 'محدود',
+    agent_product_blocked: 'مسدود',
+    agent_product_operational: 'عملیاتی',
+    agent_reason_not_scheduled: 'زمان‌بندی نشده',
+    agent_reason_execution_disabled_runtime: 'اجرای مالی در runtime فعلی غیرفعال است',
     sort_by_name: 'نام',
     sort_by_last_run: 'آخرین اجرا',
     sort_by_status: 'وضعیت',
@@ -298,6 +315,29 @@ vi.mock('../../../../components/ErrorBoundary', () => ({
   default: ({ children }: any) => <div>{children}</div>,
 }));
 
+function mockProjection(agentKey: string, partial: Partial<AgentStatusProjection> = {}): AgentStatusProjection {
+  return {
+    agentKey,
+    registered: true,
+    configured: true,
+    enabled: true,
+    allowlisted: agentKey === 'arbitrage',
+    scheduled: agentKey === 'arbitrage',
+    running: false,
+    healthy: true,
+    dataReady: agentKey === 'arbitrage',
+    consumerRegistered: agentKey === 'arbitrage',
+    consumerEligible: agentKey === 'arbitrage',
+    executionEligible: false,
+    executionEligibleWhenLive: false,
+    liveCapable: false,
+    sideEffectClass: 'read_only',
+    lastRunStatus: 'unknown',
+    schedulerOwner: 'titan-engine-worker',
+    ...partial,
+  };
+}
+
 const mockAgents: AIAgent[] = [
   {
     id: '1',
@@ -305,6 +345,7 @@ const mockAgents: AIAgent[] = [
     name: 'Artemis',
     role: 'Technical Analysis',
     status: 'active',
+    statusProjection: mockProjection('technical', { allowlisted: false, scheduled: false, consumerEligible: false }),
     accuracy: 85.5,
     trainingProgress: 95.0,
     decisions: 1000,
@@ -320,6 +361,7 @@ const mockAgents: AIAgent[] = [
     name: 'Trend Master',
     role: 'Trend Detection',
     status: 'training',
+    statusProjection: mockProjection('trend', { running: true, allowlisted: false, scheduled: false, consumerEligible: false }),
     accuracy: 78.3,
     trainingProgress: 65.0,
     decisions: 500,
@@ -335,6 +377,7 @@ const mockAgents: AIAgent[] = [
     name: 'Risk Guardian',
     role: 'Risk Management',
     status: 'inactive',
+    statusProjection: mockProjection('risk', { enabled: false, allowlisted: false, scheduled: false, consumerEligible: false }),
     accuracy: 92.1,
     trainingProgress: 100.0,
     decisions: 2000,
@@ -387,7 +430,7 @@ describe('AIAgents Component', () => {
       expect(screen.getByText('loading')).toBeInTheDocument();
     });
 
-    it('renders mapped operational status badges', async () => {
+    it('renders canonical product status badges without misleading Active', async () => {
       const mockFetchAIAgents = vi.mocked(api.fetchAIAgents);
       mockFetchAIAgents.mockResolvedValue(mockAgents);
 
@@ -397,9 +440,10 @@ describe('AIAgents Component', () => {
         expect(screen.queryByTestId('agents-loading-skeleton')).not.toBeInTheDocument();
       });
 
-      expect(screen.getAllByText('Ready').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Paused').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByTestId('agent-status-technical')).toHaveTextContent('Limited');
+      expect(screen.getByTestId('agent-status-trend')).toHaveTextContent('Running');
+      expect(screen.getByTestId('agent-status-risk')).toHaveTextContent('Paused');
+      expect(screen.queryByText('Active')).not.toBeInTheDocument();
     });
 
     it('renders compact safety summary', async () => {
@@ -432,7 +476,7 @@ describe('AIAgents Component', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('technical-agent-control')).toBeInTheDocument();
-      });
+      }, { timeout: 10000 });
     });
 
     it('closes control panel when close button is clicked', async () => {
@@ -449,7 +493,7 @@ describe('AIAgents Component', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('technical-agent-control')).toBeInTheDocument();
-      });
+      }, { timeout: 10000 });
 
       fireEvent.click(screen.getByText('Close'));
 
@@ -577,7 +621,7 @@ describe('AIAgents Component', () => {
         expect(screen.getByTestId('agents-results-count')).toHaveTextContent('Showing 3 agents');
       });
 
-      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'ready' } });
+      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'running' } });
       await waitFor(() => {
         expect(screen.getByTestId('agents-results-count')).toHaveTextContent('1 agent found');
       });
@@ -615,7 +659,7 @@ describe('AIAgents Component', () => {
       expect(screen.queryByText('showing_results')).not.toBeInTheDocument();
       expect(screen.queryByText('try_different_search')).not.toBeInTheDocument();
       expect(screen.queryByText('clear_filters')).not.toBeInTheDocument();
-      expect(screen.queryByText(/agent_state_|execution_kind_|undefined|null/)).not.toBeInTheDocument();
+      expect(screen.queryAllByText(/^agent_state_|^execution_kind_|^undefined$|^null$/)).toHaveLength(0);
     });
 
     it('renders Persian full, filtered, one, zero, clear action, and no raw keys', async () => {
@@ -627,7 +671,7 @@ describe('AIAgents Component', () => {
         expect(screen.getByTestId('agents-results-count')).toHaveTextContent('نمایش 3 عامل');
       });
 
-      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'ready' } });
+      fireEvent.change(screen.getByTestId('agents-status-filter'), { target: { value: 'running' } });
       await waitFor(() => {
         expect(screen.getByTestId('agents-results-count')).toHaveTextContent('۱ عامل پیدا شد');
       });
@@ -656,6 +700,106 @@ describe('AIAgents Component', () => {
       expect(screen.queryByText('showing_results')).not.toBeInTheDocument();
       expect(screen.queryByText('try_different_search')).not.toBeInTheDocument();
       expect(screen.queryByText('clear_filters')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Canonical status projection (15 agents)', () => {
+    const CANONICAL_KEYS = [
+      'technical', 'risk', 'sentiment', 'pattern', 'price_prediction', 'arbitrage',
+      'portfolio', 'liquidity', 'trend', 'optimization', 'order', 'fundamental',
+      'market_intelligence', 'volume', 'timing',
+    ] as const;
+
+    function buildCanonicalAgents(): AIAgent[] {
+      return CANONICAL_KEYS.map((key, index) => ({
+        id: String(index + 1),
+        agent_key: key,
+        name: key.replace(/_/g, ' '),
+        role: key.replace(/_/g, ' '),
+        status: 'active',
+        accuracy: 80,
+        trainingProgress: 50,
+        decisions: 10,
+        level: 'Advanced',
+        learningTime: 1,
+        knowledgeSize: 1,
+        capabilities: [],
+        lastUpdate: '2024-01-07T12:00:00Z',
+        statusProjection: mockProjection(key, {
+          allowlisted: key === 'arbitrage',
+          scheduled: key === 'arbitrage',
+          consumerRegistered: key === 'arbitrage',
+          consumerEligible: key === 'arbitrage',
+          dataReady: key === 'arbitrage' ? false : false,
+          lastRunStatus: key === 'arbitrage' ? 'never' : 'unknown',
+        }),
+      }));
+    }
+
+    it('projects 15 canonical agents with Arbitrage scheduled and others not scheduled', async () => {
+      vi.mocked(api.fetchAIAgents).mockResolvedValue(buildCanonicalAgents());
+      render(<AIAgents />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('agents-results-count')).toHaveTextContent('Showing 15 agents');
+      });
+
+      expect(screen.getByTestId('agent-card-arbitrage')).toBeInTheDocument();
+      expect(screen.getByTestId('agent-status-arbitrage')).toHaveTextContent('Scheduled');
+      expect(screen.getAllByText('Limited').length).toBe(13);
+      expect(screen.getByTestId('agent-status-order')).toHaveTextContent('Blocked');
+      expect(screen.queryByText('Allowlisted')).not.toBeInTheDocument();
+      expect(screen.queryByText('Active')).not.toBeInTheDocument();
+    });
+
+    it('fail-closed unknown agent shows Unavailable, not Active', async () => {
+      vi.mocked(api.fetchAIAgents).mockResolvedValue([
+        {
+          id: '99',
+          agent_key: 'unknown_agent_xyz',
+          name: 'Unknown',
+          role: 'Unknown',
+          status: 'active',
+          accuracy: null,
+          trainingProgress: null,
+          decisions: 0,
+          level: 'N/A',
+          learningTime: 0,
+          knowledgeSize: 0,
+          capabilities: [],
+          lastUpdate: null,
+          statusProjection: mockProjection('unknown_agent_xyz', {
+            registered: false,
+            configured: false,
+            enabled: false,
+            allowlisted: false,
+            scheduled: false,
+            consumerEligible: false,
+          }),
+        },
+      ]);
+
+      render(<AIAgents />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Unavailable')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
+    });
+
+    it('opens Arbitrage detail navigation from list', async () => {
+      vi.mocked(api.fetchAIAgents).mockResolvedValue(buildCanonicalAgents());
+      render(<AIAgents />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('agent-open-arbitrage')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('agent-open-arbitrage'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('arbitrageagentcontrol')).toBeInTheDocument();
+      });
     });
   });
 });

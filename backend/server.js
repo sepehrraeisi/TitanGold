@@ -74,15 +74,7 @@ app.use(helmet());
 app.use(cacheHeaders);
 
 // CORS configuration (API-006)
-// Whitelist of allowed origins
-const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
-  ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-  : [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:5173'
-  ];
+import { resolveCorsAllowedOrigins } from './utils/corsOrigins.js';
 
 const corsOptions = {
   // Dynamic origin validation with whitelist
@@ -94,7 +86,7 @@ const corsOptions = {
 
     // Normalize origin (remove trailing slash for comparison)
     const normalizedOrigin = origin.replace(/\/$/, '');
-    const normalizedWhitelist = allowedOrigins.map(o => o.replace(/\/$/, ''));
+    const normalizedWhitelist = resolveCorsAllowedOrigins().map((o) => o.replace(/\/$/, ''));
 
     // Check if origin is in whitelist
     if (normalizedWhitelist.includes(normalizedOrigin)) {

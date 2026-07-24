@@ -6,10 +6,11 @@ import {
   effectiveExecutionModeLabelKey,
   formatLastRun,
   getAgentExecutionKind,
-  mapAgentOperationalState,
-  shellOperationalStatusLabelKey,
+  shellOperationalReasonKeyFromAgent,
+  shellOperationalStatusLabelKeyFromAgent,
 } from './agentCardMeta.ts';
 import { useAgentExecutionGate } from '../../../hooks/useAgentExecutionGate.ts';
+import { resolveAgentProductStatus } from '../../../utils/agentProductStatus.ts';
 import { SecondaryButton } from '../AIManager/tabs/DataHub/dataHubUi.tsx';
 
 export interface AgentControlShellProps {
@@ -80,8 +81,9 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
   const { killSwitchActive, effectiveMode, liveBlockReason, runtime } = useAgentExecutionGate();
 
   const kind = getAgentExecutionKind(agent.agent_key);
-  const state = mapAgentOperationalState(agent.status);
-  const operationalLabelKey = shellOperationalStatusLabelKey(state);
+  const gateContext = { killSwitchActive, effectiveMode };
+  const stateLabelKey = shellOperationalStatusLabelKeyFromAgent(agent, gateContext);
+  const reasonKey = shellOperationalReasonKeyFromAgent(agent, gateContext);
   const effectiveModeKey = effectiveExecutionModeLabelKey(effectiveMode);
   const brokerConnected = runtime?.providerConnected === true;
   const isPersian = language === 'fa';
@@ -152,7 +154,8 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
         : null;
 
   const purposeText = purpose || agent.role;
-  const operationalLabel = t(operationalLabelKey) || (state === 'ready' ? 'Active' : state);
+  const operationalLabel = t(stateLabelKey) || stateLabelKey;
+  const reasonLabel = reasonKey ? t(reasonKey) : null;
   const effectiveModeLabel =
     t(effectiveModeKey) ||
     (effectiveModeKey === 'execution_mode_dry_run'
@@ -163,6 +166,12 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
   const brokerValue = brokerConnected
     ? t('online') || 'Online'
     : t('offline') || 'Offline';
+  const lastRunLabelKey = resolveAgentProductStatus(agent, gateContext).primaryState;
+  const isScheduledNow =
+    lastRunLabelKey === 'operational' || lastRunLabelKey === 'scheduled';
+  const lastRunHeading = isScheduledNow
+    ? (t('last_run') || 'Last run')
+    : (t('agent_last_recorded_run') || 'Last recorded run');
   const lastRunLabel = t('never_run') || 'Never';
   const lastRunValue = formatLastRun(agent.lastUpdate, lastRunLabel);
   const lastRunIsTechnical = Boolean(agent.lastUpdate) && lastRunValue !== lastRunLabel;
@@ -214,6 +223,15 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
               >
                 {operationalLabel}
               </span>
+              {reasonLabel ? (
+                <span
+                  className="px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground/90"
+                  data-testid="agent-shell-status-reason"
+                  title={reasonLabel}
+                >
+                  {reasonLabel}
+                </span>
+              ) : null}
               <span
                 className="px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-100"
                 data-testid="agent-shell-effective-mode"
@@ -230,7 +248,7 @@ export const AgentControlShell: React.FC<AgentControlShellProps> = ({
                 className="px-2 py-0.5 rounded-full border border-border text-muted-foreground"
                 data-testid="agent-shell-last-run"
               >
-                {t('last_run')}:{' '}
+                {lastRunHeading}:{' '}
                 {lastRunIsTechnical ? (
                   <AgentTechnicalLtr>{lastRunValue}</AgentTechnicalLtr>
                 ) : (

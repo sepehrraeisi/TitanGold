@@ -86,9 +86,12 @@ const AppContent: React.FC = () => {
       console.log('✅ Login successful, user:', loggedInUser);
       setUser(loggedInUser);
     } else {
-      // Development fallback: If backend is not available, use mock user
-      // This only works in development mode and when backend is unreachable
-      if (import.meta.env.DEV) {
+      const devLoginFallbackEnabled =
+        import.meta.env.DEV &&
+        import.meta.env.VITE_DISABLE_DEV_LOGIN_FALLBACK !== 'true';
+
+      // Development fallback: only when explicitly allowed (never in CI login E2E)
+      if (devLoginFallbackEnabled) {
         console.warn('⚠️ Backend login failed, using development fallback');
         console.warn('💡 This is a temporary development mode. Backend connection is required in production.');
 

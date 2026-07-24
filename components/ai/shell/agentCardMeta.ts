@@ -3,6 +3,12 @@
  * Side-effect classification comes from the same registry vocabulary as backend.
  */
 
+import {
+  resolveAgentProductStatus,
+  type AgentWithProjection,
+} from '../../../utils/agentProductStatus.ts';
+import type { ProductStatusContext } from '../../../utils/agentProductStatus.ts';
+
 export type AgentExecutionKind = 'analytical' | 'provider' | 'simulation' | 'live_capable';
 
 export type AgentOperationalState = 'ready' | 'running' | 'paused' | 'error' | 'unavailable';
@@ -25,6 +31,41 @@ export function mapAgentOperationalState(status?: string | null): AgentOperation
   if (s === 'inactive' || s === 'paused' || s === 'idle') return 'paused';
   if (s === 'error' || s === 'failed') return 'error';
   return 'unavailable';
+}
+
+/** Canonical product status for cards, headers, and filters. */
+export function resolveAgentProductStatusFromAgent(
+  agent: AgentWithProjection | null | undefined,
+  context: ProductStatusContext = {},
+) {
+  return resolveAgentProductStatus(agent, context);
+}
+
+/** Legacy operational bucket for filters — derived from product status only. */
+export function mapAgentOperationalStateFromAgent(
+  agent: AgentWithProjection | null | undefined,
+  context: ProductStatusContext = {},
+): AgentOperationalState {
+  const product = resolveAgentProductStatus(agent, context);
+  if (product.primaryState === 'running') return 'running';
+  if (product.primaryState === 'error' || product.primaryState === 'blocked') return 'error';
+  if (product.primaryState === 'operational' || product.primaryState === 'scheduled') return 'ready';
+  if (product.primaryState === 'paused' || product.primaryState === 'limited') return 'paused';
+  return 'unavailable';
+}
+
+export function shellOperationalStatusLabelKeyFromAgent(
+  agent: AgentWithProjection | null | undefined,
+  context: ProductStatusContext = {},
+): string {
+  return resolveAgentProductStatus(agent, context).primaryLabelKey;
+}
+
+export function shellOperationalReasonKeyFromAgent(
+  agent: AgentWithProjection | null | undefined,
+  context: ProductStatusContext = {},
+): string | null {
+  return resolveAgentProductStatus(agent, context).primaryReasonKey;
 }
 
 export function formatLastRun(iso?: string | null, neverLabel = 'Never'): string {

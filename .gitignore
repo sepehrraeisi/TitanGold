@@ -55,3 +55,4 @@ backend/docs/ssot_v3/
 # Deploy-time runtime provenance (never commit literal implementation hashes)
 backend/runtime-provenance.json
 backend/.runtime-provenance.env
+backend/.e2e-login.env

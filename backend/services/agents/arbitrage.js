@@ -16,6 +16,8 @@ import {
   ARBITRAGE_CONTRACT_VERSION_WP1A,
   ARBITRAGE_STRATEGY_CLASS,
   REJECTION_REASONS,
+  annotateCandidatesWithLifecycle,
+  aggregateLifecycleMetrics,
 } from '../arbitrageScanContract.js';
 
 const mexcCircuitBreaker = circuitBreakerManager.getBreaker('mexc-api', {
@@ -119,6 +121,8 @@ function calculateNetProfit(spread, volumeUSDT, config) {
     profitBps: netSpread * 100,
   };
 }
+
+export { calculateSpread, calculateNetProfit };
 
 function calculateRiskScore(spread, volume24h, depth, config) {
   let risk = 0;
@@ -414,6 +418,11 @@ export async function run(params) {
 
     candidates.sort((a, b) => (b.expectedProfitBps || 0) - (a.expectedProfitBps || 0));
 
+    const lifecycleCtx = { demoMode: true, killSwitchActive: true };
+    const annotatedCandidates = annotateCandidatesWithLifecycle(candidates, lifecycleCtx);
+    const annotatedRejected = annotateCandidatesWithLifecycle(rejectedCandidates, lifecycleCtx);
+    const lifecycleMetrics = aggregateLifecycleMetrics(candidates, rejectedCandidates, lifecycleCtx);
+
     const scored = [...candidates, ...rejectedCandidates].filter((c) => Number.isFinite(c.riskScore));
     const avgRiskScore =
       scored.length > 0 ? scored.reduce((s, c) => s + c.riskScore, 0) / scored.length : null;
@@ -466,9 +475,10 @@ export async function run(params) {
         averageScore: summary.avgRiskScore,
         unit: 'score_0_100',
       },
-      candidates: candidates.slice(0, 25),
-      rejectedCandidates: rejectedCandidates.slice(0, 50),
+      candidates: annotatedCandidates.slice(0, 25),
+      rejectedCandidates: annotatedRejected.slice(0, 50),
       qualifiedOpportunities: [],
+      lifecycleMetrics,
       unsupportedStrategies,
       // Intentionally empty — same-market spreads are not opportunities
       opportunities: [],

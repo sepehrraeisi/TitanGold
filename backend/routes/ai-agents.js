@@ -17,6 +17,10 @@ import {
   getArbitrageScanCountsByAgentIds,
   normalizeScanResult,
 } from '../services/arbitrageScanContract.js';
+import { readAnalyticalSchedulerStatus } from '../services/analyticalSchedulerStatus.js';
+import { buildAgentStatusProjection } from '../services/agentStatusProjection.js';
+import { buildAgentProductStatus } from '../services/agentProductStatus.js';
+import { getRuntimeExecutionState } from '../services/runtimeExecutionStateService.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { contentNegotiation } from '../middleware/contentNegotiation.js';
 import { getCache, setCache, buildCacheKey, invalidateAgentCache } from '../services/cache.js';
@@ -48,6 +52,17 @@ import {
 } from '../schemas/agentSchemas.js';
 
 const router = express.Router();
+
+/** Persisted last run — ai_decisions or last_active_at only; never updated_at alone. */
+function resolveAgentLastRecordedAt(agent, decisionStats = {}) {
+  const fromDecisions = decisionStats.last_completed_at || null;
+  const fromActive = agent?.last_active_at || null;
+  const total = parseInt(decisionStats.total, 10) || 0;
+  if (fromDecisions) return fromDecisions;
+  if (total > 0 && fromActive) return fromActive;
+  if (fromActive) return fromActive;
+  return null;
+}
 
 // ============================================================================
 // Production++ Helpers for AI Routes
@@ -96,7 +111,7 @@ const transformAgent = (agent, decisionStats = { total: 0, successful: 0, learni
     status: mappedStatus,
     decisions: parseInt(decisionStats.total, 10),
     capabilities,
-    lastUpdate: agent.updated_at || agent.created_at,
+    lastUpdate: resolveAgentLastRecordedAt(agent, decisionStats),
     // Additional fields for compatibility
     type: agent.type,
     is_enabled: agent.is_enabled,
@@ -130,8 +145,7 @@ const transformAgent = (agent, decisionStats = { total: 0, successful: 0, learni
     const lastScanAt =
       decisionStats.last_completed_at ||
       agent.last_active_at ||
-      agent.updated_at ||
-      agent.created_at;
+      null;
     return {
       ...baseMetrics,
       accuracy: null,
@@ -1385,7 +1399,8 @@ router.get('/', authenticate, validateQuery(listAgentsQuerySchema), validateResp
         agent_id,
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE was_successful = true) as successful,
-        EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))/3600 as learning_hours
+        EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))/3600 as learning_hours,
+        MAX(created_at) as last_completed_at
       FROM ai_decisions
       GROUP BY agent_id`
     );
@@ -1431,10 +1446,52 @@ router.get('/', authenticate, validateQuery(listAgentsQuerySchema), validateResp
     }
 
     // Map DB fields to UI contract using a shared helper
-    const agents = result.rows.map(agent => transformAgent(agent, decisionsMap.get(agent.id)));
+    const schedRead = await readAnalyticalSchedulerStatus();
+    const allowlist = schedRead.status?.allowlist || [];
+    const schedulerRunning = Boolean(schedRead.status?.isRunning);
+    let killSwitchActive = true;
+    let effectiveMode = 'demo';
+    try {
+      const runtimeView = await getRuntimeExecutionState({ preferCache: true });
+      killSwitchActive = Boolean(runtimeView?.killSwitchActive ?? true);
+      effectiveMode = runtimeView?.globalMode || 'demo';
+    } catch {
+      /* fail-closed */
+    }
+
+    const agents = result.rows.map((row) => {
+      const agent = transformAgent(row, decisionsMap.get(row.id));
+      const safeParse = (value) => {
+        if (!value) return {};
+        if (typeof value === 'object') return value;
+        try { return JSON.parse(value); } catch { return {}; }
+      };
+      return {
+        ...agent,
+        statusProjection: buildAgentStatusProjection({
+          agent: {
+            ...row,
+            config: safeParse(row.config),
+            metadata: safeParse(row.metadata),
+          },
+          allowlist,
+          schedulerRunning,
+          killSwitchActive,
+          effectiveMode,
+        }),
+      };
+    });
+
+    const agentsWithProductStatus = agents.map((agent) => ({
+      ...agent,
+      productStatus: buildAgentProductStatus(agent.statusProjection, {
+        killSwitchActive,
+        effectiveMode,
+      }),
+    }));
 
     // Wrap in { agents: [...] } for UI compatibility
-    res.json({ agents });
+    res.json({ agents: agentsWithProductStatus });
   } catch (error) {
     logger.error('Failed to fetch AI agents:', error);
     // If database is unavailable, return empty array instead of error

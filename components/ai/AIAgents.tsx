@@ -11,7 +11,8 @@ import { useExecutionRuntime } from '../../hooks/useExecutionRuntime.ts';
 import AgentSafetyBanner from './AgentSafetyBanner.tsx';
 import { useCapabilities } from '../../hooks/useCapabilities.ts';
 import { AgentCard } from './AgentCard.tsx';
-import { mapAgentOperationalState } from './shell/agentCardMeta.ts';
+import { mapAgentOperationalStateFromAgent } from './shell/agentCardMeta.ts';
+import { mapProductStateToFilterBucket, resolveAgentProductStatus } from '../../utils/agentProductStatus.ts';
 import {
   BTN_SECONDARY,
   DataHubAlert,
@@ -134,6 +135,10 @@ const AIAgents: React.FC = () => {
             if (message.type === 'agent_update' && message.data) {
                 const agentData = message.data;
                 if (agentData.agent_id) {
+                    const completedAt =
+                        agentData.completed_at ||
+                        agentData.result?.completed_at ||
+                        (agentData.event === 'execution_completed' ? message.timestamp : null);
                     setAgents(prev => prev.map(a => {
                         if (a.id === agentData.agent_id) {
                             return {
@@ -142,7 +147,7 @@ const AIAgents: React.FC = () => {
                                 accuracy: agentData.result?.confidence != null
                                     ? agentData.result.confidence * 100
                                     : a.accuracy,
-                                lastUpdate: new Date().toISOString(),
+                                ...(completedAt ? { lastUpdate: completedAt } : {}),
                             };
                         }
                         return a;
@@ -156,11 +161,20 @@ const AIAgents: React.FC = () => {
 
     const showRealtimeDegraded = realtimeUnavailable && !isConnected;
 
+    const killSwitchActive = runtime?.killSwitchActive !== false;
+    const effectiveMode = runtime?.globalMode || runtime?.effectiveMode || 'demo';
+    const gateContext = { killSwitchActive, effectiveMode };
+
     const filteredAgents = useMemo(() => {
         let filtered = [...agents];
 
         if (statusFilter !== 'all') {
-            filtered = filtered.filter(agent => mapAgentOperationalState(agent.status) === statusFilter);
+            filtered = filtered.filter(agent => {
+                const bucket = mapProductStateToFilterBucket(
+                    resolveAgentProductStatus(agent, gateContext),
+                );
+                return bucket === statusFilter;
+            });
         }
 
         if (debouncedSearchTerm.trim()) {
@@ -177,13 +191,15 @@ const AIAgents: React.FC = () => {
         }
 
         return filtered;
-    }, [agents, statusFilter, debouncedSearchTerm]);
+    }, [agents, statusFilter, debouncedSearchTerm, killSwitchActive, effectiveMode]);
 
     const sortedAgents = useMemo(() => {
         const list = [...filteredAgents];
         list.sort((a, b) => {
             if (sortMode === 'status') {
-                return mapAgentOperationalState(a.status).localeCompare(mapAgentOperationalState(b.status));
+                return mapAgentOperationalStateFromAgent(a, gateContext).localeCompare(
+                    mapAgentOperationalStateFromAgent(b, gateContext),
+                );
             }
             if (sortMode === 'last_run') {
                 const at = new Date(a.lastUpdate || 0).getTime();
@@ -193,7 +209,7 @@ const AIAgents: React.FC = () => {
             return a.name.localeCompare(b.name);
         });
         return list;
-    }, [filteredAgents, sortMode]);
+    }, [filteredAgents, sortMode, killSwitchActive, effectiveMode]);
 
     if (isLoading) {
         return <AgentsShellSkeleton count={6} />;

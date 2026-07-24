@@ -248,6 +248,23 @@ export function evaluateConsumerEligibility(consumer, matrix) {
     };
   }
 
+  if (!matrix || !Array.isArray(matrix.capabilities)) {
+    return {
+      consumerId: consumer.id,
+      displayName: consumer.displayName,
+      owningModule: consumer.owningModule,
+      requiredCapabilities: consumer.requiredCapabilities,
+      optionalCapabilities: consumer.optionalCapabilities,
+      publicPrivate: consumer.publicPrivate,
+      rwClass: consumer.rwClass,
+      sideEffectClass: consumer.sideEffectClass,
+      eligible: false,
+      blockedReason: 'Capability matrix unavailable',
+      fallbackBehavior: consumer.fallbackBehavior,
+      registered: true,
+    };
+  }
+
   const byId = new Map(matrix.capabilities.map((c) => [c.capabilityId, c]));
   const missingRequired = [];
   const blockedReasons = [];

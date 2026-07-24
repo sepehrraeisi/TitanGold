@@ -5,9 +5,11 @@ import {
   formatAccuracy,
   formatLastRun,
   getAgentExecutionKind,
-  mapAgentOperationalState,
+  shellOperationalReasonKeyFromAgent,
+  shellOperationalStatusLabelKeyFromAgent,
 } from './shell/agentCardMeta.ts';
 import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
+import { resolveAgentProductStatus, type AgentProductTone } from '../../utils/agentProductStatus.ts';
 import {
   AGENT_CARD_SHELL,
   BTN_PRIMARY,
@@ -36,12 +38,12 @@ const STATE_I18N: Record<string, string> = {
   unavailable: 'agent_state_unavailable',
 };
 
-const STATE_PILL: Record<string, 'success' | 'info' | 'warning' | 'error' | 'neutral'> = {
-  ready: 'success',
-  running: 'info',
-  paused: 'warning',
+const PRODUCT_TONE: Record<AgentProductTone, 'success' | 'info' | 'warning' | 'error' | 'neutral'> = {
+  success: 'success',
+  info: 'info',
+  warning: 'warning',
   error: 'error',
-  unavailable: 'neutral',
+  neutral: 'neutral',
 };
 
 export const AgentCard: React.FC<AgentCardProps> = ({
@@ -50,12 +52,28 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   canOpen = true,
 }) => {
   const { t } = useLanguage();
-  const { dryRunForced, killSwitchActive, liveBlockReason, blockReason } = useAgentExecutionGate();
+  const { dryRunForced, killSwitchActive, liveBlockReason, blockReason, effectiveMode } = useAgentExecutionGate();
   const key = agent.agent_key || '';
   const kind = getAgentExecutionKind(key);
-  const state = mapAgentOperationalState(agent.status);
+  const productStatus = resolveAgentProductStatus(agent, {
+    killSwitchActive,
+    effectiveMode,
+  });
+  const stateLabelKey = shellOperationalStatusLabelKeyFromAgent(agent, {
+    killSwitchActive,
+    effectiveMode,
+  });
+  const reasonKey = shellOperationalReasonKeyFromAgent(agent, {
+    killSwitchActive,
+    effectiveMode,
+  });
   const purpose = agent.role || t('agent_purpose_fallback') || 'Agent';
   const accuracy = formatAccuracy(agent.accuracy, t('not_available') || 'N/A');
+  const isScheduledNow =
+    productStatus.primaryState === 'operational' || productStatus.primaryState === 'scheduled';
+  const lastRunLabel = isScheduledNow
+    ? (t('last_run') || 'Last run')
+    : (t('agent_last_recorded_run') || 'Last recorded run');
   const lastRun = formatLastRun(agent.lastUpdate, t('never_run') || 'Never');
   const decisionsLabel = t('results_count') || 'Results';
   const resultsHint =
@@ -91,21 +109,35 @@ export const AgentCard: React.FC<AgentCardProps> = ({
           <h3 className="text-sm font-semibold text-foreground leading-snug min-w-0">
             {agent.name}
           </h3>
-          <StatusPill
-            label={t(STATE_I18N[state]) || state}
-            variant={STATE_PILL[state] || 'neutral'}
-            className="shrink-0 uppercase tracking-wide"
-          />
+          <span data-testid={`agent-status-${key}`}>
+            <StatusPill
+              label={t(stateLabelKey) || t(STATE_I18N[productStatus.primaryState]) || productStatus.primaryState}
+              variant={PRODUCT_TONE[productStatus.tone] || 'neutral'}
+              className="shrink-0 uppercase tracking-wide"
+            />
+          </span>
         </div>
         <p className="text-[11px] text-muted-foreground line-clamp-2 leading-snug">{purpose}</p>
+        {reasonKey ? (
+          <p
+            className="text-[10px] text-muted-foreground/90 line-clamp-2"
+            data-testid={`agent-status-reason-${key}`}
+          >
+            {t(reasonKey)}
+          </p>
+        ) : null}
       </header>
 
       <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('agent_metrics') || 'Agent metrics'}>
         <MetricCard
-          label={t('last_run') || 'Last Run'}
+          label={lastRunLabel}
           value={lastRun}
           color="blue"
-          valueTooltip={lastRun}
+          valueTooltip={
+            isScheduledNow
+              ? lastRun
+              : (t('agent_last_recorded_run_hint') || 'Last persisted run record; not current scheduled activity.')
+          }
           valueState={lastRun === (t('never_run') || 'Never') || lastRun === 'Never' ? 'unavailable' : 'loaded'}
         />
         <div title={resultsHint}>
