@@ -8026,6 +8026,7 @@ export interface ArbitrageCoreSettings {
     executionSupported: false;
     executionEligible: false;
     legacyExecutionPreferenceIgnored?: boolean;
+    isDefault?: boolean;
 }
 
 export interface ArbitrageCoreRunSummary {
@@ -8084,6 +8085,15 @@ export interface ArbitrageCoreIntegrations {
     forwardToArtemis?: boolean;
 }
 
+import {
+    parseArbitrageCandidatesEnvelope,
+    parseArbitrageIntegrationsEnvelope,
+    parseArbitrageOverviewEnvelope,
+    parseArbitrageRunDetailEnvelope,
+    parseArbitrageRunsEnvelope,
+    parseArbitrageSettingsEnvelope,
+} from './arbitrageCoreClient.ts';
+
 async function arbitrageCoreRequest<T>(
     agentId: string,
     path: string,
@@ -8117,15 +8127,23 @@ async function arbitrageCoreRequest<T>(
     return response.json() as Promise<T>;
 }
 
-export const fetchArbitrageOverview = async (agentId: string): Promise<ArbitrageCoreOverview> =>
-    arbitrageCoreRequest<ArbitrageCoreOverview>(agentId, 'overview');
+export const fetchArbitrageOverview = async (agentId: string): Promise<ArbitrageCoreOverview> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'overview');
+    return parseArbitrageOverviewEnvelope(raw);
+};
+
+export const fetchArbitrageSettings = async (agentId: string): Promise<ArbitrageCoreSettings> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'settings');
+    return parseArbitrageSettingsEnvelope(raw);
+};
 
 export const fetchArbitrageCandidates = async (
     agentId: string,
     opts: { runId?: string } = {},
 ): Promise<ArbitrageCoreCandidatesResponse> => {
     const query = opts.runId ? `?runId=${encodeURIComponent(opts.runId)}` : '';
-    return arbitrageCoreRequest<ArbitrageCoreCandidatesResponse>(agentId, `candidates${query}`);
+    const raw = await arbitrageCoreRequest<unknown>(agentId, `candidates${query}`);
+    return parseArbitrageCandidatesEnvelope(raw, opts.runId ?? null);
 };
 
 export const fetchArbitrageRuns = async (
@@ -8134,29 +8152,38 @@ export const fetchArbitrageRuns = async (
 ): Promise<ArbitrageCoreRunsResponse> => {
     const page = opts.page || 1;
     const pageSize = opts.pageSize || 20;
-    return arbitrageCoreRequest<ArbitrageCoreRunsResponse>(
+    const raw = await arbitrageCoreRequest<unknown>(
         agentId,
         `runs?page=${page}&pageSize=${pageSize}`,
     );
+    return parseArbitrageRunsEnvelope(raw, page, pageSize);
 };
 
 export const fetchArbitrageRunDetail = async (
     agentId: string,
     runId: string,
-): Promise<ArbitrageCoreRunDetail> =>
-    arbitrageCoreRequest<ArbitrageCoreRunDetail>(agentId, `runs/${encodeURIComponent(runId)}`);
+): Promise<ArbitrageCoreRunDetail> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, `runs/${encodeURIComponent(runId)}`);
+    return parseArbitrageRunDetailEnvelope(raw);
+};
 
-export const fetchArbitrageIntegrations = async (agentId: string): Promise<ArbitrageCoreIntegrations> =>
-    arbitrageCoreRequest<ArbitrageCoreIntegrations>(agentId, 'integrations');
+export const fetchArbitrageIntegrations = async (
+    agentId: string,
+): Promise<ArbitrageCoreIntegrations & { items?: import('./arbitrageCoreClient.ts').ArbitrageIntegrationItem[] }> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'integrations');
+    return parseArbitrageIntegrationsEnvelope(raw);
+};
 
 export const updateArbitrageCoreSettings = async (
     agentId: string,
     settings: Partial<ArbitrageCoreSettings>,
-): Promise<ArbitrageCoreSettings> =>
-    arbitrageCoreRequest<ArbitrageCoreSettings>(agentId, 'settings', {
-        method: 'PATCH',
-        body: JSON.stringify(settings),
+): Promise<ArbitrageCoreSettings> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'settings', {
+        method: 'PUT',
+        body: JSON.stringify({ settings }),
     });
+    return parseArbitrageSettingsEnvelope(raw);
+};
 
 export const runArbitrageAnalyticalScan = async (
     agentId: string,
@@ -8166,11 +8193,13 @@ export const runArbitrageAnalyticalScan = async (
 export const updateArbitrageMonitoringState = async (
     agentId: string,
     monitoringState: ArbitrageMonitoringState,
-): Promise<ArbitrageCoreSettings> =>
-    arbitrageCoreRequest<ArbitrageCoreSettings>(agentId, 'monitoring', {
-        method: 'PATCH',
+): Promise<ArbitrageCoreSettings> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'monitoring-state', {
+        method: 'POST',
         body: JSON.stringify({ monitoringState }),
     });
+    return parseArbitrageSettingsEnvelope(raw);
+};
 
 export const fetchArbitrageAgentData = async (agentId: string): Promise<{
     config: ArbitrageConfig | null;

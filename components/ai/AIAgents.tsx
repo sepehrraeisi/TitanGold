@@ -15,7 +15,7 @@ import { useCapabilities } from '../../hooks/useCapabilities.ts';
 import { AgentCard } from './AgentCard.tsx';
 import { mapAgentOperationalStateFromAgent } from './shell/agentCardMeta.ts';
 import { mapProductStateToFilterBucket, resolveAgentProductStatus } from '../../utils/agentProductStatus.ts';
-import ArbitrageWorkspace from './ArbitrageWorkspace.tsx';
+import ArbitrageAgentPopup from './ArbitrageAgentPopup.tsx';
 import {
   BTN_SECONDARY,
   DataHubAlert,
@@ -119,6 +119,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
     );
     const [workspaceRunId, setWorkspaceRunId] = useState<string | undefined>(initialRunId);
     const [error, setError] = useState<string | null>(null);
+    const lastOpenButtonRef = React.useRef<HTMLButtonElement | null>(null);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -171,7 +172,10 @@ const AIAgents: React.FC<AIAgentsProps> = ({
     };
 
     const handleOpenAgent = useCallback(
-      (agent: AIAgent) => {
+      (agent: AIAgent, opener?: EventTarget | null) => {
+        if (opener instanceof HTMLButtonElement) {
+          lastOpenButtonRef.current = opener;
+        }
         if (agent.agent_key === AGENT_KEYS.ARBITRAGE) {
           setWorkspaceAgentId(agent.id);
           setWorkspaceSection('overview');
@@ -189,8 +193,25 @@ const AIAgents: React.FC<AIAgentsProps> = ({
     const handleWorkspaceBack = useCallback(() => {
       setWorkspaceAgentId(undefined);
       setWorkspaceRunId(undefined);
+      setWorkspaceSection('overview');
       onNavigate?.({ view: 'ai' });
     }, [onNavigate]);
+
+    const handleWorkspaceNavigate: OnNavigateHandler = useCallback(
+      target => {
+        if (typeof target === 'object' && target.view === 'ai') {
+          if (target.agentId) setWorkspaceAgentId(target.agentId);
+          if (target.agentSection) setWorkspaceSection(parseAgentSection(target.agentSection));
+          if (target.runId) setWorkspaceRunId(target.runId);
+          if (!target.agentId) {
+            setWorkspaceAgentId(undefined);
+            setWorkspaceRunId(undefined);
+          }
+        }
+        onNavigate?.(target);
+      },
+      [onNavigate],
+    );
 
     const authToken = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token') || undefined;
 
@@ -319,19 +340,6 @@ const AIAgents: React.FC<AIAgentsProps> = ({
         : t('no_agents_found');
     const resultsLabel = getAgentsResultsLabel(t, sortedAgents.length, agents.length, hasActiveFilters);
 
-    if (workspaceAgent) {
-      return (
-        <ArbitrageWorkspace
-          agent={workspaceAgent}
-          initialSection={workspaceSection}
-          initialRunId={workspaceRunId}
-          onBack={handleWorkspaceBack}
-          onNavigate={onNavigate}
-          onUpdate={handleAgentUpdate}
-        />
-      );
-    }
-
     return (
         <>
             <AgentSafetyBanner runtime={runtime} canExecute={canExecute} loading={runtimeLoading} />
@@ -446,7 +454,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
                         <AgentCard
                             key={agent.id}
                             agent={agent}
-                            onOpen={() => handleOpenAgent(agent)}
+                            onOpen={event => handleOpenAgent(agent, event.currentTarget)}
                             canOpen={canRead}
                         />
                     ))}
@@ -472,6 +480,18 @@ const AIAgents: React.FC<AIAgentsProps> = ({
                     )}
                 </div>
             )}
+
+            {workspaceAgent ? (
+                <ArbitrageAgentPopup
+                    agent={workspaceAgent}
+                    initialSection={workspaceSection}
+                    initialRunId={workspaceRunId}
+                    onClose={handleWorkspaceBack}
+                    onNavigate={handleWorkspaceNavigate}
+                    onUpdate={handleAgentUpdate}
+                    returnFocusRef={lastOpenButtonRef}
+                />
+            ) : null}
 
             {selectedAgent && agentRegistryEntry && (
                 <ErrorBoundary fallbackTitle={agentRegistryEntry.fallbackTitle}>

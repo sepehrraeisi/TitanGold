@@ -113,7 +113,31 @@ router.get(
         pageSize: req.query.pageSize || req.query.limit,
       });
 
-      return res.json({ ok: true, candidates: result.items, pagination: result.pagination });
+      const spreadCandidates = [];
+      const rejectedCandidates = [];
+      const qualifiedCandidates = [];
+      for (const item of result.items) {
+        if (item.lifecycleState === 'qualified') qualifiedCandidates.push(item);
+        else if (['rejected', 'blocked', 'expired'].includes(item.lifecycleState)) {
+          rejectedCandidates.push(item);
+        } else {
+          spreadCandidates.push(item);
+        }
+      }
+
+      return res.json({
+        ok: true,
+        runId: req.query.runId || null,
+        spreadCandidates,
+        rejectedCandidates,
+        qualifiedCandidates,
+        candidates: result.items,
+        pagination: {
+          ...result.pagination,
+          hasNext: result.pagination.page < result.pagination.totalPages,
+          hasPrevious: result.pagination.page > 1,
+        },
+      });
     } catch (error) {
       logger.error('Arbitrage candidates error:', error);
       return sendError(res, 'SERVER_ERROR', 'Failed to load candidates', 500);
@@ -136,7 +160,16 @@ router.get(
         pageSize: req.query.pageSize || req.query.limit,
       });
 
-      return res.json({ ok: true, runs: result.items, pagination: result.pagination });
+      return res.json({
+        ok: true,
+        runs: result.items,
+        items: result.items,
+        pagination: {
+          ...result.pagination,
+          hasNext: result.pagination.page < result.pagination.totalPages,
+          hasPrevious: result.pagination.page > 1,
+        },
+      });
     } catch (error) {
       logger.error('Arbitrage runs error:', error);
       return sendError(res, 'SERVER_ERROR', 'Failed to load scan runs', 500);
