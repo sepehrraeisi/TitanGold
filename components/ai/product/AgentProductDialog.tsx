@@ -46,7 +46,7 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
   const panelDir = isPersian ? 'rtl' : 'ltr';
   const panelLangClass = isPersian ? 'rtl' : '';
   const panelFontStyle = isPersian
-    ? ({ fontFamily: 'IRANSans, Vazir, Tahoma, sans-serif' } as React.CSSProperties)
+    ? ({ fontFamily: '"Noto Sans Arabic", Tahoma, sans-serif' } as React.CSSProperties)
     : undefined;
 
   useEffect(() => {
