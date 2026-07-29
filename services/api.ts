@@ -8152,6 +8152,7 @@ import {
     parseArbitrageRunsEnvelope,
     parseArbitrageSettingsEnvelope,
 } from './arbitrageCoreClient.ts';
+import { buildArbitrageCoreApiPath } from './arbitrageCorePaths.ts';
 
 async function arbitrageCoreRequest<T>(
     agentId: string,
@@ -8169,7 +8170,7 @@ async function arbitrageCoreRequest<T>(
         throw authError;
     }
 
-    const response = await fetch(`/api/ai-agents/${agentId}/arbitrage/${path}`, {
+    const response = await fetch(buildArbitrageCoreApiPath(agentId, path), {
         ...options,
         headers: {
             Authorization: `Bearer ${token}`,

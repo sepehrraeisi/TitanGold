@@ -255,6 +255,12 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             scanPendingRef.current = false;
             setIsScanning(false);
             setScanConfirmOpen(false);
+            window.requestAnimationFrame(() => {
+                const scanTrigger = document.querySelector(
+                    '[data-testid="agent-product-dialog"] [data-testid="arb-run-analytical-scan"]',
+                ) as HTMLElement | null;
+                scanTrigger?.focus?.();
+            });
         }
     };
 

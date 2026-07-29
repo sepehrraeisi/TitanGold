@@ -24,6 +24,8 @@ export type AgentProductConfirmationProps = {
   returnFocusRef?: React.RefObject<HTMLElement | null>;
   /** Alternative: restore focus to the first matching test id inside the agent dialog. */
   returnFocusTestId?: string;
+  /** Scope returnFocusTestId lookup to this container test id (avoids global collisions). */
+  returnFocusScopeTestId?: string;
   /** Backdrop click closes confirmation (canonical cancel). */
   closeOnBackdrop?: boolean;
 };
@@ -45,6 +47,7 @@ export const AgentProductConfirmation: React.FC<AgentProductConfirmationProps> =
   confirmTestId = 'agent-product-confirm-run',
   returnFocusRef,
   returnFocusTestId,
+  returnFocusScopeTestId = 'agent-product-dialog',
   closeOnBackdrop = true,
 }) => {
   const titleId = useId();
@@ -54,9 +57,28 @@ export const AgentProductConfirmation: React.FC<AgentProductConfirmationProps> =
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    const scopeRoot = returnFocusScopeTestId
+      ? (document.querySelector(
+          `[data-testid="${returnFocusScopeTestId}"]`,
+        ) as HTMLElement | null)
+      : null;
+
+    const resolveReturnTarget = () => {
+      if (returnFocusRef?.current) return returnFocusRef.current;
+      if (returnFocusTestId) {
+        const scoped = scopeRoot?.querySelector(
+          `[data-testid="${returnFocusTestId}"]`,
+        ) as HTMLElement | null;
+        if (scoped) return scoped;
+        return document.querySelector(
+          `[data-testid="${returnFocusTestId}"]`,
+        ) as HTMLElement | null;
+      }
+      return null;
+    };
+
     previouslyFocused.current =
-      (returnFocusRef?.current as HTMLElement | null) ||
-      (document.activeElement as HTMLElement | null);
+      resolveReturnTarget() || (document.activeElement as HTMLElement | null);
 
     const timer = window.setTimeout(() => cancelRef.current?.focus(), 0);
 
@@ -96,17 +118,11 @@ export const AgentProductConfirmation: React.FC<AgentProductConfirmationProps> =
     return () => {
       window.clearTimeout(timer);
       document.removeEventListener('keydown', onKey, true);
-      const restoreTarget =
-        returnFocusRef?.current ||
-        (returnFocusTestId
-          ? (document.querySelector(
-              `[data-testid="${returnFocusTestId}"]`,
-            ) as HTMLElement | null)
-          : null) ||
-        previouslyFocused.current;
+      const restoreTarget = resolveReturnTarget() || previouslyFocused.current;
       restoreTarget?.focus?.();
+      window.requestAnimationFrame(() => restoreTarget?.focus?.());
     };
-  }, [onCancel, pending, returnFocusRef, returnFocusTestId]);
+  }, [onCancel, pending, returnFocusRef, returnFocusTestId, returnFocusScopeTestId]);
 
   return (
     <div

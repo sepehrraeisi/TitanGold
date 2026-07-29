@@ -37,6 +37,7 @@ export const ArbitrageScanConfirmDialog: React.FC<ArbitrageScanConfirmDialogProp
       }
       pending={pending}
       returnFocusTestId={returnFocusTestId}
+      returnFocusScopeTestId="agent-product-dialog"
       cancelTestId="arb-scan-confirm-cancel"
       confirmTestId="arb-scan-confirm-run"
     >

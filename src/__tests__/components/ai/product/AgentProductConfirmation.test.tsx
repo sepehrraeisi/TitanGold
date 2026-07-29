@@ -108,6 +108,61 @@ describe('AgentProductConfirmation layering', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('returns focus to the trigger control after Cancel, not the popup Close button', async () => {
+    const onClose = vi.fn();
+    const onCancel = vi.fn();
+    const { rerender } = render(
+      <AgentProductDialog
+        agent={agent}
+        onClose={onClose}
+        closeTestId="agent-product-close"
+        confirmationOpen
+        confirmation={
+          <AgentProductConfirmation
+            title="Confirm"
+            onCancel={onCancel}
+            onConfirm={() => {}}
+            cancelLabel="Cancel"
+            confirmLabel="Run scan"
+            returnFocusTestId="trigger-action"
+            returnFocusScopeTestId="agent-product-dialog"
+          />
+        }
+      >
+        <button type="button" data-testid="trigger-action">
+          Run analytical scan
+        </button>
+      </AgentProductDialog>,
+    );
+
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute('data-testid')).toBe(
+        'agent-product-confirm-cancel',
+      ),
+    );
+
+    fireEvent.click(screen.getByTestId('agent-product-confirm-cancel'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <AgentProductDialog
+        agent={agent}
+        onClose={onClose}
+        closeTestId="agent-product-close"
+        confirmationOpen={false}
+      >
+        <button type="button" data-testid="trigger-action">
+          Run analytical scan
+        </button>
+      </AgentProductDialog>,
+    );
+
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute('data-testid')).toBe('trigger-action'),
+    );
+    expect(document.activeElement?.getAttribute('data-testid')).not.toBe('agent-product-close');
+  });
+
   it('removes confirmation layer after cancel without orphan overlay state', () => {
     const onClose = vi.fn();
     const { rerender } = render(

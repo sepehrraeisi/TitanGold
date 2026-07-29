@@ -48,6 +48,8 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
   const { language } = useLanguage();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const initialFocusDoneRef = useRef(false);
+  const confirmationWasOpenRef = useRef(false);
   const isPersian = language === 'fa';
   const panelDir = isPersian ? 'rtl' : 'ltr';
   const panelLangClass = isPersian ? 'rtl' : '';
@@ -56,13 +58,22 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
     : undefined;
 
   useEffect(() => {
-    if (confirmationOpen) return undefined;
+    if (confirmationOpen) {
+      confirmationWasOpenRef.current = true;
+      return undefined;
+    }
+
+    const restoreAfterConfirmation = confirmationWasOpenRef.current;
+    confirmationWasOpenRef.current = false;
 
     const prev = document.activeElement as HTMLElement | null;
     const initialClose = panelRef.current?.querySelector(
       `[data-testid="${closeTestId}"]`,
     ) as HTMLButtonElement | null;
-    initialClose?.focus();
+    if (!restoreAfterConfirmation && !initialFocusDoneRef.current) {
+      initialClose?.focus();
+      initialFocusDoneRef.current = true;
+    }
 
     const getFocusable = () => {
       const root = panelRef.current;
