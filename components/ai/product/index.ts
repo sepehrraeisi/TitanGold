@@ -1,4 +1,6 @@
 export { AGENT_PRODUCT_TOKENS } from './agentProductTokens.ts';
+export { AgentProductConfirmation } from './AgentProductConfirmation.tsx';
+export { AGENT_PRODUCT_LAYERS, AGENT_PRODUCT_LAYER_Z } from './agentProductTokens.ts';
 export { AgentProductDialog } from './AgentProductDialog.tsx';
 export { AgentProductHeader } from './AgentProductHeader.tsx';
 export { AgentSafetyBanner } from './AgentSafetyBanner.tsx';

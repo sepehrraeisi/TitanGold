@@ -2,7 +2,7 @@ import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanguage } from '../../../context/LanguageContext.tsx';
 import type { AIAgent } from '../../../types.ts';
-import { AGENT_PRODUCT_TOKENS } from './agentProductTokens.ts';
+import { AGENT_PRODUCT_LAYERS, AGENT_PRODUCT_TOKENS } from './agentProductTokens.ts';
 import { AgentProductHeader, type AgentProductHeaderProps } from './AgentProductHeader.tsx';
 import { AgentSafetyBanner } from './AgentSafetyBanner.tsx';
 
@@ -21,6 +21,10 @@ export type AgentProductDialogProps = {
   children: React.ReactNode;
   closeTestId?: string;
   testId?: string;
+  /** When true, renders nested confirmation above popup content inside the dialog shell. */
+  confirmationOpen?: boolean;
+  /** Nested confirmation layer (AgentProductConfirmation). */
+  confirmation?: React.ReactNode;
 };
 
 /**
@@ -38,6 +42,8 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
   children,
   closeTestId = 'agent-product-close',
   testId = 'agent-product-dialog',
+  confirmationOpen = false,
+  confirmation,
 }) => {
   const { language } = useLanguage();
   const titleId = useId();
@@ -50,6 +56,8 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
     : undefined;
 
   useEffect(() => {
+    if (confirmationOpen) return undefined;
+
     const prev = document.activeElement as HTMLElement | null;
     const initialClose = panelRef.current?.querySelector(
       `[data-testid="${closeTestId}"]`,
@@ -60,7 +68,10 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
       const root = panelRef.current;
       if (!root) return [] as HTMLElement[];
       return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-        el => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true',
+        el =>
+          !el.hasAttribute('disabled') &&
+          el.getAttribute('aria-hidden') !== 'true' &&
+          !el.closest('[data-testid="agent-product-confirmation-layer"]'),
       );
     };
 
@@ -96,7 +107,16 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
       document.body.style.overflow = overflow;
       prev?.focus?.();
     };
-  }, [onClose, closeTestId]);
+  }, [onClose, closeTestId, confirmationOpen]);
+
+  useEffect(() => {
+    if (!confirmationOpen) return undefined;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [confirmationOpen]);
 
   if (typeof document === 'undefined') return null;
 
@@ -107,7 +127,7 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
       lang={language}
       dir={panelDir}
       style={panelFontStyle}
-      onClick={onClose}
+      onClick={confirmationOpen ? undefined : onClose}
       data-testid="agent-product-overlay"
     >
       <div
@@ -120,34 +140,42 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
         data-testid={testId}
         data-agent-key={agent.agent_key}
         data-scroll-owner="agent-product-body"
-        className={`${AGENT_PRODUCT_TOKENS.surfaces.dialogShell} ${AGENT_PRODUCT_TOKENS.dialogRadius} ${AGENT_PRODUCT_TOKENS.mobileFullScreen} ${AGENT_PRODUCT_TOKENS.dialogMaxWidth} ${AGENT_PRODUCT_TOKENS.dialogMaxHeight} w-full overflow-hidden flex flex-col shadow-2xl ${panelLangClass}`}
+        data-confirmation-open={confirmationOpen ? 'true' : 'false'}
+        className={`${AGENT_PRODUCT_LAYERS.dialogContent} ${AGENT_PRODUCT_TOKENS.surfaces.dialogShell} ${AGENT_PRODUCT_TOKENS.dialogRadius} ${AGENT_PRODUCT_TOKENS.mobileFullScreen} ${AGENT_PRODUCT_TOKENS.dialogMaxWidth} ${AGENT_PRODUCT_TOKENS.dialogMaxHeight} w-full overflow-hidden flex flex-col shadow-2xl ${panelLangClass}`}
         style={panelFontStyle}
         onClick={e => e.stopPropagation()}
       >
-        <AgentProductHeader
-          agent={agent}
-          purpose={purpose}
-          onClose={onClose}
-          closeTestId={closeTestId}
-          latestRunAt={latestRunAt}
-          monitoringState={monitoringState}
-        />
-        <AgentSafetyBanner agent={agent} productNote={safetyProductNote} />
-        {(actionBar || sectionNavigation) && (
-          <div
-            className={`shrink-0 ${AGENT_PRODUCT_TOKENS.surfaces.toolbarChrome}`}
-            data-testid="agent-product-toolbar"
-          >
-            {actionBar}
-            {sectionNavigation}
-          </div>
-        )}
         <div
-          className={`${AGENT_PRODUCT_TOKENS.scrollOwner} ${AGENT_PRODUCT_TOKENS.surfaces.contentCanvas}`}
-          data-testid="agent-product-body"
+          className={`flex flex-col flex-1 min-h-0 overflow-hidden${confirmationOpen ? ' pointer-events-none select-none' : ''}`}
+          aria-hidden={confirmationOpen ? true : undefined}
+          data-testid="agent-product-main-surface"
         >
-          <div className={`${AGENT_PRODUCT_TOKENS.contentGutter} py-4`}>{children}</div>
+          <AgentProductHeader
+            agent={agent}
+            purpose={purpose}
+            onClose={onClose}
+            closeTestId={closeTestId}
+            latestRunAt={latestRunAt}
+            monitoringState={monitoringState}
+          />
+          <AgentSafetyBanner agent={agent} productNote={safetyProductNote} />
+          {(actionBar || sectionNavigation) && (
+            <div
+              className={`shrink-0 ${AGENT_PRODUCT_TOKENS.surfaces.toolbarChrome}`}
+              data-testid="agent-product-toolbar"
+            >
+              {actionBar}
+              {sectionNavigation}
+            </div>
+          )}
+          <div
+            className={`${AGENT_PRODUCT_TOKENS.scrollOwner} ${AGENT_PRODUCT_TOKENS.surfaces.contentCanvas}`}
+            data-testid="agent-product-body"
+          >
+            <div className={`${AGENT_PRODUCT_TOKENS.contentGutter} py-4`}>{children}</div>
+          </div>
         </div>
+        {confirmationOpen && confirmation}
       </div>
     </div>,
     document.body,

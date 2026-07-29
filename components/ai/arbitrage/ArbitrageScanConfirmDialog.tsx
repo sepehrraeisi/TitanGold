@@ -1,5 +1,5 @@
-import React, { useEffect, useId, useRef } from 'react';
-import { DataHubModal, PrimaryButton, SecondaryButton } from '../AIManager/tabs/DataHub/dataHubUi.tsx';
+import React from 'react';
+import { AgentProductConfirmation } from '../product/AgentProductConfirmation.tsx';
 
 export type ArbitrageScanConfirmDialogProps = {
   open: boolean;
@@ -7,6 +7,7 @@ export type ArbitrageScanConfirmDialogProps = {
   onConfirm: () => void;
   t: (key: string) => string;
   pending?: boolean;
+  returnFocusTestId?: string;
 };
 
 export const ArbitrageScanConfirmDialog: React.FC<ArbitrageScanConfirmDialogProps> = ({
@@ -15,60 +16,29 @@ export const ArbitrageScanConfirmDialog: React.FC<ArbitrageScanConfirmDialogProp
   onConfirm,
   t,
   pending = false,
+  returnFocusTestId = 'arb-run-analytical-scan',
 }) => {
-  const titleId = useId();
-  const cancelRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const timer = window.setTimeout(() => cancelRef.current?.focus(), 0);
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        onCancel();
-      }
-    };
-    document.addEventListener('keydown', onKey, true);
-    return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener('keydown', onKey, true);
-    };
-  }, [open, onCancel]);
-
   if (!open) return null;
 
   return (
-    <DataHubModal
+    <AgentProductConfirmation
       title={t('arb_scan_confirm_title') || 'Run analytical scan?'}
-      subtitle={
+      description={
         t('arb_scan_confirm_subtitle') ||
-        'Read-only analytical scan using public MEXC market data.'
+        'This read-only scan uses public MEXC market data. It will not place orders or perform financial execution.'
       }
-      onClose={onCancel}
-      footer={
-        <>
-          <SecondaryButton
-            type="button"
-            ref={cancelRef}
-            onClick={onCancel}
-            disabled={pending}
-            data-testid="arb-scan-confirm-cancel"
-          >
-            {t('cancel') || 'Cancel'}
-          </SecondaryButton>
-          <PrimaryButton
-            type="button"
-            onClick={onConfirm}
-            disabled={pending}
-            data-testid="arb-scan-confirm-run"
-          >
-            {pending
-              ? t('scanning') || 'Scanning...'
-              : t('arb_scan_confirm_run') || 'Run scan'}
-          </PrimaryButton>
-        </>
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+      cancelLabel={t('cancel') || 'Cancel'}
+      confirmLabel={
+        pending
+          ? t('scanning') || 'Scanning...'
+          : t('arb_scan_confirm_run') || 'Run scan'
       }
+      pending={pending}
+      returnFocusTestId={returnFocusTestId}
+      cancelTestId="arb-scan-confirm-cancel"
+      confirmTestId="arb-scan-confirm-run"
     >
       <ul className="list-disc ps-5 space-y-2 text-sm text-muted-foreground">
         <li>{t('arb_scan_confirm_public_data') || 'Uses public MEXC market data only.'}</li>
@@ -79,7 +49,7 @@ export const ArbitrageScanConfirmDialog: React.FC<ArbitrageScanConfirmDialogProp
             'The scan may be rejected if another scan is already running.'}
         </li>
       </ul>
-    </DataHubModal>
+    </AgentProductConfirmation>
   );
 };
 

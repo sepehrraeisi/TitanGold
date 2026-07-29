@@ -25,6 +25,27 @@ export const AGENT_PRODUCT_SURFACES = {
   statusItem: 'bg-slate-950/70 border border-white/5 rounded-lg',
 } as const;
 
+/**
+ * Stacking contract for Agent Product Template portals and nested confirmations.
+ * application content < app overlay (120) < confirmation layer (within dialog shell).
+ */
+export const AGENT_PRODUCT_LAYER_Z = {
+  dialogOverlay: 120,
+  dialogContent: 1,
+  confirmationBackdrop: 30,
+  confirmationPanel: 40,
+} as const;
+
+export const AGENT_PRODUCT_LAYERS = {
+  dialogOverlay: `z-[${AGENT_PRODUCT_LAYER_Z.dialogOverlay}]`,
+  dialogContent: 'relative z-[1]',
+  confirmationRoot:
+    'absolute inset-0 z-[30] flex items-center justify-center p-4 sm:p-6 pointer-events-auto',
+  confirmationBackdrop: 'absolute inset-0 bg-black/50',
+  confirmationPanel:
+    'relative z-[40] w-full max-w-md max-h-[min(85vh,100dvh-8rem)] overflow-hidden flex flex-col shadow-2xl rounded-xl border border-white/10 bg-gradient-to-br from-slate-950/98 via-slate-950/95 to-slate-900/95',
+} as const;
+
 export const AGENT_PRODUCT_TOKENS = {
   dialogMaxWidth: 'max-w-6xl',
   dialogMaxHeight: 'max-h-[min(92vh,100dvh-1.5rem)]',

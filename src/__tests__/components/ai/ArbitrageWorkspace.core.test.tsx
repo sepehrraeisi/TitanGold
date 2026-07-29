@@ -226,6 +226,7 @@ describe('ArbitrageWorkspace core', () => {
 
     await waitFor(() => expect(screen.getByTestId('arb-run-analytical-scan')).toBeTruthy());
     fireEvent.click(screen.getByTestId('arb-run-analytical-scan'));
+    expect(screen.getByTestId('agent-product-confirmation-panel')).toBeTruthy();
     expect(screen.getByTestId('arb-scan-confirm-run')).toBeTruthy();
     expect(runArbitrageAnalyticalScan).not.toHaveBeenCalled();
 

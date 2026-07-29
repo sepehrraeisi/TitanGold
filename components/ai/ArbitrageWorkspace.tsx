@@ -391,7 +391,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                         : t('run_analytical_scan') || 'Run analytical scan'
                 }
                 onClick={handleRunScan}
-                disabled={isScanning || agent.status !== 'active'}
+                disabled={isScanning || agent.status !== 'active' || scanConfirmOpen}
                 loading={isScanning}
                 testId="arb-run-analytical-scan"
             />
@@ -545,19 +545,24 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
 
     if (embedded) {
         return (
-            <>
-                <ArbitrageScanConfirmDialog
-                    open={scanConfirmOpen}
-                    onCancel={() => setScanConfirmOpen(false)}
-                    onConfirm={() => void executeManualScan()}
-                    pending={isScanning}
-                    t={t}
-                />
-                <AgentProductDialog
-                    agent={displayAgent}
-                    onClose={onBack}
-                    closeTestId="arb-popup-close"
-                    purpose={
+            <AgentProductDialog
+                agent={displayAgent}
+                onClose={() => {
+                    setScanConfirmOpen(false);
+                    onBack();
+                }}
+                closeTestId="arb-popup-close"
+                confirmationOpen={scanConfirmOpen}
+                confirmation={
+                    <ArbitrageScanConfirmDialog
+                        open={scanConfirmOpen}
+                        onCancel={() => setScanConfirmOpen(false)}
+                        onConfirm={() => void executeManualScan()}
+                        pending={isScanning}
+                        t={t}
+                    />
+                }
+                purpose={
                         product?.description ||
                         t('arbitrage_agent_desc') ||
                         'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'
@@ -579,7 +584,6 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                 {scanFeedbackBanner}
                 {renderTabPanel()}
             </AgentProductDialog>
-            </>
         );
     }
 
