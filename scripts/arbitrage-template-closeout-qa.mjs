@@ -111,8 +111,15 @@ for (const vp of viewports) {
 
   await openPopup(page);
   const before = await page.locator('[data-testid="agent-product-confirmation-layer"]').count();
-  await page.getByTestId('arb-run-analytical-scan').click({ force: true });
-  await page.waitForTimeout(500);
+  const scanBtn = page.locator('[data-testid="agent-product-dialog"] [data-testid="arb-run-analytical-scan"]');
+  await scanBtn.waitFor({ state: 'visible', timeout: 45000 });
+  await page.waitForFunction(() => {
+    const btn = document.querySelector('[data-testid="agent-product-dialog"] [data-testid="arb-run-analytical-scan"]');
+    return btn && !(btn instanceof HTMLButtonElement && btn.disabled);
+  }, { timeout: 45000 });
+  await scanBtn.scrollIntoViewIfNeeded();
+  await scanBtn.click();
+  await page.waitForSelector('[data-testid="agent-product-confirmation-panel"]', { state: 'attached', timeout: 15000 });
 
   const afterOpen = await page.evaluate(() => {
     const panel = document.querySelector('[data-testid="agent-product-confirmation-panel"]');
@@ -126,7 +133,7 @@ for (const vp of viewports) {
 
   await page.screenshot({ path: path.join(OUT, `${vp.id}-confirm-open.png`) });
 
-  await page.getByTestId('arb-scan-confirm-cancel').click({ force: true });
+  await page.getByTestId('arb-scan-confirm-cancel').click();
   await page.waitForTimeout(500);
   const afterCancel = await page.evaluate(() => ({
     count: document.querySelectorAll('[data-testid="agent-product-confirmation-layer"]').length,
@@ -134,8 +141,9 @@ for (const vp of viewports) {
     orphanBackdrop: document.querySelectorAll('[data-testid="agent-product-confirmation-backdrop"]').length,
   }));
 
-  await page.getByTestId('arb-run-analytical-scan').click({ force: true });
-  await page.waitForTimeout(300);
+  await scanBtn.scrollIntoViewIfNeeded();
+  await scanBtn.click();
+  await page.waitForSelector('[data-testid="agent-product-confirmation-panel"]', { state: 'attached', timeout: 15000 });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
   const afterEscape = await page.evaluate(() => ({
@@ -146,10 +154,11 @@ for (const vp of viewports) {
   let scan = null;
   if (vp.runScan) {
     const postsBefore = scanPosts.length;
-    await page.getByTestId('arb-run-analytical-scan').click({ force: true });
-    await page.waitForTimeout(400);
+    await scanBtn.scrollIntoViewIfNeeded();
+    await scanBtn.click();
+    await page.waitForSelector('[data-testid="agent-product-confirmation-panel"]', { state: 'attached', timeout: 15000 });
     const postsBeforeConfirm = scanPosts.length;
-    await page.getByTestId('arb-scan-confirm-run').click({ force: true });
+    await page.getByTestId('arb-scan-confirm-run').click();
     await page.waitForTimeout(12000);
     scan = {
       postsBefore,
