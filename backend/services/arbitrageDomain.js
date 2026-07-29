@@ -119,6 +119,85 @@ function summarizeRejections(rejected = []) {
 /**
  * Build funnel counts with explicit definitions.
  */
+const PRODUCER_LIFECYCLE_MAP = Object.freeze({
+  detected: CANDIDATE_LIFECYCLE.CANDIDATE,
+  validated: CANDIDATE_LIFECYCLE.CANDIDATE,
+  rejected: CANDIDATE_LIFECYCLE.REJECTED,
+  expired: CANDIDATE_LIFECYCLE.EXPIRED,
+  simulated: CANDIDATE_LIFECYCLE.CANDIDATE,
+  blocked: CANDIDATE_LIFECYCLE.BLOCKED,
+  observed: CANDIDATE_LIFECYCLE.OBSERVED,
+  candidate: CANDIDATE_LIFECYCLE.CANDIDATE,
+  qualified: CANDIDATE_LIFECYCLE.QUALIFIED,
+});
+
+export function normalizeCandidateLifecycle(raw = {}) {
+  const lc = raw.lifecycle;
+  if (lc && PRODUCER_LIFECYCLE_MAP[lc]) return PRODUCER_LIFECYCLE_MAP[lc];
+  if (lc && Object.values(CANDIDATE_LIFECYCLE).includes(lc)) return lc;
+  if (raw.classification === 'rejected_candidate') return CANDIDATE_LIFECYCLE.REJECTED;
+  return CANDIDATE_LIFECYCLE.CANDIDATE;
+}
+
+export function buildCandidateFunnelFromItems(items = []) {
+  const counts = {
+    observed: 0,
+    analyticalCandidates: 0,
+    rejected: 0,
+    qualified: 0,
+    expired: 0,
+    blocked: 0,
+  };
+  for (const item of items) {
+    switch (item.lifecycleState) {
+      case CANDIDATE_LIFECYCLE.OBSERVED:
+        counts.observed += 1;
+        break;
+      case CANDIDATE_LIFECYCLE.CANDIDATE:
+        counts.analyticalCandidates += 1;
+        break;
+      case CANDIDATE_LIFECYCLE.REJECTED:
+        counts.rejected += 1;
+        break;
+      case CANDIDATE_LIFECYCLE.QUALIFIED:
+        counts.qualified += 1;
+        break;
+      case CANDIDATE_LIFECYCLE.EXPIRED:
+        counts.expired += 1;
+        break;
+      case CANDIDATE_LIFECYCLE.BLOCKED:
+        counts.blocked += 1;
+        break;
+      default:
+        break;
+    }
+  }
+  return counts;
+}
+
+export function buildCandidateAvailableFilters(items = []) {
+  const lifecycles = new Set();
+  const symbols = new Set();
+  const rejectionReasons = new Set();
+  const freshnessStates = new Set();
+
+  for (const item of items) {
+    if (item.lifecycleState) lifecycles.add(item.lifecycleState);
+    if (item.symbol) symbols.add(item.symbol);
+    for (const reason of item.rejectionReasons || []) {
+      if (reason) rejectionReasons.add(reason);
+    }
+    if (item.freshnessState) freshnessStates.add(item.freshnessState);
+  }
+
+  return {
+    lifecycles: [...lifecycles].sort(),
+    symbols: [...symbols].sort(),
+    rejectionReasons: [...rejectionReasons].sort(),
+    freshnessStates: [...freshnessStates].sort(),
+  };
+}
+
 export function buildFunnelCounts({
   symbolsRequested = [],
   symbolsEvaluated = [],
@@ -145,8 +224,8 @@ export function mapRawCandidateToDto(raw, { runId, mode = ANALYTICAL_MODES.SINGL
   const symbol = raw.symbol || '';
   const { baseAsset, quoteAsset } = parseSymbolParts(symbol);
   const observedAt = toIso(raw.timestamp) || new Date().toISOString();
-  const lifecycleState = raw.lifecycle
-    || (raw.classification === 'rejected_candidate' ? CANDIDATE_LIFECYCLE.REJECTED : CANDIDATE_LIFECYCLE.CANDIDATE);
+  const lifecycleState = normalizeCandidateLifecycle(raw);
+  const observedMs = Date.parse(observedAt) || Date.now();
 
   const grossSpreadBps = toNum(raw.profitBps ?? raw.expectedProfitBps ?? (raw.spreadPct != null ? raw.spreadPct * 100 : null));
   const assumedFeesBps = toNum(raw.fees?.feePct != null ? raw.fees.feePct * 100 : raw.feeBps);
@@ -169,7 +248,7 @@ export function mapRawCandidateToDto(raw, { runId, mode = ANALYTICAL_MODES.SINGL
     ask: toNum(raw.askPrice),
     sourceTimestamp: observedAt,
     observedAt,
-    ageMs: 0,
+    ageMs: Math.max(0, Date.now() - observedMs),
     grossSpreadBps,
     assumedFeesBps,
     estimatedSlippageBps,
@@ -187,6 +266,7 @@ export function mapRawCandidateToDto(raw, { runId, mode = ANALYTICAL_MODES.SINGL
       : Array.isArray(raw.rejectionReasons)
         ? raw.rejectionReasons
         : [],
+    source: raw.source || raw.venue || 'mexc_public',
   };
 }
 

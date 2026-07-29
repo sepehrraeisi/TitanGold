@@ -10,6 +10,8 @@ import {
   buildScanRunDto,
   buildArbitrageOverviewSnapshot,
   buildSettingsDto,
+  buildCandidateAvailableFilters,
+  buildCandidateFunnelFromItems,
   deriveInterpretation,
   getProductIdentity,
   mapDecisionRowToScanRun,
@@ -361,6 +363,7 @@ export async function getArbitrageCandidates(agentId, filters = {}) {
     symbol,
     lifecycle,
     rejectionReason,
+    freshness,
     search,
     sort,
     page,
@@ -368,34 +371,69 @@ export async function getArbitrageCandidates(agentId, filters = {}) {
   } = filters;
 
   const pagination = validatePagination({ page, pageSize });
+  let effectiveRunId = runId || null;
+
+  if (!effectiveRunId) {
+    const latest = await fetchLatestArbitrageScanRow(agent.id);
+    effectiveRunId = latest?.id || null;
+  }
+
   const params = [agent.id, ARBITRAGE_DECISION_TYPE];
   let sql = `
-    SELECT id, output_data, created_at
+    SELECT id, output_data, input_data, created_at, execution_time_ms, was_successful
     FROM ai_decisions
     WHERE agent_id = $1 AND decision_type = $2
   `;
 
-  if (runId) {
-    params.push(runId);
+  if (effectiveRunId) {
+    params.push(effectiveRunId);
     sql += ` AND id = $${params.length}`;
+  } else {
+    return {
+      items: [],
+      allItems: [],
+      pagination: {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        total: 0,
+        totalPages: 1,
+        hasMore: false,
+      },
+      selectedRun: null,
+      funnel: buildCandidateFunnelFromItems([]),
+      availableFilters: buildCandidateAvailableFilters([]),
+      generatedAt: new Date().toISOString(),
+    };
   }
 
-  sql += ' ORDER BY created_at DESC, id DESC LIMIT 100';
+  sql += ' ORDER BY created_at DESC, id DESC LIMIT 1';
 
   const rows = await query(sql, params);
-  let candidates = [];
+  let allCandidates = [];
+  let selectedRun = null;
 
   for (const row of rows.rows) {
     const output = parseJsonField(row.output_data);
-    const mapped = [
+    allCandidates = [
       ...(output.candidates || []).map((c) => mapRawCandidateToDto(c, { runId: row.id })),
       ...(output.rejectedCandidates || []).map((c) => mapRawCandidateToDto(c, { runId: row.id })),
+      ...(output.qualifiedOpportunities || []).map((c) =>
+        mapRawCandidateToDto({ ...c, lifecycle: 'qualified' }, { runId: row.id }),
+      ),
     ];
-    candidates.push(...mapped);
+    selectedRun = mapRecentRunSummary(row, agent.id);
+    if (!selectedRun.funnel || Object.keys(selectedRun.funnel).length === 0) {
+      selectedRun.funnel = buildCandidateFunnelFromItems(allCandidates);
+    }
   }
 
+  const availableFilters = buildCandidateAvailableFilters(allCandidates);
+  const funnel = buildCandidateFunnelFromItems(allCandidates);
+
+  let candidates = [...allCandidates];
+
   if (symbol) {
-    const sym = String(symbol).toUpperCase();
+    const sym = String(symbol).toUpperCase().slice(0, 32);
     candidates = candidates.filter((c) => c.symbol === sym);
   }
   if (lifecycle) {
@@ -404,8 +442,11 @@ export async function getArbitrageCandidates(agentId, filters = {}) {
   if (rejectionReason) {
     candidates = candidates.filter((c) => c.rejectionReasons?.includes(rejectionReason));
   }
+  if (freshness) {
+    candidates = candidates.filter((c) => c.freshnessState === freshness);
+  }
   if (search) {
-    const q = String(search).toUpperCase();
+    const q = String(search).toUpperCase().slice(0, 64);
     candidates = candidates.filter(
       (c) => c.symbol?.includes(q) || c.baseAsset?.includes(q) || c.quoteAsset?.includes(q),
     );
@@ -417,6 +458,7 @@ export async function getArbitrageCandidates(agentId, filters = {}) {
 
   return {
     items,
+    allItems: allCandidates,
     pagination: {
       page: pagination.page,
       pageSize: pagination.pageSize,
@@ -424,6 +466,15 @@ export async function getArbitrageCandidates(agentId, filters = {}) {
       totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
       hasMore: pagination.offset + items.length < total,
     },
+    selectedRun: selectedRun
+      ? {
+          ...selectedRun,
+          runId: selectedRun.runId || effectiveRunId,
+        }
+      : null,
+    funnel,
+    availableFilters,
+    generatedAt: new Date().toISOString(),
   };
 }
 

@@ -8106,11 +8106,72 @@ export interface ArbitrageCoreOverview {
     interpretation?: string | ArbitrageCoreInterpretation | null;
 }
 
+export interface ArbitrageCoreCandidate {
+    candidateId: string;
+    runId: string | null;
+    lifecycleState: string;
+    symbol: string;
+    baseAsset: string;
+    quoteAsset: string;
+    bid: number | null;
+    ask: number | null;
+    sourceTimestamp: string | null;
+    observedAt: string | null;
+    ageMs: number | null;
+    grossSpreadBps: number | null;
+    assumedFeesBps: number | null;
+    estimatedSlippageBps: number | null;
+    netSpreadBps: number | null;
+    estimatedNotional: number | null;
+    estimatedProfit: number | null;
+    estimatedProfitUnavailableReason?: string | null;
+    liquidityState: string;
+    freshnessState: string;
+    riskScore: number | null;
+    riskScoreUnavailableReason?: string | null;
+    rejectionReasons: string[];
+    mode: string;
+    source: string;
+}
+
+export interface ArbitrageCoreCandidatesFunnel {
+    observed: number;
+    analyticalCandidates: number;
+    rejected: number;
+    qualified: number;
+    expired: number;
+    blocked: number;
+}
+
 export interface ArbitrageCoreCandidatesResponse {
     runId: string | null;
+    items: ArbitrageCoreCandidate[];
+    total: number;
+    page: number;
+    pageSize: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+    selectedRun: ArbitrageCoreRunSummary | null;
+    funnel: ArbitrageCoreCandidatesFunnel;
+    availableFilters: {
+        lifecycles: string[];
+        symbols: string[];
+        rejectionReasons: string[];
+        freshnessStates: string[];
+    };
+    generatedAt: string | null;
     spreadCandidates: import('../types.ts').ArbitrageSpreadCandidate[];
     rejectedCandidates: import('../types.ts').ArbitrageSpreadCandidate[];
     qualifiedCandidates: import('../types.ts').ArbitrageSpreadCandidate[];
+    pagination?: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+        hasMore: boolean;
+        hasNext?: boolean;
+        hasPrevious?: boolean;
+    };
 }
 
 export interface ArbitrageCoreRunsResponse {
@@ -8205,9 +8266,29 @@ export const fetchArbitrageSettings = async (agentId: string): Promise<Arbitrage
 
 export const fetchArbitrageCandidates = async (
     agentId: string,
-    opts: { runId?: string } = {},
+    opts: {
+        runId?: string;
+        symbol?: string;
+        lifecycle?: string;
+        rejectionReason?: string;
+        freshness?: string;
+        search?: string;
+        sort?: string;
+        page?: number;
+        pageSize?: number;
+    } = {},
 ): Promise<ArbitrageCoreCandidatesResponse> => {
-    const query = opts.runId ? `?runId=${encodeURIComponent(opts.runId)}` : '';
+    const params = new URLSearchParams();
+    if (opts.runId) params.set('runId', opts.runId);
+    if (opts.symbol) params.set('symbol', opts.symbol);
+    if (opts.lifecycle) params.set('lifecycle', opts.lifecycle);
+    if (opts.rejectionReason) params.set('rejectionReason', opts.rejectionReason);
+    if (opts.freshness) params.set('freshness', opts.freshness);
+    if (opts.search) params.set('search', opts.search);
+    if (opts.sort) params.set('sort', opts.sort);
+    if (opts.page != null) params.set('page', String(opts.page));
+    if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    const query = params.toString() ? `?${params.toString()}` : '';
     const raw = await arbitrageCoreRequest<unknown>(agentId, `candidates${query}`);
     return parseArbitrageCandidatesEnvelope(raw, opts.runId ?? null);
 };

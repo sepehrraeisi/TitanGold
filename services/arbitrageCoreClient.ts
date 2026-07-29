@@ -4,6 +4,8 @@
  */
 
 import type {
+    ArbitrageCoreCandidate,
+    ArbitrageCoreCandidatesFunnel,
     ArbitrageCoreCandidatesResponse,
     ArbitrageCoreIntegrations,
     ArbitrageCoreOverview,
@@ -48,6 +50,42 @@ function safePagination(raw: unknown, page: number, pageSize: number) {
     };
 }
 
+function mapCandidateRecord(raw: Record<string, unknown>): ArbitrageCoreCandidate {
+    const rejectionReasons = asStringArray(raw.rejectionReasons);
+    return {
+        candidateId: String(raw.candidateId ?? raw.id ?? raw.symbol ?? 'unknown'),
+        runId: raw.runId ? String(raw.runId) : null,
+        lifecycleState: String(raw.lifecycleState ?? raw.lifecycle ?? 'candidate'),
+        symbol: String(raw.symbol ?? ''),
+        baseAsset: String(raw.baseAsset ?? ''),
+        quoteAsset: String(raw.quoteAsset ?? ''),
+        bid: raw.bid != null ? asNumber(raw.bid) : null,
+        ask: raw.ask != null ? asNumber(raw.ask) : null,
+        sourceTimestamp: raw.sourceTimestamp ? String(raw.sourceTimestamp) : null,
+        observedAt: raw.observedAt ? String(raw.observedAt) : null,
+        ageMs: raw.ageMs != null ? asNumber(raw.ageMs) : null,
+        grossSpreadBps: raw.grossSpreadBps != null ? asNumber(raw.grossSpreadBps) : null,
+        assumedFeesBps: raw.assumedFeesBps != null ? asNumber(raw.assumedFeesBps) : null,
+        estimatedSlippageBps:
+            raw.estimatedSlippageBps != null ? asNumber(raw.estimatedSlippageBps) : null,
+        netSpreadBps: raw.netSpreadBps != null ? asNumber(raw.netSpreadBps) : null,
+        estimatedNotional: raw.estimatedNotional != null ? asNumber(raw.estimatedNotional) : null,
+        estimatedProfit: raw.estimatedProfit != null ? asNumber(raw.estimatedProfit) : null,
+        estimatedProfitUnavailableReason: raw.estimatedProfitUnavailableReason
+            ? String(raw.estimatedProfitUnavailableReason)
+            : null,
+        liquidityState: String(raw.liquidityState ?? 'unknown'),
+        freshnessState: String(raw.freshnessState ?? 'unknown'),
+        riskScore: raw.riskScore != null ? asNumber(raw.riskScore) : null,
+        riskScoreUnavailableReason: raw.riskScoreUnavailableReason
+            ? String(raw.riskScoreUnavailableReason)
+            : null,
+        rejectionReasons,
+        mode: String(raw.mode ?? 'single_venue_spread_monitoring'),
+        source: String(raw.source ?? 'mexc_public'),
+    };
+}
+
 function mapCandidateDto(raw: Record<string, unknown>): ArbitrageSpreadCandidate {
     const rejectionReasons = asStringArray(raw.rejectionReasons);
     const grossBps = raw.grossSpreadBps;
@@ -67,12 +105,60 @@ function mapCandidateDto(raw: Record<string, unknown>): ArbitrageSpreadCandidate
         rejectionReason: rejectionReasons[0] ?? (raw.rejectionReason ? String(raw.rejectionReason) : null),
         rejectionReasons,
         lifecycle: raw.lifecycleState ? String(raw.lifecycleState) : undefined,
-        timestamp: raw.observedAt ? String(raw.observedAt) : raw.sourceTimestamp ? String(raw.sourceTimestamp) : null,
+        timestamp: raw.observedAt ? String(raw.observedAt) : raw.sourceTimestamp ? String(raw.sourceTimestamp) : '',
         classification:
             raw.lifecycleState === 'rejected'
                 ? 'rejected_candidate'
                 : 'spread_candidate',
+        strategy: 'mexc_spot_spread_monitor',
     };
+}
+
+function parseFunnel(raw: unknown): ArbitrageCoreCandidatesFunnel {
+    const f = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    return {
+        observed: asNumber(f.observed, 0),
+        analyticalCandidates: asNumber(f.analyticalCandidates, 0),
+        rejected: asNumber(f.rejected, 0),
+        qualified: asNumber(f.qualified, 0),
+        expired: asNumber(f.expired, 0),
+        blocked: asNumber(f.blocked, 0),
+    };
+}
+
+function parseAvailableFilters(raw: unknown) {
+    const f = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    return {
+        lifecycles: asStringArray(f.lifecycles),
+        symbols: asStringArray(f.symbols),
+        rejectionReasons: asStringArray(f.rejectionReasons),
+        freshnessStates: asStringArray(f.freshnessStates),
+    };
+}
+
+function groupCandidatesFromRecords(
+    items: ArbitrageCoreCandidate[],
+    runId: string | null = null,
+): Pick<
+    ArbitrageCoreCandidatesResponse,
+    'spreadCandidates' | 'rejectedCandidates' | 'qualifiedCandidates'
+> {
+    const spreadCandidates: ArbitrageSpreadCandidate[] = [];
+    const rejectedCandidates: ArbitrageSpreadCandidate[] = [];
+    const qualifiedCandidates: ArbitrageSpreadCandidate[] = [];
+
+    for (const item of items) {
+        const mapped = mapCandidateDto(item as unknown as Record<string, unknown>);
+        const lifecycle = item.lifecycleState;
+        if (lifecycle === 'qualified') qualifiedCandidates.push(mapped);
+        else if (lifecycle === 'rejected' || lifecycle === 'blocked' || lifecycle === 'expired') {
+            rejectedCandidates.push(mapped);
+        } else {
+            spreadCandidates.push(mapped);
+        }
+    }
+
+    return { spreadCandidates, rejectedCandidates, qualifiedCandidates };
 }
 
 function groupCandidates(
@@ -341,29 +427,53 @@ export function parseArbitrageCandidatesEnvelope(
     }
     const body = raw as Record<string, unknown>;
 
-    if (body.spreadCandidates || body.rejectedCandidates || body.qualifiedCandidates) {
-        return {
-            runId: body.runId ? String(body.runId) : runId ?? null,
-            spreadCandidates: Array.isArray(body.spreadCandidates)
-                ? body.spreadCandidates.map(c => mapCandidateDto(c as Record<string, unknown>))
-                : [],
-            rejectedCandidates: Array.isArray(body.rejectedCandidates)
-                ? body.rejectedCandidates.map(c => mapCandidateDto(c as Record<string, unknown>))
-                : [],
-            qualifiedCandidates: Array.isArray(body.qualifiedCandidates)
-                ? body.qualifiedCandidates.map(c => mapCandidateDto(c as Record<string, unknown>))
-                : [],
-        };
-    }
+    const itemsRaw = body.items ?? body.candidates ?? [];
+    const items = Array.isArray(itemsRaw)
+        ? itemsRaw.map(c => mapCandidateRecord(c as Record<string, unknown>))
+        : [];
 
-    const flat = body.candidates ?? body.items ?? [];
-    if (!Array.isArray(flat)) {
-        throw new ArbitrageContractError('Candidates items must be an array');
-    }
-    return groupCandidates(
-        flat.map(c => mapCandidateDto(c as Record<string, unknown>)),
-        body.runId ? String(body.runId) : runId ?? null,
+    const grouped =
+        body.spreadCandidates || body.rejectedCandidates || body.qualifiedCandidates
+            ? {
+                  spreadCandidates: Array.isArray(body.spreadCandidates)
+                      ? body.spreadCandidates.map(c => mapCandidateDto(c as Record<string, unknown>))
+                      : [],
+                  rejectedCandidates: Array.isArray(body.rejectedCandidates)
+                      ? body.rejectedCandidates.map(c => mapCandidateDto(c as Record<string, unknown>))
+                      : [],
+                  qualifiedCandidates: Array.isArray(body.qualifiedCandidates)
+                      ? body.qualifiedCandidates.map(c => mapCandidateDto(c as Record<string, unknown>))
+                      : [],
+              }
+            : groupCandidatesFromRecords(items, body.runId ? String(body.runId) : runId ?? null);
+
+    const pagination = safePagination(
+        body.pagination ?? {
+            page: body.page,
+            pageSize: body.pageSize,
+            total: body.total,
+        },
+        asNumber(body.page, 1),
+        asNumber(body.pageSize, 20),
     );
+
+    return {
+        runId: body.runId ? String(body.runId) : runId ?? null,
+        items,
+        total: asNumber(body.total, pagination.total),
+        page: asNumber(body.page, pagination.page),
+        pageSize: asNumber(body.pageSize, pagination.pageSize),
+        hasNext: Boolean(body.hasNext ?? pagination.hasNext),
+        hasPrevious: Boolean(body.hasPrevious ?? pagination.hasPrevious),
+        selectedRun: body.selectedRun
+            ? parseRunSummary(body.selectedRun as Record<string, unknown>)
+            : null,
+        funnel: parseFunnel(body.funnel),
+        availableFilters: parseAvailableFilters(body.availableFilters),
+        generatedAt: body.generatedAt ? String(body.generatedAt) : null,
+        pagination,
+        ...grouped,
+    };
 }
 
 export function parseArbitrageRunDetailEnvelope(raw: unknown): ArbitrageCoreRunDetail {
