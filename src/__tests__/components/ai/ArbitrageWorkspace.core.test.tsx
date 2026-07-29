@@ -9,6 +9,25 @@ const translations: Record<string, string> = {
   pause_monitoring: 'Pause monitoring',
   resume_monitoring: 'Resume monitoring',
   scanning: 'Scanning...',
+  arb_scan_confirm_title: 'Run analytical scan?',
+  arb_scan_confirm_subtitle: 'Read-only analytical scan using public MEXC market data.',
+  arb_scan_confirm_public_data: 'Uses public MEXC market data only.',
+  arb_scan_confirm_no_order: 'No order will be created.',
+  arb_scan_confirm_no_execution: 'No financial execution will occur.',
+  arb_scan_confirm_conflict_note: 'The scan may be rejected if another scan is already running.',
+  cancel: 'Cancel',
+  arb_scan_confirm_run: 'Run scan',
+  arb_scan_success: 'Analytical scan completed.',
+  close: 'Close',
+  agent_state_label: 'Agent state',
+  monitoring_state: 'Monitoring',
+  monitoring_active: 'Active',
+  runtime_mode: 'Runtime',
+  provider_mode_label: 'Provider mode',
+  arb_provider_public_market: 'Public market',
+  last_run: 'Last run',
+  never_run: 'Never',
+  arbitrage_execution_blocked_product: 'Execution blocked.',
   strategy_mexc_spot_spread_monitor: 'MEXC Spot Spread Monitor',
   arbitrage_agent_desc: 'Analytical MEXC spot bid/ask spread monitor.',
   arbitrage_analytical_mode_banner: 'Analytical mode banner',
@@ -182,5 +201,39 @@ describe('ArbitrageWorkspace core', () => {
 
     await waitFor(() => expect(screen.getByTestId('arb-execution-supported-false')).toBeTruthy());
     expect(screen.queryByLabelText(/Auto Execute/i)).toBeNull();
+  });
+
+  it('opens confirmation before manual scan and does not use window.alert', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    runArbitrageAnalyticalScan.mockResolvedValue({
+      scanRun: { runId: 'run-manual-1', trigger: 'manual', status: 'completed' },
+      candidates: {
+        runId: 'run-manual-1',
+        spreadCandidates: [],
+        rejectedCandidates: [],
+        qualifiedCandidates: [],
+      },
+    });
+
+    render(
+      <ArbitrageWorkspace
+        agent={agent}
+        embedded
+        onBack={() => {}}
+        onUpdate={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('arb-run-analytical-scan')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('arb-run-analytical-scan'));
+    expect(screen.getByTestId('arb-scan-confirm-run')).toBeTruthy();
+    expect(runArbitrageAnalyticalScan).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('arb-scan-confirm-run'));
+
+    await waitFor(() => expect(runArbitrageAnalyticalScan).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('arb-scan-feedback')).toBeTruthy());
+    expect(alertSpy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
   });
 });

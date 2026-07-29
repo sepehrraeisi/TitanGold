@@ -26,6 +26,10 @@ import {
 } from '../services/arbitrageRunService.js';
 import { buildSettingsDto } from '../services/arbitrageDomain.js';
 import { normalizeArbitrageConfig } from '../services/normalizeArbitrageConfig.js';
+import {
+  readIdempotentScanResponse,
+  storeIdempotentScanResponse,
+} from '../services/arbitrageScanIdempotency.js';
 
 const router = express.Router({ mergeParams: true });
 
@@ -300,7 +304,7 @@ router.post(
       if (!confirmed) {
         return sendError(
           res,
-          REASON.CONFIRMATION_REQUIRED,
+          'CONFIRMATION_REQUIRED',
           'Manual analytical scan requires explicit confirmation',
           409,
           {
@@ -309,6 +313,19 @@ router.post(
             executionSupported: false,
           },
         );
+      }
+
+      const idempotencyKey =
+        req.headers['idempotency-key']
+        || req.headers['x-idempotency-key']
+        || req.body?.idempotencyKey
+        || null;
+
+      if (idempotencyKey) {
+        const cached = await readIdempotentScanResponse(agent.id, String(idempotencyKey));
+        if (cached) {
+          return res.status(200).json({ ...cached, idempotentReplay: true });
+        }
       }
 
       const executionPolicy = await evaluateExecutionPolicy({
@@ -342,15 +359,19 @@ router.post(
       });
 
       if (scanResult.skipped) {
-        return res.json({
+        const skippedBody = {
           ok: true,
           skipped: true,
           reason: scanResult.reason,
           policy: sanitizePolicy(executionPolicy),
-        });
+        };
+        if (idempotencyKey) {
+          await storeIdempotentScanResponse(agent.id, String(idempotencyKey), skippedBody);
+        }
+        return res.json(skippedBody);
       }
 
-      return res.json({
+      const responseBody = {
         ok: true,
         agent_id: agent.id,
         agent_key: 'arbitrage',
@@ -363,10 +384,26 @@ router.post(
         },
         scanRun: scanResult.scanRun,
         candidates: scanResult.candidates,
-      });
+      };
+
+      if (idempotencyKey) {
+        await storeIdempotentScanResponse(agent.id, String(idempotencyKey), responseBody);
+      }
+
+      return res.json(responseBody);
     } catch (error) {
-      if (error.code === 'SCAN_IN_PROGRESS' || error.status === 409) {
-        return sendError(res, 'SCAN_IN_PROGRESS', error.message, 409);
+      if (
+        error.code === 'ARBITRAGE_SCAN_IN_PROGRESS'
+        || error.code === 'SCAN_IN_PROGRESS'
+        || (error.status === 409 && error.code !== 'CONFIRMATION_REQUIRED')
+      ) {
+        return sendError(
+          res,
+          'ARBITRAGE_SCAN_IN_PROGRESS',
+          'An analytical scan is already running. Try again after it finishes.',
+          409,
+          { retryAfterMs: 5000 },
+        );
       }
       logger.error('Arbitrage manual scan error:', error);
       return sendError(res, 'SERVER_ERROR', error.message || 'Failed to run analytical scan', 500);

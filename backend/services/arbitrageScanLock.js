@@ -70,8 +70,8 @@ export async function releaseScanLock(agentId) {
 export async function withScanLock(agentId, owner, trigger, fn) {
   const lock = await acquireScanLock({ agentId, owner, trigger });
   if (!lock.acquired) {
-    const err = new Error('An analytical scan is already in progress');
-    err.code = 'SCAN_IN_PROGRESS';
+    const err = new Error('An analytical scan is already running. Try again after it finishes.');
+    err.code = 'ARBITRAGE_SCAN_IN_PROGRESS';
     err.status = 409;
     throw err;
   }

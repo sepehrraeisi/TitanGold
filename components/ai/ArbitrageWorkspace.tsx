@@ -29,7 +29,13 @@ import {
     AgentSectionNavigation,
 } from './product/index.ts';
 import ArbitrageOverviewSection from './arbitrage/ArbitrageOverviewSection.tsx';
+import ArbitrageScanConfirmDialog from './arbitrage/ArbitrageScanConfirmDialog.tsx';
 import { formatRejectionReason } from '../../utils/arbitrageReasonLabels.ts';
+import {
+    createScanIdempotencyKey,
+    resolveArbitrageScanFeedback,
+    type ArbitrageScanFeedback,
+} from '../../utils/arbitrageScanFeedback.ts';
 
 
 const TAB_ITEMS: Array<{ id: WorkspaceTab; labelKey: string }> = [
@@ -100,7 +106,10 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     const [tabError, setTabError] = useState<string | null>(null);
     const [settingsLoadState, setSettingsLoadState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
     const [settingsError, setSettingsError] = useState<string | null>(null);
+    const [scanConfirmOpen, setScanConfirmOpen] = useState(false);
+    const [scanFeedback, setScanFeedback] = useState<ArbitrageScanFeedback | null>(null);
     const scanPendingRef = useRef(false);
+    const scanIdempotencyKeyRef = useRef<string | null>(null);
 
     const navigateSection = useCallback(
         (section: WorkspaceTab, runId?: string) => {
@@ -208,13 +217,16 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         void loadTabData();
     }, [activeTab, isLoading, loadTabData]);
 
-    const handleRunScan = async () => {
+    const executeManualScan = async () => {
         if (scanPendingRef.current || isScanning) return;
         if (!guardExecution()) return;
         scanPendingRef.current = true;
         setIsScanning(true);
+        setScanFeedback({ kind: 'scanning', message: t('scanning') || 'Scanning...', retryable: false });
+        const idempotencyKey = scanIdempotencyKeyRef.current || createScanIdempotencyKey();
+        scanIdempotencyKeyRef.current = idempotencyKey;
         try {
-            const result = await api.runArbitrageAnalyticalScan(agent.id);
+            const result = await api.runArbitrageAnalyticalScan(agent.id, { idempotencyKey });
             if (result.scanRun?.runId) setSelectedRunId(result.scanRun.runId);
             await loadOverview();
             if (activeTab === 'candidates') {
@@ -230,13 +242,27 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             const agents = await api.fetchAIAgents();
             const updatedAgent = agents.find(a => a.id === agent.id);
             if (updatedAgent) onUpdate(updatedAgent);
+            setScanFeedback({
+                kind: 'success',
+                message: t('arb_scan_success') || 'Analytical scan completed.',
+                retryable: false,
+            });
+            scanIdempotencyKeyRef.current = null;
         } catch (error) {
             console.error('Failed to run analytical scan:', error);
-            alert(t('analysis_failed') || 'Scan failed');
+            setScanFeedback(resolveArbitrageScanFeedback(error as Error & { code?: string; status?: number }, t));
         } finally {
             scanPendingRef.current = false;
             setIsScanning(false);
+            setScanConfirmOpen(false);
         }
+    };
+
+    const handleRunScan = () => {
+        if (scanPendingRef.current || isScanning) return;
+        if (!guardExecution()) return;
+        setScanFeedback(null);
+        setScanConfirmOpen(true);
     };
 
     const handleMonitoringToggle = async () => {
@@ -255,7 +281,11 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             if (updatedAgent) onUpdate(updatedAgent);
         } catch (error) {
             console.error('Failed to update monitoring state:', error);
-            alert(t('command_failed') || 'Command failed');
+            setScanFeedback({
+                kind: 'server',
+                message: t('command_failed') || 'Command failed',
+                retryable: true,
+            });
         } finally {
             setIsMonitoringPending(false);
         }
@@ -272,10 +302,18 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             });
             setSettingsDraft(saved);
             setOverview(prev => (prev ? { ...prev, settings: saved } : prev));
-            alert(t('config_updated') || 'Configuration updated successfully');
+            setScanFeedback({
+                kind: 'success',
+                message: t('config_updated') || 'Configuration updated successfully',
+                retryable: false,
+            });
         } catch (error) {
             console.error('Failed to update arbitrage settings:', error);
-            alert(t('update_failed') || 'Update failed');
+            setScanFeedback({
+                kind: 'server',
+                message: t('update_failed') || 'Update failed',
+                retryable: true,
+            });
         } finally {
             setTabLoading(false);
         }
@@ -302,6 +340,47 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         id: tab.id,
         label: t(tab.labelKey),
     }));
+
+    const displayAgent = useMemo(
+        () => ({
+            ...agent,
+            name: product?.displayName || t('strategy_mexc_spot_spread_monitor') || agent.name,
+        }),
+        [agent, product?.displayName, t],
+    );
+
+    const scanFeedbackBanner =
+        scanFeedback && scanFeedback.kind !== 'idle' && scanFeedback.kind !== 'confirm' ? (
+            <div
+                role="status"
+                aria-live="polite"
+                data-testid="arb-scan-feedback"
+                className="px-4 pt-3"
+            >
+                {scanFeedback.kind === 'success' ? (
+                    <div className="p-2 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-100 text-[11px]">
+                        {scanFeedback.message}
+                    </div>
+                ) : (
+                    <DataHubAlert
+                        variant={scanFeedback.kind === 'conflict' ? 'warning' : 'error'}
+                        message={scanFeedback.message}
+                        onRetry={
+                            scanFeedback.retryable && !isScanning
+                                ? () => {
+                                      if (scanFeedback.kind === 'conflict') {
+                                          void executeManualScan();
+                                      } else {
+                                          setScanConfirmOpen(true);
+                                      }
+                                  }
+                                : undefined
+                        }
+                        retryLabel={t('retry') || 'Retry'}
+                    />
+                )}
+            </div>
+        ) : null;
 
     const actionBar = (
         <AgentActionBar>
@@ -466,15 +545,23 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
 
     if (embedded) {
         return (
-            <AgentProductDialog
-                agent={agent}
-                onClose={onBack}
-                closeTestId="arb-popup-close"
-                purpose={
-                    product?.description ||
-                    t('arbitrage_agent_desc') ||
-                    'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'
-                }
+            <>
+                <ArbitrageScanConfirmDialog
+                    open={scanConfirmOpen}
+                    onCancel={() => setScanConfirmOpen(false)}
+                    onConfirm={() => void executeManualScan()}
+                    pending={isScanning}
+                    t={t}
+                />
+                <AgentProductDialog
+                    agent={displayAgent}
+                    onClose={onBack}
+                    closeTestId="arb-popup-close"
+                    purpose={
+                        product?.description ||
+                        t('arbitrage_agent_desc') ||
+                        'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'
+                    }
                 latestRunAt={
                     overview?.runTiming?.latestRunAt ||
                     latestRun?.completedAt ||
@@ -489,8 +576,10 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                 actionBar={actionBar}
                 sectionNavigation={sectionNavigation}
             >
+                {scanFeedbackBanner}
                 {renderTabPanel()}
             </AgentProductDialog>
+            </>
         );
     }
 

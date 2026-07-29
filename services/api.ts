@@ -8160,8 +8160,12 @@ async function arbitrageCoreRequest<T>(
 ): Promise<T> {
     const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
     if (!token) {
-        const authError = new Error('Authentication required');
-        (authError as Error & { status?: number }).status = 401;
+        const authError = new Error('Authentication required') as Error & {
+            status?: number;
+            code?: string;
+        };
+        authError.status = 401;
+        authError.code = 'UNAUTHORIZED';
         throw authError;
     }
 
@@ -8178,8 +8182,10 @@ async function arbitrageCoreRequest<T>(
         const body = await response.json().catch(() => ({}));
         const error = new Error(
             body?.error?.message || body?.message || `Arbitrage request failed: ${response.status}`,
-        );
-        (error as Error & { status?: number }).status = response.status;
+        ) as Error & { status?: number; code?: string; details?: Record<string, unknown> };
+        error.status = response.status;
+        error.code = body?.error?.code || body?.code;
+        error.details = body?.error?.details;
         throw error;
     }
 
@@ -8246,8 +8252,28 @@ export const updateArbitrageCoreSettings = async (
 
 export const runArbitrageAnalyticalScan = async (
     agentId: string,
-): Promise<{ scanRun: ArbitrageCoreRunDetail; candidates?: ArbitrageCoreCandidatesResponse }> =>
-    arbitrageCoreRequest(agentId, 'scan', { method: 'POST', body: JSON.stringify({ trigger: 'manual' }) });
+    opts: { idempotencyKey?: string } = {},
+): Promise<{ scanRun: ArbitrageCoreRunDetail; candidates?: ArbitrageCoreCandidatesResponse }> => {
+    const idempotencyKey = opts.idempotencyKey;
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'scan', {
+        method: 'POST',
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+        body: JSON.stringify({
+            trigger: 'manual',
+            confirm: true,
+            idempotencyKey,
+        }),
+    });
+    const body = raw as Record<string, unknown>;
+    const scanRun = parseArbitrageRunDetailEnvelope(raw);
+    const candidates = Array.isArray(body.candidates)
+        ? parseArbitrageCandidatesEnvelope(
+              { candidates: body.candidates, runId: scanRun.runId },
+              scanRun.runId,
+          )
+        : undefined;
+    return { scanRun, candidates };
+};
 
 export const updateArbitrageMonitoringState = async (
     agentId: string,

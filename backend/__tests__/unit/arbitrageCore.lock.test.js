@@ -37,7 +37,7 @@ describe('arbitrageCore scan lock', () => {
     await expect(
       withScanLock(agentId, 'user:2', 'manual', async () => 'should-not-run'),
     ).rejects.toMatchObject({
-      code: 'SCAN_IN_PROGRESS',
+      code: 'ARBITRAGE_SCAN_IN_PROGRESS',
       status: 409,
     });
 
