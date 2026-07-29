@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { useAgentExecutionGate } from '../../hooks/useAgentExecutionGate.ts';
 import type { OnNavigateHandler, ArbitrageAgentSection } from '../../types/navigation.ts';
-import type { AIAgent, ArbitrageSpreadCandidate } from '../../types.ts';
+import type { AIAgent } from '../../types.ts';
 import * as api from '../../services/api.ts';
 import type {
     ArbitrageCoreCandidatesResponse,
@@ -30,6 +30,10 @@ import {
 } from './product/index.ts';
 import ArbitrageOverviewSection from './arbitrage/ArbitrageOverviewSection.tsx';
 import ArbitrageScanConfirmDialog from './arbitrage/ArbitrageScanConfirmDialog.tsx';
+import ArbitrageCandidatesSection, {
+    DEFAULT_CANDIDATE_FILTERS,
+    type CandidateFilters,
+} from './arbitrage/ArbitrageCandidatesSection.tsx';
 import { formatRejectionReason } from '../../utils/arbitrageReasonLabels.ts';
 import {
     createScanIdempotencyKey,
@@ -38,7 +42,7 @@ import {
 } from '../../utils/arbitrageScanFeedback.ts';
 
 
-const TAB_ITEMS: Array<{ id: WorkspaceTab; labelKey: string }> = [
+const TAB_ITEMS: Array<{ id: ArbitrageAgentSection; labelKey: string }> = [
     { id: 'overview', labelKey: 'tab_overview' },
     { id: 'candidates', labelKey: 'tab_arbitrage_candidates' },
     { id: 'history', labelKey: 'tab_scan_history' },
@@ -88,8 +92,9 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
 }) => {
     const { t } = useLanguage();
     const { guardExecution } = useAgentExecutionGate();
-    const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialSection);
+    const [activeTab, setActiveTab] = useState<ArbitrageAgentSection>(initialSection);
     const [selectedRunId, setSelectedRunId] = useState<string | undefined>(initialRunId);
+    const [candidateFilters, setCandidateFilters] = useState<CandidateFilters>(DEFAULT_CANDIDATE_FILTERS);
     const [overview, setOverview] = useState<ArbitrageCoreOverview | null>(null);
     const [candidates, setCandidates] = useState<ArbitrageCoreCandidatesResponse | null>(null);
     const [runs, setRuns] = useState<ArbitrageCoreRunSummary[]>([]);
@@ -112,7 +117,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     const scanIdempotencyKeyRef = useRef<string | null>(null);
 
     const navigateSection = useCallback(
-        (section: WorkspaceTab, runId?: string) => {
+        (section: ArbitrageAgentSection, runId?: string) => {
             setActiveTab(section);
             if (runId) setSelectedRunId(runId);
             if (onNavigate) {
@@ -183,6 +188,14 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             if (activeTab === 'candidates') {
                 const data = await api.fetchArbitrageCandidates(agent.id, {
                     runId: selectedRunId || overview?.latestRun?.runId,
+                    symbol: candidateFilters.symbol || undefined,
+                    lifecycle: candidateFilters.lifecycle || undefined,
+                    rejectionReason: candidateFilters.rejectionReason || undefined,
+                    freshness: candidateFilters.freshness || undefined,
+                    search: candidateFilters.search || undefined,
+                    sort: candidateFilters.sort,
+                    page: candidateFilters.page,
+                    pageSize: candidateFilters.pageSize,
                 });
                 setCandidates(data);
             } else if (activeTab === 'history') {
@@ -210,7 +223,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         } finally {
             setTabLoading(false);
         }
-    }, [activeTab, agent.id, overview?.latestRun?.runId, runsPage, selectedRunId, loadSettings, t]);
+    }, [activeTab, agent.id, overview?.latestRun?.runId, runsPage, selectedRunId, loadSettings, t, candidateFilters]);
 
     useEffect(() => {
         if (isLoading) return;
@@ -230,14 +243,12 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             if (result.scanRun?.runId) setSelectedRunId(result.scanRun.runId);
             await loadOverview();
             if (activeTab === 'candidates') {
-                setCandidates(
-                    result.candidates || {
-                        runId: result.scanRun?.runId || null,
-                        spreadCandidates: [],
-                        rejectedCandidates: [],
-                        qualifiedCandidates: [],
-                    },
-                );
+                const refreshed = await api.fetchArbitrageCandidates(agent.id, {
+                    runId: result.scanRun?.runId,
+                    ...candidateFilters,
+                    page: 1,
+                });
+                setCandidates(refreshed);
             }
             const agents = await api.fetchAIAgents();
             const updatedAgent = agents.find(a => a.id === agent.id);
@@ -332,10 +343,6 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     const product = overview?.product;
     const latestRun = overview?.latestRun;
     const funnel = latestRun?.funnel || {};
-
-    const spreadCandidates = candidates?.spreadCandidates ?? [];
-    const rejectedCandidates = candidates?.rejectedCandidates ?? [];
-    const qualifiedCandidates = candidates?.qualifiedCandidates ?? [];
 
     const settingsDirty = useMemo(() => {
         if (!settingsDraft || !overview?.settings) return false;
@@ -441,7 +448,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         <AgentSectionNavigation
             tabs={sectionTabs}
             activeTab={activeTab}
-            onTabChange={tabId => navigateSection(tabId as WorkspaceTab, selectedRunId)}
+            onTabChange={tabId => navigateSection(tabId as ArbitrageAgentSection, selectedRunId)}
             ariaLabel={t('arbitrage_tabs') || 'Arbitrage tabs'}
             testId="arb-tablist"
             idPrefix="arb"
@@ -491,13 +498,20 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                     <p className="text-sm text-muted-foreground">{t('loading') || 'Loading...'}</p>
                 </AgentContentSurface>
             ) : activeTab === 'candidates' ? (
-                <AgentContentSurface>
-                    <AgentSectionHeader title={t('tab_arbitrage_candidates') || 'Candidates'} />
-                    <CandidatesSection
-                        spreadCandidates={spreadCandidates}
-                        rejectedCandidates={rejectedCandidates}
-                        qualifiedCandidates={qualifiedCandidates}
-                        failed={Boolean(tabError)}
+                <AgentContentSurface testId="arb-candidates-surface">
+                    <ArbitrageCandidatesSection
+                        data={candidates}
+                        recentRuns={overview?.recentRuns ?? []}
+                        selectedRunId={selectedRunId || overview?.latestRun?.runId}
+                        loading={tabLoading && !candidates}
+                        error={tabError}
+                        filters={candidateFilters}
+                        onFiltersChange={patch => setCandidateFilters(prev => ({ ...prev, ...patch }))}
+                        onRunChange={runId => {
+                            setSelectedRunId(runId);
+                            navigateSection('candidates', runId);
+                        }}
+                        onRefresh={() => void loadTabData()}
                         t={t}
                     />
                 </AgentContentSurface>
@@ -632,45 +646,6 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             {sectionNavigation}
             {renderTabPanel()}
         </div>
-    );
-};
-
-const CandidatesSection: React.FC<{
-    spreadCandidates: ArbitrageSpreadCandidate[];
-    rejectedCandidates: ArbitrageSpreadCandidate[];
-    qualifiedCandidates: ArbitrageSpreadCandidate[];
-    failed?: boolean;
-    t: (key: string) => string;
-}> = ({ spreadCandidates, rejectedCandidates, qualifiedCandidates, failed, t }) => {
-    if (failed) {
-        return (
-            <EmptyBlock message={t('arbitrage_overview_data_unavailable') || 'Candidate data unavailable.'} />
-        );
-    }
-    return (
-    <div className="space-y-6">
-        <SectionBlock title={t('qualified_opportunities') || 'Qualified opportunities'}>
-            {qualifiedCandidates.length ? (
-                qualifiedCandidates.map(c => <CandidateCard key={c.id} candidate={c} t={t} />)
-            ) : (
-                <EmptyBlock message={t('arbitrage_qualified_empty') || 'No qualified opportunities.'} />
-            )}
-        </SectionBlock>
-        <SectionBlock title={t('spread_candidates') || 'Spread candidates'}>
-            {spreadCandidates.length ? (
-                spreadCandidates.map(c => <CandidateCard key={c.id} candidate={c} t={t} />)
-            ) : (
-                <EmptyBlock message={t('arbitrage_no_spread_candidates') || 'No spread candidates.'} />
-            )}
-        </SectionBlock>
-        <SectionBlock title={t('rejected_candidates') || 'Rejected candidates'}>
-            {rejectedCandidates.length ? (
-                rejectedCandidates.map(c => <CandidateCard key={c.id} candidate={c} t={t} showRejection />)
-            ) : (
-                <EmptyBlock message={t('arbitrage_no_rejected') || 'No rejected candidates.'} />
-            )}
-        </SectionBlock>
-    </div>
     );
 };
 
@@ -998,32 +973,6 @@ const IntegrationSection: React.FC<{
     </SectionBlock>
     );
 };
-
-const CandidateCard: React.FC<{
-    candidate: ArbitrageSpreadCandidate;
-    t: (key: string) => string;
-    showRejection?: boolean;
-}> = ({ candidate, t, showRejection }) => (
-    <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4 mb-3">
-        <p className="text-white font-semibold">
-            {(candidate.path || []).join(' → ') || candidate.symbol || NA(t)}
-        </p>
-        <div className="flex flex-wrap gap-4 text-sm mt-2">
-            <span>
-                {t('arbitrage_expected_profit') || 'Expected profit'}: {formatBps(candidate.expectedProfitBps, t)}
-            </span>
-            <span>
-                {t('risk_score') || 'Risk score'}: {formatRiskScore(candidate.riskScore, t)}
-            </span>
-        </div>
-        {showRejection && candidate.rejectionReason ? (
-            <p className="text-xs text-rose-300 mt-2">
-                {t('rejection_reason') || 'Rejection'}:{' '}
-                {formatRejectionReason(candidate.rejectionReason, t)}
-            </p>
-        ) : null}
-    </div>
-);
 
 const SectionBlock: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
     <section className="bg-[#10141A] border border-gray-800 rounded-2xl p-5">
