@@ -526,6 +526,61 @@ export function parseArbitrageRunDetailEnvelope(raw: unknown): ArbitrageCoreRunD
     return parseRunSummary(scanRun);
 }
 
+export function parseArbitrageProfitRiskEnvelope(raw: unknown) {
+    if (!raw || typeof raw !== 'object') {
+        throw new ArbitrageContractError('Profit-risk response is not an object');
+    }
+    const body = raw as Record<string, unknown>;
+    const analytics = (body.analytics ?? body) as Record<string, unknown>;
+    return {
+        analytics: {
+            runId: analytics.runId ? String(analytics.runId) : null,
+            generatedAt: analytics.generatedAt ? String(analytics.generatedAt) : null,
+            grossSpreadBps: analytics.grossSpreadBps != null ? asNumber(analytics.grossSpreadBps) : null,
+            assumedFeesBps: analytics.assumedFeesBps != null ? asNumber(analytics.assumedFeesBps) : null,
+            assumedSlippageBps: analytics.assumedSlippageBps != null ? asNumber(analytics.assumedSlippageBps) : null,
+            estimatedNetSpreadBps: analytics.estimatedNetSpreadBps != null ? asNumber(analytics.estimatedNetSpreadBps) : null,
+            estimatedProfitValue: analytics.estimatedProfitValue != null ? asNumber(analytics.estimatedProfitValue) : null,
+            estimatedProfitCurrency: analytics.estimatedProfitCurrency ? String(analytics.estimatedProfitCurrency) : null,
+            estimateState: analytics.estimateState ? String(analytics.estimateState) : undefined,
+            estimateReason: analytics.estimateReason ? String(analytics.estimateReason) : null,
+            qualifiedCandidateCount: asNumber(analytics.qualifiedCandidateCount, 0),
+            analyticalCandidateCount: asNumber(analytics.analyticalCandidateCount, 0),
+            rejectedCandidateCount: asNumber(analytics.rejectedCandidateCount, 0),
+            freshnessState: analytics.freshnessState ? String(analytics.freshnessState) : undefined,
+            freshnessMs: analytics.freshnessMs != null ? asNumber(analytics.freshnessMs) : null,
+            liquidityState: analytics.liquidityState ? String(analytics.liquidityState) : undefined,
+            riskScore: analytics.riskScore != null ? asNumber(analytics.riskScore) : null,
+            riskScoreState: analytics.riskScoreState ? String(analytics.riskScoreState) : undefined,
+            riskScoreReason: analytics.riskScoreReason ? String(analytics.riskScoreReason) : null,
+            riskFactors: Array.isArray(analytics.riskFactors) ? analytics.riskFactors : [],
+            rejectionDistribution:
+                analytics.rejectionDistribution && typeof analytics.rejectionDistribution === 'object'
+                    ? (analytics.rejectionDistribution as Record<string, number>)
+                    : {},
+            primaryRejectionReasons: Array.isArray(analytics.primaryRejectionReasons)
+                ? analytics.primaryRejectionReasons.map(String)
+                : [],
+            bestObservedCandidate: analytics.bestObservedCandidate ?? null,
+            worstObservedCandidate: analytics.worstObservedCandidate ?? null,
+            historicalTrend: Array.isArray(analytics.historicalTrend) ? analytics.historicalTrend : [],
+            assumptions: analytics.assumptions ?? {},
+            executionSupported: analytics.executionSupported === true,
+            realizedProfitSupported: analytics.realizedProfitSupported === true,
+            capturedProfitSupported: analytics.capturedProfitSupported === true,
+            runtimeMode: analytics.runtimeMode ? String(analytics.runtimeMode) : 'demo',
+            sideEffectsSuppressed: analytics.sideEffectsSuppressed !== false,
+            dataContractVersion: analytics.dataContractVersion ? String(analytics.dataContractVersion) : undefined,
+            malformed: analytics.malformed === true,
+        },
+        selectedRun: body.selectedRun ? parseRunSummary(body.selectedRun as Record<string, unknown>) : null,
+        availableRuns: Array.isArray(body.availableRuns)
+            ? body.availableRuns.map(r => parseRunSummary(r as Record<string, unknown>))
+            : [],
+        generatedAt: body.generatedAt ? String(body.generatedAt) : null,
+    };
+}
+
 export function parseArbitrageSettingsEnvelope(raw: unknown): ArbitrageCoreSettings {
     if (!raw || typeof raw !== 'object') {
         throw new ArbitrageContractError('Settings response is not an object');

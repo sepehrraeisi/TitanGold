@@ -9,6 +9,7 @@ import type {
     ArbitrageCoreCandidatesResponse,
     ArbitrageCoreIntegrations,
     ArbitrageCoreOverview,
+    ArbitrageCoreProfitRiskResponse,
     ArbitrageCoreRunDetail,
     ArbitrageCoreRunSummary,
     ArbitrageCoreHistoricalSummary,
@@ -44,7 +45,7 @@ import ArbitrageScanHistorySection, {
 import ArbitrageScanRunDetailPanel, {
     type ScanRunComparison,
 } from './arbitrage/ArbitrageScanRunDetailPanel.tsx';
-import { formatRejectionReason } from '../../utils/arbitrageReasonLabels.ts';
+import ArbitrageProfitRiskSection from './arbitrage/ArbitrageProfitRiskSection.tsx';
 import {
     createScanIdempotencyKey,
     resolveArbitrageScanFeedback,
@@ -117,6 +118,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     >(undefined);
     const [historyRunDetail, setHistoryRunDetail] = useState<ArbitrageCoreRunDetail | null>(null);
     const [historyComparison, setHistoryComparison] = useState<ScanRunComparison | null>(null);
+    const [profitRiskData, setProfitRiskData] = useState<ArbitrageCoreProfitRiskResponse | null>(null);
     const [integrations, setIntegrations] = useState<ArbitrageCoreIntegrations | null>(null);
     const [settingsDraft, setSettingsDraft] = useState<ArbitrageCoreSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -237,6 +239,11 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                 setHistorySummary(data.summary ?? null);
                 setHistoryGeneratedAt(data.generatedAt ?? null);
                 setHistoryAvailableFilters(data.availableFilters);
+            } else if (activeTab === 'profitRisk') {
+                const data = await api.fetchArbitrageProfitRisk(agent.id, {
+                    runId: selectedRunId || overview?.latestRun?.runId,
+                });
+                setProfitRiskData(data);
             } else if (activeTab === 'integration') {
                 const data = await api.fetchArbitrageIntegrations(agent.id);
                 setIntegrations(data);
@@ -597,9 +604,21 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                     />
                 </AgentContentSurface>
             ) : activeTab === 'profitRisk' ? (
-                <AgentContentSurface>
-                    <AgentSectionHeader title={t('tab_profit_risk') || 'Profit & Risk'} />
-                    <ProfitRiskSection overview={overview} latestRun={latestRun} t={t} />
+                <AgentContentSurface testId="arb-profit-risk-surface">
+                    <ArbitrageProfitRiskSection
+                        data={profitRiskData}
+                        loading={tabLoading && !profitRiskData}
+                        error={tabError}
+                        selectedRunId={selectedRunId || overview?.latestRun?.runId}
+                        onRunChange={runId => {
+                            setSelectedRunId(runId);
+                            navigateSection('profitRisk', runId);
+                        }}
+                        onRefresh={() => void loadTabData()}
+                        onViewCandidates={viewCandidatesForRun}
+                        onOpenSettings={() => navigateSection('settings')}
+                        t={t}
+                    />
                 </AgentContentSurface>
             ) : activeTab === 'settings' ? (
                 <AgentContentSurface>
@@ -730,71 +749,6 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             {sectionNavigation}
             {renderTabPanel()}
         </div>
-    );
-};
-
-const ProfitRiskSection: React.FC<{
-    overview: ArbitrageCoreOverview | null;
-    latestRun: ArbitrageCoreRunSummary | null | undefined;
-    t: (key: string) => string;
-}> = ({ overview, latestRun, t }) => {
-    const funnel = latestRun?.funnel ?? {};
-    const rejectionEntries = Object.entries(latestRun?.rejectionSummary ?? {});
-    const settings = overview?.settings;
-
-    return (
-    <div className="space-y-4" data-testid="arb-profit-risk">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            <MetricBlock
-                label={t('total_scans') || 'Total scans'}
-                value={overview?.totalScanRuns ?? 0}
-            />
-            <MetricBlock
-                label={t('qualified_opportunities') || 'Qualified opportunities'}
-                value={funnel.qualified ?? 0}
-            />
-            <MetricBlock
-                label={t('rejected_candidates') || 'Rejected candidates'}
-                value={funnel.rejected ?? 0}
-            />
-            <MetricBlock
-                label={t('assumed_fees_bps') || 'Assumed fees (bps)'}
-                value={settings?.assumedFeesBps != null ? settings.assumedFeesBps : NA(t)}
-            />
-            <MetricBlock
-                label={t('assumed_slippage_bps') || 'Assumed slippage (bps)'}
-                value={settings?.assumedSlippageBps != null ? settings.assumedSlippageBps : NA(t)}
-            />
-            <MetricBlock
-                label={t('min_profit_bps') || 'Minimum net spread (bps)'}
-                value={settings?.minimumNetSpreadBps != null ? settings.minimumNetSpreadBps : NA(t)}
-            />
-        </div>
-        {rejectionEntries.length ? (
-            <SectionBlock title={t('rejection_summary') || 'Rejection distribution'}>
-                <div className="flex flex-wrap gap-2">
-                    {rejectionEntries.map(([reason, count]) => (
-                        <StatusPill key={reason} label={`${reason}: ${count}`} variant="warning" />
-                    ))}
-                </div>
-            </SectionBlock>
-        ) : (
-            <p className="text-sm text-gray-400">
-                {t('arbitrage_no_rejection_summary') ||
-                    'No rejection distribution available for the latest run.'}
-            </p>
-        )}
-        <p className="text-sm text-gray-400">
-            {t('arbitrage_risk_score_help') ||
-                'Risk score is a 0–100 analytical score (lower is better). It is not a percentage probability.'}
-        </p>
-        <div data-testid="arb-execution-unsupported">
-            <StatusPill
-                label={`${t('execution_support') || 'Execution'}: ${t('execution_unsupported') || 'Not supported'}`}
-                variant="warning"
-            />
-        </div>
-    </div>
     );
 };
 

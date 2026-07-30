@@ -8232,6 +8232,66 @@ export interface ArbitrageCoreRunDetail extends ArbitrageCoreRunSummary {
     malformed?: boolean;
 }
 
+export interface ArbitrageCoreProfitRiskAnalytics {
+    runId: string | null;
+    generatedAt?: string | null;
+    grossSpreadBps?: number | null;
+    assumedFeesBps?: number | null;
+    assumedSlippageBps?: number | null;
+    estimatedNetSpreadBps?: number | null;
+    estimatedProfitValue?: number | null;
+    estimatedProfitCurrency?: string | null;
+    estimateState?: string;
+    estimateReason?: string | null;
+    qualifiedCandidateCount?: number;
+    analyticalCandidateCount?: number;
+    rejectedCandidateCount?: number;
+    freshnessState?: string;
+    freshnessMs?: number | null;
+    liquidityState?: string;
+    riskScore?: number | null;
+    riskScoreState?: string;
+    riskScoreReason?: string | null;
+    riskFactors?: Array<{ code: string; count?: number; severity?: string }>;
+    rejectionDistribution?: Record<string, number>;
+    primaryRejectionReasons?: string[];
+    bestObservedCandidate?: { symbol: string; netSpreadBps?: number | null; grossSpreadBps?: number | null } | null;
+    worstObservedCandidate?: { symbol: string; netSpreadBps?: number | null; grossSpreadBps?: number | null } | null;
+    historicalTrend?: Array<{
+        runId: string;
+        completedAt?: string | null;
+        trigger?: string;
+        qualifiedCount?: number;
+        rejectedCount?: number;
+        analyticalCandidateCount?: number;
+        netSpreadBps?: number | null;
+        riskScore?: number | null;
+        freshnessMs?: number | null;
+    }>;
+    assumptions?: {
+        assumedFeesBps?: number | null;
+        assumedSlippageBps?: number | null;
+        minimumNetSpreadBps?: number | null;
+        maximumDataAgeMs?: number | null;
+        monitoredSymbols?: string[];
+        assumptionState?: string;
+    };
+    executionSupported?: boolean;
+    realizedProfitSupported?: boolean;
+    capturedProfitSupported?: boolean;
+    runtimeMode?: string;
+    sideEffectsSuppressed?: boolean;
+    dataContractVersion?: string;
+    malformed?: boolean;
+}
+
+export interface ArbitrageCoreProfitRiskResponse {
+    analytics: ArbitrageCoreProfitRiskAnalytics;
+    selectedRun?: ArbitrageCoreRunSummary | null;
+    availableRuns?: ArbitrageCoreRunSummary[];
+    generatedAt?: string | null;
+}
+
 export interface ArbitrageCoreIntegrations {
     dataSources: string[];
     executionSupported: false;
@@ -8246,6 +8306,7 @@ import {
     parseArbitrageCandidatesEnvelope,
     parseArbitrageIntegrationsEnvelope,
     parseArbitrageOverviewEnvelope,
+    parseArbitrageProfitRiskEnvelope,
     parseArbitrageRunDetailEnvelope,
     parseArbitrageRunsEnvelope,
     parseArbitrageSettingsEnvelope,
@@ -8380,6 +8441,17 @@ export const fetchArbitrageRunComparison = async (
             deltas: {},
         },
     };
+};
+
+export const fetchArbitrageProfitRisk = async (
+    agentId: string,
+    opts: { runId?: string } = {},
+): Promise<ArbitrageCoreProfitRiskResponse> => {
+    const params = new URLSearchParams();
+    if (opts.runId) params.set('runId', opts.runId);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const raw = await arbitrageCoreRequest<unknown>(agentId, `profit-risk${query}`);
+    return parseArbitrageProfitRiskEnvelope(raw);
 };
 
 export const fetchArbitrageRunDetail = async (
