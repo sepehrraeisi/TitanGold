@@ -69,7 +69,7 @@ export async function executeArbitrageAnalyticalScan({
     throw err;
   }
 
-  const settings = buildSettingsDto(normalizeArbitrageConfig(agent.config || {}));
+  const settings = buildSettingsDto(agent.config || {});
   if (settings.monitoringState === MONITORING_STATE.PAUSED && trigger === 'scheduled') {
     return { skipped: true, reason: 'monitoring_paused' };
   }
@@ -217,7 +217,7 @@ export async function getArbitrageOverview(agentId, { scheduler = {}, runtime = 
   const agent = await loadArbitrageAgent(agentId);
   if (!agent) return null;
 
-  const settings = buildSettingsDto(normalizeArbitrageConfig(agent.config || {}), {
+  const settings = buildSettingsDto(agent.config || {}, {
     updatedAt: agent.updated_at,
   });
 
@@ -710,7 +710,7 @@ export async function getArbitrageProfitRisk(agentId, { runId } = {}) {
   const agent = await loadArbitrageAgent(agentId);
   if (!agent) return null;
 
-  const settings = buildSettingsDto(normalizeArbitrageConfig(agent.config || {}), {
+  const settings = buildSettingsDto(agent.config || {}, {
     updatedAt: agent.updated_at,
   });
 
@@ -834,7 +834,13 @@ export async function updateArbitrageSettings(agentId, settingsInput, user, expe
     reasonCode: 'settings_update',
     effectiveMode: 'demo',
     sideEffectsSuppressed: true,
-    metadata: { settingsVersion: sanitized.settingsVersion },
+    metadata: {
+      settingsVersion: sanitized.settingsVersion,
+      changedFields: Object.keys(settingsInput || {}).filter(
+        (key) => !['expectedVersion', 'version', 'settings'].includes(key),
+      ),
+      symbolCount: Array.isArray(sanitized.symbols) ? sanitized.symbols.length : null,
+    },
   });
 
   return buildSettingsDto(sanitized, {

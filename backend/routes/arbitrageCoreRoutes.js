@@ -318,7 +318,7 @@ router.get(
       const agent = await requireArbitrageAgent(req, res);
       if (!agent) return;
 
-      const settings = buildSettingsDto(normalizeArbitrageConfig(agent.config || {}), {
+      const settings = buildSettingsDto(agent.config || {}, {
         version: agent.config?.settingsVersion,
         updatedAt: agent.config?.settingsUpdatedAt || agent.updated_at,
       });

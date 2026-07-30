@@ -9,6 +9,7 @@ import {
   ARBITRAGE_STRATEGY_CLASS,
   REJECTION_REASONS,
 } from './arbitrageScanContract.js';
+import { normalizeArbitrageConfig } from './normalizeArbitrageConfig.js';
 
 export const PRODUCT_ID = 'arbitrage';
 export const PRODUCT_DISPLAY_NAME = 'MEXC Spot Spread Monitor';
@@ -69,6 +70,108 @@ export const FUNNEL_STAGES = Object.freeze([
 const MAX_SYMBOLS = 50;
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_PAGE_SIZE = 20;
+
+export const SETTINGS_DEFAULTS = Object.freeze({
+  monitoredSymbols: ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT'],
+  minimumGrossSpreadBps: 20,
+  minimumNetSpreadBps: 20,
+  assumedFeesBps: 10,
+  assumedSlippageBps: 10,
+  minimumLiquidity: 100000,
+  maximumDataAgeMs: 30000,
+  scanIntervalSeconds: 300,
+  notificationPreference: true,
+});
+
+export const FIELD_SOURCES = Object.freeze({
+  CONFIGURED: 'configured',
+  DEFAULT: 'default',
+  LEGACY_NORMALIZED: 'legacy_normalized',
+  UNAVAILABLE: 'unavailable',
+  UNSUPPORTED: 'unsupported',
+  BLOCKED: 'blocked',
+  READ_ONLY: 'read_only',
+});
+
+const ALLOWED_SETTINGS_INPUT_KEYS = new Set([
+  'monitoredSymbols',
+  'symbols',
+  'minimumGrossSpreadBps',
+  'minimumNetSpreadBps',
+  'opportunityThresholdBps',
+  'assumedFeesBps',
+  'feeBps',
+  'assumedSlippageBps',
+  'slippageBps',
+  'minimumLiquidity',
+  'minVolumeUSDT',
+  'maximumDataAgeMs',
+  'scanIntervalSeconds',
+  'scanIntervalSec',
+  'notificationPreference',
+  'expectedVersion',
+  'version',
+  'settings',
+]);
+
+const FORBIDDEN_SETTINGS_INPUT_KEYS = new Set([
+  'apiKey',
+  'apiSecret',
+  'secret',
+  'password',
+  'token',
+  'credentials',
+  'privateKey',
+  'autoExecute',
+  'autoTrade',
+  'monitoringState',
+  'execution',
+]);
+
+function isFiniteNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n);
+}
+
+function hasOwnConfigured(raw, key) {
+  return raw != null && Object.prototype.hasOwnProperty.call(raw, key) && raw[key] != null;
+}
+
+function resolveSpotStrategy(raw, normalized) {
+  const strategies = Array.isArray(raw?.strategies)
+    ? raw.strategies
+    : Array.isArray(normalized?.strategies)
+      ? normalized.strategies
+      : [];
+  return strategies.find((s) => s?.type === 'spot' || s?.type === 'mexc_spot_spread_monitor') || null;
+}
+
+function buildSettingsField({
+  effective,
+  configured,
+  defaultValue,
+  source,
+  supported = true,
+  editable = true,
+  readOnly = false,
+  reason = null,
+  min = null,
+  max = null,
+  unit = null,
+}) {
+  return {
+    effective,
+    configured,
+    defaultValue,
+    source,
+    supported,
+    editable: supported && editable && !readOnly,
+    readOnly,
+    reason,
+    constraints: min != null || max != null ? { min, max } : null,
+    unit,
+  };
+}
 
 export function getProductIdentity() {
   return {
@@ -619,34 +722,217 @@ export function compareScanRuns(current = {}, previous = null) {
 }
 
 export function buildSettingsDto(rawConfig = {}, meta = {}) {
-  const normalized = rawConfig || {};
-  const strategies = Array.isArray(normalized.strategies) ? normalized.strategies : [];
-  const spot = strategies.find((s) => s?.type === 'spot' || s?.type === 'mexc_spot_spread_monitor');
+  const raw = rawConfig || {};
+  const normalized = meta.normalizedConfig || normalizeArbitrageConfig(raw);
+  const spot = resolveSpotStrategy(raw, normalized);
+
+  const symbolsConfigured = hasOwnConfigured(raw, 'symbols') && Array.isArray(raw.symbols);
+  const monitoredSymbols = symbolsConfigured
+    ? raw.symbols.map((s) => String(s).toUpperCase())
+    : [...SETTINGS_DEFAULTS.monitoredSymbols];
+
+  const grossConfigured = hasOwnConfigured(raw, 'minSpreadPct');
+  const minimumGrossSpreadBps = grossConfigured
+    ? toNum(raw.minSpreadPct * 100)
+    : SETTINGS_DEFAULTS.minimumGrossSpreadBps;
+
+  const netConfigured =
+    hasOwnConfigured(raw, 'opportunityThresholdBps')
+    || (hasOwnConfigured(raw, 'strategies') && spot?.minProfitBps != null);
+  const minimumNetSpreadBps = netConfigured
+    ? toNum(raw.opportunityThresholdBps ?? spot?.minProfitBps)
+    : toNum(spot?.minProfitBps ?? normalized.opportunityThresholdBps ?? SETTINGS_DEFAULTS.minimumNetSpreadBps);
+
+  const feesConfigured = hasOwnConfigured(raw, 'feeBps');
+  const assumedFeesBps = feesConfigured ? toNum(raw.feeBps) : SETTINGS_DEFAULTS.assumedFeesBps;
+
+  const slippageConfigured = hasOwnConfigured(raw, 'slippageBps');
+  const assumedSlippageBps = slippageConfigured
+    ? toNum(raw.slippageBps)
+    : SETTINGS_DEFAULTS.assumedSlippageBps;
+
+  const liquidityConfigured = hasOwnConfigured(raw, 'minVolumeUSDT');
+  const minimumLiquidity = liquidityConfigured
+    ? toNum(raw.minVolumeUSDT)
+    : SETTINGS_DEFAULTS.minimumLiquidity;
+
+  const maxAgeConfigured = hasOwnConfigured(raw, 'maximumDataAgeMs');
+  const maximumDataAgeMs = maxAgeConfigured
+    ? toNum(raw.maximumDataAgeMs)
+    : SETTINGS_DEFAULTS.maximumDataAgeMs;
+
+  const intervalConfigured = hasOwnConfigured(raw, 'scanIntervalSec');
+  const scanIntervalSeconds = intervalConfigured
+    ? toNum(raw.scanIntervalSec)
+    : SETTINGS_DEFAULTS.scanIntervalSeconds;
+
+  const notifyConfigured =
+    raw.autoActions != null && Object.prototype.hasOwnProperty.call(raw.autoActions, 'notifyOnOpportunity');
+  const notificationPreference = notifyConfigured
+    ? Boolean(raw.autoActions.notifyOnOpportunity)
+    : SETTINGS_DEFAULTS.notificationPreference;
 
   const monitoringState =
-    normalized.monitoringState
-    || (normalized.enabled === false ? MONITORING_STATE.PAUSED : MONITORING_STATE.ACTIVE);
+    raw.monitoringState
+    || (raw.enabled === false
+      ? MONITORING_STATE.PAUSED
+      : normalized.enabled === false
+        ? MONITORING_STATE.PAUSED
+        : MONITORING_STATE.ACTIVE);
+
+  const legacyAutoExecute =
+    Boolean(raw.execution?.autoExecute)
+    || Boolean(raw.execution?.autoExecuteStoredPreference)
+    || Boolean(raw.autoTrade);
+
+  const version = meta.version ?? raw.settingsVersion ?? 1;
+  const updatedAt = toIso(meta.updatedAt || raw.settingsUpdatedAt);
+  const updatedBy = meta.updatedBy || null;
+
+  const fields = {
+    monitoredSymbols: buildSettingsField({
+      effective: monitoredSymbols,
+      configured: symbolsConfigured ? monitoredSymbols : null,
+      defaultValue: SETTINGS_DEFAULTS.monitoredSymbols,
+      source: symbolsConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
+      editable: true,
+      min: 1,
+      max: MAX_SYMBOLS,
+    }),
+    minimumNetSpreadBps: buildSettingsField({
+      effective: minimumNetSpreadBps,
+      configured: netConfigured ? minimumNetSpreadBps : null,
+      defaultValue: SETTINGS_DEFAULTS.minimumNetSpreadBps,
+      source: netConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
+      editable: true,
+      min: 0,
+      max: 10000,
+      unit: 'bps',
+    }),
+    minimumGrossSpreadBps: buildSettingsField({
+      effective: minimumGrossSpreadBps,
+      configured: grossConfigured ? minimumGrossSpreadBps : null,
+      defaultValue: SETTINGS_DEFAULTS.minimumGrossSpreadBps,
+      source: grossConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
+      readOnly: true,
+      editable: false,
+      reason: 'Engine threshold; not editable in Settings.',
+      unit: 'bps',
+    }),
+    assumedFeesBps: buildSettingsField({
+      effective: assumedFeesBps,
+      configured: feesConfigured ? assumedFeesBps : null,
+      defaultValue: SETTINGS_DEFAULTS.assumedFeesBps,
+      source: feesConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
+      editable: true,
+      min: 0,
+      max: 500,
+      unit: 'bps',
+    }),
+    assumedSlippageBps: buildSettingsField({
+      effective: assumedSlippageBps,
+      configured: slippageConfigured ? assumedSlippageBps : null,
+      defaultValue: SETTINGS_DEFAULTS.assumedSlippageBps,
+      source: slippageConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
+      editable: true,
+      min: 0,
+      max: 500,
+      unit: 'bps',
+    }),
+    minimumLiquidity: buildSettingsField({
+      effective: minimumLiquidity,
+      configured: liquidityConfigured ? minimumLiquidity : null,
+      defaultValue: SETTINGS_DEFAULTS.minimumLiquidity,
+      source: liquidityConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
+      readOnly: true,
+      editable: false,
+      reason: 'Liquidity threshold is engine-owned.',
+      unit: 'USDT',
+    }),
+    maximumDataAgeMs: buildSettingsField({
+      effective: maximumDataAgeMs,
+      configured: maxAgeConfigured ? maximumDataAgeMs : null,
+      defaultValue: SETTINGS_DEFAULTS.maximumDataAgeMs,
+      source: maxAgeConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
+      editable: true,
+      min: 1,
+      max: 600000,
+      unit: 'ms',
+      reason: 'Interpretation preference; does not filter scan execution.',
+    }),
+    scanIntervalSeconds: buildSettingsField({
+      effective: scanIntervalSeconds,
+      configured: intervalConfigured ? scanIntervalSeconds : null,
+      defaultValue: SETTINGS_DEFAULTS.scanIntervalSeconds,
+      source: intervalConfigured ? FIELD_SOURCES.LEGACY_NORMALIZED : FIELD_SOURCES.DEFAULT,
+      readOnly: true,
+      editable: false,
+      reason: 'Scheduler cadence is global; agent interval is legacy preference only.',
+      unit: 's',
+    }),
+    notificationPreference: buildSettingsField({
+      effective: notificationPreference,
+      configured: notifyConfigured ? notificationPreference : null,
+      defaultValue: SETTINGS_DEFAULTS.notificationPreference,
+      source: notifyConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
+      editable: true,
+      reason: 'Preference only; delivery is not enabled.',
+    }),
+    monitoringState: buildSettingsField({
+      effective: monitoringState,
+      configured: hasOwnConfigured(raw, 'monitoringState') ? monitoringState : null,
+      defaultValue: MONITORING_STATE.ACTIVE,
+      source: hasOwnConfigured(raw, 'monitoringState')
+        ? FIELD_SOURCES.CONFIGURED
+        : raw.enabled === false
+          ? FIELD_SOURCES.CONFIGURED
+          : FIELD_SOURCES.DEFAULT,
+      readOnly: true,
+      editable: false,
+      reason: 'Use Pause/Resume in the action bar.',
+    }),
+    autoExecute: buildSettingsField({
+      effective: false,
+      configured: legacyAutoExecute ? true : null,
+      defaultValue: false,
+      source: legacyAutoExecute ? FIELD_SOURCES.LEGACY_NORMALIZED : FIELD_SOURCES.BLOCKED,
+      supported: false,
+      editable: false,
+      readOnly: true,
+      reason: 'Auto Execute is unsupported and blocked.',
+    }),
+  };
+
+  const unsupportedCapabilities = [
+    { id: 'auto_execute', state: 'blocked', legacyStoredPreference: legacyAutoExecute },
+    { id: 'triangular_arbitrage', state: 'unsupported' },
+    { id: 'cross_exchange_arbitrage', state: 'unsupported' },
+    { id: 'futures_basis', state: 'unsupported' },
+    { id: 'settlement_transfers', state: 'unsupported' },
+    { id: 'private_account_execution', state: 'unsupported' },
+  ];
 
   return {
-    monitoredSymbols: Array.isArray(normalized.symbols) ? normalized.symbols : [],
-    minimumGrossSpreadBps: toNum(normalized.minSpreadPct != null ? normalized.minSpreadPct * 100 : null),
-    minimumNetSpreadBps: toNum(spot?.minProfitBps ?? normalized.opportunityThresholdBps ?? 20),
-    assumedFeesBps: toNum(normalized.feeBps ?? 10),
-    assumedSlippageBps: toNum(normalized.slippageBps ?? 10),
-    minimumLiquidity: toNum(normalized.minVolumeUSDT ?? 100000),
-    maximumDataAgeMs: toNum(normalized.maximumDataAgeMs ?? 30000),
-    scanIntervalSeconds: toNum(normalized.scanIntervalSec ?? 300),
+    monitoredSymbols,
+    minimumGrossSpreadBps,
+    minimumNetSpreadBps,
+    assumedFeesBps,
+    assumedSlippageBps,
+    minimumLiquidity,
+    maximumDataAgeMs,
+    scanIntervalSeconds,
     monitoringState,
-    notificationPreference: Boolean(normalized.autoActions?.notifyOnOpportunity),
+    notificationPreference,
     notificationDeliveryAvailable: false,
-    version: meta.version ?? normalized.settingsVersion ?? 1,
-    updatedAt: toIso(meta.updatedAt || normalized.settingsUpdatedAt),
-    updatedBy: meta.updatedBy || null,
+    version,
+    updatedAt,
+    updatedBy,
     executionSupported: false,
     executionEligible: false,
-    legacyExecutionPreferenceIgnored: Boolean(
-      normalized.execution?.autoExecute || normalized.execution?.autoExecuteStoredPreference,
-    ),
+    legacyExecutionPreferenceIgnored: legacyAutoExecute,
+    fields,
+    unsupportedCapabilities,
+    dataContractVersion: '1.0',
   };
 }
 
@@ -667,40 +953,83 @@ export function sanitizeConfigForWrite(rawConfig = {}) {
 
 export function validateSettingsInput(input = {}) {
   const errors = [];
-  const symbols = Array.isArray(input.monitoredSymbols) ? input.monitoredSymbols : input.symbols;
+  const codes = [];
+  const payload = input?.settings && typeof input.settings === 'object' ? input.settings : input;
+
+  for (const key of Object.keys(payload || {})) {
+    if (FORBIDDEN_SETTINGS_INPUT_KEYS.has(key)) {
+      errors.push(`Field "${key}" is not allowed in settings updates`);
+      codes.push('FORBIDDEN_FIELD');
+    } else if (!ALLOWED_SETTINGS_INPUT_KEYS.has(key)) {
+      errors.push(`Unknown field "${key}" is not supported`);
+      codes.push('UNKNOWN_FIELD');
+    }
+  }
+
+  if (payload?.execution?.autoExecute === true || payload?.autoExecute === true) {
+    errors.push('Auto Execute is unsupported and cannot be enabled');
+    codes.push('AUTO_EXECUTE_BLOCKED');
+  }
+
+  const symbols = Array.isArray(payload?.monitoredSymbols)
+    ? payload.monitoredSymbols
+    : payload?.symbols;
   if (!symbols || symbols.length === 0) {
     errors.push('At least one monitored symbol is required');
+    codes.push('SYMBOLS_REQUIRED');
   }
   if (symbols && symbols.length > MAX_SYMBOLS) {
     errors.push(`Maximum ${MAX_SYMBOLS} monitored symbols allowed`);
+    codes.push('SYMBOLS_LIMIT');
   }
   const unique = new Set((symbols || []).map((s) => String(s).toUpperCase()));
   if (symbols && unique.size !== symbols.length) {
     errors.push('Duplicate symbols are not allowed');
+    codes.push('SYMBOLS_DUPLICATE');
   }
   for (const sym of symbols || []) {
     if (!/^[A-Z0-9]{5,20}$/.test(String(sym).toUpperCase())) {
       errors.push(`Invalid symbol: ${sym}`);
+      codes.push('SYMBOL_INVALID');
     }
   }
-  const minNet = toNum(input.minimumNetSpreadBps ?? input.opportunityThresholdBps);
-  const fees = toNum(input.assumedFeesBps ?? input.feeBps ?? 10);
-  const slip = toNum(input.assumedSlippageBps ?? input.slippageBps ?? 10);
+
+  const numericChecks = [
+    ['minimumNetSpreadBps', 0, 10000, 'NET_SPREAD_RANGE'],
+    ['minimumGrossSpreadBps', 0, 10000, 'GROSS_SPREAD_RANGE'],
+    ['assumedFeesBps', 0, 500, 'FEES_RANGE'],
+    ['assumedSlippageBps', 0, 500, 'SLIPPAGE_RANGE'],
+    ['minimumLiquidity', 0, 1_000_000_000, 'LIQUIDITY_RANGE'],
+    ['maximumDataAgeMs', 1, 600000, 'DATA_AGE_RANGE'],
+    ['scanIntervalSeconds', 30, 3600, 'SCAN_INTERVAL_RANGE'],
+  ];
+
+  for (const [field, min, max, code] of numericChecks) {
+    if (payload?.[field] == null) continue;
+    const value = Number(payload[field]);
+    if (!Number.isFinite(value)) {
+      errors.push(`${field} must be a finite number`);
+      codes.push('NUMERIC_INVALID');
+    } else if (value < min || value > max) {
+      errors.push(`${field} must be between ${min} and ${max}`);
+      codes.push(code);
+    }
+  }
+
+  const minNet = toNum(payload?.minimumNetSpreadBps ?? payload?.opportunityThresholdBps);
+  const fees = toNum(payload?.assumedFeesBps ?? payload?.feeBps ?? SETTINGS_DEFAULTS.assumedFeesBps);
+  const slip = toNum(payload?.assumedSlippageBps ?? payload?.slippageBps ?? SETTINGS_DEFAULTS.assumedSlippageBps);
   if (minNet != null && minNet < fees + slip) {
     errors.push('Minimum net spread should account for assumed fees and slippage');
+    codes.push('NET_SPREAD_TOO_LOW');
   }
-  const maxAge = toNum(input.maximumDataAgeMs);
-  if (maxAge != null && (maxAge <= 0 || maxAge > 600000)) {
-    errors.push('Maximum data age must be between 1ms and 600000ms');
+
+  if (payload?.notificationPreference != null && typeof payload.notificationPreference !== 'boolean') {
+    errors.push('notificationPreference must be a boolean');
+    codes.push('BOOLEAN_INVALID');
   }
-  const interval = toNum(input.scanIntervalSeconds ?? input.scanIntervalSec);
-  if (interval != null && (interval < 30 || interval > 3600)) {
-    errors.push('Scan interval must be between 30 and 3600 seconds');
-  }
-  if (input.execution?.autoExecute === true) {
-    errors.push('Auto Execute is unsupported and cannot be enabled');
-  }
-  return { ok: errors.length === 0, errors };
+
+  return { ok: errors.length === 0, errors, codes };
 }
 
 export function validatePagination({ page = 1, pageSize = DEFAULT_PAGE_SIZE } = {}) {
