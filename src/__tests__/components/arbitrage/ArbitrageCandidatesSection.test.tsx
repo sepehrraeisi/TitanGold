@@ -3,8 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ArbitrageCandidatesSection } from '../../../../components/ai/arbitrage/ArbitrageCandidatesSection.tsx';
 import type { ArbitrageCoreCandidatesResponse } from '../../../../services/api.ts';
 import { DEFAULT_CANDIDATE_FILTERS } from '../../../../components/ai/arbitrage/ArbitrageCandidatesSection.tsx';
+import en from '../../../../deploy/blue/locales/en.json';
 
-const t = (key: string) => key;
+const t = (key: string) => (en as Record<string, string>)[key] || key;
 
 const sampleData: ArbitrageCoreCandidatesResponse = {
     runId: 'run-1',
@@ -88,6 +89,7 @@ describe('ArbitrageCandidatesSection', () => {
                 onFiltersChange={vi.fn()}
                 onRunChange={vi.fn()}
                 onRefresh={vi.fn()}
+                onOpenDetail={vi.fn()}
                 t={t}
             />,
         );
@@ -96,9 +98,13 @@ describe('ArbitrageCandidatesSection', () => {
         expect(screen.getByTestId('arb-candidates-summary')).toBeTruthy();
         expect(screen.getByTestId('arb-candidate-row-c1')).toBeTruthy();
         expect(screen.queryByText('NON_POSITIVE_NET')).toBeNull();
+        expect(screen.queryByText('arb_funnel_observed')).toBeNull();
+        expect(screen.getByText('Analytical candidates')).toBeTruthy();
+        expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0);
     });
 
-    it('opens detail dialog on row click', () => {
+    it('delegates detail open to workspace owner', () => {
+        const onOpenDetail = vi.fn();
         render(
             <ArbitrageCandidatesSection
                 data={sampleData}
@@ -110,11 +116,13 @@ describe('ArbitrageCandidatesSection', () => {
                 onFiltersChange={vi.fn()}
                 onRunChange={vi.fn()}
                 onRefresh={vi.fn()}
+                onOpenDetail={onOpenDetail}
                 t={t}
             />,
         );
 
         fireEvent.click(screen.getByTestId('arb-candidate-row-c1'));
-        expect(screen.getByTestId('arb-candidate-detail-panel')).toBeTruthy();
+        expect(onOpenDetail).toHaveBeenCalledWith(sampleData.items[0]);
+        expect(screen.queryByTestId('arb-candidate-detail-panel')).toBeNull();
     });
 });
