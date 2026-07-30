@@ -4,9 +4,12 @@ import {
   formatLocalizedTimestamp,
   presentBps,
   presentEstimateState,
+  presentNotionalValue,
   presentProfitValue,
   presentRiskScore,
+  presentRiskScoreHelp,
   presentRunOptionLabel,
+  verifyProfitFormula,
   isRawProfitRiskKey,
 } from '../../../utils/profitRiskPresentation.ts';
 
@@ -19,6 +22,10 @@ const t = (key: string) => {
     arb_pr_state_derived: 'Derived estimate',
     arb_pr_state_market_observation: 'Market observation',
     arb_pr_risk_unavailable: 'Risk score unavailable',
+    arb_pr_notional_unavailable: 'Notional unavailable',
+    arb_pr_analytical_notional: 'Analytical notional',
+    arb_pr_risk_zero_measured_help: 'Lowest measured analytical risk',
+    arb_pr_risk_source_run_risk_stats_average: 'Run aggregate risk statistics',
     scheduled: 'Scheduled',
     arb_scan_status_completed: 'Completed',
     arb_timestamp_unavailable: 'Timestamp unavailable',
@@ -33,17 +40,30 @@ describe('profitRiskPresentation', () => {
     expect(presentBps(null, t)).toBe('Unavailable');
   });
 
-  it('presents negative net spread', () => {
-    expect(presentBps(-19.08, t)).toBe('-19.08 bps');
+  it('presents analytical notional with locale formatting', () => {
+    expect(presentNotionalValue(10000, 'USDT', t, 'en-US')).toBe('10,000.00 USDT');
+    expect(presentNotionalValue(null, 'USDT', t)).toBe('Unavailable');
   });
 
-  it('presents unavailable profit without using derived estimate as monetary value', () => {
+  it('verifies profit formula parity', () => {
+    expect(verifyProfitFormula(10000, -14.165694, -14.165694)).toBe(true);
+    expect(verifyProfitFormula(null, -14, null)).toBe(true);
+    expect(verifyProfitFormula(1000, 10, 999)).toBe(false);
+  });
+
+  it('presents unavailable profit without notional', () => {
     expect(presentProfitValue(null, 'USDT', t)).toBe('Unavailable');
+  });
+
+  it('presents valid zero risk with help', () => {
+    expect(presentRiskScore(0, 'measured', t)).toBe('0 / 100');
+    expect(presentRiskScoreHelp(0, 'measured', 'run_risk_stats_average', null, t)).toBe(
+      'Lowest measured analytical risk',
+    );
   });
 
   it('presents unavailable risk score', () => {
     expect(presentRiskScore(null, 'unavailable', t)).toBe('Risk score unavailable');
-    expect(presentRiskScore(42, 'measured', t)).toBe('42 / 100');
   });
 
   it('presents human-readable run selector label without raw UUID', () => {

@@ -86,6 +86,57 @@ export function presentRiskScore(
   return `${Math.round(value)} / 100`;
 }
 
+export function verifyProfitFormula(
+  notionalValue: number | null | undefined,
+  estimatedNetSpreadBps: number | null | undefined,
+  estimatedProfitValue: number | null | undefined,
+): boolean {
+  if (notionalValue == null || estimatedNetSpreadBps == null || estimatedProfitValue == null) {
+    return estimatedProfitValue == null;
+  }
+  const expected = (notionalValue * estimatedNetSpreadBps) / 10000;
+  return Math.abs(expected - estimatedProfitValue) < 0.0001;
+}
+
+export function presentNotionalValue(
+  value: number | null | undefined,
+  currency: string | null | undefined,
+  t: TranslateFn,
+  locale?: string,
+): string {
+  if (value == null || !Number.isFinite(value)) {
+    return formatUnavailableMetric(t);
+  }
+  const cur = currency || 'USDT';
+  const formatted = value.toLocaleString(locale || undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${formatted} ${cur}`;
+}
+
+export function presentRiskScoreHelp(
+  value: number | null | undefined,
+  state: string | null | undefined,
+  source: string | null | undefined,
+  reason: string | null | undefined,
+  t: TranslateFn,
+): string | undefined {
+  if (value == null) return presentEstimateState(state, t);
+  if (value === 0 && state === 'measured') {
+    return resolveProductLabel('arb_pr_risk_zero_measured_help', t);
+  }
+  if (source) {
+    const key = `arb_pr_risk_source_${source}`;
+    const label = resolveProductLabel(key, t);
+    if (label !== key) return label;
+  }
+  if (reason === 'explicit_measured_zero') {
+    return resolveProductLabel('arb_pr_risk_zero_measured_help', t);
+  }
+  return undefined;
+}
+
 export function presentRiskFactor(
   code: string,
   t: TranslateFn,
@@ -142,6 +193,7 @@ export function presentFieldLabel(field: string, t: TranslateFn): string {
     limitations: 'arb_pr_limitations',
     selectedCandidate: 'arb_pr_selected_candidate',
     selectionBasis: 'arb_pr_selection_basis',
+    analyticalNotional: 'arb_pr_analytical_notional',
   };
   const key = keys[field];
   return key ? resolveProductLabel(key, t) : resolveProductLabel('unavailable', t);

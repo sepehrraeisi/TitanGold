@@ -544,6 +544,8 @@ export function parseArbitrageProfitRiskEnvelope(raw: unknown) {
             estimatedProfitCurrency: analytics.estimatedProfitCurrency ? String(analytics.estimatedProfitCurrency) : null,
             notionalValue: analytics.notionalValue != null ? asNumber(analytics.notionalValue) : null,
             notionalCurrency: analytics.notionalCurrency ? String(analytics.notionalCurrency) : null,
+            notionalState: analytics.notionalState ? String(analytics.notionalState) : undefined,
+            notionalSource: analytics.notionalSource ? String(analytics.notionalSource) : null,
             estimateState: analytics.estimateState ? String(analytics.estimateState) : undefined,
             estimateReason: analytics.estimateReason ? String(analytics.estimateReason) : null,
             selectedCandidateId: analytics.selectedCandidateId ? String(analytics.selectedCandidateId) : null,
@@ -561,6 +563,7 @@ export function parseArbitrageProfitRiskEnvelope(raw: unknown) {
             riskScore: analytics.riskScore != null ? asNumber(analytics.riskScore) : null,
             riskScoreState: analytics.riskScoreState ? String(analytics.riskScoreState) : undefined,
             riskScoreReason: analytics.riskScoreReason ? String(analytics.riskScoreReason) : null,
+            riskScoreSource: analytics.riskScoreSource ? String(analytics.riskScoreSource) : null,
             riskFactors: Array.isArray(analytics.riskFactors) ? analytics.riskFactors : [],
             rejectionDistribution:
                 analytics.rejectionDistribution && typeof analytics.rejectionDistribution === 'object'

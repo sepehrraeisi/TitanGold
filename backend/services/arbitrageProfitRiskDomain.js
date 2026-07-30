@@ -14,7 +14,7 @@ import {
   SCAN_RUN_DATA_CONTRACT_VERSION,
 } from './arbitrageDomain.js';
 
-export const PROFIT_RISK_DATA_CONTRACT_VERSION = '1.1';
+export const PROFIT_RISK_DATA_CONTRACT_VERSION = '1.2';
 
 export const ESTIMATE_STATE = Object.freeze({
   MEASURED: 'measured',
@@ -78,10 +78,34 @@ export function extractAssumedSlippageBps(raw = {}, settings = {}) {
   return toNum(settings.assumedSlippageBps);
 }
 
-export function extractNotionalValue(raw = {}, settings = {}) {
-  const fromRaw = toNum(raw.testVolumeUSDT ?? raw.estimatedNotional ?? raw.notionalValue);
-  if (fromRaw != null) return fromRaw;
-  return toNum(settings.analyticalNotionalUSDT ?? settings.testVolumeUSDT);
+export function extractNotionalValue(raw = {}) {
+  return toNum(raw.testVolumeUSDT ?? raw.estimatedNotional ?? raw.notionalValue);
+}
+
+export function resolveNotionalFromRaw(raw = {}) {
+  const value = extractNotionalValue(raw);
+  if (value == null || value <= 0) {
+    return {
+      notionalValue: null,
+      notionalCurrency: null,
+      notionalState: ESTIMATE_STATE.UNAVAILABLE,
+      notionalSource: null,
+      notionalReason: 'notional_unavailable',
+    };
+  }
+  const sourceField =
+    raw.testVolumeUSDT != null
+      ? 'candidate.testVolumeUSDT'
+      : raw.estimatedNotional != null
+        ? 'candidate.estimatedNotional'
+        : 'candidate.notionalValue';
+  return {
+    notionalValue: value,
+    notionalCurrency: 'USDT',
+    notionalState: ESTIMATE_STATE.MEASURED,
+    notionalSource: sourceField,
+    notionalReason: null,
+  };
 }
 
 export function computeEstimatedNetSpreadBps(grossSpreadBps, assumedFeesBps, assumedSlippageBps) {
@@ -136,8 +160,8 @@ function buildCandidateEconomics(raw = {}, settings = {}) {
   const assumedFeesBps = extractAssumedFeesBps(raw, settings);
   const assumedSlippageBps = extractAssumedSlippageBps(raw, settings);
   const net = computeEstimatedNetSpreadBps(grossSpreadBps, assumedFeesBps, assumedSlippageBps);
-  const notionalValue = extractNotionalValue(raw, settings);
-  const profit = computeEstimatedProfitValue(notionalValue, net.estimatedNetSpreadBps);
+  const notional = resolveNotionalFromRaw(raw);
+  const profit = computeEstimatedProfitValue(notional.notionalValue, net.estimatedNetSpreadBps);
   const lifecycleState =
     raw.lifecycleState ||
     (raw.rejectionReason || raw.classification === 'rejected_candidate'
@@ -152,8 +176,10 @@ function buildCandidateEconomics(raw = {}, settings = {}) {
     assumedFeesBps,
     assumedSlippageBps,
     estimatedNetSpreadBps: net.estimatedNetSpreadBps,
-    notionalValue,
-    notionalCurrency: notionalValue != null ? 'USDT' : null,
+    notionalValue: notional.notionalValue,
+    notionalCurrency: notional.notionalCurrency,
+    notionalState: notional.notionalState,
+    notionalSource: notional.notionalSource,
     estimatedProfitValue: profit.estimatedProfitValue,
     estimatedProfitCurrency: profit.estimatedProfitCurrency,
     riskScore: toNum(raw.riskScore),
@@ -321,7 +347,9 @@ function summarizeCandidateEconomics(rawCandidates = [], dtoCandidates = [], set
     estimatedProfitValue,
     estimatedProfitCurrency,
     notionalValue: selected?.notionalValue ?? null,
-    notionalCurrency: selected?.notionalValue != null ? 'USDT' : null,
+    notionalCurrency: selected?.notionalCurrency ?? null,
+    notionalState: selected?.notionalState ?? ESTIMATE_STATE.UNAVAILABLE,
+    notionalSource: selected?.notionalSource ?? null,
     estimateState,
     estimateReason,
     selectedCandidateId: selection.selectedCandidateId,
@@ -375,31 +403,50 @@ function buildRiskFactors({ candidates = [], settings = {}, economics = {}, rawO
 }
 
 function resolveRiskScore(candidates = [], rawOutput = {}) {
+  const rawCandidates = [
+    ...(rawOutput.candidates || []),
+    ...(rawOutput.rejectedCandidates || []),
+  ];
+  const rawScored = rawCandidates.filter(
+    c => c.riskScore != null && Number.isFinite(Number(c.riskScore)),
+  );
+
   const riskStats = rawOutput.riskStats;
   const summary = rawOutput.summary;
-  const hasRiskStatsAverage =
-    riskStats != null &&
-    typeof riskStats === 'object' &&
-    riskStats.averageScore != null &&
-    Number.isFinite(Number(riskStats.averageScore));
-  const hasSummaryAverage =
-    summary != null &&
-    typeof summary === 'object' &&
-    summary.avgRiskScore != null &&
-    Number.isFinite(Number(summary.avgRiskScore));
 
-  if (hasRiskStatsAverage) {
+  if (riskStats?.averageScore != null && Number.isFinite(Number(riskStats.averageScore))) {
+    if (rawScored.length > 0) {
+      const rounded = Math.round(Number(riskStats.averageScore));
+      return {
+        riskScore: rounded,
+        riskScoreState: ESTIMATE_STATE.MEASURED,
+        riskScoreReason: rounded === 0 ? 'explicit_measured_zero' : null,
+        riskScoreSource: 'run_risk_stats_average',
+      };
+    }
     return {
-      riskScore: Math.round(Number(riskStats.averageScore)),
-      riskScoreState: ESTIMATE_STATE.MEASURED,
-      riskScoreReason: null,
+      riskScore: null,
+      riskScoreState: ESTIMATE_STATE.UNAVAILABLE,
+      riskScoreReason: 'legacy_risk_stats_without_scored_candidates',
+      riskScoreSource: null,
     };
   }
-  if (hasSummaryAverage) {
+
+  if (summary?.avgRiskScore != null && Number.isFinite(Number(summary.avgRiskScore))) {
+    if (rawScored.length > 0) {
+      const rounded = Math.round(Number(summary.avgRiskScore));
+      return {
+        riskScore: rounded,
+        riskScoreState: ESTIMATE_STATE.MEASURED,
+        riskScoreReason: rounded === 0 ? 'explicit_measured_zero' : null,
+        riskScoreSource: 'run_summary_avg_risk',
+      };
+    }
     return {
-      riskScore: Math.round(Number(summary.avgRiskScore)),
-      riskScoreState: ESTIMATE_STATE.MEASURED,
-      riskScoreReason: null,
+      riskScore: null,
+      riskScoreState: ESTIMATE_STATE.UNAVAILABLE,
+      riskScoreReason: 'legacy_summary_without_scored_candidates',
+      riskScoreSource: null,
     };
   }
 
@@ -409,28 +456,27 @@ function resolveRiskScore(candidates = [], rawOutput = {}) {
       riskScore: null,
       riskScoreState: ESTIMATE_STATE.UNAVAILABLE,
       riskScoreReason: 'no_risk_evidence',
+      riskScoreSource: null,
     };
   }
 
   const avg = scored.reduce((s, c) => s + Number(c.riskScore), 0) / scored.length;
   const rounded = Math.round(avg);
-  if (rounded === 0 && !scored.some(c => Number(c.riskScore) > 0)) {
-    const hasExplicitZero = scored.some(
-      c => c.riskScoreUnavailableReason == null && c.lifecycleState !== CANDIDATE_LIFECYCLE.REJECTED,
-    );
-    if (!hasExplicitZero) {
-      return {
-        riskScore: null,
-        riskScoreState: ESTIMATE_STATE.UNAVAILABLE,
-        riskScoreReason: 'no_measured_risk_evidence',
-      };
-    }
+  const allExplicitZero = scored.every(c => Number(c.riskScore) === 0);
+  if (allExplicitZero && scored.length > 0) {
+    return {
+      riskScore: 0,
+      riskScoreState: ESTIMATE_STATE.MEASURED,
+      riskScoreReason: 'explicit_measured_zero',
+      riskScoreSource: 'candidate_explicit_zero',
+    };
   }
 
   return {
     riskScore: rounded,
     riskScoreState: ESTIMATE_STATE.DERIVED,
     riskScoreReason: 'candidate_average',
+    riskScoreSource: 'candidate_risk_average',
   };
 }
 

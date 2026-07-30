@@ -8243,6 +8243,8 @@ export interface ArbitrageCoreProfitRiskAnalytics {
     estimatedProfitCurrency?: string | null;
     notionalValue?: number | null;
     notionalCurrency?: string | null;
+    notionalState?: string;
+    notionalSource?: string | null;
     estimateState?: string;
     estimateReason?: string | null;
     selectedCandidateId?: string | null;
@@ -8258,6 +8260,7 @@ export interface ArbitrageCoreProfitRiskAnalytics {
     riskScore?: number | null;
     riskScoreState?: string;
     riskScoreReason?: string | null;
+    riskScoreSource?: string | null;
     riskFactors?: Array<{ code: string; count?: number; severity?: string }>;
     rejectionDistribution?: Record<string, number>;
     primaryRejectionReasons?: string[];

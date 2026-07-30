@@ -687,8 +687,8 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                     />
                 }
                 purpose={
-                        product?.description ||
                         t('arbitrage_agent_desc') ||
+                        product?.description ||
                         'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'
                     }
                 latestRunAt={
@@ -728,8 +728,8 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                             {product?.displayName || t('strategy_mexc_spot_spread_monitor') || 'MEXC Spot Spread Monitor'}
                         </h1>
                         <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-                            {product?.description ||
-                                t('arbitrage_agent_desc') ||
+                            {t('arbitrage_agent_desc') ||
+                                product?.description ||
                                 'Analytical MEXC spot bid/ask spread monitor. Does not execute trades.'}
                         </p>
                     </div>

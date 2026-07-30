@@ -201,4 +201,82 @@ describe('arbitrage profit risk canonical calculations', () => {
     expect(analytics.notionalValue).toBeNull();
     expect(analytics.estimatedProfitValue).toBeNull();
   });
+
+  it('exposes analytical notional from candidate testVolumeUSDT only', () => {
+    const rawOutput = {
+      candidates: [
+        {
+          id: 'c1',
+          symbol: 'BTCUSDT',
+          spreadPct: 0.5,
+          testVolumeUSDT: 10000,
+          riskScore: 10,
+        },
+      ],
+      rejectedCandidates: [],
+      riskStats: { averageScore: 10 },
+    };
+    const analytics = buildProfitRiskAnalytics({
+      scanRun: buildScanRunDto({ runId: 'r-n', agentId: 'a1', rawOutput }),
+      candidates: mapCandidatesFromRunOutput(rawOutput, 'r-n'),
+      rawCandidates: rawOutput.candidates,
+      settings: { assumedFeesBps: 10, assumedSlippageBps: 10, testVolumeUSDT: 99999 },
+      rawOutput,
+    });
+    expect(analytics.notionalValue).toBe(10000);
+    expect(analytics.notionalSource).toBe('candidate.testVolumeUSDT');
+    expect(analytics.estimatedProfitValue).toBeCloseTo((10000 * 30) / 10000, 4);
+  });
+
+  it('does not infer default notional from settings', () => {
+    const rawOutput = {
+      candidates: [{ id: 'c1', symbol: 'BTCUSDT', spreadPct: 0.5 }],
+      rejectedCandidates: [],
+    };
+    const analytics = buildProfitRiskAnalytics({
+      scanRun: buildScanRunDto({ runId: 'r-no', agentId: 'a1', rawOutput }),
+      candidates: mapCandidatesFromRunOutput(rawOutput, 'r-no'),
+      rawCandidates: rawOutput.candidates,
+      settings: { testVolumeUSDT: 10000, assumedFeesBps: 10, assumedSlippageBps: 10 },
+      rawOutput,
+    });
+    expect(analytics.notionalValue).toBeNull();
+    expect(analytics.estimatedProfitValue).toBeNull();
+  });
+
+  it('accepts explicit measured risk zero when scored candidates exist', () => {
+    const rawOutput = {
+      candidates: [{ symbol: 'BTCUSDT', spreadPct: 0.5, riskScore: 0, testVolumeUSDT: 1000 }],
+      rejectedCandidates: [],
+      riskStats: { averageScore: 0 },
+    };
+    const analytics = buildProfitRiskAnalytics({
+      scanRun: buildScanRunDto({ runId: 'r0', agentId: 'a1', rawOutput }),
+      candidates: mapCandidatesFromRunOutput(rawOutput, 'r0'),
+      rawCandidates: rawOutput.candidates,
+      settings: { assumedFeesBps: 10, assumedSlippageBps: 10 },
+      rawOutput,
+    });
+    expect(analytics.riskScore).toBe(0);
+    expect(analytics.riskScoreState).toBe('measured');
+    expect(analytics.riskScoreSource).toBe('run_risk_stats_average');
+  });
+
+  it('rejects legacy risk stats zero without scored candidates', () => {
+    const rawOutput = {
+      candidates: [],
+      rejectedCandidates: [{ symbol: 'BTCUSDT', spreadPct: 0.0092, rejectionReason: 'SPREAD_OUT_OF_RANGE' }],
+      riskStats: { averageScore: 0 },
+      summary: { avgRiskScore: 0 },
+    };
+    const analytics = buildProfitRiskAnalytics({
+      scanRun: buildScanRunDto({ runId: 'r-leg', agentId: 'a1', rawOutput }),
+      candidates: mapCandidatesFromRunOutput(rawOutput, 'r-leg'),
+      rawCandidates: rawOutput.rejectedCandidates,
+      settings: {},
+      rawOutput,
+    });
+    expect(analytics.riskScore).toBeNull();
+    expect(analytics.riskScoreState).toBe('unavailable');
+  });
 });

@@ -24,8 +24,10 @@ import {
   presentFreshnessState,
   presentLiquidityState,
   presentProfitValue,
+  presentNotionalValue,
   presentRiskFactor,
   presentRiskScore,
+  presentRiskScoreHelp,
   presentRunOptionLabel,
   presentSelectionBasis,
   resolveProductLabel,
@@ -53,9 +55,12 @@ function metricBadge(state: string | null | undefined, t: TranslateFn) {
 function buildEconomicsMetrics(
   analytics: ArbitrageCoreProfitRiskAnalytics,
   t: TranslateFn,
+  locale?: string,
 ): AgentMetricItem[] {
   const profitUnavailable =
     analytics.estimatedProfitValue == null || !Number.isFinite(Number(analytics.estimatedProfitValue));
+  const notionalUnavailable =
+    analytics.notionalValue == null || !Number.isFinite(Number(analytics.notionalValue));
 
   return [
     {
@@ -97,6 +102,23 @@ function buildEconomicsMetrics(
         analytics.estimatedNetSpreadBps != null && analytics.estimatedNetSpreadBps < 0 ? 'red' : 'blue',
     },
     {
+      id: 'notional',
+      label: presentFieldLabel('analyticalNotional', t),
+      value: notionalUnavailable ? (
+        resolveProductLabel('arb_pr_state_unavailable', t)
+      ) : (
+        <AgentTechnicalLtr>
+          {presentNotionalValue(analytics.notionalValue, analytics.notionalCurrency, t, locale)}
+        </AgentTechnicalLtr>
+      ),
+      badge: metricBadge(
+        notionalUnavailable ? 'unavailable' : analytics.notionalState || 'measured',
+        t,
+      ),
+      valueState: notionalUnavailable ? 'unavailable' : 'loaded',
+      hint: notionalUnavailable ? resolveProductLabel('arb_pr_notional_unavailable', t) : undefined,
+    },
+    {
       id: 'profit',
       label: presentFieldLabel('estimatedProfit', t),
       value: profitUnavailable ? (
@@ -127,7 +149,13 @@ function buildEconomicsMetrics(
       ),
       badge: metricBadge(analytics.riskScoreState || 'unavailable', t),
       valueState: analytics.riskScore == null ? 'unavailable' : 'loaded',
-      title: resolveProductLabel('arbitrage_risk_score_help', t),
+      title: presentRiskScoreHelp(
+        analytics.riskScore,
+        analytics.riskScoreState,
+        analytics.riskScoreSource,
+        analytics.riskScoreReason,
+        t,
+      ) || resolveProductLabel('arbitrage_risk_score_help', t),
     },
   ];
 }
@@ -146,8 +174,8 @@ export const ArbitrageProfitRiskSection: React.FC<ArbitrageProfitRiskSectionProp
 }) => {
   const analytics = data?.analytics;
   const metrics = useMemo(
-    () => (analytics ? buildEconomicsMetrics(analytics, t) : []),
-    [analytics, t],
+    () => (analytics ? buildEconomicsMetrics(analytics, t, locale) : []),
+    [analytics, t, locale],
   );
 
   if (loading && !data) {
@@ -266,6 +294,11 @@ export const ArbitrageProfitRiskSection: React.FC<ArbitrageProfitRiskSectionProp
             {presentRiskScore(analytics.riskScore, analytics.riskScoreState, t)}
           </AgentTechnicalLtr>
         </p>
+        {analytics.riskScoreSource ? (
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {resolveProductLabel(`arb_pr_risk_source_${analytics.riskScoreSource}`, t)}
+          </p>
+        ) : null}
         <p className="text-xs text-muted-foreground mt-1">
           {presentFreshnessState(analytics.freshnessState, t)} ·{' '}
           {presentLiquidityState(analytics.liquidityState, t)}
