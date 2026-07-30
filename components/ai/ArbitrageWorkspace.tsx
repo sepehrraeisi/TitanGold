@@ -5,6 +5,7 @@ import type { OnNavigateHandler, ArbitrageAgentSection } from '../../types/navig
 import type { AIAgent } from '../../types.ts';
 import * as api from '../../services/api.ts';
 import type {
+    ArbitrageCoreCandidate,
     ArbitrageCoreCandidatesResponse,
     ArbitrageCoreIntegrations,
     ArbitrageCoreOverview,
@@ -34,6 +35,7 @@ import ArbitrageCandidatesSection, {
     DEFAULT_CANDIDATE_FILTERS,
     type CandidateFilters,
 } from './arbitrage/ArbitrageCandidatesSection.tsx';
+import ArbitrageCandidateDetailPanel from './arbitrage/ArbitrageCandidateDetailDialog.tsx';
 import { formatRejectionReason } from '../../utils/arbitrageReasonLabels.ts';
 import {
     createScanIdempotencyKey,
@@ -112,6 +114,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     const [settingsLoadState, setSettingsLoadState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
     const [settingsError, setSettingsError] = useState<string | null>(null);
     const [scanConfirmOpen, setScanConfirmOpen] = useState(false);
+    const [candidateDetail, setCandidateDetail] = useState<ArbitrageCoreCandidate | null>(null);
     const [scanFeedback, setScanFeedback] = useState<ArbitrageScanFeedback | null>(null);
     const scanPendingRef = useRef(false);
     const scanIdempotencyKeyRef = useRef<string | null>(null);
@@ -180,6 +183,10 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     useEffect(() => {
         if (initialRunId) setSelectedRunId(initialRunId);
     }, [initialRunId]);
+
+    useEffect(() => {
+        setCandidateDetail(null);
+    }, [activeTab, selectedRunId, candidateFilters]);
 
     const loadTabData = useCallback(async () => {
         setTabLoading(true);
@@ -512,6 +519,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                             navigateSection('candidates', runId);
                         }}
                         onRefresh={() => void loadTabData()}
+                        onOpenDetail={setCandidateDetail}
                         t={t}
                     />
                 </AgentContentSurface>
@@ -569,10 +577,22 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                 agent={displayAgent}
                 onClose={() => {
                     setScanConfirmOpen(false);
+                    setCandidateDetail(null);
                     onBack();
                 }}
                 closeTestId="arb-popup-close"
                 confirmationOpen={scanConfirmOpen}
+                detailOpen={Boolean(candidateDetail)}
+                detail={
+                    candidateDetail ? (
+                        <ArbitrageCandidateDetailPanel
+                            candidate={candidateDetail}
+                            open
+                            onClose={() => setCandidateDetail(null)}
+                            t={t}
+                        />
+                    ) : null
+                }
                 confirmation={
                     <ArbitrageScanConfirmDialog
                         open={scanConfirmOpen}

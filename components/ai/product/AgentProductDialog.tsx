@@ -25,6 +25,10 @@ export type AgentProductDialogProps = {
   confirmationOpen?: boolean;
   /** Nested confirmation layer (AgentProductConfirmation). */
   confirmation?: React.ReactNode;
+  /** When true, renders nested detail layer above popup content inside the dialog shell. */
+  detailOpen?: boolean;
+  /** Nested detail layer (AgentProductDetailLayer). */
+  detail?: React.ReactNode;
 };
 
 /**
@@ -44,6 +48,8 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
   testId = 'agent-product-dialog',
   confirmationOpen = false,
   confirmation,
+  detailOpen = false,
+  detail,
 }) => {
   const { language } = useLanguage();
   const titleId = useId();
@@ -58,8 +64,8 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
     : undefined;
 
   useEffect(() => {
-    if (confirmationOpen) {
-      confirmationWasOpenRef.current = true;
+    if (confirmationOpen || detailOpen) {
+      if (confirmationOpen) confirmationWasOpenRef.current = true;
       return undefined;
     }
 
@@ -87,6 +93,7 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
     };
 
     const onKey = (e: KeyboardEvent) => {
+      if (detailOpen) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
@@ -118,16 +125,16 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
       document.body.style.overflow = overflow;
       prev?.focus?.();
     };
-  }, [onClose, closeTestId, confirmationOpen]);
+  }, [onClose, closeTestId, confirmationOpen, detailOpen]);
 
   useEffect(() => {
-    if (!confirmationOpen) return undefined;
+    if (!confirmationOpen && !detailOpen) return undefined;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = overflow;
     };
-  }, [confirmationOpen]);
+  }, [confirmationOpen, detailOpen]);
 
   if (typeof document === 'undefined') return null;
 
@@ -138,7 +145,7 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
       lang={language}
       dir={panelDir}
       style={panelFontStyle}
-      onClick={confirmationOpen ? undefined : onClose}
+      onClick={confirmationOpen || detailOpen ? undefined : onClose}
       data-testid="agent-product-overlay"
     >
       <div
@@ -152,13 +159,14 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
         data-agent-key={agent.agent_key}
         data-scroll-owner="agent-product-body"
         data-confirmation-open={confirmationOpen ? 'true' : 'false'}
+        data-detail-open={detailOpen ? 'true' : 'false'}
         className={`${AGENT_PRODUCT_LAYERS.dialogContent} ${AGENT_PRODUCT_TOKENS.surfaces.dialogShell} ${AGENT_PRODUCT_TOKENS.dialogRadius} ${AGENT_PRODUCT_TOKENS.mobileFullScreen} ${AGENT_PRODUCT_TOKENS.dialogMaxWidth} ${AGENT_PRODUCT_TOKENS.dialogMaxHeight} w-full overflow-hidden flex flex-col shadow-2xl ${panelLangClass}`}
         style={panelFontStyle}
         onClick={e => e.stopPropagation()}
       >
         <div
-          className={`flex flex-col flex-1 min-h-0 overflow-hidden${confirmationOpen ? ' pointer-events-none select-none' : ''}`}
-          aria-hidden={confirmationOpen ? true : undefined}
+          className={`flex flex-col flex-1 min-h-0 overflow-hidden${confirmationOpen || detailOpen ? ' pointer-events-none select-none' : ''}`}
+          aria-hidden={confirmationOpen || detailOpen ? true : undefined}
           data-testid="agent-product-main-surface"
         >
           <AgentProductHeader
@@ -187,6 +195,7 @@ export const AgentProductDialog: React.FC<AgentProductDialogProps> = ({
           </div>
         </div>
         {confirmationOpen && confirmation}
+        {detailOpen && detail}
       </div>
     </div>,
     document.body,

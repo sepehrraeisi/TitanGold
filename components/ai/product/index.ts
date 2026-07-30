@@ -1,5 +1,6 @@
 export { AGENT_PRODUCT_TOKENS } from './agentProductTokens.ts';
 export { AgentProductConfirmation } from './AgentProductConfirmation.tsx';
+export { AgentProductDetailLayer } from './AgentProductDetailLayer.tsx';
 export { AGENT_PRODUCT_LAYERS, AGENT_PRODUCT_LAYER_Z } from './agentProductTokens.ts';
 export { AgentProductDialog } from './AgentProductDialog.tsx';
 export { AgentProductHeader } from './AgentProductHeader.tsx';
