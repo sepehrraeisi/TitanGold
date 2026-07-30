@@ -34,6 +34,11 @@ import {
   fetchLatestArbitrageScanRow,
   fetchRecentArbitrageScanRows,
 } from './arbitrageScanContract.js';
+import {
+  buildProfitRiskAnalytics,
+  enrichTrendRunFromOutput,
+  mapCandidatesFromRunOutput,
+} from './arbitrageProfitRiskDomain.js';
 import { writeExecutionAudit } from './agentExecutionService.js';
 import { logger } from './logger.js';
 
@@ -698,6 +703,67 @@ export async function getArbitrageIntegrations(agentId) {
       supported: false,
       eligible: false,
     },
+  };
+}
+
+export async function getArbitrageProfitRisk(agentId, { runId } = {}) {
+  const agent = await loadArbitrageAgent(agentId);
+  if (!agent) return null;
+
+  const settings = buildSettingsDto(normalizeArbitrageConfig(agent.config || {}), {
+    updatedAt: agent.updated_at,
+  });
+
+  let effectiveRunId = runId || null;
+  if (!effectiveRunId) {
+    const latest = await fetchLatestArbitrageScanRow(agent.id);
+    effectiveRunId = latest?.id || null;
+  }
+  if (!effectiveRunId) {
+    return {
+      analytics: buildProfitRiskAnalytics({
+        scanRun: null,
+        candidates: [],
+        settings,
+        rawOutput: {},
+        trendRuns: [],
+      }),
+      selectedRun: null,
+      availableRuns: [],
+    };
+  }
+
+  const [detail, recentRows] = await Promise.all([
+    getArbitrageRunDetail(agent.id, effectiveRunId),
+    fetchRecentArbitrageScanRows(agent.id, 10),
+  ]);
+
+  if (!detail) return null;
+
+  const trendRuns = recentRows.map((row) =>
+    enrichTrendRunFromOutput(row, agent.id, mapDecisionRowToScanRun),
+  );
+
+  const analytics = buildProfitRiskAnalytics({
+    scanRun: detail.scanRun,
+    candidates: detail.candidates || mapCandidatesFromRunOutput(detail.raw, effectiveRunId),
+    settings,
+    rawOutput: detail.raw || {},
+    trendRuns,
+  });
+
+  const availableRuns = trendRuns.map(r => ({
+    runId: r.runId,
+    completedAt: r.completedAt,
+    trigger: r.trigger,
+    status: r.status,
+  }));
+
+  return {
+    analytics,
+    selectedRun: detail.scanRun,
+    availableRuns,
+    generatedAt: new Date().toISOString(),
   };
 }
 

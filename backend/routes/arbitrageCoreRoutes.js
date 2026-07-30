@@ -19,6 +19,7 @@ import {
   getArbitrageIntegrations,
   getArbitrageOverview,
   getArbitrageRunDetail,
+  getArbitrageProfitRisk,
   getArbitrageRunComparison,
   getArbitrageRuns,
   loadArbitrageAgent,
@@ -157,6 +158,33 @@ router.get(
     } catch (error) {
       logger.error('Arbitrage candidates error:', error);
       return sendError(res, 'SERVER_ERROR', 'Failed to load candidates', 500);
+    }
+  },
+);
+
+router.get(
+  '/profit-risk',
+  authenticateStrict,
+  requireCapability(CAP.AI_AGENT_READ),
+  rateLimit({ limit: 60, windowMs: 60000 }),
+  async (req, res) => {
+    try {
+      const agent = await requireArbitrageAgent(req, res);
+      if (!agent) return;
+
+      if (req.query.runId && !isValidUUID(req.query.runId)) {
+        return sendError(res, 'VALIDATION_ERROR', 'Invalid run ID format', 400);
+      }
+
+      const result = await getArbitrageProfitRisk(agent.id, { runId: req.query.runId });
+      if (!result) {
+        return sendError(res, 'NOT_FOUND', 'Arbitrage agent not found', 404);
+      }
+
+      return res.json({ ok: true, ...result });
+    } catch (error) {
+      logger.error('Arbitrage profit-risk error:', error);
+      return sendError(res, 'SERVER_ERROR', 'Failed to load profit and risk analytics', 500);
     }
   },
 );
