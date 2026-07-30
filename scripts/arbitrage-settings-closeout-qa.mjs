@@ -3,8 +3,11 @@
  * Controlled Settings persistence QA — capture, change, verify, restore.
  * Safe analytical values only; no execution side effects.
  */
-import dotenv from 'dotenv';
-import jwt from 'jsonwebtoken';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const dotenv = require('/home/ubuntu/webapp/TitanGold/backend/node_modules/dotenv');
+const jwt = require('/home/ubuntu/webapp/TitanGold/backend/node_modules/jsonwebtoken');
 
 const AGENT_ID = process.env.ARB_QA_AGENT_ID || '04b6ca95-5fd3-471d-a568-bd7f1c391d83';
 const API_BASE = process.env.ARB_QA_API_BASE || 'http://127.0.0.1:5002';
@@ -46,7 +49,7 @@ function pickSnapshot(settings) {
 }
 
 async function main() {
-  const originalGet = await api(`/api/v1/ai/agents/${AGENT_ID}/arbitrage/settings`);
+  const originalGet = await api(`/api/v1/ai-agents/${AGENT_ID}/arbitrage/settings`);
   if (!originalGet.res.ok) {
     console.error('GET settings failed', originalGet.res.status, originalGet.body);
     process.exit(1);
@@ -64,7 +67,7 @@ async function main() {
     notificationPreference: original.notificationPreference,
   };
 
-  const update = await api(`/api/v1/ai/agents/${AGENT_ID}/arbitrage/settings`, {
+  const update = await api(`/api/v1/ai-agents/${AGENT_ID}/arbitrage/settings`, {
     method: 'PUT',
     body: JSON.stringify({ settings: tempPayload, expectedVersion: original.version }),
   });
@@ -75,7 +78,7 @@ async function main() {
   const afterChange = update.body.settings;
   const afterSnapshot = pickSnapshot(afterChange);
 
-  const verifyGet = await api(`/api/v1/ai/agents/${AGENT_ID}/arbitrage/settings`);
+  const verifyGet = await api(`/api/v1/ai-agents/${AGENT_ID}/arbitrage/settings`);
   const verified = verifyGet.body.settings;
 
   const restorePayload = {
@@ -86,7 +89,7 @@ async function main() {
     maximumDataAgeMs: original.maximumDataAgeMs,
     notificationPreference: original.notificationPreference,
   };
-  const restore = await api(`/api/v1/ai/agents/${AGENT_ID}/arbitrage/settings`, {
+  const restore = await api(`/api/v1/ai-agents/${AGENT_ID}/arbitrage/settings`, {
     method: 'PUT',
     body: JSON.stringify({ settings: restorePayload, expectedVersion: afterChange.version }),
   });
