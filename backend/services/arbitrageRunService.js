@@ -744,11 +744,13 @@ export async function getArbitrageProfitRisk(agentId, { runId } = {}) {
     enrichTrendRunFromOutput(row, agent.id, mapDecisionRowToScanRun),
   );
 
+  const rawOutput = detail.raw || {};
   const analytics = buildProfitRiskAnalytics({
     scanRun: detail.scanRun,
-    candidates: detail.candidates || mapCandidatesFromRunOutput(detail.raw, effectiveRunId),
+    candidates: detail.candidates || mapCandidatesFromRunOutput(rawOutput, effectiveRunId),
+    rawCandidates: [...(rawOutput.candidates || []), ...(rawOutput.rejectedCandidates || [])],
     settings,
-    rawOutput: detail.raw || {},
+    rawOutput,
     trendRuns,
   });
 
