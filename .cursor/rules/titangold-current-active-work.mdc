@@ -1,25 +1,25 @@
 ---
-description: TitanGold dynamic active-work authority — Arbitrage Profit & Risk completion
+description: TitanGold dynamic active-work authority — Arbitrage Profit & Risk truthfulness correction
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Complete Arbitrage Profit & Risk as a truthful analytical decision-support
-surface inside the frozen Agent Product Template.
+Correct Profit & Risk calculation and presentation truthfulness so economics
+match canonical bps formulas and selected-candidate ownership.
 
 Current area:
-Agents → Arbitrage → Profit & Risk (sole active tab outcome)
+Agents → Arbitrage → Profit & Risk (truthfulness remediation)
 
 Current program slice:
-ARBITRAGE-PROFIT-RISK-FULL-PRODUCT
+ARBITRAGE-PROFIT-RISK-TRUTHFULNESS-CORRECTION
 
 Risk tier:
 Tier 2 analytical product (Tier-4/Live execution remains blocked)
 
 Engineering status:
-PROFIT & RISK IN PROGRESS — Scan History frozen; Human QA pending for Profit & Risk
+PROFIT & RISK TRUTHFULNESS FIX DEPLOYED — awaiting Human QA re-test
 
 Closed and frozen baselines:
 - Agent Product Template V1: CLOSED AND FROZEN
@@ -27,30 +27,31 @@ Closed and frozen baselines:
 - Manual Analytical Scan: VERIFIED
 - Arbitrage Candidates: CLOSED AND FROZEN at `1e24f3e`
 - Arbitrage Scan History: CLOSED AND FROZEN (Human QA PASSED; performance verified)
-- Scan History frozen commit: substantive HEAD after `88366d3` closeout
-- Reopen frozen tabs only for a reproduced production defect
+- Do not reopen frozen tabs except for reproduced regression
 
 Expected baseline:
 - Feature branch: `feat/arbitrage-agent-full-product`
+- Deployed HEAD: `a09a747` (after truthfulness correction)
+- Prior deployed baseline: `e65bfcf`
 - Scheduler owner: `titan-engine-worker` (do not restart)
 - Scheduler allowlist: `["arbitrage"]` only — do not expand
 - Demo + Emergency Stop remain active; Live impossible
 
 Authorized scope:
-- Profit & Risk backend contract, selected-run analytics, trend, assumptions
-- Profit & Risk product UI (EN/FA/RTL, mobile, accessibility)
-- profitRiskPresentation mapper and locale keys
+- Profit & Risk unit contract, formulas, selected candidate ownership
+- Risk score unavailable semantics
+- Metric cards, run selector, trend table, EN/FA/RTL
 - Profit & Risk regression tests and Browser QA
-- Guarded Staging deploy of Profit & Risk changes
+- Guarded Staging deploy
 
 Hard boundaries:
-- Do not redesign or refactor frozen Candidates, Overview, History, or Template
-- Do not start Settings, Integrations, or another Agent
-- Do not add/apply database migration without explicit stop and approval
-- Do not access private exchange credentials
-- Do not add financial execution
+- Do not freeze Profit & Risk until Human QA passes
+- Do not start Settings or Integrations
+- Do not modify frozen Overview, Candidates, History except regression
+- Do not open a PR
+- Do not apply migration
+- Do not access private credentials or enable execution
 - Do not restart titan-engine-worker or change Scheduler allowlist
-- Do not open a PR until Profit & Risk Human QA passes
 
 Next transition:
-READY FOR ARBITRAGE PROFIT AND RISK HUMAN QA → user-approved PR (Profit & Risk only)
+READY FOR ARBITRAGE PROFIT AND RISK TRUTHFULNESS HUMAN QA
