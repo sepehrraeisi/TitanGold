@@ -6,8 +6,10 @@ import {
   buildProfitRiskAnalytics,
   computeEstimatedNetSpreadBps,
   computeEstimatedProfitValue,
+  deriveAnalyticalNotionalFromPublicVolume,
   extractGrossSpreadBpsFromRaw,
   mapCandidatesFromRunOutput,
+  NOTIONAL_CAP_USDT,
   PROFIT_RISK_DATA_CONTRACT_VERSION,
   SELECTION_BASIS,
 } from '../../services/arbitrageProfitRiskDomain.js';
@@ -107,7 +109,13 @@ describe('arbitrage profit risk canonical calculations', () => {
   it('qualified candidate selection uses best qualified basis', () => {
     const rawOutput = {
       candidates: [
-        { id: 'q1', symbol: 'BTCUSDT', spreadPct: 0.5, lifecycleState: CANDIDATE_LIFECYCLE.QUALIFIED },
+        {
+          id: 'q1',
+          symbol: 'BTCUSDT',
+          spreadPct: 0.5,
+          volume24hUSDT: 2_000_000,
+          lifecycleState: CANDIDATE_LIFECYCLE.QUALIFIED,
+        },
       ],
       rejectedCandidates: [],
     };
@@ -177,7 +185,7 @@ describe('arbitrage profit risk canonical calculations', () => {
 
   it('buildProfitRiskAnalytics exposes canonical contract version', () => {
     const rawOutput = {
-      candidates: [{ symbol: 'BTCUSDT', spreadPct: 0.5, riskScore: 20 }],
+      candidates: [{ symbol: 'BTCUSDT', spreadPct: 0.5, riskScore: 20, volume24hUSDT: 500000 }],
       rejectedCandidates: [],
       riskStats: { averageScore: 20 },
     };
@@ -198,85 +206,153 @@ describe('arbitrage profit risk canonical calculations', () => {
     expect(analytics.dataContractVersion).toBe(PROFIT_RISK_DATA_CONTRACT_VERSION);
     expect(analytics.executionSupported).toBe(false);
     expect(analytics.riskScore).toBe(20);
-    expect(analytics.notionalValue).toBeNull();
-    expect(analytics.estimatedProfitValue).toBeNull();
+    expect(analytics.notionalValue).toBe(5000);
+    expect(analytics.notionalState).toBe('derived_estimate');
   });
 
-  it('exposes analytical notional from candidate testVolumeUSDT only', () => {
-    const rawOutput = {
-      candidates: [
-        {
-          id: 'c1',
-          symbol: 'BTCUSDT',
-          spreadPct: 0.5,
-          testVolumeUSDT: 10000,
-          riskScore: 10,
-        },
-      ],
-      rejectedCandidates: [],
-      riskStats: { averageScore: 10 },
-    };
-    const analytics = buildProfitRiskAnalytics({
-      scanRun: buildScanRunDto({ runId: 'r-n', agentId: 'a1', rawOutput }),
-      candidates: mapCandidatesFromRunOutput(rawOutput, 'r-n'),
-      rawCandidates: rawOutput.candidates,
-      settings: { assumedFeesBps: 10, assumedSlippageBps: 10, testVolumeUSDT: 99999 },
-      rawOutput,
+  describe('analytical notional semantics', () => {
+    it('public volume produces derived notional with one_percent_capped', () => {
+      const result = deriveAnalyticalNotionalFromPublicVolume(2_000_000);
+      expect(result.notionalState).toBe('derived_estimate');
+      expect(result.notionalSource).toBe('public_market_volume_24h');
+      expect(result.notionalDerivation).toBe('one_percent_capped');
+      expect(result.notionalCapValue).toBe(NOTIONAL_CAP_USDT);
+      expect(result.uncappedNotionalValue).toBe(20000);
+      expect(result.notionalValue).toBe(10000);
     });
-    expect(analytics.notionalValue).toBe(10000);
-    expect(analytics.notionalSource).toBe('candidate.testVolumeUSDT');
-    expect(analytics.estimatedProfitValue).toBeCloseTo((10000 * 30) / 10000, 4);
+
+    it('applies cap at 10000 USDT', () => {
+      const result = deriveAnalyticalNotionalFromPublicVolume(5_000_000);
+      expect(result.uncappedNotionalValue).toBe(50000);
+      expect(result.notionalValue).toBe(10000);
+    });
+
+    it('value below cap remains uncapped', () => {
+      const result = deriveAnalyticalNotionalFromPublicVolume(500_000);
+      expect(result.uncappedNotionalValue).toBe(5000);
+      expect(result.notionalValue).toBe(5000);
+    });
+
+    it('missing public volume produces unavailable notional', () => {
+      const result = deriveAnalyticalNotionalFromPublicVolume(null);
+      expect(result.notionalValue).toBeNull();
+      expect(result.notionalState).toBe('unavailable');
+    });
+
+    it('invalid or negative volume produces unavailable notional', () => {
+      expect(deriveAnalyticalNotionalFromPublicVolume(-100).notionalValue).toBeNull();
+      expect(deriveAnalyticalNotionalFromPublicVolume(0).notionalValue).toBeNull();
+    });
+
+    it('does not use testVolumeUSDT without public volume', () => {
+      const rawOutput = {
+        candidates: [
+          {
+            id: 'c1',
+            symbol: 'BTCUSDT',
+            spreadPct: 0.5,
+            testVolumeUSDT: 10000,
+            riskScore: 10,
+          },
+        ],
+        rejectedCandidates: [],
+        riskStats: { averageScore: 10 },
+      };
+      const analytics = buildProfitRiskAnalytics({
+        scanRun: buildScanRunDto({ runId: 'r-n', agentId: 'a1', rawOutput }),
+        candidates: mapCandidatesFromRunOutput(rawOutput, 'r-n'),
+        rawCandidates: rawOutput.candidates,
+        settings: { assumedFeesBps: 10, assumedSlippageBps: 10, testVolumeUSDT: 99999 },
+        rawOutput,
+      });
+      expect(analytics.notionalValue).toBeNull();
+      expect(analytics.notionalState).toBe('unavailable');
+      expect(analytics.estimatedAnalyticalProfitValue).toBeNull();
+    });
+
+    it('derives notional from volume24hUSDT with exact analytical profit formula', () => {
+      const rawOutput = {
+        candidates: [
+          {
+            id: 'c1',
+            symbol: 'BTCUSDT',
+            spreadPct: 0.5,
+            volume24hUSDT: 2_000_000,
+            riskScore: 10,
+          },
+        ],
+        rejectedCandidates: [],
+        riskStats: { averageScore: 10 },
+      };
+      const analytics = buildProfitRiskAnalytics({
+        scanRun: buildScanRunDto({ runId: 'r-v', agentId: 'a1', rawOutput }),
+        candidates: mapCandidatesFromRunOutput(rawOutput, 'r-v'),
+        rawCandidates: rawOutput.candidates,
+        settings: { assumedFeesBps: 10, assumedSlippageBps: 10 },
+        rawOutput,
+      });
+      expect(analytics.notionalValue).toBe(10000);
+      expect(analytics.notionalSource).toBe('public_market_volume_24h');
+      expect(analytics.publicMarketVolume24h).toBe(2_000_000);
+      expect(analytics.estimatedNetSpreadBps).toBeCloseTo(30, 2);
+      expect(analytics.estimatedAnalyticalProfitValue).toBeCloseTo(30, 4);
+    });
+
+    it('does not infer default notional from settings', () => {
+      const rawOutput = {
+        candidates: [{ id: 'c1', symbol: 'BTCUSDT', spreadPct: 0.5 }],
+        rejectedCandidates: [],
+      };
+      const analytics = buildProfitRiskAnalytics({
+        scanRun: buildScanRunDto({ runId: 'r-no', agentId: 'a1', rawOutput }),
+        candidates: mapCandidatesFromRunOutput(rawOutput, 'r-no'),
+        rawCandidates: rawOutput.candidates,
+        settings: { testVolumeUSDT: 10000, assumedFeesBps: 10, assumedSlippageBps: 10 },
+        rawOutput,
+      });
+      expect(analytics.notionalValue).toBeNull();
+      expect(analytics.estimatedProfitValue).toBeNull();
+    });
   });
 
-  it('does not infer default notional from settings', () => {
-    const rawOutput = {
-      candidates: [{ id: 'c1', symbol: 'BTCUSDT', spreadPct: 0.5 }],
-      rejectedCandidates: [],
-    };
-    const analytics = buildProfitRiskAnalytics({
-      scanRun: buildScanRunDto({ runId: 'r-no', agentId: 'a1', rawOutput }),
-      candidates: mapCandidatesFromRunOutput(rawOutput, 'r-no'),
-      rawCandidates: rawOutput.candidates,
-      settings: { testVolumeUSDT: 10000, assumedFeesBps: 10, assumedSlippageBps: 10 },
-      rawOutput,
+  describe('risk score regression guard', () => {
+    it('accepts explicit measured risk zero when scored candidates exist', () => {
+      const rawOutput = {
+        candidates: [
+          { symbol: 'BTCUSDT', spreadPct: 0.5, riskScore: 0, volume24hUSDT: 1_000_000 },
+        ],
+        rejectedCandidates: [],
+        riskStats: { averageScore: 0 },
+      };
+      const analytics = buildProfitRiskAnalytics({
+        scanRun: buildScanRunDto({ runId: 'r0', agentId: 'a1', rawOutput }),
+        candidates: mapCandidatesFromRunOutput(rawOutput, 'r0'),
+        rawCandidates: rawOutput.candidates,
+        settings: { assumedFeesBps: 10, assumedSlippageBps: 10 },
+        rawOutput,
+      });
+      expect(analytics.riskScore).toBe(0);
+      expect(analytics.riskScoreState).toBe('measured');
+      expect(analytics.riskScoreSource).toBe('run_risk_stats_average');
+      expect(analytics.notionalState).toBe('derived_estimate');
     });
-    expect(analytics.notionalValue).toBeNull();
-    expect(analytics.estimatedProfitValue).toBeNull();
-  });
 
-  it('accepts explicit measured risk zero when scored candidates exist', () => {
-    const rawOutput = {
-      candidates: [{ symbol: 'BTCUSDT', spreadPct: 0.5, riskScore: 0, testVolumeUSDT: 1000 }],
-      rejectedCandidates: [],
-      riskStats: { averageScore: 0 },
-    };
-    const analytics = buildProfitRiskAnalytics({
-      scanRun: buildScanRunDto({ runId: 'r0', agentId: 'a1', rawOutput }),
-      candidates: mapCandidatesFromRunOutput(rawOutput, 'r0'),
-      rawCandidates: rawOutput.candidates,
-      settings: { assumedFeesBps: 10, assumedSlippageBps: 10 },
-      rawOutput,
+    it('rejects legacy risk stats zero without scored candidates', () => {
+      const rawOutput = {
+        candidates: [],
+        rejectedCandidates: [{ symbol: 'BTCUSDT', spreadPct: 0.0092, rejectionReason: 'SPREAD_OUT_OF_RANGE' }],
+        riskStats: { averageScore: 0 },
+        summary: { avgRiskScore: 0 },
+      };
+      const analytics = buildProfitRiskAnalytics({
+        scanRun: buildScanRunDto({ runId: 'r-leg', agentId: 'a1', rawOutput }),
+        candidates: mapCandidatesFromRunOutput(rawOutput, 'r-leg'),
+        rawCandidates: rawOutput.rejectedCandidates,
+        settings: {},
+        rawOutput,
+      });
+      expect(analytics.riskScore).toBeNull();
+      expect(analytics.riskScoreState).toBe('unavailable');
     });
-    expect(analytics.riskScore).toBe(0);
-    expect(analytics.riskScoreState).toBe('measured');
-    expect(analytics.riskScoreSource).toBe('run_risk_stats_average');
-  });
-
-  it('rejects legacy risk stats zero without scored candidates', () => {
-    const rawOutput = {
-      candidates: [],
-      rejectedCandidates: [{ symbol: 'BTCUSDT', spreadPct: 0.0092, rejectionReason: 'SPREAD_OUT_OF_RANGE' }],
-      riskStats: { averageScore: 0 },
-      summary: { avgRiskScore: 0 },
-    };
-    const analytics = buildProfitRiskAnalytics({
-      scanRun: buildScanRunDto({ runId: 'r-leg', agentId: 'a1', rawOutput }),
-      candidates: mapCandidatesFromRunOutput(rawOutput, 'r-leg'),
-      rawCandidates: rawOutput.rejectedCandidates,
-      settings: {},
-      rawOutput,
-    });
-    expect(analytics.riskScore).toBeNull();
-    expect(analytics.riskScoreState).toBe('unavailable');
   });
 });

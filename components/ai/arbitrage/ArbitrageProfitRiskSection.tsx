@@ -25,6 +25,8 @@ import {
   presentLiquidityState,
   presentProfitValue,
   presentNotionalValue,
+  presentNotionalDerivationBasis,
+  presentProfitNotRealizedDisclaimer,
   presentRiskFactor,
   presentRiskScore,
   presentRiskScoreHelp,
@@ -112,21 +114,23 @@ function buildEconomicsMetrics(
         </AgentTechnicalLtr>
       ),
       badge: metricBadge(
-        notionalUnavailable ? 'unavailable' : analytics.notionalState || 'measured',
+        notionalUnavailable ? 'unavailable' : 'derived_estimate',
         t,
       ),
       valueState: notionalUnavailable ? 'unavailable' : 'loaded',
-      hint: notionalUnavailable ? resolveProductLabel('arb_pr_notional_unavailable', t) : undefined,
+      hint: notionalUnavailable
+        ? resolveProductLabel('arb_pr_notional_unavailable', t)
+        : presentNotionalDerivationBasis(t),
     },
     {
       id: 'profit',
-      label: presentFieldLabel('estimatedProfit', t),
+      label: presentFieldLabel('estimatedAnalyticalProfit', t),
       value: profitUnavailable ? (
         resolveProductLabel('arb_pr_state_unavailable', t)
       ) : (
         <AgentTechnicalLtr>
           {presentProfitValue(
-            analytics.estimatedProfitValue,
+            analytics.estimatedAnalyticalProfitValue ?? analytics.estimatedProfitValue,
             analytics.estimatedProfitCurrency,
             t,
           )}
@@ -135,7 +139,7 @@ function buildEconomicsMetrics(
       hint:
         profitUnavailable && analytics.estimateReason === 'notional_unavailable'
           ? resolveProductLabel('arb_pr_notional_unavailable', t)
-          : undefined,
+          : presentProfitNotRealizedDisclaimer(t),
       badge: metricBadge(profitUnavailable ? 'unavailable' : 'derived_estimate', t),
       valueState: profitUnavailable ? 'unavailable' : 'loaded',
     },

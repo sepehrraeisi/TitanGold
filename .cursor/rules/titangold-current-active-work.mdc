@@ -1,12 +1,12 @@
 ---
-description: TitanGold dynamic active-work authority — Arbitrage Settings next
+description: TitanGold dynamic active-work authority — Profit & Risk frozen, Settings next
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Begin Arbitrage Settings as the next tab outcome after Profit & Risk closeout.
+Begin Arbitrage Settings as the next tab outcome after Profit & Risk truthful closeout.
 
 Current area:
 Agents → Arbitrage → Settings (next authorized tab — not started in this slice)
@@ -18,7 +18,7 @@ Risk tier:
 Tier 2 settings and persistence (Tier-4/Live execution remains blocked)
 
 Engineering status:
-PROFIT & RISK CLOSED AND FROZEN — Settings authorized as next outcome only
+PROFIT & RISK TRUTHFULLY CLOSED AND FROZEN — Settings authorized as next outcome only
 
 Closed and frozen baselines:
 - Agent Product Template V1: CLOSED AND FROZEN (minimal FA header localization fix applied)
@@ -26,13 +26,12 @@ Closed and frozen baselines:
 - Manual Analytical Scan: VERIFIED
 - Arbitrage Candidates: CLOSED AND FROZEN at `1e24f3e`
 - Arbitrage Scan History: CLOSED AND FROZEN (Human QA PASSED; performance verified)
-- Arbitrage Profit & Risk: CLOSED AND FROZEN at freeze commit on `feat/arbitrage-agent-full-product`
+- Arbitrage Profit & Risk: CLOSED AND FROZEN at notional-semantics freeze commit on `feat/arbitrage-agent-full-product`
+- Calculation baseline reference: `a09a747`
 - Reopen frozen tabs only for a reproduced production defect
 
 Expected baseline:
 - Feature branch: `feat/arbitrage-agent-full-product`
-- Profit & Risk calculation baseline: `a09a747`
-- Profit & Risk freeze commit: see closeout report
 - Scheduler owner: `titan-engine-worker` (do not restart)
 - Scheduler allowlist: `["arbitrage"]` only — do not expand
 - Demo + Emergency Stop remain active; Live impossible

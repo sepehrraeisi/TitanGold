@@ -546,6 +546,18 @@ export function parseArbitrageProfitRiskEnvelope(raw: unknown) {
             notionalCurrency: analytics.notionalCurrency ? String(analytics.notionalCurrency) : null,
             notionalState: analytics.notionalState ? String(analytics.notionalState) : undefined,
             notionalSource: analytics.notionalSource ? String(analytics.notionalSource) : null,
+            notionalDerivation: analytics.notionalDerivation ? String(analytics.notionalDerivation) : null,
+            notionalCapValue: analytics.notionalCapValue != null ? asNumber(analytics.notionalCapValue) : null,
+            publicMarketVolume24h:
+                analytics.publicMarketVolume24h != null ? asNumber(analytics.publicMarketVolume24h) : null,
+            uncappedNotionalValue:
+                analytics.uncappedNotionalValue != null ? asNumber(analytics.uncappedNotionalValue) : null,
+            estimatedAnalyticalProfitValue:
+                analytics.estimatedAnalyticalProfitValue != null
+                    ? asNumber(analytics.estimatedAnalyticalProfitValue)
+                    : analytics.estimatedProfitValue != null
+                      ? asNumber(analytics.estimatedProfitValue)
+                      : null,
             estimateState: analytics.estimateState ? String(analytics.estimateState) : undefined,
             estimateReason: analytics.estimateReason ? String(analytics.estimateReason) : null,
             selectedCandidateId: analytics.selectedCandidateId ? String(analytics.selectedCandidateId) : null,

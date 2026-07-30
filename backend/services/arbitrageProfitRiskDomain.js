@@ -14,7 +14,10 @@ import {
   SCAN_RUN_DATA_CONTRACT_VERSION,
 } from './arbitrageDomain.js';
 
-export const PROFIT_RISK_DATA_CONTRACT_VERSION = '1.2';
+export const PROFIT_RISK_DATA_CONTRACT_VERSION = '1.3';
+
+export const NOTIONAL_DERIVATION_PERCENT = 0.01;
+export const NOTIONAL_CAP_USDT = 10000;
 
 export const ESTIMATE_STATE = Object.freeze({
   MEASURED: 'measured',
@@ -78,34 +81,55 @@ export function extractAssumedSlippageBps(raw = {}, settings = {}) {
   return toNum(settings.assumedSlippageBps);
 }
 
-export function extractNotionalValue(raw = {}) {
-  return toNum(raw.testVolumeUSDT ?? raw.estimatedNotional ?? raw.notionalValue);
+export function extractPublicMarketVolume24h(raw = {}) {
+  return toNum(raw.volume24hUSDT ?? raw.volume24h ?? raw.quoteVolume24hUSDT);
 }
 
-export function resolveNotionalFromRaw(raw = {}) {
-  const value = extractNotionalValue(raw);
-  if (value == null || value <= 0) {
+export function deriveAnalyticalNotionalFromPublicVolume(volume24hUSDT) {
+  const volume = toNum(volume24hUSDT);
+  if (volume == null || volume <= 0) {
     return {
       notionalValue: null,
       notionalCurrency: null,
       notionalState: ESTIMATE_STATE.UNAVAILABLE,
       notionalSource: null,
-      notionalReason: 'notional_unavailable',
+      notionalDerivation: null,
+      notionalCapValue: NOTIONAL_CAP_USDT,
+      publicMarketVolume24h: null,
+      uncappedNotionalValue: null,
+      notionalReason: 'public_volume_unavailable',
     };
   }
-  const sourceField =
-    raw.testVolumeUSDT != null
-      ? 'candidate.testVolumeUSDT'
-      : raw.estimatedNotional != null
-        ? 'candidate.estimatedNotional'
-        : 'candidate.notionalValue';
+  const uncappedNotionalValue = volume * NOTIONAL_DERIVATION_PERCENT;
+  const notionalValue = Math.min(uncappedNotionalValue, NOTIONAL_CAP_USDT);
+  if (notionalValue <= 0) {
+    return {
+      notionalValue: null,
+      notionalCurrency: null,
+      notionalState: ESTIMATE_STATE.UNAVAILABLE,
+      notionalSource: null,
+      notionalDerivation: null,
+      notionalCapValue: NOTIONAL_CAP_USDT,
+      publicMarketVolume24h: volume,
+      uncappedNotionalValue,
+      notionalReason: 'invalid_public_volume',
+    };
+  }
   return {
-    notionalValue: value,
+    notionalValue,
     notionalCurrency: 'USDT',
-    notionalState: ESTIMATE_STATE.MEASURED,
-    notionalSource: sourceField,
+    notionalState: ESTIMATE_STATE.DERIVED,
+    notionalSource: 'public_market_volume_24h',
+    notionalDerivation: 'one_percent_capped',
+    notionalCapValue: NOTIONAL_CAP_USDT,
+    publicMarketVolume24h: volume,
+    uncappedNotionalValue,
     notionalReason: null,
   };
+}
+
+export function resolveNotionalFromRaw(raw = {}) {
+  return deriveAnalyticalNotionalFromPublicVolume(extractPublicMarketVolume24h(raw));
 }
 
 export function computeEstimatedNetSpreadBps(grossSpreadBps, assumedFeesBps, assumedSlippageBps) {
@@ -180,7 +204,12 @@ function buildCandidateEconomics(raw = {}, settings = {}) {
     notionalCurrency: notional.notionalCurrency,
     notionalState: notional.notionalState,
     notionalSource: notional.notionalSource,
+    notionalDerivation: notional.notionalDerivation,
+    notionalCapValue: notional.notionalCapValue,
+    publicMarketVolume24h: notional.publicMarketVolume24h,
+    uncappedNotionalValue: notional.uncappedNotionalValue,
     estimatedProfitValue: profit.estimatedProfitValue,
+    estimatedAnalyticalProfitValue: profit.estimatedProfitValue,
     estimatedProfitCurrency: profit.estimatedProfitCurrency,
     riskScore: toNum(raw.riskScore),
   };
@@ -199,6 +228,7 @@ function economicsFromDto(candidate, settings = {}) {
         slippagePct: candidate.estimatedSlippageBps != null ? candidate.estimatedSlippageBps / 100 : null,
       },
       testVolumeUSDT: candidate.estimatedNotional,
+      volume24hUSDT: candidate.publicMarketVolume24h,
       riskScore: candidate.riskScore,
       lifecycleState: candidate.lifecycleState,
       rejectionReason: candidate.rejectionReasons?.[0],
@@ -305,8 +335,8 @@ function summarizeCandidateEconomics(rawCandidates = [], dtoCandidates = [], set
     estimatedProfitCurrency = profit.estimatedProfitCurrency;
 
     if (selected.lifecycleState === CANDIDATE_LIFECYCLE.QUALIFIED && estimatedProfitValue != null) {
-      estimateState = ESTIMATE_STATE.MEASURED;
-      estimateReason = null;
+      estimateState = ESTIMATE_STATE.DERIVED;
+      estimateReason = 'analytical_profit_from_derived_notional';
     } else if (estimatedNetSpreadBps != null) {
       estimateState = ESTIMATE_STATE.DERIVED;
       estimateReason = net.estimateReason;
@@ -345,11 +375,16 @@ function summarizeCandidateEconomics(rawCandidates = [], dtoCandidates = [], set
     assumedSlippageBps: slippageBps,
     estimatedNetSpreadBps,
     estimatedProfitValue,
+    estimatedAnalyticalProfitValue: estimatedProfitValue,
     estimatedProfitCurrency,
     notionalValue: selected?.notionalValue ?? null,
     notionalCurrency: selected?.notionalCurrency ?? null,
     notionalState: selected?.notionalState ?? ESTIMATE_STATE.UNAVAILABLE,
     notionalSource: selected?.notionalSource ?? null,
+    notionalDerivation: selected?.notionalDerivation ?? null,
+    notionalCapValue: selected?.notionalCapValue ?? NOTIONAL_CAP_USDT,
+    publicMarketVolume24h: selected?.publicMarketVolume24h ?? null,
+    uncappedNotionalValue: selected?.uncappedNotionalValue ?? null,
     estimateState,
     estimateReason,
     selectedCandidateId: selection.selectedCandidateId,

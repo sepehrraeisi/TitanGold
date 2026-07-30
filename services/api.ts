@@ -8245,6 +8245,11 @@ export interface ArbitrageCoreProfitRiskAnalytics {
     notionalCurrency?: string | null;
     notionalState?: string;
     notionalSource?: string | null;
+    notionalDerivation?: string | null;
+    notionalCapValue?: number | null;
+    publicMarketVolume24h?: number | null;
+    uncappedNotionalValue?: number | null;
+    estimatedAnalyticalProfitValue?: number | null;
     estimateState?: string;
     estimateReason?: string | null;
     selectedCandidateId?: string | null;

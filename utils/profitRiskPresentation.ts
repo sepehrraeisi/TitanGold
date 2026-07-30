@@ -98,6 +98,14 @@ export function verifyProfitFormula(
   return Math.abs(expected - estimatedProfitValue) < 0.0001;
 }
 
+export function presentNotionalDerivationBasis(t: TranslateFn): string {
+  return resolveProductLabel('arb_pr_notional_derivation_basis', t);
+}
+
+export function presentProfitNotRealizedDisclaimer(t: TranslateFn): string {
+  return resolveProductLabel('arb_pr_profit_not_realized_disclaimer', t);
+}
+
 export function presentNotionalValue(
   value: number | null | undefined,
   currency: string | null | undefined,
@@ -194,6 +202,7 @@ export function presentFieldLabel(field: string, t: TranslateFn): string {
     selectedCandidate: 'arb_pr_selected_candidate',
     selectionBasis: 'arb_pr_selection_basis',
     analyticalNotional: 'arb_pr_analytical_notional',
+    estimatedAnalyticalProfit: 'arb_pr_estimated_analytical_profit',
   };
   const key = keys[field];
   return key ? resolveProductLabel(key, t) : resolveProductLabel('unavailable', t);
