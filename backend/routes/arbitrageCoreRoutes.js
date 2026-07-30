@@ -19,6 +19,7 @@ import {
   getArbitrageIntegrations,
   getArbitrageOverview,
   getArbitrageRunDetail,
+  getArbitrageRunComparison,
   getArbitrageRuns,
   loadArbitrageAgent,
   updateArbitrageSettings,
@@ -173,21 +174,57 @@ router.get(
       const result = await getArbitrageRuns(agent.id, {
         page: req.query.page,
         pageSize: req.query.pageSize || req.query.limit,
+        trigger: req.query.trigger,
+        status: req.query.status,
+        dateFrom: req.query.dateFrom,
+        dateTo: req.query.dateTo,
+        search: req.query.search || req.query.runId,
+        sort: req.query.sort,
       });
 
       return res.json({
         ok: true,
         runs: result.items,
         items: result.items,
+        summary: result.summary,
+        availableFilters: result.availableFilters,
+        generatedAt: result.generatedAt,
         pagination: {
           ...result.pagination,
-          hasNext: result.pagination.page < result.pagination.totalPages,
-          hasPrevious: result.pagination.page > 1,
+          hasNext: result.pagination.hasNext,
+          hasPrevious: result.pagination.hasPrevious,
         },
       });
     } catch (error) {
       logger.error('Arbitrage runs error:', error);
       return sendError(res, 'SERVER_ERROR', 'Failed to load scan runs', 500);
+    }
+  },
+);
+
+router.get(
+  '/runs/:runId/compare',
+  authenticateStrict,
+  requireCapability(CAP.AI_AGENT_READ),
+  rateLimit({ limit: 60, windowMs: 60000 }),
+  async (req, res) => {
+    try {
+      const agent = await requireArbitrageAgent(req, res);
+      if (!agent) return;
+
+      if (!isValidUUID(req.params.runId)) {
+        return sendError(res, 'VALIDATION_ERROR', 'Invalid run ID format', 400);
+      }
+
+      const comparison = await getArbitrageRunComparison(agent.id, req.params.runId);
+      if (!comparison) {
+        return sendError(res, 'NOT_FOUND', 'Scan run not found', 404);
+      }
+
+      return res.json({ ok: true, ...comparison });
+    } catch (error) {
+      logger.error('Arbitrage run comparison error:', error);
+      return sendError(res, 'SERVER_ERROR', 'Failed to load scan run comparison', 500);
     }
   },
 );
@@ -215,6 +252,7 @@ router.get(
         ok: true,
         scanRun: detail.scanRun,
         candidates: detail.candidates,
+        malformed: detail.malformed === true,
       });
     } catch (error) {
       logger.error('Arbitrage run detail error:', error);

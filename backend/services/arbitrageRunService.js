@@ -12,12 +12,16 @@ import {
   buildSettingsDto,
   buildCandidateAvailableFilters,
   buildCandidateFunnelFromItems,
+  buildHistorySummary,
+  compareScanRuns,
   deriveInterpretation,
   getProductIdentity,
   mapDecisionRowToScanRun,
   mapRawCandidateToDto,
   MONITORING_STATE,
+  SCAN_RUN_STATUS,
   sanitizeConfigForWrite as sanitizeDomainConfig,
+  validateHistoryQuery,
   validatePagination,
   validateSettingsInput,
 } from './arbitrageDomain.js';
@@ -186,6 +190,7 @@ function mapRecentRunSummary(row, agentId) {
     durationMs: scanRun.durationMs,
     durationAvailability: scanRun.durationAvailability,
     durationReason: scanRun.durationReason,
+    durationState: scanRun.durationState,
     dataFreshnessState: scanRun.dataFreshnessState,
     dataFreshnessMs: scanRun.dataFreshnessMs,
     dataFreshnessReason: scanRun.dataFreshnessReason,
@@ -194,6 +199,12 @@ function mapRecentRunSummary(row, agentId) {
     runtimeMode: scanRun.runtimeMode,
     funnel: scanRun.funnel,
     rejectionSummary: scanRun.rejectionSummary,
+    primaryRejectionReasons: scanRun.primaryRejectionReasons,
+    evaluatedSymbols: scanRun.evaluatedSymbols,
+    rejectedCount: scanRun.rejectedCount,
+    qualifiedCount: scanRun.qualifiedCount,
+    failureReason: scanRun.failureReason,
+    sideEffectsSuppressed: scanRun.sideEffectsSuppressed,
   };
 }
 
@@ -478,51 +489,126 @@ export async function getArbitrageCandidates(agentId, filters = {}) {
   };
 }
 
-export async function getArbitrageRuns(agentId, pagination = {}) {
+export async function getArbitrageRuns(agentId, filters = {}) {
   const agent = await loadArbitrageAgent(agentId);
   if (!agent) return null;
 
-  const { page, pageSize, offset } = validatePagination(pagination);
+  const queryOpts = validateHistoryQuery(filters);
+  const { page, pageSize, offset, trigger, status, dateFrom, dateTo, search, sort } = queryOpts;
+
+  const params = [agent.id, ARBITRAGE_DECISION_TYPE];
+  let where = 'agent_id = $1 AND decision_type = $2';
+
+  if (trigger) {
+    params.push(trigger);
+    where += ` AND COALESCE(input_data->>'trigger', output_data->>'trigger', 'scheduled') = $${params.length}`;
+  }
+  if (dateFrom) {
+    params.push(dateFrom);
+    where += ` AND created_at >= $${params.length}::timestamptz`;
+  }
+  if (dateTo) {
+    params.push(dateTo);
+    where += ` AND created_at <= $${params.length}::timestamptz`;
+  }
+  if (status === SCAN_RUN_STATUS.FAILED) {
+    where += ' AND was_successful = false';
+  } else if (status === SCAN_RUN_STATUS.COMPLETED) {
+    where += ' AND was_successful = true';
+  }
+  if (search && /^[a-f0-9-]{8,36}$/i.test(search)) {
+    params.push(`${search}%`);
+    where += ` AND id::text ILIKE $${params.length}`;
+  }
 
   const countResult = await query(
-    `SELECT COUNT(*)::int AS total
-     FROM ai_decisions
-     WHERE agent_id = $1 AND decision_type = $2`,
-    [agent.id, ARBITRAGE_DECISION_TYPE],
+    `SELECT COUNT(*)::int AS total FROM ai_decisions WHERE ${where}`,
+    params,
   );
   const total = countResult.rows[0]?.total || 0;
 
+  const orderDir = sort.endsWith(':asc') ? 'ASC' : 'DESC';
   const rows = await query(
     `SELECT id, input_data, output_data, created_at, execution_time_ms, was_successful
      FROM ai_decisions
-     WHERE agent_id = $1 AND decision_type = $2
-     ORDER BY created_at DESC, id DESC
-     LIMIT $3 OFFSET $4`,
-    [agent.id, ARBITRAGE_DECISION_TYPE, pageSize, offset],
+     WHERE ${where}
+     ORDER BY created_at ${orderDir}, id ${orderDir}
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, pageSize, offset],
   );
 
   const items = rows.rows.map((row) =>
-    mapDecisionRowToScanRun(
-      {
-        id: row.id,
-        created_at: row.created_at,
-        execution_time_ms: row.execution_time_ms,
-        output_data: parseJsonField(row.output_data),
-        input_data: parseJsonField(row.input_data),
-      },
-      agent.id,
-    ),
+    mapRecentRunSummary(row, agent.id),
   );
+
+  const [historicalSummary] = await Promise.all([
+    fetchArbitrageHistoricalSummary(agent.id),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return {
     items,
+    summary: buildHistorySummary(historicalSummary),
+    availableFilters: {
+      triggers: ['manual', 'scheduled'],
+      statuses: [
+        SCAN_RUN_STATUS.COMPLETED,
+        SCAN_RUN_STATUS.FAILED,
+        SCAN_RUN_STATUS.RUNNING,
+        SCAN_RUN_STATUS.CANCELLED,
+        SCAN_RUN_STATUS.BLOCKED,
+      ],
+    },
+    generatedAt: new Date().toISOString(),
     pagination: {
       page,
       pageSize,
       total,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      totalPages,
       hasMore: offset + items.length < total,
+      hasNext: page < totalPages,
+      hasPrevious: page > 1,
     },
+  };
+}
+
+export async function getArbitrageRunComparison(agentId, runId) {
+  const agent = await loadArbitrageAgent(agentId);
+  if (!agent) return null;
+
+  const detail = await getArbitrageRunDetail(agentId, runId);
+  if (!detail) return null;
+
+  const current = detail.scanRun;
+  const prevResult = await query(
+    `SELECT id, input_data, output_data, created_at, execution_time_ms, was_successful
+     FROM ai_decisions
+     WHERE agent_id = $1 AND decision_type = $2 AND created_at < $3::timestamptz
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [agent.id, ARBITRAGE_DECISION_TYPE, current.startedAt || current.createdAt],
+  );
+
+  const previous =
+    prevResult.rows.length > 0
+      ? mapDecisionRowToScanRun(
+          {
+            id: prevResult.rows[0].id,
+            created_at: prevResult.rows[0].created_at,
+            execution_time_ms: prevResult.rows[0].execution_time_ms,
+            output_data: parseJsonField(prevResult.rows[0].output_data),
+            input_data: parseJsonField(prevResult.rows[0].input_data),
+            was_successful: prevResult.rows[0].was_successful,
+          },
+          agent.id,
+        )
+      : null;
+
+  return {
+    current,
+    previous,
+    comparison: compareScanRuns(current, previous),
   };
 }
 
@@ -549,6 +635,7 @@ export async function getArbitrageRunDetail(agentId, runId) {
       execution_time_ms: row.execution_time_ms,
       output_data: output,
       input_data: parseJsonField(row.input_data),
+      was_successful: row.was_successful,
     },
     agent.id,
   );
@@ -558,7 +645,7 @@ export async function getArbitrageRunDetail(agentId, runId) {
     ...(output.rejectedCandidates || []).map((c) => mapRawCandidateToDto(c, { runId: row.id })),
   ];
 
-  return { scanRun, candidates, raw: output };
+  return { scanRun, candidates, raw: output, malformed: !output || typeof output !== 'object' };
 }
 
 export async function getArbitrageIntegrations(agentId) {

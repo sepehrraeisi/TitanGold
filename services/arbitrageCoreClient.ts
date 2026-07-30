@@ -378,6 +378,12 @@ function parseRunSummary(raw: Record<string, unknown>) {
                 ? raw.durationAvailability
                 : undefined,
         durationReason: raw.durationReason ? String(raw.durationReason) : null,
+        durationState:
+            raw.durationState === 'measured' ||
+            raw.durationState === 'sub_ms' ||
+            raw.durationState === 'unavailable'
+                ? raw.durationState
+                : undefined,
         dataFreshnessState:
             raw.dataFreshnessState === 'measured' || raw.dataFreshnessState === 'unavailable'
                 ? raw.dataFreshnessState
@@ -396,10 +402,29 @@ function parseRunSummary(raw: Record<string, unknown>) {
             raw.rejectionSummary && typeof raw.rejectionSummary === 'object'
                 ? (raw.rejectionSummary as Record<string, number>)
                 : {},
+        rejectionDistribution:
+            raw.rejectionDistribution && typeof raw.rejectionDistribution === 'object'
+                ? (raw.rejectionDistribution as Record<string, number>)
+                : undefined,
+        primaryRejectionReasons: Array.isArray(raw.primaryRejectionReasons)
+            ? raw.primaryRejectionReasons.map(String)
+            : undefined,
+        evaluatedSymbols: raw.evaluatedSymbols != null ? asNumber(raw.evaluatedSymbols) : undefined,
+        rejectedCount: raw.rejectedCount != null ? asNumber(raw.rejectedCount) : undefined,
+        qualifiedCount: raw.qualifiedCount != null ? asNumber(raw.qualifiedCount) : undefined,
         symbolsRequested: asStringArray(raw.symbolsRequested),
         symbolsEvaluated: asStringArray(raw.symbolsEvaluated),
         sourceFreshnessMs: raw.sourceFreshnessMs != null ? asNumber(raw.sourceFreshnessMs) : raw.dataFreshnessMs != null ? asNumber(raw.dataFreshnessMs) : null,
         failureReason: raw.failureReason ? String(raw.failureReason) : null,
+        failureCode: raw.failureCode ? String(raw.failureCode) : null,
+        failureMessage: raw.failureMessage ? String(raw.failureMessage) : null,
+        schedulerOwner: raw.schedulerOwner ? String(raw.schedulerOwner) : undefined,
+        sideEffectsSuppressed: raw.sideEffectsSuppressed !== false,
+        executionSupported: raw.executionSupported === true ? true : false,
+        createdAt: raw.createdAt ? String(raw.createdAt) : null,
+        source: raw.source ? String(raw.source) : undefined,
+        dataContractVersion: raw.dataContractVersion ? String(raw.dataContractVersion) : undefined,
+        malformed: raw.malformed === true,
     };
 }
 
@@ -412,8 +437,24 @@ export function parseArbitrageRunsEnvelope(raw: unknown, page: number, pageSize:
     if (!Array.isArray(itemsRaw)) {
         throw new ArbitrageContractError('Runs items must be an array');
     }
+    const availableFiltersRaw = body.availableFilters;
+    const availableFilters =
+        availableFiltersRaw && typeof availableFiltersRaw === 'object'
+            ? {
+                  triggers: Array.isArray((availableFiltersRaw as Record<string, unknown>).triggers)
+                      ? ((availableFiltersRaw as Record<string, unknown>).triggers as unknown[]).map(String)
+                      : ['manual', 'scheduled'],
+                  statuses: Array.isArray((availableFiltersRaw as Record<string, unknown>).statuses)
+                      ? ((availableFiltersRaw as Record<string, unknown>).statuses as unknown[]).map(String)
+                      : ['completed', 'failed'],
+              }
+            : undefined;
+
     return {
         items: itemsRaw.map(item => parseRunSummary(item as Record<string, unknown>)),
+        summary: parseHistoricalSummary(body.summary),
+        availableFilters,
+        generatedAt: body.generatedAt ? String(body.generatedAt) : null,
         pagination: safePagination(body.pagination, page, pageSize),
     };
 }

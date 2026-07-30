@@ -8038,11 +8038,22 @@ export interface ArbitrageCoreRunSummary {
     durationMs?: number | null;
     durationAvailability?: 'measured' | 'sub_ms' | 'unavailable';
     durationReason?: string | null;
+    durationState?: 'measured' | 'sub_ms' | 'unavailable';
     dataFreshnessState?: 'measured' | 'unavailable';
     dataFreshnessMs?: number | null;
     dataFreshnessReason?: string | null;
     funnel?: Record<string, number>;
     sourceFreshnessMs?: number | null;
+    dryRun?: boolean;
+    runtimeMode?: string;
+    rejectionSummary?: Record<string, number>;
+    primaryRejectionReasons?: string[];
+    evaluatedSymbols?: number;
+    rejectedCount?: number;
+    qualifiedCount?: number;
+    failureReason?: string | null;
+    sideEffectsSuppressed?: boolean;
+    schedulerOwner?: string;
 }
 
 export interface ArbitrageCoreOverviewProductState {
@@ -8176,12 +8187,28 @@ export interface ArbitrageCoreCandidatesResponse {
 
 export interface ArbitrageCoreRunsResponse {
     items: ArbitrageCoreRunSummary[];
+    summary?: ArbitrageCoreHistoricalSummary | null;
+    availableFilters?: { triggers: string[]; statuses: string[] };
+    generatedAt?: string | null;
     pagination: {
         page: number;
         pageSize: number;
         total: number;
         totalPages: number;
         hasMore: boolean;
+        hasNext?: boolean;
+        hasPrevious?: boolean;
+    };
+}
+
+export interface ArbitrageCoreRunComparison {
+    current: ArbitrageCoreRunDetail;
+    previous: ArbitrageCoreRunDetail | null;
+    comparison: {
+        hasPrevious: boolean;
+        triggerContext?: string | null;
+        previousTrigger?: string | null;
+        deltas?: Record<string, number | Record<string, number> | null>;
     };
 }
 
@@ -8192,7 +8219,17 @@ export interface ArbitrageCoreRunDetail extends ArbitrageCoreRunSummary {
     symbolsRequested?: string[];
     symbolsEvaluated?: string[];
     rejectionSummary?: Record<string, number>;
+    rejectionDistribution?: Record<string, number>;
     failureReason?: string | null;
+    failureCode?: string | null;
+    failureMessage?: string | null;
+    schedulerOwner?: string;
+    sideEffectsSuppressed?: boolean;
+    executionSupported?: boolean;
+    createdAt?: string | null;
+    source?: string;
+    dataContractVersion?: string;
+    malformed?: boolean;
 }
 
 export interface ArbitrageCoreIntegrations {
@@ -8295,15 +8332,54 @@ export const fetchArbitrageCandidates = async (
 
 export const fetchArbitrageRuns = async (
     agentId: string,
-    opts: { page?: number; pageSize?: number } = {},
+    opts: {
+        page?: number;
+        pageSize?: number;
+        trigger?: string;
+        status?: string;
+        dateFrom?: string;
+        dateTo?: string;
+        search?: string;
+        sort?: string;
+    } = {},
 ): Promise<ArbitrageCoreRunsResponse> => {
     const page = opts.page || 1;
     const pageSize = opts.pageSize || 20;
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    if (opts.trigger) params.set('trigger', opts.trigger);
+    if (opts.status) params.set('status', opts.status);
+    if (opts.dateFrom) params.set('dateFrom', opts.dateFrom);
+    if (opts.dateTo) params.set('dateTo', opts.dateTo);
+    if (opts.search) params.set('search', opts.search);
+    if (opts.sort) params.set('sort', opts.sort);
+    const raw = await arbitrageCoreRequest<unknown>(agentId, `runs?${params.toString()}`);
+    return parseArbitrageRunsEnvelope(raw, page, pageSize);
+};
+
+export const fetchArbitrageRunComparison = async (
+    agentId: string,
+    runId: string,
+): Promise<ArbitrageCoreRunComparison> => {
     const raw = await arbitrageCoreRequest<unknown>(
         agentId,
-        `runs?page=${page}&pageSize=${pageSize}`,
+        `runs/${encodeURIComponent(runId)}/compare`,
     );
-    return parseArbitrageRunsEnvelope(raw, page, pageSize);
+    if (!raw || typeof raw !== 'object') {
+        throw new Error('Invalid comparison response');
+    }
+    const body = raw as Record<string, unknown>;
+    return {
+        current: parseArbitrageRunDetailEnvelope({ scanRun: body.current }),
+        previous: body.previous
+            ? parseArbitrageRunDetailEnvelope({ scanRun: body.previous })
+            : null,
+        comparison: (body.comparison as ArbitrageCoreRunComparison['comparison']) || {
+            hasPrevious: false,
+            deltas: {},
+        },
+    };
 };
 
 export const fetchArbitrageRunDetail = async (

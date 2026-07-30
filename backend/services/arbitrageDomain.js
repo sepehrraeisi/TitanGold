@@ -39,12 +39,16 @@ export const CANDIDATE_LIFECYCLE = Object.freeze({
 });
 
 export const SCAN_RUN_STATUS = Object.freeze({
+  QUEUED: 'queued',
   RUNNING: 'running',
   COMPLETED: 'completed',
   FAILED: 'failed',
   CANCELLED: 'cancelled',
+  EXPIRED: 'expired',
   BLOCKED: 'blocked',
 });
+
+export const SCAN_RUN_DATA_CONTRACT_VERSION = '1.0';
 
 export const MONITORING_STATE = Object.freeze({
   ACTIVE: 'active',
@@ -454,6 +458,7 @@ export function buildScanRunDto({
     durationMs: resolvedDuration.durationMs,
     durationAvailability: resolvedDuration.durationAvailability,
     durationReason: resolvedDuration.durationReason,
+    durationState: resolvedDuration.durationAvailability,
     dataFreshnessState: resolvedFreshness.dataFreshnessState,
     dataFreshnessMs: resolvedFreshness.dataFreshnessMs,
     dataFreshnessReason: resolvedFreshness.dataFreshnessReason,
@@ -470,10 +475,146 @@ export function buildScanRunDto({
     qualifiedCandidates: funnel.qualified,
     expiredCandidates: funnel.expired,
     blockedCandidates: funnel.blocked,
+    requestedSymbols: funnel.symbolsRequested,
+    evaluatedSymbols: funnel.symbolsEvaluated,
+    rawObservationCount: funnel.rawObservations,
+    analyticalCandidateCount: funnel.analyticalCandidates,
+    rejectedCount: funnel.rejected,
+    qualifiedCount: funnel.qualified,
+    expiredCount: funnel.expired,
+    blockedCount: funnel.blocked,
     rejectionSummary: summarizeRejections(rejected),
+    primaryRejectionReasons: buildPrimaryRejectionReasons(summarizeRejections(rejected)),
+    rejectionDistribution: summarizeRejections(rejected),
     failureReason,
+    failureCode: status === SCAN_RUN_STATUS.FAILED ? (failureReason ? 'scan_failed' : 'unknown') : null,
+    failureMessage: failureReason || null,
+    sideEffectsSuppressed: true,
     executionSupported: false,
     executionEligible: false,
+    createdAt: toIso(startedAt),
+    source: 'mexc_public',
+    dataContractVersion: SCAN_RUN_DATA_CONTRACT_VERSION,
+  };
+}
+
+export function buildPrimaryRejectionReasons(rejectionSummary = {}) {
+  return Object.entries(rejectionSummary)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([code]) => code);
+}
+
+export function buildHistorySummary(historicalSummary = {}) {
+  return {
+    totalScanRuns: historicalSummary.totalScanRuns ?? 0,
+    successfulRuns: historicalSummary.successfulRuns ?? 0,
+    failedRuns: historicalSummary.failedRuns ?? 0,
+    scheduledRuns: historicalSummary.scheduledRuns ?? 0,
+    manualRuns: historicalSummary.manualRuns ?? 0,
+    latestSuccessfulRunAt: historicalSummary.latestSuccessfulRunAt ?? null,
+    latestFailedRunAt: historicalSummary.latestFailedRunAt ?? null,
+    latestRunAt: historicalSummary.latestRunAt ?? null,
+    latestCompletedRunAt: historicalSummary.latestCompletedRunAt ?? null,
+  };
+}
+
+const HISTORY_SORT_ALLOWLIST = new Set([
+  'startedAt:desc',
+  'startedAt:asc',
+  'completedAt:desc',
+  'completedAt:asc',
+]);
+
+export function validateHistoryQuery(filters = {}) {
+  const pagination = validatePagination(filters);
+  const trigger =
+    filters.trigger && ['manual', 'scheduled'].includes(String(filters.trigger))
+      ? String(filters.trigger)
+      : null;
+  const status =
+    filters.status && Object.values(SCAN_RUN_STATUS).includes(String(filters.status))
+      ? String(filters.status)
+      : null;
+  const sort = HISTORY_SORT_ALLOWLIST.has(String(filters.sort || ''))
+    ? String(filters.sort)
+    : 'startedAt:desc';
+
+  let dateFrom = null;
+  let dateTo = null;
+  if (filters.dateFrom) {
+    const d = new Date(filters.dateFrom);
+    if (!Number.isNaN(d.getTime())) dateFrom = d.toISOString();
+  }
+  if (filters.dateTo) {
+    const d = new Date(filters.dateTo);
+    if (!Number.isNaN(d.getTime())) dateTo = d.toISOString();
+  }
+
+  const searchRaw = filters.search ? String(filters.search).trim().slice(0, 64) : '';
+  const search = searchRaw || null;
+
+  return {
+    ...pagination,
+    trigger,
+    status,
+    sort,
+    dateFrom,
+    dateTo,
+    search,
+  };
+}
+
+export function compareScanRuns(current = {}, previous = null) {
+  if (!previous) {
+    return {
+      hasPrevious: false,
+      triggerContext: current.trigger || null,
+      deltas: {},
+    };
+  }
+
+  const curFunnel = current.funnel || {};
+  const prevFunnel = previous.funnel || {};
+  const delta = (field) => {
+    const a = toNum(curFunnel[field]) ?? toNum(current[`${field}Count`]) ?? 0;
+    const b = toNum(prevFunnel[field === 'analyticalCandidates' ? 'analyticalCandidates' : field])
+      ?? toNum(previous[`${field}Count`])
+      ?? 0;
+    return a - b;
+  };
+
+  const deltas = {
+    evaluatedSymbols: (toNum(curFunnel.symbolsEvaluated) ?? 0) - (toNum(prevFunnel.symbolsEvaluated) ?? 0),
+    analyticalCandidates: delta('analyticalCandidates'),
+    rejected: delta('rejected'),
+    qualified: delta('qualified'),
+    durationMs:
+      current.durationAvailability === 'measured' && previous.durationAvailability === 'measured'
+        ? (toNum(current.durationMs) ?? 0) - (toNum(previous.durationMs) ?? 0)
+        : null,
+    freshnessMs:
+      current.dataFreshnessState === 'measured' && previous.dataFreshnessState === 'measured'
+        ? (toNum(current.dataFreshnessMs) ?? 0) - (toNum(previous.dataFreshnessMs) ?? 0)
+        : null,
+  };
+
+  const rejectionDelta = {};
+  const allKeys = new Set([
+    ...Object.keys(current.rejectionDistribution || current.rejectionSummary || {}),
+    ...Object.keys(previous.rejectionDistribution || previous.rejectionSummary || {}),
+  ]);
+  for (const key of allKeys) {
+    const a = (current.rejectionDistribution || current.rejectionSummary || {})[key] || 0;
+    const b = (previous.rejectionDistribution || previous.rejectionSummary || {})[key] || 0;
+    rejectionDelta[key] = a - b;
+  }
+
+  return {
+    hasPrevious: true,
+    triggerContext: current.trigger || null,
+    previousTrigger: previous.trigger || null,
+    deltas: { ...deltas, rejectionDistribution: rejectionDelta },
   };
 }
 

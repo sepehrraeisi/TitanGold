@@ -1,72 +1,55 @@
 ---
-description: TitanGold dynamic active-work authority — Arbitrage Agent full product completion
+description: TitanGold dynamic active-work authority — Arbitrage Scan History completion
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Complete the Arbitrage Agent as a truthful, read-only analytical product — MEXC
-spot bid/ask spread monitor first — with full tabs, canonical domain contracts,
-persistence audit, security hardening, performance targets, observability, and
-Human QA. Do not treat Arbitrage as closed or frozen.
+Complete Arbitrage Scan History as a production-quality read-only analytical
+history experience inside the frozen Agent Product Template.
 
 Current area:
-Agents → Arbitrage (sole active Agent outcome)
+Agents → Arbitrage → Scan History (sole active tab outcome)
 
 Current program slice:
-ARBITRAGE-CORE — Truthful Product Workspace, Canonical Contracts and Operational Controls
+ARBITRAGE-SCAN-HISTORY-FULL-PRODUCT
 
 Risk tier:
 Tier 2 analytical product (Tier-4/Live execution remains blocked)
 
 Engineering status:
-ARBITRAGE-CORE IMPLEMENTED — READY FOR ARBITRAGE CORE HUMAN QA (not full product closeout)
+SCAN HISTORY IN PROGRESS — Candidates closed; Human QA pending for History
 
-Human-QA status:
-NOT STARTED — required before PR and before any Arbitrage freeze claim
+Closed and frozen baselines:
+- Agent Product Template V1: CLOSED AND FROZEN
+- Arbitrage Overview: CLOSED AND FROZEN
+- Manual Analytical Scan: VERIFIED
+- Arbitrage Candidates: CLOSED AND FROZEN at substantive HEAD `1e24f3e`
+- Reopen Candidates only for a reproduced production defect
 
 Expected baseline:
-- Main baseline: `566b412e181004c591e68ba34f2f4464712de0c4`
-- Runtime marker: `566b412` (Scheduler-safe deploy guard active)
-- Branch: `feat/arbitrage-agent-full-product` from exact `origin/main`
-- Scheduler owner: `titan-engine-worker` (single owner — do not restart)
+- Feature branch: `feat/arbitrage-agent-full-product`
+- Candidates accepted baseline: `1e24f3e`
+- Scheduler owner: `titan-engine-worker` (do not restart)
 - Scheduler allowlist: `["arbitrage"]` only — do not expand
 - Demo + Emergency Stop remain active; Live impossible
 
 Authorized scope:
-- Arbitrage-only registry, backend, API, UI, tests, observability
-- Canonical scan/candidate/settings contracts (read-only analytical)
-- Settings persistence, pause/resume monitoring (not PM2 Scheduler restart)
-- Manual analytical scan with authorization and idempotency
-- Dedicated-table design and migration **proposal only** until explicit approval
-- EN/FA/RTL, mobile, accessibility for Arbitrage workspace
-- Performance/load tests with synthetic data only
+- Scan History backend contract, filters, pagination, run detail, comparison
+- Scan History product UI (EN/FA/RTL, mobile, accessibility)
+- scanRunPresentation mapper and locale keys
+- History regression tests and Browser QA
+- Guarded Staging deploy of History changes
 
 Hard boundaries:
-- Do not start work on any other Agent until this outcome completes
-- Do not call new provider endpoints without explicit stop + authorization
-- Do not access exchange credentials
-- Do not place orders or enable Tier-4/Live execution
-- Do not expand Scheduler allowlist
-- Do not restart or delete `titan-engine-worker`
-- Do not label Arbitrage closed/frozen until user approves final Human QA
-- Do not open PR until all tabs functionally complete and tests green
-- Do not apply new Staging migrations without explicit migration approval
-
-Product truth:
-- Operational mode today: **single-venue MEXC spot bid/ask spread monitoring**
-- Triangular, cross-exchange, futures/spot basis: **unavailable** until explicitly implemented
-- Auto Execute operational setting: **not permitted** in this read-only Agent
-
-Acceptance criteria:
-- Truth audit and capability map complete (done)
-- All tabs functionally complete with server-side pagination/filtering where required
-- Database ownership proven; migration approved/applied only when required
-- Security, performance, and observability targets met
-- Automated tests green (`failed=0`, `environment-blocked=0`)
-- Consolidated Human QA PASS (EN/FA, desktop/tablet/mobile)
-- No provider/private financial side effects
+- Do not redesign or refactor frozen Candidates, Overview, or Template
+- Do not start Profit & Risk, Settings, Integrations, or another Agent
+- Do not add/apply database migration without explicit stop and approval
+- Do not access private exchange credentials
+- Do not add financial execution
+- Do not restart titan-engine-worker or change Scheduler allowlist
+- Do not open a PR until Scan History Human QA passes
 
 Next transition:
-Implementation phases → **READY FOR ARBITRAGE FULL PRODUCT HUMAN QA** → user-approved PR
+READY FOR ARBITRAGE SCAN HISTORY HUMAN QA → user-approved PR (History only)
