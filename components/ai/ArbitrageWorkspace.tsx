@@ -11,6 +11,7 @@ import type {
     ArbitrageCoreOverview,
     ArbitrageCoreRunDetail,
     ArbitrageCoreRunSummary,
+    ArbitrageCoreHistoricalSummary,
     ArbitrageCoreSettings,
     ArbitrageMonitoringState,
 } from '../../services/api.ts';
@@ -36,6 +37,13 @@ import ArbitrageCandidatesSection, {
     type CandidateFilters,
 } from './arbitrage/ArbitrageCandidatesSection.tsx';
 import ArbitrageCandidateDetailPanel from './arbitrage/ArbitrageCandidateDetailDialog.tsx';
+import ArbitrageScanHistorySection, {
+    DEFAULT_HISTORY_FILTERS,
+    type HistoryFilters,
+} from './arbitrage/ArbitrageScanHistorySection.tsx';
+import ArbitrageScanRunDetailPanel, {
+    type ScanRunComparison,
+} from './arbitrage/ArbitrageScanRunDetailPanel.tsx';
 import { formatRejectionReason } from '../../utils/arbitrageReasonLabels.ts';
 import {
     createScanIdempotencyKey,
@@ -97,12 +105,18 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     const [activeTab, setActiveTab] = useState<ArbitrageAgentSection>(initialSection);
     const [selectedRunId, setSelectedRunId] = useState<string | undefined>(initialRunId);
     const [candidateFilters, setCandidateFilters] = useState<CandidateFilters>(DEFAULT_CANDIDATE_FILTERS);
+    const [historyFilters, setHistoryFilters] = useState<HistoryFilters>(DEFAULT_HISTORY_FILTERS);
     const [overview, setOverview] = useState<ArbitrageCoreOverview | null>(null);
     const [candidates, setCandidates] = useState<ArbitrageCoreCandidatesResponse | null>(null);
     const [runs, setRuns] = useState<ArbitrageCoreRunSummary[]>([]);
-    const [runsPage, setRunsPage] = useState(1);
     const [runsTotal, setRunsTotal] = useState(0);
-    const [runDetail, setRunDetail] = useState<ArbitrageCoreRunDetail | null>(null);
+    const [historySummary, setHistorySummary] = useState<ArbitrageCoreHistoricalSummary | null>(null);
+    const [historyGeneratedAt, setHistoryGeneratedAt] = useState<string | null>(null);
+    const [historyAvailableFilters, setHistoryAvailableFilters] = useState<
+        { triggers: string[]; statuses: string[] } | undefined
+    >(undefined);
+    const [historyRunDetail, setHistoryRunDetail] = useState<ArbitrageCoreRunDetail | null>(null);
+    const [historyComparison, setHistoryComparison] = useState<ScanRunComparison | null>(null);
     const [integrations, setIntegrations] = useState<ArbitrageCoreIntegrations | null>(null);
     const [settingsDraft, setSettingsDraft] = useState<ArbitrageCoreSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -186,7 +200,9 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
 
     useEffect(() => {
         setCandidateDetail(null);
-    }, [activeTab, selectedRunId, candidateFilters]);
+        setHistoryRunDetail(null);
+        setHistoryComparison(null);
+    }, [activeTab, selectedRunId, candidateFilters, historyFilters]);
 
     const loadTabData = useCallback(async () => {
         setTabLoading(true);
@@ -206,15 +222,21 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                 });
                 setCandidates(data);
             } else if (activeTab === 'history') {
-                const data = await api.fetchArbitrageRuns(agent.id, { page: runsPage, pageSize: 10 });
+                const data = await api.fetchArbitrageRuns(agent.id, {
+                    page: historyFilters.page,
+                    pageSize: historyFilters.pageSize,
+                    trigger: historyFilters.trigger || undefined,
+                    status: historyFilters.status || undefined,
+                    dateFrom: historyFilters.dateFrom || undefined,
+                    dateTo: historyFilters.dateTo || undefined,
+                    search: historyFilters.search || undefined,
+                    sort: historyFilters.sort,
+                });
                 setRuns(data.items ?? []);
                 setRunsTotal(data.pagination?.total ?? 0);
-                if (selectedRunId) {
-                    const detail = await api.fetchArbitrageRunDetail(agent.id, selectedRunId);
-                    setRunDetail(detail);
-                } else {
-                    setRunDetail(null);
-                }
+                setHistorySummary(data.summary ?? null);
+                setHistoryGeneratedAt(data.generatedAt ?? null);
+                setHistoryAvailableFilters(data.availableFilters);
             } else if (activeTab === 'integration') {
                 const data = await api.fetchArbitrageIntegrations(agent.id);
                 setIntegrations(data);
@@ -230,7 +252,41 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         } finally {
             setTabLoading(false);
         }
-    }, [activeTab, agent.id, overview?.latestRun?.runId, runsPage, selectedRunId, loadSettings, t, candidateFilters]);
+    }, [activeTab, agent.id, overview?.latestRun?.runId, historyFilters, selectedRunId, loadSettings, t, candidateFilters]);
+
+    const openHistoryRunDetail = useCallback(
+        async (run: ArbitrageCoreRunSummary) => {
+            setHistoryRunDetail(run);
+            setSelectedRunId(run.runId);
+            navigateSection('history', run.runId);
+            try {
+                const [detail, comparisonResult] = await Promise.all([
+                    api.fetchArbitrageRunDetail(agent.id, run.runId),
+                    api.fetchArbitrageRunComparison(agent.id, run.runId),
+                ]);
+                setHistoryRunDetail(detail);
+                setHistoryComparison(comparisonResult.comparison);
+            } catch (error) {
+                console.error('Failed to load scan run detail:', error);
+            }
+        },
+        [agent.id, navigateSection],
+    );
+
+    const closeHistoryRunDetail = useCallback(() => {
+        setHistoryRunDetail(null);
+        setHistoryComparison(null);
+    }, []);
+
+    const viewCandidatesForRun = useCallback(
+        (runId: string) => {
+            closeHistoryRunDetail();
+            setSelectedRunId(runId);
+            setCandidateFilters(prev => ({ ...prev, page: 1 }));
+            navigateSection('candidates', runId);
+        },
+        [closeHistoryRunDetail, navigateSection],
+    );
 
     useEffect(() => {
         if (isLoading) return;
@@ -524,21 +580,19 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                     />
                 </AgentContentSurface>
             ) : activeTab === 'history' ? (
-                <AgentContentSurface>
-                    <AgentSectionHeader title={t('tab_scan_history') || 'Scan history'} />
-                    <HistorySection
+                <AgentContentSurface testId="arb-history-surface">
+                    <ArbitrageScanHistorySection
                         runs={runs ?? []}
                         total={runsTotal}
-                        page={runsPage}
-                        runDetail={runDetail}
-                        selectedRunId={selectedRunId}
-                        onPage={setRunsPage}
-                        onSelectRun={runId => {
-                            setSelectedRunId(runId);
-                            navigateSection('history', runId);
-                        }}
-                        onRetry={() => void loadTabData()}
-                        failed={Boolean(tabError)}
+                        summary={historySummary}
+                        generatedAt={historyGeneratedAt}
+                        loading={tabLoading && !runs.length}
+                        error={tabError}
+                        filters={historyFilters}
+                        availableFilters={historyAvailableFilters}
+                        onFiltersChange={patch => setHistoryFilters(prev => ({ ...prev, ...patch }))}
+                        onRefresh={() => void loadTabData()}
+                        onOpenDetail={run => void openHistoryRunDetail(run)}
                         t={t}
                     />
                 </AgentContentSurface>
@@ -578,17 +632,27 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                 onClose={() => {
                     setScanConfirmOpen(false);
                     setCandidateDetail(null);
+                    closeHistoryRunDetail();
                     onBack();
                 }}
                 closeTestId="arb-popup-close"
                 confirmationOpen={scanConfirmOpen}
-                detailOpen={Boolean(candidateDetail)}
+                detailOpen={Boolean(candidateDetail || historyRunDetail)}
                 detail={
                     candidateDetail ? (
                         <ArbitrageCandidateDetailPanel
                             candidate={candidateDetail}
                             open
                             onClose={() => setCandidateDetail(null)}
+                            t={t}
+                        />
+                    ) : historyRunDetail ? (
+                        <ArbitrageScanRunDetailPanel
+                            run={historyRunDetail}
+                            comparison={historyComparison}
+                            open
+                            onClose={closeHistoryRunDetail}
+                            onViewCandidates={viewCandidatesForRun}
                             t={t}
                         />
                     ) : null
@@ -666,115 +730,6 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             {sectionNavigation}
             {renderTabPanel()}
         </div>
-    );
-};
-
-const HistorySection: React.FC<{
-    runs: ArbitrageCoreRunSummary[];
-    total: number;
-    page: number;
-    runDetail: ArbitrageCoreRunDetail | null;
-    selectedRunId?: string;
-    onPage: (page: number) => void;
-    onSelectRun: (runId: string) => void;
-    onRetry: () => void;
-    failed?: boolean;
-    t: (key: string) => string;
-}> = ({ runs, total, page, runDetail, selectedRunId, onPage, onSelectRun, onRetry, failed, t }) => {
-    const safeRuns = Array.isArray(runs) ? runs : [];
-    const symbolsRequested = runDetail?.symbolsRequested ?? [];
-    const symbolsEvaluated = runDetail?.symbolsEvaluated ?? [];
-    const rejectionEntries = Object.entries(runDetail?.rejectionSummary ?? {});
-
-    if (failed) {
-        return (
-            <DataHubAlert
-                variant="error"
-                message={t('load_failed') || 'Failed to load scan history.'}
-                onRetry={onRetry}
-                retryLabel={t('retry') || 'Retry'}
-            />
-        );
-    }
-
-    return (
-    <div className="space-y-4">
-        <SectionBlock title={t('tab_scan_history') || 'Scan history'}>
-            <p className="text-xs text-gray-400 mb-3" data-testid="arb-history-total">
-                {t('total_scans') || 'Total scans'}: {total}
-            </p>
-            <p className="text-xs text-muted-foreground mb-3">
-                {t('arb_history_analytical_only_product') ||
-                    'Scan history shows analytical monitoring runs only. Execution history and realized profit are unavailable.'}
-            </p>
-            {safeRuns.length ? (
-                <div className="space-y-3">
-                    {safeRuns.map(item => (
-                        <button
-                            key={item.runId}
-                            type="button"
-                            onClick={() => onSelectRun(item.runId)}
-                            className={`w-full text-left bg-gray-900/40 border rounded-xl p-4 transition-colors ${
-                                selectedRunId === item.runId
-                                    ? 'border-purple-500/60'
-                                    : 'border-gray-800 hover:border-purple-400/40'
-                            }`}
-                        >
-                            <p className="text-white font-semibold">
-                                {formatTimestamp(item.completedAt || item.startedAt, t)}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                                {item.status || t('completed') || 'Completed'} · {item.trigger || 'manual'}
-                            </p>
-                        </button>
-                    ))}
-                </div>
-            ) : (
-                <EmptyBlock message={t('arbitrage_no_scan_history') || 'No scan history yet.'} />
-            )}
-            {total > 10 ? (
-                <div className="flex gap-2 mt-4">
-                    <SecondaryButton type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-                        {t('previous') || 'Previous'}
-                    </SecondaryButton>
-                    <SecondaryButton
-                        type="button"
-                        disabled={page * 10 >= total}
-                        onClick={() => onPage(page + 1)}
-                    >
-                        {t('next') || 'Next'}
-                    </SecondaryButton>
-                </div>
-            ) : null}
-        </SectionBlock>
-        {runDetail ? (
-            <SectionBlock title={t('run_detail') || 'Run detail'}>
-                <p className="text-sm text-gray-300">
-                    {t('status') || 'Status'}: {runDetail.status || NA(t)}
-                </p>
-                <p className="text-sm text-gray-300">
-                    {t('duration') || 'Duration'}: {runDetail.durationMs ?? NA(t)} ms
-                </p>
-                <p className="text-sm text-gray-300">
-                    {t('monitored_symbols') || 'Symbols requested'}: {symbolsRequested.length}
-                </p>
-                <p className="text-sm text-gray-300">
-                    {t('symbols_evaluated') || 'Symbols evaluated'}: {symbolsEvaluated.length}
-                </p>
-                {rejectionEntries.length ? (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                        {rejectionEntries.map(([reason, count]) => (
-                            <StatusPill
-                                key={reason}
-                                label={`${formatRejectionReason(reason, t)}: ${count}`}
-                                variant="warning"
-                            />
-                        ))}
-                    </div>
-                ) : null}
-            </SectionBlock>
-        ) : null}
-    </div>
     );
 };
 
