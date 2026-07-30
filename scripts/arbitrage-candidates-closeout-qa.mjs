@@ -46,8 +46,10 @@ async function openCandidatesTab(page) {
   await page.waitForSelector('[data-agent-key="arbitrage"]', { timeout: 30000 });
   await page.locator('[data-testid="agent-open-arbitrage"]').first().click({ force: true });
   await page.waitForSelector('[data-testid="arb-overview"]', { timeout: 45000 });
-  await page.getByTestId('agent-section-nav-candidates').click({ timeout: 15000 });
+  await page.getByTestId('arb-tab-candidates').click({ timeout: 15000 });
   await page.waitForSelector('[data-testid="arb-candidates-section"]', { timeout: 45000 });
+  await page.waitForSelector('[data-testid^="arb-candidate-row-"]', { timeout: 45000 });
+  await page.waitForTimeout(800);
 }
 
 function countRawKeys(text) {
@@ -108,8 +110,16 @@ for (const scenario of scenarios) {
   if (scenario.openDetail) {
     const row = page.locator('[data-testid^="arb-candidate-row-"]').first();
     await row.waitFor({ state: 'visible', timeout: 20000 });
-    await row.click();
-    await page.waitForSelector('[data-testid="arb-candidate-detail-panel"]', { timeout: 15000 });
+    await page.locator('[data-testid="agent-product-body"]').evaluate(el => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await row.scrollIntoViewIfNeeded();
+    await row.evaluate(el => el.click());
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="arb-candidate-detail-panel"]') !== null,
+      { timeout: 20000 },
+    );
+    await page.waitForTimeout(300);
 
     detailMetrics = await page.evaluate(() => {
       const dialog = document.querySelector('[data-testid="agent-product-dialog"]');

@@ -44,6 +44,32 @@ describe('arbitrageCoreClient contract parsing', () => {
         expect(parsed.generatedAt).toBe('2026-07-24T10:01:00.000Z');
     });
 
+    it('unwraps runs envelope with summary and available filters', () => {
+        const parsed = parseArbitrageRunsEnvelope(
+            {
+                ok: true,
+                runs: [{ runId: 'r1', status: 'completed', rejectedCount: 2 }],
+                summary: {
+                    totalScanRuns: 10,
+                    successfulRuns: 8,
+                    failedRuns: 2,
+                    manualRuns: 1,
+                    scheduledRuns: 9,
+                    latestSuccessfulRunAt: '2026-07-24T10:00:00.000Z',
+                },
+                availableFilters: { triggers: ['manual'], statuses: ['completed'] },
+                generatedAt: '2026-07-24T10:01:00.000Z',
+                pagination: { page: 1, pageSize: 20, total: 10, totalPages: 1 },
+            },
+            1,
+            20,
+        );
+        expect(parsed.summary?.totalScanRuns).toBe(10);
+        expect(parsed.availableFilters?.triggers).toEqual(['manual']);
+        expect(parsed.generatedAt).toBe('2026-07-24T10:01:00.000Z');
+        expect(parsed.items[0].rejectedCount).toBe(2);
+    });
+
     it('unwraps runs envelope and defaults missing pagination fields', () => {
         const parsed = parseArbitrageRunsEnvelope(
             {
