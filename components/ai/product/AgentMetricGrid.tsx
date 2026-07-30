@@ -8,6 +8,8 @@ export type AgentMetricItem = {
   color?: 'blue' | 'purple' | 'emerald' | 'amber' | 'red';
   valueState?: 'loaded' | 'unavailable' | 'zero' | 'loading';
   title?: string;
+  hint?: string;
+  badge?: React.ReactNode;
 };
 
 export const AgentMetricGrid: React.FC<{
@@ -32,6 +34,8 @@ export const AgentMetricGrid: React.FC<{
           color={metric.color || 'blue'}
           valueState={metric.valueState || 'loaded'}
           title={metric.title}
+          hint={metric.hint}
+          badge={metric.badge}
         />
       ))}
     </div>

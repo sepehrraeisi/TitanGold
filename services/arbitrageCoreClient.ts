@@ -542,8 +542,16 @@ export function parseArbitrageProfitRiskEnvelope(raw: unknown) {
             estimatedNetSpreadBps: analytics.estimatedNetSpreadBps != null ? asNumber(analytics.estimatedNetSpreadBps) : null,
             estimatedProfitValue: analytics.estimatedProfitValue != null ? asNumber(analytics.estimatedProfitValue) : null,
             estimatedProfitCurrency: analytics.estimatedProfitCurrency ? String(analytics.estimatedProfitCurrency) : null,
+            notionalValue: analytics.notionalValue != null ? asNumber(analytics.notionalValue) : null,
+            notionalCurrency: analytics.notionalCurrency ? String(analytics.notionalCurrency) : null,
             estimateState: analytics.estimateState ? String(analytics.estimateState) : undefined,
             estimateReason: analytics.estimateReason ? String(analytics.estimateReason) : null,
+            selectedCandidateId: analytics.selectedCandidateId ? String(analytics.selectedCandidateId) : null,
+            selectedCandidateSymbol: analytics.selectedCandidateSymbol
+                ? String(analytics.selectedCandidateSymbol)
+                : null,
+            selectionBasis: analytics.selectionBasis ? String(analytics.selectionBasis) : null,
+            selectionReason: analytics.selectionReason ? String(analytics.selectionReason) : null,
             qualifiedCandidateCount: asNumber(analytics.qualifiedCandidateCount, 0),
             analyticalCandidateCount: asNumber(analytics.analyticalCandidateCount, 0),
             rejectedCandidateCount: asNumber(analytics.rejectedCandidateCount, 0),

@@ -8241,8 +8241,14 @@ export interface ArbitrageCoreProfitRiskAnalytics {
     estimatedNetSpreadBps?: number | null;
     estimatedProfitValue?: number | null;
     estimatedProfitCurrency?: string | null;
+    notionalValue?: number | null;
+    notionalCurrency?: string | null;
     estimateState?: string;
     estimateReason?: string | null;
+    selectedCandidateId?: string | null;
+    selectedCandidateSymbol?: string | null;
+    selectionBasis?: string | null;
+    selectionReason?: string | null;
     qualifiedCandidateCount?: number;
     analyticalCandidateCount?: number;
     rejectedCandidateCount?: number;
@@ -8265,8 +8271,12 @@ export interface ArbitrageCoreProfitRiskAnalytics {
         rejectedCount?: number;
         analyticalCandidateCount?: number;
         netSpreadBps?: number | null;
+        grossSpreadBps?: number | null;
         riskScore?: number | null;
+        riskScoreState?: string;
         freshnessMs?: number | null;
+        isSelected?: boolean;
+        status?: string;
     }>;
     assumptions?: {
         assumedFeesBps?: number | null;

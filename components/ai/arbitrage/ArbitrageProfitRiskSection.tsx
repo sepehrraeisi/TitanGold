@@ -16,6 +16,8 @@ import {
 } from '../product/index.ts';
 import { formatRejectionReason } from '../../../utils/arbitrageReasonLabels.ts';
 import {
+  formatLocalizedTimestamp,
+  metricStateForSpread,
   presentBps,
   presentEstimateState,
   presentFieldLabel,
@@ -24,6 +26,8 @@ import {
   presentProfitValue,
   presentRiskFactor,
   presentRiskScore,
+  presentRunOptionLabel,
+  presentSelectionBasis,
   resolveProductLabel,
   type TranslateFn,
 } from '../../../utils/profitRiskPresentation.ts';
@@ -38,52 +42,91 @@ export type ArbitrageProfitRiskSectionProps = {
   onViewCandidates: (runId: string) => void;
   onOpenSettings: () => void;
   t: TranslateFn;
+  locale?: string;
 };
+
+function metricBadge(state: string | null | undefined, t: TranslateFn) {
+  const label = presentEstimateState(state, t);
+  return <StatusPill label={label} variant="info" className="shrink-0" />;
+}
 
 function buildEconomicsMetrics(
   analytics: ArbitrageCoreProfitRiskAnalytics,
   t: TranslateFn,
 ): AgentMetricItem[] {
+  const profitUnavailable =
+    analytics.estimatedProfitValue == null || !Number.isFinite(Number(analytics.estimatedProfitValue));
+
   return [
     {
       id: 'gross',
       label: presentFieldLabel('grossSpread', t),
-      value: presentBps(analytics.grossSpreadBps, t, analytics.estimateState),
-      title: presentEstimateState(analytics.estimateState, t),
+      value: (
+        <AgentTechnicalLtr>{presentBps(analytics.grossSpreadBps, t)}</AgentTechnicalLtr>
+      ),
+      badge: metricBadge('market_observation', t),
+      valueState: analytics.grossSpreadBps == null ? 'unavailable' : 'loaded',
     },
     {
       id: 'fees',
       label: presentFieldLabel('assumedFees', t),
-      value: presentBps(analytics.assumedFeesBps, t, 'assumption'),
-      title: resolveProductLabel('arb_pr_state_assumption', t),
+      value: (
+        <AgentTechnicalLtr>{presentBps(analytics.assumedFeesBps, t)}</AgentTechnicalLtr>
+      ),
+      badge: metricBadge('assumption', t),
+      valueState: analytics.assumedFeesBps == null ? 'unavailable' : 'loaded',
     },
     {
       id: 'slippage',
       label: presentFieldLabel('assumedSlippage', t),
-      value: presentBps(analytics.assumedSlippageBps, t, 'assumption'),
-      title: resolveProductLabel('arb_pr_state_assumption', t),
+      value: (
+        <AgentTechnicalLtr>{presentBps(analytics.assumedSlippageBps, t)}</AgentTechnicalLtr>
+      ),
+      badge: metricBadge('assumption', t),
+      valueState: analytics.assumedSlippageBps == null ? 'unavailable' : 'loaded',
     },
     {
       id: 'net',
       label: presentFieldLabel('netSpread', t),
-      value: presentBps(analytics.estimatedNetSpreadBps, t, analytics.estimateState),
-      title: presentEstimateState(analytics.estimateState, t),
+      value: (
+        <AgentTechnicalLtr>{presentBps(analytics.estimatedNetSpreadBps, t)}</AgentTechnicalLtr>
+      ),
+      badge: metricBadge(metricStateForSpread('net'), t),
+      valueState: analytics.estimatedNetSpreadBps == null ? 'unavailable' : 'loaded',
+      color:
+        analytics.estimatedNetSpreadBps != null && analytics.estimatedNetSpreadBps < 0 ? 'red' : 'blue',
     },
     {
       id: 'profit',
       label: presentFieldLabel('estimatedProfit', t),
-      value: presentProfitValue(
-        analytics.estimatedProfitValue,
-        analytics.estimatedProfitCurrency,
-        t,
-        analytics.estimateState,
+      value: profitUnavailable ? (
+        resolveProductLabel('arb_pr_state_unavailable', t)
+      ) : (
+        <AgentTechnicalLtr>
+          {presentProfitValue(
+            analytics.estimatedProfitValue,
+            analytics.estimatedProfitCurrency,
+            t,
+          )}
+        </AgentTechnicalLtr>
       ),
-      title: presentEstimateState(analytics.estimateState, t),
+      hint:
+        profitUnavailable && analytics.estimateReason === 'notional_unavailable'
+          ? resolveProductLabel('arb_pr_notional_unavailable', t)
+          : undefined,
+      badge: metricBadge(profitUnavailable ? 'unavailable' : 'derived_estimate', t),
+      valueState: profitUnavailable ? 'unavailable' : 'loaded',
     },
     {
       id: 'risk',
       label: presentFieldLabel('riskScore', t),
-      value: presentRiskScore(analytics.riskScore, analytics.riskScoreState, t),
+      value: (
+        <AgentTechnicalLtr dir="ltr">
+          {presentRiskScore(analytics.riskScore, analytics.riskScoreState, t)}
+        </AgentTechnicalLtr>
+      ),
+      badge: metricBadge(analytics.riskScoreState || 'unavailable', t),
+      valueState: analytics.riskScore == null ? 'unavailable' : 'loaded',
       title: resolveProductLabel('arbitrage_risk_score_help', t),
     },
   ];
@@ -99,6 +142,7 @@ export const ArbitrageProfitRiskSection: React.FC<ArbitrageProfitRiskSectionProp
   onViewCandidates,
   onOpenSettings,
   t,
+  locale,
 }) => {
   const analytics = data?.analytics;
   const metrics = useMemo(
@@ -151,7 +195,7 @@ export const ArbitrageProfitRiskSection: React.FC<ArbitrageProfitRiskSectionProp
 
       {data?.availableRuns?.length ? (
         <div className="space-y-1" data-testid="arb-pr-run-select">
-          <span className="text-xs text-muted-foreground">{resolveProductLabel('run_id', t)}</span>
+          <span className="text-xs text-muted-foreground">{resolveProductLabel('arb_pr_run_selector', t)}</span>
           <select
             className="w-full max-w-md rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm"
             value={selectedRunId || runId}
@@ -160,11 +204,33 @@ export const ArbitrageProfitRiskSection: React.FC<ArbitrageProfitRiskSectionProp
           >
             {data.availableRuns.map((run: ArbitrageCoreRunSummary & { runId: string }) => (
               <option key={run.runId} value={run.runId}>
-                {run.completedAt || run.startedAt || run.runId}
+                {presentRunOptionLabel(run, t, locale)}
               </option>
             ))}
           </select>
+          <p className="text-[10px] text-muted-foreground">
+            {resolveProductLabel('run_id', t)}:{' '}
+            <AgentTechnicalLtr>{runId}</AgentTechnicalLtr>
+          </p>
         </div>
+      ) : null}
+
+      {analytics.selectedCandidateSymbol ? (
+        <section className="text-xs space-y-1" data-testid="arb-pr-selected-candidate">
+          <h4 className="text-sm font-semibold">{presentFieldLabel('selectedCandidate', t)}</h4>
+          <p>
+            <AgentTechnicalLtr>{analytics.selectedCandidateSymbol}</AgentTechnicalLtr>
+            {analytics.selectedCandidateId ? (
+              <>
+                {' '}
+                (<AgentTechnicalLtr>{analytics.selectedCandidateId}</AgentTechnicalLtr>)
+              </>
+            ) : null}
+          </p>
+          <p className="text-muted-foreground">
+            {presentFieldLabel('selectionBasis', t)}: {presentSelectionBasis(analytics.selectionBasis, t)}
+          </p>
+        </section>
       ) : null}
 
       <AgentMetricGrid metrics={metrics} testId="arb-pr-economics" />
@@ -195,7 +261,10 @@ export const ArbitrageProfitRiskSection: React.FC<ArbitrageProfitRiskSectionProp
       <section data-testid="arb-pr-risk-overview">
         <h4 className="text-sm font-semibold mb-2">{resolveProductLabel('arb_pr_risk_overview', t)}</h4>
         <p className="text-sm">
-          {presentFieldLabel('riskScore', t)}: {presentRiskScore(analytics.riskScore, analytics.riskScoreState, t)}
+          {presentFieldLabel('riskScore', t)}:{' '}
+          <AgentTechnicalLtr dir="ltr">
+            {presentRiskScore(analytics.riskScore, analytics.riskScoreState, t)}
+          </AgentTechnicalLtr>
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           {presentFreshnessState(analytics.freshnessState, t)} ·{' '}
@@ -218,15 +287,21 @@ export const ArbitrageProfitRiskSection: React.FC<ArbitrageProfitRiskSectionProp
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
           <div>
             <dt className="text-muted-foreground">{presentFieldLabel('assumedFees', t)}</dt>
-            <dd>{presentBps(analytics.assumptions?.assumedFeesBps, t, 'assumption')}</dd>
+            <dd>
+              <AgentTechnicalLtr>{presentBps(analytics.assumptions?.assumedFeesBps, t)}</AgentTechnicalLtr>
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">{presentFieldLabel('assumedSlippage', t)}</dt>
-            <dd>{presentBps(analytics.assumptions?.assumedSlippageBps, t, 'assumption')}</dd>
+            <dd>
+              <AgentTechnicalLtr>{presentBps(analytics.assumptions?.assumedSlippageBps, t)}</AgentTechnicalLtr>
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">{resolveProductLabel('min_profit_bps', t)}</dt>
-            <dd>{presentBps(analytics.assumptions?.minimumNetSpreadBps, t, 'assumption')}</dd>
+            <dd>
+              <AgentTechnicalLtr>{presentBps(analytics.assumptions?.minimumNetSpreadBps, t)}</AgentTechnicalLtr>
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">{resolveProductLabel('monitored_symbols', t)}</dt>
@@ -245,27 +320,39 @@ export const ArbitrageProfitRiskSection: React.FC<ArbitrageProfitRiskSectionProp
       {analytics.historicalTrend?.length ? (
         <section data-testid="arb-pr-trend">
           <h4 className="text-sm font-semibold mb-2">{presentFieldLabel('trend', t)}</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto max-w-full">
+            <table className="w-full min-w-[320px] text-xs">
               <thead>
-                <tr className="text-muted-foreground text-left">
-                  <th className="py-1 pr-2">{resolveProductLabel('arb_history_completed_at', t)}</th>
-                  <th className="py-1 pr-2">{presentFieldLabel('qualified', t)}</th>
-                  <th className="py-1 pr-2">{presentFieldLabel('rejected', t)}</th>
-                  <th className="py-1 pr-2">{presentFieldLabel('netSpread', t)}</th>
+                <tr className="text-muted-foreground text-start">
+                  <th className="py-1 pe-2 whitespace-nowrap">{resolveProductLabel('arb_history_completed_at', t)}</th>
+                  <th className="py-1 pe-2">{presentFieldLabel('qualified', t)}</th>
+                  <th className="py-1 pe-2">{presentFieldLabel('rejected', t)}</th>
+                  <th className="py-1 pe-2 whitespace-nowrap">{presentFieldLabel('netSpread', t)}</th>
                 </tr>
               </thead>
               <tbody>
-                {analytics.historicalTrend.slice(0, 8).map(row => (
-                  <tr key={row.runId} className="border-t border-gray-800">
-                    <td className="py-1 pr-2">
-                      <AgentTechnicalLtr>{row.completedAt || '—'}</AgentTechnicalLtr>
-                    </td>
-                    <td className="py-1 pr-2">{row.qualifiedCount ?? 0}</td>
-                    <td className="py-1 pr-2">{row.rejectedCount ?? 0}</td>
-                    <td className="py-1 pr-2">{presentBps(row.netSpreadBps, t)}</td>
-                  </tr>
-                ))}
+                {analytics.historicalTrend.slice(0, 8).map(row => {
+                  const isSelected = row.runId === runId || row.isSelected;
+                  return (
+                    <tr
+                      key={row.runId}
+                      className={`border-t border-gray-800 ${isSelected ? 'bg-purple-500/10' : ''}`}
+                      data-testid={isSelected ? 'arb-pr-trend-selected' : undefined}
+                    >
+                      <td className="py-1 pe-2 whitespace-nowrap">
+                        <span>{formatLocalizedTimestamp(row.completedAt, locale, t)}</span>
+                        <span className="block text-[10px] text-muted-foreground">
+                          <AgentTechnicalLtr>{row.completedAt || '—'}</AgentTechnicalLtr>
+                        </span>
+                      </td>
+                      <td className="py-1 pe-2">{row.qualifiedCount ?? 0}</td>
+                      <td className="py-1 pe-2">{row.rejectedCount ?? 0}</td>
+                      <td className="py-1 pe-2 whitespace-nowrap">
+                        <AgentTechnicalLtr>{presentBps(row.netSpreadBps, t)}</AgentTechnicalLtr>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

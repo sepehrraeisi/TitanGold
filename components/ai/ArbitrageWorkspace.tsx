@@ -101,7 +101,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     onNavigate,
     onUpdate,
 }) => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const { guardExecution } = useAgentExecutionGate();
     const [activeTab, setActiveTab] = useState<ArbitrageAgentSection>(initialSection);
     const [selectedRunId, setSelectedRunId] = useState<string | undefined>(initialRunId);
@@ -618,6 +618,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                         onViewCandidates={viewCandidatesForRun}
                         onOpenSettings={() => navigateSection('settings')}
                         t={t}
+                        locale={language === 'fa' ? 'fa-IR' : 'en-US'}
                     />
                 </AgentContentSurface>
             ) : activeTab === 'settings' ? (
