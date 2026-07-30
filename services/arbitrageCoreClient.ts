@@ -12,6 +12,7 @@ import type {
     ArbitrageCoreRunDetail,
     ArbitrageCoreRunsResponse,
     ArbitrageCoreSettings,
+    ArbitrageSettingsFieldMeta,
 } from './api.ts';
 import type { ArbitrageSpreadCandidate } from '../types.ts';
 
@@ -604,28 +605,72 @@ export function parseArbitrageProfitRiskEnvelope(raw: unknown) {
     };
 }
 
+function parseSettingsFieldMeta(raw: unknown): ArbitrageSettingsFieldMeta | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const field = raw as Record<string, unknown>;
+    const source = String(field.source || 'default');
+    const allowedSources = new Set([
+        'configured',
+        'default',
+        'legacy_normalized',
+        'unavailable',
+        'unsupported',
+        'blocked',
+        'read_only',
+    ]);
+    return {
+        effective: field.effective ?? null,
+        configured: field.configured ?? null,
+        defaultValue: field.defaultValue ?? null,
+        source: (allowedSources.has(source) ? source : 'default') as ArbitrageSettingsFieldMeta['source'],
+        supported: field.supported !== false,
+        editable: Boolean(field.editable),
+        readOnly: Boolean(field.readOnly),
+        reason: field.reason ? String(field.reason) : null,
+        constraints:
+            field.constraints && typeof field.constraints === 'object'
+                ? {
+                      min: asNumber((field.constraints as Record<string, unknown>).min, 0),
+                      max: asNumber((field.constraints as Record<string, unknown>).max, 0),
+                  }
+                : null,
+        unit: field.unit ? String(field.unit) : null,
+    };
+}
+
 export function parseArbitrageSettingsEnvelope(raw: unknown): ArbitrageCoreSettings {
     if (!raw || typeof raw !== 'object') {
         throw new ArbitrageContractError('Settings response is not an object');
     }
     const body = raw as Record<string, unknown>;
     const settings = (body.settings ?? body) as Record<string, unknown>;
+    const fieldsRaw =
+        settings.fields && typeof settings.fields === 'object'
+            ? (settings.fields as Record<string, unknown>)
+            : {};
+    const fields: NonNullable<ArbitrageCoreSettings['fields']> = {};
+    for (const key of Object.keys(fieldsRaw)) {
+        const parsed = parseSettingsFieldMeta(fieldsRaw[key]);
+        if (parsed) {
+            (fields as Record<string, ArbitrageSettingsFieldMeta>)[key] = parsed;
+        }
+    }
 
     return {
         monitoredSymbols: asStringArray(settings.monitoredSymbols ?? settings.symbols),
         minimumGrossSpreadBps:
             settings.minimumGrossSpreadBps != null ? asNumber(settings.minimumGrossSpreadBps) : null,
         minimumNetSpreadBps:
-            settings.minimumNetSpreadBps != null ? asNumber(settings.minimumNetSpreadBps) : 20,
-        assumedFeesBps: settings.assumedFeesBps != null ? asNumber(settings.assumedFeesBps) : 10,
+            settings.minimumNetSpreadBps != null ? asNumber(settings.minimumNetSpreadBps) : null,
+        assumedFeesBps: settings.assumedFeesBps != null ? asNumber(settings.assumedFeesBps) : null,
         assumedSlippageBps:
-            settings.assumedSlippageBps != null ? asNumber(settings.assumedSlippageBps) : 10,
+            settings.assumedSlippageBps != null ? asNumber(settings.assumedSlippageBps) : null,
         minimumLiquidity:
-            settings.minimumLiquidity != null ? asNumber(settings.minimumLiquidity) : 100000,
+            settings.minimumLiquidity != null ? asNumber(settings.minimumLiquidity) : null,
         maximumDataAgeMs:
-            settings.maximumDataAgeMs != null ? asNumber(settings.maximumDataAgeMs) : 30000,
+            settings.maximumDataAgeMs != null ? asNumber(settings.maximumDataAgeMs) : null,
         scanIntervalSeconds:
-            settings.scanIntervalSeconds != null ? asNumber(settings.scanIntervalSeconds) : 300,
+            settings.scanIntervalSeconds != null ? asNumber(settings.scanIntervalSeconds) : null,
         monitoringState:
             settings.monitoringState === 'paused' || settings.monitoringState === 'active'
                 ? settings.monitoringState
@@ -639,6 +684,20 @@ export function parseArbitrageSettingsEnvelope(raw: unknown): ArbitrageCoreSetti
         executionEligible: false,
         legacyExecutionPreferenceIgnored: Boolean(settings.legacyExecutionPreferenceIgnored),
         isDefault: Boolean(settings.isDefault),
+        fields: Object.keys(fields).length > 0 ? fields : undefined,
+        unsupportedCapabilities: Array.isArray(settings.unsupportedCapabilities)
+            ? settings.unsupportedCapabilities.map(item => {
+                  const row = item as Record<string, unknown>;
+                  return {
+                      id: String(row.id ?? ''),
+                      state: String(row.state ?? 'unsupported'),
+                      legacyStoredPreference: Boolean(row.legacyStoredPreference),
+                  };
+              })
+            : undefined,
+        dataContractVersion: settings.dataContractVersion
+            ? String(settings.dataContractVersion)
+            : undefined,
     };
 }
 

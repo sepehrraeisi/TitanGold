@@ -46,6 +46,12 @@ import ArbitrageScanRunDetailPanel, {
     type ScanRunComparison,
 } from './arbitrage/ArbitrageScanRunDetailPanel.tsx';
 import ArbitrageProfitRiskSection from './arbitrage/ArbitrageProfitRiskSection.tsx';
+import { ArbitrageSettingsSection } from './arbitrage/ArbitrageSettingsSection.tsx';
+import { AgentProductConfirmation } from './product/AgentProductConfirmation.tsx';
+import {
+    editableSettingsPayload,
+    settingsDraftEquals,
+} from '../../utils/settingsPresentation.ts';
 import {
     createScanIdempotencyKey,
     resolveArbitrageScanFeedback,
@@ -121,6 +127,12 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     const [profitRiskData, setProfitRiskData] = useState<ArbitrageCoreProfitRiskResponse | null>(null);
     const [integrations, setIntegrations] = useState<ArbitrageCoreIntegrations | null>(null);
     const [settingsDraft, setSettingsDraft] = useState<ArbitrageCoreSettings | null>(null);
+    const [settingsConfirmed, setSettingsConfirmed] = useState<ArbitrageCoreSettings | null>(null);
+    const [settingsSaving, setSettingsSaving] = useState(false);
+    const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
+    const [settingsSaveSuccess, setSettingsSaveSuccess] = useState(false);
+    const [settingsDiscardConfirmOpen, setSettingsDiscardConfirmOpen] = useState(false);
+    const [pendingSettingsNavigation, setPendingSettingsNavigation] = useState<ArbitrageAgentSection | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [tabLoading, setTabLoading] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
@@ -137,6 +149,17 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
 
     const navigateSection = useCallback(
         (section: ArbitrageAgentSection, runId?: string) => {
+            if (
+                activeTab === 'settings'
+                && section !== 'settings'
+                && settingsDraft
+                && settingsConfirmed
+                && !settingsDraftEquals(settingsDraft, settingsConfirmed)
+            ) {
+                setPendingSettingsNavigation(section);
+                setSettingsDiscardConfirmOpen(true);
+                return;
+            }
             setActiveTab(section);
             if (runId) setSelectedRunId(runId);
             if (onNavigate) {
@@ -148,7 +171,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                 });
             }
         },
-        [agent.id, onNavigate],
+        [activeTab, agent.id, onNavigate, settingsConfirmed, settingsDraft],
     );
 
     const loadOverview = useCallback(async () => {
@@ -159,6 +182,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             setOverview(data);
             if (data.settings) {
                 setSettingsDraft(data.settings);
+                setSettingsConfirmed(data.settings);
                 setSettingsLoadState('loaded');
             }
             if (!selectedRunId && data.latestRun?.runId) {
@@ -179,6 +203,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         try {
             const saved = await api.fetchArbitrageSettings(agent.id);
             setSettingsDraft(saved);
+            setSettingsConfirmed(saved);
             setSettingsLoadState('loaded');
             setOverview(prev => (prev ? { ...prev, settings: saved } : prev));
         } catch (error) {
@@ -380,15 +405,18 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
 
     const handleSaveSettings = async () => {
         if (!settingsDraft) return;
-        setTabLoading(true);
+        setSettingsSaving(true);
+        setSettingsSaveError(null);
+        setSettingsSaveSuccess(false);
         try {
-            const saved = await api.updateArbitrageCoreSettings(agent.id, {
-                monitoredSymbols: settingsDraft.monitoredSymbols,
-                minimumNetSpreadBps: settingsDraft.minimumNetSpreadBps,
-                notificationPreference: settingsDraft.notificationPreference,
+            const payload = editableSettingsPayload(settingsDraft);
+            const saved = await api.updateArbitrageCoreSettings(agent.id, payload, {
+                expectedVersion: settingsConfirmed?.version ?? settingsDraft.version,
             });
             setSettingsDraft(saved);
+            setSettingsConfirmed(saved);
             setOverview(prev => (prev ? { ...prev, settings: saved } : prev));
+            setSettingsSaveSuccess(true);
             setScanFeedback({
                 kind: 'success',
                 message: t('config_updated') || 'Configuration updated successfully',
@@ -396,13 +424,55 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             });
         } catch (error) {
             console.error('Failed to update arbitrage settings:', error);
-            setScanFeedback({
-                kind: 'server',
-                message: t('update_failed') || 'Update failed',
-                retryable: true,
-            });
+            const err = error as Error & { status?: number; code?: string };
+            if (err.status === 409 || err.code === 'VERSION_CONFLICT') {
+                setSettingsSaveError(
+                    t('arb_settings_conflict_error')
+                        || 'Settings were updated elsewhere. Refresh and try again.',
+                );
+                setScanFeedback({
+                    kind: 'conflict',
+                    message: t('arb_settings_conflict_error') || 'Settings conflict',
+                    retryable: true,
+                });
+            } else {
+                setSettingsSaveError(err.message || t('update_failed') || 'Update failed');
+                setScanFeedback({
+                    kind: 'server',
+                    message: t('update_failed') || 'Update failed',
+                    retryable: true,
+                });
+            }
         } finally {
-            setTabLoading(false);
+            setSettingsSaving(false);
+        }
+    };
+
+    const handleResetSettingsDraft = () => {
+        if (settingsConfirmed) {
+            setSettingsDraft(settingsConfirmed);
+            setSettingsSaveError(null);
+            setSettingsSaveSuccess(false);
+        }
+    };
+
+    const confirmDiscardSettings = () => {
+        if (settingsConfirmed) {
+            setSettingsDraft(settingsConfirmed);
+        }
+        setSettingsDiscardConfirmOpen(false);
+        if (pendingSettingsNavigation) {
+            const next = pendingSettingsNavigation;
+            setPendingSettingsNavigation(null);
+            setActiveTab(next);
+            if (onNavigate) {
+                onNavigate({
+                    view: 'ai',
+                    agentId: agent.id,
+                    agentSection: next,
+                    ...(selectedRunId ? { runId: selectedRunId } : {}),
+                });
+            }
         }
     };
 
@@ -414,10 +484,10 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     const latestRun = overview?.latestRun;
     const funnel = latestRun?.funnel || {};
 
-    const settingsDirty = useMemo(() => {
-        if (!settingsDraft || !overview?.settings) return false;
-        return JSON.stringify(settingsDraft) !== JSON.stringify(overview.settings);
-    }, [overview?.settings, settingsDraft]);
+    const settingsDirty = useMemo(
+        () => !settingsDraftEquals(settingsDraft, settingsConfirmed),
+        [settingsConfirmed, settingsDraft],
+    );
 
     const sectionTabs = TAB_ITEMS.map(tab => ({
         id: tab.id,
@@ -525,6 +595,50 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         />
     );
 
+    const handleCloseWorkspace = () => {
+        if (
+            activeTab === 'settings'
+            && settingsDraft
+            && settingsConfirmed
+            && !settingsDraftEquals(settingsDraft, settingsConfirmed)
+        ) {
+            setPendingSettingsNavigation(null);
+            setSettingsDiscardConfirmOpen(true);
+            return;
+        }
+        setScanConfirmOpen(false);
+        setCandidateDetail(null);
+        closeHistoryRunDetail();
+        onBack();
+    };
+
+    const settingsDiscardConfirmation = (
+        <AgentProductConfirmation
+            title={t('arb_settings_discard_title') || 'Discard unsaved settings?'}
+            description={t('arb_settings_discard_description') || 'Your changes have not been saved.'}
+            onCancel={() => {
+                setSettingsDiscardConfirmOpen(false);
+                setPendingSettingsNavigation(null);
+            }}
+            onConfirm={() => {
+                if (pendingSettingsNavigation) {
+                    confirmDiscardSettings();
+                    return;
+                }
+                if (settingsConfirmed) setSettingsDraft(settingsConfirmed);
+                setSettingsDiscardConfirmOpen(false);
+                setScanConfirmOpen(false);
+                setCandidateDetail(null);
+                closeHistoryRunDetail();
+                onBack();
+            }}
+            cancelLabel={t('cancel') || 'Cancel'}
+            confirmLabel={t('arb_settings_discard_confirm') || 'Discard changes'}
+            cancelTestId="arb-settings-discard-cancel"
+            confirmTestId="arb-settings-discard-confirm"
+        />
+    );
+
     const renderTabPanel = () => (
         <div
             role="tabpanel"
@@ -622,16 +736,25 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                     />
                 </AgentContentSurface>
             ) : activeTab === 'settings' ? (
-                <AgentContentSurface>
-                    <AgentSectionHeader title={t('tab_settings') || 'Settings'} />
-                    <SettingsSection
+                <AgentContentSurface testId="arb-settings-surface">
+                    <ArbitrageSettingsSection
                         settings={settingsDraft}
+                        confirmed={settingsConfirmed}
                         dirty={settingsDirty}
-                        loading={settingsLoadState === 'loading' || tabLoading}
+                        loading={settingsLoadState === 'loading'}
+                        saving={settingsSaving}
                         loadState={settingsLoadState}
                         error={settingsError}
-                        onChange={setSettingsDraft}
-                        onSave={handleSaveSettings}
+                        saveError={settingsSaveError}
+                        saveSuccess={settingsSaveSuccess}
+                        validationErrors={[]}
+                        onChange={next => {
+                            setSettingsSaveSuccess(false);
+                            setSettingsSaveError(null);
+                            setSettingsDraft(next);
+                        }}
+                        onSave={() => void handleSaveSettings()}
+                        onResetDraft={handleResetSettingsDraft}
                         onRetry={() => void loadSettings()}
                         t={t}
                     />
@@ -649,14 +772,9 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         return (
             <AgentProductDialog
                 agent={displayAgent}
-                onClose={() => {
-                    setScanConfirmOpen(false);
-                    setCandidateDetail(null);
-                    closeHistoryRunDetail();
-                    onBack();
-                }}
+                onClose={handleCloseWorkspace}
                 closeTestId="arb-popup-close"
-                confirmationOpen={scanConfirmOpen}
+                confirmationOpen={scanConfirmOpen || settingsDiscardConfirmOpen}
                 detailOpen={Boolean(candidateDetail || historyRunDetail)}
                 detail={
                     candidateDetail ? (
@@ -678,13 +796,17 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                     ) : null
                 }
                 confirmation={
-                    <ArbitrageScanConfirmDialog
-                        open={scanConfirmOpen}
-                        onCancel={() => setScanConfirmOpen(false)}
-                        onConfirm={() => void executeManualScan()}
-                        pending={isScanning}
-                        t={t}
-                    />
+                    settingsDiscardConfirmOpen ? (
+                        settingsDiscardConfirmation
+                    ) : (
+                        <ArbitrageScanConfirmDialog
+                            open={scanConfirmOpen}
+                            onCancel={() => setScanConfirmOpen(false)}
+                            onConfirm={() => void executeManualScan()}
+                            pending={isScanning}
+                            t={t}
+                        />
+                    )
                 }
                 purpose={
                         t('arbitrage_agent_desc') ||
@@ -750,110 +872,6 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
             {sectionNavigation}
             {renderTabPanel()}
         </div>
-    );
-};
-
-const SettingsSection: React.FC<{
-    settings: ArbitrageCoreSettings | null;
-    dirty: boolean;
-    loading: boolean;
-    loadState: 'idle' | 'loading' | 'loaded' | 'error';
-    error: string | null;
-    onChange: (next: ArbitrageCoreSettings) => void;
-    onSave: () => void;
-    onRetry: () => void;
-    t: (key: string) => string;
-}> = ({ settings, dirty, loading, loadState, error, onChange, onSave, onRetry, t }) => {
-    if (loadState === 'loading' || (loadState === 'idle' && !settings)) {
-        return <p className="text-sm text-muted-foreground">{t('loading') || 'Loading...'}</p>;
-    }
-    if (loadState === 'error' || !settings) {
-        return (
-            <DataHubAlert
-                variant="error"
-                message={error || t('load_failed') || 'Failed to load settings.'}
-                onRetry={onRetry}
-                retryLabel={t('retry') || 'Retry'}
-            />
-        );
-    }
-
-    return (
-    <div className="space-y-6" data-testid="arb-settings">
-        {settings.isDefault ? (
-            <DataHubAlert
-                variant="warning"
-                message={t('arbitrage_settings_defaults_not_saved') || 'Defaults not yet saved'}
-            />
-        ) : null}
-        <SectionBlock title={t('arbitrage_active_monitor') || 'Active monitor'}>
-            <p className="text-sm text-emerald-300 mb-3">
-                {t('strategy_mexc_spot_spread_monitor') || 'MEXC spot spread monitor'}
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="text-xs text-gray-400 block">
-                    {t('min_profit_bps') || 'Min profit (bps)'}
-                    <input
-                        type="number"
-                        className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white"
-                        value={settings.minimumNetSpreadBps ?? 20}
-                        onChange={e =>
-                            onChange({
-                                ...settings,
-                                minimumNetSpreadBps: Number(e.target.value),
-                            })
-                        }
-                        disabled={loading}
-                    />
-                </label>
-                <label className="text-xs text-gray-400 block">
-                    {t('monitored_symbols') || 'Monitored symbols'}
-                    <input
-                        type="text"
-                        className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white"
-                        value={(settings.monitoredSymbols || []).join(', ')}
-                        onChange={e =>
-                            onChange({
-                                ...settings,
-                                monitoredSymbols: e.target.value
-                                    .split(',')
-                                    .map(s => s.trim().toUpperCase())
-                                    .filter(Boolean),
-                            })
-                        }
-                        disabled={loading}
-                    />
-                </label>
-            </div>
-        </SectionBlock>
-        <SectionBlock title={t('unsupported_capabilities') || 'Unsupported capabilities'}>
-            <ul className="text-sm text-gray-400 space-y-2">
-                <li>{t('arbitrage_unsupported_triangle') || 'Triangular arbitrage — Not available'}</li>
-                <li>{t('arbitrage_unsupported_cross') || 'Cross-exchange arbitrage — Not available'}</li>
-                <li>{t('arbitrage_unsupported_futures') || 'MEXC futures scanning — Not available'}</li>
-                <li>{t('arbitrage_unsupported_auto_execute') || 'Auto Execute — Not supported'}</li>
-            </ul>
-            <p className="text-xs text-amber-300 mt-3" data-testid="arb-execution-supported-false">
-                {t('execution_support') || 'Execution'}: {t('execution_unsupported') || 'Not supported'}
-            </p>
-        </SectionBlock>
-        <label className="flex items-center gap-2 text-sm text-gray-300">
-            <input
-                type="checkbox"
-                checked={Boolean(settings.notificationPreference)}
-                onChange={e =>
-                    onChange({ ...settings, notificationPreference: e.target.checked })
-                }
-                disabled={loading}
-            />
-            {t('notify_on_opportunity') || 'Notify on opportunity (preference)'}
-        </label>
-        <div className="flex gap-2">
-            <PrimaryButton type="button" onClick={onSave} disabled={!dirty || loading}>
-                {loading ? t('saving') || 'Saving...' : t('save_changes') || 'Save changes'}
-            </PrimaryButton>
-        </div>
-    </div>
     );
 };
 

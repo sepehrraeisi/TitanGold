@@ -8008,6 +8008,28 @@ export interface ArbitrageCoreProductIdentity {
     executionEligible: false;
 }
 
+export type ArbitrageSettingsFieldSource =
+    | 'configured'
+    | 'default'
+    | 'legacy_normalized'
+    | 'unavailable'
+    | 'unsupported'
+    | 'blocked'
+    | 'read_only';
+
+export interface ArbitrageSettingsFieldMeta {
+    effective: unknown;
+    configured: unknown;
+    defaultValue: unknown;
+    source: ArbitrageSettingsFieldSource;
+    supported: boolean;
+    editable: boolean;
+    readOnly: boolean;
+    reason?: string | null;
+    constraints?: { min: number; max: number } | null;
+    unit?: string | null;
+}
+
 export interface ArbitrageCoreSettings {
     monitoredSymbols: string[];
     minimumGrossSpreadBps?: number | null;
@@ -8027,6 +8049,26 @@ export interface ArbitrageCoreSettings {
     executionEligible: false;
     legacyExecutionPreferenceIgnored?: boolean;
     isDefault?: boolean;
+    fields?: Partial<Record<
+        | 'monitoredSymbols'
+        | 'minimumGrossSpreadBps'
+        | 'minimumNetSpreadBps'
+        | 'assumedFeesBps'
+        | 'assumedSlippageBps'
+        | 'minimumLiquidity'
+        | 'maximumDataAgeMs'
+        | 'scanIntervalSeconds'
+        | 'notificationPreference'
+        | 'monitoringState'
+        | 'autoExecute',
+        ArbitrageSettingsFieldMeta
+    >>;
+    unsupportedCapabilities?: Array<{
+        id: string;
+        state: string;
+        legacyStoredPreference?: boolean;
+    }>;
+    dataContractVersion?: string;
 }
 
 export interface ArbitrageCoreRunSummary {
@@ -8490,10 +8532,14 @@ export const fetchArbitrageIntegrations = async (
 export const updateArbitrageCoreSettings = async (
     agentId: string,
     settings: Partial<ArbitrageCoreSettings>,
+    opts: { expectedVersion?: number } = {},
 ): Promise<ArbitrageCoreSettings> => {
     const raw = await arbitrageCoreRequest<unknown>(agentId, 'settings', {
         method: 'PUT',
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({
+            settings,
+            expectedVersion: opts.expectedVersion ?? settings.version,
+        }),
     });
     return parseArbitrageSettingsEnvelope(raw);
 };
