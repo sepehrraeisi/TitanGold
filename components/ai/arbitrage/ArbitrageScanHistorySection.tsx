@@ -144,7 +144,7 @@ export const ArbitrageScanHistorySection: React.FC<ArbitrageScanHistorySectionPr
       />
 
       <p className="text-xs text-muted-foreground" data-testid="arb-history-product-note">
-        {resolveProductLabel('arb_history_analytical_only_product', t)}
+        {resolveProductLabel('arb_history_available_records_note', t)}
       </p>
 
       <AgentMetricGrid metrics={metrics} testId="arb-history-summary" />

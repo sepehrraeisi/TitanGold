@@ -1,55 +1,56 @@
 ---
-description: TitanGold dynamic active-work authority — Arbitrage Scan History completion
+description: TitanGold dynamic active-work authority — Arbitrage Profit & Risk completion
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Complete Arbitrage Scan History as a production-quality read-only analytical
-history experience inside the frozen Agent Product Template.
+Complete Arbitrage Profit & Risk as a truthful analytical decision-support
+surface inside the frozen Agent Product Template.
 
 Current area:
-Agents → Arbitrage → Scan History (sole active tab outcome)
+Agents → Arbitrage → Profit & Risk (sole active tab outcome)
 
 Current program slice:
-ARBITRAGE-SCAN-HISTORY-FULL-PRODUCT
+ARBITRAGE-PROFIT-RISK-FULL-PRODUCT
 
 Risk tier:
 Tier 2 analytical product (Tier-4/Live execution remains blocked)
 
 Engineering status:
-SCAN HISTORY IN PROGRESS — Candidates closed; Human QA pending for History
+PROFIT & RISK IN PROGRESS — Scan History frozen; Human QA pending for Profit & Risk
 
 Closed and frozen baselines:
 - Agent Product Template V1: CLOSED AND FROZEN
 - Arbitrage Overview: CLOSED AND FROZEN
 - Manual Analytical Scan: VERIFIED
-- Arbitrage Candidates: CLOSED AND FROZEN at substantive HEAD `1e24f3e`
-- Reopen Candidates only for a reproduced production defect
+- Arbitrage Candidates: CLOSED AND FROZEN at `1e24f3e`
+- Arbitrage Scan History: CLOSED AND FROZEN (Human QA PASSED; performance verified)
+- Scan History frozen commit: substantive HEAD after `88366d3` closeout
+- Reopen frozen tabs only for a reproduced production defect
 
 Expected baseline:
 - Feature branch: `feat/arbitrage-agent-full-product`
-- Candidates accepted baseline: `1e24f3e`
 - Scheduler owner: `titan-engine-worker` (do not restart)
 - Scheduler allowlist: `["arbitrage"]` only — do not expand
 - Demo + Emergency Stop remain active; Live impossible
 
 Authorized scope:
-- Scan History backend contract, filters, pagination, run detail, comparison
-- Scan History product UI (EN/FA/RTL, mobile, accessibility)
-- scanRunPresentation mapper and locale keys
-- History regression tests and Browser QA
-- Guarded Staging deploy of History changes
+- Profit & Risk backend contract, selected-run analytics, trend, assumptions
+- Profit & Risk product UI (EN/FA/RTL, mobile, accessibility)
+- profitRiskPresentation mapper and locale keys
+- Profit & Risk regression tests and Browser QA
+- Guarded Staging deploy of Profit & Risk changes
 
 Hard boundaries:
-- Do not redesign or refactor frozen Candidates, Overview, or Template
-- Do not start Profit & Risk, Settings, Integrations, or another Agent
+- Do not redesign or refactor frozen Candidates, Overview, History, or Template
+- Do not start Settings, Integrations, or another Agent
 - Do not add/apply database migration without explicit stop and approval
 - Do not access private exchange credentials
 - Do not add financial execution
 - Do not restart titan-engine-worker or change Scheduler allowlist
-- Do not open a PR until Scan History Human QA passes
+- Do not open a PR until Profit & Risk Human QA passes
 
 Next transition:
-READY FOR ARBITRAGE SCAN HISTORY HUMAN QA → user-approved PR (History only)
+READY FOR ARBITRAGE PROFIT AND RISK HUMAN QA → user-approved PR (Profit & Risk only)

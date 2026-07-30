@@ -528,22 +528,21 @@ export async function getArbitrageRuns(agentId, filters = {}) {
   const total = countResult.rows[0]?.total || 0;
 
   const orderDir = sort.endsWith(':asc') ? 'ASC' : 'DESC';
-  const rows = await query(
-    `SELECT id, input_data, output_data, created_at, execution_time_ms, was_successful
-     FROM ai_decisions
-     WHERE ${where}
-     ORDER BY created_at ${orderDir}, id ${orderDir}
-     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-    [...params, pageSize, offset],
-  );
+  const [rows, historicalSummary] = await Promise.all([
+    query(
+      `SELECT id, input_data, output_data, created_at, execution_time_ms, was_successful
+       FROM ai_decisions
+       WHERE ${where}
+       ORDER BY created_at ${orderDir}, id ${orderDir}
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, pageSize, offset],
+    ),
+    fetchArbitrageHistoricalSummary(agent.id),
+  ]);
 
   const items = rows.rows.map((row) =>
     mapRecentRunSummary(row, agent.id),
   );
-
-  const [historicalSummary] = await Promise.all([
-    fetchArbitrageHistoricalSummary(agent.id),
-  ]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 

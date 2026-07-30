@@ -423,37 +423,27 @@ export async function countArbitrageScans(agentId) {
 export async function fetchArbitrageHistoricalSummary(agentId) {
   const result = await query(
     `SELECT COUNT(*)::int AS total,
-            COUNT(*) FILTER (
-              WHERE was_successful IS NOT FALSE
-                AND COALESCE(output_data->>'error', 'false') NOT IN ('true', '1')
-            )::int AS successful,
+            COUNT(*) FILTER (WHERE was_successful = true)::int AS successful,
             COUNT(*) FILTER (WHERE was_successful = false)::int AS failed,
-            MAX(created_at) FILTER (
-              WHERE was_successful IS NOT FALSE
-                AND COALESCE(output_data->>'error', 'false') NOT IN ('true', '1')
-            ) AS latest_success,
+            COUNT(*) FILTER (
+              WHERE COALESCE(input_data->>'trigger', output_data->>'trigger', 'scheduled') = 'manual'
+            )::int AS manual,
+            COUNT(*) FILTER (
+              WHERE COALESCE(input_data->>'trigger', output_data->>'trigger', 'scheduled') = 'scheduled'
+            )::int AS scheduled,
+            MAX(created_at) FILTER (WHERE was_successful = true) AS latest_success,
             MAX(created_at) FILTER (WHERE was_successful = false) AS latest_failed
      FROM ai_decisions
      WHERE agent_id = $1 AND decision_type = $2`,
     [agentId, ARBITRAGE_DECISION_TYPE],
   );
-  const triggerResult = await query(
-    `SELECT COUNT(*) FILTER (
-              WHERE COALESCE(input_data->>'trigger', 'scheduled') = 'scheduled'
-            )::int AS scheduled,
-            COUNT(*) FILTER (WHERE input_data->>'trigger' = 'manual')::int AS manual
-     FROM ai_decisions
-     WHERE agent_id = $1 AND decision_type = $2`,
-    [agentId, ARBITRAGE_DECISION_TYPE],
-  );
   const row = result.rows[0] || {};
-  const triggers = triggerResult.rows[0] || {};
   return {
     totalScanRuns: row.total || 0,
     successfulRuns: row.successful || 0,
     failedRuns: row.failed || 0,
-    scheduledRuns: triggers.scheduled || 0,
-    manualRuns: triggers.manual || 0,
+    scheduledRuns: row.scheduled || 0,
+    manualRuns: row.manual || 0,
     latestSuccessfulRunAt: asIso(row.latest_success),
     latestFailedRunAt: asIso(row.latest_failed),
   };
