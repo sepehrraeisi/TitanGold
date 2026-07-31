@@ -5495,6 +5495,8 @@
   "arb_int_field_impact": "Consumer impact",
   "arb_int_field_endpoint": "Endpoint",
   "arb_int_field_fallback": "Fallback locking",
+  "arb_int_fallback_mode_memory": "In-memory fallback lock",
+  "arb_int_fallback_mode_redis": "Redis",
   "arb_int_field_state": "State",
   "arb_int_timestamp_unavailable": "Not yet recorded",
   "arb_int_value_unknown": "Unknown",

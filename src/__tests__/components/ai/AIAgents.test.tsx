@@ -798,7 +798,9 @@ describe('AIAgents Component', () => {
       fireEvent.click(screen.getByTestId('agent-open-arbitrage'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('arbitrageagentcontrol')).toBeInTheDocument();
+        const workspace = screen.queryByTestId('arb-workspace');
+        const dialog = screen.queryByTestId('agent-product-dialog');
+        expect(workspace || dialog).toBeTruthy();
       });
     });
   });

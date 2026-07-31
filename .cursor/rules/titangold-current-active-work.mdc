@@ -1,65 +1,90 @@
 ---
-description: TitanGold dynamic active-work authority — Settings frozen, Integrations next
+description: TitanGold dynamic active-work authority — Arbitrage full product final closeout
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Begin Arbitrage Integrations as the next tab outcome after Settings closeout.
+Final integration, regression, localization, security, performance and deployment verification for the complete Arbitrage Agent product before PR review.
 
 Current area:
-Agents → Arbitrage → Integrations (next authorized tab — not started in this slice)
+Agents → Arbitrage → Full Product Final Closeout
 
 Current program slice:
-ARBITRAGE-INTEGRATIONS-PRODUCT
+ARBITRAGE-FULL-PRODUCT-FINAL-CLOSEOUT
 
 Risk tier:
-Tier 2 read-only integration status (Tier-4/Live execution remains blocked)
+Tier 2 product integration closeout (Tier-4/Live execution remains blocked)
 
 Engineering status:
-SETTINGS CLOSED AND FROZEN — Integrations authorized as next outcome only
+ALL SIX SECTIONS IMPLEMENTED — Integrations Human QA PASSED — FINAL CLOSEOUT IN PROGRESS
 
-Closed and frozen baselines:
-- Agent Product Template V1: CLOSED AND FROZEN
-- Arbitrage Overview: CLOSED AND FROZEN
-- Manual Analytical Scan: VERIFIED
-- Arbitrage Candidates: CLOSED AND FROZEN at `1e24f3e`
-- Arbitrage Scan History: CLOSED AND FROZEN (Human QA PASSED)
-- Arbitrage Profit & Risk: CLOSED AND FROZEN at `b14aec7`
-- Arbitrage Settings: CLOSED AND FROZEN at final Settings closeout commit on `feat/arbitrage-agent-full-product`
-- Reopen frozen tabs only for a reproduced production defect
+## Closed and frozen baselines
 
-Settings Human QA (product owner — 2026-07-31):
-- layout and template consistency: PASS
-- Current configuration: PASS
-- Market universe: PASS
-- thresholds and assumptions: PASS
-- notification preference disclaimer: PASS
-- unsupported capabilities: PASS
-- Save / Reset behavior: PASS
-- EN desktop: PASS
-- FA/RTL: PASS after localization correction
-- responsive/mobile: PASS
-- no visible overflow: PASS
+| Product surface | Freeze commit | Status |
+|-----------------|---------------|--------|
+| Agent Product Template V1 | `44aced2` | CLOSED AND FROZEN |
+| Arbitrage Overview | `44aced2` | CLOSED AND FROZEN |
+| Manual Analytical Scan | verified | CLOSED |
+| Arbitrage Candidates | `1e24f3e` | CLOSED AND FROZEN |
+| Arbitrage Scan History | `0b707f9` | CLOSED AND FROZEN |
+| Arbitrage Profit & Risk | `b14aec7` | CLOSED AND FROZEN |
+| Arbitrage Settings | `35e1c76` | CLOSED AND FROZEN |
+| Arbitrage Integrations | see deployed closeout HEAD | CLOSED AND FROZEN |
 
-Expected baseline:
+Reopen frozen tabs only for a reproduced production defect with explicit approval.
+
+## Integrations Human QA
+
+Product owner Human QA: **PASSED** (2026-07-31).
+
+Post-QA: FA terminology audit only (allowlist / fallback / memory in normal prose).
+
+## Expected baseline
+
 - Feature branch: `feat/arbitrage-agent-full-product`
+- origin/main: `566b412`
 - Scheduler owner: `titan-engine-worker` (do not restart)
 - Scheduler allowlist: `["arbitrage"]` only — do not expand
 - Demo + Emergency Stop remain active; Live impossible
 
-Authorized scope (next outcome only):
-- Arbitrage Integrations product workflow when explicitly started
-- Integrations regression relative to frozen Settings
+## Authorized scope
 
-Hard boundaries:
-- Do not implement Integrations in read-only or closeout slices without authorization
-- Do not modify frozen Overview, Candidates, History, Profit & Risk, Settings except regression
-- Do not open a PR until Integrations Human QA passes
+- Integrations freeze and FA terminology polish
+- Cross-section parity audit
+- Full workflow regression
+- Template V1 regression fixes only
+- EN/FA/RTL final audit
+- Backend/security/performance verification
+- Automated regression suites
+- Deploy exact feature HEAD
+- Full browser QA matrix
+- Rule 02 and living closeout documentation
+- Final Human QA handoff
+
+## Hard boundaries
+
+- Do not add new Arbitrage features
+- Do not redesign frozen sections except proven template regression
+- Do not open or merge a PR in this task
+- Do not declare Arbitrage complete until final Human QA handoff
 - Do not apply migration without explicit approval
 - Do not access private credentials or enable execution
 - Do not restart titan-engine-worker or change Scheduler allowlist
+- Protected dirty worktree remains untouched
 
-Next transition:
-Start ARBITRAGE-INTEGRATIONS-PRODUCT when user authorizes Integrations implementation
+## Side-effect counters (must remain zero)
+
+- private provider requests: 0
+- credential access: 0
+- financial execution: 0
+- worker restart: 0
+- allowlist changes: 0
+- database migrations: 0
+- leaked secrets: 0
+
+## Next transition
+
+Return **READY FOR ARBITRAGE FULL PRODUCT FINAL HUMAN QA** to product owner.  
+PR open/merge only after final Human QA PASS in a separate authorized slice.

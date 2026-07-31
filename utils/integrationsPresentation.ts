@@ -119,6 +119,21 @@ export function presentActionLabel(action: ArbitrageCoreIntegrationAction, t: Tr
   return resolveIntegrationLabel(action.labelKey, t) || action.target;
 }
 
+export function presentFallbackMode(value: string | null | undefined, t: TranslateFn): string {
+  if (value === 'memory') {
+    return resolveIntegrationLabel('arb_int_fallback_mode_memory', t) || resolveIntegrationLabel('memory', t) || 'Memory';
+  }
+  if (value === 'redis') {
+    return resolveIntegrationLabel('arb_int_fallback_mode_redis', t) || 'Redis';
+  }
+  return resolveIntegrationLabel('arb_int_value_unknown', t) || 'Unknown';
+}
+
 export function presentSchedulerDimensionLabel(key: string, t: TranslateFn): string {
+  if (key === 'allowlisted') {
+    return resolveIntegrationLabel('agent_state_allowlisted', t)
+      || resolveIntegrationLabel('arb_int_scheduler_allowlisted', t)
+      || key;
+  }
   return resolveIntegrationLabel(`arb_int_scheduler_${key}`, t) || key;
 }

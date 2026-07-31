@@ -21,6 +21,7 @@ import {
   presentOverallState,
   presentReadinessDimension,
   presentReasonCode,
+  presentFallbackMode,
   presentSchedulerDimensionLabel,
   presentTimestamp,
   presentVerificationState,
@@ -346,7 +347,7 @@ export const ArbitrageIntegrationsSection: React.FC<ArbitrageIntegrationsSection
             </p>
             <IntegrationDetailRow
               label={resolveIntegrationLabel('arb_int_field_fallback', t) || 'Fallback'}
-              value={<AgentTechnicalLtr>{String(redis.technicalDetails?.fallback || 'memory')}</AgentTechnicalLtr>}
+              value={presentFallbackMode(String(redis.technicalDetails?.fallback || 'memory'), t)}
             />
           </div>
         ) : null}

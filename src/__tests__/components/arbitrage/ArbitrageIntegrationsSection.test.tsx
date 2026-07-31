@@ -229,6 +229,9 @@ describe('ArbitrageIntegrationsSection', () => {
     expect(screen.getByText('titan-engine-worker')).toBeTruthy();
     const sectionText = screen.getByTestId('arb-integrations-section').textContent || '';
     expect(sectionText).toMatch(/داده بازار|زمان‌بندی/);
+    expect(sectionText.includes('allowlist')).toBe(false);
+    expect(sectionText.includes('fallback')).toBe(false);
+    expect(sectionText.match(/\bmemory\b/i)).toBeNull();
     expect(isRawLocaleKey('arb_int_title')).toBe(true);
     expect(sectionText.includes('arb_int_')).toBe(false);
   });
