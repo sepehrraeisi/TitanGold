@@ -8352,6 +8352,58 @@ export interface ArbitrageCoreProfitRiskResponse {
     generatedAt?: string | null;
 }
 
+export interface ArbitrageCoreIntegrationAction {
+    id: string;
+    labelKey: string;
+    target: string;
+    contextual?: boolean;
+}
+
+export interface ArbitrageCoreIntegrationLimitation {
+    code: string;
+    labelKey: string;
+}
+
+export interface ArbitrageCoreIntegrationItem {
+    id: string;
+    productLabelKey: string;
+    category: string;
+    configured: boolean;
+    operationalState: string;
+    verificationState: string;
+    requiredForMonitoring: boolean;
+    requiredForExecution: boolean;
+    owner: string | null;
+    dependency: string | null;
+    lastCheckedAt: string | null;
+    lastSuccessfulAt: string | null;
+    evidenceSource: string | null;
+    reasonCode: string | null;
+    consumerImpact: string | null;
+    action?: ArbitrageCoreIntegrationAction | null;
+    technicalDetails?: Record<string, unknown> | null;
+}
+
+export interface ArbitrageCoreIntegrationsResponse {
+    productId: string;
+    generatedAt: string;
+    dataContractVersion: string;
+    overallState: string;
+    overallReasonCode: string;
+    publicDataReady: boolean;
+    schedulingReady: boolean;
+    persistenceReady: boolean;
+    notificationDeliveryReady: boolean;
+    executionReady: boolean;
+    items: ArbitrageCoreIntegrationItem[];
+    limitations: ArbitrageCoreIntegrationLimitation[];
+    availableActions: ArbitrageCoreIntegrationAction[];
+    executionSupported: false;
+    executionEligible: false;
+    dataSources: string[];
+}
+
+/** @deprecated legacy envelope fields — use ArbitrageCoreIntegrationsResponse */
 export interface ArbitrageCoreIntegrations {
     dataSources: string[];
     executionSupported: false;
@@ -8524,7 +8576,7 @@ export const fetchArbitrageRunDetail = async (
 
 export const fetchArbitrageIntegrations = async (
     agentId: string,
-): Promise<ArbitrageCoreIntegrations & { items?: import('./arbitrageCoreClient.ts').ArbitrageIntegrationItem[] }> => {
+): Promise<ArbitrageCoreIntegrationsResponse> => {
     const raw = await arbitrageCoreRequest<unknown>(agentId, 'integrations');
     return parseArbitrageIntegrationsEnvelope(raw);
 };

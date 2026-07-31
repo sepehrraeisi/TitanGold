@@ -946,6 +946,538 @@ export function buildSettingsDto(rawConfig = {}, meta = {}) {
   };
 }
 
+export const INTEGRATIONS_DATA_CONTRACT_VERSION = '1.0';
+
+export const INTEGRATION_OPERATIONAL_STATE = Object.freeze({
+  OPERATIONAL: 'operational',
+  DEGRADED: 'degraded',
+  LIMITED: 'limited',
+  UNAVAILABLE: 'unavailable',
+  BLOCKED: 'blocked',
+  NOT_REQUIRED: 'not_required',
+  UNKNOWN: 'unknown',
+});
+
+export const INTEGRATION_VERIFICATION_STATE = Object.freeze({
+  VERIFIED: 'verified',
+  INFERRED: 'inferred',
+  UNVERIFIED: 'unverified',
+  UNKNOWN: 'unknown',
+});
+
+export const INTEGRATIONS_REASON_CODES = Object.freeze({
+  PUBLIC_SPOT_NO_CREDENTIALS: 'public_spot_no_credentials',
+  PUBLIC_DATA_NOT_EXECUTION: 'public_data_not_execution',
+  PROXY_CONFIGURED: 'proxy_configured',
+  PROXY_EVIDENCE_FROM_SCAN: 'proxy_evidence_from_scan',
+  PROXY_BLOCKS_SCANS: 'proxy_blocks_scans',
+  PROXY_EVIDENCE_UNAVAILABLE: 'proxy_evidence_unavailable',
+  SCHEDULER_OWNER_WORKER: 'scheduler_owner_worker',
+  SCHEDULER_STALE: 'scheduler_stale',
+  SCHEDULER_NOT_REGISTERED: 'scheduler_not_registered',
+  SCHEDULER_NOT_ALLOWLISTED: 'scheduler_not_allowlisted',
+  SCHEDULER_MONITORING_PAUSED: 'scheduler_monitoring_paused',
+  REDIS_CONFIGURED: 'redis_configured',
+  REDIS_UNVERIFIED: 'redis_unverified',
+  REDIS_MEMORY_FALLBACK: 'redis_memory_fallback',
+  REDIS_UNAVAILABLE: 'redis_unavailable',
+  PERSISTENCE_AVAILABLE: 'persistence_available',
+  PERSISTENCE_NO_RUNS: 'persistence_no_runs',
+  NOTIFICATION_PREFERENCE_STORED: 'notification_preference_stored',
+  NOTIFICATION_DELIVERY_DISABLED: 'notification_delivery_disabled',
+  PRIVATE_CONNECTIONS_NOT_REQUIRED: 'private_connections_not_required',
+  EXECUTION_NOT_SUPPORTED: 'execution_not_supported',
+  EXECUTION_DEMO_RUNTIME: 'execution_demo_runtime',
+  EXECUTION_EMERGENCY_STOP: 'execution_emergency_stop',
+  EXECUTION_LIVE_UNAVAILABLE: 'execution_live_unavailable',
+});
+
+const MARKET_PROXY_BASE_PATH = '/api/market/mexc';
+
+function buildIntegrationItem(partial = {}) {
+  return {
+    id: partial.id,
+    productLabelKey: partial.productLabelKey,
+    category: partial.category,
+    configured: partial.configured === true,
+    operationalState: partial.operationalState || INTEGRATION_OPERATIONAL_STATE.UNKNOWN,
+    verificationState: partial.verificationState || INTEGRATION_VERIFICATION_STATE.UNKNOWN,
+    requiredForMonitoring: partial.requiredForMonitoring === true,
+    requiredForExecution: partial.requiredForExecution === true,
+    owner: partial.owner ?? null,
+    dependency: partial.dependency ?? null,
+    lastCheckedAt: partial.lastCheckedAt ?? null,
+    lastSuccessfulAt: partial.lastSuccessfulAt ?? null,
+    evidenceSource: partial.evidenceSource ?? null,
+    reasonCode: partial.reasonCode ?? null,
+    consumerImpact: partial.consumerImpact ?? null,
+    action: partial.action ?? null,
+    technicalDetails: partial.technicalDetails ?? null,
+  };
+}
+
+function resolveScanEvidence(latestScanRow) {
+  if (!latestScanRow) {
+    return {
+      hasSuccessfulScan: false,
+      lastSuccessfulAt: null,
+      lastAttemptAt: null,
+      scanFailed: false,
+      failureReason: null,
+    };
+  }
+  const successful = latestScanRow.was_successful === true;
+  const output = latestScanRow.output_data || {};
+  return {
+    hasSuccessfulScan: successful,
+    lastSuccessfulAt: successful ? toIso(latestScanRow.created_at) : null,
+    lastAttemptAt: toIso(latestScanRow.created_at),
+    scanFailed: latestScanRow.was_successful === false,
+    failureReason: output.errorMessage || output.error || null,
+  };
+}
+
+function resolveSchedulerDimensions(schedulerRead = {}, monitoringState = MONITORING_STATE.ACTIVE) {
+  const status = schedulerRead.status || null;
+  const allowlist = Array.isArray(status?.allowlist) ? status.allowlist : [];
+  const registeredJobs = Array.isArray(status?.registeredJobs) ? status.registeredJobs : [];
+  const arbitrageAllowlisted = allowlist.includes('arbitrage');
+  const arbitrageRegistered =
+    registeredJobs.includes('arbitrage')
+    || registeredJobs.some((job) => String(job).toLowerCase().includes('arbitrage'));
+  const monitoringPaused = monitoringState === MONITORING_STATE.PAUSED;
+  const lastRun = status?.lastRun || null;
+  const lastArbitrageRunAt =
+    lastRun?.agentKey === 'arbitrage' || lastRun?.agentId
+      ? toIso(lastRun?.completedAt || lastRun?.startedAt || status?.lastSuccessAt)
+      : toIso(status?.lastSuccessAt);
+
+  return {
+    owner: status?.owner || 'titan-engine-worker',
+    registered: Boolean(status && (arbitrageRegistered || arbitrageAllowlisted)),
+    enabled: status?.agentsEnabled === true,
+    allowlisted: arbitrageAllowlisted,
+    scheduled: arbitrageAllowlisted && status?.agentsEnabled === true && !monitoringPaused,
+    monitoringState,
+    lastTickAt: toIso(status?.lastTickAt),
+    lastSuccessfulArbitrageRunAt: lastArbitrageRunAt,
+    stale: schedulerRead.stale === true,
+    source: schedulerRead.source || 'unknown',
+    pid: status?.pid ?? null,
+  };
+}
+
+function resolveExecutionBlockedReasons(runtimeState = {}, executionSupported = false) {
+  const reasons = [];
+  if (!executionSupported) reasons.push(INTEGRATIONS_REASON_CODES.EXECUTION_NOT_SUPPORTED);
+  if (normalizeMode(runtimeState?.globalMode) === 'demo') {
+    reasons.push(INTEGRATIONS_REASON_CODES.EXECUTION_DEMO_RUNTIME);
+  }
+  if (runtimeState?.killSwitchActive === true) {
+    reasons.push(INTEGRATIONS_REASON_CODES.EXECUTION_EMERGENCY_STOP);
+  }
+  reasons.push(INTEGRATIONS_REASON_CODES.EXECUTION_LIVE_UNAVAILABLE);
+  return reasons;
+}
+
+function normalizeMode(mode) {
+  const m = String(mode || '').toLowerCase();
+  return m === 'live' ? 'live' : 'demo';
+}
+
+/**
+ * Canonical read-only Integrations DTO for the Arbitrage analytical monitor.
+ */
+export function buildArbitrageIntegrationsDto(context = {}) {
+  const generatedAt = new Date().toISOString();
+  const product = context.product || getProductIdentity();
+  const settings = context.settings || buildSettingsDto(context.rawConfig || {});
+  const scanEvidence = resolveScanEvidence(context.latestScanRow);
+  const historical = context.historicalSummary || {};
+  const schedulerDims = resolveSchedulerDimensions(
+    context.schedulerRead || {},
+    settings.monitoringState,
+  );
+  const runtimeState = context.runtimeState || {};
+  const redisConfigured = context.redisConfigured === true;
+  const redisVerificationState = context.redisVerificationState
+    || (redisConfigured
+      ? INTEGRATION_VERIFICATION_STATE.UNVERIFIED
+      : INTEGRATION_VERIFICATION_STATE.UNKNOWN);
+  const executionSupported = false;
+  const executionBlockedReasons = resolveExecutionBlockedReasons(runtimeState, executionSupported);
+  const livePossible =
+    normalizeMode(runtimeState.globalMode) === 'live'
+    && runtimeState.killSwitchActive !== true
+    && executionSupported;
+
+  const mexcOperationalState = scanEvidence.hasSuccessfulScan
+    ? INTEGRATION_OPERATIONAL_STATE.OPERATIONAL
+    : scanEvidence.scanFailed
+      ? INTEGRATION_OPERATIONAL_STATE.DEGRADED
+      : historical.totalScanRuns > 0
+        ? INTEGRATION_OPERATIONAL_STATE.DEGRADED
+        : INTEGRATION_OPERATIONAL_STATE.UNKNOWN;
+
+  const mexcVerificationState = scanEvidence.hasSuccessfulScan
+    ? INTEGRATION_VERIFICATION_STATE.VERIFIED
+    : historical.totalScanRuns > 0
+      ? INTEGRATION_VERIFICATION_STATE.INFERRED
+      : INTEGRATION_VERIFICATION_STATE.UNKNOWN;
+
+  const proxyOperationalState = scanEvidence.hasSuccessfulScan
+    ? INTEGRATION_OPERATIONAL_STATE.OPERATIONAL
+    : scanEvidence.scanFailed
+      ? INTEGRATION_OPERATIONAL_STATE.UNAVAILABLE
+      : INTEGRATION_OPERATIONAL_STATE.UNKNOWN;
+
+  const proxyVerificationState = scanEvidence.hasSuccessfulScan
+    ? INTEGRATION_VERIFICATION_STATE.INFERRED
+    : INTEGRATION_VERIFICATION_STATE.UNKNOWN;
+
+  const schedulerOperationalState = !schedulerDims.registered
+    ? INTEGRATION_OPERATIONAL_STATE.UNAVAILABLE
+    : !schedulerDims.allowlisted
+      ? INTEGRATION_OPERATIONAL_STATE.LIMITED
+      : schedulerDims.stale
+        ? INTEGRATION_OPERATIONAL_STATE.DEGRADED
+        : schedulerDims.scheduled
+          ? INTEGRATION_OPERATIONAL_STATE.OPERATIONAL
+          : INTEGRATION_OPERATIONAL_STATE.LIMITED;
+
+  const redisOperationalState = redisConfigured
+    ? redisVerificationState === INTEGRATION_VERIFICATION_STATE.VERIFIED
+      ? INTEGRATION_OPERATIONAL_STATE.OPERATIONAL
+      : INTEGRATION_OPERATIONAL_STATE.DEGRADED
+    : INTEGRATION_OPERATIONAL_STATE.LIMITED;
+
+  const persistenceOperationalState = historical.totalScanRuns > 0
+    ? INTEGRATION_OPERATIONAL_STATE.OPERATIONAL
+    : INTEGRATION_OPERATIONAL_STATE.DEGRADED;
+
+  const notificationPreferenceStored =
+    settings.fields?.notificationPreference?.source === 'configured'
+    || settings.notificationPreference != null;
+
+  const items = [
+    buildIntegrationItem({
+      id: 'mexc_public_market_data',
+      productLabelKey: 'arb_int_item_mexc_public',
+      category: 'data_pipeline',
+      configured: true,
+      operationalState: mexcOperationalState,
+      verificationState: mexcVerificationState,
+      requiredForMonitoring: true,
+      requiredForExecution: false,
+      owner: 'mexc-public-market-data',
+      dependency: 'MEXC spot public ticker and depth via internal proxy',
+      lastCheckedAt: generatedAt,
+      lastSuccessfulAt: scanEvidence.lastSuccessfulAt,
+      evidenceSource: scanEvidence.hasSuccessfulScan ? 'ai_decisions.latest_scan' : null,
+      reasonCode: INTEGRATIONS_REASON_CODES.PUBLIC_SPOT_NO_CREDENTIALS,
+      consumerImpact: 'analytical_scan_market_observations',
+      technicalDetails: {
+        credentialRequired: false,
+        privateAccountIntegration: false,
+        authorizesExecution: false,
+        exchangeId: 'mexc',
+        dataClass: 'public_spot',
+      },
+    }),
+    buildIntegrationItem({
+      id: 'internal_market_proxy',
+      productLabelKey: 'arb_int_item_market_proxy',
+      category: 'data_pipeline',
+      configured: true,
+      operationalState: proxyOperationalState,
+      verificationState: proxyVerificationState,
+      requiredForMonitoring: true,
+      requiredForExecution: false,
+      owner: 'market-proxy-route',
+      dependency: MARKET_PROXY_BASE_PATH,
+      lastCheckedAt: generatedAt,
+      lastSuccessfulAt: scanEvidence.lastSuccessfulAt,
+      evidenceSource: scanEvidence.hasSuccessfulScan ? 'ai_decisions.latest_scan' : null,
+      reasonCode: scanEvidence.hasSuccessfulScan
+        ? INTEGRATIONS_REASON_CODES.PROXY_EVIDENCE_FROM_SCAN
+        : scanEvidence.scanFailed
+          ? INTEGRATIONS_REASON_CODES.PROXY_BLOCKS_SCANS
+          : INTEGRATIONS_REASON_CODES.PROXY_EVIDENCE_UNAVAILABLE,
+      consumerImpact: scanEvidence.scanFailed ? 'blocks_analytical_scans' : 'feeds_public_market_data',
+      technicalDetails: {
+        basePath: MARKET_PROXY_BASE_PATH,
+        readOnly: true,
+        blocksScansWhenUnavailable: true,
+      },
+    }),
+    buildIntegrationItem({
+      id: 'scheduler',
+      productLabelKey: 'arb_int_item_scheduler',
+      category: 'runtime_orchestration',
+      configured: schedulerDims.registered,
+      operationalState: schedulerOperationalState,
+      verificationState: schedulerDims.stale
+        ? INTEGRATION_VERIFICATION_STATE.INFERRED
+        : schedulerDims.lastTickAt
+          ? INTEGRATION_VERIFICATION_STATE.VERIFIED
+          : INTEGRATION_VERIFICATION_STATE.UNKNOWN,
+      requiredForMonitoring: true,
+      requiredForExecution: false,
+      owner: schedulerDims.owner,
+      dependency: 'analytical_scheduler_status',
+      lastCheckedAt: generatedAt,
+      lastSuccessfulAt: schedulerDims.lastSuccessfulArbitrageRunAt,
+      evidenceSource: schedulerDims.lastTickAt ? 'scheduler_status_cache' : null,
+      reasonCode: !schedulerDims.allowlisted
+        ? INTEGRATIONS_REASON_CODES.SCHEDULER_NOT_ALLOWLISTED
+        : schedulerDims.stale
+          ? INTEGRATIONS_REASON_CODES.SCHEDULER_STALE
+          : INTEGRATIONS_REASON_CODES.SCHEDULER_OWNER_WORKER,
+      consumerImpact: 'scheduled_analytical_scans',
+      technicalDetails: {
+        dimensions: {
+          owner: schedulerDims.owner,
+          registered: schedulerDims.registered,
+          enabled: schedulerDims.enabled,
+          allowlisted: schedulerDims.allowlisted,
+          scheduled: schedulerDims.scheduled,
+          monitoringState: schedulerDims.monitoringState,
+          allowlist: schedulerDims.allowlisted ? ['arbitrage'] : [],
+          lastTickAt: schedulerDims.lastTickAt,
+          lastSuccessfulArbitrageRunAt: schedulerDims.lastSuccessfulArbitrageRunAt,
+          stale: schedulerDims.stale,
+          statusSource: schedulerDims.source,
+          pid: schedulerDims.pid,
+        },
+      },
+    }),
+    buildIntegrationItem({
+      id: 'redis_scan_lock',
+      productLabelKey: 'arb_int_item_redis_lock',
+      category: 'runtime_orchestration',
+      configured: redisConfigured,
+      operationalState: redisOperationalState,
+      verificationState: redisVerificationState,
+      requiredForMonitoring: false,
+      requiredForExecution: false,
+      owner: 'arbitrage-scan-lock',
+      dependency: context.redisKeyPrefix || 'titan:arbitrage:scan_lock:',
+      lastCheckedAt: generatedAt,
+      lastSuccessfulAt: null,
+      evidenceSource: redisConfigured ? 'runtime_redis_client' : null,
+      reasonCode: redisConfigured
+        ? INTEGRATIONS_REASON_CODES.REDIS_CONFIGURED
+        : INTEGRATIONS_REASON_CODES.REDIS_MEMORY_FALLBACK,
+      consumerImpact: redisConfigured ? 'duplicate_scan_protection' : 'memory_fallback_duplicate_protection',
+      technicalDetails: {
+        fallback: 'memory',
+        ttlSec: context.redisTtlSec ?? 120,
+        duplicateScanProtection: redisConfigured ? 'redis_primary_with_memory_fallback' : 'memory_only',
+      },
+    }),
+    buildIntegrationItem({
+      id: 'database_persistence',
+      productLabelKey: 'arb_int_item_database',
+      category: 'persistence',
+      configured: true,
+      operationalState: persistenceOperationalState,
+      verificationState: INTEGRATION_VERIFICATION_STATE.VERIFIED,
+      requiredForMonitoring: true,
+      requiredForExecution: false,
+      owner: 'ai_decisions',
+      dependency: ARBITRAGE_DECISION_TYPE,
+      lastCheckedAt: generatedAt,
+      lastSuccessfulAt: historical.latestSuccessfulRunAt || scanEvidence.lastSuccessfulAt,
+      evidenceSource: 'ai_decisions.summary_query',
+      reasonCode: historical.totalScanRuns > 0
+        ? INTEGRATIONS_REASON_CODES.PERSISTENCE_AVAILABLE
+        : INTEGRATIONS_REASON_CODES.PERSISTENCE_NO_RUNS,
+      consumerImpact: historical.totalScanRuns > 0 ? 'scan_history_available' : 'history_empty_until_first_scan',
+      technicalDetails: {
+        decisionType: ARBITRAGE_DECISION_TYPE,
+        totalScanRuns: historical.totalScanRuns ?? 0,
+        readOnlyHistory: true,
+      },
+    }),
+    buildIntegrationItem({
+      id: 'notification_preference',
+      productLabelKey: 'arb_int_item_notification_preference',
+      category: 'notifications',
+      configured: notificationPreferenceStored,
+      operationalState: notificationPreferenceStored
+        ? INTEGRATION_OPERATIONAL_STATE.OPERATIONAL
+        : INTEGRATION_OPERATIONAL_STATE.DEGRADED,
+      verificationState: notificationPreferenceStored
+        ? INTEGRATION_VERIFICATION_STATE.VERIFIED
+        : INTEGRATION_VERIFICATION_STATE.INFERRED,
+      requiredForMonitoring: false,
+      requiredForExecution: false,
+      owner: 'arbitrage_settings',
+      dependency: 'agent.config.autoActions.notifyOnOpportunity',
+      lastCheckedAt: generatedAt,
+      lastSuccessfulAt: settings.updatedAt,
+      evidenceSource: 'settings_dto',
+      reasonCode: INTEGRATIONS_REASON_CODES.NOTIFICATION_PREFERENCE_STORED,
+      consumerImpact: 'stores_user_preference_only',
+      action: {
+        type: 'navigate',
+        target: 'settings',
+        labelKey: 'arb_int_action_open_settings',
+      },
+    }),
+    buildIntegrationItem({
+      id: 'notification_delivery',
+      productLabelKey: 'arb_int_item_notification_delivery',
+      category: 'notifications',
+      configured: false,
+      operationalState: INTEGRATION_OPERATIONAL_STATE.UNAVAILABLE,
+      verificationState: INTEGRATION_VERIFICATION_STATE.VERIFIED,
+      requiredForMonitoring: false,
+      requiredForExecution: false,
+      owner: 'notification_platform',
+      dependency: 'delivery_pipeline',
+      lastCheckedAt: generatedAt,
+      lastSuccessfulAt: null,
+      evidenceSource: 'product_contract',
+      reasonCode: INTEGRATIONS_REASON_CODES.NOTIFICATION_DELIVERY_DISABLED,
+      consumerImpact: 'no_outbound_alerts_for_analytical_scans',
+      technicalDetails: {
+        deliveryImplemented: false,
+        deliveryOperational: false,
+        channels: ['dashboard'],
+      },
+    }),
+    buildIntegrationItem({
+      id: 'connections_private_mexc',
+      productLabelKey: 'arb_int_item_connections',
+      category: 'connections',
+      configured: false,
+      operationalState: INTEGRATION_OPERATIONAL_STATE.NOT_REQUIRED,
+      verificationState: INTEGRATION_VERIFICATION_STATE.VERIFIED,
+      requiredForMonitoring: false,
+      requiredForExecution: true,
+      owner: 'settings_connections',
+      dependency: 'private_mexc_connection',
+      lastCheckedAt: generatedAt,
+      lastSuccessfulAt: null,
+      evidenceSource: 'product_contract',
+      reasonCode: INTEGRATIONS_REASON_CODES.PRIVATE_CONNECTIONS_NOT_REQUIRED,
+      consumerImpact: 'not_required_for_public_data_monitor',
+      action: {
+        type: 'navigate',
+        target: 'connections',
+        labelKey: 'arb_int_action_manage_connections',
+        contextual: true,
+      },
+      technicalDetails: {
+        privateCredentialsRequiredForMonitor: false,
+        improvesAnalyticalScans: false,
+      },
+    }),
+    buildIntegrationItem({
+      id: 'financial_execution',
+      productLabelKey: 'arb_int_item_execution',
+      category: 'execution',
+      configured: false,
+      operationalState: INTEGRATION_OPERATIONAL_STATE.BLOCKED,
+      verificationState: INTEGRATION_VERIFICATION_STATE.VERIFIED,
+      requiredForMonitoring: false,
+      requiredForExecution: true,
+      owner: 'runtime_execution_policy',
+      dependency: 'global_execution_runtime',
+      lastCheckedAt: generatedAt,
+      lastSuccessfulAt: null,
+      evidenceSource: 'runtime_execution_state',
+      reasonCode: executionBlockedReasons[0] || INTEGRATIONS_REASON_CODES.EXECUTION_NOT_SUPPORTED,
+      consumerImpact: 'no_orders_settlement_or_transfers',
+      technicalDetails: {
+        executionSupported,
+        executionEligible: false,
+        demoRuntime: normalizeMode(runtimeState.globalMode) === 'demo',
+        emergencyStopActive: runtimeState.killSwitchActive === true,
+        livePossible,
+        blockedReasons: executionBlockedReasons,
+      },
+    }),
+  ];
+
+  const publicDataReady =
+    mexcOperationalState === INTEGRATION_OPERATIONAL_STATE.OPERATIONAL
+    || mexcOperationalState === INTEGRATION_OPERATIONAL_STATE.DEGRADED;
+  const schedulingReady =
+    schedulerDims.allowlisted
+    && schedulerDims.enabled
+    && schedulerOperationalState !== INTEGRATION_OPERATIONAL_STATE.UNAVAILABLE;
+  const persistenceReady = persistenceOperationalState !== INTEGRATION_OPERATIONAL_STATE.UNAVAILABLE;
+  const notificationDeliveryReady = false;
+  const executionReady = false;
+
+  const limitations = [
+    {
+      code: 'execution_not_supported',
+      labelKey: 'arb_int_limit_execution_not_supported',
+    },
+    {
+      code: 'notification_delivery_disabled',
+      labelKey: 'arb_int_limit_notification_delivery',
+    },
+    {
+      code: 'private_credentials_not_required',
+      labelKey: 'arb_int_limit_private_not_required',
+    },
+  ];
+
+  if (!schedulerDims.allowlisted) {
+    limitations.push({
+      code: 'scheduler_not_allowlisted',
+      labelKey: 'arb_int_limit_scheduler_allowlist',
+    });
+  }
+
+  const availableActions = [
+    { id: 'open_settings', labelKey: 'arb_int_action_open_settings', target: 'settings' },
+    { id: 'view_scan_history', labelKey: 'arb_int_action_view_history', target: 'history' },
+    {
+      id: 'manage_connections',
+      labelKey: 'arb_int_action_manage_connections',
+      target: 'connections',
+      contextual: true,
+    },
+  ];
+
+  let overallState = 'ready';
+  let overallReasonCode = 'monitoring_ready';
+  if (!publicDataReady && !persistenceReady) {
+    overallState = 'limited';
+    overallReasonCode = 'monitoring_limited';
+  } else if (!schedulingReady || schedulerDims.stale) {
+    overallState = 'degraded';
+    overallReasonCode = schedulerDims.stale ? 'scheduler_stale' : 'scheduling_degraded';
+  } else if (mexcOperationalState === INTEGRATION_OPERATIONAL_STATE.UNKNOWN) {
+    overallState = 'degraded';
+    overallReasonCode = 'market_data_unverified';
+  }
+
+  return {
+    productId: product.agentKey || PRODUCT_ID,
+    generatedAt,
+    dataContractVersion: INTEGRATIONS_DATA_CONTRACT_VERSION,
+    overallState,
+    overallReasonCode,
+    publicDataReady,
+    schedulingReady,
+    persistenceReady,
+    notificationDeliveryReady,
+    executionReady,
+    items,
+    limitations,
+    availableActions,
+    executionSupported: false,
+    executionEligible: false,
+    dataSources: ['MEXC spot (public market data)'],
+  };
+}
+
 export function sanitizeConfigForWrite(rawConfig = {}) {
   const next = { ...rawConfig };
   next.execution = {

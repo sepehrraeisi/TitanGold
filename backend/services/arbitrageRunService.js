@@ -10,6 +10,7 @@ import {
   buildScanRunDto,
   buildArbitrageOverviewSnapshot,
   buildSettingsDto,
+  buildArbitrageIntegrationsDto,
   buildCandidateAvailableFilters,
   buildCandidateFunnelFromItems,
   buildHistorySummary,
@@ -26,8 +27,13 @@ import {
   validateSettingsInput,
 } from './arbitrageDomain.js';
 import { readAnalyticalSchedulerStatus } from './analyticalSchedulerStatus.js';
+import { getRuntimeExecutionState } from './runtimeExecutionStateService.js';
 import { isRedisAvailable } from '../utils/redis.js';
-import { withScanLock } from './arbitrageScanLock.js';
+import {
+  ARBITRAGE_SCAN_LOCK_KEY_PREFIX,
+  ARBITRAGE_SCAN_LOCK_TTL_SEC,
+  withScanLock,
+} from './arbitrageScanLock.js';
 import {
   fetchArbitrageHistoricalSummary,
   fetchArbitrageScanHistory,
@@ -656,54 +662,30 @@ export async function getArbitrageIntegrations(agentId) {
   const agent = await loadArbitrageAgent(agentId);
   if (!agent) return null;
 
-  const scheduler = await readAnalyticalSchedulerStatus();
-  const config = normalizeArbitrageConfig(agent.config || {});
-  const mexcExchange = (config.exchanges || []).find(
-    (ex) => (typeof ex === 'string' ? ex : ex?.id)?.toLowerCase?.() === 'mexc',
-  );
+  const [schedulerRead, runtimeState, latestScanRow, historicalSummary] = await Promise.all([
+    readAnalyticalSchedulerStatus(),
+    getRuntimeExecutionState({ preferCache: true }),
+    fetchLatestArbitrageScanRow(agent.id),
+    fetchArbitrageHistoricalSummary(agent.id),
+  ]);
 
-  return {
-    mexcPublicMarketData: {
-      status: 'available',
-      credentialRequired: false,
-      exchangeId: 'mexc',
-      enabled: typeof mexcExchange === 'object' ? mexcExchange.enabled !== false : true,
-    },
-    marketProxy: {
-      status: 'operational',
-      basePath: '/api/market/mexc',
-      readOnly: true,
-    },
-    scheduler: {
-      owner: scheduler.status?.owner || 'titan-engine-worker',
-      isRunning: scheduler.status?.isRunning === true,
-      allowlist: scheduler.status?.allowlist || ['arbitrage'],
-      stale: scheduler.stale,
-      source: scheduler.source,
-      lastTickAt: scheduler.status?.lastTickAt || null,
-    },
-    redisScanLock: {
-      available: isRedisAvailable(),
-      keyPrefix: 'titan:arbitrage:scan_lock:',
-      ttlSec: 120,
-      fallback: 'memory',
-    },
-    database: {
-      status: 'connected',
-      scanHistorySource: 'ai_decisions',
-      decisionType: ARBITRAGE_DECISION_TYPE,
-    },
-    notifications: {
-      preferenceSupported: true,
-      deliveryAvailable: false,
-      channels: ['dashboard'],
-      note: 'Notification delivery is not enabled for analytical scans.',
-    },
-    execution: {
-      supported: false,
-      eligible: false,
-    },
-  };
+  const settings = buildSettingsDto(agent.config || {}, {
+    updatedAt: agent.updated_at,
+  });
+
+  return buildArbitrageIntegrationsDto({
+    product: getProductIdentity(),
+    settings,
+    rawConfig: agent.config || {},
+    schedulerRead,
+    runtimeState,
+    latestScanRow,
+    historicalSummary,
+    redisConfigured: isRedisAvailable(),
+    redisVerificationState: isRedisAvailable() ? 'unverified' : 'unknown',
+    redisKeyPrefix: ARBITRAGE_SCAN_LOCK_KEY_PREFIX,
+    redisTtlSec: ARBITRAGE_SCAN_LOCK_TTL_SEC,
+  });
 }
 
 export async function getArbitrageProfitRisk(agentId, { runId } = {}) {

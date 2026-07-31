@@ -701,74 +701,87 @@ export function parseArbitrageSettingsEnvelope(raw: unknown): ArbitrageCoreSetti
     };
 }
 
-export type ArbitrageIntegrationItem = {
-    id: string;
-    label: string;
-    state: 'available' | 'limited' | 'unavailable';
-    lastSuccess?: string | null;
-    lastAttempt?: string | null;
-    safeReason?: string | null;
-    owner?: string | null;
-};
-
-export function parseArbitrageIntegrationsEnvelope(raw: unknown): ArbitrageCoreIntegrations & {
-    items: ArbitrageIntegrationItem[];
-} {
+export function parseArbitrageIntegrationsEnvelope(raw: unknown): import('./api.ts').ArbitrageCoreIntegrationsResponse {
     if (!raw || typeof raw !== 'object') {
         throw new ArbitrageContractError('Integrations response is not an object');
     }
     const body = raw as Record<string, unknown>;
     const integrations = (body.integrations ?? body) as Record<string, unknown>;
 
-    const items: ArbitrageIntegrationItem[] = [];
-
-    const pushItem = (
-        id: string,
-        label: string,
-        block: Record<string, unknown> | undefined,
-        mapState: (b: Record<string, unknown>) => ArbitrageIntegrationItem['state'],
-    ) => {
-        if (!block) {
-            items.push({ id, label, state: 'unavailable', safeReason: 'Status unavailable', owner: null });
-            return;
-        }
-        items.push({
-            id,
-            label,
-            state: mapState(block),
-            lastSuccess: block.lastSuccess ? String(block.lastSuccess) : block.lastTickAt ? String(block.lastTickAt) : null,
-            lastAttempt: block.lastAttempt ? String(block.lastAttempt) : null,
-            safeReason: block.note ? String(block.note) : block.safeReason ? String(block.safeReason) : null,
-            owner: block.owner ? String(block.owner) : null,
-        });
-    };
-
-    pushItem('mexc_public', 'MEXC public market data', integrations.mexcPublicMarketData as Record<string, unknown>, b =>
-        b.status === 'available' ? 'available' : 'unavailable',
-    );
-    pushItem('market_proxy', 'Internal market proxy', integrations.marketProxy as Record<string, unknown>, b =>
-        b.status === 'operational' || b.status === 'available' ? 'available' : 'limited',
-    );
-    pushItem('scheduler', 'Scheduler', integrations.scheduler as Record<string, unknown>, b =>
-        b.isRunning ? 'available' : b.stale ? 'limited' : 'limited',
-    );
-    pushItem('redis_lock', 'Redis scan lock', integrations.redisScanLock as Record<string, unknown>, b =>
-        b.available ? 'available' : 'limited',
-    );
-    pushItem('database', 'Database persistence', integrations.database as Record<string, unknown>, b =>
-        b.status === 'connected' ? 'available' : 'unavailable',
-    );
-    pushItem('notifications', 'Notification delivery', integrations.notifications as Record<string, unknown>, b =>
-        b.deliveryAvailable ? 'available' : 'unavailable',
-    );
-    pushItem('execution', 'Financial execution', integrations.execution as Record<string, unknown>, () => 'unavailable');
+    const itemsRaw = Array.isArray(integrations.items) ? integrations.items : [];
+    const items = itemsRaw.map(row => parseIntegrationItem(row));
 
     return {
-        dataSources: ['MEXC spot (public market data)'],
+        productId: String(integrations.productId ?? 'arbitrage'),
+        generatedAt: integrations.generatedAt ? String(integrations.generatedAt) : new Date().toISOString(),
+        dataContractVersion: String(integrations.dataContractVersion ?? '1.0'),
+        overallState: String(integrations.overallState ?? 'unknown'),
+        overallReasonCode: String(integrations.overallReasonCode ?? 'unknown'),
+        publicDataReady: integrations.publicDataReady === true,
+        schedulingReady: integrations.schedulingReady === true,
+        persistenceReady: integrations.persistenceReady === true,
+        notificationDeliveryReady: integrations.notificationDeliveryReady === true,
+        executionReady: integrations.executionReady === true,
+        items,
+        limitations: Array.isArray(integrations.limitations)
+            ? integrations.limitations.map(l => parseIntegrationLimitation(l))
+            : [],
+        availableActions: Array.isArray(integrations.availableActions)
+            ? integrations.availableActions.map(a => parseIntegrationAction(a))
+            : [],
         executionSupported: false,
         executionEligible: false,
-        unavailableIntegrations: items.filter(i => i.state !== 'available').map(i => i.label),
-        items,
+        dataSources: asStringArray(integrations.dataSources ?? ['MEXC spot (public market data)']),
+    };
+}
+
+function parseIntegrationAction(raw: unknown): import('./api.ts').ArbitrageCoreIntegrationAction {
+    const row = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    return {
+        id: String(row.id ?? ''),
+        labelKey: String(row.labelKey ?? ''),
+        target: String(row.target ?? ''),
+        contextual: row.contextual === true,
+    };
+}
+
+function parseIntegrationLimitation(raw: unknown): import('./api.ts').ArbitrageCoreIntegrationLimitation {
+    const row = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    return {
+        code: String(row.code ?? ''),
+        labelKey: String(row.labelKey ?? ''),
+    };
+}
+
+function parseIntegrationItem(raw: unknown): import('./api.ts').ArbitrageCoreIntegrationItem {
+    const row = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    const actionRaw = row.action;
+    let action: import('./api.ts').ArbitrageCoreIntegrationAction | null = null;
+    if (actionRaw && typeof actionRaw === 'object') {
+        action = parseIntegrationAction(actionRaw);
+    }
+
+    return {
+        id: String(row.id ?? ''),
+        productLabelKey: String(row.productLabelKey ?? ''),
+        category: String(row.category ?? ''),
+        configured: row.configured === true,
+        operationalState: String(row.operationalState ?? 'unknown'),
+        verificationState: String(row.verificationState ?? 'unknown'),
+        requiredForMonitoring: row.requiredForMonitoring === true,
+        requiredForExecution: row.requiredForExecution === true,
+        owner: row.owner != null ? String(row.owner) : null,
+        dependency: row.dependency != null ? String(row.dependency) : null,
+        lastCheckedAt: row.lastCheckedAt ? String(row.lastCheckedAt) : null,
+        lastSuccessfulAt: row.lastSuccessfulAt ? String(row.lastSuccessfulAt) : null,
+        evidenceSource: row.evidenceSource != null ? String(row.evidenceSource) : null,
+        reasonCode: row.reasonCode != null ? String(row.reasonCode) : null,
+        consumerImpact: row.consumerImpact != null ? String(row.consumerImpact) : null,
+        action,
+        technicalDetails:
+            row.technicalDetails && typeof row.technicalDetails === 'object'
+                ? (row.technicalDetails as Record<string, unknown>)
+                : null,
     };
 }
 

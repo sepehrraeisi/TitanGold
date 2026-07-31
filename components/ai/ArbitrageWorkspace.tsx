@@ -7,7 +7,7 @@ import * as api from '../../services/api.ts';
 import type {
     ArbitrageCoreCandidate,
     ArbitrageCoreCandidatesResponse,
-    ArbitrageCoreIntegrations,
+    ArbitrageCoreIntegrationsResponse,
     ArbitrageCoreOverview,
     ArbitrageCoreProfitRiskResponse,
     ArbitrageCoreRunDetail,
@@ -47,6 +47,7 @@ import ArbitrageScanRunDetailPanel, {
 } from './arbitrage/ArbitrageScanRunDetailPanel.tsx';
 import ArbitrageProfitRiskSection from './arbitrage/ArbitrageProfitRiskSection.tsx';
 import { ArbitrageSettingsSection } from './arbitrage/ArbitrageSettingsSection.tsx';
+import { ArbitrageIntegrationsSection } from './arbitrage/ArbitrageIntegrationsSection.tsx';
 import { AgentProductConfirmation } from './product/AgentProductConfirmation.tsx';
 import {
     editableSettingsPayload,
@@ -125,7 +126,7 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
     const [historyRunDetail, setHistoryRunDetail] = useState<ArbitrageCoreRunDetail | null>(null);
     const [historyComparison, setHistoryComparison] = useState<ScanRunComparison | null>(null);
     const [profitRiskData, setProfitRiskData] = useState<ArbitrageCoreProfitRiskResponse | null>(null);
-    const [integrations, setIntegrations] = useState<ArbitrageCoreIntegrations | null>(null);
+    const [integrations, setIntegrations] = useState<ArbitrageCoreIntegrationsResponse | null>(null);
     const [settingsDraft, setSettingsDraft] = useState<ArbitrageCoreSettings | null>(null);
     const [settingsConfirmed, setSettingsConfirmed] = useState<ArbitrageCoreSettings | null>(null);
     const [settingsSaving, setSettingsSaving] = useState(false);
@@ -760,9 +761,22 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
                     />
                 </AgentContentSurface>
             ) : activeTab === 'integration' ? (
-                <AgentContentSurface>
-                    <AgentSectionHeader title={t('tab_integration') || 'Integrations'} />
-                    <IntegrationSection integrations={integrations} failed={Boolean(tabError)} t={t} />
+                <AgentContentSurface testId="arb-integrations-surface">
+                    <ArbitrageIntegrationsSection
+                        data={integrations}
+                        loading={tabLoading && !integrations}
+                        error={tabError}
+                        onRefresh={() => void loadTabData()}
+                        onOpenSettings={() => navigateSection('settings')}
+                        onViewScanHistory={() => navigateSection('history')}
+                        onManageConnections={() => {
+                            if (onNavigate) {
+                                onNavigate({ view: 'settings', settingsTab: 'connections' });
+                            }
+                        }}
+                        t={t}
+                        locale={language === 'fa' ? 'fa-IR' : 'en-US'}
+                    />
                 </AgentContentSurface>
             ) : null}
         </div>
@@ -874,72 +888,5 @@ const ArbitrageWorkspace: React.FC<ArbitrageWorkspaceProps> = ({
         </div>
     );
 };
-
-const IntegrationSection: React.FC<{
-    integrations: (ArbitrageCoreIntegrations & { items?: import('../../services/arbitrageCoreClient.ts').ArbitrageIntegrationItem[] }) | null;
-    failed?: boolean;
-    t: (key: string) => string;
-}> = ({ integrations, failed, t }) => {
-    if (failed || !integrations) {
-        return (
-            <EmptyBlock
-                message={t('arbitrage_overview_data_unavailable') || 'Integration status unavailable.'}
-            />
-        );
-    }
-
-    const items = integrations.items ?? [];
-
-    return (
-    <SectionBlock title={t('tab_integration') || 'Integrations'}>
-        <div className="space-y-3">
-            {items.map(item => (
-                <div key={item.id} className="bg-gray-900/40 border border-gray-800 rounded-xl p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-white">{item.label}</p>
-                        <StatusPill label={item.state} variant={item.state === 'available' ? 'info' : 'warning'} />
-                    </div>
-                    {item.owner ? (
-                        <p className="text-xs text-gray-500 mt-1">
-                            {t('owner') || 'Owner'}: {item.owner}
-                        </p>
-                    ) : null}
-                    {item.safeReason ? (
-                        <p className="text-xs text-gray-400 mt-1">{item.safeReason}</p>
-                    ) : item.state === 'unavailable' ? (
-                        <p className="text-xs text-gray-400 mt-1">
-                            {t('arbitrage_overview_data_unavailable') || 'Status unavailable'}
-                        </p>
-                    ) : null}
-                </div>
-            ))}
-        </div>
-        <p className="text-xs text-amber-300 mt-4">
-            {t('arbitrage_integration_truth') ||
-                'Binance, Gate, futures, settlement, and live execution integrations are not active for this agent.'}
-        </p>
-    </SectionBlock>
-    );
-};
-
-const SectionBlock: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-    <section className="bg-[#10141A] border border-gray-800 rounded-2xl p-5">
-        <h3 className="text-sm font-semibold text-white mb-4">{title}</h3>
-        {children}
-    </section>
-);
-
-const MetricBlock: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-    <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
-        <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
-        <p className="text-xl text-white font-semibold mt-2">{value}</p>
-    </div>
-);
-
-const EmptyBlock: React.FC<{ message: string }> = ({ message }) => (
-    <div className="text-sm text-gray-500 py-6 text-center border border-dashed border-gray-800 rounded-xl">
-        {message}
-    </div>
-);
 
 export default ArbitrageWorkspace;
