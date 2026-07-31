@@ -16,7 +16,7 @@
 | Scan History | `0b707f9` | CLOSED AND FROZEN |
 | Profit & Risk | `b14aec7` | CLOSED AND FROZEN |
 | Settings | `35e1c76` | CLOSED AND FROZEN |
-| Integrations | see Rule 02 freeze commit | CLOSED AND FROZEN (Human QA PASSED) |
+| Integrations | `ff4fe8b` | CLOSED AND FROZEN (Human QA PASSED) |
 
 ## Integrations Human QA
 

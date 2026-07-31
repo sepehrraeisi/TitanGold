@@ -31,7 +31,7 @@ ALL SIX SECTIONS IMPLEMENTED — Integrations Human QA PASSED — FINAL CLOSEOUT
 | Arbitrage Scan History | `0b707f9` | CLOSED AND FROZEN |
 | Arbitrage Profit & Risk | `b14aec7` | CLOSED AND FROZEN |
 | Arbitrage Settings | `35e1c76` | CLOSED AND FROZEN |
-| Arbitrage Integrations | see deployed closeout HEAD | CLOSED AND FROZEN |
+| Arbitrage Integrations | `ff4fe8b` | CLOSED AND FROZEN |
 
 Reopen frozen tabs only for a reproduced production defect with explicit approval.
 
