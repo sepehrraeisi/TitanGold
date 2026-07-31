@@ -8025,7 +8025,7 @@ export interface ArbitrageSettingsFieldMeta {
     supported: boolean;
     editable: boolean;
     readOnly: boolean;
-    reason?: string | null;
+    reasonCode?: string | null;
     constraints?: { min: number; max: number } | null;
     unit?: string | null;
 }

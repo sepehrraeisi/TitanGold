@@ -23,6 +23,7 @@ describe('arbitrageCore settings contract', () => {
     expect(dto.fields.monitoredSymbols.source).toBe(FIELD_SOURCES.CONFIGURED);
     expect(dto.fields.minimumNetSpreadBps.source).toBe(FIELD_SOURCES.CONFIGURED);
     expect(dto.fields.assumedFeesBps.effective).toBe(12);
+    expect(dto.fields.minimumGrossSpreadBps.reasonCode).toBe('engine_threshold_read_only');
     expect(dto.fields.scanIntervalSeconds.readOnly).toBe(true);
     expect(dto.fields.autoExecute.supported).toBe(false);
     expect(dto.executionSupported).toBe(false);

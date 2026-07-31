@@ -16,6 +16,7 @@ import {
   type AgentMetricItem,
 } from '../product/index.ts';
 import {
+  presentFieldReason,
   getFieldMeta,
   presentBpsValue,
   presentMonitoringState,
@@ -69,10 +70,14 @@ const SettingsCard: React.FC<{ title: string; children: React.ReactNode; testId?
   </section>
 );
 
-const FieldHint: React.FC<{ text?: string | null }> = ({ text }) => {
+const FieldHint: React.FC<{ text?: string | null; testId?: string }> = ({ text, testId }) => {
   if (!text) return null;
-  return <p className="text-[11px] text-gray-500 mt-1">{text}</p>;
-}
+  return (
+    <p className="text-[11px] text-gray-500 mt-1" data-testid={testId}>
+      {text}
+    </p>
+  );
+};
 
 const SourceBadge: React.FC<{ settings: ArbitrageCoreSettings; field: keyof NonNullable<ArbitrageCoreSettings['fields']>; t: TranslateFn }> = ({
   settings,
@@ -318,7 +323,10 @@ export const ArbitrageSettingsSection: React.FC<ArbitrageSettingsSectionProps> =
           <AgentTechnicalLtr className="text-white mt-1 block">
             {presentBpsValue(settings.minimumGrossSpreadBps, t)}
           </AgentTechnicalLtr>
-          <FieldHint text={getFieldMeta(settings, 'minimumGrossSpreadBps')?.reason} />
+          <FieldHint
+            text={presentFieldReason(getFieldMeta(settings, 'minimumGrossSpreadBps'), t)}
+            testId="arb-settings-gross-spread-hint"
+          />
         </div>
       </SettingsCard>
 

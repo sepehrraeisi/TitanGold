@@ -5256,5 +5256,12 @@
   "arb_settings_error_slippage": "لغزش فرضی باید عدد نامنفی معتبر باشد.",
   "arb_settings_error_data_age": "حداکثر سن داده باید بین ۱ و ۶۰۰۰۰۰ میلی‌ثانیه باشد.",
   "monitoring_paused": "متوقف",
-  "remove": "حذف"
+  "remove": "حذف",
+  "arb_settings_reason_engine_threshold_read_only": "این آستانه متعلق به موتور تحلیل است و در بخش تنظیمات قابل ویرایش نیست.",
+  "arb_settings_reason_liquidity_engine_owned": "آستانه نقدینگی متعلق به موتور تحلیل است.",
+  "arb_settings_reason_data_age_interpretation_only": "فقط ترجیح تفسیر تازگی؛ اجرای اسکن را فیلتر نمی‌کند.",
+  "arb_settings_reason_scan_interval_legacy": "ریتم زمان‌بندی سراسری است؛ فاصله عامل فقط ترجیح قدیمی است.",
+  "arb_settings_reason_notification_preference_only": "فقط ترجیح؛ ارسال اعلان فعال نیست.",
+  "arb_settings_reason_monitoring_action_bar": "از توقف/ادامه در نوار عملیات استفاده کنید.",
+  "arb_settings_reason_auto_execute_blocked": "اجرای خودکار پشتیبانی نمی‌شود و مسدود است."
 }

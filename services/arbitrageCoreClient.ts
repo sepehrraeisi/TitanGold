@@ -626,7 +626,7 @@ function parseSettingsFieldMeta(raw: unknown): ArbitrageSettingsFieldMeta | unde
         supported: field.supported !== false,
         editable: Boolean(field.editable),
         readOnly: Boolean(field.readOnly),
-        reason: field.reason ? String(field.reason) : null,
+        reasonCode: field.reasonCode ? String(field.reasonCode) : null,
         constraints:
             field.constraints && typeof field.constraints === 'object'
                 ? {

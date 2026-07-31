@@ -146,6 +146,16 @@ function resolveSpotStrategy(raw, normalized) {
   return strategies.find((s) => s?.type === 'spot' || s?.type === 'mexc_spot_spread_monitor') || null;
 }
 
+export const SETTINGS_REASON_CODES = Object.freeze({
+  ENGINE_THRESHOLD_READ_ONLY: 'engine_threshold_read_only',
+  LIQUIDITY_ENGINE_OWNED: 'liquidity_engine_owned',
+  DATA_AGE_INTERPRETATION_ONLY: 'data_age_interpretation_only',
+  SCAN_INTERVAL_LEGACY: 'scan_interval_legacy',
+  NOTIFICATION_PREFERENCE_ONLY: 'notification_preference_only',
+  MONITORING_ACTION_BAR: 'monitoring_action_bar',
+  AUTO_EXECUTE_BLOCKED: 'auto_execute_blocked',
+});
+
 function buildSettingsField({
   effective,
   configured,
@@ -154,7 +164,7 @@ function buildSettingsField({
   supported = true,
   editable = true,
   readOnly = false,
-  reason = null,
+  reasonCode = null,
   min = null,
   max = null,
   unit = null,
@@ -167,7 +177,7 @@ function buildSettingsField({
     supported,
     editable: supported && editable && !readOnly,
     readOnly,
-    reason,
+    reasonCode,
     constraints: min != null || max != null ? { min, max } : null,
     unit,
   };
@@ -816,7 +826,7 @@ export function buildSettingsDto(rawConfig = {}, meta = {}) {
       source: grossConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
       readOnly: true,
       editable: false,
-      reason: 'Engine threshold; not editable in Settings.',
+      reasonCode: SETTINGS_REASON_CODES.ENGINE_THRESHOLD_READ_ONLY,
       unit: 'bps',
     }),
     assumedFeesBps: buildSettingsField({
@@ -846,7 +856,7 @@ export function buildSettingsDto(rawConfig = {}, meta = {}) {
       source: liquidityConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
       readOnly: true,
       editable: false,
-      reason: 'Liquidity threshold is engine-owned.',
+      reasonCode: SETTINGS_REASON_CODES.LIQUIDITY_ENGINE_OWNED,
       unit: 'USDT',
     }),
     maximumDataAgeMs: buildSettingsField({
@@ -858,7 +868,7 @@ export function buildSettingsDto(rawConfig = {}, meta = {}) {
       min: 1,
       max: 600000,
       unit: 'ms',
-      reason: 'Interpretation preference; does not filter scan execution.',
+      reasonCode: SETTINGS_REASON_CODES.DATA_AGE_INTERPRETATION_ONLY,
     }),
     scanIntervalSeconds: buildSettingsField({
       effective: scanIntervalSeconds,
@@ -867,7 +877,7 @@ export function buildSettingsDto(rawConfig = {}, meta = {}) {
       source: intervalConfigured ? FIELD_SOURCES.LEGACY_NORMALIZED : FIELD_SOURCES.DEFAULT,
       readOnly: true,
       editable: false,
-      reason: 'Scheduler cadence is global; agent interval is legacy preference only.',
+      reasonCode: SETTINGS_REASON_CODES.SCAN_INTERVAL_LEGACY,
       unit: 's',
     }),
     notificationPreference: buildSettingsField({
@@ -876,7 +886,7 @@ export function buildSettingsDto(rawConfig = {}, meta = {}) {
       defaultValue: SETTINGS_DEFAULTS.notificationPreference,
       source: notifyConfigured ? FIELD_SOURCES.CONFIGURED : FIELD_SOURCES.DEFAULT,
       editable: true,
-      reason: 'Preference only; delivery is not enabled.',
+      reasonCode: SETTINGS_REASON_CODES.NOTIFICATION_PREFERENCE_ONLY,
     }),
     monitoringState: buildSettingsField({
       effective: monitoringState,
@@ -889,7 +899,7 @@ export function buildSettingsDto(rawConfig = {}, meta = {}) {
           : FIELD_SOURCES.DEFAULT,
       readOnly: true,
       editable: false,
-      reason: 'Use Pause/Resume in the action bar.',
+      reasonCode: SETTINGS_REASON_CODES.MONITORING_ACTION_BAR,
     }),
     autoExecute: buildSettingsField({
       effective: false,
@@ -899,7 +909,7 @@ export function buildSettingsDto(rawConfig = {}, meta = {}) {
       supported: false,
       editable: false,
       readOnly: true,
-      reason: 'Auto Execute is unsupported and blocked.',
+      reasonCode: SETTINGS_REASON_CODES.AUTO_EXECUTE_BLOCKED,
     }),
   };
 

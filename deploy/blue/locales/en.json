@@ -5435,5 +5435,12 @@
   "arb_settings_error_slippage": "Assumed slippage must be a valid non-negative number.",
   "arb_settings_error_data_age": "Maximum data age must be between 1 and 600000 ms.",
   "monitoring_paused": "Paused",
-  "remove": "Remove"
+  "remove": "Remove",
+  "arb_settings_reason_engine_threshold_read_only": "This threshold is owned by the analytical engine and cannot be edited in Settings.",
+  "arb_settings_reason_liquidity_engine_owned": "The liquidity threshold is owned by the analytical engine.",
+  "arb_settings_reason_data_age_interpretation_only": "Freshness interpretation preference only; does not filter scan execution.",
+  "arb_settings_reason_scan_interval_legacy": "Scheduler cadence is global; the agent interval is a legacy preference only.",
+  "arb_settings_reason_notification_preference_only": "Preference only; notification delivery is not enabled.",
+  "arb_settings_reason_monitoring_action_bar": "Use Pause/Resume in the action bar.",
+  "arb_settings_reason_auto_execute_blocked": "Auto Execute is unsupported and blocked."
 }

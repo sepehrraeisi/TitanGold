@@ -58,6 +58,22 @@ export function presentTimestamp(value: string | null | undefined, t: TranslateF
   return d.toLocaleString();
 }
 
+export function presentFieldReason(
+  meta: ArbitrageSettingsFieldMeta | undefined,
+  t: TranslateFn,
+): string | null {
+  if (!meta?.reasonCode) return null;
+  const key = `arb_settings_reason_${meta.reasonCode}`;
+  const localized = resolveSettingsLabel(key, t);
+  if (localized === key) return null;
+  return localized;
+}
+
+export function isRawLocaleKey(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return /^arb_[a-z0-9_]+$/.test(text.trim());
+}
+
 export function getFieldMeta(
   settings: ArbitrageCoreSettings,
   field: keyof NonNullable<ArbitrageCoreSettings['fields']>,

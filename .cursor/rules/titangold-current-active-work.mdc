@@ -1,34 +1,47 @@
 ---
-description: TitanGold dynamic active-work authority — Profit & Risk frozen, Settings next
+description: TitanGold dynamic active-work authority — Settings frozen, Integrations next
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Begin Arbitrage Settings as the next tab outcome after Profit & Risk truthful closeout.
+Begin Arbitrage Integrations as the next tab outcome after Settings closeout.
 
 Current area:
-Agents → Arbitrage → Settings (next authorized tab — not started in this slice)
+Agents → Arbitrage → Integrations (next authorized tab — not started in this slice)
 
 Current program slice:
-ARBITRAGE-SETTINGS-PRODUCT
+ARBITRAGE-INTEGRATIONS-PRODUCT
 
 Risk tier:
-Tier 2 settings and persistence (Tier-4/Live execution remains blocked)
+Tier 2 read-only integration status (Tier-4/Live execution remains blocked)
 
 Engineering status:
-PROFIT & RISK TRUTHFULLY CLOSED AND FROZEN — Settings authorized as next outcome only
+SETTINGS CLOSED AND FROZEN — Integrations authorized as next outcome only
 
 Closed and frozen baselines:
-- Agent Product Template V1: CLOSED AND FROZEN (minimal FA header localization fix applied)
+- Agent Product Template V1: CLOSED AND FROZEN
 - Arbitrage Overview: CLOSED AND FROZEN
 - Manual Analytical Scan: VERIFIED
 - Arbitrage Candidates: CLOSED AND FROZEN at `1e24f3e`
-- Arbitrage Scan History: CLOSED AND FROZEN (Human QA PASSED; performance verified)
-- Arbitrage Profit & Risk: CLOSED AND FROZEN at notional-semantics freeze commit on `feat/arbitrage-agent-full-product`
-- Calculation baseline reference: `a09a747`
+- Arbitrage Scan History: CLOSED AND FROZEN (Human QA PASSED)
+- Arbitrage Profit & Risk: CLOSED AND FROZEN at `b14aec7`
+- Arbitrage Settings: CLOSED AND FROZEN at final Settings closeout commit on `feat/arbitrage-agent-full-product`
 - Reopen frozen tabs only for a reproduced production defect
+
+Settings Human QA (product owner — 2026-07-31):
+- layout and template consistency: PASS
+- Current configuration: PASS
+- Market universe: PASS
+- thresholds and assumptions: PASS
+- notification preference disclaimer: PASS
+- unsupported capabilities: PASS
+- Save / Reset behavior: PASS
+- EN desktop: PASS
+- FA/RTL: PASS after localization correction
+- responsive/mobile: PASS
+- no visible overflow: PASS
 
 Expected baseline:
 - Feature branch: `feat/arbitrage-agent-full-product`
@@ -37,17 +50,16 @@ Expected baseline:
 - Demo + Emergency Stop remain active; Live impossible
 
 Authorized scope (next outcome only):
-- Arbitrage Settings product workflow when explicitly started
-- Settings regression relative to frozen Profit & Risk
+- Arbitrage Integrations product workflow when explicitly started
+- Integrations regression relative to frozen Settings
 
 Hard boundaries:
-- Do not implement Settings in read-only or closeout slices
-- Do not start Integrations
-- Do not modify frozen Overview, Candidates, History, Profit & Risk except regression
-- Do not open a PR until Settings Human QA passes
+- Do not implement Integrations in read-only or closeout slices without authorization
+- Do not modify frozen Overview, Candidates, History, Profit & Risk, Settings except regression
+- Do not open a PR until Integrations Human QA passes
 - Do not apply migration without explicit approval
 - Do not access private credentials or enable execution
 - Do not restart titan-engine-worker or change Scheduler allowlist
 
 Next transition:
-Start ARBITRAGE-SETTINGS-PRODUCT when user authorizes Settings implementation
+Start ARBITRAGE-INTEGRATIONS-PRODUCT when user authorizes Integrations implementation

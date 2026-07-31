@@ -42,6 +42,17 @@ const baseSettings: ArbitrageCoreSettings = {
       readOnly: false,
       unit: 'bps',
     },
+    minimumGrossSpreadBps: {
+      effective: 20,
+      configured: 20,
+      defaultValue: 20,
+      source: 'configured',
+      supported: true,
+      editable: false,
+      readOnly: true,
+      reasonCode: 'engine_threshold_read_only',
+      unit: 'bps',
+    },
     autoExecute: {
       effective: false,
       configured: null,
@@ -139,5 +150,33 @@ describe('ArbitrageSettingsSection', () => {
     const disclaimer = screen.getByTestId('arb-settings-notification-disclaimer').textContent || '';
     expect(disclaimer).toContain('ارسال اعلان');
     expect(disclaimer).not.toContain('arb_settings_notification_disclaimer');
+  });
+
+  it('renders localized gross spread helper in FA without raw locale keys', () => {
+    const tFa = (key: string) => (fa as Record<string, string>)[key] ?? key;
+    render(
+      <ArbitrageSettingsSection
+        settings={baseSettings}
+        confirmed={baseSettings}
+        dirty={false}
+        loading={false}
+        saving={false}
+        loadState="loaded"
+        error={null}
+        saveError={null}
+        saveSuccess={false}
+        validationErrors={[]}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        onResetDraft={vi.fn()}
+        onRetry={vi.fn()}
+        t={tFa}
+      />,
+    );
+
+    const hint = screen.getByTestId('arb-settings-gross-spread-hint').textContent || '';
+    expect(hint).toContain('موتور تحلیل');
+    expect(hint).not.toContain('Engine threshold');
+    expect(hint).not.toMatch(/^arb_settings_reason_/);
   });
 });
