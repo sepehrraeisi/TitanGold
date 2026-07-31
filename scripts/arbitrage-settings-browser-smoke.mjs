@@ -29,15 +29,21 @@ function mintToken() {
   );
 }
 
-async function runScenario(page, { locale, dir, viewport, label }) {
-  await page.setViewportSize(viewport);
-  await page.addInitScript(({ localeValue, dirValue, token }) => {
-    localStorage.setItem('titan_language', localeValue);
-    localStorage.setItem('titan_token', token);
-    document.documentElement.dir = dirValue;
-    document.documentElement.lang = localeValue;
-  }, { localeValue: locale, dirValue: dir, token: mintToken() });
+async function openSettingsTab(page) {
+  await page.goto(`${BASE}/?view=ai&_=${Date.now()}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.waitForTimeout(1200);
+  await page.locator('[data-ai-tab="agents"]').first().click({ timeout: 15000 }).catch(() => {});
+  await page.waitForSelector('[data-agent-key="arbitrage"]', { timeout: 45000 });
+  await page.locator('[data-testid="agent-open-arbitrage"]').first().click({ force: true });
+  await page.waitForSelector('[data-testid="arb-workspace"], [data-testid="agent-product-dialog"]', { timeout: 45000 });
+  await page.getByTestId('arb-tab-settings').click({ timeout: 15000 });
+  await page.waitForSelector('[data-testid="arb-settings"]', { timeout: 45000 });
+  await page.waitForTimeout(800);
+}
 
+async function runScenario(browser, token, { locale, dir, viewport, label }) {
+  const ctx = await browser.newContext({ viewport });
+  const page = await ctx.newPage();
   const consoleErrors = [];
   const pageErrors = [];
   page.on('console', (msg) => {
@@ -45,12 +51,26 @@ async function runScenario(page, { locale, dir, viewport, label }) {
   });
   page.on('pageerror', (err) => pageErrors.push(String(err)));
 
-  await page.goto(`${BASE}/?view=ai&agentId=${AGENT_ID}&agentSection=settings`, {
-    waitUntil: 'networkidle',
-    timeout: 90000,
-  });
+  await page.addInitScript(({ tokenValue }) => {
+    localStorage.setItem('titan_token', tokenValue);
+    localStorage.setItem('titan_user', JSON.stringify({ id: 'qa', role: 'admin' }));
+    localStorage.setItem('titan_migration_dismissed', 'true');
+  }, { tokenValue: token });
 
-  await page.waitForSelector('[data-testid="arb-settings"]', { timeout: 60000 });
+  await page.addInitScript(({ localeValue, dirValue }) => {
+    localStorage.setItem('titan_language', localeValue);
+    const apply = () => {
+      if (document.documentElement) {
+        document.documentElement.dir = dirValue;
+        document.documentElement.lang = localeValue === 'fa' ? 'fa' : 'en';
+      }
+    };
+    apply();
+    document.addEventListener('DOMContentLoaded', apply, { once: true });
+  }, { localeValue: locale, dirValue: dir });
+
+  await openSettingsTab(page);
+
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(500);
 
@@ -71,7 +91,7 @@ async function runScenario(page, { locale, dir, viewport, label }) {
   fs.mkdirSync(OUT, { recursive: true });
   await page.screenshot({ path: path.join(OUT, `${label}.png`), fullPage: true });
 
-  return {
+  const result = {
     label,
     locale,
     pass:
@@ -90,12 +110,15 @@ async function runScenario(page, { locale, dir, viewport, label }) {
     grossHint: grossHint.slice(0, 120),
     alerts,
   };
+  await page.close();
+  await ctx.close();
+  return result;
 }
 
 async function main() {
   fs.mkdirSync(OUT, { recursive: true });
+  const token = mintToken();
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
 
   const scenarios = [
     { locale: 'en', dir: 'ltr', viewport: { width: 1440, height: 900 }, label: 'en-desktop' },
@@ -105,7 +128,7 @@ async function main() {
 
   const results = [];
   for (const scenario of scenarios) {
-    results.push(await runScenario(page, scenario));
+    results.push(await runScenario(browser, token, scenario));
   }
   await browser.close();
 
