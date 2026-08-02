@@ -19,8 +19,6 @@ export default defineConfig({
       'e2e/**',
       // Legacy flaky suites — restored in vitest.agents.config.ts for closeout runs.
       'src/__tests__/components/ai/TrendAgentControl.test.tsx',
-      'src/__tests__/components/ai/ArbitrageAgentControl.wp1a.test.tsx',
-      'src/__tests__/components/ai/ArbitrageAgentControl.wp1b1.test.tsx',
     ],
     coverage: {
       provider: 'v8',

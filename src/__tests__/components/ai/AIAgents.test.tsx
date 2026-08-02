@@ -230,15 +230,6 @@ vi.mock('../../../../components/ai/PricePredictionAgentControl', () => ({
   ),
 }));
 
-vi.mock('../../../../components/ai/ArbitrageAgentControl', () => ({
-  default: ({ agent, onClose }: any) => (
-    <div data-testid="arbitrageagentcontrol">
-      <h2>{agent.name} Control Panel</h2>
-      <button onClick={onClose}>Close</button>
-    </div>
-  ),
-}));
-
 vi.mock('../../../../components/ai/PortfolioAllocationAgentControl', () => ({
   default: ({ agent, onClose }: any) => (
     <div data-testid="portfolioallocationagentcontrol">
