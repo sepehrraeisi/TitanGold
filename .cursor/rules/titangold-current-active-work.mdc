@@ -1,73 +1,57 @@
 ---
-description: TitanGold dynamic active-work authority — Arbitrage Draft PR #17 review
+description: TitanGold dynamic active-work authority — Next AI Agent discovery (post-Arbitrage merge)
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Draft Arbitrage PR #17 reviewed; branch-owned blockers resolved; CI green; native-dialog and smoke audits complete.
+Arbitrage CLOSED / MERGED / DEPLOYED / FROZEN on exact main; read-only discovery for the next AI Agent (no implementation authorized).
 
 Current area:
-Agents → Arbitrage → Draft PR #17 Review Closeout
+Agents → Next Agent Discovery
 
 Current program slice:
-ARBITRAGE-PR-READINESS — PR #17 REVIEW
+NEXT-AI-AGENT-DISCOVERY
 
 Risk tier:
-Tier 2 product closeout (Tier-4/Live execution remains blocked)
+Tier 0 read-only discovery (implementation blocked until owner approval)
 
 Engineering status:
-DRAFT PR #17 — ALL CHECKS PASS — REVIEW BLOCKERS CLEARED — READY FOR REVIEW (Draft unchanged)
+ARBITRAGE POST-MERGE CLOSEOUT COMPLETE — DISCOVERY ONLY
 
-## Pull Request
-
-| Item | Value |
-|------|--------|
-| PR | [#17](https://github.com/sepehrraeisi/TitanGold/pull/17) |
-| State | open, **draft: true** |
-| Base | `main` @ `566b412` |
-| Head | `feat/arbitrage-agent-full-product` @ `43c030f` |
-
-## Closed and frozen baselines
-
-| Product surface | Freeze commit | Status |
-|-----------------|---------------|--------|
-| Agent Product Template V1 | `44aced2` | CLOSED AND FROZEN |
-| Arbitrage Overview | `44aced2` | CLOSED AND FROZEN |
-| Arbitrage Candidates | `1e24f3e` | CLOSED AND FROZEN |
-| Arbitrage Scan History | `0b707f9` | CLOSED AND FROZEN |
-| Arbitrage Profit & Risk | `b14aec7` | CLOSED AND FROZEN |
-| Arbitrage Settings | `35e1c76` | CLOSED AND FROZEN |
-| Arbitrage Integrations | `ff4fe8b` | CLOSED AND FROZEN |
-
-## Human QA
-
-Final Human QA: **15/15 PASSED** (2026-07-31, product owner accepted).
-
-## Verified baseline (2026-08-02 review closeout)
+## Arbitrage (closed — not active work)
 
 | Item | Value |
 |------|--------|
-| Feature branch | `feat/arbitrage-agent-full-product` |
-| Feature HEAD | `43c030f` |
-| origin/main | `566b412` |
-| Worktree | `/home/ubuntu/worktrees/titangold-arbitrage-final` |
-| GitHub Actions @ head | Backend/Frontend/E2E **success** (run IDs 30756662135 / 30756662143 / 30756662093) |
+| PR | [#17](https://github.com/sepehrraeisi/TitanGold/pull/17) **MERGED** (Squash) |
+| Merged feature head | `24e3e3c` |
+| Main merge commit | `55090f6` |
+| Deployed main HEAD | `55090f6950991c73592f56a60b1fca1b75b6d9e9` |
+| Served bundle | `assets/index-D7Aq4Ef2.js` |
+| Backend runtime marker | `55090f6` (`provenanceVerified=true`) |
+| Human QA | **15/15 PASSED** |
 | Native dialogs (reachable Arbitrage paths) | **0** |
-| EN desktop smoke ×3 | **3/3 PASS** (~1.4–1.6m each) |
-| Backend runtime marker | `2634d62` |
-| Served frontend bundle | `assets/index-D7Aq4Ef2.js` (`43c030f`) |
-| Scheduler | PID `1776042`, owner `titan-engine-worker`, allowlist `["arbitrage"]` |
-| Demo + Emergency Stop | active; Live impossible |
+| Six product sections | CLOSED AND FROZEN |
+| Scheduler | PID `1776042`, owner `titan-engine-worker`, allowlist `["arbitrage"]` (unchanged) |
 
-## Hard boundaries (unchanged)
+Arbitrage is **not** listed as active implementation work.
 
-- Do not merge PR #17
-- Do not mark Ready for Review
+## Discovery authorization
+
+- Inventory all AI Agents in repository and runtime
+- Score viable next candidates
+- Recommend one preferred Agent for read-only V1
+- **Do not implement**, **do not create feature branch**, **do not migrate**
+
+## Hard boundaries
+
+- Do not reopen Arbitrage product sections
 - Do not restart `titan-engine-worker`
-- Do not repair repository-wide main CI on this branch
+- Do not repair repository-wide main CI in discovery
+- Do not access private provider credentials
+- Do not execute financial actions
 
 ## Next transition
 
-Product owner may mark Draft PR #17 Ready for Review in a separate authorized step. Do not merge without PR review.
+Owner approval required before creating a feature branch or beginning the recommended Agent implementation.
