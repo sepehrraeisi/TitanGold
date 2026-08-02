@@ -1,57 +1,57 @@
 ---
-description: TitanGold dynamic active-work authority — Next AI Agent discovery (post-Arbitrage merge)
+description: TitanGold dynamic active-work authority — Trend Detection specialized productization
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Arbitrage CLOSED / MERGED / DEPLOYED / FROZEN on exact main; read-only discovery for the next AI Agent (no implementation authorized).
+**TREND-DETECTION-SPECIALIZED-PRODUCTIZATION** — optimize, integrate and productize the existing Trend Detection Agent end-to-end; stop at Human QA readiness (no PR).
 
 Current area:
-Agents → Next Agent Discovery
+Agents → Trend Detection
 
 Current program slice:
-NEXT-AI-AGENT-DISCOVERY
+TREND-DETECTION-SPECIALIZED-PRODUCTIZATION
 
 Risk tier:
-Tier 0 read-only discovery (implementation blocked until owner approval)
+Tier 2 (Tier 3 gates explicit; Tier 4 not authorized)
 
 Engineering status:
-ARBITRAGE POST-MERGE CLOSEOUT COMPLETE — DISCOVERY ONLY
+IMPLEMENTATION IN PROGRESS — Human QA gate pending
 
-## Arbitrage (closed — not active work)
+Authorized scope:
+- Specialized Trend discovery and truth audit
+- Backend contract hardening (`trendDomain`, `trendRunService`, `trendCoreRoutes`)
+- Specialized Trend product UI (`TrendWorkspace`, `TrendAgentPopup`)
+- Manual public analytical run workflow
+- History/comparison from persisted runs
+- Settings and integrations truth
+- EN/FA/RTL product verification
+- Focused automated tests and Staging deploy
+- Human QA checklist handoff
 
-| Item | Value |
-|------|--------|
-| PR | [#17](https://github.com/sepehrraeisi/TitanGold/pull/17) **MERGED** (Squash) |
-| Merged feature head | `24e3e3c` |
-| Main merge commit | `55090f6` |
-| Deployed main HEAD | `55090f6950991c73592f56a60b1fca1b75b6d9e9` |
-| Served bundle | `assets/index-D7Aq4Ef2.js` |
-| Backend runtime marker | `55090f6` (`provenanceVerified=true`) |
-| Human QA | **15/15 PASSED** |
-| Native dialogs (reachable Arbitrage paths) | **0** |
-| Six product sections | CLOSED AND FROZEN |
-| Scheduler | PID `1776042`, owner `titan-engine-worker`, allowlist `["arbitrage"]` (unchanged) |
+Hard boundaries:
+- Do not create a PR or merge
+- Do not restart `titan-engine-worker` or change Scheduler allowlist
+- Do not modify closed baselines (Data Hub, Agents Shell, Arbitrage, Shared Foundation) unless proven shared defect
+- Do not create DB migration without owner approval
+- Do not call private MEXC or enable Live execution
+- Do not modify protected monitoring/backup scripts
 
-Arbitrage is **not** listed as active implementation work.
+Branch / worktree:
+- Branch: `feat/trend-detection-agent-full-product`
+- Worktree: `/home/ubuntu/worktrees/titangold-trend-agent`
 
-## Discovery authorization
+Acceptance criteria:
+- User opens Trend via workspace route (not legacy `TrendAgentControl`)
+- All specialized sections render truthful states
+- One confirmed manual analysis creates exactly one run
+- History shows persisted runs only
+- Invalid/missing evidence shows N/A — no fake zeroes
+- Automated regression passes for Trend scope
+- Staging deploy provenance recorded
+- Human QA checklist delivered
 
-- Inventory all AI Agents in repository and runtime
-- Score viable next candidates
-- Recommend one preferred Agent for read-only V1
-- **Do not implement**, **do not create feature branch**, **do not migrate**
-
-## Hard boundaries
-
-- Do not reopen Arbitrage product sections
-- Do not restart `titan-engine-worker`
-- Do not repair repository-wide main CI in discovery
-- Do not access private provider credentials
-- Do not execute financial actions
-
-## Next transition
-
-Owner approval required before creating a feature branch or beginning the recommended Agent implementation.
+Next transition:
+Owner Human QA PASS → closeout evidence; still no PR unless separately authorized.
