@@ -53,7 +53,7 @@ async function openAgentsTrend(page: Page) {
   });
   await page.goto('/?view=ai', { waitUntil: 'domcontentloaded', timeout: 90_000 });
   await page.locator('[data-ai-tab="agents"]').first().click({ timeout: 15_000 }).catch(() => {});
-  await page.waitForSelector('[data-agent-key="trend_detection"], [data-agent-key="trend"]', { timeout: 45_000 });
+  await page.waitForSelector('[data-testid="agent-card-trend"]', { timeout: 45_000 });
   await page.getByTestId('agent-open-trend').click({ force: true, timeout: 15_000 });
   await page.waitForSelector('[data-testid="trend-workspace"], [data-testid="agent-product-dialog"]', {
     timeout: 45_000,
