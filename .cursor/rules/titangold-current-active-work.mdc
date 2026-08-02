@@ -1,24 +1,24 @@
 ---
-description: TitanGold dynamic active-work authority — Arbitrage full product final closeout
+description: TitanGold dynamic active-work authority — Arbitrage PR readiness
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Final integration, regression, localization, security, performance and deployment verification for the complete Arbitrage Agent product before PR review.
+Arbitrage feature branch verified and ready for PR creation (product frozen; E2E and changed-path gates green).
 
 Current area:
-Agents → Arbitrage → Full Product Final Closeout
+Agents → Arbitrage → PR Readiness
 
 Current program slice:
-ARBITRAGE-FULL-PRODUCT-FINAL-CLOSEOUT
+ARBITRAGE-PR-READINESS
 
 Risk tier:
-Tier 2 product integration closeout (Tier-4/Live execution remains blocked)
+Tier 2 product closeout (Tier-4/Live execution remains blocked)
 
 Engineering status:
-ALL SIX SECTIONS IMPLEMENTED — Integrations Human QA PASSED — FINAL CLOSEOUT IN PROGRESS
+ALL SIX SECTIONS CLOSED AND FROZEN — Human QA 15/15 PASSED — READY FOR ARBITRAGE PR CREATION
 
 ## Closed and frozen baselines
 
@@ -33,48 +33,26 @@ ALL SIX SECTIONS IMPLEMENTED — Integrations Human QA PASSED — FINAL CLOSEOUT
 | Arbitrage Settings | `35e1c76` | CLOSED AND FROZEN |
 | Arbitrage Integrations | `ff4fe8b` | CLOSED AND FROZEN |
 
-Reopen frozen tabs only for a reproduced production defect with explicit approval.
+## Human QA
 
-## Integrations Human QA
+Final Human QA: **15/15 PASSED** (2026-07-31, product owner accepted).
 
-Product owner Human QA: **PASSED** (2026-07-31).
+## Verified baseline (2026-08-02)
 
-Post-QA: FA terminology audit only (allowlist / fallback / memory in normal prose).
+| Item | Value |
+|------|--------|
+| Feature branch | `feat/arbitrage-agent-full-product` |
+| Feature HEAD | `02629df` |
+| origin/main | `566b412` |
+| Worktree | `/home/ubuntu/worktrees/titangold-arbitrage-final` |
+| Backend runtime marker | `2634d62` (unchanged — frontend-only E2E commit) |
+| Served frontend bundle | `assets/index-CPuUIZlC.js` (built from `02629df`) |
+| provenanceVerified | true |
+| Scheduler | PID `1776042`, unchanged start |
+| Scheduler allowlist | `["arbitrage"]` |
+| Demo + Emergency Stop | active; Live impossible |
 
-## Expected baseline
-
-- Feature branch: `feat/arbitrage-agent-full-product`
-- origin/main: `566b412`
-- Scheduler owner: `titan-engine-worker` (do not restart)
-- Scheduler allowlist: `["arbitrage"]` only — do not expand
-- Demo + Emergency Stop remain active; Live impossible
-
-## Authorized scope
-
-- Integrations freeze and FA terminology polish
-- Cross-section parity audit
-- Full workflow regression
-- Template V1 regression fixes only
-- EN/FA/RTL final audit
-- Backend/security/performance verification
-- Automated regression suites
-- Deploy exact feature HEAD
-- Full browser QA matrix
-- Rule 02 and living closeout documentation
-- Final Human QA handoff
-
-## Hard boundaries
-
-- Do not add new Arbitrage features
-- Do not redesign frozen sections except proven template regression
-- Do not open or merge a PR in this task
-- Do not declare Arbitrage complete until final Human QA handoff
-- Do not apply migration without explicit approval
-- Do not access private credentials or enable execution
-- Do not restart titan-engine-worker or change Scheduler allowlist
-- Protected dirty worktree remains untouched
-
-## Side-effect counters (must remain zero)
+## Side-effect counters (verified zero)
 
 - private provider requests: 0
 - credential access: 0
@@ -83,8 +61,12 @@ Post-QA: FA terminology audit only (allowlist / fallback / memory in normal pros
 - allowlist changes: 0
 - database migrations: 0
 - leaked secrets: 0
+- PR opened: 0
+
+## Pre-existing main CI (out of scope for Arbitrage PR)
+
+Repository-wide backend failures on `origin/main` (~27 suites) and non-deterministic `predictor.test.js` / `trendAnalyzer.test.js` flakes documented separately; not repaired on this branch.
 
 ## Next transition
 
-Return **READY FOR ARBITRAGE FULL PRODUCT FINAL HUMAN QA** to product owner.  
-PR open/merge only after final Human QA PASS in a separate authorized slice.
+Open Arbitrage PR in a separate authorized slice after product owner review. Do not merge without PR review.

@@ -1,10 +1,10 @@
 # Arbitrage Full Product — Final Closeout
 
-**Program slice:** ARBITRAGE-FULL-PRODUCT-FINAL-CLOSEOUT  
+**Program slice:** ARBITRAGE-PR-READINESS  
 **Branch:** `feat/arbitrage-agent-full-product`  
+**Feature HEAD:** `02629df`  
 **Environment:** Staging (`titan.zala.ir`)  
-**Runtime path:** `/home/ubuntu/webapp/TitanGold`  
-**Source worktree:** `/tmp/titangold-arb-deploy`
+**Worktree:** `/home/ubuntu/worktrees/titangold-arbitrage-final`
 
 ## Frozen baseline map
 
@@ -18,13 +18,44 @@
 | Settings | `35e1c76` | CLOSED AND FROZEN |
 | Integrations | `ff4fe8b` | CLOSED AND FROZEN (Human QA PASSED) |
 
-## Integrations Human QA
+## Human QA
 
-Product owner Human QA: **PASSED** (2026-07-31).
+Final Human QA: **15/15 PASSED** (2026-07-31).
 
-Post-QA presentation polish only: FA terminology for allowlist / fallback / memory in normal product mode.
+## E2E verification (2026-08-02)
 
-## Side-effect counts (closeout)
+| Suite | Result |
+|-------|--------|
+| `login-real.spec.ts` run 1 | 3/3 PASS |
+| `login-real.spec.ts` run 2 | 3/3 PASS |
+| `login-real.spec.ts` run 3 | 3/3 PASS |
+| Arbitrage read-only smoke (EN+FA+mobile) | 3/3 PASS |
+| EN desktop consecutive (3 runs) | 3/3 PASS |
+
+Disposable fixture only (`e2e_login_fixture`); no Staging user password committed.
+
+## Changed-path automated verification
+
+| Area | Result |
+|------|--------|
+| Arbitrage-owned backend | 20 suites, 126/126 PASS |
+| Auth/CORS/deploy preflight | 3 suites, 18/18 PASS |
+| Frontend Vitest | 65 files, 596/596 PASS |
+| Production build | PASS |
+| Database bootstrap/migrations | PASS |
+
+## Runtime alignment
+
+| Item | Value |
+|------|--------|
+| Backend runtime marker | `2634d62` |
+| Frontend product commit (served) | `02629df` |
+| Served bundle | `assets/index-CPuUIZlC.js` |
+| provenanceVerified | true |
+| Scheduler | `titan-engine-worker` PID unchanged |
+| allowlist | `["arbitrage"]` |
+
+## Side-effect counts
 
 | Counter | Expected | Actual |
 |---------|----------|--------|
@@ -35,33 +66,15 @@ Post-QA presentation polish only: FA terminology for allowlist / fallback / memo
 | Scheduler allowlist changes | 0 | 0 |
 | Database migrations | 0 | 0 |
 | Leaked secrets | 0 | 0 |
+| PR opened | 0 | 0 |
 
-## Runtime safety
+## Pre-existing main CI limitations
 
-- Demo runtime: active
-- Emergency Stop: active
-- Live execution: impossible
-- Scheduler owner: `titan-engine-worker`
-- Scheduler allowlist: `["arbitrage"]`
+- Full backend on `origin/main`: ~27 failing suites (category-1; not repaired on Arbitrage branch).
+- `predictor.test.js` / `trendAnalyzer.test.js`: non-deterministic on main and feature (5-iteration audit); not Arbitrage-owned.
 
-## Known limitations (by design)
+## Verdict
 
-- Financial execution not supported
-- Notification delivery not enabled for analytical scans
-- Private MEXC credentials not required for public-data monitor
-- Triangular / cross-exchange / futures / settlement integrations unavailable
+**READY FOR ARBITRAGE PR CREATION**
 
-## Regression scope
-
-- Canonical DTO parity across Overview, Candidates, History, Profit & Risk, Settings, Integrations
-- Agent Product Template V1 shell consistency
-- EN/FA/RTL localization without raw keys in normal mode
-- Manual scan confirmation, idempotency, single persisted run
-- Settings optimistic concurrency and restore cycle
-- Integrations readiness truth semantics
-
-## Human QA handoff
-
-See Rule 02 and engineering closeout report for the 15-item final Human QA checklist.
-
-**Verdict:** READY FOR ARBITRAGE FULL PRODUCT FINAL HUMAN QA
+PR not yet opened.
