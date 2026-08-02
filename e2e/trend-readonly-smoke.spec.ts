@@ -48,18 +48,20 @@ function attachMetrics(page: Page, metrics: SmokeMetrics) {
 }
 
 async function openAgentsTrend(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('titan_migration_dismissed', 'true');
+  });
   await page.goto('/?view=ai', { waitUntil: 'domcontentloaded', timeout: 90_000 });
   await page.locator('[data-ai-tab="agents"]').first().click({ timeout: 15_000 }).catch(() => {});
   await page.waitForSelector('[data-agent-key="trend_detection"], [data-agent-key="trend"]', { timeout: 45_000 });
-  const openBtn = page.locator('[data-testid="agent-open-trend"], [data-testid="agent-open-trend_detection"]').first();
-  await openBtn.click({ force: true });
+  await page.getByTestId('agent-open-trend').click({ force: true, timeout: 15_000 });
   await page.waitForSelector('[data-testid="trend-workspace"], [data-testid="agent-product-dialog"]', {
     timeout: 45_000,
   });
 }
 
 test.describe('Trend Detection read-only smoke', () => {
-  test('login + sections EN', async ({ page }) => {
+  test('login + sections EN', async ({ page, context }) => {
     const metrics: SmokeMetrics = {
       consoleErrors: [],
       pageErrors: [],
@@ -69,7 +71,7 @@ test.describe('Trend Detection read-only smoke', () => {
       privateProviderPosts: 0,
     };
     attachMetrics(page, metrics);
-    await performRealLogin(page);
+    await performRealLogin(page, context);
     await openAgentsTrend(page);
 
     for (const tab of TREND_TABS) {
