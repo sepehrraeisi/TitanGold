@@ -1,0 +1,41 @@
+{
+  "environment": "staging_postgresql_readonly",
+  "totalRows": 3535,
+  "runId": "370aba4e-4ddc-4dd5-bdb5-2280da038ca0",
+  "queries": [
+    {
+      "name": "newest_page",
+      "planningTimeMs": 85.86,
+      "executionTimeMs": 0.839,
+      "rowsReturned": 20,
+      "indexScan": true,
+      "seqScan": false
+    },
+    {
+      "name": "older_page",
+      "planningTimeMs": 160.19,
+      "executionTimeMs": 71.219,
+      "rowsReturned": 20,
+      "indexScan": true,
+      "seqScan": true
+    },
+    {
+      "name": "summary_combined",
+      "planningTimeMs": 199.025,
+      "executionTimeMs": 95.242,
+      "rowsReturned": 1,
+      "indexScan": true,
+      "seqScan": true
+    },
+    {
+      "name": "run_detail",
+      "planningTimeMs": 297.524,
+      "executionTimeMs": 9.827,
+      "rowsReturned": 1,
+      "indexScan": true,
+      "seqScan": false
+    }
+  ],
+  "archiveNote": "Active partitioned ai_decisions only; ai_decisions_archive has 0 arbitrage_scan rows at verification time.",
+  "indexRecommendation": "Optional composite index may improve summary/filter queries at 10k+ scale; not applied."
+}

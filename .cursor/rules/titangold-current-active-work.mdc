@@ -1,72 +1,73 @@
 ---
-description: TitanGold dynamic active-work authority — post-merge scheduler incident closeout
+description: TitanGold dynamic active-work authority — Arbitrage Draft PR #17 review
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Close the post-merge Scheduler incident, land Scheduler-safe backend deployment
-guards, and complete post-merge Human QA for authentication and Agents/Arbitrage
-browser navigation on main @ `2e5e493`.
+Draft Arbitrage PR #17 reviewed; branch-owned blockers resolved; CI green; native-dialog and smoke audits complete.
 
 Current area:
-Deployment safety · Scheduler ownership · Post-merge verification
+Agents → Arbitrage → Draft PR #17 Review Closeout
 
 Current program slice:
-POST-MERGE-SCHEDULER-INCIDENT — Remediation + Closeout
+ARBITRAGE-PR-READINESS — PR #17 REVIEW
 
 Risk tier:
-Tier 3 — Scheduler/runtime safety remediation
+Tier 2 product closeout (Tier-4/Live execution remains blocked)
 
 Engineering status:
-HOTFIX IN REVIEW — `fix/postmerge-scheduler-deploy-guard`
+DRAFT PR #17 — ALL CHECKS PASS — REVIEW BLOCKERS CLEARED — READY FOR REVIEW (Draft unchanged)
 
-Human-QA status:
-PENDING — user must confirm clean-browser login/logout/re-login cycle
+## Pull Request
 
-Expected baseline:
-- Main merge baseline: `2e5e493676f223836a910a0ee57c8197afeef00b`
-- Runtime marker: `2e5e493`
-- Scheduler owner: `titan-engine-worker` (single owner, do not restart)
-- Scheduler allowlist: `["arbitrage"]` only — do not expand
-- Demo + Emergency Stop remain active; Live impossible
+| Item | Value |
+|------|--------|
+| PR | [#17](https://github.com/sepehrraeisi/TitanGold/pull/17) |
+| State | open, **draft: true** |
+| Base | `main` @ `566b412` |
+| Head | `feat/arbitrage-agent-full-product` @ `43c030f` |
 
-Authorized scope:
-- PM2 deployment guard hardening (`titan-backend` only)
-- Deployment regression tests (mocked PM2 harness)
-- Scheduler recovery verification (read-only, no worker restart)
-- Post-merge browser smoke evidence
-- Canonical Rule 02 update for incident closeout
+## Closed and frozen baselines
 
-Hard boundaries:
-- Do not start the next Agent outcome
-- Do not call MEXC or access exchange credentials
-- Do not execute financial actions
-- Do not expand Scheduler allowlist
-- Do not restart or delete `titan-engine-worker`
-- Do not deploy guard by manually editing runtime files
-- Do not merge hotfix PR without review
+| Product surface | Freeze commit | Status |
+|-----------------|---------------|--------|
+| Agent Product Template V1 | `44aced2` | CLOSED AND FROZEN |
+| Arbitrage Overview | `44aced2` | CLOSED AND FROZEN |
+| Arbitrage Candidates | `1e24f3e` | CLOSED AND FROZEN |
+| Arbitrage Scan History | `0b707f9` | CLOSED AND FROZEN |
+| Arbitrage Profit & Risk | `b14aec7` | CLOSED AND FROZEN |
+| Arbitrage Settings | `35e1c76` | CLOSED AND FROZEN |
+| Arbitrage Integrations | `ff4fe8b` | CLOSED AND FROZEN |
 
-Freeze status (pending incident closeout PASS):
-- Agents Platform canonical registry — **CLOSED pending scheduler-safety PR**
-- Arbitrage read-only workflow — **CLOSED pending scheduler-safety PR**
-- Authentication/CORS deployment regression — **CLOSED**
-- Deployment environment guard — **ACTIVE BASELINE** (being extended with PM2 guard)
+## Human QA
 
-Documented limitations:
-- Invalid direct Agent UI route uses safe SPA redirect (API fail-closed preserved)
-- Only Arbitrage is allowlisted; other Agents remain Limited
-- Tier-4 / Live blocked
+Final Human QA: **15/15 PASSED** (2026-07-31, product owner accepted).
 
-Acceptance criteria:
-- RCA for accidental Scheduler restart documented
-- Backend deploy cannot target Scheduler or wildcard PM2 verbs
-- Guard tests pass (`failed=0`, `environment-blocked=0`)
-- Scheduler owner=1, allowlist unchanged, 3 normal ticks verified
-- User confirms post-merge login/logout/re-login
-- Actual browser navigation smoke for Agents + Arbitrage (EN/FA)
-- Hotfix PR open to main (not merged)
+## Verified baseline (2026-08-02 review closeout)
 
-Next transition:
-**READY FOR SCHEDULER-SAFETY PR REVIEW** → merge hotfix → resume Agents/Arbitrage freeze closeout
+| Item | Value |
+|------|--------|
+| Feature branch | `feat/arbitrage-agent-full-product` |
+| Feature HEAD | `43c030f` |
+| origin/main | `566b412` |
+| Worktree | `/home/ubuntu/worktrees/titangold-arbitrage-final` |
+| GitHub Actions @ head | Backend/Frontend/E2E **success** (run IDs 30756662135 / 30756662143 / 30756662093) |
+| Native dialogs (reachable Arbitrage paths) | **0** |
+| EN desktop smoke ×3 | **3/3 PASS** (~1.4–1.6m each) |
+| Backend runtime marker | `2634d62` |
+| Served frontend bundle | `assets/index-D7Aq4Ef2.js` (`43c030f`) |
+| Scheduler | PID `1776042`, owner `titan-engine-worker`, allowlist `["arbitrage"]` |
+| Demo + Emergency Stop | active; Live impossible |
+
+## Hard boundaries (unchanged)
+
+- Do not merge PR #17
+- Do not mark Ready for Review
+- Do not restart `titan-engine-worker`
+- Do not repair repository-wide main CI on this branch
+
+## Next transition
+
+Product owner may mark Draft PR #17 Ready for Review in a separate authorized step. Do not merge without PR review.

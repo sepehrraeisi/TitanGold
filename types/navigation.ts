@@ -18,12 +18,23 @@ export type ViewKey =
   | 'profile'
   | 'wallet';
 
+export type ArbitrageAgentSection =
+  | 'overview'
+  | 'candidates'
+  | 'history'
+  | 'profitRisk'
+  | 'settings'
+  | 'integration';
+
 export type NavigationPayload = {
   view: ViewKey;
   settingsTab?: string;
   settingsSubtab?: string;
   provider?: string;
   section?: string;
+  agentId?: string;
+  agentSection?: ArbitrageAgentSection;
+  runId?: string;
 };
 
 export type NavigationTarget = ViewKey | NavigationPayload;

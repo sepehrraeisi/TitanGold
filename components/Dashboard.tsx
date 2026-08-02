@@ -44,13 +44,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     const urlState = readStateFromURL();
     if (urlState) {
       setActiveView(urlState.view);
-      if (urlState.settingsTab || urlState.settingsSubtab || urlState.provider || urlState.section) {
+      if (urlState.settingsTab || urlState.settingsSubtab || urlState.provider || urlState.section || urlState.agentId || urlState.agentSection || urlState.runId) {
         setNavigationPayload({
           view: urlState.view,
           settingsTab: urlState.settingsTab,
           settingsSubtab: urlState.settingsSubtab,
           provider: urlState.provider,
           section: urlState.section,
+          agentId: urlState.agentId,
+          agentSection: urlState.agentSection,
+          runId: urlState.runId,
         });
       } else {
         // Explicitly clear payload when URL has no settingsTab/settingsSubtab
@@ -155,7 +158,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       case 'news':
         return <News />;
       case 'ai':
-        return <AICenter onNavigate={handleNavigation} />;
+        return (
+          <AICenter
+            onNavigate={handleNavigation}
+            initialAgentId={navigationPayload?.agentId}
+            initialAgentSection={navigationPayload?.agentSection}
+            initialRunId={navigationPayload?.runId}
+          />
+        );
       case 'gold':
         return <GoldPage />;
       case 'settings':

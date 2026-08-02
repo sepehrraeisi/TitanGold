@@ -8,6 +8,7 @@ import { evaluateExecutionPolicy, REASON } from './agentExecutionPolicyService.j
 import { webhookDispatcher } from './webhookDispatcher.js';
 import { notifyAgentCompleted, notifyAgentFailed } from '../websocket/server.js';
 import { logger } from './logger.js';
+import { executeArbitrageAnalyticalScan } from './arbitrageRunService.js';
 
 export async function writeExecutionAudit({
   userId = null,
@@ -126,7 +127,37 @@ export async function executeAgentRun({
 
   let result;
   try {
-    result = await agentRegistry.runAgent(agent.agent_key, runParams);
+    if (agent.agent_key === 'arbitrage') {
+      const trigger = input?.trigger === 'scheduled' ? 'scheduled' : 'manual';
+      const scanResult = await executeArbitrageAnalyticalScan({
+        agentId: agent.id,
+        trigger,
+        user,
+        configOverride: mergedConfig,
+        runtimeMode: policy.effectiveMode,
+        schedulerOwner: input?.schedulerOwner || 'titan-engine-worker',
+      });
+
+      if (scanResult.skipped) {
+        return {
+          ok: true,
+          status: 200,
+          agent,
+          result: scanResult,
+          policy: sanitizePolicy(policy),
+          sideEffectsSuppressed,
+          skipped: true,
+        };
+      }
+
+      result = {
+        ...(scanResult.raw || {}),
+        scanRun: scanResult.scanRun,
+        candidates: scanResult.candidates,
+      };
+    } else {
+      result = await agentRegistry.runAgent(agent.agent_key, runParams);
+    }
   } catch (error) {
     if (!sideEffectsSuppressed) {
       try {
@@ -148,17 +179,19 @@ export async function executeAgentRun({
   }
 
   // DB writes for decisions/metadata (audit trail — allowed in demo)
-  await query(
-    `INSERT INTO ai_decisions (agent_id, decision_type, confidence, input_data, output_data, created_at)
-     VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, NOW())`,
-    [
-      agent.id,
-      result?.decision_type || 'analysis',
-      typeof result?.confidence === 'number' ? result.confidence : 0.5,
-      JSON.stringify({ symbol, timeframe, config: mergedConfig, input, policy: sanitizePolicy(policy) }),
-      JSON.stringify({ ...(result || {}), _execution: { effective_mode: policy.effectiveMode, side_effects_suppressed: sideEffectsSuppressed } }),
-    ],
-  );
+  if (agent.agent_key !== 'arbitrage') {
+    await query(
+      `INSERT INTO ai_decisions (agent_id, decision_type, confidence, input_data, output_data, created_at)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, NOW())`,
+      [
+        agent.id,
+        result?.decision_type || 'analysis',
+        typeof result?.confidence === 'number' ? result.confidence : 0.5,
+        JSON.stringify({ symbol, timeframe, config: mergedConfig, input, policy: sanitizePolicy(policy) }),
+        JSON.stringify({ ...(result || {}), _execution: { effective_mode: policy.effectiveMode, side_effects_suppressed: sideEffectsSuppressed } }),
+      ],
+    );
+  }
 
   const newMetadata = {
     ...(agent.metadata || {}),
@@ -172,6 +205,17 @@ export async function executeAgentRun({
     `UPDATE ai_agents SET last_active_at = NOW(), updated_at = NOW(), metadata = $2::jsonb WHERE id = $1`,
     [agent.id, JSON.stringify(newMetadata)],
   );
+
+  if (agent.agent_key === 'arbitrage') {
+    return {
+      ok: true,
+      status: 200,
+      agent,
+      result,
+      policy: sanitizePolicy(policy),
+      sideEffectsSuppressed,
+    };
+  }
 
   if (!sideEffectsSuppressed) {
     try {

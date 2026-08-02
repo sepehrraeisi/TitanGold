@@ -7995,6 +7995,643 @@ const buildOpportunityHistoryEntries = (
     return [...newEntries, ...(currentHistory || [])].slice(0, 40);
 };
 
+export type ArbitrageMonitoringState = 'active' | 'paused';
+
+export interface ArbitrageCoreProductIdentity {
+    agentKey: string;
+    displayName: string;
+    description: string;
+    activeMode: string;
+    activeModeLabel: string;
+    unavailableModes: Array<{ mode: string; label: string; state: string }>;
+    executionSupported: false;
+    executionEligible: false;
+}
+
+export type ArbitrageSettingsFieldSource =
+    | 'configured'
+    | 'default'
+    | 'legacy_normalized'
+    | 'unavailable'
+    | 'unsupported'
+    | 'blocked'
+    | 'read_only';
+
+export interface ArbitrageSettingsFieldMeta {
+    effective: unknown;
+    configured: unknown;
+    defaultValue: unknown;
+    source: ArbitrageSettingsFieldSource;
+    supported: boolean;
+    editable: boolean;
+    readOnly: boolean;
+    reasonCode?: string | null;
+    constraints?: { min: number; max: number } | null;
+    unit?: string | null;
+}
+
+export interface ArbitrageCoreSettings {
+    monitoredSymbols: string[];
+    minimumGrossSpreadBps?: number | null;
+    minimumNetSpreadBps?: number | null;
+    assumedFeesBps?: number | null;
+    assumedSlippageBps?: number | null;
+    minimumLiquidity?: number | null;
+    maximumDataAgeMs?: number | null;
+    scanIntervalSeconds?: number | null;
+    monitoringState: ArbitrageMonitoringState;
+    notificationPreference: boolean;
+    notificationDeliveryAvailable?: boolean;
+    version?: number;
+    updatedAt?: string | null;
+    updatedBy?: string | null;
+    executionSupported: false;
+    executionEligible: false;
+    legacyExecutionPreferenceIgnored?: boolean;
+    isDefault?: boolean;
+    fields?: Partial<Record<
+        | 'monitoredSymbols'
+        | 'minimumGrossSpreadBps'
+        | 'minimumNetSpreadBps'
+        | 'assumedFeesBps'
+        | 'assumedSlippageBps'
+        | 'minimumLiquidity'
+        | 'maximumDataAgeMs'
+        | 'scanIntervalSeconds'
+        | 'notificationPreference'
+        | 'monitoringState'
+        | 'autoExecute',
+        ArbitrageSettingsFieldMeta
+    >>;
+    unsupportedCapabilities?: Array<{
+        id: string;
+        state: string;
+        legacyStoredPreference?: boolean;
+    }>;
+    dataContractVersion?: string;
+}
+
+export interface ArbitrageCoreRunSummary {
+    runId: string;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    status?: string;
+    trigger?: string;
+    durationMs?: number | null;
+    durationAvailability?: 'measured' | 'sub_ms' | 'unavailable';
+    durationReason?: string | null;
+    durationState?: 'measured' | 'sub_ms' | 'unavailable';
+    dataFreshnessState?: 'measured' | 'unavailable';
+    dataFreshnessMs?: number | null;
+    dataFreshnessReason?: string | null;
+    funnel?: Record<string, number>;
+    sourceFreshnessMs?: number | null;
+    dryRun?: boolean;
+    runtimeMode?: string;
+    rejectionSummary?: Record<string, number>;
+    primaryRejectionReasons?: string[];
+    evaluatedSymbols?: number;
+    rejectedCount?: number;
+    qualifiedCount?: number;
+    failureReason?: string | null;
+    sideEffectsSuppressed?: boolean;
+    schedulerOwner?: string;
+}
+
+export interface ArbitrageCoreOverviewProductState {
+    productMode: string;
+    productName: string;
+    monitoringState: string;
+    agentStatus: string;
+    schedulerState: string;
+    runtimeMode: string;
+    emergencyStop: boolean;
+    executionSupported: false;
+}
+
+export interface ArbitrageCoreHistoricalSummary {
+    totalScanRuns: number;
+    successfulRuns: number;
+    failedRuns: number;
+    scheduledRuns: number;
+    manualRuns: number;
+    latestSuccessfulRunAt: string | null;
+    latestFailedRunAt: string | null;
+    latestRunAt?: string | null;
+    latestCompletedRunAt?: string | null;
+}
+
+export interface ArbitrageCoreRunTiming {
+    latestRunAt: string | null;
+    latestCompletedRunAt: string | null;
+    latestSuccessfulRunAt: string | null;
+}
+
+export interface ArbitrageCoreConfigurationSummary {
+    monitoredSymbolCount: number;
+    minimumGrossSpreadBps: number | null;
+    minimumNetSpreadBps: number | null;
+    assumedFeesBps: number | null;
+    assumedSlippageBps: number | null;
+    maximumDataAgeMs: number | null;
+    settingsVersion: number;
+    settingsUpdatedAt: string | null;
+}
+
+export interface ArbitrageCoreInterpretation {
+    primaryMessage: string;
+    safeReasonCodes: string[];
+    rejectionSummary: Record<string, number>;
+}
+
+export interface ArbitrageCoreOverview {
+    generatedAt?: string | null;
+    snapshotAt?: string | null;
+    runTiming?: ArbitrageCoreRunTiming;
+    productState?: ArbitrageCoreOverviewProductState;
+    product: ArbitrageCoreProductIdentity;
+    settings: ArbitrageCoreSettings;
+    totalScanRuns: number;
+    historicalSummary?: ArbitrageCoreHistoricalSummary;
+    configurationSummary?: ArbitrageCoreConfigurationSummary;
+    latestRun: ArbitrageCoreRunSummary | null;
+    recentRuns: ArbitrageCoreRunSummary[];
+    interpretation?: string | ArbitrageCoreInterpretation | null;
+}
+
+export interface ArbitrageCoreCandidate {
+    candidateId: string;
+    runId: string | null;
+    lifecycleState: string;
+    symbol: string;
+    baseAsset: string;
+    quoteAsset: string;
+    bid: number | null;
+    ask: number | null;
+    sourceTimestamp: string | null;
+    observedAt: string | null;
+    ageMs: number | null;
+    grossSpreadBps: number | null;
+    assumedFeesBps: number | null;
+    estimatedSlippageBps: number | null;
+    netSpreadBps: number | null;
+    estimatedNotional: number | null;
+    estimatedProfit: number | null;
+    estimatedProfitUnavailableReason?: string | null;
+    liquidityState: string;
+    freshnessState: string;
+    riskScore: number | null;
+    riskScoreUnavailableReason?: string | null;
+    rejectionReasons: string[];
+    mode: string;
+    source: string;
+}
+
+export interface ArbitrageCoreCandidatesFunnel {
+    observed: number;
+    analyticalCandidates: number;
+    rejected: number;
+    qualified: number;
+    expired: number;
+    blocked: number;
+}
+
+export interface ArbitrageCoreCandidatesResponse {
+    runId: string | null;
+    items: ArbitrageCoreCandidate[];
+    total: number;
+    page: number;
+    pageSize: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+    selectedRun: ArbitrageCoreRunSummary | null;
+    funnel: ArbitrageCoreCandidatesFunnel;
+    availableFilters: {
+        lifecycles: string[];
+        symbols: string[];
+        rejectionReasons: string[];
+        freshnessStates: string[];
+    };
+    generatedAt: string | null;
+    spreadCandidates: import('../types.ts').ArbitrageSpreadCandidate[];
+    rejectedCandidates: import('../types.ts').ArbitrageSpreadCandidate[];
+    qualifiedCandidates: import('../types.ts').ArbitrageSpreadCandidate[];
+    pagination?: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+        hasMore: boolean;
+        hasNext?: boolean;
+        hasPrevious?: boolean;
+    };
+}
+
+export interface ArbitrageCoreRunsResponse {
+    items: ArbitrageCoreRunSummary[];
+    summary?: ArbitrageCoreHistoricalSummary | null;
+    availableFilters?: { triggers: string[]; statuses: string[] };
+    generatedAt?: string | null;
+    pagination: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+        hasMore: boolean;
+        hasNext?: boolean;
+        hasPrevious?: boolean;
+    };
+}
+
+export interface ArbitrageCoreRunComparison {
+    current: ArbitrageCoreRunDetail;
+    previous: ArbitrageCoreRunDetail | null;
+    comparison: {
+        hasPrevious: boolean;
+        triggerContext?: string | null;
+        previousTrigger?: string | null;
+        deltas?: Record<string, number | Record<string, number> | null>;
+    };
+}
+
+export interface ArbitrageCoreRunDetail extends ArbitrageCoreRunSummary {
+    durationMs?: number | null;
+    dryRun?: boolean;
+    runtimeMode?: string;
+    symbolsRequested?: string[];
+    symbolsEvaluated?: string[];
+    rejectionSummary?: Record<string, number>;
+    rejectionDistribution?: Record<string, number>;
+    failureReason?: string | null;
+    failureCode?: string | null;
+    failureMessage?: string | null;
+    schedulerOwner?: string;
+    sideEffectsSuppressed?: boolean;
+    executionSupported?: boolean;
+    createdAt?: string | null;
+    source?: string;
+    dataContractVersion?: string;
+    malformed?: boolean;
+}
+
+export interface ArbitrageCoreProfitRiskAnalytics {
+    runId: string | null;
+    generatedAt?: string | null;
+    grossSpreadBps?: number | null;
+    assumedFeesBps?: number | null;
+    assumedSlippageBps?: number | null;
+    estimatedNetSpreadBps?: number | null;
+    estimatedProfitValue?: number | null;
+    estimatedProfitCurrency?: string | null;
+    notionalValue?: number | null;
+    notionalCurrency?: string | null;
+    notionalState?: string;
+    notionalSource?: string | null;
+    notionalDerivation?: string | null;
+    notionalCapValue?: number | null;
+    publicMarketVolume24h?: number | null;
+    uncappedNotionalValue?: number | null;
+    estimatedAnalyticalProfitValue?: number | null;
+    estimateState?: string;
+    estimateReason?: string | null;
+    selectedCandidateId?: string | null;
+    selectedCandidateSymbol?: string | null;
+    selectionBasis?: string | null;
+    selectionReason?: string | null;
+    qualifiedCandidateCount?: number;
+    analyticalCandidateCount?: number;
+    rejectedCandidateCount?: number;
+    freshnessState?: string;
+    freshnessMs?: number | null;
+    liquidityState?: string;
+    riskScore?: number | null;
+    riskScoreState?: string;
+    riskScoreReason?: string | null;
+    riskScoreSource?: string | null;
+    riskFactors?: Array<{ code: string; count?: number; severity?: string }>;
+    rejectionDistribution?: Record<string, number>;
+    primaryRejectionReasons?: string[];
+    bestObservedCandidate?: { symbol: string; netSpreadBps?: number | null; grossSpreadBps?: number | null } | null;
+    worstObservedCandidate?: { symbol: string; netSpreadBps?: number | null; grossSpreadBps?: number | null } | null;
+    historicalTrend?: Array<{
+        runId: string;
+        completedAt?: string | null;
+        trigger?: string;
+        qualifiedCount?: number;
+        rejectedCount?: number;
+        analyticalCandidateCount?: number;
+        netSpreadBps?: number | null;
+        grossSpreadBps?: number | null;
+        riskScore?: number | null;
+        riskScoreState?: string;
+        freshnessMs?: number | null;
+        isSelected?: boolean;
+        status?: string;
+    }>;
+    assumptions?: {
+        assumedFeesBps?: number | null;
+        assumedSlippageBps?: number | null;
+        minimumNetSpreadBps?: number | null;
+        maximumDataAgeMs?: number | null;
+        monitoredSymbols?: string[];
+        assumptionState?: string;
+    };
+    executionSupported?: boolean;
+    realizedProfitSupported?: boolean;
+    capturedProfitSupported?: boolean;
+    runtimeMode?: string;
+    sideEffectsSuppressed?: boolean;
+    dataContractVersion?: string;
+    malformed?: boolean;
+}
+
+export interface ArbitrageCoreProfitRiskResponse {
+    analytics: ArbitrageCoreProfitRiskAnalytics;
+    selectedRun?: ArbitrageCoreRunSummary | null;
+    availableRuns?: ArbitrageCoreRunSummary[];
+    generatedAt?: string | null;
+}
+
+export interface ArbitrageCoreIntegrationAction {
+    id: string;
+    labelKey: string;
+    target: string;
+    contextual?: boolean;
+}
+
+export interface ArbitrageCoreIntegrationLimitation {
+    code: string;
+    labelKey: string;
+}
+
+export interface ArbitrageCoreIntegrationItem {
+    id: string;
+    productLabelKey: string;
+    category: string;
+    configured: boolean;
+    operationalState: string;
+    verificationState: string;
+    requiredForMonitoring: boolean;
+    requiredForExecution: boolean;
+    owner: string | null;
+    dependency: string | null;
+    lastCheckedAt: string | null;
+    lastSuccessfulAt: string | null;
+    evidenceSource: string | null;
+    reasonCode: string | null;
+    consumerImpact: string | null;
+    action?: ArbitrageCoreIntegrationAction | null;
+    technicalDetails?: Record<string, unknown> | null;
+}
+
+export interface ArbitrageCoreIntegrationsResponse {
+    productId: string;
+    generatedAt: string;
+    dataContractVersion: string;
+    overallState: string;
+    overallReasonCode: string;
+    publicDataReady: boolean;
+    schedulingReady: boolean;
+    persistenceReady: boolean;
+    notificationDeliveryReady: boolean;
+    executionReady: boolean;
+    items: ArbitrageCoreIntegrationItem[];
+    limitations: ArbitrageCoreIntegrationLimitation[];
+    availableActions: ArbitrageCoreIntegrationAction[];
+    executionSupported: false;
+    executionEligible: false;
+    dataSources: string[];
+}
+
+/** @deprecated legacy envelope fields — use ArbitrageCoreIntegrationsResponse */
+export interface ArbitrageCoreIntegrations {
+    dataSources: string[];
+    executionSupported: false;
+    executionEligible: false;
+    unavailableIntegrations: string[];
+    shareWithRisk?: boolean;
+    shareWithPortfolio?: boolean;
+    forwardToArtemis?: boolean;
+}
+
+import {
+    parseArbitrageCandidatesEnvelope,
+    parseArbitrageIntegrationsEnvelope,
+    parseArbitrageOverviewEnvelope,
+    parseArbitrageProfitRiskEnvelope,
+    parseArbitrageRunDetailEnvelope,
+    parseArbitrageRunsEnvelope,
+    parseArbitrageSettingsEnvelope,
+} from './arbitrageCoreClient.ts';
+import { buildArbitrageCoreApiPath } from './arbitrageCorePaths.ts';
+
+async function arbitrageCoreRequest<T>(
+    agentId: string,
+    path: string,
+    options: RequestInit = {},
+): Promise<T> {
+    const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+    if (!token) {
+        const authError = new Error('Authentication required') as Error & {
+            status?: number;
+            code?: string;
+        };
+        authError.status = 401;
+        authError.code = 'UNAUTHORIZED';
+        throw authError;
+    }
+
+    const response = await fetch(buildArbitrageCoreApiPath(agentId, path), {
+        ...options,
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            ...(options.headers || {}),
+        },
+    });
+
+    if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const error = new Error(
+            body?.error?.message || body?.message || `Arbitrage request failed: ${response.status}`,
+        ) as Error & { status?: number; code?: string; details?: Record<string, unknown> };
+        error.status = response.status;
+        error.code = body?.error?.code || body?.code;
+        error.details = body?.error?.details;
+        throw error;
+    }
+
+    return response.json() as Promise<T>;
+}
+
+export const fetchArbitrageOverview = async (agentId: string): Promise<ArbitrageCoreOverview> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'overview');
+    return parseArbitrageOverviewEnvelope(raw);
+};
+
+export const fetchArbitrageSettings = async (agentId: string): Promise<ArbitrageCoreSettings> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'settings');
+    return parseArbitrageSettingsEnvelope(raw);
+};
+
+export const fetchArbitrageCandidates = async (
+    agentId: string,
+    opts: {
+        runId?: string;
+        symbol?: string;
+        lifecycle?: string;
+        rejectionReason?: string;
+        freshness?: string;
+        search?: string;
+        sort?: string;
+        page?: number;
+        pageSize?: number;
+    } = {},
+): Promise<ArbitrageCoreCandidatesResponse> => {
+    const params = new URLSearchParams();
+    if (opts.runId) params.set('runId', opts.runId);
+    if (opts.symbol) params.set('symbol', opts.symbol);
+    if (opts.lifecycle) params.set('lifecycle', opts.lifecycle);
+    if (opts.rejectionReason) params.set('rejectionReason', opts.rejectionReason);
+    if (opts.freshness) params.set('freshness', opts.freshness);
+    if (opts.search) params.set('search', opts.search);
+    if (opts.sort) params.set('sort', opts.sort);
+    if (opts.page != null) params.set('page', String(opts.page));
+    if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const raw = await arbitrageCoreRequest<unknown>(agentId, `candidates${query}`);
+    return parseArbitrageCandidatesEnvelope(raw, opts.runId ?? null);
+};
+
+export const fetchArbitrageRuns = async (
+    agentId: string,
+    opts: {
+        page?: number;
+        pageSize?: number;
+        trigger?: string;
+        status?: string;
+        dateFrom?: string;
+        dateTo?: string;
+        search?: string;
+        sort?: string;
+    } = {},
+): Promise<ArbitrageCoreRunsResponse> => {
+    const page = opts.page || 1;
+    const pageSize = opts.pageSize || 20;
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    if (opts.trigger) params.set('trigger', opts.trigger);
+    if (opts.status) params.set('status', opts.status);
+    if (opts.dateFrom) params.set('dateFrom', opts.dateFrom);
+    if (opts.dateTo) params.set('dateTo', opts.dateTo);
+    if (opts.search) params.set('search', opts.search);
+    if (opts.sort) params.set('sort', opts.sort);
+    const raw = await arbitrageCoreRequest<unknown>(agentId, `runs?${params.toString()}`);
+    return parseArbitrageRunsEnvelope(raw, page, pageSize);
+};
+
+export const fetchArbitrageRunComparison = async (
+    agentId: string,
+    runId: string,
+): Promise<ArbitrageCoreRunComparison> => {
+    const raw = await arbitrageCoreRequest<unknown>(
+        agentId,
+        `runs/${encodeURIComponent(runId)}/compare`,
+    );
+    if (!raw || typeof raw !== 'object') {
+        throw new Error('Invalid comparison response');
+    }
+    const body = raw as Record<string, unknown>;
+    return {
+        current: parseArbitrageRunDetailEnvelope({ scanRun: body.current }),
+        previous: body.previous
+            ? parseArbitrageRunDetailEnvelope({ scanRun: body.previous })
+            : null,
+        comparison: (body.comparison as ArbitrageCoreRunComparison['comparison']) || {
+            hasPrevious: false,
+            deltas: {},
+        },
+    };
+};
+
+export const fetchArbitrageProfitRisk = async (
+    agentId: string,
+    opts: { runId?: string } = {},
+): Promise<ArbitrageCoreProfitRiskResponse> => {
+    const params = new URLSearchParams();
+    if (opts.runId) params.set('runId', opts.runId);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const raw = await arbitrageCoreRequest<unknown>(agentId, `profit-risk${query}`);
+    return parseArbitrageProfitRiskEnvelope(raw);
+};
+
+export const fetchArbitrageRunDetail = async (
+    agentId: string,
+    runId: string,
+): Promise<ArbitrageCoreRunDetail> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, `runs/${encodeURIComponent(runId)}`);
+    return parseArbitrageRunDetailEnvelope(raw);
+};
+
+export const fetchArbitrageIntegrations = async (
+    agentId: string,
+): Promise<ArbitrageCoreIntegrationsResponse> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'integrations');
+    return parseArbitrageIntegrationsEnvelope(raw);
+};
+
+export const updateArbitrageCoreSettings = async (
+    agentId: string,
+    settings: Partial<ArbitrageCoreSettings>,
+    opts: { expectedVersion?: number } = {},
+): Promise<ArbitrageCoreSettings> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+            settings,
+            expectedVersion: opts.expectedVersion ?? settings.version,
+        }),
+    });
+    return parseArbitrageSettingsEnvelope(raw);
+};
+
+export const runArbitrageAnalyticalScan = async (
+    agentId: string,
+    opts: { idempotencyKey?: string } = {},
+): Promise<{ scanRun: ArbitrageCoreRunDetail; candidates?: ArbitrageCoreCandidatesResponse }> => {
+    const idempotencyKey = opts.idempotencyKey;
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'scan', {
+        method: 'POST',
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+        body: JSON.stringify({
+            trigger: 'manual',
+            confirm: true,
+            idempotencyKey,
+        }),
+    });
+    const body = raw as Record<string, unknown>;
+    const scanRun = parseArbitrageRunDetailEnvelope(raw);
+    const candidates = Array.isArray(body.candidates)
+        ? parseArbitrageCandidatesEnvelope(
+              { candidates: body.candidates, runId: scanRun.runId },
+              scanRun.runId,
+          )
+        : undefined;
+    return { scanRun, candidates };
+};
+
+export const updateArbitrageMonitoringState = async (
+    agentId: string,
+    monitoringState: ArbitrageMonitoringState,
+): Promise<ArbitrageCoreSettings> => {
+    const raw = await arbitrageCoreRequest<unknown>(agentId, 'monitoring-state', {
+        method: 'POST',
+        body: JSON.stringify({ monitoringState }),
+    });
+    return parseArbitrageSettingsEnvelope(raw);
+};
+
 export const fetchArbitrageAgentData = async (agentId: string): Promise<{
     config: ArbitrageConfig | null;
     metrics: ArbitrageMetrics | null;

@@ -230,15 +230,6 @@ vi.mock('../../../../components/ai/PricePredictionAgentControl', () => ({
   ),
 }));
 
-vi.mock('../../../../components/ai/ArbitrageAgentControl', () => ({
-  default: ({ agent, onClose }: any) => (
-    <div data-testid="arbitrageagentcontrol">
-      <h2>{agent.name} Control Panel</h2>
-      <button onClick={onClose}>Close</button>
-    </div>
-  ),
-}));
-
 vi.mock('../../../../components/ai/PortfolioAllocationAgentControl', () => ({
   default: ({ agent, onClose }: any) => (
     <div data-testid="portfolioallocationagentcontrol">
@@ -798,7 +789,9 @@ describe('AIAgents Component', () => {
       fireEvent.click(screen.getByTestId('agent-open-arbitrage'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('arbitrageagentcontrol')).toBeInTheDocument();
+        const workspace = screen.queryByTestId('arb-workspace');
+        const dialog = screen.queryByTestId('agent-product-dialog');
+        expect(workspace || dialog).toBeTruthy();
       });
     });
   });

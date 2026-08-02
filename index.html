@@ -19,43 +19,8 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <!-- Persian typography uses Noto Sans Arabic (loaded above) and system fallbacks. -->
     <style>
-      @font-face {
-        font-family: "IRANSans";
-        font-style: normal;
-        font-weight: 300;
-        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Light-FD.woff2")
-          format("woff2");
-      }
-      @font-face {
-        font-family: "IRANSans";
-        font-style: normal;
-        font-weight: 400;
-        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Regular-FD.woff2")
-          format("woff2");
-      }
-      @font-face {
-        font-family: "IRANSans";
-        font-style: normal;
-        font-weight: 500;
-        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Medium-FD.woff2")
-          format("woff2");
-      }
-      @font-face {
-        font-family: "IRANSans";
-        font-style: normal;
-        font-weight: 600;
-        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Bold-FD.woff2")
-          format("woff2");
-      }
-      @font-face {
-        font-family: "IRANSans";
-        font-style: normal;
-        font-weight: 700;
-        src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirfont@v30.1.0/dist/Farsi-Digits/Vazir-Bold-FD.woff2")
-          format("woff2");
-      }
-
       :root {
         /* Professional Trading Theme - Dark Mode */
         --trading-bg-primary: #0a0e27;
@@ -169,13 +134,13 @@
       [dir="rtl"],
       html[lang="fa"] body,
       body[data-lang="fa"] {
-        font-family: "IRANSans", "Vazir", "Tahoma", sans-serif;
+        font-family: "Noto Sans Arabic", "Tahoma", sans-serif;
       }
 
       /* Apply Persian font to all elements when language is Persian */
       .rtl,
       [dir="rtl"] * {
-        font-family: "IRANSans", "Vazir", "Tahoma", sans-serif !important;
+        font-family: "Noto Sans Arabic", "Tahoma", sans-serif !important;
       }
 
       /* Professional Trading Card Style */
@@ -270,7 +235,7 @@
             },
             fontFamily: {
               sans: ["Inter", "sans-serif"],
-              persian: ["IRANSans", "Vazir", "Tahoma", "sans-serif"],
+              persian: ["Noto Sans Arabic", "Tahoma", "sans-serif"],
             },
           },
         },
