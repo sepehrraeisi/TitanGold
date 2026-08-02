@@ -81,7 +81,7 @@ export const agentRegistry: Record<string, AgentRegistryEntry> = {
   },
   trend: {
     key: 'trend',
-    component: lazy(() => import('./TrendAgentControl.tsx')),
+    component: lazy(() => import('./TrendAgentPopup.tsx')),
     fallbackTitle: 'Trend Agent Error'
   },
   [AGENT_KEYS.OPTIMIZATION]: {

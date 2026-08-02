@@ -10,21 +10,25 @@
  * No complex routing, no internal AI state
  */
 
-import { ViewKey, NavigationPayload, ArbitrageAgentSection } from '../types/navigation';
+import { ViewKey, NavigationPayload, AgentWorkspaceSection } from '../types/navigation';
 
-const ARBITRAGE_SECTIONS = new Set<ArbitrageAgentSection>([
+const AGENT_WORKSPACE_SECTIONS = new Set<AgentWorkspaceSection>([
   'overview',
   'candidates',
   'history',
   'profitRisk',
   'settings',
   'integration',
+  'regimeStrength',
+  'evidence',
+  'weakeningReversal',
+  'multiTimeframe',
 ]);
 
-function parseAgentSection(value: string | null): ArbitrageAgentSection | undefined {
+function parseAgentSection(value: string | null): AgentWorkspaceSection | undefined {
   if (!value) return undefined;
-  return ARBITRAGE_SECTIONS.has(value as ArbitrageAgentSection)
-    ? (value as ArbitrageAgentSection)
+  return AGENT_WORKSPACE_SECTIONS.has(value as AgentWorkspaceSection)
+    ? (value as AgentWorkspaceSection)
     : undefined;
 }
 
@@ -35,7 +39,7 @@ export interface URLState {
   provider?: string;
   section?: string;
   agentId?: string;
-  agentSection?: ArbitrageAgentSection;
+  agentSection?: AgentWorkspaceSection;
   runId?: string;
 }
 

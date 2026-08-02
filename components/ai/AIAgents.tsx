@@ -2,7 +2,7 @@ import React, { useState, useEffect, Suspense, useMemo, useCallback } from 'reac
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import * as api from '../../services/api.ts';
 import { AIAgent } from '../../types.ts';
-import type { ArbitrageAgentSection, OnNavigateHandler } from '../../types/navigation.ts';
+import type { AgentWorkspaceSection, ArbitrageAgentSection, TrendAgentSection, OnNavigateHandler } from '../../types/navigation.ts';
 import { AGENT_KEYS } from '../../constants/agentKeys.ts';
 import ErrorBoundary from '../ErrorBoundary.tsx';
 import { getAgentControl } from './agentRegistry.ts';
@@ -16,6 +16,7 @@ import { AgentCard } from './AgentCard.tsx';
 import { mapAgentOperationalStateFromAgent } from './shell/agentCardMeta.ts';
 import { mapProductStateToFilterBucket, resolveAgentProductStatus } from '../../utils/agentProductStatus.ts';
 import ArbitrageAgentPopup from './ArbitrageAgentPopup.tsx';
+import TrendAgentPopup from './TrendAgentPopup.tsx';
 import {
   BTN_SECONDARY,
   DataHubAlert,
@@ -28,18 +29,42 @@ import Skeleton from '../ui/skeleton';
 type StatusFilter = 'all' | 'ready' | 'paused' | 'error' | 'running';
 type SortMode = 'name' | 'last_run' | 'status';
 
-const ARBITRAGE_SECTIONS = new Set<ArbitrageAgentSection>([
+const WORKSPACE_AGENT_KEYS = new Set<string>([AGENT_KEYS.ARBITRAGE, AGENT_KEYS.TREND]);
+
+const AGENT_WORKSPACE_SECTIONS = new Set<AgentWorkspaceSection>([
   'overview',
   'candidates',
   'history',
   'profitRisk',
   'settings',
   'integration',
+  'regimeStrength',
+  'evidence',
+  'weakeningReversal',
+  'multiTimeframe',
 ]);
 
-function parseAgentSection(value?: string): ArbitrageAgentSection {
-  if (value && ARBITRAGE_SECTIONS.has(value as ArbitrageAgentSection)) {
-    return value as ArbitrageAgentSection;
+function toArbitrageSection(section: AgentWorkspaceSection): ArbitrageAgentSection {
+  const allowed: ArbitrageAgentSection[] = ['overview', 'candidates', 'history', 'profitRisk', 'settings', 'integration'];
+  return allowed.includes(section as ArbitrageAgentSection) ? (section as ArbitrageAgentSection) : 'overview';
+}
+
+function toTrendSection(section: AgentWorkspaceSection): TrendAgentSection {
+  const allowed: TrendAgentSection[] = [
+    'overview',
+    'regimeStrength',
+    'evidence',
+    'weakeningReversal',
+    'multiTimeframe',
+    'history',
+    'settings',
+    'integration',
+  ];
+  return allowed.includes(section as TrendAgentSection) ? (section as TrendAgentSection) : 'overview';
+}
+function parseAgentSection(value?: string): AgentWorkspaceSection {
+  if (value && AGENT_WORKSPACE_SECTIONS.has(value as AgentWorkspaceSection)) {
+    return value as AgentWorkspaceSection;
   }
   return 'overview';
 }
@@ -114,7 +139,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
     const [agents, setAgents] = useState<AIAgent[]>([]);
     const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
     const [workspaceAgentId, setWorkspaceAgentId] = useState<string | undefined>(initialAgentId);
-    const [workspaceSection, setWorkspaceSection] = useState<ArbitrageAgentSection>(
+    const [workspaceSection, setWorkspaceSection] = useState<AgentWorkspaceSection>(
       parseAgentSection(initialAgentSection),
     );
     const [workspaceRunId, setWorkspaceRunId] = useState<string | undefined>(initialRunId);
@@ -160,7 +185,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
     useEffect(() => {
         if (!workspaceAgentId || agents.length === 0) return;
         const match = agents.find(a => a.id === workspaceAgentId);
-        if (match && match.agent_key !== AGENT_KEYS.ARBITRAGE) {
+        if (match && !WORKSPACE_AGENT_KEYS.has(match.agent_key)) {
             setWorkspaceAgentId(undefined);
             setSelectedAgent(match);
         }
@@ -176,7 +201,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
         if (opener instanceof HTMLButtonElement) {
           lastOpenButtonRef.current = opener;
         }
-        if (agent.agent_key === AGENT_KEYS.ARBITRAGE) {
+        if (WORKSPACE_AGENT_KEYS.has(agent.agent_key)) {
           setWorkspaceAgentId(agent.id);
           setWorkspaceSection('overview');
           setWorkspaceRunId(undefined);
@@ -312,7 +337,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
     }, [filteredAgents, sortMode, killSwitchActive, effectiveMode]);
 
     const workspaceAgent = useMemo(
-      () => agents.find(a => a.id === workspaceAgentId && a.agent_key === AGENT_KEYS.ARBITRAGE) || null,
+      () => agents.find(a => a.id === workspaceAgentId && WORKSPACE_AGENT_KEYS.has(a.agent_key)) || null,
       [agents, workspaceAgentId],
     );
 
@@ -481,10 +506,22 @@ const AIAgents: React.FC<AIAgentsProps> = ({
                 </div>
             )}
 
-            {workspaceAgent ? (
+            {workspaceAgent?.agent_key === AGENT_KEYS.ARBITRAGE ? (
                 <ArbitrageAgentPopup
                     agent={workspaceAgent}
-                    initialSection={workspaceSection}
+                    initialSection={toArbitrageSection(workspaceSection)}
+                    initialRunId={workspaceRunId}
+                    onClose={handleWorkspaceBack}
+                    onNavigate={handleWorkspaceNavigate}
+                    onUpdate={handleAgentUpdate}
+                    returnFocusRef={lastOpenButtonRef}
+                />
+            ) : null}
+
+            {workspaceAgent?.agent_key === AGENT_KEYS.TREND ? (
+                <TrendAgentPopup
+                    agent={workspaceAgent}
+                    initialSection={toTrendSection(workspaceSection)}
                     initialRunId={workspaceRunId}
                     onClose={handleWorkspaceBack}
                     onNavigate={handleWorkspaceNavigate}

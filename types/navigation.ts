@@ -26,6 +26,18 @@ export type ArbitrageAgentSection =
   | 'settings'
   | 'integration';
 
+export type TrendAgentSection =
+  | 'overview'
+  | 'regimeStrength'
+  | 'evidence'
+  | 'weakeningReversal'
+  | 'multiTimeframe'
+  | 'history'
+  | 'settings'
+  | 'integration';
+
+export type AgentWorkspaceSection = ArbitrageAgentSection | TrendAgentSection;
+
 export type NavigationPayload = {
   view: ViewKey;
   settingsTab?: string;
@@ -33,7 +45,7 @@ export type NavigationPayload = {
   provider?: string;
   section?: string;
   agentId?: string;
-  agentSection?: ArbitrageAgentSection;
+  agentSection?: AgentWorkspaceSection;
   runId?: string;
 };
 
