@@ -139,7 +139,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, errorKey }) => {
                 </div>
               </div>
               
-              {errorKey && <p className="text-sm text-red-400 text-center">{t(errorKey)}</p>}
+              {errorKey && (
+                <p
+                  data-testid="login-error"
+                  role="alert"
+                  className="text-sm text-red-400 text-center"
+                >
+                  {t(errorKey)}
+                </p>
+              )}
 
               <div>
                 <button

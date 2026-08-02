@@ -1,20 +1,26 @@
 import { defineConfig, devices } from '@playwright/test';
 
-/** Staging/local runtime safety — reuses running dev server on :3000 */
+/**
+ * Staging E2E — no local dev server; targets PLAYWRIGHT_BASE_URL (default production Staging).
+ */
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /runtime-safety|pre-human-qa|agent-panels|artemis-tabs|topic-routing-browser/,
   fullyParallel: false,
-  workers: 1,
+  forbidOnly: true,
   retries: 0,
-  timeout: 45000,
+  workers: 1,
   reporter: 'list',
+  timeout: 60_000,
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000',
-    trace: 'on-first-retry',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://titan.zala.ir',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    actionTimeout: 5000,
-    navigationTimeout: 15000,
+    video: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
 });
