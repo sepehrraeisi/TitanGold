@@ -29,7 +29,11 @@ import Skeleton from '../ui/skeleton';
 type StatusFilter = 'all' | 'ready' | 'paused' | 'error' | 'running';
 type SortMode = 'name' | 'last_run' | 'status';
 
-const WORKSPACE_AGENT_KEYS = new Set<string>([AGENT_KEYS.ARBITRAGE, AGENT_KEYS.TREND]);
+const WORKSPACE_AGENT_KEYS = new Set<string>([AGENT_KEYS.ARBITRAGE, AGENT_KEYS.TREND, 'trend']);
+
+function isWorkspaceAgentKey(agentKey: string | undefined): boolean {
+  return Boolean(agentKey && WORKSPACE_AGENT_KEYS.has(agentKey));
+}
 
 const AGENT_WORKSPACE_SECTIONS = new Set<AgentWorkspaceSection>([
   'overview',
@@ -185,7 +189,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
     useEffect(() => {
         if (!workspaceAgentId || agents.length === 0) return;
         const match = agents.find(a => a.id === workspaceAgentId);
-        if (match && !WORKSPACE_AGENT_KEYS.has(match.agent_key)) {
+        if (match && !isWorkspaceAgentKey(match.agent_key)) {
             setWorkspaceAgentId(undefined);
             setSelectedAgent(match);
         }
@@ -201,7 +205,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
         if (opener instanceof HTMLButtonElement) {
           lastOpenButtonRef.current = opener;
         }
-        if (WORKSPACE_AGENT_KEYS.has(agent.agent_key)) {
+        if (isWorkspaceAgentKey(agent.agent_key)) {
           setWorkspaceAgentId(agent.id);
           setWorkspaceSection('overview');
           setWorkspaceRunId(undefined);
@@ -337,7 +341,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
     }, [filteredAgents, sortMode, killSwitchActive, effectiveMode]);
 
     const workspaceAgent = useMemo(
-      () => agents.find(a => a.id === workspaceAgentId && WORKSPACE_AGENT_KEYS.has(a.agent_key)) || null,
+      () => agents.find(a => a.id === workspaceAgentId && isWorkspaceAgentKey(a.agent_key)) || null,
       [agents, workspaceAgentId],
     );
 
@@ -506,7 +510,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
                 </div>
             )}
 
-            {workspaceAgent?.agent_key === AGENT_KEYS.ARBITRAGE ? (
+            {workspaceAgent?.agent_key === AGENT_KEYS.ARBITRAGE || workspaceAgent?.agent_key === 'arbitrage' ? (
                 <ArbitrageAgentPopup
                     agent={workspaceAgent}
                     initialSection={toArbitrageSection(workspaceSection)}
@@ -518,7 +522,7 @@ const AIAgents: React.FC<AIAgentsProps> = ({
                 />
             ) : null}
 
-            {workspaceAgent?.agent_key === AGENT_KEYS.TREND ? (
+            {isWorkspaceAgentKey(workspaceAgent?.agent_key) && workspaceAgent?.agent_key !== AGENT_KEYS.ARBITRAGE && workspaceAgent?.agent_key !== 'arbitrage' ? (
                 <TrendAgentPopup
                     agent={workspaceAgent}
                     initialSection={toTrendSection(workspaceSection)}
