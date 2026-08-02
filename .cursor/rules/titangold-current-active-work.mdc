@@ -1,24 +1,33 @@
 ---
-description: TitanGold dynamic active-work authority — Arbitrage PR readiness
+description: TitanGold dynamic active-work authority — Arbitrage Draft PR #17 review
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Arbitrage feature branch verified and ready for PR creation (product frozen; E2E and changed-path gates green).
+Draft Arbitrage PR #17 reviewed; branch-owned blockers resolved; CI green; native-dialog and smoke audits complete.
 
 Current area:
-Agents → Arbitrage → PR Readiness
+Agents → Arbitrage → Draft PR #17 Review Closeout
 
 Current program slice:
-ARBITRAGE-PR-READINESS
+ARBITRAGE-PR-READINESS — PR #17 REVIEW
 
 Risk tier:
 Tier 2 product closeout (Tier-4/Live execution remains blocked)
 
 Engineering status:
-ALL SIX SECTIONS CLOSED AND FROZEN — Human QA 15/15 PASSED — READY FOR ARBITRAGE PR CREATION
+DRAFT PR #17 — ALL CHECKS PASS — REVIEW BLOCKERS CLEARED — READY FOR REVIEW (Draft unchanged)
+
+## Pull Request
+
+| Item | Value |
+|------|--------|
+| PR | [#17](https://github.com/sepehrraeisi/TitanGold/pull/17) |
+| State | open, **draft: true** |
+| Base | `main` @ `566b412` |
+| Head | `feat/arbitrage-agent-full-product` @ `43c030f` |
 
 ## Closed and frozen baselines
 
@@ -26,7 +35,6 @@ ALL SIX SECTIONS CLOSED AND FROZEN — Human QA 15/15 PASSED — READY FOR ARBIT
 |-----------------|---------------|--------|
 | Agent Product Template V1 | `44aced2` | CLOSED AND FROZEN |
 | Arbitrage Overview | `44aced2` | CLOSED AND FROZEN |
-| Manual Analytical Scan | verified | CLOSED |
 | Arbitrage Candidates | `1e24f3e` | CLOSED AND FROZEN |
 | Arbitrage Scan History | `0b707f9` | CLOSED AND FROZEN |
 | Arbitrage Profit & Risk | `b14aec7` | CLOSED AND FROZEN |
@@ -37,36 +45,29 @@ ALL SIX SECTIONS CLOSED AND FROZEN — Human QA 15/15 PASSED — READY FOR ARBIT
 
 Final Human QA: **15/15 PASSED** (2026-07-31, product owner accepted).
 
-## Verified baseline (2026-08-02)
+## Verified baseline (2026-08-02 review closeout)
 
 | Item | Value |
 |------|--------|
 | Feature branch | `feat/arbitrage-agent-full-product` |
-| Feature HEAD | `02629df` |
+| Feature HEAD | `43c030f` |
 | origin/main | `566b412` |
 | Worktree | `/home/ubuntu/worktrees/titangold-arbitrage-final` |
-| Backend runtime marker | `2634d62` (unchanged — frontend-only E2E commit) |
-| Served frontend bundle | `assets/index-CPuUIZlC.js` (built from `02629df`) |
-| provenanceVerified | true |
-| Scheduler | PID `1776042`, unchanged start |
-| Scheduler allowlist | `["arbitrage"]` |
+| GitHub Actions @ head | Backend/Frontend/E2E **success** (run IDs 30756662135 / 30756662143 / 30756662093) |
+| Native dialogs (reachable Arbitrage paths) | **0** |
+| EN desktop smoke ×3 | **3/3 PASS** (~1.4–1.6m each) |
+| Backend runtime marker | `2634d62` |
+| Served frontend bundle | `assets/index-D7Aq4Ef2.js` (`43c030f`) |
+| Scheduler | PID `1776042`, owner `titan-engine-worker`, allowlist `["arbitrage"]` |
 | Demo + Emergency Stop | active; Live impossible |
 
-## Side-effect counters (verified zero)
+## Hard boundaries (unchanged)
 
-- private provider requests: 0
-- credential access: 0
-- financial execution: 0
-- worker restart: 0
-- allowlist changes: 0
-- database migrations: 0
-- leaked secrets: 0
-- PR opened: 0
-
-## Pre-existing main CI (out of scope for Arbitrage PR)
-
-Repository-wide backend failures on `origin/main` (~27 suites) and non-deterministic `predictor.test.js` / `trendAnalyzer.test.js` flakes documented separately; not repaired on this branch.
+- Do not merge PR #17
+- Do not mark Ready for Review
+- Do not restart `titan-engine-worker`
+- Do not repair repository-wide main CI on this branch
 
 ## Next transition
 
-Open Arbitrage PR in a separate authorized slice after product owner review. Do not merge without PR review.
+Product owner may mark Draft PR #17 Ready for Review in a separate authorized step. Do not merge without PR review.
