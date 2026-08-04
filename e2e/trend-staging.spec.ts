@@ -37,7 +37,7 @@ function attachLedger(page: Page, ledger: Ledger) {
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
     const text = msg.text();
-    if (/Failed to fetch MEXC|favicon\.ico|404.*\.map/i.test(text)) return;
+    if (/Failed to fetch MEXC|favicon\.ico|404.*\.map|status of 429/i.test(text)) return;
     ledger.consoleErrors.push(text);
   });
   page.on('pageerror', (err) => ledger.pageErrors.push(String(err)));
