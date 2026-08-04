@@ -39,11 +39,34 @@ export function localizeFreshness(snapshot: TrendSnapshot | null, t: TFn, locale
   const reasonKey = (snapshot as TrendSnapshot & { freshnessReasonKey?: string }).freshnessReasonKey;
   const labelKey = reasonKey || `trend_freshness_${snapshot.freshness}`;
   const label = t(labelKey);
-  const ts = snapshot.sourceCandleTimestamp || snapshot.analysisTimestamp;
+  const ts =
+    (snapshot as TrendSnapshot & { sourceCandleTimestamp?: string; analysisTimestamp?: string })
+      .sourceCandleTimestamp ||
+    (snapshot as TrendSnapshot & { analysisTimestamp?: string }).analysisTimestamp;
   if (!ts) return label;
   const formatted = new Date(ts).toLocaleString(locale === 'fa' ? 'fa-IR' : 'en-US');
   return `${label} · ${formatted}`;
 }
+
+export function localizeSummary(snapshot: TrendSnapshot | null, t: TFn): string | null {
+  if (!snapshot) return null;
+  const key = (snapshot as TrendSnapshot & { summaryKey?: string }).summaryKey;
+  if (key) {
+    const translated = t(key);
+    if (translated !== key) return translated;
+  }
+  if (snapshot.summary) return snapshot.summary;
+  return null;
+}
+
+export function localizeAgreement(agreement: string | null | undefined, t: TFn): string {
+  if (!agreement) return t('not_available');
+  const key = `trend_mtf_agreement_${agreement}`;
+  const translated = t(key);
+  return translated === key ? agreement : translated;
+}
+
+export const TREND_PRIMARY_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'] as const;
 
 export function resolveEvidenceText(
   item: Record<string, unknown>,

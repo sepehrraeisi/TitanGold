@@ -7,6 +7,21 @@ import { buildTrendCoreApiPath } from './trendCorePaths.ts';
 export type TrendDirection = 'bullish' | 'bearish' | 'sideways' | 'mixed' | 'unavailable';
 export type TrendRegime = 'trending' | 'ranging' | 'transition' | 'unavailable';
 
+export type TrendChartPoint = {
+  t: number;
+  close: number;
+  sma: number | null;
+  ema: number | null;
+  adx: number | null;
+};
+
+export type TrendChartSeries = {
+  points: TrendChartPoint[];
+  smaPeriod: number;
+  emaPeriod: number;
+  adxPeriod: number;
+};
+
 export type TrendSnapshot = {
   symbol: string | null;
   timeframe: string | null;
@@ -21,9 +36,12 @@ export type TrendSnapshot = {
     strength: string;
     interpretation?: string;
     interpretationKey?: string;
+    momentum?: string | null;
   } | null;
   currentPrice: number | null;
   summary: string | null;
+  summaryKey?: string | null;
+  chartSeries?: TrendChartSeries | null;
   supportingEvidence: Array<Record<string, unknown>>;
   conflictingEvidence: Array<Record<string, unknown>>;
   weakeningEvidence: Array<Record<string, unknown>>;
@@ -34,6 +52,8 @@ export type TrendSnapshot = {
   provenance: Record<string, unknown>;
   unavailableReasons: string[];
   analyticalSignal: string | null;
+  sourceCandleTimestamp?: string | null;
+  analysisTimestamp?: string | null;
 };
 
 export type TrendRunSummary = {
@@ -163,11 +183,27 @@ export async function updateTrendSettings(
   agentId: string,
   patch: Partial<TrendSettings> & { version?: number },
 ): Promise<TrendSettings> {
+  const body = buildSettingsPatch(patch);
   const raw = await trendCoreRequest<{ settings: TrendSettings }>(agentId, 'settings', {
     method: 'PATCH',
-    body: JSON.stringify(patch),
+    body: JSON.stringify(body),
   });
   return raw.settings;
+}
+
+/** PATCH only backend-allowlisted fields — excludes read-only autoExecute DTO. */
+export function buildSettingsPatch(patch: Partial<TrendSettings> & { version?: number }) {
+  const allowed: Partial<TrendSettings> & { version?: number } = {};
+  if (patch.symbol !== undefined) allowed.symbol = patch.symbol;
+  if (patch.timeframe !== undefined) allowed.timeframe = patch.timeframe;
+  if (patch.compareTimeframes !== undefined) allowed.compareTimeframes = patch.compareTimeframes;
+  if (patch.adxPeriod !== undefined) allowed.adxPeriod = patch.adxPeriod;
+  if (patch.smaPeriod !== undefined) allowed.smaPeriod = patch.smaPeriod;
+  if (patch.emaPeriod !== undefined) allowed.emaPeriod = patch.emaPeriod;
+  if (patch.trendLineLookback !== undefined) allowed.trendLineLookback = patch.trendLineLookback;
+  if (patch.candleCount !== undefined) allowed.candleCount = patch.candleCount;
+  if (patch.version !== undefined) allowed.version = patch.version;
+  return allowed;
 }
 
 export async function fetchTrendIntegrations(agentId: string): Promise<TrendIntegrations> {

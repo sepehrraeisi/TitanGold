@@ -11,9 +11,44 @@
  */
 
 import { logger } from '../logger.js';
-import { analyzeTrend } from '../trendAnalyzer.js';
+import { analyzeTrend, calculateSMA, calculateEMA, calculateADX } from '../trendAnalyzer.js';
 import { mexcService } from '../mexc.js';
 import { classifyAdxStrength } from '../trendDomain.js';
+
+const CHART_SERIES_POINTS = 60;
+
+function buildChartSeries(ohlcv, { smaPeriod, emaPeriod, adxPeriod, maxPoints = CHART_SERIES_POINTS }) {
+  const closes = ohlcv.map((c) => c[4]);
+  const smaAll = calculateSMA(closes, smaPeriod);
+  const emaAll = calculateEMA(closes, emaPeriod);
+  const adxData = calculateADX(ohlcv, adxPeriod);
+  const adxValues = adxData.values || [];
+  const n = Math.min(maxPoints, ohlcv.length);
+  const startIdx = ohlcv.length - n;
+  const points = [];
+
+  for (let i = startIdx; i < ohlcv.length; i++) {
+    const smaVal = i >= smaPeriod - 1 ? smaAll[i - smaPeriod + 1] : null;
+    const emaVal = i >= emaPeriod ? emaAll[i - emaPeriod] : null;
+    const adxOffset = ohlcv.length - adxValues.length;
+    const adxVal = i >= adxOffset ? adxValues[i - adxOffset] : null;
+    points.push({
+      t: ohlcv[i][0],
+      close: Math.round(closes[i] * 100) / 100,
+      sma: smaVal != null ? Math.round(smaVal * 100) / 100 : null,
+      ema: emaVal != null ? Math.round(emaVal * 100) / 100 : null,
+      adx: adxVal != null ? Math.round(adxVal * 100) / 100 : null,
+    });
+  }
+
+  return { points, smaPeriod, emaPeriod, adxPeriod };
+}
+
+function buildSummaryKey(direction, strength) {
+  const dir = direction === 'up' ? 'up' : direction === 'down' ? 'down' : 'sideways';
+  const str = ['weak', 'moderate', 'strong', 'developing'].includes(strength) ? strength : 'weak';
+  return `trend_summary_${dir}_${str}`;
+}
 
 // Cache for storing trend analysis results
 const analysisCache = new Map();
@@ -95,7 +130,8 @@ export async function run({ userId, symbol, timeframe = '1h', config = {} }) {
         direction: analysis.trend.direction,
         strength: analysis.trend.strength,
         confidence: Math.round(analysis.trend.confidence * 100),
-        description: describeTrend(analysis.trend.direction, analysis.trend.strength)
+        description: describeTrend(analysis.trend.direction, analysis.trend.strength),
+        descriptionKey: buildSummaryKey(analysis.trend.direction, analysis.trend.strength),
       },
       
       moving_averages: {
@@ -138,6 +174,8 @@ export async function run({ userId, symbol, timeframe = '1h', config = {} }) {
       trading_recommendation: generateTradingRecommendation(analysis),
       
       summary: analysis.summary,
+      summary_key: buildSummaryKey(analysis.trend.direction, analysis.trend.strength),
+      chart_series: buildChartSeries(ohlcv, { smaPeriod, emaPeriod, adxPeriod }),
       
       data_points: ohlcv.length,
       execution_time_ms: Date.now() - startTime,
@@ -305,20 +343,37 @@ function calculateDistancePercent(price, level) {
  */
 function generateMASignal(price, ma) {
   const { sma, ema, position } = ma;
-  
+
   if (position === 'above_both') {
-    return { signal: 'bullish', description: 'Price above both MAs - bullish alignment' };
-  } else if (position === 'below_both') {
-    return { signal: 'bearish', description: 'Price below both MAs - bearish alignment' };
-  } else if (position === 'between') {
-    if (ema.value > sma.value) {
-      return { signal: 'neutral_bullish', description: 'Mixed signals, slight bullish bias' };
-    } else {
-      return { signal: 'neutral_bearish', description: 'Mixed signals, slight bearish bias' };
-    }
+    return {
+      signal: 'bullish',
+      description: 'Price above both MAs - bullish alignment',
+      interpretationKey: 'trend_ma_bullish_alignment',
+    };
   }
-  
-  return { signal: 'neutral', description: 'No clear MA signal' };
+  if (position === 'below_both') {
+    return {
+      signal: 'bearish',
+      description: 'Price below both MAs - bearish alignment',
+      interpretationKey: 'trend_ma_bearish_alignment',
+    };
+  }
+  if (position === 'between') {
+    if (ema.value > sma.value) {
+      return {
+        signal: 'neutral_bullish',
+        description: 'Mixed signals, slight bullish bias',
+        interpretationKey: 'trend_ma_neutral_bullish',
+      };
+    }
+    return {
+      signal: 'neutral_bearish',
+      description: 'Mixed signals, slight bearish bias',
+      interpretationKey: 'trend_ma_neutral_bearish',
+    };
+  }
+
+  return { signal: 'neutral', description: 'No clear MA signal', interpretationKey: 'trend_ma_neutral' };
 }
 
 /**

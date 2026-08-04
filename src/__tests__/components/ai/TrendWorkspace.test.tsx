@@ -135,6 +135,7 @@ describe('TrendWorkspace', () => {
     await user.click(screen.getByTestId('trend-run-analytical-analysis'));
     expect(screen.getByTestId('trend-analyze-confirm-run')).toBeInTheDocument();
     expect(screen.getByTestId('trend-analyze-confirm-cancel')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-analyze-timeframe')).toBeInTheDocument();
   });
 
   it('navigates specialized trend tabs', async () => {

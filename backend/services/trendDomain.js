@@ -165,17 +165,19 @@ function buildEvidenceItems(raw, regime) {
 
   if (raw?.moving_averages?.signal) {
     const ma = raw.moving_averages;
+    const sig = ma.signal;
     const item = {
       indicatorId: 'moving_averages',
       displayKey: 'trend_indicator_ma',
       value: null,
-      interpretation: ma.signal.description || null,
-      contribution: ma.signal.signal || 'neutral',
-      evidenceType: ma.signal.signal?.includes('bullish') ? 'supporting' : ma.signal.signal?.includes('bearish') ? 'supporting' : 'neutral',
+      interpretation: sig.description || null,
+      interpretationKey: sig.interpretationKey || null,
+      contribution: sig.signal || 'neutral',
+      evidenceType: sig.signal?.includes('bullish') ? 'supporting' : sig.signal?.includes('bearish') ? 'supporting' : 'neutral',
       available: true,
     };
-    if (ma.signal.signal?.startsWith('neutral')) {
-      push(conflicting, { ...item, evidenceType: 'conflicting', interpretationKey: 'trend_evidence_neutral_ma' });
+    if (sig.signal?.startsWith('neutral')) {
+      push(conflicting, { ...item, evidenceType: 'conflicting', interpretationKey: sig.interpretationKey || 'trend_evidence_neutral_ma' });
     } else {
       push(supporting, item);
     }
@@ -263,6 +265,18 @@ export function buildTrendSnapshot(raw, meta = {}) {
   else if (rec === 'SELL') analyticalSignal = 'bearish_bias';
   else if (rec === 'HOLD') analyticalSignal = 'neutral';
 
+  const chartSeries = raw.chart_series || null;
+  let adxMomentum = null;
+  if (chartSeries?.points?.length >= 2) {
+    const adxPoints = chartSeries.points.map((p) => p.adx).filter((v) => v != null);
+    if (adxPoints.length >= 2) {
+      const delta = adxPoints[adxPoints.length - 1] - adxPoints[adxPoints.length - 2];
+      if (Math.abs(delta) >= 0.5) {
+        adxMomentum = delta > 0 ? 'strengthening' : 'weakening';
+      }
+    }
+  }
+
   return {
     symbol: raw.symbol,
     timeframe: raw.timeframe,
@@ -278,6 +292,7 @@ export function buildTrendSnapshot(raw, meta = {}) {
           strength: strengthClassification,
           interpretation: raw.adx.interpretation || null,
           interpretationKey: adxCanonical.interpretationKey,
+          momentum: adxMomentum,
         }
       : null,
     currentPrice: raw.current_price ?? null,
@@ -288,6 +303,8 @@ export function buildTrendSnapshot(raw, meta = {}) {
     weakeningEvidence: wr.weakening,
     reversalEvidence: wr.reversal,
     summary: raw.summary || raw.trend?.description || null,
+    summaryKey: raw.summary_key || raw.trend?.descriptionKey || null,
+    chartSeries,
     sourceCandleTimestamp: freshnessMeta.sourceCandleTimestamp,
     analysisTimestamp: freshnessMeta.analysisTimestamp,
     freshness: freshnessMeta.freshness,
@@ -429,8 +446,8 @@ export function buildTrendIntegrationsDto({ redisOk, scheduler, runtime, mexcPub
       owner: 'redis',
     },
     scheduler: {
-      status: workerStatus,
-      statusLabelKey: schedulerStatusKey,
+      status: trendAllowlisted ? workerStatus : 'not_scheduled',
+      statusLabelKey: trendAllowlisted ? schedulerStatusKey : 'trend_int_status_not_scheduled',
       trendAllowlisted,
       scheduledMonitoringStatus: trendAllowlisted ? 'scheduled' : 'not_scheduled',
       reasonKey: trendAllowlisted ? null : 'trend_int_scheduler_not_allowlisted',
