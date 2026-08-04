@@ -75,114 +75,46 @@ See final handoff checklist in closeout report.
 
 ---
 
-## Evidence Ledger (Human-QA Readiness Remediation — 2026-08-04)
+## Evidence Ledger (Human-QA round 2 — 2026-08-04)
 
-### Provenance
+### Committed / deployed provenance
 
 | Field | Value |
 |-------|-------|
-| Base SHA (`origin/main`) | `9c9f860` |
-| Branch | `feat/trend-detection-agent-full-product` |
-| Branch HEAD (git) | `0a28597` |
-| Remediation delta | **Uncommitted** in worktree (guardExecution, integrations DTO, public OHLCV path, E2E suite, tests) |
-| Backend runtime marker (`TITAN_RUNTIME_COMMIT`) | `af1b690` |
-| Backend runtime files deployed | `trendDomain.js`, `agents/trend.js` (patched on Staging runtime path) |
-| Frontend runtime implementation | Built from worktree @ `0a28597` + remediation delta |
-| Documentation HEAD | Same worktree (this file updated in remediation) |
-| Served bundle (Staging) | `assets/index-BFJyoumV.js` |
-| Dist path | `/home/ubuntu/webapp/TitanGold/dist` |
-| Deployment target | Staging — `https://titan.zala.ir` |
-| Nginx target | Existing TitanGold Staging vhost → `/home/ubuntu/webapp/TitanGold/dist` |
-| Frontend load verification | `curl https://titan.zala.ir/` → `index-BFJyoumV.js` |
+| Base SHA | `9c9f860` |
+| Implementation commit | **`ad53ce2`** (code + deploy) |
+| Documentation HEAD | **`29c2010`** |
+| Backend runtime marker | **`ad53ce2`** |
+| Served bundle | **`assets/index-urwZv0ot.js`** |
+| Worktree | clean |
 
-### Commit classification (after `af1b690`)
+### Scheduler vs backend (distinct processes)
 
-| SHA | Scope |
-|-----|-------|
-| `f4b98df` | E2E/test behavior |
-| `42d6445` | Frontend runtime routing (`trend` / `trend_detection` → workspace) |
-| `0a28597` | E2E/test behavior |
-| Worktree delta | Integrations DTO fix, guardExecution, public OHLCV in `agents/trend.js`, E2E replacement |
+| Process | PIDs | Restarts | Role |
+|---------|------|----------|------|
+| `titan-engine-worker` | `1377375`, `1377399` | 0 | Scheduler owner — **not restarted** |
+| `titan-backend` | 4 cluster instances | restarted for deploy | API only |
 
-### E2E (retries=0, trace on)
+### Owner defect fixes (`ad53ce2`)
 
-| Run set | Result |
-|---------|--------|
-| Pre-remediation | FAIL — stale bundle + integration tab React #31 + hidden testId |
-| Post-routing deploy (3×) | 4/4 pass (flaky browser crash run 1 without `NODE_OPTIONS`) |
-| Post public-OHLCV fix (3× consecutive) | **12/12 pass** (4 tests × 3 runs) |
+1. Header monitoring → **Not scheduled** (not "Monitoring active")
+2. Canonical ADX thresholds — regime/strength/evidence aligned (ADX 23 → transition)
+3. Freshness from last candle + localized reason/timestamp
+4. Localized evidence (no raw keys in UI)
+5. Compare-timeframe settings + truthful MTF unavailable state
+6. Localized integration labels/status/reasons
+7. Removed duplicate Close in action bar
+8. History run detail layer with comparison gate
+9. Committed + deployed from same SHA
+10. Scheduler PIDs documented separately from backend cluster
 
-Scenarios: A read-only all sections + cancel, B one analyze POST, C settings PATCH, A FA mobile RTL.
+### Verification @ `ad53ce2`
 
-### RCA — E2E failures (branch-owned)
-
-1. Stale frontend before `42d6445` — invalid Browser QA
-2. `agent_key=trend` not routed to workspace — fixed in `AIAgents.tsx`
-3. `data-testid="trend-workspace"` outside portal dialog — fixed
-4. Integrations DTO passed object to `StatusPill` — fixed in `trendDomain.js`
-5. `agents/trend.js` called fail-closed `initializeExchange` — fixed to public `fetchOHLCV(null, …)`
-
-### Shared-shell audit
-
-| File | Trend need | Shell impact | Type | Consumers |
-|------|------------|--------------|------|-----------|
-| `AIAgents.tsx` | Route `trend`/`trend_detection` to `TrendAgentPopup` | Workspace routing only | Additive routing | Arbitrage unchanged; legacy agents use registry |
-| `agentRegistry.ts` | `TrendAgentPopup` lazy entry | Registry entry only | Additive | Trend card open |
-| `navigation.ts` | Trend section types | Type extension | Additive | URL sync consumers |
-| `urlSync.ts` | Trend section in URL | Parse/serialize | Additive | Deep-link |
-
-Canonical ID: DB `agent_key=trend`; legacy alias `trend_detection` accepted in loader only; **one** product owner: `TrendAgentPopup` → `TrendWorkspace`.
-
-### Legacy reachability
-
-| Check | Result |
-|-------|--------|
-| `TrendAgentControl` in `agentRegistry` | NO |
-| `TrendAgentControl` in production dist chunks | NO |
-| Product owner | `TrendAgentPopup` / `TrendWorkspace` only |
-| Native dialogs (alert/confirm/prompt) reachable | **0** (source audit + E2E ledger) |
-
-### Side-effect ledger (E2E observed)
-
-**Scenario A — read-only load:** analyze POSTs=0, settings PATCH=0, monitoring mutations=0, private provider POSTs=0, native dialogs=0, console errors=0, page errors=0.
-
-**Scenario B — one confirmed analysis:** analyze POST=1, persisted run=1, private provider=0, scheduler mutations=0, worker restarts=0, dialogs=0.
-
-**Scenario C — settings save:** settings PATCH=1, analyze POST=0.
-
-Manual API verify (post-fix): POST analyze → `status=completed`, `direction=bullish`, MEXC public provenance, ~11s execution.
-
-### Performance (BASELINE NOT AVAILABLE for prior Trend product)
-
-| Sample | Value |
-|--------|-------|
-| Analyze API (HTTP, successful run) | ~14s |
-| Analyzer execution (observed) | ~11.2s |
-| History API (HTTP) | ~1.05s |
-| Main bundle | 2,514,504 bytes (`index-BFJyoumV.js`) |
-| Duplicate analyze (cancel flow) | 0 POST before confirm |
-
-### Automated tests (invalidated scope)
-
-| Suite | Result |
-|-------|--------|
-| `trendDomain.test.js` | 7/7 pass |
-| `TrendWorkspace.test.tsx` | 3/3 pass |
-| `nativeDialogAudit.test.ts` | 3/3 pass |
-| `agentKeyRouting.test.ts` | 3/3 pass |
-| `AIAgents.test.tsx` (trend open) | pass (updated for workspace) |
-
-Known base CI debt: broad backend `jest --testPathPattern=trend` matches unrelated suites — not repaired.
-
-### Scheduler / runtime safety
-
-| Check | Result |
-|-------|--------|
-| `titan-engine-worker` PID | `498812`, `498842` (unchanged, ↺=0) |
-| Scheduler allowlist | `arbitrage` only (unchanged) |
-| Demo / Emergency Stop | Active (integrations DTO: demo + killSwitch) |
-| Live execution | Unavailable |
+- Backend tests: `trendDomain.test.js` **8/8**
+- Frontend Trend suite: **12/12**
+- E2E: **3× consecutive 12/12** (retries=0)
+- Side effects: analyze POST=1 on confirm only; private MEXC=0; worker restarts=0; native dialogs=0
 
 ### Human-QA status
 
-**READY FOR OWNER HUMAN QA** — automated remediation gates satisfied; owner sign-off on full design-system matrix (keyboard, Escape, Back/Forward, overflow per section) remains the Human-QA milestone.
+**READY FOR OWNER HUMAN QA**
