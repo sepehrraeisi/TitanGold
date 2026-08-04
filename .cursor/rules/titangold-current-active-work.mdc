@@ -56,9 +56,8 @@ Acceptance criteria:
 Next transition:
 Owner Human QA PASS → closeout evidence; still no PR unless separately authorized.
 
-Evidence (2026-08-04 remediation):
-- Base SHA `9c9f860` · branch HEAD `0a28597` · served bundle `index-BFJyoumV.js`
-- Backend marker `af1b690`; runtime patches `trendDomain.js`, `agents/trend.js`
-- E2E 12/12 pass (3×4, retries=0) post public-OHLCV fix
-- Scheduler PIDs unchanged · worker not restarted
+Evidence (2026-08-04 remediation round 2):
+- Base SHA `9c9f860` · branch HEAD **`ad53ce2`** · served bundle **`index-urwZv0ot.js`**
+- Backend marker **`ad53ce2`** · worktree clean · E2E 12/12 @ ad53ce2
+- Scheduler workers PIDs `1377375`,`1377399` (↺=0) — distinct from titan-backend cluster
 - See `docs/TREND_DETECTION_PRODUCT.md` Evidence Ledger
