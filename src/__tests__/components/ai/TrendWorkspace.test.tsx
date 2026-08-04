@@ -46,7 +46,12 @@ vi.mock('../../../../services/trendCoreClient.ts', () => ({
 }));
 
 vi.mock('../../../../hooks/useAgentExecutionGate.ts', () => ({
-  useAgentExecutionGate: () => ({ guardExecution: () => null }),
+  useAgentExecutionGate: () => ({
+    guardExecution: () => true,
+    blockReason: null,
+    canExecuteSafe: true,
+    loading: false,
+  }),
 }));
 
 vi.mock('../../../../hooks/useExecutionRuntime.ts', () => ({

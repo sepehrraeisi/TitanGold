@@ -33,11 +33,23 @@ import {
   AgentMetricGrid,
   AgentPrimaryAction,
   AgentProductDialog,
-  AgentSecondaryAction,
   AgentSectionHeader,
   AgentSectionNavigation,
 } from './product/index.ts';
 import { TrendAnalyzeConfirmDialog } from './trend/TrendAnalyzeConfirmDialog.tsx';
+import { AgentProductDetailLayer } from './product/AgentProductDetailLayer.tsx';
+import {
+  TREND_COMPARE_TIMEFRAMES,
+  integrationEntries,
+  integrationLabel,
+  integrationReason,
+  integrationStatusLabel,
+  localizeDirection,
+  localizeFreshness,
+  localizeRegime,
+  localizeStrength,
+  resolveEvidenceText,
+} from './trend/trendUiHelpers.ts';
 
 const TAB_ITEMS: Array<{ id: TrendAgentSection; labelKey: string }> = [
   { id: 'overview', labelKey: 'tab_overview' },
@@ -70,8 +82,8 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
   onBack,
   onNavigate,
 }) => {
-  const { t } = useLanguage();
-  const { guardExecution } = useAgentExecutionGate();
+  const { t, language } = useLanguage();
+  const { guardExecution, blockReason, canExecuteSafe, loading: executionGateLoading } = useAgentExecutionGate();
   const [activeTab, setActiveTab] = useState<TrendAgentSection>(initialSection);
   const [overview, setOverview] = useState<TrendOverview | null>(null);
   const [runs, setRuns] = useState<TrendRunSummary[]>([]);
@@ -87,7 +99,20 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<TrendSettings | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [historyDetailRunId, setHistoryDetailRunId] = useState<string | null>(null);
+  const [historyDetail, setHistoryDetail] = useState<{
+    run: TrendRunSummary;
+    snapshot: TrendSnapshot;
+    comparison: Record<string, unknown>;
+    multiTimeframe: unknown[];
+  } | null>(null);
+  const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
   const idempotencyRef = useRef<string | null>(null);
+
+  const scheduledMonitoringState =
+    overview?.scheduler?.scheduledMonitoringStatus === 'not_scheduled' ? 'not_scheduled' : 'active';
+
+  const compareTimeframesConfigured = (settings?.compareTimeframes?.length ?? 0) > 0;
 
   const latestSnapshot = overview?.latestSnapshot ?? selectedSnapshot;
 
@@ -155,11 +180,38 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
     onNavigate?.({ view: 'ai', agentId: agent.id, agentSection: tab, runId: selectedRunId });
   };
 
+  const openHistoryDetail = async (runId: string) => {
+    setHistoryDetailRunId(runId);
+    setHistoryDetailLoading(true);
+    setHistoryDetail(null);
+    try {
+      const detail = await fetchTrendRunDetail(agent.id, runId);
+      setHistoryDetail(detail);
+      setSelectedRunId(runId);
+      setSelectedSnapshot(detail.snapshot);
+      setMultiTimeframe(detail.multiTimeframe || []);
+    } catch {
+      setFeedback({ kind: 'error', message: t('trend_load_run_failed') || 'Failed to load run' });
+      setHistoryDetailRunId(null);
+    } finally {
+      setHistoryDetailLoading(false);
+    }
+  };
+
+  const closeHistoryDetail = () => {
+    setHistoryDetailRunId(null);
+    setHistoryDetail(null);
+  };
+
+  const executionBlockedMessage =
+    blockReason === 'CAPABILITY_DENIED'
+      ? t('agents_permission_limited') || 'Your role cannot execute this agent action.'
+      : t('trend_analysis_failed') || 'Analysis unavailable';
+
   const handleRunAnalysis = async () => {
     if (!settings) return;
-    const blocked = guardExecution();
-    if (blocked) {
-      setFeedback({ kind: 'error', message: blocked });
+    if (!guardExecution()) {
+      setFeedback({ kind: 'error', message: executionBlockedMessage });
       return;
     }
     if (!idempotencyRef.current) idempotencyRef.current = createTrendIdempotencyKey();
@@ -199,6 +251,10 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
 
   const handleSaveSettings = async () => {
     if (!settingsDraft) return;
+    if (!guardExecution()) {
+      setFeedback({ kind: 'error', message: executionBlockedMessage });
+      return;
+    }
     setIsSavingSettings(true);
     try {
       const saved = await updateTrendSettings(agent.id, settingsDraft);
@@ -216,12 +272,12 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
     const snap = latestSnapshot;
     if (!snap) return [];
     return [
-      { id: 'direction', label: t('trend_direction') || 'Direction', value: snap.direction !== 'unavailable' ? snap.direction : NA(t) },
-      { id: 'regime', label: t('trend_regime') || 'Regime', value: snap.regime !== 'unavailable' ? snap.regime : NA(t) },
+      { id: 'direction', label: t('trend_direction') || 'Direction', value: localizeDirection(snap.direction, t) },
+      { id: 'regime', label: t('trend_regime') || 'Regime', value: localizeRegime(snap.regime, t) },
       { id: 'adx', label: 'ADX', value: snap.adx?.value != null ? String(snap.adx.value) : NA(t) },
-      { id: 'freshness', label: t('trend_freshness') || 'Freshness', value: snap.freshness || NA(t) },
+      { id: 'freshness', label: t('trend_freshness') || 'Freshness', value: localizeFreshness(snap, t, language) },
     ];
-  }, [latestSnapshot, t]);
+  }, [latestSnapshot, t, language]);
 
   const renderOverview = () => {
     if (isLoading && !overview) {
@@ -245,7 +301,16 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
         {latestSnapshot.summary ? (
           <p className="text-sm text-slate-300 mt-4">{latestSnapshot.summary}</p>
         ) : null}
-        {overview?.comparison?.available === false ? (
+        {latestSnapshot.adx?.interpretationKey ? (
+          <p className="text-xs text-slate-400 mt-2">{t(latestSnapshot.adx.interpretationKey)}</p>
+        ) : null}
+        {overview?.comparison?.available === true ? (
+          <p className="text-xs text-slate-400 mt-2">
+            {overview.comparison.regimeChanged
+              ? t('trend_change') || 'Regime changed vs prior run'
+              : t('trend_no_prior_comparison') || 'No material change vs prior run.'}
+          </p>
+        ) : overview?.comparison?.available === false ? (
           <p className="text-xs text-slate-400 mt-2">{t('trend_no_prior_comparison') || 'No prior run to compare.'}</p>
         ) : null}
       </AgentContentSurface>
@@ -270,9 +335,13 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
       case 'regimeStrength':
         return renderSnapshotSection('trend_tab_regime_strength', 'trend-panel-regimeStrength', () => (
           <div className="space-y-2 text-sm">
-            <div><StatusPill label={latestSnapshot!.regime} variant="info" /></div>
-            <div>{t('trend_strength')}: {latestSnapshot!.strengthClassification || NA(t)}</div>
-            <div>ADX: {latestSnapshot!.adx?.interpretation || NA(t)}</div>
+            <div><StatusPill label={localizeRegime(latestSnapshot!.regime, t)} variant="info" /></div>
+            <div>{t('trend_strength')}: {localizeStrength(latestSnapshot!.strengthClassification, t)}</div>
+            <div>
+              ADX: {latestSnapshot!.adx?.interpretationKey
+                ? t(latestSnapshot!.adx.interpretationKey)
+                : latestSnapshot!.adx?.interpretation || NA(t)}
+            </div>
           </div>
         ));
       case 'evidence':
@@ -282,7 +351,7 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
               <h4 className="font-medium">{t('trend_supporting_evidence')}</h4>
               {latestSnapshot!.supportingEvidence.length === 0 ? NA(t) : (
                 <ul className="list-disc ps-5">{latestSnapshot!.supportingEvidence.map((e, i) => (
-                  <li key={i}>{String(e.interpretation || e.displayKey || e.indicatorId)}</li>
+                  <li key={i}>{resolveEvidenceText(e, t)}</li>
                 ))}</ul>
               )}
             </div>
@@ -290,7 +359,7 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
               <h4 className="font-medium">{t('trend_conflicting_evidence')}</h4>
               {latestSnapshot!.conflictingEvidence.length === 0 ? NA(t) : (
                 <ul className="list-disc ps-5">{latestSnapshot!.conflictingEvidence.map((e, i) => (
-                  <li key={i}>{String(e.interpretation || e.displayKey || e.indicatorId)}</li>
+                  <li key={i}>{resolveEvidenceText(e, t)}</li>
                 ))}</ul>
               )}
             </div>
@@ -304,29 +373,42 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
               : (
                 <>
                   {latestSnapshot!.weakeningEvidence.map((w, i) => (
-                    <div key={`w-${i}`}>{String(w.displayKey || w.type)}</div>
+                    <div key={`w-${i}`}>{resolveEvidenceText(w, t)}</div>
                   ))}
                   {latestSnapshot!.reversalEvidence.map((r, i) => (
-                    <div key={`r-${i}`}>{String(r.description || r.type)}</div>
+                    <div key={`r-${i}`}>{resolveEvidenceText(r, t)}</div>
                   ))}
                 </>
               )}
           </div>
         ));
       case 'multiTimeframe':
-        return renderSnapshotSection('trend_tab_multi_timeframe', 'trend-panel-multiTimeframe', () => (
-          multiTimeframe.length === 0 ? (
-            <p>{t('trend_mtf_empty') || 'Configure compare timeframes in Settings or run analysis.'}</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {(multiTimeframe as Array<{ timeframe: string; agreement: string; snapshot: TrendSnapshot }>).map(row => (
-                <li key={row.timeframe}>
-                  <span dir="ltr">{row.timeframe}</span>: {row.snapshot?.direction || NA(t)} ({row.agreement})
-                </li>
-              ))}
-            </ul>
-          )
-        ));
+        return (
+          <AgentContentSurface testId="trend-panel-multiTimeframe">
+            <AgentSectionHeader title={t('trend_tab_multi_timeframe')} />
+            {!compareTimeframesConfigured ? (
+              <AgentEmptyState
+                message={t('trend_mtf_unavailable') || 'Multi-timeframe comparison unavailable until configured in Settings.'}
+                testId="trend-mtf-unavailable"
+              />
+            ) : !latestSnapshot ? (
+              <AgentEmptyState message={NA(t)} testId="trend-panel-multiTimeframe-empty" />
+            ) : multiTimeframe.length === 0 ? (
+              <AgentEmptyState
+                message={t('trend_mtf_no_data') || 'No comparison data yet.'}
+                testId="trend-mtf-empty"
+              />
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {(multiTimeframe as Array<{ timeframe: string; agreement: string; snapshot: TrendSnapshot }>).map(row => (
+                  <li key={row.timeframe}>
+                    <span dir="ltr">{row.timeframe}</span>: {localizeDirection(row.snapshot?.direction, t)} ({row.agreement})
+                  </li>
+                ))}
+              </ul>
+            )}
+          </AgentContentSurface>
+        );
       case 'history':
         return (
           <AgentContentSurface testId="trend-panel-history">
@@ -336,19 +418,24 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
             ) : (
               <ul className="divide-y divide-white/5">
                 {runs.map(run => (
-                  <li key={run.runId} className="py-2 flex justify-between gap-2 text-sm">
-                    <button
-                      type="button"
-                      className="text-left hover:underline"
-                      data-testid={`trend-history-row-${run.runId}`}
-                      onClick={() => {
-                        setSelectedRunId(run.runId);
-                        handleTabChange('overview');
-                      }}
-                    >
-                      <span dir="ltr">{run.symbol}</span> · {run.timeframe} · {run.snapshotSummary?.direction as string}
-                    </button>
-                    <span className="text-slate-400">{new Date(run.startedAt).toLocaleString()}</span>
+                  <li key={run.runId} className="py-2 flex flex-col sm:flex-row sm:justify-between gap-2 text-sm">
+                    <div>
+                      <span dir="ltr">{run.symbol}</span> · {run.timeframe} · {localizeDirection(run.snapshotSummary?.direction as string, t)}
+                      <span className="text-slate-400 ms-2">
+                        · {t(`trend_run_status_${run.status}`) || run.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-slate-400">{new Date(run.startedAt).toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}</span>
+                      <button
+                        type="button"
+                        className="text-primary hover:underline"
+                        data-testid={`trend-history-row-${run.runId}`}
+                        onClick={() => openHistoryDetail(run.runId)}
+                      >
+                        {t('trend_history_view_detail') || 'View detail'}
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -386,6 +473,31 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
                     ))}
                   </select>
                 </label>
+                <fieldset className="block text-sm space-y-2" data-testid="trend-settings-compare-timeframes">
+                  <legend>{t('trend_compare_timeframes') || 'Compare timeframes'}</legend>
+                  <p className="text-xs text-slate-400">{t('trend_compare_timeframes_help')}</p>
+                  <div className="flex flex-wrap gap-3">
+                    {TREND_COMPARE_TIMEFRAMES.filter(tf => tf !== settingsDraft.timeframe).map(tf => {
+                      const selected = settingsDraft.compareTimeframes.includes(tf);
+                      return (
+                        <label key={tf} className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            data-testid={`trend-settings-compare-${tf}`}
+                            onChange={() => {
+                              const next = selected
+                                ? settingsDraft.compareTimeframes.filter(x => x !== tf)
+                                : [...settingsDraft.compareTimeframes, tf].slice(0, 3);
+                              setSettingsDraft({ ...settingsDraft, compareTimeframes: next });
+                            }}
+                          />
+                          <span dir="ltr">{tf}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
                 <p className="text-xs text-slate-400">{t('trend_auto_execute_blocked') || 'Auto Execute is unavailable (analytical only).'}</p>
                 <PrimaryButton onClick={handleSaveSettings} disabled={isSavingSettings} data-testid="trend-settings-save">
                   {t('save') || 'Save'}
@@ -401,13 +513,27 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
             {!integrations ? (
               <AgentLoadingState message={t('loading')} />
             ) : (
-              <ul className="space-y-2 text-sm">
-                {Object.entries(integrations).map(([key, val]) => (
-                  <li key={key} className="flex justify-between gap-2">
-                    <span>{key}</span>
-                    <StatusPill label={val.status} variant={val.status === 'available' ? 'success' : 'warning'} />
-                  </li>
-                ))}
+              <ul className="space-y-3 text-sm">
+                {integrationEntries(integrations).map(({ key, ...entry }) => {
+                  const statusLabel = integrationStatusLabel(entry, t);
+                  const reason = integrationReason(entry, t);
+                  return (
+                    <li key={key} className="rounded border border-white/10 p-3 space-y-1">
+                      <div className="flex justify-between gap-2 items-start">
+                        <span className="font-medium">{integrationLabel(key, t)}</span>
+                        <StatusPill
+                          label={statusLabel}
+                          variant={
+                            ['available', 'online'].includes(String(entry.status))
+                              ? 'success'
+                              : 'warning'
+                          }
+                        />
+                      </div>
+                      {reason ? <p className="text-xs text-slate-400">{reason}</p> : null}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </AgentContentSurface>
@@ -418,13 +544,55 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
   };
 
   return (
-    <div data-testid="trend-workspace" className={embedded ? '' : 'min-h-screen'}>
+    <div className={embedded ? '' : 'min-h-screen'}>
       <AgentProductDialog
         agent={agent}
         onClose={onBack}
         purpose={t('trend_agent_desc') || agent.role}
         latestRunAt={overview?.metrics.lastRunAt}
-        monitoringState="active"
+        monitoringState={scheduledMonitoringState}
+        detailOpen={Boolean(historyDetailRunId)}
+        detail={
+          historyDetailRunId ? (
+            <AgentProductDetailLayer
+              title={t('trend_history_detail_title') || 'Run detail'}
+              closeLabel={t('close') || 'Close'}
+              onClose={closeHistoryDetail}
+              layerTestId="trend-history-detail-layer"
+              panelTestId="trend-history-detail-panel"
+            >
+              {historyDetailLoading || !historyDetail ? (
+                <AgentLoadingState message={t('loading')} testId="trend-history-detail-loading" />
+              ) : (
+                <div className="space-y-3 text-sm">
+                  <div><span className="text-slate-400">{t('trend_history_run_id')}:</span>{' '}<span dir="ltr">{historyDetail.run.runId}</span></div>
+                  <div><span className="text-slate-400">{t('trend_history_status')}:</span> {t(`trend_run_status_${historyDetail.run.status}`) || historyDetail.run.status}</div>
+                  <div><span className="text-slate-400">{t('trend_freshness')}:</span> {localizeFreshness(historyDetail.snapshot, t, language)}</div>
+                  {historyDetail.run.errorMessage ? (
+                    <DataHubAlert variant="error">{historyDetail.run.errorMessage}</DataHubAlert>
+                  ) : null}
+                  {historyDetail.comparison?.available ? (
+                    <p className="text-xs text-slate-400">
+                      {historyDetail.comparison.regimeChanged ? t('trend_change') : t('trend_no_prior_comparison')}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400">{t('trend_comparison_unavailable')}</p>
+                  )}
+                  <div>
+                    <h4 className="font-medium">{t('trend_supporting_evidence')}</h4>
+                    {historyDetail.snapshot.supportingEvidence.length === 0 ? NA(t) : (
+                      <ul className="list-disc ps-5">
+                        {historyDetail.snapshot.supportingEvidence.map((e, i) => (
+                          <li key={i}>{resolveEvidenceText(e, t)}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+            </AgentProductDetailLayer>
+          ) : null
+        }
         confirmationOpen={confirmOpen}
         confirmation={
           settings ? (
@@ -444,11 +612,16 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
             <AgentPrimaryAction
               testId="trend-run-analytical-analysis"
               label={t('trend_run_analysis') || 'Run analysis'}
-              onClick={() => setConfirmOpen(true)}
-              disabled={isAnalyzing || !settings}
+              onClick={() => {
+                if (!guardExecution()) {
+                  setFeedback({ kind: 'error', message: executionBlockedMessage });
+                  return;
+                }
+                setConfirmOpen(true);
+              }}
+              disabled={isAnalyzing || !settings || executionGateLoading || !canExecuteSafe}
               loading={isAnalyzing}
             />
-            <AgentSecondaryAction label={t('close') || 'Close'} onClick={onBack} />
           </AgentActionBar>
         }
         sectionNavigation={
@@ -463,12 +636,14 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
         }
         testId="agent-product-dialog"
       >
+        <div className="space-y-3" data-testid="trend-workspace">
         {feedback ? (
           <DataHubAlert variant={feedback.kind === 'error' ? 'error' : 'success'} className="mb-3">
             {feedback.message}
           </DataHubAlert>
         ) : null}
         {renderPanel()}
+        </div>
       </AgentProductDialog>
     </div>
   );

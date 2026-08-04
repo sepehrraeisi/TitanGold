@@ -20,6 +20,7 @@ export type TrendSnapshot = {
     diMinus: number;
     strength: string;
     interpretation?: string;
+    interpretationKey?: string;
   } | null;
   currentPrice: number | null;
   summary: string | null;
@@ -29,6 +30,7 @@ export type TrendSnapshot = {
   reversalEvidence: Array<Record<string, unknown>>;
   freshness: string;
   freshnessMs: number | null;
+  freshnessReasonKey?: string;
   provenance: Record<string, unknown>;
   unavailableReasons: string[];
   analyticalSignal: string | null;

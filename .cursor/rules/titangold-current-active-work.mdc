@@ -18,7 +18,7 @@ Risk tier:
 Tier 2 (Tier 3 gates explicit; Tier 4 not authorized)
 
 Engineering status:
-IMPLEMENTATION IN PROGRESS — Human QA gate pending
+HUMAN-QA READINESS REMEDIATION COMPLETE — owner Human QA gate pending
 
 Authorized scope:
 - Specialized Trend discovery and truth audit
@@ -55,3 +55,10 @@ Acceptance criteria:
 
 Next transition:
 Owner Human QA PASS → closeout evidence; still no PR unless separately authorized.
+
+Evidence (2026-08-04 remediation):
+- Base SHA `9c9f860` · branch HEAD `0a28597` · served bundle `index-BFJyoumV.js`
+- Backend marker `af1b690`; runtime patches `trendDomain.js`, `agents/trend.js`
+- E2E 12/12 pass (3×4, retries=0) post public-OHLCV fix
+- Scheduler PIDs unchanged · worker not restarted
+- See `docs/TREND_DETECTION_PRODUCT.md` Evidence Ledger

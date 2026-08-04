@@ -185,10 +185,10 @@ vi.mock('../../../../components/ai/TechnicalAnalysisAgentControl', () => ({
   ),
 }));
 
-vi.mock('../../../../components/ai/TrendAgentControl', () => ({
+vi.mock('../../../../components/ai/TrendAgentPopup', () => ({
   default: ({ agent, onClose }: any) => (
-    <div data-testid="trend-agent-control">
-      <h2>{agent.name} Control Panel</h2>
+    <div data-testid="trend-workspace">
+      <h2>{agent.name} Product Workspace</h2>
       <button onClick={onClose}>Close</button>
     </div>
   ),
@@ -506,8 +506,8 @@ describe('AIAgents Component', () => {
       fireEvent.click(screen.getByTestId('agent-open-trend'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('trend-agent-control')).toBeInTheDocument();
-        expect(screen.getByText('Trend Master Control Panel')).toBeInTheDocument();
+        expect(screen.getByTestId('trend-workspace')).toBeInTheDocument();
+        expect(screen.getByText('Trend Master Product Workspace')).toBeInTheDocument();
       });
     });
 

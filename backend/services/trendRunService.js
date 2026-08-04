@@ -17,6 +17,7 @@ import {
   buildTrendSnapshot,
   compareSnapshots,
   mapDecisionRowToRun,
+  resolveSchedulerIntegrationStatus,
   validateAnalyzeRequest,
   validateSettingsInput,
 } from './trendDomain.js';
@@ -92,7 +93,10 @@ export async function getTrendOverview(agentId, { scheduler, runtime } = {}) {
           agent.id,
         )
       : null,
-    comparison: compareSnapshots(latestSnapshot, priorSnapshot),
+    comparison: compareSnapshots(latestSnapshot, priorSnapshot, {
+      currentSuccessful: latestRow?.was_successful !== false && !latestOutput?.error,
+      priorSuccessful: priorRow?.was_successful !== false && !priorOutput?.error,
+    }),
     metrics: {
       totalRuns: totalRuns.rows[0]?.c ?? 0,
       lastRunAt: metadata.last_run_at || latestRow?.created_at || null,
@@ -102,9 +106,17 @@ export async function getTrendOverview(agentId, { scheduler, runtime } = {}) {
       effectiveMode: runtime?.globalMode || 'demo',
       killSwitchActive: Boolean(runtime?.killSwitchActive),
     },
+    manualAnalysis: {
+      available: true,
+      mode: 'public_manual',
+      reasonKey: 'trend_manual_analysis_available',
+    },
     scheduler: {
-      status: scheduler?.status || 'unknown',
       trendScheduled: false,
+      scheduledMonitoringStatus: 'not_scheduled',
+      scheduledMonitoringReasonKey: 'trend_scheduled_monitoring_off',
+      workerStatus: resolveSchedulerIntegrationStatus(scheduler),
+      schedulerReadiness: resolveSchedulerIntegrationStatus(scheduler),
     },
   };
 }
@@ -341,6 +353,20 @@ export async function getTrendRunDetail(agentId, runId) {
   if (result.rows.length === 0) return null;
   const row = result.rows[0];
   const output = parseJson(row.output_data);
+  const input = parseJson(row.input_data);
+  const snapshot = buildTrendSnapshot(output);
+
+  const prior = await query(
+    `SELECT id, created_at, execution_time_ms, output_data, input_data, was_successful
+     FROM ai_decisions
+     WHERE agent_id = $1 AND decision_type = $2 AND created_at < $3
+     ORDER BY created_at DESC LIMIT 1`,
+    [agent.id, TREND_DECISION_TYPE, row.created_at],
+  );
+  const priorRow = prior.rows[0] || null;
+  const priorOutput = priorRow ? parseJson(priorRow.output_data) : null;
+  const priorSnapshot = priorOutput ? buildTrendSnapshot(priorOutput) : null;
+
   return {
     run: mapDecisionRowToRun(
       {
@@ -348,13 +374,17 @@ export async function getTrendRunDetail(agentId, runId) {
         created_at: row.created_at,
         execution_time_ms: row.execution_time_ms,
         output_data: output,
-        input_data: parseJson(row.input_data),
+        input_data: input,
         was_successful: row.was_successful,
       },
       agent.id,
     ),
-    snapshot: buildTrendSnapshot(output),
+    snapshot,
     multiTimeframe: output.multiTimeframe || [],
+    comparison: compareSnapshots(snapshot, priorSnapshot, {
+      currentSuccessful: row.was_successful !== false && !output.error,
+      priorSuccessful: priorRow?.was_successful !== false && !priorOutput?.error,
+    }),
   };
 }
 

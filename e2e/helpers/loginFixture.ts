@@ -17,6 +17,7 @@ export async function clearAuthState(page: Page, context: BrowserContext) {
     if (sessionStorage.getItem(marker)) return;
     localStorage.clear();
     sessionStorage.clear();
+    localStorage.setItem('titan_migration_dismissed', 'true');
     sessionStorage.setItem(marker, '1');
   });
 }

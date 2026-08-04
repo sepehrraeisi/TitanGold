@@ -13,6 +13,7 @@
 import { logger } from '../logger.js';
 import { analyzeTrend } from '../trendAnalyzer.js';
 import { mexcService } from '../mexc.js';
+import { classifyAdxStrength } from '../trendDomain.js';
 
 // Cache for storing trend analysis results
 const analysisCache = new Map();
@@ -54,11 +55,9 @@ export async function run({ userId, symbol, timeframe = '1h', config = {} }) {
       };
     }
 
-    // Fetch historical data from MEXC
-    await mexcService.initializeExchange(userId);
-    
+    // Public OHLCV only — credential-free ccxt path (no legacy initializeExchange)
     logger.info('📈 Fetching historical data', { symbol, timeframe, candleCount });
-    const ohlcv = await mexcService.fetchOHLCV(userId, symbol, timeframe, candleCount);
+    const ohlcv = await mexcService.fetchOHLCV(null, symbol, timeframe, candleCount);
 
     if (!ohlcv || ohlcv.length < Math.max(adxPeriod, smaPeriod, emaPeriod, trendLineLookback) + 10) {
       throw new Error(`Insufficient historical data (got ${ohlcv ? ohlcv.length : 0}, need at least ${Math.max(adxPeriod, smaPeriod, emaPeriod, trendLineLookback) + 10})`);
@@ -75,18 +74,21 @@ export async function run({ userId, symbol, timeframe = '1h', config = {} }) {
 
     // Prepare result
     const currentPrice = ohlcv[ohlcv.length - 1][4];
+    const lastCandleMs = ohlcv[ohlcv.length - 1][0];
+    const canonicalAdxStrength = classifyAdxStrength(analysis.adx.value) || analysis.adx.strength;
     const result = {
       agent_key: 'trend_detection',
       symbol,
       timeframe,
       current_price: currentPrice,
+      last_candle_timestamp: new Date(lastCandleMs).toISOString(),
       
       adx: {
         value: Math.round(analysis.adx.value * 100) / 100,
         di_plus: Math.round(analysis.adx.diPlus * 100) / 100,
         di_minus: Math.round(analysis.adx.diMinus * 100) / 100,
-        strength: analysis.adx.strength,
-        interpretation: interpretADX(analysis.adx.value, analysis.adx.strength)
+        strength: canonicalAdxStrength,
+        interpretation: null,
       },
       
       trend: {

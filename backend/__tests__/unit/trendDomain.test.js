@@ -5,6 +5,7 @@ import { describe, expect, it } from '@jest/globals';
 import {
   TREND_DIRECTION,
   TREND_REGIME,
+  buildTrendIntegrationsDto,
   buildTrendSnapshot,
   classifyRegime,
   compareSnapshots,
@@ -21,10 +22,28 @@ describe('trendDomain contracts', () => {
     expect(normalizeDirection(null)).toBe(TREND_DIRECTION.UNAVAILABLE);
   });
 
-  it('classifyRegime distinguishes trending vs ranging', () => {
+  it('classifyRegime distinguishes trending vs ranging vs transition', () => {
     expect(classifyRegime(TREND_DIRECTION.BULLISH, 'strong', 28)).toBe(TREND_REGIME.TRENDING);
+    expect(classifyRegime(TREND_DIRECTION.BULLISH, 'developing', 23)).toBe(TREND_REGIME.TRANSITION);
     expect(classifyRegime(TREND_DIRECTION.SIDEWAYS, 'weak', 12)).toBe(TREND_REGIME.RANGING);
     expect(classifyRegime(TREND_DIRECTION.UNAVAILABLE, 'weak', 12)).toBe(TREND_REGIME.UNAVAILABLE);
+  });
+
+  it('buildTrendSnapshot aligns regime and ADX at threshold 23', () => {
+    const snap = buildTrendSnapshot({
+      symbol: 'BTC/USDT',
+      timeframe: '1h',
+      timestamp: new Date().toISOString(),
+      last_candle_timestamp: new Date().toISOString(),
+      trend: { direction: 'up', strength: 'weak', confidence: 72 },
+      adx: { value: 23, di_plus: 24, di_minus: 13, strength: 'developing', interpretation: null },
+      moving_averages: { signal: { signal: 'bullish', description: 'Price above both MAs - bullish alignment' } },
+      summary: 'Developing uptrend',
+    });
+    expect(snap.regime).toBe(TREND_REGIME.TRANSITION);
+    expect(snap.strengthClassification).toBe('developing');
+    expect(snap.adx?.interpretationKey).toBe('trend_adx_transition');
+    expect(snap.weakeningEvidence[0]?.interpretationKey).toBe('trend_weakening_adx');
   });
 
   it('buildTrendSnapshot returns unavailable on error without fake direction', () => {
@@ -60,14 +79,19 @@ describe('trendDomain contracts', () => {
     expect(validateSettingsInput({ symbol: 'ETH/USDT' }).ok).toBe(true);
   });
 
-  it('compareSnapshots is unavailable without prior run', () => {
-    const current = buildTrendSnapshot({
-      symbol: 'BTC/USDT',
-      timeframe: '1h',
-      timestamp: new Date().toISOString(),
-      trend: { direction: 'up', strength: 'strong' },
-      adx: { value: 25, di_plus: 20, di_minus: 10, strength: 'strong' },
+  it('buildTrendIntegrationsDto maps scheduler object status to string label', () => {
+    const dto = buildTrendIntegrationsDto({
+      redisOk: true,
+      mexcPublicOk: true,
+      runtime: { globalMode: 'demo', killSwitchActive: true },
+      scheduler: {
+        status: { status: 'online', allowlist: ['arbitrage'] },
+        stale: false,
+        source: 'worker-redis',
+      },
     });
-    expect(compareSnapshots(current, null).available).toBe(false);
+    expect(typeof dto.scheduler.status).toBe('string');
+    expect(dto.scheduler.trendAllowlisted).toBe(false);
+    expect(dto.scheduler.reasonKey).toBe('trend_int_scheduler_not_allowlisted');
   });
 });

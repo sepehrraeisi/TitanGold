@@ -61,9 +61,19 @@ export const AgentProductHeader: React.FC<AgentProductHeaderProps> = ({
       ? t('pause_monitoring') || 'Paused'
       : monitoringState === 'active'
         ? t('monitoring_active') || 'Active'
-        : t('unavailable') || 'Unavailable';
+        : monitoringState === 'not_scheduled'
+          ? t('trend_scheduled_monitoring_off') || 'Not scheduled'
+          : monitoringState === 'manual_only'
+            ? t('trend_manual_analysis_available') || 'Manual analysis'
+            : t('unavailable') || 'Unavailable';
   const monitoringTone =
-    monitoringState === 'active' ? 'success' : monitoringState === 'paused' ? 'warning' : 'neutral';
+    monitoringState === 'active'
+      ? 'success'
+      : monitoringState === 'paused'
+        ? 'warning'
+        : monitoringState === 'not_scheduled' || monitoringState === 'manual_only'
+          ? 'neutral'
+          : 'neutral';
 
   const runtimeLabel =
     t(effectiveModeKey) ||
