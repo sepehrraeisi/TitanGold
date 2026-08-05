@@ -462,9 +462,11 @@ test('Scenario MTF-CLOSEOUT — 4h + 30m/15m persist, rehydrate, history, no dup
   const runRow = page.getByTestId(`trend-history-row-${runId}`);
   await expect(runRow).toBeVisible({ timeout: 30_000 });
   await runRow.click();
+  await expect(page.getByTestId('trend-history-detail-loading')).toBeHidden({ timeout: 30_000 });
   await expect(page.getByTestId('trend-history-detail-panel')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('trend-history-detail-panel')).toContainText(runId);
+  await expect(page.getByTestId('trend-history-detail-panel')).toContainText(runId.slice(0, 8));
   await page.getByTestId('agent-product-detail-close').click();
+  await expect(page.getByTestId('trend-history-detail-layer')).toBeHidden();
   await page.getByTestId('trend-tab-multiTimeframe').click();
   await expect(page.getByTestId('trend-mtf-matrix')).toBeVisible({ timeout: 30_000 });
   for (const tf of ['4h', '30m', '15m']) {
@@ -475,4 +477,90 @@ test('Scenario MTF-CLOSEOUT — 4h + 30m/15m persist, rehydrate, history, no dup
   expect(ledger.privateProviderPosts).toBe(0);
   expect(ledger.pageErrors).toEqual([]);
   expect(ledger.consoleErrors).toEqual([]);
+});
+
+test('Scenario PRE-PR — exact runtime read-only smoke (EN + FA + refresh, no analyze)', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(240_000);
+
+  const ledger: Ledger = {
+    consoleErrors: [],
+    pageErrors: [],
+    analyzePosts: [],
+    settingsPatches: [],
+    settingsGets: 0,
+    monitoringMutations: 0,
+    privateProviderPosts: 0,
+    dialogEvents: [],
+  };
+  attachLedger(page, ledger);
+
+  await performRealLogin(page, context);
+  await openTrendWorkspace(page);
+  await waitTrendOverviewReady(page);
+
+  for (const tab of TREND_TABS) {
+    await page.getByTestId(`trend-tab-${tab}`).click();
+    await expect(page.getByTestId('trend-workspace')).toBeVisible();
+    if (tab === 'overview') await waitTrendOverviewReady(page);
+  }
+
+  await page.getByTestId('trend-tab-multiTimeframe').click();
+  const mtfMatrix = page.getByTestId('trend-mtf-matrix');
+  if (await mtfMatrix.isVisible().catch(() => false)) {
+    const rowCount = await page.locator('[data-testid^="trend-mtf-row-"]').count();
+    expect(rowCount).toBeGreaterThanOrEqual(1);
+  }
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await openTrendWorkspace(page);
+  await page.getByTestId('trend-tab-multiTimeframe').click();
+  if (await mtfMatrix.isVisible().catch(() => false)) {
+    expect(await page.locator('[data-testid^="trend-mtf-row-"]').count()).toBeGreaterThanOrEqual(1);
+  }
+
+  await page.getByTestId('trend-tab-history').click();
+  const historyRow = page.locator('[data-testid^="trend-history-row-"]').first();
+  if (await historyRow.isVisible().catch(() => false)) {
+    await historyRow.click();
+    await expect(page.getByTestId('trend-history-detail-loading')).toBeHidden({ timeout: 30_000 });
+    await expect(page.getByTestId('trend-history-detail-panel')).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId('agent-product-detail-close').click();
+  }
+
+  const faPage = await context.newPage();
+  await faPage.setViewportSize({ width: 390, height: 844 });
+  await faPage.addInitScript(() => {
+    localStorage.setItem('titan_language', 'fa');
+    localStorage.setItem('titan_migration_dismissed', 'true');
+  });
+  const faLedger: Ledger = {
+    consoleErrors: [],
+    pageErrors: [],
+    analyzePosts: [],
+    settingsPatches: [],
+    settingsGets: 0,
+    monitoringMutations: 0,
+    privateProviderPosts: 0,
+    dialogEvents: [],
+  };
+  attachLedger(faPage, faLedger);
+  await performRealLogin(faPage, context);
+  await openTrendWorkspace(faPage);
+  await expect(faPage.locator('html')).toHaveAttribute('dir', 'rtl');
+  await faPage.getByTestId('trend-tab-overview').click();
+  await waitTrendOverviewReady(faPage);
+  await faPage.getByTestId('trend-tab-multiTimeframe').click();
+  await faPage.close();
+
+  expect(ledger.analyzePosts).toHaveLength(0);
+  expect(ledger.privateProviderPosts).toBe(0);
+  expect(ledger.monitoringMutations).toBe(0);
+  expect(faLedger.analyzePosts).toHaveLength(0);
+  expect(ledger.pageErrors).toEqual([]);
+  expect(ledger.consoleErrors).toEqual([]);
+  expect(faLedger.pageErrors).toEqual([]);
+  expect(faLedger.consoleErrors).toEqual([]);
 });

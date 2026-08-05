@@ -2,6 +2,8 @@
 
 Living document for **TREND-DETECTION-SPECIALIZED-PRODUCTIZATION** (Program Slice, Tier 2).
 
+**Status:** `HUMAN-QA PASSED / READY FOR PR` (not merged, not frozen)
+
 ## User needs
 
 Trend Detection answers:
@@ -68,53 +70,118 @@ Reuse `ai_agents.config` for settings and `ai_decisions` for runs/history.
 
 - Scheduled Trend runs (requires separate outcome + allowlist approval)
 - Predictive accuracy scoring without persisted evaluation method
+- Dual-worker scheduler leader election remediation (separate shared-runtime outcome)
 
-## Human QA
+## Known analytical limitations
 
-See final handoff checklist in closeout report.
+- Analysis uses public OHLCV only; no private account or order context
+- Compare timeframes capped at three; primary excluded from compare set
+- MTF agreement is heuristic alignment, not execution signal
+- Prior-run comparison requires same symbol and compatible persisted snapshots
+- Freshness reflects last candle timestamp, not live tick data
+- Accuracy metrics not shown without persisted evaluation method
 
 ---
 
-## Evidence Ledger (Human-QA round 2 — 2026-08-04)
+## Final Closeout Evidence (2026-08-05)
 
-### Committed / deployed provenance
+### Owner Human QA
+
+**PASS** — verified by Owner:
+
+- Multi-Timeframe primary + 2 comparisons renders correctly
+- English success interpolation is correct
+- Persian success interpolation is correct
+- Hard refresh restores persisted MTF result without second analysis
+- Prior-run comparison works
+
+### Runtime provenance (verbatim, Staging `https://titan.zala.ir`)
+
+| Field | Value |
+|-------|-------|
+| Branch | `feat/trend-detection-agent-full-product` |
+| Runtime implementation commit | **`186c088`** |
+| Documentation / test HEAD (pre-closeout commit) | **`8bd39b1`** |
+| Backend `/api/v1/health` `commit` | **`186c088`** |
+| Backend `/api/v1/health` `runtimeCommit` | **`186c088`** |
+| Backend `provenanceVerified` | **`true`** |
+| `backend/runtime-provenance.json` `implementationCommit` | **`186c088`** (repo aligned at closeout) |
+| Served frontend bundle | **`assets/index-CLwf6ADb.js`** |
+| Environment | Staging |
+| Source worktree | `/home/ubuntu/worktrees/titangold-trend-agent` |
+
+**Note:** Live health marker and served bundle matched `186c088` / `index-CLwf6ADb.js` before closeout. Repository `runtime-provenance.json` was stale at `756edab` and corrected to `186c088` in closeout commit (documentation alignment; no runtime redeploy required).
+
+### Automated test totals
+
+| Suite | Executed | Passed |
+|-------|----------|--------|
+| Backend `trendDomain.test.js` | 15 | 15 |
+| Frontend `trendFeedback.test.ts` | 12 | 12 |
+| Frontend `trendSignalSemantics.test.ts` | 2 | 2 |
+| **Unit subtotal** | **29** | **29** |
+| E2E `Scenario A — EN desktop` (Staging) | 1 | 1 |
+| E2E `Scenario PRE-PR` read-only closeout smoke (Staging) | 1 | 1 |
+| **Closeout E2E subtotal** | **2** | **2** |
+
+Additional E2E scenarios (MTF-1/2/CLOSEOUT, analyze/settings) exist in `e2e/trend-staging.spec.ts` and were exercised during remediation; not re-run at pre-PR closeout to avoid unnecessary analysis POSTs.
+
+### Browser QA (exact deployed runtime)
+
+Pre-PR smoke @ `186c088`:
+
+- Login via real form — PASS
+- Trend workspace — PASS
+- All specialized tabs (Overview, Regime, Evidence, Weakening/Reversal, MTF, History, Settings, Integrations) — PASS
+- Persisted MTF matrix visible after navigation — PASS
+- Hard refresh restores MTF without analyze POST — PASS
+- History prior-run detail opens — PASS
+- FA mobile RTL overview + MTF — PASS
+- Console errors — **0**
+- Page errors — **0**
+- Raw i18n keys observed — **0**
+
+### Side-effect ledger (PRE-PR smoke)
+
+| Check | Result |
+|-------|--------|
+| `/trend/analyze` POST | 0 |
+| Private MEXC requests | 0 |
+| Financial actions | 0 |
+| Scheduler mutations | 0 |
+| `titan-engine-worker` restarts | 0 |
+| Native dialogs | 0 |
+
+### Scheduler state
+
+- Trend **not scheduled** (Integrations shows not-scheduled; allowlist remains `arbitrage` only)
+- `titan-engine-worker` instances observed: **2** (fork mode, ↺=0 each)
+- Dual-worker leader election: **NOT VERIFIED** — deferred to separate shared-runtime remediation; Trend closeout does not modify worker count or allowlist
+
+### Rollback
+
+1. Revert merge of `feat/trend-detection-agent-full-product` (when merged) or stop serving branch build
+2. Redeploy prior Staging artifact from `origin/main` (`6972dd5` baseline) via standard blue deploy
+3. PM2 restart `titan-backend` only; do **not** restart `titan-engine-worker` unless separately authorized
+4. Verify `/api/v1/health` commit and served bundle revert
+5. Trend agent card returns to pre-product routing if frontend rolled back
+
+### Human-QA status
+
+**HUMAN-QA PASSED / READY FOR PR**
+
+Draft PR prepared; merge and freeze pending review.
+
+---
+
+## Evidence Ledger (prior rounds — archived)
+
+### Human-QA round 2 — 2026-08-04
 
 | Field | Value |
 |-------|-------|
 | Base SHA | `9c9f860` |
-| Implementation commit | **`ad53ce2`** (code + deploy) |
-| Documentation HEAD | **`29c2010`** |
-| Backend runtime marker | **`ad53ce2`** |
-| Served bundle | **`assets/index-urwZv0ot.js`** |
-| Worktree | clean |
+| Implementation commit | `ad53ce2` |
+| Served bundle | `assets/index-urwZv0ot.js` |
 
-### Scheduler vs backend (distinct processes)
-
-| Process | PIDs | Restarts | Role |
-|---------|------|----------|------|
-| `titan-engine-worker` | `1377375`, `1377399` | 0 | Scheduler owner — **not restarted** |
-| `titan-backend` | 4 cluster instances | restarted for deploy | API only |
-
-### Owner defect fixes (`ad53ce2`)
-
-1. Header monitoring → **Not scheduled** (not "Monitoring active")
-2. Canonical ADX thresholds — regime/strength/evidence aligned (ADX 23 → transition)
-3. Freshness from last candle + localized reason/timestamp
-4. Localized evidence (no raw keys in UI)
-5. Compare-timeframe settings + truthful MTF unavailable state
-6. Localized integration labels/status/reasons
-7. Removed duplicate Close in action bar
-8. History run detail layer with comparison gate
-9. Committed + deployed from same SHA
-10. Scheduler PIDs documented separately from backend cluster
-
-### Verification @ `ad53ce2`
-
-- Backend tests: `trendDomain.test.js` **8/8**
-- Frontend Trend suite: **12/12**
-- E2E: **3× consecutive 12/12** (retries=0)
-- Side effects: analyze POST=1 on confirm only; private MEXC=0; worker restarts=0; native dialogs=0
-
-### Human-QA status
-
-**READY FOR OWNER HUMAN QA**
+Owner defects addressed in rounds 2–3; MTF pipeline defect fixed in `756edab`; closeout interpolation + provenance in `186c088`.

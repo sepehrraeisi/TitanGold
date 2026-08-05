@@ -1,63 +1,64 @@
 ---
-description: TitanGold dynamic active-work authority — Trend Detection specialized productization
+description: TitanGold dynamic active-work authority — Trend Detection pre-PR closeout
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**TREND-DETECTION-SPECIALIZED-PRODUCTIZATION** — optimize, integrate and productize the existing Trend Detection Agent end-to-end; stop at Human QA readiness (no PR).
+**TREND-DETECTION-SPECIALIZED-PRODUCTIZATION** — Owner Human QA PASSED; draft PR ready for review (no merge yet).
 
 Current area:
 Agents → Trend Detection
 
 Current program slice:
-TREND-DETECTION-SPECIALIZED-PRODUCTIZATION
+TREND-DETECTION-PRE-PR-CLOSEOUT
 
 Risk tier:
-Tier 2 (Tier 3 gates explicit; Tier 4 not authorized)
+Tier 2 (Tier 3 gates satisfied for auth unchanged; Tier 4 not authorized)
 
 Engineering status:
-HUMAN-QA READINESS REMEDIATION COMPLETE — owner Human QA gate pending
+**HUMAN-QA PASSED / READY FOR PR**
 
-Authorized scope:
-- Specialized Trend discovery and truth audit
-- Backend contract hardening (`trendDomain`, `trendRunService`, `trendCoreRoutes`)
-- Specialized Trend product UI (`TrendWorkspace`, `TrendAgentPopup`)
-- Manual public analytical run workflow
-- History/comparison from persisted runs
-- Settings and integrations truth
-- EN/FA/RTL product verification
-- Focused automated tests and Staging deploy
-- Human QA checklist handoff
+Authorized scope (closeout only):
+- Runtime provenance verification
+- Final read-only Staging smoke
+- Living document + Rule 02 closeout
+- Push branch and open **Draft PR** to `main`
+- No feature additions
 
 Hard boundaries:
-- Do not create a PR or merge
-- Do not restart `titan-engine-worker` or change Scheduler allowlist
-- Do not modify closed baselines (Data Hub, Agents Shell, Arbitrage, Shared Foundation) unless proven shared defect
-- Do not create DB migration without owner approval
-- Do not call private MEXC or enable Live execution
-- Do not modify protected monitoring/backup scripts
+- Do **not** merge PR or delete branch
+- Do **not** restart `titan-engine-worker` or change Scheduler allowlist
+- Do **not** activate Core Rules v4.5
+- Do **not** mark Trend merged or frozen
+- Do **not** modify closed baselines unless proven shared defect
+- Do **not** call private MEXC or enable Live execution
 
 Branch / worktree:
 - Branch: `feat/trend-detection-agent-full-product`
 - Worktree: `/home/ubuntu/worktrees/titangold-trend-agent`
 
-Acceptance criteria:
-- User opens Trend via workspace route (not legacy `TrendAgentControl`)
-- All specialized sections render truthful states
-- One confirmed manual analysis creates exactly one run
-- History shows persisted runs only
-- Invalid/missing evidence shows N/A — no fake zeroes
-- Automated regression passes for Trend scope
-- Staging deploy provenance recorded
-- Human QA checklist delivered
+Final provenance (Staging @ closeout):
+- Runtime implementation commit: **`186c088`**
+- Backend health `commit` / `runtimeCommit`: **`186c088`**
+- Served bundle: **`assets/index-CLwf6ADb.js`**
+- Documentation/test HEAD: see latest closeout commit on branch
+
+Acceptance criteria (met):
+- Owner Human QA PASS on MTF, EN/FA interpolation, refresh, prior-run comparison
+- Automated Trend unit tests pass (29/29)
+- Pre-PR read-only Staging smoke pass (console/page errors = 0)
+- Side-effect ledger clean (no analyze POST in smoke, no worker restarts)
+- Draft PR opened; local HEAD equals remote HEAD
+
+Deferred (separate outcomes):
+- Dual-worker scheduler leader election remediation
+- Scheduled Trend runs (allowlist change)
+- Trend merge + freeze
 
 Next transition:
-Owner Human QA PASS → closeout evidence; still no PR unless separately authorized.
+Draft PR review → merge approval → post-merge deploy verification → Trend freeze
 
-Evidence (2026-08-04 remediation round 2):
-- Base SHA `9c9f860` · branch HEAD **`ad53ce2`** · served bundle **`index-urwZv0ot.js`**
-- Backend marker **`ad53ce2`** · worktree clean · E2E 12/12 @ ad53ce2
-- Scheduler workers PIDs `1377375`,`1377399` (↺=0) — distinct from titan-backend cluster
-- See `docs/TREND_DETECTION_PRODUCT.md` Evidence Ledger
+Evidence:
+- `docs/TREND_DETECTION_PRODUCT.md` — Final Closeout Evidence (2026-08-05)
