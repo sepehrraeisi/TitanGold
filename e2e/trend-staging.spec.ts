@@ -355,7 +355,7 @@ test('Scenario MTF-1 — primary 1h + compare 30m/15m matrix persists', async ({
   await openTrendWorkspace(page);
   await runMtfAnalysisScenario(page, ledger, '1h', ['30m', '15m']);
 
-  expect(ledger.privateProviderPosts).toHaveLength(0);
+  expect(ledger.privateProviderPosts).toBe(0);
   expect(ledger.monitoringMutations).toBe(0);
   expect(ledger.pageErrors).toEqual([]);
   expect(ledger.consoleErrors).toEqual([]);
