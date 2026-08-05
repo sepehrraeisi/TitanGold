@@ -779,7 +779,12 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
 
   const dismissibleFeedback =
     feedback &&
-    ['analysis_completed', 'settings_saved', 'stale_data'].includes(feedback.state);
+    [
+      'analysis_completed',
+      'analysis_completed_with_comparisons',
+      'settings_saved',
+      'stale_data',
+    ].includes(feedback.state);
 
   return (
     <div className={embedded ? '' : 'min-h-screen'}>

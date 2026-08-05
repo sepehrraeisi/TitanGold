@@ -462,6 +462,9 @@ test('Scenario MTF-CLOSEOUT — 4h + 30m/15m persist, rehydrate, history, no dup
   const runRow = page.getByTestId(`trend-history-row-${runId}`);
   await expect(runRow).toBeVisible({ timeout: 30_000 });
   await runRow.click();
+  await expect(page.getByTestId('trend-history-detail-panel')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('trend-history-detail-panel')).toContainText(runId);
+  await page.getByTestId('agent-product-detail-close').click();
   await page.getByTestId('trend-tab-multiTimeframe').click();
   await expect(page.getByTestId('trend-mtf-matrix')).toBeVisible({ timeout: 30_000 });
   for (const tf of ['4h', '30m', '15m']) {
