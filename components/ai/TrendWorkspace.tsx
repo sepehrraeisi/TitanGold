@@ -17,6 +17,8 @@ import {
   type TrendSettings,
   type TrendSnapshot,
   type TrendIntegrations,
+  type TrendMtfRow,
+  type TrendMtfSummary,
 } from '../../services/trendCoreClient.ts';
 import {
   PrimaryButton,
@@ -45,11 +47,12 @@ import { TrendFeedbackBanner } from './trend/TrendFeedbackBanner.tsx';
 import {
   sanitizeTrendApiError,
   sanitizeTrendSettingsError,
+  buildAnalysisCompleteFeedback,
   type TrendFeedback,
 } from './trend/trendFeedback.ts';
 import { TrendPriceMaChart } from './trend/TrendPriceMaChart.tsx';
 import { TrendAdxChart } from './trend/TrendAdxChart.tsx';
-import { TrendMtfMatrix, type TrendMtfRow } from './trend/TrendMtfMatrix.tsx';
+import { TrendMtfMatrix } from './trend/TrendMtfMatrix.tsx';
 import { TrendHistoryTrendChart } from './trend/TrendHistoryTrendChart.tsx';
 import { TrendRunComparisonPanel } from './trend/TrendRunComparisonPanel.tsx';
 import { TrendWeakeningReversalItem } from './trend/TrendWeakeningReversalItem.tsx';
@@ -153,6 +156,8 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
     try {
       const data = await fetchTrendOverview(agent.id);
       setOverview(data);
+      setMultiTimeframe((data.latestMultiTimeframe || []) as TrendMtfRow[]);
+      if (data.latestSnapshot) setSelectedSnapshot(data.latestSnapshot);
     } catch (e: unknown) {
       const err = e as Error;
       setLoadError(err?.message || t('trend_load_failed'));
@@ -269,6 +274,8 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
               ...prev,
               latestSnapshot: result.snapshot,
               latestRun: result.run,
+              latestMultiTimeframe: (result.multiTimeframe || []) as TrendMtfRow[],
+              mtfSummary: result.mtfSummary ?? null,
               metrics: {
                 ...prev.metrics,
                 totalRuns: prev.metrics.totalRuns + (result.idempotent ? 0 : 1),
@@ -279,7 +286,7 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
       setSelectedSnapshot(result.snapshot);
       setMultiTimeframe((result.multiTimeframe || []) as TrendMtfRow[]);
       if (!result.idempotent) await loadRuns();
-      setFeedback({ state: 'analysis_completed' });
+      setFeedback(buildAnalysisCompleteFeedback(result.mtfSummary));
     } catch (e: unknown) {
       setFeedback(sanitizeTrendApiError(e, t));
     } finally {
@@ -339,6 +346,8 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
     ];
   }, [latestSnapshot, t, language]);
 
+  const mtfSummary: TrendMtfSummary | null | undefined = overview?.mtfSummary;
+
   const mtfRows: TrendMtfRow[] = useMemo(() => {
     const rows = [...multiTimeframe];
     if (latestSnapshot?.timeframe && !rows.some((r) => r.timeframe === latestSnapshot.timeframe)) {
@@ -346,10 +355,14 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
         timeframe: latestSnapshot.timeframe,
         snapshot: latestSnapshot,
         agreement: 'primary',
+        status: 'completed',
       });
     }
     return rows;
   }, [multiTimeframe, latestSnapshot]);
+
+  const mtfHasComparisonRows = multiTimeframe.length > 0;
+  const mtfShowMatrix = mtfRows.length > 1 || (mtfHasComparisonRows && latestSnapshot != null);
 
   const renderEvidenceList = (items: Array<Record<string, unknown>>, emptyKey: string) => {
     if (items.length === 0) {
@@ -519,8 +532,19 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
               </div>
             ) : !latestSnapshot ? (
               <AgentEmptyState message={t('no_trend_data')} testId="trend-panel-multiTimeframe-empty" />
-            ) : mtfRows.length <= 1 ? (
-              <AgentEmptyState message={t('trend_mtf_no_data')} testId="trend-mtf-empty" />
+            ) : !mtfShowMatrix ? (
+              <div className="space-y-2" data-testid="trend-mtf-empty">
+                <AgentEmptyState
+                  message={
+                    mtfSummary && mtfSummary.requestedCount > 0
+                      ? t('trend_mtf_requested_no_results', {
+                          requested: mtfSummary.requestedCount,
+                          unavailable: mtfSummary.unavailableCount + mtfSummary.failedCount,
+                        })
+                      : t('trend_mtf_no_data')
+                  }
+                />
+              </div>
             ) : (
               <TrendMtfMatrix
                 rows={mtfRows}

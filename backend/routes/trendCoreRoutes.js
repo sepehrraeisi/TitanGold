@@ -11,7 +11,7 @@ import { rateLimit } from '../middleware/rateLimit.js';
 import { readAnalyticalSchedulerStatus } from '../services/analyticalSchedulerStatus.js';
 import { getRuntimeExecutionState } from '../services/runtimeExecutionStateService.js';
 import { logger } from '../services/logger.js';
-import { validateAnalyzeRequest } from '../services/trendDomain.js';
+import { validateAnalyzeRequest, normalizeCompareTimeframes } from '../services/trendDomain.js';
 import {
   executeTrendAnalysis,
   getTrendIntegrations,
@@ -88,10 +88,11 @@ router.post(
       }
 
       const settings = await getTrendSettings(agent.id);
-      const compareTimeframes =
-        Array.isArray(req.body?.compareTimeframes) && req.body.compareTimeframes.length
-          ? req.body.compareTimeframes
-          : settings?.compareTimeframes || [];
+      const compareFromBody = Array.isArray(req.body?.compareTimeframes) ? req.body.compareTimeframes : null;
+      const compareTimeframes = normalizeCompareTimeframes(
+        validation.timeframe,
+        compareFromBody && compareFromBody.length ? compareFromBody : settings?.compareTimeframes || [],
+      );
 
       const result = await executeTrendAnalysis({
         agentId: agent.id,
@@ -108,6 +109,9 @@ router.post(
         run: result.run,
         snapshot: result.snapshot,
         multiTimeframe: result.multiTimeframe,
+        mtfSummary: result.mtfSummary,
+        lifecycleStatus: result.mtfSummary?.lifecycleStatus || 'complete',
+        compareTimeframes: result.compareTimeframes,
       });
     } catch (error) {
       logger.error('Trend analyze error:', error);

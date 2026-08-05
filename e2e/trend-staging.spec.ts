@@ -242,3 +242,146 @@ test('Scenario A — FA mobile RTL read-only', async ({ page, context }) => {
   await expect(page.getByTestId('trend-tab-panel')).toBeVisible();
   expect(ledger.dialogEvents).toHaveLength(0);
 });
+
+const TREND_COMPARE_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'] as const;
+
+async function configureCompareTimeframes(
+  page: Page,
+  primary: string,
+  compares: string[],
+) {
+  await page.getByTestId('trend-tab-settings').click();
+  await expect(page.getByTestId('trend-settings-symbol')).toBeVisible();
+
+  const tfSelect = page.getByTestId('trend-settings-timeframe');
+  await tfSelect.selectOption(primary);
+
+  for (const tf of TREND_COMPARE_TIMEFRAMES) {
+    const cb = page.getByTestId(`trend-settings-compare-${tf}`);
+    if (await cb.isChecked().catch(() => false)) {
+      await cb.uncheck();
+    }
+  }
+  for (const tf of compares) {
+    await page.getByTestId(`trend-settings-compare-${tf}`).check();
+  }
+
+  const patchWait = page.waitForResponse(
+    (r) => r.url().includes('/trend/settings') && r.request().method() === 'PATCH',
+    { timeout: 30_000 },
+  );
+  await page.getByTestId('trend-settings-save').click();
+  const patchResp = await patchWait;
+  expect(patchResp.status()).toBeGreaterThanOrEqual(200);
+  expect(patchResp.status()).toBeLessThan(500);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await openTrendWorkspace(page);
+  await page.getByTestId('trend-tab-settings').click();
+  for (const tf of compares) {
+    await expect(page.getByTestId(`trend-settings-compare-${tf}`)).toBeChecked();
+  }
+}
+
+async function runMtfAnalysisScenario(
+  page: Page,
+  ledger: Ledger,
+  primary: string,
+  compares: string[],
+) {
+  await configureCompareTimeframes(page, primary, compares);
+
+  await page.getByTestId('trend-tab-overview').click();
+  await waitTrendOverviewReady(page);
+
+  const runBtn = page.getByTestId('trend-run-analytical-analysis');
+  await expect(runBtn).toBeEnabled({ timeout: 15_000 });
+  await runBtn.click();
+
+  for (const tf of compares) {
+    await expect(page.getByTestId('trend-analyze-confirm-form')).toContainText(tf);
+  }
+
+  const analyzeResponse = page.waitForResponse(
+    (r) => r.url().includes('/trend/analyze') && r.request().method() === 'POST',
+    { timeout: 120_000 },
+  );
+  await page.getByTestId('trend-analyze-confirm-run').click();
+  const resp = await analyzeResponse;
+  expect(resp.status()).toBeGreaterThanOrEqual(200);
+  expect(resp.status()).toBeLessThan(500);
+  expect(ledger.analyzePosts).toHaveLength(1);
+
+  const body = await resp.json();
+  expect(body.multiTimeframe?.length).toBe(compares.length);
+  expect(body.mtfSummary?.requestedCount).toBe(compares.length);
+  expect(body.mtfSummary?.completedCount + body.mtfSummary?.unavailableCount + body.mtfSummary?.failedCount).toBe(
+    compares.length,
+  );
+
+  await waitTrendOverviewReady(page);
+  await page.getByTestId('trend-tab-multiTimeframe').click();
+  await expect(page.getByTestId('trend-mtf-matrix')).toBeVisible({ timeout: 30_000 });
+
+  for (const tf of [primary, ...compares]) {
+    await expect(page.getByTestId(`trend-mtf-row-${tf}`)).toBeVisible();
+  }
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await openTrendWorkspace(page);
+  await page.getByTestId('trend-tab-multiTimeframe').click();
+  await expect(page.getByTestId('trend-mtf-matrix')).toBeVisible({ timeout: 45_000 });
+  for (const tf of [primary, ...compares]) {
+    await expect(page.getByTestId(`trend-mtf-row-${tf}`)).toBeVisible();
+  }
+}
+
+test('Scenario MTF-1 — primary 1h + compare 30m/15m matrix persists', async ({ page, context }) => {
+  test.skip(!process.env.TREND_E2E_ANALYZE_ENABLED, 'requires trader-capable fixture');
+
+  const ledger: Ledger = {
+    consoleErrors: [],
+    pageErrors: [],
+    analyzePosts: [],
+    settingsPatches: [],
+    settingsGets: 0,
+    monitoringMutations: 0,
+    privateProviderPosts: 0,
+    dialogEvents: [],
+  };
+  attachLedger(page, ledger);
+
+  await performRealLogin(page, context);
+  await openTrendWorkspace(page);
+  await runMtfAnalysisScenario(page, ledger, '1h', ['30m', '15m']);
+
+  expect(ledger.privateProviderPosts).toHaveLength(0);
+  expect(ledger.monitoringMutations).toBe(0);
+  expect(ledger.pageErrors).toEqual([]);
+  expect(ledger.consoleErrors).toEqual([]);
+});
+
+test('Scenario MTF-2 — primary 4h + compare 1h/30m matrix persists', async ({ page, context }) => {
+  test.skip(!process.env.TREND_E2E_ANALYZE_ENABLED, 'requires trader-capable fixture');
+
+  const ledger: Ledger = {
+    consoleErrors: [],
+    pageErrors: [],
+    analyzePosts: [],
+    settingsPatches: [],
+    settingsGets: 0,
+    monitoringMutations: 0,
+    privateProviderPosts: 0,
+    dialogEvents: [],
+  };
+  attachLedger(page, ledger);
+
+  await performRealLogin(page, context);
+  await openTrendWorkspace(page);
+  await runMtfAnalysisScenario(page, ledger, '4h', ['1h', '30m']);
+
+  expect(ledger.privateProviderPosts).toHaveLength(0);
+  expect(ledger.monitoringMutations).toBe(0);
+  expect(ledger.pageErrors).toEqual([]);
+  expect(ledger.consoleErrors).toEqual([]);
+});

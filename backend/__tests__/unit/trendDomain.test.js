@@ -7,9 +7,12 @@ import {
   TREND_REGIME,
   buildTrendIntegrationsDto,
   buildTrendSnapshot,
+  buildMtfCompareEntry,
+  buildMtfSummary,
   classifyRegime,
   compareSnapshots,
   computeMtfAgreement,
+  normalizeCompareTimeframes,
   normalizeDirection,
   validateAnalyzeRequest,
   validateSettingsInput,
@@ -150,5 +153,58 @@ describe('trendDomain contracts', () => {
     expect(snap.reversalEvidence[0]?.interpretationKey).toBe('trend_reversal_bullish_crossover');
     expect(snap.reversalEvidence[0]?.evidenceState).toBe('detected');
     expect(snap.reversalEvidence[0]?.signalType).toBe('bullish_crossover');
+  });
+
+  it('buildTrendSnapshot routes trend_weakening to weakening not reversal', () => {
+    const snap = buildTrendSnapshot({
+      symbol: 'BTC/USDT',
+      timeframe: '1h',
+      timestamp: new Date().toISOString(),
+      trend: { direction: 'up', strength: 'moderate', confidence: 70 },
+      adx: { value: 26, di_plus: 20, di_minus: 12, strength: 'moderate' },
+      reversal_signals: [{ type: 'trend_weakening', strength: 'moderate' }],
+    });
+    expect(snap.weakeningEvidence.some((w) => w.signalType === 'trend_weakening')).toBe(true);
+    expect(snap.reversalEvidence.some((r) => r.signalType === 'trend_weakening')).toBe(false);
+    expect(snap.weakeningEvidence[0]?.interpretationKey).toBe('trend_weakening_momentum');
+  });
+
+  it('normalizeCompareTimeframes dedupes, excludes primary and caps at 3', () => {
+    expect(normalizeCompareTimeframes('1h', ['30m', '15m', '1h', '30m', '5m', '1m'])).toEqual([
+      '30m',
+      '15m',
+      '5m',
+    ]);
+    expect(normalizeCompareTimeframes('1h', ['2h', 'bad'])).toEqual([]);
+  });
+
+  it('buildMtfSummary reports lifecycle states truthfully', () => {
+    const requested = ['30m', '15m'];
+    const allComplete = [
+      buildMtfCompareEntry({ timeframe: '30m', status: 'completed', snapshot: {} }),
+      buildMtfCompareEntry({ timeframe: '15m', status: 'completed', snapshot: {} }),
+    ];
+    expect(buildMtfSummary(requested, allComplete).lifecycleStatus).toBe('complete');
+
+    const partial = [
+      buildMtfCompareEntry({ timeframe: '30m', status: 'completed', snapshot: {} }),
+      buildMtfCompareEntry({ timeframe: '15m', status: 'failed', snapshot: null }),
+    ];
+    expect(buildMtfSummary(requested, partial).lifecycleStatus).toBe('complete_with_partial_comparisons');
+
+    const none = [
+      buildMtfCompareEntry({ timeframe: '30m', status: 'failed', snapshot: null }),
+      buildMtfCompareEntry({ timeframe: '15m', status: 'unavailable', snapshot: null }),
+    ];
+    expect(buildMtfSummary(requested, none).lifecycleStatus).toBe('comparison_unavailable');
+  });
+
+  it('validateAnalyzeRequest rejects invalid compare timeframes', () => {
+    expect(validateAnalyzeRequest({ symbol: 'BTC/USDT', timeframe: '1h', compareTimeframes: ['2h'] }).ok).toBe(
+      false,
+    );
+    expect(
+      validateAnalyzeRequest({ symbol: 'BTC/USDT', timeframe: '1h', compareTimeframes: ['30m', '15m'] }).ok,
+    ).toBe(true);
   });
 });

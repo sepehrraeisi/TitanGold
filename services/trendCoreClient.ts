@@ -70,15 +70,42 @@ export type TrendRunSummary = {
   errorMessage: string | null;
 };
 
+export type TrendMtfSummary = {
+  requestedCompareTimeframes: string[];
+  requestedCount: number;
+  completedCount: number;
+  unavailableCount: number;
+  failedCount: number;
+  lifecycleStatus:
+    | 'complete'
+    | 'complete_with_partial_comparisons'
+    | 'comparison_unavailable'
+    | 'failed';
+};
+
 export type TrendOverview = {
   productIdentity: Record<string, unknown>;
   settings: TrendSettings;
   latestSnapshot: TrendSnapshot | null;
+  latestMultiTimeframe?: TrendMtfRow[];
+  mtfSummary?: TrendMtfSummary | null;
+  requestedCompareTimeframes?: string[];
   latestRun: TrendRunSummary | null;
   comparison: Record<string, unknown>;
   metrics: { totalRuns: number; lastRunAt: string | null; lastRunId: string | null };
   runtime: Record<string, unknown>;
   scheduler: Record<string, unknown>;
+};
+
+export type TrendMtfRow = {
+  timeframe: string;
+  status?: 'completed' | 'unavailable' | 'failed';
+  snapshot: TrendSnapshot | null;
+  agreement: string;
+  agreementReasonKey?: string | null;
+  agreementFactors?: Record<string, string>;
+  unavailableReasonKey?: string | null;
+  errorMessage?: string | null;
 };
 
 export type TrendSettings = {
@@ -141,11 +168,22 @@ export async function fetchTrendOverview(agentId: string): Promise<TrendOverview
 export async function runTrendAnalysis(
   agentId: string,
   payload: { symbol: string; timeframe: string; idempotencyKey?: string; compareTimeframes?: string[] },
-): Promise<{ run: TrendRunSummary; snapshot: TrendSnapshot; multiTimeframe: unknown[]; idempotent: boolean }> {
+): Promise<{
+  run: TrendRunSummary;
+  snapshot: TrendSnapshot;
+  multiTimeframe: TrendMtfRow[];
+  mtfSummary?: TrendMtfSummary | null;
+  lifecycleStatus?: string;
+  compareTimeframes?: string[];
+  idempotent: boolean;
+}> {
   const raw = await trendCoreRequest<{
     run: TrendRunSummary;
     snapshot: TrendSnapshot;
-    multiTimeframe: unknown[];
+    multiTimeframe: TrendMtfRow[];
+    mtfSummary?: TrendMtfSummary | null;
+    lifecycleStatus?: string;
+    compareTimeframes?: string[];
     idempotent: boolean;
   }>(agentId, 'analyze', {
     method: 'POST',
@@ -165,11 +203,12 @@ export async function fetchTrendRuns(
 export async function fetchTrendRunDetail(
   agentId: string,
   runId: string,
-): Promise<{ run: TrendRunSummary; snapshot: TrendSnapshot; multiTimeframe: unknown[] }> {
+): Promise<{ run: TrendRunSummary; snapshot: TrendSnapshot; multiTimeframe: TrendMtfRow[]; mtfSummary?: TrendMtfSummary | null }> {
   const raw = await trendCoreRequest<{
     run: TrendRunSummary;
     snapshot: TrendSnapshot;
-    multiTimeframe: unknown[];
+    multiTimeframe: TrendMtfRow[];
+    mtfSummary?: TrendMtfSummary | null;
   }>(agentId, `runs/${runId}`);
   return { ...raw, snapshot: asSnapshot(raw.snapshot)! };
 }

@@ -15,9 +15,12 @@ import {
   buildSettingsDto,
   buildTrendIntegrationsDto,
   buildTrendSnapshot,
+  buildMtfCompareEntry,
+  buildMtfSummary,
   compareSnapshots,
   computeMtfAgreement,
   mapDecisionRowToRun,
+  normalizeCompareTimeframes,
   resolveRunSymbolTimeframe,
   resolveSchedulerIntegrationStatus,
   validateAnalyzeRequest,
@@ -76,6 +79,13 @@ export async function getTrendOverview(agentId, { scheduler, runtime } = {}) {
   }
   const priorSnapshot = priorOutput ? buildTrendSnapshot(priorOutput) : null;
 
+  const latestMultiTimeframe = Array.isArray(latestOutput?.multiTimeframe) ? latestOutput.multiTimeframe : [];
+  const mtfSummary = latestOutput?.mtfSummary || null;
+  const requestedCompareTimeframes = normalizeCompareTimeframes(
+    latestSnapshot?.timeframe || latestInput?.timeframe || settings.timeframe,
+    latestInput?.compareTimeframes || latestOutput?.compareTimeframes || settings.compareTimeframes || [],
+  );
+
   const metadata = parseJson(agent.metadata);
   const totalRuns = await query(
     `SELECT COUNT(*)::int AS c FROM ai_decisions WHERE agent_id = $1 AND decision_type = $2`,
@@ -91,6 +101,9 @@ export async function getTrendOverview(agentId, { scheduler, runtime } = {}) {
     },
     settings,
     latestSnapshot,
+    latestMultiTimeframe,
+    mtfSummary,
+    requestedCompareTimeframes,
     latestRun: latestRow
       ? mapDecisionRowToRun(
           {
@@ -175,11 +188,17 @@ export async function executeTrendAnalysis({
         ),
         snapshot: buildTrendSnapshot(output),
         multiTimeframe: output.multiTimeframe || [],
+        mtfSummary: output.mtfSummary || buildMtfSummary(output.compareTimeframes || [], output.multiTimeframe || []),
+        compareTimeframes: output.compareTimeframes || normalizeCompareTimeframes(
+          parseJson(row.input_data)?.timeframe,
+          parseJson(row.input_data)?.compareTimeframes || [],
+        ),
       };
     }
   }
 
   const settings = buildSettingsDto(agent.config || {}, trendDefaultConfig());
+  const normalizedCompare = normalizeCompareTimeframes(timeframe, compareTimeframes);
   const config = {
     adxPeriod: settings.adxPeriod,
     smaPeriod: settings.smaPeriod,
@@ -197,9 +216,10 @@ export async function executeTrendAnalysis({
     config,
   });
 
+  const primarySnapshot = buildTrendSnapshot(primary);
   const multiTimeframe = [];
-  for (const tf of compareTimeframes.slice(0, 3)) {
-    if (tf === timeframe) continue;
+
+  for (const tf of normalizedCompare) {
     try {
       const cmp = await agentRegistry.runAgent(TREND_AGENT_KEY, {
         userId: user?.id || null,
@@ -208,25 +228,59 @@ export async function executeTrendAnalysis({
         timeframe: tf,
         config,
       });
-      if (!cmp.error) {
+      if (cmp?.error) {
         const cmpSnapshot = buildTrendSnapshot(cmp);
-        const agreementDto = computeMtfAgreement(snapshot, cmpSnapshot);
-        multiTimeframe.push({
-          timeframe: tf,
-          snapshot: cmpSnapshot,
-          agreement: agreementDto.agreement,
-          agreementReasonKey: agreementDto.reasonKey,
-          agreementFactors: agreementDto.factors,
-        });
+        multiTimeframe.push(
+          buildMtfCompareEntry({
+            timeframe: tf,
+            status: 'failed',
+            snapshot: cmpSnapshot.direction !== 'unavailable' ? cmpSnapshot : null,
+            agreementDto: {
+              agreement: 'unavailable',
+              reasonKey: 'trend_mtf_agreement_reason_unavailable',
+            },
+            unavailableReasonKey: 'trend_mtf_compare_analysis_failed',
+            errorMessage: cmp.error,
+          }),
+        );
+        continue;
       }
+      const cmpSnapshot = buildTrendSnapshot(cmp);
+      const isUnavailable = cmpSnapshot.direction === 'unavailable';
+      const agreementDto = computeMtfAgreement(primarySnapshot, cmpSnapshot);
+      multiTimeframe.push(
+        buildMtfCompareEntry({
+          timeframe: tf,
+          status: isUnavailable ? 'unavailable' : 'completed',
+          snapshot: cmpSnapshot,
+          agreementDto,
+          unavailableReasonKey: isUnavailable ? 'trend_mtf_agreement_reason_unavailable' : null,
+        }),
+      );
     } catch (e) {
       logger.warn('Trend multi-timeframe compare failed', { tf, error: e.message });
+      multiTimeframe.push(
+        buildMtfCompareEntry({
+          timeframe: tf,
+          status: 'failed',
+          snapshot: null,
+          agreementDto: {
+            agreement: 'unavailable',
+            reasonKey: 'trend_mtf_agreement_reason_unavailable',
+          },
+          unavailableReasonKey: 'trend_mtf_compare_provider_error',
+        }),
+      );
     }
   }
+
+  const mtfSummary = buildMtfSummary(normalizedCompare, multiTimeframe);
 
   const output = {
     ...primary,
     multiTimeframe,
+    mtfSummary,
+    compareTimeframes: normalizedCompare,
     trigger: 'manual',
     idempotencyKey,
   };
@@ -250,7 +304,7 @@ export async function executeTrendAnalysis({
       user?.id || null,
       TREND_DECISION_TYPE,
       confidence,
-      JSON.stringify({ trigger: 'manual', symbol, timeframe, compareTimeframes, idempotencyKey }),
+      JSON.stringify({ trigger: 'manual', symbol, timeframe, compareTimeframes: normalizedCompare, idempotencyKey }),
       JSON.stringify(output),
       executionTimeMs,
       !primary?.error,
@@ -293,13 +347,15 @@ export async function executeTrendAnalysis({
         created_at: insert.rows[0].created_at,
         execution_time_ms: executionTimeMs,
         output_data: output,
-        input_data: { trigger: 'manual', symbol, timeframe },
+        input_data: { trigger: 'manual', symbol, timeframe, compareTimeframes: normalizedCompare },
         was_successful: !primary?.error,
       },
       agent.id,
     ),
     snapshot,
     multiTimeframe,
+    mtfSummary,
+    compareTimeframes: normalizedCompare,
   };
 }
 
@@ -417,6 +473,10 @@ export async function getTrendRunDetail(agentId, runId) {
     ),
     snapshot,
     multiTimeframe,
+    mtfSummary: output.mtfSummary || buildMtfSummary(
+      normalizeCompareTimeframes(timeframe, input?.compareTimeframes || output?.compareTimeframes || []),
+      multiTimeframe,
+    ),
     comparison: compareSnapshots(snapshot, priorSnapshot, {
       currentSuccessful: row.was_successful !== false && !output.error,
       priorSuccessful: priorRow?.was_successful !== false && !priorOutput?.error,

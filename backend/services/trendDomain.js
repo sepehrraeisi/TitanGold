@@ -30,16 +30,20 @@ export const RUN_STATUS = {
 export const REVERSAL_SIGNAL_INTERPRETATION_KEYS = {
   bullish_crossover: 'trend_reversal_bullish_crossover',
   bearish_crossover: 'trend_reversal_bearish_crossover',
-  trend_weakening: 'trend_reversal_adx_declining',
   support_bounce: 'trend_reversal_support_bounce',
   resistance_rejection: 'trend_reversal_resistance_rejection',
   overbought_trend: 'trend_reversal_overbought_exhaustion',
 };
 
+/** Weakening signals — distinct from reversal (trend_weakening is NOT a reversal). */
+export const WEAKENING_SIGNAL_INTERPRETATION_KEYS = {
+  trend_weakening: 'trend_weakening_momentum',
+  developing_trend_strength: 'trend_weakening_adx',
+};
+
 const REVERSAL_SIGNAL_DIRECTION = {
   bullish_crossover: 'bullish',
   bearish_crossover: 'bearish',
-  trend_weakening: 'neutral',
   support_bounce: 'bullish',
   resistance_rejection: 'bearish',
   overbought_trend: 'neutral',
@@ -250,7 +254,31 @@ function mapWeakeningReversal(raw, regime) {
   }
 
   for (const signal of raw?.reversal_signals || []) {
-    reversal.push(mapReversalSignal(signal, analysisTimestamp));
+    const type = String(signal?.type || '');
+    if (type === 'trend_weakening') {
+      weakening.push({
+        type,
+        signalType: type,
+        displayKey: 'trend_weakening_momentum',
+        interpretationKey: WEAKENING_SIGNAL_INTERPRETATION_KEYS.trend_weakening,
+        direction: 'neutral',
+        strength: signal?.strength || null,
+        severity:
+          signal?.strength === 'strong'
+            ? 'high'
+            : signal?.strength === 'moderate'
+              ? 'medium'
+              : signal?.strength === 'weak'
+                ? 'low'
+                : 'medium',
+        sourceTimestamp: analysisTimestamp,
+        provenance: { source: 'trend_analyzer', indicator: 'reversal_signals' },
+        evidenceState: 'detected',
+        available: true,
+      });
+    } else {
+      reversal.push(mapReversalSignal(signal, analysisTimestamp));
+    }
   }
 
   return { weakening, reversal };
@@ -375,6 +403,68 @@ export function buildSettingsDto(config = {}, defaults = {}) {
   };
 }
 
+export function normalizeCompareTimeframes(primaryTimeframe, compareTimeframes = []) {
+  const primary = String(primaryTimeframe || '').trim();
+  const seen = new Set();
+  const normalized = [];
+  for (const raw of compareTimeframes || []) {
+    const tf = String(raw || '').trim();
+    if (!tf || !VALID_TIMEFRAMES.has(tf)) continue;
+    if (tf === primary) continue;
+    if (seen.has(tf)) continue;
+    seen.add(tf);
+    normalized.push(tf);
+    if (normalized.length >= 3) break;
+  }
+  return normalized;
+}
+
+export function buildMtfCompareEntry({
+  timeframe,
+  status,
+  snapshot = null,
+  agreementDto = null,
+  unavailableReasonKey = null,
+  errorMessage = null,
+}) {
+  return {
+    timeframe,
+    status,
+    snapshot,
+    agreement: agreementDto?.agreement || (status === 'completed' ? 'partial' : 'unavailable'),
+    agreementReasonKey: agreementDto?.reasonKey || null,
+    agreementFactors: agreementDto?.factors || null,
+    unavailableReasonKey,
+    errorMessage: errorMessage ? String(errorMessage).slice(0, 200) : null,
+  };
+}
+
+export function buildMtfSummary(requestedCompareTimeframes, multiTimeframeResults = []) {
+  const requested = Array.isArray(requestedCompareTimeframes) ? requestedCompareTimeframes.length : 0;
+  let completed = 0;
+  let unavailable = 0;
+  let failed = 0;
+  for (const entry of multiTimeframeResults) {
+    if (entry.status === 'completed') completed += 1;
+    else if (entry.status === 'unavailable') unavailable += 1;
+    else if (entry.status === 'failed') failed += 1;
+  }
+  let lifecycleStatus = 'complete';
+  if (requested > 0) {
+    if (completed === requested) lifecycleStatus = 'complete';
+    else if (completed > 0) lifecycleStatus = 'complete_with_partial_comparisons';
+    else lifecycleStatus = 'comparison_unavailable';
+  }
+  return {
+    requestedCompareTimeframes: requestedCompareTimeframes || [],
+    requestedCount: requested,
+    completedCount: completed,
+    unavailableCount: unavailable,
+    failedCount: failed,
+    lifecycleStatus,
+  };
+}
+
 export function validateAnalyzeRequest(body = {}) {
   const symbol = String(body.symbol || '').trim();
   const timeframe = String(body.timeframe || '1h').trim();
@@ -383,6 +473,18 @@ export function validateAnalyzeRequest(body = {}) {
   }
   if (!VALID_TIMEFRAMES.has(timeframe)) {
     return { ok: false, code: 'VALIDATION_ERROR', message: 'Invalid timeframe' };
+  }
+  if (body.compareTimeframes !== undefined) {
+    if (!Array.isArray(body.compareTimeframes)) {
+      return { ok: false, code: 'VALIDATION_ERROR', message: 'compareTimeframes must be an array' };
+    }
+    if (body.compareTimeframes.length > 3) {
+      return { ok: false, code: 'VALIDATION_ERROR', message: 'At most 3 compare timeframes allowed' };
+    }
+    const invalid = body.compareTimeframes.filter((tf) => !VALID_TIMEFRAMES.has(String(tf)));
+    if (invalid.length) {
+      return { ok: false, code: 'VALIDATION_ERROR', message: `Invalid compare timeframes: ${invalid.join(', ')}` };
+    }
   }
   return { ok: true, symbol, timeframe };
 }

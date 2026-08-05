@@ -1,7 +1,12 @@
+import type { TrendMtfSummary } from '../../../services/trendCoreClient.ts';
+
 export type TrendFeedbackState =
   | 'analysis_preparing'
   | 'analysis_running'
   | 'analysis_completed'
+  | 'analysis_completed_with_comparisons'
+  | 'analysis_completed_partial_comparisons'
+  | 'analysis_comparison_unavailable'
   | 'analysis_failed'
   | 'settings_saving'
   | 'settings_saved'
@@ -17,12 +22,15 @@ export type TrendFeedback = {
   detail?: string;
 };
 
-type TFn = (key: string) => string;
+type TFn = (key: string, options?: Record<string, string | number>) => string;
 
 const TITLE_KEYS: Record<TrendFeedbackState, string> = {
   analysis_preparing: 'trend_feedback_analysis_preparing_title',
   analysis_running: 'trend_feedback_analysis_running_title',
   analysis_completed: 'trend_feedback_analysis_completed_title',
+  analysis_completed_with_comparisons: 'trend_feedback_analysis_completed_title',
+  analysis_completed_partial_comparisons: 'trend_feedback_analysis_partial_title',
+  analysis_comparison_unavailable: 'trend_feedback_analysis_comparison_unavailable_title',
   analysis_failed: 'trend_feedback_analysis_failed_title',
   settings_saving: 'trend_feedback_settings_saving_title',
   settings_saved: 'trend_feedback_settings_saved_title',
@@ -38,6 +46,9 @@ const MESSAGE_KEYS: Record<TrendFeedbackState, string> = {
   analysis_preparing: 'trend_feedback_analysis_preparing_message',
   analysis_running: 'trend_feedback_analysis_running_message',
   analysis_completed: 'trend_feedback_analysis_completed_message',
+  analysis_completed_with_comparisons: 'trend_feedback_analysis_completed_with_comparisons_message',
+  analysis_completed_partial_comparisons: 'trend_feedback_analysis_partial_comparisons_message',
+  analysis_comparison_unavailable: 'trend_feedback_analysis_comparison_unavailable_message',
   analysis_failed: 'trend_feedback_analysis_failed_message',
   settings_saving: 'trend_feedback_settings_saving_message',
   settings_saved: 'trend_feedback_settings_saved_message',
@@ -53,6 +64,9 @@ const SEVERITY: Record<TrendFeedbackState, 'info' | 'success' | 'warning' | 'err
   analysis_preparing: 'info',
   analysis_running: 'info',
   analysis_completed: 'success',
+  analysis_completed_with_comparisons: 'success',
+  analysis_completed_partial_comparisons: 'warning',
+  analysis_comparison_unavailable: 'warning',
   analysis_failed: 'error',
   settings_saving: 'info',
   settings_saved: 'success',
@@ -63,6 +77,32 @@ const SEVERITY: Record<TrendFeedbackState, 'info' | 'success' | 'warning' | 'err
   execution_blocked: 'error',
   load_failed: 'error',
 };
+
+export function buildAnalysisCompleteFeedback(mtfSummary?: TrendMtfSummary | null): TrendFeedback {
+  if (!mtfSummary || mtfSummary.requestedCount === 0) {
+    return { state: 'analysis_completed' };
+  }
+  const { lifecycleStatus, requestedCount, completedCount, unavailableCount, failedCount } = mtfSummary;
+  if (lifecycleStatus === 'complete') {
+    return {
+      state: 'analysis_completed_with_comparisons',
+      detail: `${completedCount}/${requestedCount}`,
+    };
+  }
+  if (lifecycleStatus === 'complete_with_partial_comparisons') {
+    return {
+      state: 'analysis_completed_partial_comparisons',
+      detail: `${completedCount}/${requestedCount}`,
+    };
+  }
+  if (lifecycleStatus === 'comparison_unavailable') {
+    return {
+      state: 'analysis_comparison_unavailable',
+      detail: `${unavailableCount + failedCount}/${requestedCount}`,
+    };
+  }
+  return { state: 'analysis_completed' };
+}
 
 export function trendFeedbackSeverity(state: TrendFeedbackState) {
   return SEVERITY[state];
@@ -76,10 +116,32 @@ export function trendFeedbackTitle(state: TrendFeedbackState, t: TFn): string {
 
 export function trendFeedbackMessage(feedback: TrendFeedback, t: TFn): string {
   const key = MESSAGE_KEYS[feedback.state];
-  const base = t(key);
-  const translated = base === key ? feedback.state : base;
-  if (feedback.detail) return `${translated} ${feedback.detail}`.trim();
-  return translated;
+  let base = t(key);
+  if (base === key) base = feedback.state;
+
+  if (
+    feedback.state === 'analysis_completed_with_comparisons' &&
+    feedback.detail
+  ) {
+    const [completed] = feedback.detail.split('/');
+    return t(key, { completed: Number(completed) });
+  }
+  if (
+    (feedback.state === 'analysis_completed_partial_comparisons' ||
+      feedback.state === 'analysis_comparison_unavailable') &&
+    feedback.detail
+  ) {
+    const [a, b] = feedback.detail.split('/');
+    if (feedback.state === 'analysis_comparison_unavailable') {
+      return t(key, { unavailable: Number(a), requested: Number(b) });
+    }
+    return t(key, { completed: Number(a), requested: Number(b) });
+  }
+
+  if (feedback.detail && !base.includes('{{')) {
+    return `${base} ${feedback.detail}`.trim();
+  }
+  return base;
 }
 
 export function sanitizeTrendApiError(error: unknown, t: TFn): TrendFeedback {

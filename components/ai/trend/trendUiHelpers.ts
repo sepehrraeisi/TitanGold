@@ -74,6 +74,29 @@ export function localizeAgreementReason(reasonKey: string | null | undefined, t:
   return translated === reasonKey ? null : translated;
 }
 
+export function localizeMtfUnavailableReason(reasonKey: string | null | undefined, t: TFn): string {
+  if (!reasonKey) return t('not_available');
+  const translated = t(reasonKey);
+  return translated === reasonKey ? t('not_available') : translated;
+}
+
+export function localizeSignalType(signalType: string | null | undefined, t: TFn): string {
+  if (!signalType) return t('not_available');
+  const weakeningKey = `trend_signal_type_${signalType}`;
+  const translated = t(weakeningKey);
+  if (translated !== weakeningKey) return translated;
+  const reversalKey = `trend_reversal_${signalType}`;
+  const reversalTranslated = t(reversalKey);
+  if (reversalTranslated !== reversalKey) return reversalTranslated;
+  return t('not_available');
+}
+
+export function localizeSignalDirection(direction: string | null | undefined, t: TFn): string {
+  if (!direction) return t('not_available');
+  if (direction === 'neutral') return t('trend_signal_direction_neutral');
+  return localizeDirection(direction, t);
+}
+
 /** Completed runs with numeric ADX for one symbol+timeframe — excludes failed/mixed-symbol series. */
 export function filterComparableHistoryRuns(
   runs: TrendRunSummary[],

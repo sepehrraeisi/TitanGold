@@ -1,5 +1,9 @@
 import React from 'react';
-import { resolveEvidenceText } from './trendUiHelpers.ts';
+import {
+  localizeSignalDirection,
+  localizeSignalType,
+  resolveEvidenceText,
+} from './trendUiHelpers.ts';
 
 type TFn = (key: string) => string;
 
@@ -32,19 +36,19 @@ export const TrendWeakeningReversalItem: React.FC<TrendWeakeningReversalItemProp
         {signalType ? (
           <>
             <dt>{t('trend_evidence_signal_type')}</dt>
-            <dd dir="ltr">{signalType}</dd>
+            <dd>{localizeSignalType(signalType, t)}</dd>
           </>
         ) : null}
         {direction ? (
           <>
             <dt>{t('trend_direction')}</dt>
-            <dd>{t(`trend_direction_${direction}`) || direction}</dd>
+            <dd>{localizeSignalDirection(direction, t)}</dd>
           </>
         ) : null}
         {severity ? (
           <>
             <dt>{t('trend_evidence_severity')}</dt>
-            <dd>{t(`trend_evidence_severity_${severity}`) || severity}</dd>
+            <dd>{t(`trend_evidence_severity_${severity}`) || t('not_available')}</dd>
           </>
         ) : null}
         {ts ? (
