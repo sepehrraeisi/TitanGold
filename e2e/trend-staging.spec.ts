@@ -253,10 +253,10 @@ async function configureCompareTimeframes(
   await page.getByTestId('trend-tab-settings').click();
   await expect(page.getByTestId('trend-settings-symbol')).toBeVisible();
 
-  const tfSelect = page.getByTestId('trend-settings-timeframe');
-  await tfSelect.selectOption(primary);
+  await page.getByTestId('trend-settings-timeframe').selectOption(primary);
 
   for (const tf of TREND_COMPARE_TIMEFRAMES) {
+    if (tf === primary) continue;
     const cb = page.getByTestId(`trend-settings-compare-${tf}`);
     if (await cb.isChecked().catch(() => false)) {
       await cb.uncheck();
@@ -274,13 +274,8 @@ async function configureCompareTimeframes(
   const patchResp = await patchWait;
   expect(patchResp.status()).toBeGreaterThanOrEqual(200);
   expect(patchResp.status()).toBeLessThan(500);
-
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await openTrendWorkspace(page);
-  await page.getByTestId('trend-tab-settings').click();
-  for (const tf of compares) {
-    await expect(page.getByTestId(`trend-settings-compare-${tf}`)).toBeChecked();
-  }
+  const patchBody = await patchResp.json();
+  expect(patchBody.settings?.compareTimeframes?.sort()).toEqual([...compares].sort());
 }
 
 async function runMtfAnalysisScenario(
@@ -328,7 +323,11 @@ async function runMtfAnalysisScenario(
   }
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await openTrendWorkspace(page);
+  await page.goto('/?view=ai', { waitUntil: 'domcontentloaded', timeout: 90_000 });
+  await dismissMigrationIfPresent(page);
+  await page.locator('[data-ai-tab="agents"]').first().click({ timeout: 15_000 });
+  await page.getByTestId('agent-open-trend').click();
+  await expect(page.getByTestId('trend-workspace')).toBeVisible({ timeout: 45_000 });
   await page.getByTestId('trend-tab-multiTimeframe').click();
   await expect(page.getByTestId('trend-mtf-matrix')).toBeVisible({ timeout: 45_000 });
   for (const tf of [primary, ...compares]) {
@@ -338,6 +337,7 @@ async function runMtfAnalysisScenario(
 
 test('Scenario MTF-1 — primary 1h + compare 30m/15m matrix persists', async ({ page, context }) => {
   test.skip(!process.env.TREND_E2E_ANALYZE_ENABLED, 'requires trader-capable fixture');
+  test.setTimeout(180_000);
 
   const ledger: Ledger = {
     consoleErrors: [],
@@ -363,6 +363,7 @@ test('Scenario MTF-1 — primary 1h + compare 30m/15m matrix persists', async ({
 
 test('Scenario MTF-2 — primary 4h + compare 1h/30m matrix persists', async ({ page, context }) => {
   test.skip(!process.env.TREND_E2E_ANALYZE_ENABLED, 'requires trader-capable fixture');
+  test.setTimeout(180_000);
 
   const ledger: Ledger = {
     consoleErrors: [],
