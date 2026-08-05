@@ -1,4 +1,4 @@
-import type { TrendIntegrations, TrendSnapshot } from '../../../services/trendCoreClient.ts';
+import type { TrendIntegrations, TrendRunSummary, TrendSnapshot } from '../../../services/trendCoreClient.ts';
 
 type TFn = (key: string, options?: Record<string, string | number>) => string;
 
@@ -61,9 +61,49 @@ export function localizeSummary(snapshot: TrendSnapshot | null, t: TFn): string 
 
 export function localizeAgreement(agreement: string | null | undefined, t: TFn): string {
   if (!agreement) return t('not_available');
-  const key = `trend_mtf_agreement_${agreement}`;
+  const normalized =
+    agreement === 'agree' ? 'full' : agreement;
+  const key = `trend_mtf_agreement_${normalized}`;
   const translated = t(key);
   return translated === key ? agreement : translated;
+}
+
+export function localizeAgreementReason(reasonKey: string | null | undefined, t: TFn): string | null {
+  if (!reasonKey) return null;
+  const translated = t(reasonKey);
+  return translated === reasonKey ? null : translated;
+}
+
+/** Completed runs with numeric ADX for one symbol+timeframe — excludes failed/mixed-symbol series. */
+export function filterComparableHistoryRuns(
+  runs: TrendRunSummary[],
+  symbol: string,
+  timeframe: string,
+): TrendRunSummary[] {
+  return runs.filter(
+    (r) =>
+      r.status === 'completed' &&
+      r.symbol === symbol &&
+      r.timeframe === timeframe &&
+      typeof r.snapshotSummary?.adx === 'number',
+  );
+}
+
+export function extractHistoryFilterOptions(runs: TrendRunSummary[]): {
+  symbols: string[];
+  timeframes: string[];
+} {
+  const symbols = new Set<string>();
+  const timeframes = new Set<string>();
+  for (const r of runs) {
+    if (r.status !== 'completed') continue;
+    if (r.symbol) symbols.add(r.symbol);
+    if (r.timeframe) timeframes.add(r.timeframe);
+  }
+  return {
+    symbols: [...symbols].sort(),
+    timeframes: [...timeframes].sort(),
+  };
 }
 
 export const TREND_PRIMARY_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'] as const;

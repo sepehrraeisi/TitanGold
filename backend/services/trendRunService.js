@@ -16,7 +16,9 @@ import {
   buildTrendIntegrationsDto,
   buildTrendSnapshot,
   compareSnapshots,
+  computeMtfAgreement,
   mapDecisionRowToRun,
+  resolveRunSymbolTimeframe,
   resolveSchedulerIntegrationStatus,
   validateAnalyzeRequest,
   validateSettingsInput,
@@ -53,16 +55,25 @@ export async function getTrendOverview(agentId, { scheduler, runtime } = {}) {
   const latest = await query(
     `SELECT id, created_at, execution_time_ms, output_data, input_data, was_successful
      FROM ai_decisions WHERE agent_id = $1 AND decision_type = $2
-     ORDER BY created_at DESC LIMIT 2`,
+     ORDER BY created_at DESC LIMIT 1`,
     [agent.id, TREND_DECISION_TYPE],
   );
 
-  const rows = latest.rows;
-  const latestRow = rows[0] || null;
-  const priorRow = rows[1] || null;
+  const latestRow = latest.rows[0] || null;
   const latestOutput = latestRow ? parseJson(latestRow.output_data) : null;
-  const priorOutput = priorRow ? parseJson(priorRow.output_data) : null;
+  const latestInput = latestRow ? parseJson(latestRow.input_data) : null;
   const latestSnapshot = latestOutput ? buildTrendSnapshot(latestOutput) : null;
+
+  let priorRow = null;
+  let priorOutput = null;
+  if (latestRow && latestSnapshot) {
+    const { symbol, timeframe } = resolveRunSymbolTimeframe(latestInput, latestOutput, latestSnapshot);
+    if (symbol && timeframe) {
+      const prior = await findPriorComparableRun(agent.id, latestRow.created_at, symbol, timeframe);
+      priorRow = prior;
+      priorOutput = prior ? parseJson(prior.output_data) : null;
+    }
+  }
   const priorSnapshot = priorOutput ? buildTrendSnapshot(priorOutput) : null;
 
   const metadata = parseJson(agent.metadata);
@@ -96,6 +107,7 @@ export async function getTrendOverview(agentId, { scheduler, runtime } = {}) {
     comparison: compareSnapshots(latestSnapshot, priorSnapshot, {
       currentSuccessful: latestRow?.was_successful !== false && !latestOutput?.error,
       priorSuccessful: priorRow?.was_successful !== false && !priorOutput?.error,
+      priorRunId: priorRow?.id || null,
     }),
     metrics: {
       totalRuns: totalRuns.rows[0]?.c ?? 0,
@@ -197,11 +209,14 @@ export async function executeTrendAnalysis({
         config,
       });
       if (!cmp.error) {
+        const cmpSnapshot = buildTrendSnapshot(cmp);
+        const agreementDto = computeMtfAgreement(snapshot, cmpSnapshot);
         multiTimeframe.push({
           timeframe: tf,
-          snapshot: buildTrendSnapshot(cmp),
-          agreement:
-            normalizeAgreement(primary, cmp),
+          snapshot: cmpSnapshot,
+          agreement: agreementDto.agreement,
+          agreementReasonKey: agreementDto.reasonKey,
+          agreementFactors: agreementDto.factors,
         });
       }
     } catch (e) {
@@ -288,14 +303,22 @@ export async function executeTrendAnalysis({
   };
 }
 
-function normalizeAgreement(primary, compare) {
-  if (primary?.error || compare?.error) return 'unavailable';
-  const a = primary?.trend?.direction;
-  const b = compare?.trend?.direction;
-  if (!a || !b) return 'unavailable';
-  if (a === b) return 'agree';
-  if (a === 'sideways' || b === 'sideways') return 'partial';
-  return 'conflict';
+async function findPriorComparableRun(agentId, beforeCreatedAt, symbol, timeframe) {
+  const result = await query(
+    `SELECT id, created_at, execution_time_ms, output_data, input_data, was_successful
+     FROM ai_decisions
+     WHERE agent_id = $1
+       AND decision_type = $2
+       AND created_at < $3
+       AND was_successful = true
+       AND (output_data->>'error') IS NULL
+       AND COALESCE(input_data->>'symbol', output_data->>'symbol') = $4
+       AND COALESCE(input_data->>'timeframe', output_data->>'timeframe') = $5
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [agentId, TREND_DECISION_TYPE, beforeCreatedAt, symbol, timeframe],
+  );
+  return result.rows[0] || null;
 }
 
 export async function getTrendRuns(agentId, { page = 1, pageSize = 20 } = {}) {
@@ -355,17 +378,30 @@ export async function getTrendRunDetail(agentId, runId) {
   const output = parseJson(row.output_data);
   const input = parseJson(row.input_data);
   const snapshot = buildTrendSnapshot(output);
+  const { symbol, timeframe } = resolveRunSymbolTimeframe(input, output, snapshot);
 
-  const prior = await query(
-    `SELECT id, created_at, execution_time_ms, output_data, input_data, was_successful
-     FROM ai_decisions
-     WHERE agent_id = $1 AND decision_type = $2 AND created_at < $3
-     ORDER BY created_at DESC LIMIT 1`,
-    [agent.id, TREND_DECISION_TYPE, row.created_at],
-  );
-  const priorRow = prior.rows[0] || null;
+  const priorRow =
+    symbol && timeframe
+      ? await findPriorComparableRun(agent.id, row.created_at, symbol, timeframe)
+      : null;
   const priorOutput = priorRow ? parseJson(priorRow.output_data) : null;
   const priorSnapshot = priorOutput ? buildTrendSnapshot(priorOutput) : null;
+
+  const primarySnapshot = snapshot;
+  const multiTimeframeRaw = output.multiTimeframe || [];
+  const multiTimeframe = multiTimeframeRaw.map((entry) => {
+    if (entry.agreementReasonKey) return entry;
+    const cmpSnapshot = entry.snapshot || (entry.timeframe ? buildTrendSnapshot(entry) : null);
+    if (!cmpSnapshot) return entry;
+    const agreementDto = computeMtfAgreement(primarySnapshot, cmpSnapshot);
+    return {
+      ...entry,
+      snapshot: cmpSnapshot,
+      agreement: agreementDto.agreement,
+      agreementReasonKey: agreementDto.reasonKey,
+      agreementFactors: agreementDto.factors,
+    };
+  });
 
   return {
     run: mapDecisionRowToRun(
@@ -380,10 +416,11 @@ export async function getTrendRunDetail(agentId, runId) {
       agent.id,
     ),
     snapshot,
-    multiTimeframe: output.multiTimeframe || [],
+    multiTimeframe,
     comparison: compareSnapshots(snapshot, priorSnapshot, {
       currentSuccessful: row.was_successful !== false && !output.error,
       priorSuccessful: priorRow?.was_successful !== false && !priorOutput?.error,
+      priorRunId: priorRow?.id || null,
     }),
   };
 }

@@ -3,6 +3,7 @@ import type { TrendSnapshot } from '../../../services/trendCoreClient.ts';
 import { StatusPill } from '../AIManager/tabs/DataHub/dataHubUi.tsx';
 import {
   localizeAgreement,
+  localizeAgreementReason,
   localizeDirection,
   localizeFreshness,
   localizeRegime,
@@ -13,6 +14,8 @@ export type TrendMtfRow = {
   timeframe: string;
   snapshot: TrendSnapshot;
   agreement: string;
+  agreementReasonKey?: string | null;
+  agreementFactors?: Record<string, string>;
   unavailableReason?: string | null;
 };
 
@@ -73,16 +76,25 @@ export const TrendMtfMatrix: React.FC<TrendMtfMatrixProps> = ({
                 </td>
                 <td className="py-2 pe-3 text-xs">{localizeFreshness(snap, t, locale)}</td>
                 <td className="py-2">
-                  <StatusPill
-                    label={localizeAgreement(row.agreement, t)}
-                    variant={
-                      row.agreement === 'agree'
-                        ? 'success'
-                        : row.agreement === 'conflict'
-                          ? 'error'
-                          : 'warning'
-                    }
-                  />
+                  <div className="space-y-1">
+                    <StatusPill
+                      label={localizeAgreement(row.agreement, t)}
+                      variant={
+                        row.agreement === 'full' || row.agreement === 'agree'
+                          ? 'success'
+                          : row.agreement === 'conflict'
+                            ? 'error'
+                            : row.agreement === 'unavailable'
+                              ? 'neutral'
+                              : 'warning'
+                      }
+                    />
+                    {row.agreementReasonKey ? (
+                      <p className="text-[10px] text-slate-400 max-w-[14rem]">
+                        {localizeAgreementReason(row.agreementReasonKey, t)}
+                      </p>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             );

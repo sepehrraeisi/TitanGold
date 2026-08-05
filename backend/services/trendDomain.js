@@ -26,6 +26,25 @@ export const RUN_STATUS = {
   RUNNING: 'running',
 };
 
+/** Canonical reversal signal type → localized interpretation key (no generic placeholders). */
+export const REVERSAL_SIGNAL_INTERPRETATION_KEYS = {
+  bullish_crossover: 'trend_reversal_bullish_crossover',
+  bearish_crossover: 'trend_reversal_bearish_crossover',
+  trend_weakening: 'trend_reversal_adx_declining',
+  support_bounce: 'trend_reversal_support_bounce',
+  resistance_rejection: 'trend_reversal_resistance_rejection',
+  overbought_trend: 'trend_reversal_overbought_exhaustion',
+};
+
+const REVERSAL_SIGNAL_DIRECTION = {
+  bullish_crossover: 'bullish',
+  bearish_crossover: 'bearish',
+  trend_weakening: 'neutral',
+  support_bounce: 'bullish',
+  resistance_rejection: 'bearish',
+  overbought_trend: 'neutral',
+};
+
 const VALID_TIMEFRAMES = new Set(['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w']);
 
 /** Canonical ADX thresholds — single source for regime, strength and evidence. */
@@ -186,9 +205,29 @@ function buildEvidenceItems(raw, regime) {
   return { supporting, conflicting };
 }
 
+function mapReversalSignal(signal, analysisTimestamp) {
+  const type = String(signal?.type || '');
+  const interpretationKey = REVERSAL_SIGNAL_INTERPRETATION_KEYS[type] || null;
+  const severityFromStrength =
+    signal?.strength === 'strong' ? 'high' : signal?.strength === 'moderate' ? 'medium' : signal?.strength === 'weak' ? 'low' : null;
+  return {
+    type,
+    signalType: type || null,
+    interpretationKey,
+    direction: REVERSAL_SIGNAL_DIRECTION[type] || null,
+    strength: signal?.strength || null,
+    severity: severityFromStrength,
+    sourceTimestamp: analysisTimestamp || null,
+    provenance: { source: 'trend_analyzer', indicator: 'reversal_signals' },
+    evidenceState: interpretationKey ? 'detected' : 'insufficient',
+    available: Boolean(interpretationKey),
+  };
+}
+
 function mapWeakeningReversal(raw, regime) {
   const weakening = [];
   const reversal = [];
+  const analysisTimestamp = raw?.timestamp || raw?.last_candle_timestamp || null;
 
   const adx = Number(raw?.adx?.value);
   if (
@@ -198,23 +237,20 @@ function mapWeakeningReversal(raw, regime) {
   ) {
     weakening.push({
       type: 'developing_trend_strength',
+      signalType: 'developing_trend_strength',
       displayKey: 'trend_weakening_adx',
       interpretationKey: 'trend_weakening_adx',
+      direction: null,
       severity: adx < ADX_REGIME_RANGING_MAX ? 'medium' : 'low',
+      sourceTimestamp: analysisTimestamp,
+      provenance: { source: 'trend_analyzer', indicator: 'adx' },
+      evidenceState: 'detected',
       available: true,
     });
   }
 
   for (const signal of raw?.reversal_signals || []) {
-    reversal.push({
-      type: signal.type,
-      displayKey: 'trend_reversal_signal',
-      interpretationKey: 'trend_reversal_signal',
-      description: signal.description,
-      strength: signal.strength,
-      confidence: signal.confidence,
-      available: true,
-    });
+    reversal.push(mapReversalSignal(signal, analysisTimestamp));
   }
 
   return { weakening, reversal };
@@ -464,30 +500,146 @@ export function buildTrendIntegrationsDto({ redisOk, scheduler, runtime, mexcPub
   };
 }
 
-export function compareSnapshots(current, previous, { currentSuccessful = true, priorSuccessful = true } = {}) {
+export function resolveRunSymbolTimeframe(input = {}, output = {}, snapshot = null) {
+  return {
+    symbol: snapshot?.symbol || input?.symbol || output?.symbol || null,
+    timeframe: snapshot?.timeframe || input?.timeframe || output?.timeframe || null,
+  };
+}
+
+/**
+ * Canonical MTF agreement — derived from direction, regime, strength class, freshness.
+ * Values: full | partial | conflict | unavailable
+ */
+export function computeMtfAgreement(primarySnap, compareSnap) {
+  if (!primarySnap || !compareSnap) {
+    return {
+      agreement: 'unavailable',
+      reasonKey: 'trend_mtf_agreement_reason_unavailable',
+      factors: {},
+    };
+  }
+  if (
+    primarySnap.direction === TREND_DIRECTION.UNAVAILABLE ||
+    compareSnap.direction === TREND_DIRECTION.UNAVAILABLE
+  ) {
+    return {
+      agreement: 'unavailable',
+      reasonKey: 'trend_mtf_agreement_reason_unavailable',
+      factors: { direction: 'unavailable' },
+    };
+  }
+
+  const directionMatch = primarySnap.direction === compareSnap.direction;
+  const directionConflict =
+    (primarySnap.direction === TREND_DIRECTION.BULLISH && compareSnap.direction === TREND_DIRECTION.BEARISH) ||
+    (primarySnap.direction === TREND_DIRECTION.BEARISH && compareSnap.direction === TREND_DIRECTION.BULLISH);
+  const directionPartial =
+    !directionMatch &&
+    !directionConflict &&
+    (primarySnap.direction === TREND_DIRECTION.SIDEWAYS ||
+      compareSnap.direction === TREND_DIRECTION.SIDEWAYS ||
+      primarySnap.direction === TREND_DIRECTION.MIXED ||
+      compareSnap.direction === TREND_DIRECTION.MIXED);
+
+  const regimeMatch = primarySnap.regime === compareSnap.regime;
+  const strengthMatch = primarySnap.strengthClassification === compareSnap.strengthClassification;
+  const freshnessMatch = primarySnap.freshness === compareSnap.freshness;
+
+  const factors = {
+    direction: directionMatch ? 'match' : directionConflict ? 'conflict' : 'partial',
+    regime: regimeMatch ? 'match' : 'partial',
+    strength: strengthMatch ? 'match' : 'partial',
+    freshness: freshnessMatch ? 'match' : 'partial',
+  };
+
+  if (directionConflict) {
+    return {
+      agreement: 'conflict',
+      reasonKey: 'trend_mtf_agreement_reason_direction_conflict',
+      factors,
+    };
+  }
+  if (directionMatch && regimeMatch && strengthMatch) {
+    return {
+      agreement: 'full',
+      reasonKey: 'trend_mtf_agreement_reason_full',
+      factors,
+    };
+  }
+  if (directionPartial || !regimeMatch || !strengthMatch) {
+    let reasonKey = 'trend_mtf_agreement_reason_partial';
+    if (directionPartial) reasonKey = 'trend_mtf_agreement_reason_direction_partial';
+    else if (!regimeMatch) reasonKey = 'trend_mtf_agreement_reason_regime_partial';
+    else if (!strengthMatch) reasonKey = 'trend_mtf_agreement_reason_strength_partial';
+    return { agreement: 'partial', reasonKey, factors };
+  }
+  return { agreement: 'partial', reasonKey: 'trend_mtf_agreement_reason_partial', factors };
+}
+
+export function compareSnapshots(
+  current,
+  previous,
+  { currentSuccessful = true, priorSuccessful = true, priorRunId = null } = {},
+) {
   if (!current || !previous) {
-    return { available: false, reason: 'no_prior_run' };
+    return { available: false, reason: 'no_prior_run', reasonKey: 'trend_comparison_no_prior_run' };
   }
   if (!currentSuccessful || !priorSuccessful) {
-    return { available: false, reason: 'incomparable_run_status' };
+    return { available: false, reason: 'incomparable_run_status', reasonKey: 'trend_comparison_incomparable_status' };
   }
   if (current.direction === TREND_DIRECTION.UNAVAILABLE || previous.direction === TREND_DIRECTION.UNAVAILABLE) {
-    return { available: false, reason: 'unavailable_snapshot' };
+    return { available: false, reason: 'unavailable_snapshot', reasonKey: 'trend_comparison_unavailable_snapshot' };
   }
   if (current.symbol && previous.symbol && current.symbol !== previous.symbol) {
-    return { available: false, reason: 'symbol_mismatch' };
+    return { available: false, reason: 'symbol_mismatch', reasonKey: 'trend_comparison_symbol_mismatch' };
   }
   if (current.timeframe && previous.timeframe && current.timeframe !== previous.timeframe) {
-    return { available: false, reason: 'timeframe_mismatch' };
+    return { available: false, reason: 'timeframe_mismatch', reasonKey: 'trend_comparison_timeframe_mismatch' };
   }
+
+  const adxCurrent = current.adx?.value != null ? Number(current.adx.value) : null;
+  const adxPrior = previous.adx?.value != null ? Number(previous.adx.value) : null;
+
   return {
     available: true,
+    priorRunId,
+    priorRunAt: previous.analysisTimestamp || null,
+    direction: {
+      current: current.direction,
+      prior: previous.direction,
+      changed: current.direction !== previous.direction,
+    },
+    regime: {
+      current: current.regime,
+      prior: previous.regime,
+      changed: current.regime !== previous.regime,
+    },
+    strengthClassification: {
+      current: current.strengthClassification,
+      prior: previous.strengthClassification,
+      changed: current.strengthClassification !== previous.strengthClassification,
+    },
+    adx: {
+      current: adxCurrent,
+      prior: adxPrior,
+      delta: adxCurrent != null && adxPrior != null ? adxCurrent - adxPrior : null,
+    },
+    freshness: {
+      current: current.freshness,
+      prior: previous.freshness,
+      changed: current.freshness !== previous.freshness,
+    },
+    supportingEvidence: {
+      currentCount: current.supportingEvidence?.length ?? 0,
+      priorCount: previous.supportingEvidence?.length ?? 0,
+    },
+    conflictingEvidence: {
+      currentCount: current.conflictingEvidence?.length ?? 0,
+      priorCount: previous.conflictingEvidence?.length ?? 0,
+    },
     directionChanged: current.direction !== previous.direction,
-    strengthDelta:
-      current.adx?.value != null && previous.adx?.value != null
-        ? Number(current.adx.value) - Number(previous.adx.value)
-        : null,
+    strengthDelta: adxCurrent != null && adxPrior != null ? adxCurrent - adxPrior : null,
     regimeChanged: current.regime !== previous.regime,
-    priorRunAt: previous.analysisTimestamp,
   };
 }

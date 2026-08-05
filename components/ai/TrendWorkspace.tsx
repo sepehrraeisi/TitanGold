@@ -51,9 +51,13 @@ import { TrendPriceMaChart } from './trend/TrendPriceMaChart.tsx';
 import { TrendAdxChart } from './trend/TrendAdxChart.tsx';
 import { TrendMtfMatrix, type TrendMtfRow } from './trend/TrendMtfMatrix.tsx';
 import { TrendHistoryTrendChart } from './trend/TrendHistoryTrendChart.tsx';
+import { TrendRunComparisonPanel } from './trend/TrendRunComparisonPanel.tsx';
+import { TrendWeakeningReversalItem } from './trend/TrendWeakeningReversalItem.tsx';
 import {
   TREND_COMPARE_TIMEFRAMES,
   TREND_PRIMARY_TIMEFRAMES,
+  extractHistoryFilterOptions,
+  filterComparableHistoryRuns,
   integrationEntries,
   integrationLabel,
   integrationReason,
@@ -121,6 +125,8 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
     multiTimeframe: TrendMtfRow[];
   } | null>(null);
   const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
+  const [historySymbolFilter, setHistorySymbolFilter] = useState('');
+  const [historyTimeframeFilter, setHistoryTimeframeFilter] = useState('');
   const idempotencyRef = useRef<string | null>(null);
 
   const scheduledMonitoringState =
@@ -128,6 +134,19 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
 
   const compareTimeframesConfigured = (settings?.compareTimeframes?.length ?? 0) > 0;
   const latestSnapshot = overview?.latestSnapshot ?? selectedSnapshot;
+
+  useEffect(() => {
+    if (settings?.symbol) setHistorySymbolFilter(settings.symbol);
+    if (settings?.timeframe) setHistoryTimeframeFilter(settings.timeframe);
+  }, [settings?.symbol, settings?.timeframe, settings?.version]);
+
+  const historyFilterOptions = useMemo(() => extractHistoryFilterOptions(runs), [runs]);
+  const historyChartSymbol = historySymbolFilter || settings?.symbol || 'BTC/USDT';
+  const historyChartTimeframe = historyTimeframeFilter || settings?.timeframe || '1h';
+  const filteredHistoryRuns = useMemo(
+    () => filterComparableHistoryRuns(runs, historyChartSymbol, historyChartTimeframe),
+    [runs, historyChartSymbol, historyChartTimeframe],
+  );
 
   const loadOverview = useCallback(async () => {
     setLoadError(null);
@@ -466,7 +485,9 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
                 {weakening.length === 0 ? (
                   <p className="text-xs text-slate-400">{t('trend_no_weakening_evidence')}</p>
                 ) : (
-                  weakening.map((w, i) => <div key={`w-${i}`}>{resolveEvidenceText(w, t)}</div>)
+                  weakening.map((w, i) => (
+                    <TrendWeakeningReversalItem key={`w-${i}`} item={w} t={t} locale={language} />
+                  ))
                 )}
               </div>
               <div>
@@ -474,7 +495,9 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
                 {reversal.length === 0 ? (
                   <p className="text-xs text-slate-400">{t('trend_no_reversal_evidence')}</p>
                 ) : (
-                  reversal.map((r, i) => <div key={`r-${i}`}>{resolveEvidenceText(r, t)}</div>)
+                  reversal.map((r, i) => (
+                    <TrendWeakeningReversalItem key={`r-${i}`} item={r} t={t} locale={language} />
+                  ))
                 )}
               </div>
             </div>
@@ -516,7 +539,57 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
               <AgentEmptyState message={t('no_trend_data')} testId="trend-history-empty" />
             ) : (
               <div className="space-y-4">
-                <TrendHistoryTrendChart runs={runs} t={t} locale={language} />
+                <div
+                  className="flex flex-wrap gap-3 items-end text-sm"
+                  data-testid="trend-history-filters"
+                >
+                  <label className="block">
+                    <span className="text-xs text-slate-400">{t('symbol')}</span>
+                    <select
+                      className="mt-1 block rounded bg-slate-900 border border-white/10 px-2 py-1"
+                      value={historyChartSymbol}
+                      data-testid="trend-history-filter-symbol"
+                      onChange={(e) => setHistorySymbolFilter(e.target.value)}
+                    >
+                      {(historyFilterOptions.symbols.length
+                        ? historyFilterOptions.symbols
+                        : [historyChartSymbol]
+                      ).map((sym) => (
+                        <option key={sym} value={sym}>
+                          {sym}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-slate-400">{t('timeframe')}</span>
+                    <select
+                      className="mt-1 block rounded bg-slate-900 border border-white/10 px-2 py-1"
+                      value={historyChartTimeframe}
+                      data-testid="trend-history-filter-timeframe"
+                      onChange={(e) => setHistoryTimeframeFilter(e.target.value)}
+                    >
+                      {(historyFilterOptions.timeframes.length
+                        ? historyFilterOptions.timeframes
+                        : [historyChartTimeframe]
+                      ).map((tf) => (
+                        <option key={tf} value={tf}>
+                          {tf}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="text-xs text-slate-400 pb-1">
+                    {t('trend_history_chart_points')}: {filteredHistoryRuns.length}
+                  </p>
+                </div>
+                <TrendHistoryTrendChart
+                  runs={runs}
+                  symbol={historyChartSymbol}
+                  timeframe={historyChartTimeframe}
+                  t={t}
+                  locale={language}
+                />
                 <ul className="divide-y divide-white/5">
                   {runs.map((run) => (
                     <li key={run.runId} className="py-2 flex flex-col sm:flex-row sm:justify-between gap-2 text-sm">
@@ -721,15 +794,12 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
                   {historyDetail.run.errorMessage ? (
                     <DataHubAlert variant="error" message={historyDetail.run.errorMessage} />
                   ) : null}
-                  {historyDetail.comparison?.available ? (
-                    <p className="text-xs text-slate-400">
-                      {historyDetail.comparison.regimeChanged
-                        ? t('trend_change')
-                        : t('trend_no_prior_comparison')}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-slate-400">{t('trend_comparison_unavailable')}</p>
-                  )}
+                  <TrendRunComparisonPanel
+                    comparison={historyDetail.comparison}
+                    snapshot={historyDetail.snapshot}
+                    t={t}
+                    locale={language}
+                  />
                   <div>
                     <h4 className="font-medium">{t('trend_supporting_evidence')}</h4>
                     {renderEvidenceList(

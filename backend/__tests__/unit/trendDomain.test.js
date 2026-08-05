@@ -9,6 +9,7 @@ import {
   buildTrendSnapshot,
   classifyRegime,
   compareSnapshots,
+  computeMtfAgreement,
   normalizeDirection,
   validateAnalyzeRequest,
   validateSettingsInput,
@@ -93,5 +94,61 @@ describe('trendDomain contracts', () => {
     expect(typeof dto.scheduler.status).toBe('string');
     expect(dto.scheduler.trendAllowlisted).toBe(false);
     expect(dto.scheduler.reasonKey).toBe('trend_int_scheduler_not_allowlisted');
+  });
+
+  it('compareSnapshots rejects different symbols and enriches comparable diffs', () => {
+    const base = {
+      symbol: 'BTC/USDT',
+      timeframe: '1h',
+      direction: TREND_DIRECTION.BULLISH,
+      regime: TREND_REGIME.TRENDING,
+      strengthClassification: 'moderate',
+      adx: { value: 28 },
+      freshness: 'fresh',
+      supportingEvidence: [{ id: 1 }],
+      conflictingEvidence: [],
+      analysisTimestamp: '2026-08-01T10:00:00.000Z',
+    };
+    const prior = { ...base, direction: TREND_DIRECTION.SIDEWAYS, adx: { value: 22 }, analysisTimestamp: '2026-08-01T09:00:00.000Z' };
+    const mismatch = compareSnapshots(base, { ...prior, symbol: 'ETH/USDT' });
+    expect(mismatch.available).toBe(false);
+    expect(mismatch.reason).toBe('symbol_mismatch');
+
+    const cmp = compareSnapshots(base, prior, { priorRunId: 'prior-1' });
+    expect(cmp.available).toBe(true);
+    expect(cmp.priorRunId).toBe('prior-1');
+    expect(cmp.direction.changed).toBe(true);
+    expect(cmp.adx.delta).toBe(6);
+  });
+
+  it('computeMtfAgreement distinguishes full, partial, conflict and unavailable', () => {
+    const primary = {
+      direction: TREND_DIRECTION.BULLISH,
+      regime: TREND_REGIME.TRENDING,
+      strengthClassification: 'moderate',
+      freshness: 'fresh',
+    };
+    const full = { ...primary };
+    expect(computeMtfAgreement(primary, full).agreement).toBe('full');
+
+    const partial = { ...primary, regime: TREND_REGIME.TRANSITION };
+    expect(computeMtfAgreement(primary, partial).agreement).toBe('partial');
+
+    const conflict = { ...primary, direction: TREND_DIRECTION.BEARISH };
+    expect(computeMtfAgreement(primary, conflict).agreement).toBe('conflict');
+  });
+
+  it('buildTrendSnapshot maps reversal signals to specific interpretation keys', () => {
+    const snap = buildTrendSnapshot({
+      symbol: 'BTC/USDT',
+      timeframe: '1h',
+      timestamp: new Date().toISOString(),
+      trend: { direction: 'up', strength: 'moderate', confidence: 70 },
+      adx: { value: 26, di_plus: 20, di_minus: 12, strength: 'moderate' },
+      reversal_signals: [{ type: 'bullish_crossover', strength: 'strong', description: 'ignored prose' }],
+    });
+    expect(snap.reversalEvidence[0]?.interpretationKey).toBe('trend_reversal_bullish_crossover');
+    expect(snap.reversalEvidence[0]?.evidenceState).toBe('detected');
+    expect(snap.reversalEvidence[0]?.signalType).toBe('bullish_crossover');
   });
 });
