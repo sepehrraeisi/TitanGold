@@ -882,6 +882,7 @@ const TrendWorkspace: React.FC<TrendWorkspaceProps> = ({
             <TrendFeedbackBanner
               feedback={feedback}
               t={t}
+              locale={language}
               onDismiss={dismissibleFeedback ? () => setFeedback(null) : undefined}
               dismissLabel={t('close')}
             />

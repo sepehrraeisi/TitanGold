@@ -19,6 +19,8 @@ export type TrendFeedbackState =
 
 export type TrendFeedback = {
   state: TrendFeedbackState;
+  /** Completed comparison count for success messaging. */
+  comparisonCount?: number;
   detail?: string;
 };
 
@@ -78,15 +80,43 @@ const SEVERITY: Record<TrendFeedbackState, 'info' | 'success' | 'warning' | 'err
   load_failed: 'error',
 };
 
+const PERSIAN_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+
+export function formatTrendCount(value: number, locale?: string): string {
+  const raw = String(Math.max(0, Math.floor(value)));
+  if (locale !== 'fa') return raw;
+  return raw.replace(/\d/g, (d) => PERSIAN_DIGITS[Number(d)] ?? d);
+}
+
+/** Canonical comparison-complete message keys by completed comparison count. */
+export function analysisCompleteComparisonMessageKey(completedCount: number): string {
+  if (completedCount <= 0) return 'trend_feedback_analysis_completed_primary_only_message';
+  if (completedCount === 1) return 'trend_feedback_analysis_completed_one_comparison_message';
+  return 'trend_feedback_analysis_completed_many_comparisons_message';
+}
+
+export function formatAnalysisCompleteComparisonMessage(
+  completedCount: number,
+  t: TFn,
+  locale?: string,
+): string {
+  const count = Math.max(0, Math.min(3, Math.floor(completedCount)));
+  const localizedCount = formatTrendCount(count, locale);
+  const key = analysisCompleteComparisonMessageKey(count);
+  const translated = t(key, count >= 2 ? { count: localizedCount } : count === 1 ? { count: localizedCount } : {});
+  if (translated !== key) return translated;
+  return t('trend_feedback_analysis_completed_message');
+}
+
 export function buildAnalysisCompleteFeedback(mtfSummary?: TrendMtfSummary | null): TrendFeedback {
   if (!mtfSummary || mtfSummary.requestedCount === 0) {
-    return { state: 'analysis_completed' };
+    return { state: 'analysis_completed', comparisonCount: 0 };
   }
   const { lifecycleStatus, requestedCount, completedCount, unavailableCount, failedCount } = mtfSummary;
   if (lifecycleStatus === 'complete') {
     return {
       state: 'analysis_completed_with_comparisons',
-      detail: `${completedCount}/${requestedCount}`,
+      comparisonCount: completedCount,
     };
   }
   if (lifecycleStatus === 'complete_with_partial_comparisons') {
@@ -101,7 +131,7 @@ export function buildAnalysisCompleteFeedback(mtfSummary?: TrendMtfSummary | nul
       detail: `${unavailableCount + failedCount}/${requestedCount}`,
     };
   }
-  return { state: 'analysis_completed' };
+  return { state: 'analysis_completed', comparisonCount: 0 };
 }
 
 export function trendFeedbackSeverity(state: TrendFeedbackState) {
@@ -114,33 +144,36 @@ export function trendFeedbackTitle(state: TrendFeedbackState, t: TFn): string {
   return translated === key ? state : translated;
 }
 
-export function trendFeedbackMessage(feedback: TrendFeedback, t: TFn): string {
+export function trendFeedbackMessage(feedback: TrendFeedback, t: TFn, locale?: string): string {
+  if (feedback.state === 'analysis_completed_with_comparisons') {
+    return formatAnalysisCompleteComparisonMessage(feedback.comparisonCount ?? 0, t, locale);
+  }
+
+  if (feedback.state === 'analysis_completed' && feedback.comparisonCount === 0) {
+    const primaryOnly = t('trend_feedback_analysis_completed_primary_only_message');
+    if (primaryOnly !== 'trend_feedback_analysis_completed_primary_only_message') return primaryOnly;
+  }
+
   const key = MESSAGE_KEYS[feedback.state];
   let base = t(key);
   if (base === key) base = feedback.state;
 
-  if (
-    feedback.state === 'analysis_completed_with_comparisons' &&
-    feedback.detail
-  ) {
-    const [completed] = feedback.detail.split('/');
-    return t(key, { completed: Number(completed) });
-  }
   if (
     (feedback.state === 'analysis_completed_partial_comparisons' ||
       feedback.state === 'analysis_comparison_unavailable') &&
     feedback.detail
   ) {
     const [a, b] = feedback.detail.split('/');
+    const countA = formatTrendCount(Number(a), locale);
+    const countB = formatTrendCount(Number(b), locale);
     if (feedback.state === 'analysis_comparison_unavailable') {
-      return t(key, { unavailable: Number(a), requested: Number(b) });
+      const translated = t(key, { unavailable: countA, requested: countB });
+      return translated === key ? base : translated;
     }
-    return t(key, { completed: Number(a), requested: Number(b) });
+    const translated = t(key, { completed: countA, requested: countB });
+    return translated === key ? base : translated;
   }
 
-  if (feedback.detail && !base.includes('{{')) {
-    return `${base} ${feedback.detail}`.trim();
-  }
   return base;
 }
 

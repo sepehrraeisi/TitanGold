@@ -18,6 +18,7 @@ const BOX: Record<'info' | 'success' | 'warning' | 'error', string> = {
 export type TrendFeedbackBannerProps = {
   feedback: TrendFeedback;
   t: TFn;
+  locale?: string;
   onDismiss?: () => void;
   dismissLabel?: string;
   testId?: string;
@@ -29,10 +30,11 @@ export const TrendFeedbackBanner: React.FC<TrendFeedbackBannerProps> = ({
   onDismiss,
   dismissLabel,
   testId = 'trend-feedback-banner',
+  locale = 'en',
 }) => {
   const severity = trendFeedbackSeverity(feedback.state);
   const title = trendFeedbackTitle(feedback.state, t);
-  const message = trendFeedbackMessage(feedback, t);
+  const message = trendFeedbackMessage(feedback, t, locale);
   const role = severity === 'error' ? 'alert' : 'status';
 
   return (
