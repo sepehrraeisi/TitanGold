@@ -18,7 +18,7 @@ PR status: **Ready for Review — code re-review, Owner Human QA, and final GitH
 - Deployed runtime implementation: `85a762b`
 - E2E marker lifecycle implementation/test commit: `81e25f6`
 - Final code head verified by GitHub Actions: `3ab5f4d`
-- Current documentation-only branch tip: `cb831c2`
+- Current documentation-only branch tip: `92e115b`
 - Backend health commit/runtimeCommit: `85a762b`
 - provenanceVerified: `true`
 - Served bundle: `assets/index-CLflvsy0.js`
