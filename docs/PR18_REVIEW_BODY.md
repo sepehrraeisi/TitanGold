@@ -1,42 +1,52 @@
 ## Summary
 
-Resolves the **four remaining PR re-review findings** for Trend Detection (PR #18, Draft). No product features, no Scheduler/worker topology changes, no merge.
+Resolves the **E2E promotion marker crash-safety** fail-safe blocker for Trend Detection (PR #18, Draft). No product features, no Scheduler/worker changes, no Staging product redeploy, no merge.
 
-### Re-review findings closed
+### Marker lifecycle fix
 
-1. **Shell-free E2E fixture tooling** — `execFileSync` + argv arrays (`shell: false`); metacharacter inputs rejected before child spawn.
-2. **Canonical deploy-env verification** — role mutation requires `TITAN_DEPLOY_ENV=staging`; production/missing/conflict rejected (not inferred from `DATABASE_URL`).
-3. **Fail-safe cleanup** — `.e2e-fixture-promotion.json` marker (non-secret identity only); teardown fail-closed when marker incomplete; `rowCount === 1`.
-4. **Confidence schema compatibility** — DB-backed proof: `ai_decisions.confidence` **nullable**; canonical INSERT with `NULL` + rollback; no synthetic `0.5`.
+- Setup **never silently deletes** an existing promotion marker.
+- Valid `promotion_pending` / `promoted` markers are **cleaned first** (`rowCount === 1`) before a new setup.
+- Incomplete/invalid markers **abort setup**.
+- Cleanup failure **preserves** the marker and aborts setup.
+- Before DB role promotion: atomic `state=promotion_pending` marker (identity only; no secrets).
+- After successful promotion: atomic `state=promoted`.
+- Teardown cleans **both** pending and promoted; marker removed only after successful DB cleanup.
 
-### Runtime provenance (Staging)
+### Commits
+
+| Commit | Role |
+|--------|------|
+| `81e25f6` | Implementation + focused crash-safety tests |
+| `18ef08f` | Docs / Rule 02 closeout |
+| (follow-up) | CI path nudge / docs body if needed |
+
+### Runtime provenance (unchanged — tooling/tests only)
 
 | Field | Value |
 |-------|-------|
-| Runtime implementation commit | **`85a762b`** |
-| Branch HEAD | **`5c11e4d`** (+ docs closeout) |
-| Backend health `commit` / `runtimeCommit` | **`85a762b`** |
-| `provenanceVerified` | **`true`** |
+| Runtime implementation | **`85a762b`** |
 | Served bundle | **`assets/index-CLflvsy0.js`** |
+| `provenanceVerified` | **true** |
 
-### Tests
+### Tests (local)
 
-- Safety tests: **31/31** (fixture shell-safety, role mutation gates, confidence NULL DB)
-- Prior Trend unit subtotal: **29/29**
-- Selective Staging smoke: login, Trend, settings save, EN/FA/RTL, hard refresh — PASS (read-only smoke analyze POST = 0)
+- `fixtureProcess.test.ts` + `globalSetup.test.ts`: **21/21 PASS**
 
 ### Deferred
 
-- Dual-worker scheduler fingerprint (`deploy-backend-runtime-provenance.sh` expects 1 worker; Staging has 2) — separate remediation
-- Trend merge/freeze pending review
+- Dual-worker scheduler fingerprint remediation
+- Trend merge/freeze
 
 ## Test plan
 
-- [x] Backend `e2eFixtureSafety` + `e2eFixtureRoleMutation` unit tests
-- [x] Frontend `fixtureProcess` + `globalSetup` vitest
-- [x] DB-backed `aiDecisionsConfidence` integration (NULL insert + rollback)
-- [x] Staging selective smoke @ `85a762b`
-- [x] Worker restarts = 0; Scheduler mutations = 0
-- [ ] GitHub CI on latest HEAD (re-run after push)
+- [x] Existing promoted marker never silently deleted
+- [x] Existing pending marker cleaned before new setup
+- [x] Promote fail leaves pending; teardown cleans it
+- [x] Crash window pending still cleans exact fixture
+- [x] Cleanup fail aborts and preserves marker
+- [x] Invalid marker aborts setup
+- [x] Successful cleanup allows new promotion
+- [x] No shell/secret regression
+- [ ] GitHub PR checks on final HEAD (Backend / Frontend / E2E / Migrations / Security)
 
-**Verdict:** TREND FINAL PR SAFETY CLOSEOUT COMPLETE — READY FOR RE-REVIEW
+**Verdict:** TREND E2E MARKER CRASH-SAFETY FIX COMPLETE — READY FOR FINAL RE-REVIEW

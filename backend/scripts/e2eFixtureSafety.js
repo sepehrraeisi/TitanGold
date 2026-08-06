@@ -1,6 +1,9 @@
 /**
  * Shared disposable E2E fixture safety helpers.
  * Fail-closed validation + canonical staging deploy-env gate for role mutation scripts.
+ *
+ * Promotion marker ownership lives in e2e/fixtureProcess.mjs:
+ * states `promotion_pending` then `promoted`; never silently delete unresolved markers.
  */
 
 import fs from 'node:fs';
