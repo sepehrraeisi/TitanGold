@@ -43,7 +43,7 @@ Final provenance (Staging @ prior safety closeout; unchanged by marker-only fix)
 - Backend health `commit` / `runtimeCommit`: **`85a762b`**
 - Backend `provenanceVerified`: **`true`**
 - Served frontend bundle: **`assets/index-CLflvsy0.js`**
-- Branch HEAD: see latest marker crash-safety commit
+- Branch HEAD: **`988f89a`**
 - Environment: Staging (`https://titan.zala.ir`)
 
 Acceptance criteria (met for final re-review):

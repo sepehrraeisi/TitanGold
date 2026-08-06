@@ -296,8 +296,13 @@ Fail-safe blocker from final re-review: setup previously called `clearPromotionM
 `src/__tests__/e2e/fixtureProcess.test.ts` — crash-safety scenarios (existing promoted never silent-deleted, pending cleaned before new setup, promote fail leaves pending, pending still cleans after crash window, cleanup fail aborts, invalid marker aborts, successful cleanup allows new promotion, no shell/secret regression).
 
 Local focused totals: fixtureProcess **17** + globalSetup **4** = **21/21 PASS**.
+Backend fixture unit regression: **16/16 PASS**.
+
+Implementation commit: **`81e25f6`**. Final branch HEAD: **`988f89a`**.
 
 No Staging product redeploy required (E2E tooling/tests only). Runtime remains **`85a762b`** / **`assets/index-CLflvsy0.js`**.
+
+GitHub Actions on final HEAD: **NOT VERIFIED from this environment** (`gh` token invalid / private API 401). Push via SSH completed; PR path filters should re-run Backend/Frontend/E2E/Migrations on `988f89a` — Owner must confirm Checks tab.
 
 ### Verdict
 
