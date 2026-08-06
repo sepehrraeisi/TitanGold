@@ -275,3 +275,30 @@ GitHub checks on pushed HEAD **`5c11e4d`**: pending re-run after push (prior **`
 ### Verdict
 
 **TREND FINAL PR SAFETY CLOSEOUT COMPLETE — READY FOR RE-REVIEW**
+
+---
+
+## E2E Promotion Marker Crash-Safety Fix (2026-08-06)
+
+Fail-safe blocker from final re-review: setup previously called `clearPromotionMarker()` at startup, which could silently drop the only cleanup record after an interrupted promote.
+
+### Marker lifecycle (current)
+
+| Phase | Behavior |
+|-------|----------|
+| Setup startup | Never silently delete. Valid `promotion_pending` / `promoted` → verified cleanup first (`rowCount === 1`); incomplete/invalid → abort; cleanup failure preserves marker |
+| Before promote | Write atomic `state=promotion_pending` marker (identity only; no secrets) |
+| After promote | Atomically replace marker with `state=promoted` |
+| Teardown | Cleans both pending and promoted; marker removed only after successful DB cleanup |
+
+### Focused tests
+
+`src/__tests__/e2e/fixtureProcess.test.ts` — crash-safety scenarios (existing promoted never silent-deleted, pending cleaned before new setup, promote fail leaves pending, pending still cleans after crash window, cleanup fail aborts, invalid marker aborts, successful cleanup allows new promotion, no shell/secret regression).
+
+Local focused totals: fixtureProcess **17** + globalSetup **4** = **21/21 PASS**.
+
+No Staging product redeploy required (E2E tooling/tests only). Runtime remains **`85a762b`** / **`assets/index-CLflvsy0.js`**.
+
+### Verdict
+
+**TREND E2E MARKER CRASH-SAFETY FIX COMPLETE — READY FOR FINAL RE-REVIEW**
