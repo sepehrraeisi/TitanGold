@@ -298,11 +298,11 @@ Fail-safe blocker from final re-review: setup previously called `clearPromotionM
 Local focused totals: fixtureProcess **17** + globalSetup **4** = **21/21 PASS**.
 Backend fixture unit regression: **16/16 PASS**.
 
-Implementation commit: **`81e25f6`**. Final branch HEAD: **`988f89a`**.
+Implementation commit: **`81e25f6`**. Final branch HEAD: **`cb81bd6`**.
 
 No Staging product redeploy required (E2E tooling/tests only). Runtime remains **`85a762b`** / **`assets/index-CLflvsy0.js`**.
 
-GitHub Actions on final HEAD: **NOT VERIFIED from this environment** (`gh` token invalid / private API 401). Push via SSH completed; PR path filters should re-run Backend/Frontend/E2E/Migrations on `988f89a` — Owner must confirm Checks tab.
+GitHub Actions on final HEAD: **NOT VERIFIED from this environment** (`gh` token invalid / private API 401). Push via SSH completed; PR path filters should re-run Backend/Frontend/E2E/Migrations — Owner must confirm Checks tab on PR #18.
 
 ### Verdict
 
