@@ -185,3 +185,93 @@ Draft PR prepared; merge and freeze pending review.
 | Served bundle | `assets/index-urwZv0ot.js` |
 
 Owner defects addressed in rounds 2–3; MTF pipeline defect fixed in `756edab`; closeout interpolation + provenance in `186c088`.
+
+---
+
+## Final PR Safety Closeout Evidence (2026-08-06)
+
+PR **#18** remains **Draft**. Four remaining re-review findings resolved on branch `feat/trend-detection-agent-full-product`.
+
+### Runtime provenance (verbatim, Staging `https://titan.zala.ir`)
+
+| Field | Value |
+|-------|-------|
+| Branch | `feat/trend-detection-agent-full-product` |
+| Runtime implementation commit | **`85a762b`** |
+| Branch HEAD (tests + docs) | **`5c11e4d`** (+ docs closeout commit) |
+| Backend `/api/v1/health` `commit` | **`85a762b`** |
+| Backend `/api/v1/health` `runtimeCommit` | **`85a762b`** |
+| Backend `provenanceVerified` | **`true`** |
+| `backend/runtime-provenance.json` `implementationCommit` | **`85a762b`** |
+| Served frontend bundle | **`assets/index-CLflvsy0.js`** |
+| Frontend build source commit | **`85a762b`** worktree |
+| Environment | Staging |
+| Source worktree | `/home/ubuntu/worktrees/titangold-trend-agent` |
+
+Deploy note: `scripts/deploy-backend-runtime-provenance.sh` aborted before PM2 mutation because Staging has **two** `titan-engine-worker` instances (fingerprint guard expects one). Backend sync + dist rsync completed; **`titan-backend` only** restarted manually with `TITAN_RUNTIME_COMMIT=85a762b`. Workers unchanged (↺=0, same PIDs).
+
+### E2E fixture safety model
+
+| Control | Implementation |
+|---------|----------------|
+| Shell execution | **Removed** — `execFileSync(process.execPath, [script, ...args], { shell: false })` via `e2e/fixtureProcess.mjs` |
+| Input validation | `backend/scripts/e2eFixtureSafety.js` — disposable `e2e_*`, `@titangold.test`, safe owner, UUID, backend root |
+| Deploy-env gate | `TITAN_DEPLOY_ENV=staging` required before promote/cleanup; production rejected; `--target-env` alone insufficient |
+| Promotion marker | `.e2e-fixture-promotion.json` (gitignored) — identity metadata only; no passwords/tokens |
+| Cleanup | No marker → safe no-op; marker present → mandatory identity + `rowCount === 1` + marker removed on success |
+| GitHub CI | Isolated Postgres + explicit `TITAN_DEPLOY_ENV=staging` documented in `.github/workflows/e2e-tests.yml` |
+
+### Confidence column nullability
+
+| Check | Result |
+|-------|--------|
+| `information_schema.columns` `is_nullable` | **`YES`** |
+| Canonical INSERT with `confidence NULL` + rollback | **PASS** (DB-backed integration test on migrated Staging schema) |
+| Synthetic `0.5` fallback | **Not restored** |
+
+### Automated test totals (safety closeout)
+
+| Suite | Executed | Passed |
+|-------|----------|--------|
+| Backend `e2eFixtureSafety.test.js` | 10 | 10 |
+| Backend `e2eFixtureRoleMutation.test.js` | 6 | 6 |
+| Backend `aiDecisionsConfidence.integration.test.js` | 2 | 2 |
+| Frontend `fixtureProcess.test.ts` | 9 | 9 |
+| Frontend `globalSetup.test.ts` | 4 | 4 |
+| **Safety subtotal** | **31** | **31** |
+| Prior Trend unit subtotal (`trendDomain` + feedback + semantics) | 29 | 29 |
+| **Combined unit subtotal** | **60** | **60** |
+
+GitHub checks on pushed HEAD **`5c11e4d`**: pending re-run after push (prior **`295294a`** was green).
+
+### Selective Staging smoke (@ `85a762b` / `index-CLflvsy0.js`)
+
+| Scenario | Result |
+|----------|--------|
+| Login + Trend opens (EN desktop tabs) | PASS |
+| Settings save (`Scenario C`) | PASS |
+| FA mobile RTL overview | PASS |
+| PRE-PR read-only (EN + FA + hard refresh, no analyze) | PASS (1 retry; first attempt had transient trading-engine status console noise) |
+| Shared header generic monitoring labels | PASS (via tab navigation) |
+| Integrations MEXC public readiness | PASS (Integrations tab rendered; no private provider POST) |
+
+### Side-effect ledger (selective smoke)
+
+| Check | Result |
+|-------|--------|
+| `/trend/analyze` POST (read-only smoke) | 0 |
+| Private MEXC requests | 0 |
+| Financial actions | 0 |
+| Scheduler mutations | 0 |
+| `titan-engine-worker` restarts | 0 |
+| Console/page errors (final PRE-PR retry) | 0 |
+
+### Deferred
+
+- Dual-worker scheduler leader election / deploy fingerprint guard (Staging has 2 workers; unchanged)
+- Trend merge + freeze
+- Core Rules v4.5 activation (not authorized)
+
+### Verdict
+
+**TREND FINAL PR SAFETY CLOSEOUT COMPLETE — READY FOR RE-REVIEW**

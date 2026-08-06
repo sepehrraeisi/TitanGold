@@ -12,19 +12,21 @@ Current area:
 Agents → Trend Detection
 
 Current program slice:
-TREND-DETECTION-PRE-PR-CLOSEOUT
+TREND-FINAL-PR-SAFETY-CLOSEOUT
 
 Risk tier:
 Tier 2 (Tier 3 gates satisfied for auth unchanged; Tier 4 not authorized)
 
 Engineering status:
-**HUMAN-QA PASSED / READY FOR PR**
+**READY FOR RE-REVIEW — PR #18 DRAFT**
 
 Authorized scope (closeout only):
-- Runtime provenance verification
-- Final read-only Staging smoke
+- E2E fixture shell-safety + staging deploy-env gates
+- Fail-safe promotion-marker cleanup
+- DB-backed confidence NULL verification
+- Runtime provenance deploy + selective Staging smoke
 - Living document + Rule 02 closeout
-- Push branch and open **Draft PR** to `main`
+- Push branch; keep **Draft PR** open
 - No feature additions
 
 Hard boundaries:
@@ -39,26 +41,28 @@ Branch / worktree:
 - Branch: `feat/trend-detection-agent-full-product`
 - Worktree: `/home/ubuntu/worktrees/titangold-trend-agent`
 
-Final provenance (Staging @ closeout):
-- Runtime implementation commit: **`186c088`**
-- Backend health `commit` / `runtimeCommit`: **`186c088`**
-- Served bundle: **`assets/index-CLwf6ADb.js`**
-- Documentation/test HEAD: see latest closeout commit on branch
+Final provenance (Staging @ safety closeout):
+- Runtime implementation commit: **`85a762b`**
+- Branch documentation/test HEAD: **`5c11e4d`** (docs closeout follows)
+- Backend health `commit` / `runtimeCommit`: **`85a762b`**
+- Backend `provenanceVerified`: **`true`**
+- Served frontend bundle: **`assets/index-CLflvsy0.js`**
+- Environment: Staging (`https://titan.zala.ir`)
 
-Acceptance criteria (met):
-- Owner Human QA PASS on MTF, EN/FA interpolation, refresh, prior-run comparison
-- Automated Trend unit tests pass (29/29)
-- Pre-PR read-only Staging smoke pass (console/page errors = 0)
-- Side-effect ledger clean (no analyze POST in smoke, no worker restarts)
-- Draft PR opened; local HEAD equals remote HEAD
+Acceptance criteria (met for re-review):
+- Four remaining PR re-review findings resolved (shell-free fixture, deploy-env gate, promotion-marker cleanup, confidence NULL DB proof)
+- Automated tests added and executed locally
+- Selective Staging smoke pass (login, Trend, settings save, EN/FA/RTL, hard refresh; analyze POST = 0 in read-only smoke)
+- Side-effect ledger clean (no worker restarts; no Scheduler mutations)
+- Draft PR remains open; local HEAD equals remote HEAD
 
 Deferred (separate outcomes):
-- Dual-worker scheduler leader election remediation
+- Dual-worker scheduler leader election remediation (`deploy-backend-runtime-provenance.sh` fingerprint expects 1 worker; Staging has 2 — manual backend restart used)
 - Scheduled Trend runs (allowlist change)
 - Trend merge + freeze
 
 Next transition:
-Draft PR review → merge approval → post-merge deploy verification → Trend freeze
+Draft PR re-review → merge approval → post-merge deploy verification → Trend freeze
 
 Evidence:
-- `docs/TREND_DETECTION_PRODUCT.md` — Final Closeout Evidence (2026-08-05)
+- `docs/TREND_DETECTION_PRODUCT.md` — Final PR Safety Closeout Evidence (2026-08-06)
