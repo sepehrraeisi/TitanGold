@@ -6,10 +6,27 @@ import { execSync } from 'node:child_process';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const envFile = path.join(root, '.e2e-playwright.env');
 
+export function assertE2EFixtureEnv(env = process.env) {
+  if (env.RUN_LOGIN_E2E !== '1') {
+    return;
+  }
+
+  if (env.TITAN_E2E_TARGET_ENV !== 'staging') {
+    throw new Error('RUN_LOGIN_E2E requires TITAN_E2E_TARGET_ENV=staging');
+  }
+  if (!env.TITAN_E2E_BACKEND_DIR) {
+    throw new Error('RUN_LOGIN_E2E requires explicit TITAN_E2E_BACKEND_DIR');
+  }
+  if (!env.TITAN_E2E_FIXTURE_USERNAME || !env.TITAN_E2E_FIXTURE_EMAIL || !env.TITAN_E2E_FIXTURE_OWNER) {
+    throw new Error('RUN_LOGIN_E2E requires explicit fixture username, email, and owner');
+  }
+}
+
 export default async function globalSetup() {
   if (process.env.RUN_LOGIN_E2E !== '1') {
     return;
   }
+  assertE2EFixtureEnv(process.env);
 
   execSync('node e2e/prepareTrendStagingFixture.mjs', {
     cwd: root,

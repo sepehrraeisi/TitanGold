@@ -62,9 +62,9 @@ export const AgentProductHeader: React.FC<AgentProductHeaderProps> = ({
       : monitoringState === 'active'
         ? t('monitoring_active') || 'Active'
         : monitoringState === 'not_scheduled'
-          ? t('trend_scheduled_monitoring_off') || 'Not scheduled'
+          ? t('agent_monitoring_not_scheduled') || 'Not scheduled'
           : monitoringState === 'manual_only'
-            ? t('trend_manual_analysis_available') || 'Manual analysis'
+            ? t('agent_manual_only') || 'Manual only'
             : t('unavailable') || 'Unavailable';
   const monitoringTone =
     monitoringState === 'active'

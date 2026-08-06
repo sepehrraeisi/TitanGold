@@ -32,6 +32,14 @@ function sendError(res, code, message, status = 400, details = null) {
   });
 }
 
+function redactUnexpectedErrorMessage(error) {
+  const raw = String(error?.message || 'Trend analysis failed');
+  return raw
+    .replace(/(api[-_ ]?key|secret|token|authorization)([:=]\s*|\s+)[^\s,;]+/gi, '$1=[redacted]')
+    .replace(/https?:\/\/\S+/gi, '[redacted-url]')
+    .slice(0, 400);
+}
+
 function isValidUUID(id) {
   return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id);
 }
@@ -114,8 +122,16 @@ router.post(
         compareTimeframes: result.compareTimeframes,
       });
     } catch (error) {
-      logger.error('Trend analyze error:', error);
-      return sendError(res, 'SERVER_ERROR', error.message || 'Trend analysis failed', error.status || 500);
+      logger.error('Trend analyze error', {
+        status: error?.status || 500,
+        code: error?.code || 'SERVER_ERROR',
+        message: redactUnexpectedErrorMessage(error),
+      });
+      const status = error?.status && error.status < 500 ? error.status : 500;
+      const code = error?.status && error.status < 500 ? error.code || 'VALIDATION_ERROR' : 'SERVER_ERROR';
+      const message =
+        error?.status && error.status < 500 ? error.message || 'Trend analysis failed' : 'Trend analysis failed';
+      return sendError(res, code, message, status);
     }
   },
 );

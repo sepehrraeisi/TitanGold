@@ -86,7 +86,7 @@ describe('trendDomain contracts', () => {
   it('buildTrendIntegrationsDto maps scheduler object status to string label', () => {
     const dto = buildTrendIntegrationsDto({
       redisOk: true,
-      mexcPublicOk: true,
+      mexcPublicStatus: 'available',
       runtime: { globalMode: 'demo', killSwitchActive: true },
       scheduler: {
         status: { status: 'online', allowlist: ['arbitrage'] },
@@ -97,6 +97,17 @@ describe('trendDomain contracts', () => {
     expect(typeof dto.scheduler.status).toBe('string');
     expect(dto.scheduler.trendAllowlisted).toBe(false);
     expect(dto.scheduler.reasonKey).toBe('trend_int_scheduler_not_allowlisted');
+  });
+
+  it('buildTrendIntegrationsDto reports unknown public provider readiness truthfully', () => {
+    const dto = buildTrendIntegrationsDto({
+      redisOk: true,
+      mexcPublicStatus: 'unknown',
+      runtime: { globalMode: 'demo', killSwitchActive: false },
+      scheduler: null,
+    });
+    expect(dto.publicMarketData.status).toBe('unknown');
+    expect(dto.publicMarketData.statusLabelKey).toBe('trend_int_status_unknown');
   });
 
   it('compareSnapshots rejects different symbols and enriches comparable diffs', () => {

@@ -548,7 +548,7 @@ export function resolveSchedulerIntegrationStatus(schedulerRead) {
   return 'unknown';
 }
 
-export function buildTrendIntegrationsDto({ redisOk, scheduler, runtime, mexcPublicOk }) {
+export function buildTrendIntegrationsDto({ redisOk, scheduler, runtime, mexcPublicStatus = 'unknown' }) {
   const schedulerInner = scheduler?.status;
   const allowlist = Array.isArray(schedulerInner?.allowlist) ? schedulerInner.allowlist : [];
   const workerStatus = resolveSchedulerIntegrationStatus(scheduler);
@@ -564,8 +564,18 @@ export function buildTrendIntegrationsDto({ redisOk, scheduler, runtime, mexcPub
 
   return {
     publicMarketData: {
-      status: mexcPublicOk ? 'available' : 'degraded',
-      statusLabelKey: mexcPublicOk ? 'trend_int_status_available' : 'trend_int_status_degraded',
+      status:
+        mexcPublicStatus === 'available'
+          ? 'available'
+          : mexcPublicStatus === 'degraded'
+            ? 'degraded'
+            : 'unknown',
+      statusLabelKey:
+        mexcPublicStatus === 'available'
+          ? 'trend_int_status_available'
+          : mexcPublicStatus === 'degraded'
+            ? 'trend_int_status_degraded'
+            : 'trend_int_status_unknown',
       owner: 'mexc_public',
     },
     trendAnalyzer: {

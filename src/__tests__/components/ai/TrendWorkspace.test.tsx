@@ -123,7 +123,9 @@ describe('TrendWorkspace', () => {
       expect(screen.getByTestId('trend-workspace')).toBeInTheDocument();
     });
     expect(screen.getByTestId('trend-run-analytical-analysis')).toBeInTheDocument();
-    expect(screen.getByTestId('trend-overview-empty')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('trend-overview-empty')).toBeInTheDocument();
+    });
   });
 
   it('opens confirmation without native dialog when run is clicked', async () => {

@@ -4941,6 +4941,8 @@
   "back_to_agents": "Back to agents",
   "run_analytical_scan": "Run analytical scan",
   "pause_monitoring": "Pause monitoring",
+  "agent_monitoring_not_scheduled": "Not scheduled",
+  "agent_manual_only": "Manual only",
   "resume_monitoring": "Resume monitoring",
   "run_detail": "Run detail",
   "unavailable": "Unavailable",

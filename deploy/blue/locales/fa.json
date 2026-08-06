@@ -4757,6 +4757,8 @@
   "back_to_agents": "بازگشت به فهرست عوامل",
   "run_analytical_scan": "اجرای اسکن تحلیلی",
   "pause_monitoring": "توقف مانیتورینگ",
+  "agent_monitoring_not_scheduled": "زمان‌بندی نشده",
+  "agent_manual_only": "فقط دستی",
   "resume_monitoring": "ادامه مانیتورینگ",
   "run_detail": "جزئیات اجرا",
   "unavailable": "در دسترس نیست",

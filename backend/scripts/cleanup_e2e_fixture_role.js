@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Promote disposable E2E fixture to trader for analyze/settings Staging tests. */
+/** Demote disposable E2E fixture back to user after Staging analyze/settings tests. */
 import pool, { query } from '../database/db.js';
 
 function readArg(flag) {
@@ -25,12 +25,12 @@ async function main() {
   const owner = requireArg('--fixture-owner');
   const targetEnv = requireArg('--target-env');
   if (targetEnv !== 'staging') {
-    throw new Error('Disposable fixture role promotion is allowed only for target-env=staging');
+    throw new Error('Disposable fixture cleanup is allowed only for target-env=staging');
   }
 
   const result = await query(
     `UPDATE users
-        SET role = 'trader'
+        SET role = 'user'
       WHERE id = $1
         AND username = $2
         AND email = $3
@@ -41,10 +41,10 @@ async function main() {
   );
 
   if (result.rowCount !== 1) {
-    throw new Error(`Expected exactly one disposable fixture row for role promotion, got ${result.rowCount}`);
+    throw new Error(`Expected exactly one disposable fixture row for cleanup, got ${result.rowCount}`);
   }
 
-  console.log(`E2E fixture role=trader for username=${username}`);
+  console.log(`E2E fixture cleaned up for username=${username}`);
 }
 
 main()
@@ -52,6 +52,6 @@ main()
     await pool.end();
   })
   .catch((err) => {
-    console.error(`Failed to promote disposable login fixture: ${err.message}`);
+    console.error(`Failed to clean up disposable login fixture: ${err.message}`);
     process.exit(1);
   });

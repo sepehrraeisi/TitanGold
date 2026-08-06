@@ -8,6 +8,7 @@ import { logger } from './logger.js';
 import { readAnalyticalSchedulerStatus } from './analyticalSchedulerStatus.js';
 import { getRuntimeExecutionState } from './runtimeExecutionStateService.js';
 import { isRedisAvailable } from '../utils/redis.js';
+import { exchangeFactory } from './exchanges/ExchangeFactory.js';
 import { writeExecutionAudit } from './agentExecutionService.js';
 import {
   TREND_AGENT_KEY,
@@ -292,7 +293,7 @@ export async function executeTrendAnalysis({
       ? primary.trend.confidence / 100
       : typeof primary?._meta?.confidence === 'number'
         ? primary._meta.confidence
-        : 0.5;
+        : null;
 
   const insert = await query(
     `INSERT INTO ai_decisions (
@@ -511,27 +512,47 @@ export async function updateTrendSettings(agentId, input, expectedVersion) {
     version: Number(current.version || 1) + 1,
   };
 
-  await query(`UPDATE ai_agents SET config = $2::jsonb, updated_at = NOW() WHERE id = $1`, [
-    agent.id,
-    JSON.stringify(next),
-  ]);
+  const update = await query(
+    `UPDATE ai_agents
+        SET config = $2::jsonb, updated_at = NOW()
+      WHERE id = $1
+        AND COALESCE((config->>'version')::int, 1) = $3`,
+    [agent.id, JSON.stringify(next), Number(current.version || 1)],
+  );
+
+  if (update.rowCount !== 1) {
+    const err = new Error('Settings version conflict');
+    err.status = 409;
+    err.code = 'VERSION_CONFLICT';
+    throw err;
+  }
 
   return buildSettingsDto(next, trendDefaultConfig());
+}
+
+async function resolveTrendPublicMarketDataStatus() {
+  try {
+    const health = await exchangeFactory.getHealthStatus('mexc');
+    return health?.status === 'healthy' ? 'available' : 'degraded';
+  } catch {
+    return 'unknown';
+  }
 }
 
 export async function getTrendIntegrations(agentId) {
   const agent = await loadTrendAgent(agentId);
   if (!agent) return null;
-  const [scheduler, runtime, redisOk] = await Promise.all([
+  const [scheduler, runtime, redisOk, mexcPublicStatus] = await Promise.all([
     readAnalyticalSchedulerStatus(),
     getRuntimeExecutionState({ preferCache: true }),
     isRedisAvailable(),
+    resolveTrendPublicMarketDataStatus(),
   ]);
   return buildTrendIntegrationsDto({
     redisOk,
     scheduler,
     runtime,
-    mexcPublicOk: true,
+    mexcPublicStatus,
   });
 }
 
