@@ -57,3 +57,4 @@ backend/runtime-provenance.json
 backend/.runtime-provenance.env
 backend/.e2e-login.env
 .e2e-playwright.env
+.e2e-fixture-promotion.json

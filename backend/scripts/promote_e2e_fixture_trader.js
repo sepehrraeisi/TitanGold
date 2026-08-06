@@ -1,34 +1,32 @@
 #!/usr/bin/env node
 /** Promote disposable E2E fixture to trader for analyze/settings Staging tests. */
 import pool, { query } from '../database/db.js';
+import {
+  assertCanonicalStagingDeployEnv,
+  assertSafeFixtureIdentity,
+  buildFixtureFullName,
+  requireArg,
+} from './e2eFixtureSafety.js';
 
-function readArg(flag) {
-  const index = process.argv.indexOf(flag);
-  if (index === -1 || index + 1 >= process.argv.length) return null;
-  return process.argv[index + 1];
-}
+export async function promoteFixtureRole({
+  fixtureUserId,
+  username,
+  email,
+  owner,
+  targetEnv,
+  deployEnv = process.env.TITAN_DEPLOY_ENV,
+  dbQuery = query,
+} = {}) {
+  assertCanonicalStagingDeployEnv({ targetEnv, deployEnv });
+  assertSafeFixtureIdentity({
+    username,
+    email,
+    owner,
+    fixtureUserId,
+    requireId: true,
+  });
 
-function requireArg(flag) {
-  const value = readArg(flag);
-  if (!value) throw new Error(`Missing required flag ${flag}`);
-  return value;
-}
-
-function buildFixtureFullName(owner) {
-  return `E2E Login Fixture (${owner})`;
-}
-
-async function main() {
-  const fixtureUserId = requireArg('--fixture-user-id');
-  const username = requireArg('--fixture-username');
-  const email = requireArg('--fixture-email');
-  const owner = requireArg('--fixture-owner');
-  const targetEnv = requireArg('--target-env');
-  if (targetEnv !== 'staging') {
-    throw new Error('Disposable fixture role promotion is allowed only for target-env=staging');
-  }
-
-  const result = await query(
+  const result = await dbQuery(
     `UPDATE users
         SET role = 'trader'
       WHERE id = $1
@@ -44,14 +42,39 @@ async function main() {
     throw new Error(`Expected exactly one disposable fixture row for role promotion, got ${result.rowCount}`);
   }
 
-  console.log(`E2E fixture role=trader for username=${username}`);
+  return result.rows[0];
 }
 
-main()
-  .finally(async () => {
-    await pool.end();
-  })
-  .catch((err) => {
-    console.error(`Failed to promote disposable login fixture: ${err.message}`);
-    process.exit(1);
+async function main() {
+  const fixtureUserId = requireArg(process.argv, '--fixture-user-id');
+  const username = requireArg(process.argv, '--fixture-username');
+  const email = requireArg(process.argv, '--fixture-email');
+  const owner = requireArg(process.argv, '--fixture-owner');
+  const targetEnv = requireArg(process.argv, '--target-env');
+
+  const row = await promoteFixtureRole({
+    fixtureUserId,
+    username,
+    email,
+    owner,
+    targetEnv,
   });
+
+  console.log(`E2E fixture role=trader for username=${row.username}`);
+}
+
+const isDirectRun =
+  process.argv[1] &&
+  (process.argv[1].endsWith('promote_e2e_fixture_trader.js') ||
+    process.argv[1].includes('promote_e2e_fixture_trader'));
+
+if (isDirectRun) {
+  main()
+    .finally(async () => {
+      await pool.end();
+    })
+    .catch((err) => {
+      console.error(`Failed to promote disposable login fixture: ${err.message}`);
+      process.exit(1);
+    });
+}

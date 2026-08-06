@@ -1,4 +1,11 @@
 # PR-safe E2E workflow — disposable PostgreSQL + backend + login fixture.
+#
+# Staging-safe fixture contract (GitHub CI):
+# - Uses an isolated disposable Postgres service (not Staging/Production).
+# - Sets TITAN_DEPLOY_ENV=staging explicitly so role-mutation scripts pass the
+#   canonical deploy-env gate under the same staging-safe fixture contract.
+# - Fixture identity is disposable (e2e_* / @titangold.test) and fail-closed.
+# - Safety is NOT inferred from DATABASE_URL text alone.
 name: E2E Tests
 
 on:

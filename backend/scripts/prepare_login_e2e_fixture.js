@@ -7,46 +7,24 @@ import fs from 'fs';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import pool, { query } from '../database/db.js';
+import {
+  assertSafeFixtureIdentity,
+  buildFixtureFullName,
+  readArg,
+  requireArg,
+} from './e2eFixtureSafety.js';
 
-function readArg(flag) {
-  const index = process.argv.indexOf(flag);
-  if (index === -1 || index + 1 >= process.argv.length) return null;
-  return process.argv[index + 1];
-}
-
-function requireArg(flag) {
-  const value = readArg(flag);
-  if (!value) throw new Error(`Missing required flag ${flag}`);
-  return value;
-}
-
-function buildFixtureFullName(owner) {
-  return `E2E Login Fixture (${owner})`;
-}
-
-function assertDisposableFixtureInput({ username, email, owner, targetEnv }) {
+async function main() {
+  const outputFile = readArg(process.argv, '--output-file');
+  const quietSecrets = process.argv.includes('--quiet-secrets');
+  const username = requireArg(process.argv, '--fixture-username');
+  const email = requireArg(process.argv, '--fixture-email');
+  const owner = requireArg(process.argv, '--fixture-owner');
+  const targetEnv = requireArg(process.argv, '--target-env');
   if (targetEnv !== 'staging') {
     throw new Error('Disposable login fixture preparation is allowed only for target-env=staging');
   }
-  if (!/^e2e_[a-z0-9_]{3,}$/i.test(username)) {
-    throw new Error('Fixture username must be explicit, disposable, and start with e2e_');
-  }
-  if (!/^[^@\s]+@titangold\.test$/i.test(email)) {
-    throw new Error('Fixture email must use the disposable @titangold.test domain');
-  }
-  if (!owner || owner.trim().length < 3) {
-    throw new Error('Fixture owner must be explicit and non-empty');
-  }
-}
-
-async function main() {
-  const outputFile = readArg('--output-file');
-  const quietSecrets = process.argv.includes('--quiet-secrets');
-  const username = requireArg('--fixture-username');
-  const email = requireArg('--fixture-email');
-  const owner = requireArg('--fixture-owner');
-  const targetEnv = requireArg('--target-env');
-  assertDisposableFixtureInput({ username, email, owner, targetEnv });
+  assertSafeFixtureIdentity({ username, email, owner });
 
   const fullName = buildFixtureFullName(owner);
   const password = crypto.randomBytes(18).toString('base64url');

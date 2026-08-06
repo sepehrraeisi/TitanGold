@@ -1,34 +1,32 @@
 #!/usr/bin/env node
 /** Demote disposable E2E fixture back to user after Staging analyze/settings tests. */
 import pool, { query } from '../database/db.js';
+import {
+  assertCanonicalStagingDeployEnv,
+  assertSafeFixtureIdentity,
+  buildFixtureFullName,
+  requireArg,
+} from './e2eFixtureSafety.js';
 
-function readArg(flag) {
-  const index = process.argv.indexOf(flag);
-  if (index === -1 || index + 1 >= process.argv.length) return null;
-  return process.argv[index + 1];
-}
+export async function cleanupFixtureRole({
+  fixtureUserId,
+  username,
+  email,
+  owner,
+  targetEnv,
+  deployEnv = process.env.TITAN_DEPLOY_ENV,
+  dbQuery = query,
+} = {}) {
+  assertCanonicalStagingDeployEnv({ targetEnv, deployEnv });
+  assertSafeFixtureIdentity({
+    username,
+    email,
+    owner,
+    fixtureUserId,
+    requireId: true,
+  });
 
-function requireArg(flag) {
-  const value = readArg(flag);
-  if (!value) throw new Error(`Missing required flag ${flag}`);
-  return value;
-}
-
-function buildFixtureFullName(owner) {
-  return `E2E Login Fixture (${owner})`;
-}
-
-async function main() {
-  const fixtureUserId = requireArg('--fixture-user-id');
-  const username = requireArg('--fixture-username');
-  const email = requireArg('--fixture-email');
-  const owner = requireArg('--fixture-owner');
-  const targetEnv = requireArg('--target-env');
-  if (targetEnv !== 'staging') {
-    throw new Error('Disposable fixture cleanup is allowed only for target-env=staging');
-  }
-
-  const result = await query(
+  const result = await dbQuery(
     `UPDATE users
         SET role = 'user'
       WHERE id = $1
@@ -44,14 +42,39 @@ async function main() {
     throw new Error(`Expected exactly one disposable fixture row for cleanup, got ${result.rowCount}`);
   }
 
-  console.log(`E2E fixture cleaned up for username=${username}`);
+  return result.rows[0];
 }
 
-main()
-  .finally(async () => {
-    await pool.end();
-  })
-  .catch((err) => {
-    console.error(`Failed to clean up disposable login fixture: ${err.message}`);
-    process.exit(1);
+async function main() {
+  const fixtureUserId = requireArg(process.argv, '--fixture-user-id');
+  const username = requireArg(process.argv, '--fixture-username');
+  const email = requireArg(process.argv, '--fixture-email');
+  const owner = requireArg(process.argv, '--fixture-owner');
+  const targetEnv = requireArg(process.argv, '--target-env');
+
+  const row = await cleanupFixtureRole({
+    fixtureUserId,
+    username,
+    email,
+    owner,
+    targetEnv,
   });
+
+  console.log(`E2E fixture cleaned up for username=${row.username}`);
+}
+
+const isDirectRun =
+  process.argv[1] &&
+  (process.argv[1].endsWith('cleanup_e2e_fixture_role.js') ||
+    process.argv[1].includes('cleanup_e2e_fixture_role'));
+
+if (isDirectRun) {
+  main()
+    .finally(async () => {
+      await pool.end();
+    })
+    .catch((err) => {
+      console.error(`Failed to clean up disposable login fixture: ${err.message}`);
+      process.exit(1);
+    });
+}

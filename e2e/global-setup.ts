@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const envFile = path.join(root, '.e2e-playwright.env');
+const prepareScript = path.join(root, 'e2e', 'prepareTrendStagingFixture.mjs');
 
 export function assertE2EFixtureEnv(env = process.env) {
   if (env.RUN_LOGIN_E2E !== '1') {
@@ -28,9 +29,11 @@ export default async function globalSetup() {
   }
   assertE2EFixtureEnv(process.env);
 
-  execSync('node e2e/prepareTrendStagingFixture.mjs', {
+  execFileSync(process.execPath, [prepareScript], {
     cwd: root,
     stdio: 'inherit',
+    shell: false,
+    env: process.env,
   });
 
   if (!fs.existsSync(envFile)) {
