@@ -1,57 +1,65 @@
 ---
-description: TitanGold dynamic active-work authority — Next AI Agent discovery (post-Arbitrage merge)
+description: TitanGold dynamic active-work authority — Trend Detection pre-PR closeout
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-Arbitrage CLOSED / MERGED / DEPLOYED / FROZEN on exact main; read-only discovery for the next AI Agent (no implementation authorized).
+**TREND-DETECTION-SPECIALIZED-PRODUCTIZATION** — Owner Human QA PASSED; draft PR ready for review (no merge yet).
 
 Current area:
-Agents → Next Agent Discovery
+Agents → Trend Detection
 
 Current program slice:
-NEXT-AI-AGENT-DISCOVERY
+TREND-FINAL-PR-SAFETY-CLOSEOUT
 
 Risk tier:
-Tier 0 read-only discovery (implementation blocked until owner approval)
+Tier 2 (Tier 3 gates satisfied for auth unchanged; Tier 4 not authorized)
 
 Engineering status:
-ARBITRAGE POST-MERGE CLOSEOUT COMPLETE — DISCOVERY ONLY
+**READY FOR FINAL RE-REVIEW — PR #18 DRAFT (marker crash-safety fixed)**
 
-## Arbitrage (closed — not active work)
+Authorized scope (closeout only):
+- E2E promotion marker crash-safety (`promotion_pending` / `promoted`)
+- Focused fixture tooling tests
+- Push branch; keep **Draft PR** open
+- No product feature additions; no Staging product redeploy unless runtime changes
 
-| Item | Value |
-|------|--------|
-| PR | [#17](https://github.com/sepehrraeisi/TitanGold/pull/17) **MERGED** (Squash) |
-| Merged feature head | `24e3e3c` |
-| Main merge commit | `55090f6` |
-| Deployed main HEAD | `55090f6950991c73592f56a60b1fca1b75b6d9e9` |
-| Served bundle | `assets/index-D7Aq4Ef2.js` |
-| Backend runtime marker | `55090f6` (`provenanceVerified=true`) |
-| Human QA | **15/15 PASSED** |
-| Native dialogs (reachable Arbitrage paths) | **0** |
-| Six product sections | CLOSED AND FROZEN |
-| Scheduler | PID `1776042`, owner `titan-engine-worker`, allowlist `["arbitrage"]` (unchanged) |
+Hard boundaries:
+- Do **not** merge PR or delete branch
+- Do **not** restart `titan-engine-worker` or change Scheduler allowlist
+- Do **not** activate Core Rules v4.5
+- Do **not** mark Trend merged or frozen
+- Do **not** modify closed baselines unless proven shared defect
+- Do **not** call private MEXC or enable Live execution
 
-Arbitrage is **not** listed as active implementation work.
+Branch / worktree:
+- Branch: `feat/trend-detection-agent-full-product`
+- Worktree: `/home/ubuntu/worktrees/titangold-trend-agent`
 
-## Discovery authorization
+Final provenance (Staging @ prior safety closeout; unchanged by marker-only fix):
+- Runtime implementation commit: **`85a762b`**
+- Backend health `commit` / `runtimeCommit`: **`85a762b`**
+- Backend `provenanceVerified`: **`true`**
+- Served frontend bundle: **`assets/index-CLflvsy0.js`**
+- Branch HEAD: remote tip of `feat/trend-detection-agent-full-product` (implementation **`81e25f6`**)
+- Environment: Staging (`https://titan.zala.ir`)
 
-- Inventory all AI Agents in repository and runtime
-- Score viable next candidates
-- Recommend one preferred Agent for read-only V1
-- **Do not implement**, **do not create feature branch**, **do not migrate**
+Acceptance criteria (met for final re-review):
+- Promotion marker never silently deleted at setup
+- `promotion_pending` written before role mutation; `promoted` after success
+- Teardown cleans pending and promoted; cleanup failure preserves marker
+- Focused crash-safety tests pass
+- Draft PR remains open; local HEAD equals remote HEAD
 
-## Hard boundaries
+Deferred (separate outcomes):
+- Dual-worker scheduler leader election remediation
+- Scheduled Trend runs (allowlist change)
+- Trend merge + freeze
 
-- Do not reopen Arbitrage product sections
-- Do not restart `titan-engine-worker`
-- Do not repair repository-wide main CI in discovery
-- Do not access private provider credentials
-- Do not execute financial actions
+Next transition:
+Draft PR final re-review → merge approval → post-merge deploy verification → Trend freeze
 
-## Next transition
-
-Owner approval required before creating a feature branch or beginning the recommended Agent implementation.
+Evidence:
+- `docs/TREND_DETECTION_PRODUCT.md` — E2E Promotion Marker Crash-Safety Fix (2026-08-06)

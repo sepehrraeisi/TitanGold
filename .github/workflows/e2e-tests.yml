@@ -1,4 +1,11 @@
 # PR-safe E2E workflow — disposable PostgreSQL + backend + login fixture.
+#
+# Staging-safe fixture contract (GitHub CI):
+# - Uses an isolated disposable Postgres service (not Staging/Production).
+# - Sets TITAN_DEPLOY_ENV=staging explicitly so role-mutation scripts pass the
+#   canonical deploy-env gate under the same staging-safe fixture contract.
+# - Fixture identity is disposable (e2e_* / @titangold.test) and fail-closed.
+# - Safety is NOT inferred from DATABASE_URL text alone.
 name: E2E Tests
 
 on:
@@ -59,6 +66,10 @@ jobs:
       JWT_SECRET: test
       TITAN_DEPLOY_ENV: staging
       CORS_ALLOWED_ORIGINS: http://127.0.0.1:3010,http://localhost:3010
+      TITAN_E2E_TARGET_ENV: staging
+      TITAN_E2E_FIXTURE_OWNER: github-actions-pr-safe
+      TITAN_E2E_FIXTURE_USERNAME: e2e_pr_safe_fixture
+      TITAN_E2E_FIXTURE_EMAIL: e2e-pr-safe-fixture@titangold.test
 
     steps:
       - name: Checkout code
@@ -91,7 +102,13 @@ jobs:
       - name: Prepare disposable login fixture
         run: |
           cd backend
-          node scripts/prepare_login_e2e_fixture.js --quiet-secrets --output-file .e2e-login.env
+          node scripts/prepare_login_e2e_fixture.js \
+            --quiet-secrets \
+            --output-file .e2e-login.env \
+            --fixture-username "$TITAN_E2E_FIXTURE_USERNAME" \
+            --fixture-email "$TITAN_E2E_FIXTURE_EMAIL" \
+            --fixture-owner "$TITAN_E2E_FIXTURE_OWNER" \
+            --target-env "$TITAN_E2E_TARGET_ENV"
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
@@ -106,6 +123,7 @@ jobs:
           CI: true
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3010
           RUN_LOGIN_E2E: '1'
+          TITAN_E2E_BACKEND_DIR: /home/runner/work/TitanGold/TitanGold/backend
           VITE_DISABLE_DEV_LOGIN_FALLBACK: 'true'
           VITE_API_PROXY_TARGET: 'http://127.0.0.1:5002'
 

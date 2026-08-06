@@ -1,0 +1,255 @@
+/**
+ * TREND-CORE — Frontend API client and contract parsers.
+ */
+
+import { buildTrendCoreApiPath } from './trendCorePaths.ts';
+
+export type TrendDirection = 'bullish' | 'bearish' | 'sideways' | 'mixed' | 'unavailable';
+export type TrendRegime = 'trending' | 'ranging' | 'transition' | 'unavailable';
+
+export type TrendChartPoint = {
+  t: number;
+  close: number;
+  sma: number | null;
+  ema: number | null;
+  adx: number | null;
+};
+
+export type TrendChartSeries = {
+  points: TrendChartPoint[];
+  smaPeriod: number;
+  emaPeriod: number;
+  adxPeriod: number;
+};
+
+export type TrendSnapshot = {
+  symbol: string | null;
+  timeframe: string | null;
+  direction: TrendDirection;
+  regime: TrendRegime;
+  strength: number | null;
+  strengthClassification: string | null;
+  adx: {
+    value: number;
+    diPlus: number;
+    diMinus: number;
+    strength: string;
+    interpretation?: string;
+    interpretationKey?: string;
+    momentum?: string | null;
+  } | null;
+  currentPrice: number | null;
+  summary: string | null;
+  summaryKey?: string | null;
+  chartSeries?: TrendChartSeries | null;
+  supportingEvidence: Array<Record<string, unknown>>;
+  conflictingEvidence: Array<Record<string, unknown>>;
+  weakeningEvidence: Array<Record<string, unknown>>;
+  reversalEvidence: Array<Record<string, unknown>>;
+  freshness: string;
+  freshnessMs: number | null;
+  freshnessReasonKey?: string;
+  provenance: Record<string, unknown>;
+  unavailableReasons: string[];
+  analyticalSignal: string | null;
+  sourceCandleTimestamp?: string | null;
+  analysisTimestamp?: string | null;
+};
+
+export type TrendRunSummary = {
+  runId: string;
+  agentId: string;
+  status: string;
+  trigger: string;
+  symbol: string | null;
+  timeframe: string | null;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number | null;
+  snapshotSummary: Record<string, unknown>;
+  errorMessage: string | null;
+};
+
+export type TrendMtfSummary = {
+  requestedCompareTimeframes: string[];
+  requestedCount: number;
+  completedCount: number;
+  unavailableCount: number;
+  failedCount: number;
+  lifecycleStatus:
+    | 'complete'
+    | 'complete_with_partial_comparisons'
+    | 'comparison_unavailable'
+    | 'failed';
+};
+
+export type TrendOverview = {
+  productIdentity: Record<string, unknown>;
+  settings: TrendSettings;
+  latestSnapshot: TrendSnapshot | null;
+  latestMultiTimeframe?: TrendMtfRow[];
+  mtfSummary?: TrendMtfSummary | null;
+  requestedCompareTimeframes?: string[];
+  latestRun: TrendRunSummary | null;
+  comparison: Record<string, unknown>;
+  metrics: { totalRuns: number; lastRunAt: string | null; lastRunId: string | null };
+  runtime: Record<string, unknown>;
+  scheduler: Record<string, unknown>;
+};
+
+export type TrendMtfRow = {
+  timeframe: string;
+  status?: 'completed' | 'unavailable' | 'failed';
+  snapshot: TrendSnapshot | null;
+  agreement: string;
+  agreementReasonKey?: string | null;
+  agreementFactors?: Record<string, string>;
+  unavailableReasonKey?: string | null;
+  errorMessage?: string | null;
+};
+
+export type TrendSettings = {
+  symbol: string;
+  timeframe: string;
+  compareTimeframes: string[];
+  adxPeriod: number;
+  smaPeriod: number;
+  emaPeriod: number;
+  trendLineLookback: number;
+  candleCount: number;
+  autoExecute: { supported: false; effective: false; reason: string };
+  version: number;
+};
+
+export type TrendIntegrations = Record<string, { status: string; owner?: string; note?: string }>;
+
+async function trendCoreRequest<T>(agentId: string, path: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem('titan_token') || sessionStorage.getItem('titan_token');
+  if (!token) {
+    const err = new Error('Authentication required') as Error & { status?: number };
+    err.status = 401;
+    throw err;
+  }
+  const response = await fetch(buildTrendCoreApiPath(agentId, path), {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const err = new Error(body?.error?.message || `Trend request failed: ${response.status}`) as Error & {
+      status?: number;
+      code?: string;
+    };
+    err.status = response.status;
+    err.code = body?.error?.code;
+    throw err;
+  }
+  return response.json() as Promise<T>;
+}
+
+function asSnapshot(raw: unknown): TrendSnapshot | null {
+  if (!raw || typeof raw !== 'object') return null;
+  return raw as TrendSnapshot;
+}
+
+export async function fetchTrendOverview(agentId: string): Promise<TrendOverview> {
+  const raw = await trendCoreRequest<{ overview: TrendOverview }>(agentId, 'overview');
+  const o = raw.overview;
+  return {
+    ...o,
+    latestSnapshot: asSnapshot(o.latestSnapshot),
+  };
+}
+
+export async function runTrendAnalysis(
+  agentId: string,
+  payload: { symbol: string; timeframe: string; idempotencyKey?: string; compareTimeframes?: string[] },
+): Promise<{
+  run: TrendRunSummary;
+  snapshot: TrendSnapshot;
+  multiTimeframe: TrendMtfRow[];
+  mtfSummary?: TrendMtfSummary | null;
+  lifecycleStatus?: string;
+  compareTimeframes?: string[];
+  idempotent: boolean;
+}> {
+  const raw = await trendCoreRequest<{
+    run: TrendRunSummary;
+    snapshot: TrendSnapshot;
+    multiTimeframe: TrendMtfRow[];
+    mtfSummary?: TrendMtfSummary | null;
+    lifecycleStatus?: string;
+    compareTimeframes?: string[];
+    idempotent: boolean;
+  }>(agentId, 'analyze', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return { ...raw, snapshot: asSnapshot(raw.snapshot)! };
+}
+
+export async function fetchTrendRuns(
+  agentId: string,
+  page = 1,
+  pageSize = 20,
+): Promise<{ runs: TrendRunSummary[]; pagination: Record<string, number> }> {
+  return trendCoreRequest(agentId, `runs?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function fetchTrendRunDetail(
+  agentId: string,
+  runId: string,
+): Promise<{ run: TrendRunSummary; snapshot: TrendSnapshot; multiTimeframe: TrendMtfRow[]; mtfSummary?: TrendMtfSummary | null }> {
+  const raw = await trendCoreRequest<{
+    run: TrendRunSummary;
+    snapshot: TrendSnapshot;
+    multiTimeframe: TrendMtfRow[];
+    mtfSummary?: TrendMtfSummary | null;
+  }>(agentId, `runs/${runId}`);
+  return { ...raw, snapshot: asSnapshot(raw.snapshot)! };
+}
+
+export async function fetchTrendSettings(agentId: string): Promise<TrendSettings> {
+  const raw = await trendCoreRequest<{ settings: TrendSettings }>(agentId, 'settings');
+  return raw.settings;
+}
+
+export async function updateTrendSettings(
+  agentId: string,
+  patch: Partial<TrendSettings> & { version?: number },
+): Promise<TrendSettings> {
+  const body = buildSettingsPatch(patch);
+  const raw = await trendCoreRequest<{ settings: TrendSettings }>(agentId, 'settings', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+  return raw.settings;
+}
+
+/** PATCH only backend-allowlisted fields — excludes read-only autoExecute DTO. */
+export function buildSettingsPatch(patch: Partial<TrendSettings> & { version?: number }) {
+  const allowed: Partial<TrendSettings> & { version?: number } = {};
+  if (patch.symbol !== undefined) allowed.symbol = patch.symbol;
+  if (patch.timeframe !== undefined) allowed.timeframe = patch.timeframe;
+  if (patch.compareTimeframes !== undefined) allowed.compareTimeframes = patch.compareTimeframes;
+  if (patch.adxPeriod !== undefined) allowed.adxPeriod = patch.adxPeriod;
+  if (patch.smaPeriod !== undefined) allowed.smaPeriod = patch.smaPeriod;
+  if (patch.emaPeriod !== undefined) allowed.emaPeriod = patch.emaPeriod;
+  if (patch.trendLineLookback !== undefined) allowed.trendLineLookback = patch.trendLineLookback;
+  if (patch.candleCount !== undefined) allowed.candleCount = patch.candleCount;
+  if (patch.version !== undefined) allowed.version = patch.version;
+  return allowed;
+}
+
+export async function fetchTrendIntegrations(agentId: string): Promise<TrendIntegrations> {
+  const raw = await trendCoreRequest<{ integrations: TrendIntegrations }>(agentId, 'integrations');
+  return raw.integrations;
+}
+
+export function createTrendIdempotencyKey(): string {
+  return `trend-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}

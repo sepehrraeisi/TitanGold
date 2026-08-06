@@ -33,6 +33,7 @@ import { webhookDispatcher } from '../services/webhookDispatcher.js';
 import * as experiments from '../services/experiments.js'; // BACKEND-022: A/B testing
 import { notifyAgentStarted, notifyAgentCompleted, notifyAgentFailed } from '../websocket/server.js'; // BACKEND-023: WebSocket updates
 import arbitrageCoreRouter from './arbitrageCoreRoutes.js';
+import trendCoreRouter from './trendCoreRoutes.js';
 import { executeArbitrageAnalyticalScan } from '../services/arbitrageRunService.js';
 import { sanitizeConfigForWrite, MONITORING_STATE } from '../services/arbitrageDomain.js';
 import { validateBody, validateParams, validateQuery, validateResponse } from '../middleware/validation.js';
@@ -1088,6 +1089,9 @@ router.patch('/:id/config', authenticateStrict, requireCapability(CAP.AI_AGENT_C
 
 // ARB-CORE: Canonical analytical product routes
 router.use('/:id/arbitrage', arbitrageCoreRouter);
+
+// TREND-CORE: Canonical Trend Detection product routes
+router.use('/:id/trend', trendCoreRouter);
 
 // ARB-WP1A: Paginated canonical scan history from ai_decisions
 router.get(
