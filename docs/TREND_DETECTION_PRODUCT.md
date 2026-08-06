@@ -307,3 +307,86 @@ GitHub Actions on final HEAD: **NOT VERIFIED from this environment** (`gh` token
 ### Verdict
 
 **TREND E2E MARKER CRASH-SAFETY FIX COMPLETE — READY FOR FINAL RE-REVIEW**
+
+---
+
+## Post-Merge Exact-Main Alignment and Freeze (2026-08-06)
+
+PR **#18** squash-merged.
+
+### Source baseline
+
+| Field | Value |
+|-------|-------|
+| Squash merge commit | **`b242c9c3df1aedb283f96784a11d46e80699909b`** |
+| `origin/main` at deploy | **`b242c9c`** (identical; **0** commits after merge) |
+| Clean deploy worktree | `/home/ubuntu/worktrees/titangold-trend-exact-main` |
+| Worktree status at deploy | clean detached/`main` @ `b242c9c` |
+
+**Verdict:** TREND POST-MERGE SOURCE BASELINE VERIFIED
+
+### Staging exact-main runtime provenance
+
+| Field | Value |
+|-------|-------|
+| Deployed runtime source | **`b242c9c`** |
+| `/api/v1/health` status | ok |
+| `/api/v1/health` commit | **`b242c9c`** |
+| `/api/v1/health` runtimeCommit | **`b242c9c`** |
+| `provenanceVerified` | **true** |
+| `runtime-provenance.json` implementationCommit | **`b242c9c`** |
+| Served frontend bundle | **`assets/index-CLflvsy0.js`** |
+| Frontend build source commit | **`b242c9c`** |
+| Deployed dirty delta (backend excl. env/provenance/node_modules) | **0** |
+| `titan-backend` restart count | 4 → **5** (expected) |
+| `titan-engine-worker` restart count | **0** (unchanged) |
+
+Guarded deploy note: `scripts/deploy-backend-runtime-provenance.sh` aborted solely because Staging has **two** `titan-engine-worker` instances (fingerprint expects one). Controlled fallback restarted **only** `titan-backend`. Worker fingerprint before/after identical:
+
+- id=4 pid=1639616 restarts=0 uptime=1785883939786
+- id=8 pid=1639645 restarts=0 uptime=1785883940123
+
+Scheduler allowlist remains **`["arbitrage"]`**. Trend **not scheduled**.
+
+### Post-merge selective Staging smoke
+
+| Check | Result |
+|-------|--------|
+| Login | PASS |
+| Agents → Trend opens | PASS |
+| Overview / tabs / charts surface | PASS (Scenario A EN) |
+| Persisted MTF + hard refresh (0 analyze POST) | PASS (Scenario PRE-PR) |
+| Analysis History / prior-run path | PASS (PRE-PR) |
+| Settings load + normal save | PASS (Scenario C; 1 retry after transient no-PATCH) |
+| Integrations / Not scheduled / execution blocked | PASS (header + Integrations tab) |
+| EN desktop | PASS |
+| FA mobile RTL | PASS |
+| Console / page errors (final PRE-PR) | **0** |
+| Analyze POSTs (read-only smoke) | **0** |
+| Private MEXC / financial / Scheduler mutations | **0** |
+| Worker restarts during smoke | **0** |
+
+**Verdict:** TREND EXACT-MAIN STAGING ALIGNMENT — PASS
+
+### Owner Human QA
+
+Prior Owner Human QA on MTF / EN-FA interpolation / refresh / prior-run comparison remains **PASS** (recorded earlier on this Program Slice). Post-merge did not re-run full Human QA; selective smoke confirms exact-main Staging.
+
+### Final known analytical limitations
+
+- Trend is analytical / dry-run only; Live side effects blocked
+- Not scheduled; allowlist unchanged
+- Accuracy metrics not shown without persisted evaluation method
+- Dual-worker leader election **NOT VERIFIED** — deferred shared-runtime remediation
+
+### Rollback
+
+1. Redeploy prior Staging runtime baseline from `origin/main` parent of `b242c9c` (pre-Trend squash) via standard backend+dist sync
+2. Restart **only** `titan-backend`; do **not** restart `titan-engine-worker`
+3. Verify `/api/v1/health` commit and served bundle revert
+
+### Status
+
+**TREND DETECTION — CLOSED AND FROZEN**
+
+Do not reopen without a reproduced defect and a separate approved work package.

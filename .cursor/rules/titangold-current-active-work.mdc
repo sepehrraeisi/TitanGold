@@ -1,65 +1,55 @@
 ---
-description: TitanGold dynamic active-work authority — Trend Detection pre-PR closeout
+description: TitanGold dynamic active-work authority — Trend CLOSED AND FROZEN
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**TREND-DETECTION-SPECIALIZED-PRODUCTIZATION** — Owner Human QA PASSED; draft PR ready for review (no merge yet).
+**TREND-DETECTION-SPECIALIZED-PRODUCTIZATION**
 
 Current area:
 Agents → Trend Detection
 
 Current program slice:
-TREND-FINAL-PR-SAFETY-CLOSEOUT
+TREND-POST-MERGE-CLOSEOUT-AND-FREEZE
 
 Risk tier:
-Tier 2 (Tier 3 gates satisfied for auth unchanged; Tier 4 not authorized)
+Tier 0 (documentation / freeze closeout after exact-main deploy)
 
 Engineering status:
-**READY FOR FINAL RE-REVIEW — PR #18 DRAFT (marker crash-safety fixed)**
+**MERGED · EXACT-MAIN DEPLOYED · HUMAN-QA PASSED · CLOSED AND FROZEN**
 
-Authorized scope (closeout only):
-- E2E promotion marker crash-safety (`promotion_pending` / `promoted`)
-- Focused fixture tooling tests
-- Push branch; keep **Draft PR** open
-- No product feature additions; no Staging product redeploy unless runtime changes
+Authorized scope:
+- Documentation and Rule 02 freeze only
+- No Trend product runtime changes
+- No Scheduler / worker changes
+- Do not reopen Trend without a reproduced defect and a separate approved work package
 
 Hard boundaries:
-- Do **not** merge PR or delete branch
+- Do **not** reopen Trend productization
 - Do **not** restart `titan-engine-worker` or change Scheduler allowlist
-- Do **not** activate Core Rules v4.5
-- Do **not** mark Trend merged or frozen
-- Do **not** modify closed baselines unless proven shared defect
 - Do **not** call private MEXC or enable Live execution
+- Do **not** begin another Agent productization outcome from this freeze commit
 
-Branch / worktree:
-- Branch: `feat/trend-detection-agent-full-product`
-- Worktree: `/home/ubuntu/worktrees/titangold-trend-agent`
-
-Final provenance (Staging @ prior safety closeout; unchanged by marker-only fix):
-- Runtime implementation commit: **`85a762b`**
-- Backend health `commit` / `runtimeCommit`: **`85a762b`**
-- Backend `provenanceVerified`: **`true`**
+Provenance (Staging exact-main alignment):
+- Squash merge commit (PR #18): **`b242c9c3df1aedb283f96784a11d46e80699909b`**
+- Deployed runtime source commit: **`b242c9c`**
+- Backend health `commit` / `runtimeCommit`: **`b242c9c`**
+- `provenanceVerified`: **true**
 - Served frontend bundle: **`assets/index-CLflvsy0.js`**
-- Branch HEAD: remote tip of `feat/trend-detection-agent-full-product` (implementation **`81e25f6`**)
+- Frontend build source: exact-main worktree `@ b242c9c`
 - Environment: Staging (`https://titan.zala.ir`)
+- Worktree used for deploy: `/home/ubuntu/worktrees/titangold-trend-exact-main`
 
-Acceptance criteria (met for final re-review):
-- Promotion marker never silently deleted at setup
-- `promotion_pending` written before role mutation; `promoted` after success
-- Teardown cleans pending and promoted; cleanup failure preserves marker
-- Focused crash-safety tests pass
-- Draft PR remains open; local HEAD equals remote HEAD
-
-Deferred (separate outcomes):
-- Dual-worker scheduler leader election remediation
+Deferred (separate outcomes — not Trend):
+- Dual-worker scheduler leader election / deploy fingerprint guard
 - Scheduled Trend runs (allowlist change)
-- Trend merge + freeze
+- Core Rules v4.5 activation (requires authoritative source file)
+- Artemis Contract Foundation discovery
 
 Next transition:
-Draft PR final re-review → merge approval → post-merge deploy verification → Trend freeze
+Activate Core Rules v4.5 (when source available) → Artemis Contract Foundation read-only discovery
 
 Evidence:
-- `docs/TREND_DETECTION_PRODUCT.md` — E2E Promotion Marker Crash-Safety Fix (2026-08-06)
+- `docs/TREND_DETECTION_PRODUCT.md` — Post-Merge Exact-Main Alignment and Freeze
