@@ -43,7 +43,7 @@ Final provenance (Staging @ prior safety closeout; unchanged by marker-only fix)
 - Backend health `commit` / `runtimeCommit`: **`85a762b`**
 - Backend `provenanceVerified`: **`true`**
 - Served frontend bundle: **`assets/index-CLflvsy0.js`**
-- Branch HEAD: **`cb81bd6`**
+- Branch HEAD: remote tip of `feat/trend-detection-agent-full-product` (implementation **`81e25f6`**)
 - Environment: Staging (`https://titan.zala.ir`)
 
 Acceptance criteria (met for final re-review):
