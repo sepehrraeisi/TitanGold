@@ -22,4 +22,27 @@ describe('e2e global setup fixture guards', () => {
       } as NodeJS.ProcessEnv),
     ).not.toThrow();
   });
+
+  it('global-setup source uses execFileSync with shell disabled', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '../../../e2e/global-setup.ts'),
+      'utf8',
+    );
+    expect(source).toContain('execFileSync');
+    expect(source).toContain('shell: false');
+    expect(source).not.toMatch(/execSync\(/);
+  });
+
+  it('prepareTrendStagingFixture source does not interpolate shell command strings', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '../../../e2e/prepareTrendStagingFixture.mjs'),
+      'utf8',
+    );
+    expect(source).not.toMatch(/execSync\(/);
+    expect(source).toContain('prepareTrendStagingFixture');
+  });
 });
