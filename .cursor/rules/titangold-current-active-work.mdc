@@ -1,70 +1,52 @@
 ---
-description: TitanGold dynamic active-work — Artemis Foundation OWNER APPROVED; ready for WP-A
+description: TitanGold Rule 02 — Artemis WP-A Legacy Safety + Specialized UI Redesign
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS CONTRACT FOUNDATION — OWNER APPROVED**
-**UI/UX ARCHITECTURE — READY FOR WP-A**
+**ARTEMIS WP-A — LEGACY SAFETY CONTAINMENT + SPECIALIZED UI/UX REDESIGN**
 
 Current area:
-Shared Foundation → Artemis evidence contract + canonical Artemis UI location
+Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
 
 Current program slice:
-ARTEMIS-CONTRACT-FOUNDATION-DISCOVERY-CLOSEOUT
+ARTEMIS-WP-A-LEGACY-SAFETY-UI
 
 Risk tier:
-Tier 0 (Documentation closeout) until WP-A is explicitly started
+Tier 2–3 (API contract containment + frontend product redesign; no Tier-4 Live)
 
 Engineering status:
-**OWNER APPROVED · DISCOVERY CLOSED FOR DESIGN · RUNTIME IMPLEMENTATION NOT STARTED**
+**IMPLEMENTATION AUTHORIZED — IN PROGRESS**
 
-Classification:
-Shared Foundation discovery/design closeout.
+Authorized:
+- Legacy `/artemis/decision` advisory containment (backward compatible)
+- Trading Engine consumer fail-closed on `executionEligible`
+- AI Center visible label Manager → Artemis (id `manager` preserved)
+- Artemis shell + IA redesign (Overview/Evidence/Decisions/Orchestration/Controls/Lineage/System)
+- Autopilot/Demo↔Real/Insights/native-dialog containment
+- Narrow read-only readiness aggregation if no owner exists
+- Focused tests, Staging deploy (backend-only restart if dual-worker guard)
+- Living doc `docs/ARTEMIS_WP_A_LEGACY_SAFETY_UI.md`
 
-Authorized scope (this closeout):
-- Living document UI/UX architecture updates
-- Rule 02 truthfulness updates
-- Planning for WP-A only
+Not authorized:
+- DB migrations
+- Scheduler allowlist / worker topology changes
+- Live activation / order placement / private provider calls
+- Risk→Portfolio→Liquidity→OM full control-chain wiring
+- Reopening frozen Trend/Arbitrage product surfaces
+- Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
-Hard boundaries — NOT authorized until explicit WP-A start:
-- Artemis runtime implementation
-- Frontend/runtime code changes
-- Agent adapter implementation
-- Database migration
-- Deployment
-- Scheduler change (allowlist remains `["arbitrage"]`)
-- Worker topology change
-- Private provider calls
-- Live activation
-- Order execution
-- Financial side effects
-- Reopening Trend or Arbitrage frozen product surfaces
-- Modifying Data Hub / Agents Shell / AI Shared Foundation baselines
-- Protected files:
-  - `scripts/backup-db.sh`
-  - `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`
-  - `scripts/phase2-monitoring/titangold-telegram-notify.sh`
+Foundation baseline (closed):
+`01e461634c6910bad795a2c3c3b506ecf2c343df`
 
-Preserved prior checkpoint:
-**TREND DETECTION — CLOSED AND FROZEN** (`b242c9c` runtime · `a100f7b` docs)
-Arbitrage CLOSED AND FROZEN.
-Findings 1–3 accepted — do not reopen without contradictory evidence.
+Branch / worktree:
+- `feat/artemis-wp-a-legacy-safety-ui`
+- `/home/ubuntu/worktrees/titangold-artemis-wp-a`
 
-Governing Core Rule:
-**ACTIVE Rule 01 = TitanGold Core Engineering Rules v4.5**
+Human QA:
+Required before WP-A close. Do not declare CLOSED without Owner Human QA PASS.
 
-Canonical UI location (APPROVED):
-**AI Center → Artemis** (reuse `AIManager`; keep internal tab id `manager`; rename visible label)
-
-Target Artemis IA:
-Overview · Evidence · Decisions · Orchestration · Controls · Lineage & Audit · System & Integrations
-
-Next approved transition:
-Explicit owner authorization to **start WP-A — Legacy Artemis safety + UI containment**
-(then WP-B contract → WP-C lineage → WP-D adapters → WP-E advisory consumer + canonical UI)
-
-Evidence:
-- `docs/ARTEMIS_CONTRACT_FOUNDATION.md` (§29 UI/UX Architecture)
+Next transition after Human QA:
+Draft PR → Owner review → explicit merge approval.
