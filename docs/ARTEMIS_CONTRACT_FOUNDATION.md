@@ -81,16 +81,20 @@ Tier 0 — Read-Only / Documentation.
 
 ### 2.3 Proven frontend owners
 
+See **§29** for the full production reachability audit and target IA.
+
 | Path | Role | Provenance |
 |---|---|---|
-| `components/ai/AIManager/index.tsx` + tabs | Canonical Artemis/Manager UI shell | PROVEN (mounted via AICenter) |
+| `components/Dashboard.tsx` | Dashboard → AI Center (`view='ai'`) | PROVEN |
+| `components/AICenter.tsx` | AI-area tabs; `manager` → AIManager | PROVEN |
+| `components/ai/AIManager/index.tsx` + tabs | Current Artemis frontend shell | PROVEN |
 | `components/ai/hooks/useArtemisState.ts` | Artemis state hook → `GET /api/v1/artemis/state` | PROVEN |
-| `components/ai/AIManager/tabs/DecisionEngineTab.tsx` | Mostly redirects to Settings Decision Engine | PROVEN |
-| `components/settings/configuration/DecisionEngine.tsx` | Decision Engine config UI → `/api/v1/config/artemis` | PROVEN |
-| `components/widgets/ArtemisInsightsWidget.tsx` | Dashboard widget | PROVEN import; **hardcoded stub data** (not API-backed) |
-| `components/ai/ArtemisComponents.tsx` | Legacy Backtesting/Logs/Settings surface | **FILENAME-ONLY / likely dead** — no production import from AIManager/App; do not treat as canonical UI |
-| `services/api.ts` / `services/api-backend.ts` | `fetchArtemisState`, Artemis helpers, `/api/v1/artemis/*` | PROVEN |
-| `e2e/artemis-tabs.spec.ts` | E2E coverage for Artemis tabs | PROVEN |
+| `components/ai/AIManager/tabs/DecisionEngineTab.tsx` | LINK to Settings Decision Engine | PROVEN |
+| `components/settings/configuration/DecisionEngine.tsx` | Canonical Decision Engine config | PROVEN |
+| `components/widgets/ArtemisInsightsWidget.tsx` | DashboardHome widget | PROVEN reachable; **hardcoded fake confidence** |
+| `components/ai/ArtemisComponents.tsx` | Legacy surface | **FILENAME-ONLY** — not production-imported |
+| `services/api.ts` / `services/api-backend.ts` | Artemis API client helpers | PROVEN |
+| `e2e/artemis-tabs.spec.ts` | Artemis tab smoke | PROVEN |
 
 ### 2.4 Critical implementation facts (PROVEN)
 
