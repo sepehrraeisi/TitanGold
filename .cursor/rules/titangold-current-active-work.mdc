@@ -18,35 +18,32 @@ Risk tier:
 Tier 2–3 (API contract containment + frontend product redesign; no Tier-4 Live)
 
 Engineering status:
-**IMPLEMENTATION AUTHORIZED — IN PROGRESS**
+**IMPLEMENTED ON STAGING — READY FOR OWNER HUMAN QA**
 
-Authorized:
-- Legacy `/artemis/decision` advisory containment (backward compatible)
-- Trading Engine consumer fail-closed on `executionEligible`
-- AI Center visible label Manager → Artemis (id `manager` preserved)
-- Artemis shell + IA redesign (Overview/Evidence/Decisions/Orchestration/Controls/Lineage/System)
-- Autopilot/Demo↔Real/Insights/native-dialog containment
-- Narrow read-only readiness aggregation if no owner exists
-- Focused tests, Staging deploy (backend-only restart if dual-worker guard)
-- Living doc `docs/ARTEMIS_WP_A_LEGACY_SAFETY_UI.md`
-
-Not authorized:
-- DB migrations
-- Scheduler allowlist / worker topology changes
-- Live activation / order placement / private provider calls
-- Risk→Portfolio→Liquidity→OM full control-chain wiring
-- Reopening frozen Trend/Arbitrage product surfaces
-- Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
-
-Foundation baseline (closed):
-`01e461634c6910bad795a2c3c3b506ecf2c343df`
-
-Branch / worktree:
+Branch / HEAD:
 - `feat/artemis-wp-a-legacy-safety-ui`
 - `/home/ubuntu/worktrees/titangold-artemis-wp-a`
+- Implementation + runtime: `32a65e4`
+
+Authorized completed in WP-A:
+- Legacy `/artemis/decision` advisory containment
+- Trading Engine fail-closed on `executionEligible`
+- AI Center label Manager → Artemis (id `manager`)
+- Artemis shell + IA redesign
+- Autopilot/Demo↔Real/Insights/native-dialog containment
+- Read-only readiness aggregation
+- Focused tests + Staging deploy (backend-only; workers unchanged)
+
+Not authorized / unchanged:
+- DB migrations
+- Scheduler allowlist / worker topology
+- Live / orders / private provider calls
+- Risk→Portfolio→Liquidity→OM full wiring
+- Frozen Trend/Arbitrage product surfaces
+- Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
 Human QA:
-Required before WP-A close. Do not declare CLOSED without Owner Human QA PASS.
+Required. Do not declare CLOSED without Owner Human QA PASS.
 
-Next transition after Human QA:
-Draft PR → Owner review → explicit merge approval.
+Next transition after Human QA PASS:
+Draft PR review → explicit merge approval.

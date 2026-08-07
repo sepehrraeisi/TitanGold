@@ -98,3 +98,30 @@ See checklist below. WP-A must not close until Owner Human QA PASS.
 ## 10. Verdict (pre–Human QA target)
 
 **ARTEMIS WP-A — IMPLEMENTED ON STAGING · READY FOR OWNER HUMAN QA**
+
+
+## 11. Staging evidence (2026-08-07)
+
+| Item | Value |
+|------|-------|
+| Branch | `feat/artemis-wp-a-legacy-safety-ui` |
+| Implementation HEAD | `32a65e49ae890838fc532930ad0a03f2ed1efe82` (`32a65e4`) |
+| Runtime commit | `32a65e4` (`provenanceVerified=true`) |
+| Deploy method | Guarded script aborted (dual `titan-engine-worker`); controlled **titan-backend-only** restart |
+| Served bundle | `index-BW_Un-M9.js` (matches worktree dist) |
+| Worker before | id4 pid=1639616 ↺=0; id8 pid=1639645 ↺=0 |
+| Worker after | id4 pid=1639616 ↺=0; id8 pid=1639645 ↺=0 |
+| Backend tests | 8/8 PASS (containment, readiness, TE gate) |
+| Frontend tests | 9/9 PASS (`ArtemisWpA.test.tsx`) |
+| Production build | PASS |
+| Native dialogs (WP-A Autopilot chunk) | 0 |
+| Artemis Insights fake confidence | Removed (readiness-backed) |
+| Side effects | private=0 orders=0 transfers=0 withdrawals=0 scheduler mutations=0 workers=0 migrations=0 Live=0 |
+| Draft PR | BLOCKED — `gh` token invalid; branch pushed for Owner to open Draft PR |
+
+## 12. Pre–Human QA verdict
+
+**ARTEMIS WP-A — IMPLEMENTED ON STAGING**  
+**READY FOR OWNER HUMAN QA**
+
+Not CLOSED.
