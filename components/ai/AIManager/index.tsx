@@ -1,266 +1,237 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../../context/LanguageContext.tsx';
 import { OnNavigateHandler } from '../../../types/navigation.ts';
-import { useArtemisState } from '../hooks/useArtemisState.ts';
-import * as api from '../../../services/api.ts';
-import { AIManagerOverview, ArtemisState } from '../../../types.ts';
+import { fetchArtemisReadiness, fetchArtemisLegacyDecisionLogs } from '../../../services/artemisReadinessApi.ts';
+import {
+  CANONICAL_SECTIONS,
+  type ArtemisReadiness,
+  type ArtemisSectionId,
+} from './artemisProductTypes.ts';
+import { StatusPill } from './components/ArtemisUi.tsx';
+import {
+  OverviewSection,
+  EvidenceSection,
+  DecisionsSection,
+  OrchestrationSection,
+  ControlsSection,
+  LineageSection,
+  SystemSection,
+} from './tabs/canonical/ArtemisSections.tsx';
 
-const OverviewTab = lazy(() => import('./tabs/OverviewTab.tsx'));
-const DecisionEngineTab = lazy(() => import('./tabs/DecisionEngineTab.tsx'));
-const OrchestrationTab = lazy(() => import('./tabs/OrchestrationTab.tsx'));
-const LearningTab = lazy(() => import('./tabs/LearningTab.tsx'));
-const MonitoringTab = lazy(() => import('./tabs/MonitoringTab.tsx'));
-const ScenariosTab = lazy(() => import('./tabs/ScenariosTab.tsx'));
-const DataHubTab = lazy(() => import('./tabs/DataHubTab.tsx'));
-const BacktestingTab = lazy(() => import('./tabs/BacktestingTab.tsx'));
-const SystemLogsTab = lazy(() => import('./tabs/SystemLogsTab.tsx'));
-const SettingsTab = lazy(() => import('./tabs/SettingsTab.tsx'));
 const AutopilotTab = lazy(() => import('./tabs/AutopilotTab.tsx'));
-
-type ArtemisTab =
-  | 'overview'
-  | 'decision_engine'
-  | 'orchestration'
-  | 'learning'
-  | 'monitoring'
-  | 'scenarios'
-  | 'data_hub'
-  | 'backtesting'
-  | 'logs'
-  | 'settings'
-  | 'autopilot';
-
-const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({
-  children,
-  className,
-}) => (
-  <div className={`bg-card border border-border rounded-lg p-4 ${className || ''}`}>{children}</div>
-);
 
 type Props = {
   onNavigate?: OnNavigateHandler;
 };
 
+const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
+  <div className={`bg-card border border-border rounded-lg p-4 ${className || ''}`}>{children}</div>
+);
+
+function readSectionFromLocation(): ArtemisSectionId {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('artemisSection') || params.get('subtab') || 'overview';
+    const allowed = new Set(CANONICAL_SECTIONS.map((s) => s.id));
+    if (raw === 'autopilot' || raw === 'legacy_admin') return 'legacy_admin';
+    if (allowed.has(raw as ArtemisSectionId)) return raw as ArtemisSectionId;
+  } catch {
+    /* ignore */
+  }
+  return 'overview';
+}
+
 const AIManager: React.FC<Props> = ({ onNavigate }) => {
-  const { t } = useLanguage();
-  const [isLoading, setIsLoading] = useState(true);
-  const [data, setData] = useState<AIManagerOverview | null>(null);
-  const {
-    state: artemis,
-    loading: artemisLoading,
-    error: artemisError,
-    reload: reloadArtemis,
-    setSafeState: setArtemis,
-  } = useArtemisState();
-  const [activeTab, setActiveTab] = useState<ArtemisTab>('overview');
-  const [error, setError] = useState<string | null>(null);
+  const { t, language } = useLanguage();
+  const [activeSection, setActiveSection] = useState<ArtemisSectionId>(readSectionFromLocation);
+  const [readiness, setReadiness] = useState<ArtemisReadiness | null>(null);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showLegacyAdmin, setShowLegacyAdmin] = useState(false);
 
-  React.useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const managerData = await api.fetchAIManagerData();
-        setData(managerData);
-        if (managerData.artemis) {
-          setArtemis(managerData.artemis);
-        } else {
-          await reloadArtemis();
-        }
-      } catch (e) {
-        console.error('Failed to load AIManager data:', e);
-        setError(e instanceof Error ? e.message : 'Failed to load data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, [reloadArtemis, setArtemis]);
-
-  if (isLoading || artemisLoading) {
-    return <div className="text-center p-10">{t('loading')}</div>;
-  }
-
-  const combinedError = error || artemisError;
-  if (combinedError) {
-    return (
-      <div className="text-center p-10">
-        <p className="text-red-400 mb-4">
-          {t('error_loading') || 'Error loading data'}: {combinedError}
-        </p>
-        <button
-          onClick={() => window.location.reload()}
-          className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
-        >
-          {t('reload') || 'Reload'}
-        </button>
-      </div>
-    );
-  }
-
-  if (!data || !artemis) {
-    return <div className="text-center p-10">{t('no_data') || 'No data available'}</div>;
-  }
-
-  const tabs: { id: ArtemisTab; label: string }[] = [
-    { id: 'overview', label: t('artemis_overview') || 'Overview' },
-    { id: 'decision_engine', label: t('artemis_decision_engine') || 'Decision Engine' },
-    { id: 'orchestration', label: t('artemis_orchestration') || 'Agent Orchestration' },
-    { id: 'learning', label: t('artemis_learning') || 'Learning System' },
-    { id: 'monitoring', label: t('artemis_monitoring') || 'System Monitoring' },
-    { id: 'scenarios', label: t('artemis_scenarios') || 'Trading Scenarios' },
-    { id: 'data_hub', label: t('artemis_data_hub') || 'Data Hub' },
-    { id: 'backtesting', label: t('artemis_backtesting') || 'Backtesting' },
-    { id: 'logs', label: t('artemis_logs') || 'System Logs' },
-    { id: 'settings', label: t('artemis_settings') || 'Settings' },
-    { id: 'autopilot', label: t('artemis_autopilot') || 'Autopilot' },
-  ];
-
-  const refreshArtemis = async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
+    setReadinessError(null);
     try {
-      await reloadArtemis();
+      const [ready, legacyLogs] = await Promise.all([
+        fetchArtemisReadiness(),
+        fetchArtemisLegacyDecisionLogs(25),
+      ]);
+      setReadiness(ready);
+      setLogs(legacyLogs);
     } catch (e) {
-      console.error('Failed to refresh Artemis state:', e);
+      setReadiness(null);
+      setReadinessError(e instanceof Error ? e.message : 'Failed to load Artemis readiness');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
-  return (
-    <div className="space-y-6">
-      <Card>
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              {t('artemis_central_ai') || 'Artemis Central AI Controller'}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {t('artemis_description') ||
-                'Central decision-making and coordination system for autonomous trading'}
-            </p>
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('artemisSection', activeSection === 'legacy_admin' ? 'legacy_admin' : activeSection);
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      /* ignore */
+    }
+  }, [activeSection]);
+
+  const dir = language === 'fa' ? 'rtl' : 'ltr';
+
+  const sectionBody = useMemo(() => {
+    const common = { t, readiness, readinessError, onNavigate, logs };
+    switch (activeSection) {
+      case 'evidence':
+        return <EvidenceSection {...common} />;
+      case 'decisions':
+        return <DecisionsSection {...common} />;
+      case 'orchestration':
+        return <OrchestrationSection {...common} />;
+      case 'controls':
+        return <ControlsSection {...common} />;
+      case 'lineage':
+        return <LineageSection {...common} />;
+      case 'system':
+        return <SystemSection {...common} />;
+      case 'legacy_admin':
+        return showLegacyAdmin ? (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+              <p className="font-semibold">{t('artemis_legacy_admin_banner') || 'Legacy Administrative'}</p>
+              <p className="mt-1 text-muted-foreground">
+                {t('artemis_legacy_admin_not_ready') ||
+                  'Not Automated-Trading Ready · Not Live Authorization · Contained Autopilot UI'}
+              </p>
+            </div>
+            <Suspense fallback={<div className="p-6 text-center">{t('loading')}</div>}>
+              <AutopilotTab t={t} onRefresh={load} Card={Card} />
+            </Suspense>
           </div>
-          <div className="flex gap-2 items-center">
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                artemis.status === 'active'
-                  ? 'bg-green-500/20 text-green-400'
-                  : artemis.status === 'standby'
-                    ? 'bg-yellow-500/20 text-yellow-400'
-                    : artemis.status === 'maintenance'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'bg-red-500/20 text-red-400'
-              }`}
-            >
-              {t(artemis.status) || artemis.status}
-            </span>
+        ) : (
+          <div className="rounded-lg border border-border p-6 space-y-3">
+            <p className="font-semibold">{t('artemis_autopilot_hidden') || 'Autopilot is hidden from normal Artemis navigation'}</p>
+            <p className="text-sm text-muted-foreground">
+              {t('artemis_autopilot_hidden_reason') ||
+                'Current maturity does not support autonomous trading controls in the product nav.'}
+            </p>
             <button
-              onClick={async () => {
-                const newMode = artemis.mode === 'demo' ? 'real' : 'demo';
-                if (
-                  confirm(
-                    t('switch_mode_confirm') ||
-                      `Switch to ${newMode} mode? This will affect all trading operations.`
-                  )
-                ) {
-                  try {
-                    const updated = await api.updateArtemisMode(newMode);
-                    setArtemis(updated);
-                    alert(t('mode_switched') || `Mode switched to ${newMode}`);
-                  } catch (e) {
-                    console.error('Failed to switch mode:', e);
-                    alert(t('mode_switch_failed') || 'Failed to switch mode');
-                  }
-                }
-              }}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-80 ${
-                artemis.mode === 'real'
-                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                  : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-              }`}
-              title={t('click_to_switch_mode') || 'Click to switch between demo and real mode'}
+              type="button"
+              className="text-sm underline text-amber-700 dark:text-amber-300"
+              onClick={() => setShowLegacyAdmin(true)}
             >
-              {artemis.mode === 'real' ? '🔴 ' : '🟢 '}
-              {t(artemis.mode) || artemis.mode}
+              {t('artemis_open_legacy_admin') || 'Open legacy administrative Autopilot (not Live authorization)'}
             </button>
           </div>
+        );
+      case 'overview':
+      default:
+        return <OverviewSection {...common} />;
+    }
+  }, [activeSection, t, readiness, readinessError, onNavigate, logs, showLegacyAdmin, load]);
+
+  return (
+    <div className="space-y-4" dir={dir} data-artemis-shell="canonical-wpa">
+      <header className="bg-card border border-border rounded-lg p-4 space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-foreground">{t('artemis') || 'Artemis'}</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {t('artemis_central_intelligence') || 'Central Intelligence — legacy advisory maturity'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2" aria-label={t('artemis_status') || 'Artemis status'}>
+            <StatusPill label={t('artemis_stage_legacy_advisory') || 'LEGACY ADVISORY'} tone="warning" />
+            <StatusPill label={t('artemis_not_execution_eligible') || 'NOT EXECUTION ELIGIBLE'} tone="danger" />
+          </div>
         </div>
 
-        <div className="border-b border-border">
-          <nav className="-mb-px flex space-x-6 overflow-x-auto">
-            {tabs.map(tab => (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-muted-foreground">{t('requested_mode') || 'Requested Mode'}</p>
+            <p className="font-semibold">
+              {readiness?.runtime?.requestedMode?.toUpperCase() || (t('unavailable') || 'Unavailable')}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('effective_mode') || 'Effective Mode'}</p>
+            <p className="font-semibold">
+              {readiness?.runtime?.effectiveMode?.toUpperCase() || (t('unavailable') || 'Unavailable')}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('emergency_stop') || 'Emergency Stop'}</p>
+            <p className="font-semibold">
+              {readiness?.runtime
+                ? readiness.runtime.killSwitchActive
+                  ? t('active') || 'Active'
+                  : t('inactive') || 'Inactive'
+                : t('unavailable') || 'Unavailable'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('execution_eligibility') || 'Execution Eligibility'}</p>
+            <p className="font-semibold text-red-600 dark:text-red-300">{t('no') || 'No'}</p>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          {t('artemis_no_one_click_live') ||
+            'Artemis does not provide one-click Live automation. Runtime mode is owned by canonical settings/runtime controls.'}
+        </p>
+      </header>
+
+      <nav
+        className="bg-card border border-border rounded-lg p-2 overflow-x-auto"
+        aria-label={t('artemis_sections') || 'Artemis sections'}
+      >
+        <div className="flex min-w-max gap-1">
+          {CANONICAL_SECTIONS.map((section) => {
+            const selected = activeSection === section.id;
+            return (
               <button
-                key={tab.id}
-                data-artemis-tab={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-purple-500 text-purple-400'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                key={section.id}
+                type="button"
+                data-artemis-tab={section.id}
+                data-artemis-section={section.id}
+                aria-current={selected ? 'page' : undefined}
+                onClick={() => setActiveSection(section.id)}
+                className={`px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                  selected
+                    ? 'bg-blue-600 text-white'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                 }`}
               >
-                {tab.label}
+                {t(section.labelKey) !== section.labelKey ? t(section.labelKey) : section.fallback}
               </button>
-            ))}
-          </nav>
+            );
+          })}
+          <button
+            type="button"
+            data-artemis-section="legacy_admin"
+            className="px-3 py-2 rounded-md text-xs text-amber-700 dark:text-amber-300 whitespace-nowrap"
+            onClick={() => {
+              setShowLegacyAdmin(false);
+              setActiveSection('legacy_admin');
+            }}
+          >
+            {t('artemis_legacy_admin_nav') || 'Legacy Admin'}
+          </button>
         </div>
-      </Card>
+      </nav>
 
-      <div className="mt-6">
-        <Suspense fallback={<div className="text-center p-10">{t('loading')}</div>}>
-          {activeTab === 'overview' && (
-            <OverviewTab
-              data={data}
-              artemis={artemis}
-              t={t}
-              onRefresh={refreshArtemis}
-              onNavigate={setActiveTab}
-              Card={Card}
-            />
-          )}
-          {activeTab === 'decision_engine' && (
-            <DecisionEngineTab
-              artemis={artemis}
-              t={t}
-              onRefresh={refreshArtemis}
-              Card={Card}
-              onNavigate={onNavigate}
-            />
-          )}
-          {activeTab === 'orchestration' && <OrchestrationTab t={t} Card={Card} />}
-          {activeTab === 'learning' && <LearningTab t={t} Card={Card} />}
-          {activeTab === 'monitoring' && (
-            <MonitoringTab
-              artemis={artemis}
-              t={t}
-              onRefresh={refreshArtemis}
-              Card={Card}
-              onNavigate={onNavigate}
-            />
-          )}
-          {activeTab === 'scenarios' && (
-            <ScenariosTab t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-          {activeTab === 'data_hub' && (
-            <DataHubTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-          {activeTab === 'backtesting' && (
-            <BacktestingTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-          {activeTab === 'logs' && (
-            <SystemLogsTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-          {activeTab === 'settings' && (
-            <SettingsTab
-              artemis={artemis}
-              t={t}
-              onRefresh={refreshArtemis}
-              Card={Card}
-              onNavigate={onNavigate}
-            />
-          )}
-          {activeTab === 'autopilot' && (
-            <AutopilotTab t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-        </Suspense>
-      </div>
+      {loading ? (
+        <div className="text-center p-10" role="status">
+          {t('loading')}
+        </div>
+      ) : (
+        <div className="min-h-[320px]">{sectionBody}</div>
+      )}
     </div>
   );
 };

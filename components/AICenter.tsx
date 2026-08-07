@@ -82,12 +82,12 @@ const AICenter: React.FC<Props> = ({
   };
 
   const tabs: { id: AITab; label: string }[] = [
-    { id: 'manager', label: t('ai_manager') },
+    { id: 'manager', label: t('artemis') !== 'artemis' ? t('artemis') : (t('ai_manager_artemis') || 'Artemis') },
     { id: 'agents', label: t('ai_agents') },
     { id: 'training', label: t('ai_training') },
     { id: 'analytics', label: t('ai_analytics') },
     { id: 'config', label: t('ai_config') },
-    { id: 'topic_routing', label: 'Topic Routing' },
+    { id: 'topic_routing', label: t('topic_routing') !== 'topic_routing' ? t('topic_routing') : 'Topic Routing' },
   ];
 
   return (
