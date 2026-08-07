@@ -1,55 +1,93 @@
 ---
-description: TitanGold dynamic active-work authority — Trend CLOSED AND FROZEN
+description: TitanGold dynamic active-work authority — Artemis Contract Foundation discovery
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**TREND-DETECTION-SPECIALIZED-PRODUCTIZATION**
+**ARTEMIS CONTRACT FOUNDATION — READ-ONLY DISCOVERY AND CONTRACT DESIGN**
 
 Current area:
-Agents → Trend Detection
+Shared Foundation → Artemis evidence contract / Agent authority architecture
 
 Current program slice:
-TREND-POST-MERGE-CLOSEOUT-AND-FREEZE
+ARTEMIS-CONTRACT-FOUNDATION-DISCOVERY
 
 Risk tier:
-Tier 0 (documentation / freeze closeout after exact-main deploy)
+Tier 0 (Read-Only Discovery / Documentation)
 
 Engineering status:
-**MERGED · EXACT-MAIN DEPLOYED · HUMAN-QA PASSED · CLOSED AND FROZEN**
+**DISCOVERY / DESIGN — IMPLEMENTATION NOT AUTHORIZED**
+
+Classification:
+Shared Foundation discovery/design.
 
 Authorized scope:
-- Documentation and Rule 02 freeze only
-- No Trend product runtime changes
-- No Scheduler / worker changes
-- Do not reopen Trend without a reproduced defect and a separate approved work package
+- Repository inspection
+- Architecture discovery
+- Source-of-Truth mapping
+- Agent role/authority analysis
+- Evidence contract design
+- Compatibility/correlation design
+- Lineage/audit/replay design
+- Implementation planning
+- Living document: `docs/ARTEMIS_CONTRACT_FOUNDATION.md`
+- Rule 02 updates for this discovery outcome only
 
-Hard boundaries:
-- Do **not** reopen Trend productization
-- Do **not** restart `titan-engine-worker` or change Scheduler allowlist
-- Do **not** call private MEXC or enable Live execution
-- Do **not** begin another Agent productization outcome from this freeze commit
+Hard boundaries — NOT authorized:
+- Artemis runtime implementation
+- Agent adapter implementation
+- Database migration
+- Deployment
+- Scheduler change (allowlist remains `["arbitrage"]`)
+- Worker topology change (dual `titan-engine-worker` deferred)
+- Private provider calls
+- Live activation
+- Order execution
+- Financial side effects
+- Reopening Trend or Arbitrage frozen product surfaces
+- Modifying Data Hub / Agents Shell / AI Shared Foundation baselines
+- Touching protected unrelated files:
+  - `scripts/backup-db.sh`
+  - `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`
+  - `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
-Provenance (Staging exact-main alignment):
-- Squash merge commit (PR #18): **`b242c9c3df1aedb283f96784a11d46e80699909b`**
-- Deployed runtime source commit: **`b242c9c`**
-- Backend health `commit` / `runtimeCommit`: **`b242c9c`**
-- `provenanceVerified`: **true**
-- Served frontend bundle: **`assets/index-CLflvsy0.js`**
-- Frontend build source: exact-main worktree `@ b242c9c`
-- Environment: Staging (`https://titan.zala.ir`)
-- Worktree used for deploy: `/home/ubuntu/worktrees/titangold-trend-exact-main`
+Preserved prior checkpoint (do not redo):
+**TREND DETECTION — CLOSED AND FROZEN**
+- Trend squash merge / deployed exact-main runtime: `b242c9c3df1aedb283f96784a11d46e80699909b`
+- Trend post-merge docs / Rule 02 freeze HEAD (pre-Artemis): `a100f7b`
+- Exact-main Staging alignment: PASS
+- Runtime provenance: health/runtimeCommit/manifest = `b242c9c`; bundle `assets/index-CLflvsy0.js`; dirty delta = 0
+- Human QA = PASS; not Scheduler-allowlisted; no Live execution
 
-Deferred (separate outcomes — not Trend):
-- Dual-worker scheduler leader election / deploy fingerprint guard
-- Scheduled Trend runs (allowlist change)
-- Core Rules v4.5 activation (requires authoritative source file)
-- Artemis Contract Foundation discovery
+Arbitrage remains CLOSED AND FROZEN (product).
 
-Next transition:
-Activate Core Rules v4.5 (when source available) → Artemis Contract Foundation read-only discovery
+Governing Core Rule:
+**ACTIVE Rule 01 = TitanGold Core Engineering Rules v4.5** (replaces v4.4).
+Section 47 governs the canonical Agent-to-Artemis evidence contract design in this outcome.
+
+Branch / worktree:
+- Branch: `feat/artemis-contract-foundation`
+- Worktree: `/home/ubuntu/worktrees/titangold-artemis-contract-foundation`
+- Base: current `origin/main` at discovery start
+
+Acceptance criteria (this outcome):
+- Living discovery document with all required sections
+- Agent authority matrix for all 15 Agents
+- Canonical evidence envelope + Evidence Item design
+- Compatibility / correlation / conflict / control-chain / lineage / maturity designs
+- Frozen Arbitrage + Trend future-adapter analysis (docs only)
+- Runtime code changed = 0; migrations = 0; deployments = 0
+- Scheduler mutations = 0; worker mutations = 0; private provider calls = 0
+
+Stop conditions:
+- Any request for Artemis runtime coding, migrations, deploy, Scheduler/worker mutation, Live, or Tier-4 execution
+- Attempt to modify frozen Trend/Arbitrage product implementations
+- ACTIVE Rule 01 no longer visible as v4.5
+
+Next approved transition (owner only):
+Owner review of `docs/ARTEMIS_CONTRACT_FOUNDATION.md` → explicit approval of a separate Shared Foundation implementation Work Package (if any).
 
 Evidence:
-- `docs/TREND_DETECTION_PRODUCT.md` — Post-Merge Exact-Main Alignment and Freeze
+- `docs/ARTEMIS_CONTRACT_FOUNDATION.md`
