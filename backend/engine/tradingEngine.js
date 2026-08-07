@@ -740,9 +740,9 @@ class TradingEngine {
                 }
             };
 
-            // Call Artemis Decision Engine via API (with 30s timeout)
+            // Call Artemis Decision Engine via API (v1 mount; WP-A containment)
             const response = await fetchWithTimeout(
-                `http://localhost:${process.env.PORT || 5001}/api/artemis/decision`,
+                `http://localhost:${process.env.PORT || 5001}/api/v1/artemis/decision`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -753,11 +753,16 @@ class TradingEngine {
 
             if (response.ok) {
                 const decision = await response.json();
+                // WP-A: never treat legacy advisory as execution approval
+                const executionEligible = decision.executionEligible === true
+                    && decision.approvedForExecution === true;
+                const actionOk = decision.action === 'EXECUTE' || decision.action === 'BUY' || decision.action === 'SELL';
                 return {
-                    approved: decision.action === 'EXECUTE' || decision.action === 'BUY' || decision.action === 'SELL',
-                    reason: decision.reason || 'Artemis decision',
+                    approved: executionEligible && actionOk,
+                    reason: decision.reason || 'Artemis legacy advisory — not execution eligible',
                     confidence: decision.confidence || opportunity.confidence,
-                    decision: decision,
+                    decision,
+                    executionEligible: false,
                 };
             } else {
                 // Fallback to AI service
@@ -771,39 +776,20 @@ class TradingEngine {
     }
 
     async getArtemisApprovalFallback(opportunity) {
-        try {
-            const prompt = `Should we execute this trade opportunity?
-Symbol: ${opportunity.symbol}
-Type: ${opportunity.type}
-Side: ${opportunity.side}
-Confidence: ${opportunity.confidence}%
-Price: ${opportunity.price}
-
-Return ONLY JSON: {"approved": true/false, "reason": "short reason", "confidence": 0-100}`;
-
-            const response = await aiService.askArtemis(prompt);
-            
-            try {
-                const decision = JSON.parse(response);
-                return {
-                    approved: decision.approved === true,
-                    reason: decision.reason || 'Artemis decision',
-                    confidence: decision.confidence || 0,
-                };
-            } catch {
-                return {
-                    approved: opportunity.confidence >= 80,
-                    reason: 'Artemis response parsing failed, using confidence threshold',
-                    confidence: opportunity.confidence,
-                };
-            }
-        } catch (error) {
-            return {
-                approved: opportunity.confidence >= 85,
-                reason: 'Artemis unavailable, using high confidence threshold',
-                confidence: opportunity.confidence,
-            };
-        }
+        // WP-A containment: fallback must not authorize execution
+        return {
+            approved: false,
+            reason: 'Artemis legacy advisory fallback — NOT_EXECUTION_ELIGIBLE',
+            confidence: opportunity.confidence,
+            executionEligible: false,
+            decision: {
+                action: 'HOLD',
+                approved: false,
+                classification: 'LEGACY_ADVISORY_ONLY',
+                executionEligible: false,
+                approvedForExecution: false,
+            },
+        };
     }
 
     async getAgentSignals(opportunity) {

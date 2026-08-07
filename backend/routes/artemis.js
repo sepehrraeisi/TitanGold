@@ -5,12 +5,15 @@ import { CAP } from '../services/capabilities.js';
 import { evaluateExecutionPolicy, REASON } from '../services/agentExecutionPolicyService.js';
 import { query } from '../database/db.js';
 import { getMixtureDecision } from '../services/artemisOrchestrator.js';
+import { containLegacyArtemisDecision } from '../services/artemisDecisionContainment.js';
+import { buildArtemisReadiness } from '../services/artemisReadinessService.js';
 import { logger } from '../services/logger.js';
 import { validateBody, validateParams, validateResponse } from '../middleware/validation.js';
 import {
   artemisHealthResponseSchema,
   artemisStateResponseSchema,
   artemisDecisionResponseSchema,
+  artemisReadinessResponseSchema,
   artemisDecisionEnginePatchSchema,
   artemisConfigPutSchema,
 } from '../schemas/artemisSchemas.js';
@@ -82,6 +85,19 @@ router.get('/health', authenticate, validateResponse(artemisHealthResponseSchema
     });
   }
 });
+router.get('/readiness', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), validateResponse(artemisReadinessResponseSchema), async (req, res) => {
+  try {
+    const readiness = await buildArtemisReadiness({ userId: req.user?.id });
+    return res.json(readiness);
+  } catch (error) {
+    logger.error('Failed to build Artemis readiness:', error);
+    return res.status(500).json({
+      error: 'Failed to build Artemis readiness',
+      message: error.message,
+    });
+  }
+});
+
 router.get('/state', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), validateResponse(artemisStateResponseSchema), async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -297,31 +313,33 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
     });
 
     if (!decisionPolicy.allowed) {
-      return res.status(decisionPolicy.reasonCode === REASON.CONFIRMATION_REQUIRED ? 409 : 403).json({
-        action: 'HOLD',
-        approved: false,
-        reason: decisionPolicy.suppressionReason || decisionPolicy.reasonCode,
-        confidence: opportunity?.confidence || 0,
-        policy: {
-          effective_mode: decisionPolicy.effectiveMode,
-          side_effects_suppressed: decisionPolicy.sideEffectsSuppressed,
-        },
-      });
+      return res.status(decisionPolicy.reasonCode === REASON.CONFIRMATION_REQUIRED ? 409 : 403).json(
+        containLegacyArtemisDecision({
+          action: 'HOLD',
+          approved: false,
+          reason: decisionPolicy.suppressionReason || decisionPolicy.reasonCode,
+          confidence: opportunity?.confidence || 0,
+          policy: {
+            effective_mode: decisionPolicy.effectiveMode,
+            side_effects_suppressed: decisionPolicy.sideEffectsSuppressed,
+          },
+        }, { sideEffectsSuppressed: true })
+      );
     }
 
-    const sideEffectsSuppressed = decisionPolicy.sideEffectsSuppressed;
+    const sideEffectsSuppressed = decisionPolicy.sideEffectsSuppressed !== false;
 
     // Get Artemis state
     const stateResult = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');
     const artemisState = stateResult.rows[0];
 
     if (!artemisState || artemisState.status !== 'active') {
-      const payload = {
+      const payload = containLegacyArtemisDecision({
         action: 'HOLD',
         approved: false,
         reason: 'Artemis is not active',
         confidence: 0,
-      };
+      }, { sideEffectsSuppressed });
       await logDecision('warning', 'Artemis decision skipped: Artemis not active', {
         opportunity,
         context,
@@ -359,12 +377,12 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
 
     // Check if we have enough capacity
     if (context && context.activeTrades >= context.maxTrades) {
-      const payload = {
+      const payload = containLegacyArtemisDecision({
         action: 'HOLD',
         approved: false,
         reason: 'Maximum concurrent trades reached',
         confidence: opportunity.confidence,
-      };
+      }, { sideEffectsSuppressed });
       await logDecision('info', 'Artemis decision blocked: max concurrent trades reached', {
         opportunity,
         context,
@@ -376,12 +394,12 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
 
     // Check risk limits
     if (context && context.dailyLoss && Math.abs(context.dailyLoss) > (context.portfolioValue * 0.05)) {
-      const payload = {
+      const payload = containLegacyArtemisDecision({
         action: 'HOLD',
         approved: false,
         reason: 'Daily loss limit reached',
         confidence: opportunity.confidence,
-      };
+      }, { sideEffectsSuppressed });
       await logDecision('warning', 'Artemis decision blocked: daily loss limit reached', {
         opportunity,
         context,
@@ -406,18 +424,18 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
         (mixture.action === 'BUY' || mixture.action === 'SELL') &&
         mixture.confidence >= minConfidence;
 
-      const payload = {
+      const payload = containLegacyArtemisDecision({
         action: finalApproved ? mixture.action : 'HOLD',
         approved: finalApproved,
         reason:
           mixture.reason ||
           (finalApproved
-            ? 'Mixture-of-experts approved opportunity'
+            ? 'Mixture-of-experts advisory opportunity (not execution approval)'
             : 'Mixture-of-experts below confidence threshold'),
         confidence: mixture.confidence,
         signals: signalCount,
         providers: mixture.providers,
-      };
+      }, { sideEffectsSuppressed });
 
       await logDecision('info', 'Artemis mixture-of-experts decision', {
         opportunity,
@@ -435,7 +453,7 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
     // Fallback: منطق جمع ساده confidence + سیگنال‌ها
     const finalApproved = baseApproved && totalConfidence >= minConfidence;
 
-    const payload = {
+    const payload = containLegacyArtemisDecision({
       action: finalApproved
         ? opportunity.side === 'BUY'
           ? 'BUY'
@@ -443,15 +461,15 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
         : 'HOLD',
       approved: finalApproved,
       reason: finalApproved
-        ? `High confidence opportunity (${totalConfidence.toFixed(
+        ? `Legacy advisory opportunity (${totalConfidence.toFixed(
           1
-        )}%) with ${signalCount} agent signals`
+        )}%) with ${signalCount} agent signals — not execution approval`
         : `Confidence ${totalConfidence.toFixed(
           1
         )}% below threshold ${minConfidence}%`,
       confidence: totalConfidence,
       signals: signalCount,
-    };
+    }, { sideEffectsSuppressed });
 
     await logDecision('info', 'Artemis baseline decision (no mixture or mixture failed)', {
       opportunity,
@@ -465,12 +483,12 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
     return res.json(payload);
   } catch (error) {
     logger.error('Artemis decision error:', error);
-    res.status(500).json({
+    res.status(500).json(containLegacyArtemisDecision({
       action: 'HOLD',
       approved: false,
       reason: 'Decision engine error',
       confidence: 0,
-    });
+    }, { sideEffectsSuppressed: true }));
   }
 });
 

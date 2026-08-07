@@ -97,7 +97,34 @@ export const artemisDecisionResponseSchema = z.object({
     reason: z.string(),
     confidence: z.number(),
     signals: z.number().optional(),
-    providers: z.array(z.string()).optional()
+    providers: z.array(z.any()).optional(),
+    // WP-A containment — required advisory classification on all decision responses
+    classification: z.literal('LEGACY_ADVISORY_ONLY'),
+    executionEligible: z.literal(false),
+    executionEligibility: z.literal('NOT_EXECUTION_ELIGIBLE'),
+    approvedForExecution: z.literal(false),
+    maturityStage: z.literal('LEGACY_ADVISORY'),
+    advisoryOnly: z.literal(true),
+    sideEffectsSuppressed: z.boolean(),
+    legacyApprovedFieldSemantics: z.string(),
+    policy: z.record(z.any()).optional(),
+});
+
+export const artemisReadinessResponseSchema = z.object({
+    maturityStage: z.string(),
+    classification: z.string(),
+    executionEligible: z.boolean(),
+    executionEligibility: z.string(),
+    contract: z.record(z.any()),
+    evidence: z.record(z.any()),
+    orchestration: z.record(z.any()),
+    controlChain: z.record(z.any()),
+    runtime: z.any().nullable(),
+    runtimeTruth: z.string(),
+    agents: z.record(z.any()),
+    limitations: z.array(z.string()),
+    dualConfigLimitationKey: z.string().optional(),
+    generatedAt: z.string(),
 });
 
 export const artemisDecisionEnginePatchSchema = z.object({
@@ -115,6 +142,7 @@ export default {
     artemisHealthResponseSchema,
     artemisStateResponseSchema,
     artemisDecisionResponseSchema,
+    artemisReadinessResponseSchema,
     artemisDecisionEnginePatchSchema,
     artemisConfigPutSchema,
 };
