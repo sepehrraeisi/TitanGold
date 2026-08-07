@@ -1,17 +1,21 @@
 # Artemis Contract Foundation — Discovery & Design
 
-**Status:** OWNER RE-REVIEW REMEDIATION COMPLETE — READ-ONLY DISCOVERY / CONTRACT DESIGN  
-**Classification:** Shared Foundation discovery (Tier 0)  
+**Status:** OWNER APPROVED — UI/UX ARCHITECTURE RECORDED — READY FOR WP-A  
+**Classification:** Shared Foundation discovery (Tier 0) — **closeout before implementation**  
 **Governing authority:** TitanGold Core Engineering Rules **v4.5** — Sections 45–54 (esp. §47)  
-**Rule 02:** ARTEMIS CONTRACT FOUNDATION — READ-ONLY DISCOVERY AND CONTRACT DESIGN  
+**Rule 02:** ARTEMIS CONTRACT FOUNDATION — OWNER APPROVED; WP-A not yet authorized for runtime coding until explicit start  
 **Branch:** `feat/artemis-contract-foundation`  
 **Worktree:** `/home/ubuntu/worktrees/titangold-artemis-contract-foundation`  
+**Discovery HEAD (prior remediation):** `aca08a8bed8db8da3ab3fb937f43cc2756e6ddc7`  
 **Base `origin/main`:** `a100f7ba21131c351b561fb66554e90990da8725`  
-**Runtime implementation changed:** **0**  
+**Runtime / frontend implementation changed:** **0**  
 **Migrations / deployments / Scheduler / worker / private provider calls:** **0**
 
 **Preserved prior checkpoint (do not reopen):**  
 TREND DETECTION — CLOSED AND FROZEN · runtime `b242c9c` · docs freeze `a100f7b` · Scheduler allowlist `["arbitrage"]` · dual `titan-engine-worker` deferred.
+
+**Owner re-review of remediated discovery:** **APPROVED** (subject to UI/UX decisions in §29).  
+Findings 1–3 remain accepted — do not reopen unless contradictory evidence appears.
 
 ---
 
@@ -635,14 +639,27 @@ Design-only stages (aligned to v4.5 §53; user-facing shorthand Independent → 
 
 **Owner-approved order.** No slice below is authorized for implementation by this discovery commit.
 
-### WP-A — Legacy Artemis safety containment (first)
+### WP-A — Legacy Artemis safety + UI containment (first)
 
-- Prove all consumers of `/artemis/decision` (including Trading Engine path mismatch).
-- Prevent legacy `approved: true` from being treated as execution eligibility.
-- Preserve backward compatibility for advisory consumers.
-- Explicitly mark / contain output as advisory / analysis-only until the full control chain exists.
+**Backend**
+
+- Prove all consumers of legacy `/artemis/decision` (including Trading Engine path mismatch).
+- Contain approval semantics: legacy output cannot become execution approval.
+- Ensure classification `LEGACY_ADVISORY_ONLY` / `NOT_EXECUTION_ELIGIBLE`.
 - No Live activation.
 - Focused regression only.
+
+**Frontend (same WP — no new fake backend)**
+
+- Rename AI Center visible label `AI Manager` → **Artemis**; keep internal tab id `manager` for compatibility.
+- Preserve current navigation / deep-link compatibility; no second Artemis UI owner.
+- Remove/contain misleading Demo↔Real control from Artemis (`AIManager`) header; show Requested / Effective mode + Emergency Stop + eligibility as read-only truthful displays; do **not** create another runtime-mode SoT.
+- Classify product surface as Legacy Advisory / Not Execution Eligible (never “Approved for Execution”).
+- Contain/hide Autopilot from normal Artemis product navigation; if admin legacy surface remains temporarily, label explicitly Legacy / Administrative / Not Automated-Trading Ready.
+- Eliminate reachable native `alert` / `confirm` / `prompt` in worked-on Artemis product paths (target **0**).
+- Remove or replace hardcoded `ArtemisInsightsWidget` with API-backed truthful advisory **or** Unavailable/Readiness **or** remove reachable production rendering — no replacement fake values.
+- Remove fake/synthetic metrics from worked-on canonical Overview view.
+- Do **not** build rich Evidence/Decisions screens against temporary fake data in WP-A.
 
 ### WP-B — Canonical contract package
 
@@ -661,18 +678,16 @@ Design-only stages (aligned to v4.5 §53; user-facing shorthand Independent → 
 - Preserve `ai_decisions` as existing Agent-run Source of Truth.
 - Do **not** overwrite frozen Agent `output_data` into a new schema.
 
-### WP-D — Read-only adapters
+### WP-D — Trend + Arbitrage read-only adapters
 
 - Trend adapter outside frozen product surfaces.
 - Arbitrage adapter outside frozen product surfaces.
 - Map persisted product outputs → canonical envelope; no product IA/business edits.
 
-### WP-E — Artemis advisory consumer
+### WP-E — Artemis advisory consumer + canonical UI
 
-- `analysis_only`.
-- Correlation-aware.
-- Conflict-aware.
-- No orders.
+- Backend: `analysis_only` consumer; correlation-aware; conflict-aware; no orders.
+- Frontend activates real **Evidence**, **Decisions**, correlation/conflict, decision context, and **Lineage** views using canonical persisted owners only.
 
 ### Only after WP-A…WP-E
 
@@ -700,6 +715,8 @@ Design-only stages (aligned to v4.5 §53; user-facing shorthand Independent → 
 | Reopening frozen Trend/Arbitrage | High | Adapter-outside-freeze rule (WP-D) |
 | Using `ai_decisions.confidence` as calibrated probability | Medium | Nullable + method required |
 | Artemis decisions only in `system_logs` | Medium | WP-C lineage before DECISION_ELIGIBLE |
+| Hardcoded `ArtemisInsightsWidget` + Demo↔Real header + Autopilot in product nav | Critical | WP-A UI containment |
+| Native `alert`/`confirm`/`prompt` on Artemis product paths | High | WP-A: target count **0** on worked-on paths |
 | Dead/alternate surfaces (`ArtemisComponents.tsx`, non-PM2 `engineWorker.js`) | Medium | Do not revive; prove reachability before edits |
 | Dual workers / Scheduler fingerprint | Medium | Separate shared-runtime outcome |
 | Deploy blue/green drift | Medium | Implement only in canonical source; deploy via normal pipeline |
@@ -713,7 +730,7 @@ This discovery outcome is complete when:
 - [x] ACTIVE Rule 01 verified as **v4.5**
 - [x] Rule 02 transitioned to Artemis discovery (implementation not authorized)
 - [x] Isolated branch + worktree from verified `origin/main`
-- [x] Living doc with sections 1–28
+- [x] Living doc with sections 1–29 (incl. Frontend / UI-UX Architecture)
 - [x] Agent authority matrix for 15 Agents
 - [x] Canonical envelope + Evidence Item designed
 - [x] Compatibility / correlation / conflict / control chain / lineage / maturity designed
@@ -721,13 +738,15 @@ This discovery outcome is complete when:
 - [x] Runtime code = 0; migrations = 0; deployments = 0; Scheduler/worker mutations = 0; private provider calls = 0
 - [x] Owner re-review findings 1–3 documented (identity graph, legacy approval semantics, Risk UUID debt)
 - [x] Owner design directions recorded as APPROVED in §26
-- [ ] Owner re-review of remediated document (Human) — **pending**
+- [x] Canonical Artemis UI location + IA designed (§29)
+- [x] Misleading/unsafe UI surfaces inventoried for WP-A
+- [ ] Explicit owner authorization to **start WP-A implementation** — **pending**
 
 ---
 
 ## 26. Owner Decisions — APPROVED DESIGN DIRECTION
 
-These are **no longer ambiguous**. Recorded as owner-approved design direction for future implementation WPs (still **not** implementation authorization):
+These are **no longer ambiguous**. Recorded as owner-approved design direction for future implementation WPs (still **not** automatic runtime authorization until WP-A is explicitly started):
 
 1. **Canonical contract — APPROVED**  
    `schemaVersion = 1.0.0`  
@@ -762,13 +781,29 @@ These are **no longer ambiguous**. Recorded as owner-approved design direction f
 7. **Dual `titan-engine-worker` remediation — APPROVED as separate outcome**  
    Remains a separate shared-runtime outcome; not part of Artemis Contract Foundation discovery.
 
-**Still open for a later implementation WP (not blocking this discovery remediation):** single Decision Engine config SoT (`artemis_state` vs `system_config`) — to be decided during WP-A/WP-E consumer proof.
+8. **Canonical menu location — APPROVED**  
+   **AI Center → Artemis** is the canonical product location.  
+   Do **not** add another top-level Dashboard menu item for Artemis.
+
+9. **Frontend owner — APPROVED**  
+   Reuse existing `AIManager` as the Artemis frontend shell owner.  
+   Do **not** create a duplicate Artemis frontend.
+
+10. **Internal tab id compatibility — APPROVED**  
+    Keep internal AICenter tab id `manager` initially.  
+    Change **visible** label from `AI Manager` to `Artemis`.  
+    Preserve navigation/deep-link compatibility.
+
+11. **Current UI truthfulness — APPROVED**  
+    Existing Artemis UI requires truthfulness/safety redesign (Demo↔Real header, Autopilot nav, hardcoded Insights, native dialogs, synthetic metrics).
+
+**Still open for a later implementation WP (not blocking discovery closeout):** single Decision Engine config SoT (`artemis_state` vs `system_config`) — decide during WP-A consumer proof / Settings link verification.
 
 ---
 
 ## 27. Explicit Non-Goals
 
-- Implementing Artemis runtime changes
+- Implementing Artemis runtime changes in this discovery closeout
 - Implementing Agent adapters
 - DB migrations
 - Deployments / PM2 restarts / worker topology changes
@@ -779,25 +814,270 @@ These are **no longer ambiguous**. Recorded as owner-approved design direction f
 - Reopening Data Hub / Agents Shell / AI Shared Foundation
 - Declaring any Agent `EXECUTION_ELIGIBLE` or automated-trading ready
 - Equal-weight voting design
+- Adding a second top-level Dashboard Artemis menu item
+- Creating a duplicate Artemis frontend beside `AIManager`
+- Building rich Evidence/Decisions UI against fake temporary data in WP-A
 
 ---
 
 ## 28. Final Recommendation
 
-**Proceed to owner re-review of this remediated Contract Foundation design.**  
+**Owner discovery approval recorded.** Next authorized engineering step is an explicit **WP-A** start (Legacy Artemis safety + UI containment) — not yet coded in this commit.
 
-Do **not** implement Artemis runtime, adapters, migrations, or control-chain wiring until the owner explicitly approves the next Work Package (expected first: **WP-A Legacy Artemis safety containment**).
-
-Until then:
+Until WP-A starts and completes:
 
 - Keep Trend and Arbitrage **CLOSED AND FROZEN**.
-- Treat legacy `/artemis/decision` as **`LEGACY_ADVISORY_ONLY` / `NOT_EXECUTION_ELIGIBLE`** — never as `approved_for_execution`.
+- Treat legacy `/artemis/decision` as **`LEGACY_ADVISORY_ONLY` / `NOT_EXECUTION_ELIGIBLE`**.
 - Keep Scheduler allowlist `["arbitrage"]`.
 - Keep dual-worker issue deferred.
-- Preserve ACTIVE Core Rules **v4.5** as governing authority for all subsequent Artemis work.
+- Canonical UI location remains **AI Center → Artemis** (`manager` id / `AIManager` owner).
 
 **Discovery verdict:**  
-`ARTEMIS CONTRACT FOUNDATION DISCOVERY REMEDIATED — READY FOR OWNER RE-REVIEW`
+`ARTEMIS CONTRACT FOUNDATION — OWNER APPROVED`  
+`UI/UX ARCHITECTURE — READY FOR WP-A`
+
+---
+
+## 29. Artemis Frontend / UI-UX Architecture
+
+### 29.1 Existing production UI inventory (PROVEN reachability)
+
+| Surface | Path | Reachability verdict | Role |
+|---|---|---|---|
+| Dashboard → AI Center | `components/Dashboard.tsx` `ViewKey='ai'` → `<AICenter />` | **PROVEN** | Top-level product nav (desktop + mobile menu via Header) |
+| AICenter shell | `components/AICenter.tsx` | **PROVEN** | Owns AI-area tabs: `manager`, `agents`, `training`, `analytics`, `config`, `topic_routing` |
+| Default AICenter tab | `useState<AITab>('agents')` | **PROVEN** | Default opens **Agents**, not Manager/Artemis |
+| Artemis shell (current) | `AICenter` `case 'manager'` → `components/ai/AIManager/index.tsx` | **PROVEN** | Existing Artemis frontend shell |
+| Visible label today | `t('ai_manager')` on tab id `manager` | **PROVEN** | Still labeled “AI Manager” — WP-A renames to Artemis |
+| Artemis state hook | `components/ai/hooks/useArtemisState.ts` | **PROVEN** | Used by AIManager; `GET /api/v1/artemis/state` + defaults merge |
+| Decision Engine config | `components/settings/configuration/DecisionEngine.tsx` via Settings → Configuration | **PROVEN** | Canonical config owner |
+| Decision Engine tab inside AIManager | `DecisionEngineTab.tsx` | **PROVEN LINK** | Redirect/link UI to Settings Decision Engine (already consolidated) |
+| Artemis Insights widget | `components/widgets/ArtemisInsightsWidget.tsx` rendered from `DashboardHome.tsx` | **PROVEN reachable** | Hardcoded recommendation + confidence **87** |
+| `ArtemisComponents.tsx` | `components/ai/ArtemisComponents.tsx` | **FILENAME-ONLY / not production-imported** | Legacy Backtesting/Logs/Settings; no `import` from App/AICenter/AIManager |
+| E2E | `e2e/artemis-tabs.spec.ts`, helpers `gotoAIManager` | **PROVEN** | Tabs overview/decision_engine/orchestration/scenarios/settings/autopilot; EN roles Admin/Trader/User |
+| i18n / RTL | `useLanguage` / LanguageContext across AICenter & AIManager | **PROVEN pattern** | FA/EN present; Topic Routing label currently hard-coded English in AICenter |
+| Mobile | Dashboard mobile menu includes AI Center | **PROVEN** | AIManager sub-tabs use wrap; overflow risk remains (many tabs) |
+
+**Contradiction check vs expected known state:** **None.** Main app has AI Center; `manager` renders AIManager; AIManager is the Artemis shell; `ArtemisComponents.tsx` is non-canonical; Decision Engine config lives under Settings.
+
+### 29.2 Canonical menu location (APPROVED)
+
+```
+Dashboard
+  └── AI Center                    ← only AI product entry (existing)
+        ├── Artemis                ← rename visible label of tab id `manager`
+        ├── Agents
+        ├── Training
+        ├── Analytics
+        ├── API / Integrations
+        └── Topic Routing
+```
+
+- Do **not** add Artemis to top-level Dashboard nav.
+- AICenter continues to own AI-area navigation.
+- Internal id remains `manager` initially for compatibility.
+- No second `artemis` UI owner unless a later explicit URL migration WP.
+
+### 29.3 Current-tab disposition matrix
+
+| Current AIManager tab | Disposition | Target mapping / note |
+|---|---|---|
+| Overview | **KEEP / REDESIGN** | Target **Overview** — truthful maturity/readiness only; strip synthetic accuracy/success/health |
+| Decision Engine | **LINK** | Keep redirect to Settings → Configuration → Decision Engine; do not duplicate config |
+| Agent Orchestration | **KEEP / REDESIGN** | Target **Orchestration** — must not present mock `coordinateAgents` as real 15-Agent orchestration |
+| Learning System | **HIDE UNTIL AVAILABLE** / evaluate relocate | Candidate for AI Center → Training; not canonical Artemis control until truthful owner proven |
+| System Monitoring | **MERGE** | Useful health signals → **Overview** / **System & Integrations** only if MEASURED; else Unavailable |
+| Trading Scenarios | **HIDE UNTIL AVAILABLE** | Determine real owner before retaining; not core Artemis IA |
+| Data Hub | **LINK** | Link to closed Data Hub product; do not duplicate Data Hub UI inside Artemis |
+| Backtesting | **HIDE UNTIL AVAILABLE** / evaluate relocate | Candidate for Analytics / evaluation; not Artemis control UI |
+| System Logs | **MERGE** | Artemis-relevant lineage → **Lineage & Audit**; not generic raw logs dump |
+| Settings | **LINK** | Link to canonical Settings owners |
+| Autopilot | **HIDE** from normal product nav | Contain as Legacy/Administrative if temporarily retained; not automated-trading ready |
+
+Do **not** remove production paths until reachability and consumers are proven (WP-A discipline).
+
+### 29.4 Target Artemis information architecture
+
+Canonical Artemis sub-navigation (v4.5 role):
+
+1. **Overview**
+2. **Evidence**
+3. **Decisions**
+4. **Orchestration**
+5. **Controls**
+6. **Lineage & Audit**
+7. **System & Integrations**
+
+Progressive disclosure: Summary → context → evidence → controls → lineage/details. Avoid a giant single dashboard.
+
+#### Overview (KEEP / REDESIGN)
+
+Must show truthful product state only:
+
+- Artemis maturity stage (highlight only verified current stage)
+- Contract version / readiness
+- Decision eligibility (separate from process/provider/agent readiness)
+- Requested mode + Effective mode
+- Emergency Stop
+- Agent evidence readiness summary
+- Risk / Portfolio / Liquidity control readiness
+- Provider readiness
+- Latest advisory decision **only when real**
+- Limitations
+
+Forbidden: synthetic accuracy, fake success rate, fake system health, generic green “Active” implying automation readiness.
+
+#### Evidence (NEW IA — not a duplicate backend)
+
+Future view for contributing Agents, canonical `agentId`, role/`authorityClass`, freshness, data quality, availability, compatibility, correlation family, supporting/conflicting/excluded evidence.
+
+Until contract exists: truthful readiness / Unavailable. **No fabricated envelopes in WP-A.**
+
+#### Decisions (REDESIGN)
+
+Label current `/artemis/decision` results: **Legacy Advisory** — **NOT EXECUTION APPROVAL**. Never present `approved:true` as Approved for Execution.
+
+Future decisionContext views (WP-E+) when owners exist: state, direction, evidence, conflict resolution, Risk/Portfolio/Liquidity/runtime results, explanation, lineage.
+
+#### Orchestration (KEEP / REDESIGN)
+
+Where data is mock/legacy, show: **Legacy orchestration unavailable for canonical Artemis**.
+
+Future: real Agent runs, dependencies by `agent_key`, evidence state, failures, correlation groups, timing/freshness — no fake task metrics.
+
+#### Controls (NEW)
+
+Read-only control-chain view:
+
+Risk → Portfolio / Optimization → Liquidity → Runtime / Emergency Stop → Order Management
+
+Risk veto must visually dominate analytical voting. No UI implying Artemis can bypass Risk.
+
+#### Lineage & Audit (MERGE)
+
+Future: `decisionContextId`, Agent run IDs, included/excluded evidence, versions, timestamps, control outcomes, reconciliation.
+
+Until persistence: **Unavailable** — not placeholders.
+
+#### System & Integrations (MERGE / LINK)
+
+Read-only: LLM provider health, Agent contract readiness, Connections/Capabilities, runtime state, Decision Engine **link**, Settings **link**. No config duplication.
+
+### 29.5 Frontend Source-of-Truth / truth model
+
+Every Artemis UI value must declare one of:
+
+`MEASURED` · `PERSISTED` · `DERIVED` · `CONFIGURED` · `LEGACY` · `UNAVAILABLE`
+
+| Major card / region | Intended source owner | Truth class today |
+|---|---|---|
+| Maturity stage badge | Docs/ledger + readiness classifiers | CONFIGURED / DERIVED (manual until WP-E) |
+| Contract version | Shared contract package (WP-B) | UNAVAILABLE until WP-B |
+| Requested / Effective mode | `runtimeExecutionStateService` + preferences (canonical runtime SoT) | MEASURED/PERSISTED — header must not invent a parallel SoT |
+| Emergency Stop | `runtimeExecutionStateService` | MEASURED/PERSISTED |
+| Execution eligibility | Control-chain + policy | UNAVAILABLE / LEGACY advisory only today |
+| Agent evidence readiness | Future envelopes / adapters | UNAVAILABLE for most Agents; Trend/Arbitrage product readiness DOCUMENTABLE |
+| Legacy decision result | `POST /api/v1/artemis/decision` + `system_logs` | **LEGACY** — advisory only |
+| Orchestration “tasks” | Current orchestration endpoint / mock coordination | **LEGACY** / misleading |
+| LLM provider health | `/api/v1/artemis/health` / providerPool | MEASURED when endpoint used truthfully |
+| Insights widget | None | **FORBIDDEN fake** — hardcoded |
+| Decision Engine knobs | Settings `DecisionEngine` / `system_config` | CONFIGURED (Settings owner) |
+
+Never display as real product data: mock Agent consensus, random/hardcoded confidence, synthetic accuracy/success/health, fake orchestration, fake execution approval.
+
+### 29.6 Misleading / unsafe UI findings (WP-A targets)
+
+#### A. Demo / Real toggle — `AIManager` header
+
+Clickable Demo↔Real switch with native `confirm`/`alert` (`AIManager/index.tsx`). Unacceptable as canonical Artemis Live activation UX.
+
+Target display: Requested Mode, Effective Mode, Emergency Stop, execution eligibility — **read-only** relative to runtime SoT. Any Live activation remains Tier-4 outside this outcome. WP-A contains/removes misleading control without creating another mode SoT.
+
+Note: Header also has Artemis mode toggles — WP-A must inventory consumers and avoid duplicate unsafe controls on Artemis product paths.
+
+#### B. Autopilot tab
+
+Contains Enable/Disable, Run Once, Approve/Reject/Rollback suggestion, plus native `alert`/`confirm`/`prompt`.
+
+Do not automatically delete backend. First prove consumers. Canonical UI: **HIDE FROM NORMAL ARTEMIS PRODUCT NAVIGATION** until maturity/control-chain requirements satisfied. Temporary admin surface must say Legacy / Administrative / Not Automated-Trading Ready.
+
+#### C. Hardcoded Artemis Insights widget
+
+`ArtemisInsightsWidget` hardcodes `confidence: 87` and static recommendation text; rendered on `DashboardHome`.
+
+WP-A must: API-backed truthful advisory **or** Unavailable/Readiness **or** remove reachable production rendering. No fake replacement.
+
+#### D. Native dialogs (worked-on Artemis product paths)
+
+Proven `alert` / `confirm` / `prompt` / `window.*` in:
+
+- `AIManager/index.tsx` (mode switch)
+- `AutopilotTab.tsx`
+- `SystemLogsTab.tsx`
+- `BacktestingTab.tsx`
+- `ScenariosTab.tsx`
+- `DecisionEngine.tsx` (Settings — in-scope if touched via Decision Engine link work)
+- `ArtemisComponents.tsx` (legacy; not production-imported — still document; do not revive)
+
+**Target at product closeout for worked-on Artemis paths: 0** native dialogs. Use canonical accessible in-product confirmations.
+
+#### E. Synthetic Overview metrics
+
+`OverviewTab` surfaces `successRate`, `avgAccuracy` style stats — must not imply calibrated performance without methodology.
+
+### 29.7 Visual status model
+
+High-level Artemis stage vocabulary (highlight only verified current stage):
+
+`LEGACY ADVISORY` · `CONTRACT FOUNDATION` · `CONTRACT COMPATIBLE` · `ADVISORY` · `SHADOW` · `PAPER` · `LIMITED LIVE` · `EXPANDED LIVE`
+
+**Current verified stage to highlight after WP-A containment:** **LEGACY ADVISORY** (Contract Foundation design approved; contract package not yet implemented).
+
+Separate axes (never collapse into one green Active):
+
+- Process / mount status
+- Provider health
+- Agent readiness
+- Evidence readiness
+- Runtime mode
+- Execution eligibility
+
+### 29.8 Responsive / i18n / RTL / a11y requirements
+
+Design for Desktop, Tablet, Mobile; EN + FA + RTL; dark/light where supported; keyboard navigation; visible focus; screen-reader labels; reduced horizontal overflow (collapse/subnav instead of 11+ tabs); meaningful loading; truthful empty/unavailable; recoverable errors; no raw internal reason codes as user prose.
+
+Charts only when truthful time-series/history exists — no decorative placeholder charts.
+
+### 29.9 Staged UI implementation plan
+
+| Stage | UI work | Depends on |
+|---|---|---|
+| WP-A | Label rename; safety containment; hide Autopilot; Insights fix; strip fake Overview metrics; native dialog removal on worked paths; Legacy Advisory badges | Owner start authorization |
+| WP-B | No rich UI required; may show contract version once package exists | Contract package |
+| WP-C | Lineage Unavailable → structured empty ready for data | Persistence |
+| WP-D | Optional readiness chips for Trend/Arbitrage adapters | Adapters |
+| WP-E | Activate Evidence / Decisions / Orchestration / Controls / Lineage with real owners | Advisory consumer + persistence |
+
+### 29.10 Frontend acceptance criteria (for WP-A and later)
+
+WP-A:
+
+- Visible AI Center tab label = Artemis; id `manager` preserved
+- No misleading Demo↔Real Artemis-header Live implication
+- Autopilot not in normal product nav (or clearly Legacy Admin)
+- Hardcoded Insights not reachable as fake confidence
+- Worked-on Artemis paths: native dialog count = 0
+- Overview does not present synthetic accuracy/success as calibrated truth
+- Legacy decisions labeled Legacy Advisory / Not Execution Eligible
+- EN + FA RTL smoke on Artemis shell
+- Desktop + mobile nav to AI Center → Artemis works
+- No new fake backend; runtime Live not activated
+
+WP-E (later):
+
+- Evidence/Decisions/Lineage render only MEASURED/PERSISTED/DERIVED/CONFIGURED/UNAVAILABLE values
+- Control chain UI shows Risk authority dominance
+- Design-system matrix Browser QA PASS with evidence
 
 ---
 
@@ -809,9 +1089,9 @@ Until then:
 | Base `origin/main` | `a100f7ba21131c351b561fb66554e90990da8725` |
 | Branch | `feat/artemis-contract-foundation` |
 | Worktree | `/home/ubuntu/worktrees/titangold-artemis-contract-foundation` |
-| Parallel discovery reconciliation | Inventory + Agent authority findings folded into §§2–3, §24, §26 |
-| Owner re-review remediation | Findings 1–3 + APPROVED §26 directions + WP-A…WP-E order |
-| Runtime code changed | 0 |
+| Prior remediation HEAD | `aca08a8bed8db8da3ab3fb937f43cc2756e6ddc7` |
+| Owner discovery approval | APPROVED (+ UI/UX architecture) |
+| Runtime / frontend implementation changed | 0 |
 | Migrations | 0 |
 | Deployments | 0 |
 | Scheduler mutations | 0 |

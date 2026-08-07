@@ -1,102 +1,70 @@
 ---
-description: TitanGold dynamic active-work authority — Artemis Contract Foundation discovery (owner re-review remediated)
+description: TitanGold dynamic active-work — Artemis Foundation OWNER APPROVED; ready for WP-A
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS CONTRACT FOUNDATION — READ-ONLY DISCOVERY AND CONTRACT DESIGN**
+**ARTEMIS CONTRACT FOUNDATION — OWNER APPROVED**
+**UI/UX ARCHITECTURE — READY FOR WP-A**
 
 Current area:
-Shared Foundation → Artemis evidence contract / Agent authority architecture
+Shared Foundation → Artemis evidence contract + canonical Artemis UI location
 
 Current program slice:
-ARTEMIS-CONTRACT-FOUNDATION-DISCOVERY-OWNER-REREVIEW-REMEDIATION
+ARTEMIS-CONTRACT-FOUNDATION-DISCOVERY-CLOSEOUT
 
 Risk tier:
-Tier 0 (Read-Only Discovery / Documentation)
+Tier 0 (Documentation closeout) until WP-A is explicitly started
 
 Engineering status:
-**DISCOVERY REMEDIATED — IMPLEMENTATION NOT AUTHORIZED — READY FOR OWNER RE-REVIEW**
+**OWNER APPROVED · DISCOVERY CLOSED FOR DESIGN · RUNTIME IMPLEMENTATION NOT STARTED**
 
 Classification:
-Shared Foundation discovery/design.
+Shared Foundation discovery/design closeout.
 
-Authorized scope:
-- Repository inspection
-- Architecture discovery
-- Source-of-Truth mapping
-- Agent role/authority analysis
-- Evidence contract design
-- Compatibility/correlation design
-- Lineage/audit/replay design
-- Implementation planning
-- Living document: `docs/ARTEMIS_CONTRACT_FOUNDATION.md`
-- Documentation remediation of owner re-review findings
-- Rule 02 updates for this discovery outcome only
+Authorized scope (this closeout):
+- Living document UI/UX architecture updates
+- Rule 02 truthfulness updates
+- Planning for WP-A only
 
-Hard boundaries — NOT authorized:
+Hard boundaries — NOT authorized until explicit WP-A start:
 - Artemis runtime implementation
+- Frontend/runtime code changes
 - Agent adapter implementation
 - Database migration
 - Deployment
 - Scheduler change (allowlist remains `["arbitrage"]`)
-- Worker topology change (dual `titan-engine-worker` deferred)
+- Worker topology change
 - Private provider calls
 - Live activation
 - Order execution
 - Financial side effects
 - Reopening Trend or Arbitrage frozen product surfaces
 - Modifying Data Hub / Agents Shell / AI Shared Foundation baselines
-- Touching protected unrelated files:
+- Protected files:
   - `scripts/backup-db.sh`
   - `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`
   - `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
-Preserved prior checkpoint (do not redo):
-**TREND DETECTION — CLOSED AND FROZEN**
-- Trend squash merge / deployed exact-main runtime: `b242c9c3df1aedb283f96784a11d46e80699909b`
-- Trend post-merge docs / Rule 02 freeze HEAD (pre-Artemis): `a100f7b`
-- Exact-main Staging alignment: PASS
-- Runtime provenance: health/runtimeCommit/manifest = `b242c9c`; bundle `assets/index-CLflvsy0.js`; dirty delta = 0
-- Human QA = PASS; not Scheduler-allowlisted; no Live execution
-
-Arbitrage remains CLOSED AND FROZEN (product).
+Preserved prior checkpoint:
+**TREND DETECTION — CLOSED AND FROZEN** (`b242c9c` runtime · `a100f7b` docs)
+Arbitrage CLOSED AND FROZEN.
+Findings 1–3 accepted — do not reopen without contradictory evidence.
 
 Governing Core Rule:
-**ACTIVE Rule 01 = TitanGold Core Engineering Rules v4.5** (replaces v4.4).
-Section 47 governs the canonical Agent-to-Artemis evidence contract design in this outcome.
+**ACTIVE Rule 01 = TitanGold Core Engineering Rules v4.5**
 
-Owner-approved design directions (docs only — not implementation auth):
-- Contract: `schemaVersion=1.0.0`, `contractVersion=artemis-evidence-1.0.0`
-- Canonical `agentId` = stable agent key (not `ai_agents` UUID)
-- Trend Artemis `agentId` = `trend` (`trend_detection` = legacy alias only)
-- Preserve `ai_decisions` as Agent-run SoT; separate Artemis lineage later
-- Legacy `/artemis/decision` = CONTAIN as LEGACY_ADVISORY_ONLY / NOT_EXECUTION_ELIGIBLE
-- Liquidity productization mandatory before feasibility eligibility
-- Dual-worker remediation = separate outcome
-- Future WP order: WP-A containment → WP-B contract → WP-C lineage → WP-D adapters → WP-E advisory
+Canonical UI location (APPROVED):
+**AI Center → Artemis** (reuse `AIManager`; keep internal tab id `manager`; rename visible label)
 
-Branch / worktree:
-- Branch: `feat/artemis-contract-foundation`
-- Worktree: `/home/ubuntu/worktrees/titangold-artemis-contract-foundation`
-- Base: `origin/main` @ `a100f7b` (discovery start)
+Target Artemis IA:
+Overview · Evidence · Decisions · Orchestration · Controls · Lineage & Audit · System & Integrations
 
-Acceptance criteria (this remediation):
-- Findings 1–3 documented in living doc
-- §26 records APPROVED design directions
-- WP-A…WP-E order recorded
-- Runtime code changed = 0; migrations = 0; deployments = 0
-- Scheduler mutations = 0; worker mutations = 0; private provider calls = 0
-
-Stop conditions:
-- Any request for Artemis runtime coding, migrations, deploy, Scheduler/worker mutation, Live, or Tier-4 execution
-- Attempt to modify frozen Trend/Arbitrage product implementations
-- ACTIVE Rule 01 no longer visible as v4.5
-
-Next approved transition (owner only):
-Owner re-review PASS → explicit approval of **WP-A Legacy Artemis safety containment** (or another scoped implementation WP).
+Next approved transition:
+Explicit owner authorization to **start WP-A — Legacy Artemis safety + UI containment**
+(then WP-B contract → WP-C lineage → WP-D adapters → WP-E advisory consumer + canonical UI)
 
 Evidence:
-- `docs/ARTEMIS_CONTRACT_FOUNDATION.md`
+- `docs/ARTEMIS_CONTRACT_FOUNDATION.md` (§29 UI/UX Architecture)
