@@ -1,5 +1,5 @@
 ---
-description: TitanGold dynamic active-work authority — Artemis Contract Foundation discovery
+description: TitanGold dynamic active-work authority — Artemis Contract Foundation discovery (owner re-review remediated)
 alwaysApply: true
 ---
 
@@ -12,13 +12,13 @@ Current area:
 Shared Foundation → Artemis evidence contract / Agent authority architecture
 
 Current program slice:
-ARTEMIS-CONTRACT-FOUNDATION-DISCOVERY
+ARTEMIS-CONTRACT-FOUNDATION-DISCOVERY-OWNER-REREVIEW-REMEDIATION
 
 Risk tier:
 Tier 0 (Read-Only Discovery / Documentation)
 
 Engineering status:
-**DISCOVERY / DESIGN — IMPLEMENTATION NOT AUTHORIZED**
+**DISCOVERY REMEDIATED — IMPLEMENTATION NOT AUTHORIZED — READY FOR OWNER RE-REVIEW**
 
 Classification:
 Shared Foundation discovery/design.
@@ -33,6 +33,7 @@ Authorized scope:
 - Lineage/audit/replay design
 - Implementation planning
 - Living document: `docs/ARTEMIS_CONTRACT_FOUNDATION.md`
+- Documentation remediation of owner re-review findings
 - Rule 02 updates for this discovery outcome only
 
 Hard boundaries — NOT authorized:
@@ -67,17 +68,25 @@ Governing Core Rule:
 **ACTIVE Rule 01 = TitanGold Core Engineering Rules v4.5** (replaces v4.4).
 Section 47 governs the canonical Agent-to-Artemis evidence contract design in this outcome.
 
+Owner-approved design directions (docs only — not implementation auth):
+- Contract: `schemaVersion=1.0.0`, `contractVersion=artemis-evidence-1.0.0`
+- Canonical `agentId` = stable agent key (not `ai_agents` UUID)
+- Trend Artemis `agentId` = `trend` (`trend_detection` = legacy alias only)
+- Preserve `ai_decisions` as Agent-run SoT; separate Artemis lineage later
+- Legacy `/artemis/decision` = CONTAIN as LEGACY_ADVISORY_ONLY / NOT_EXECUTION_ELIGIBLE
+- Liquidity productization mandatory before feasibility eligibility
+- Dual-worker remediation = separate outcome
+- Future WP order: WP-A containment → WP-B contract → WP-C lineage → WP-D adapters → WP-E advisory
+
 Branch / worktree:
 - Branch: `feat/artemis-contract-foundation`
 - Worktree: `/home/ubuntu/worktrees/titangold-artemis-contract-foundation`
-- Base: current `origin/main` at discovery start
+- Base: `origin/main` @ `a100f7b` (discovery start)
 
-Acceptance criteria (this outcome):
-- Living discovery document with all required sections
-- Agent authority matrix for all 15 Agents
-- Canonical evidence envelope + Evidence Item design
-- Compatibility / correlation / conflict / control-chain / lineage / maturity designs
-- Frozen Arbitrage + Trend future-adapter analysis (docs only)
+Acceptance criteria (this remediation):
+- Findings 1–3 documented in living doc
+- §26 records APPROVED design directions
+- WP-A…WP-E order recorded
 - Runtime code changed = 0; migrations = 0; deployments = 0
 - Scheduler mutations = 0; worker mutations = 0; private provider calls = 0
 
@@ -87,7 +96,7 @@ Stop conditions:
 - ACTIVE Rule 01 no longer visible as v4.5
 
 Next approved transition (owner only):
-Owner review of `docs/ARTEMIS_CONTRACT_FOUNDATION.md` → explicit approval of a separate Shared Foundation implementation Work Package (if any).
+Owner re-review PASS → explicit approval of **WP-A Legacy Artemis safety containment** (or another scoped implementation WP).
 
 Evidence:
 - `docs/ARTEMIS_CONTRACT_FOUNDATION.md`

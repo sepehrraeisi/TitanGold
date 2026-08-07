@@ -1,6 +1,6 @@
 # Artemis Contract Foundation — Discovery & Design
 
-**Status:** READ-ONLY DISCOVERY / CONTRACT DESIGN  
+**Status:** OWNER RE-REVIEW REMEDIATION COMPLETE — READ-ONLY DISCOVERY / CONTRACT DESIGN  
 **Classification:** Shared Foundation discovery (Tier 0)  
 **Governing authority:** TitanGold Core Engineering Rules **v4.5** — Sections 45–54 (esp. §47)  
 **Rule 02:** ARTEMIS CONTRACT FOUNDATION — READ-ONLY DISCOVERY AND CONTRACT DESIGN  
@@ -50,10 +50,12 @@ Tier 0 — Read-Only / Documentation.
 | Multi-LLM decision aggregation | Implemented (`getMixtureDecision`) | PROVEN |
 | Agent evidence contract (canonical envelope) | **Absent** | PROVEN gap |
 | Real Agent→Artemis consumption | **Not implemented** — `callAgentAPI` returns **mock** signals | PROVEN |
+| Agent identity in coordination | **Broken** — `AGENT_DEPENDENCIES` keyed by `agent-1..15`; DB path uses UUID `ai_agents.id` | PROVEN defect |
+| Legacy `/decision` approval semantics | Can return `approved:true` BUY/SELL without control chain; classify **LEGACY_ADVISORY_ONLY** | PROVEN safety finding |
 | Role-aware conflict resolution | Absent (majority vote + confidence average across LLM providers) | PROVEN |
-| Risk veto in Artemis decision path | **Not wired** to Artemis `/decision` | PROVEN |
+| Risk veto in Artemis decision path | **Not wired** to Artemis `/decision`; Risk Gate uses hardcoded Risk UUID | PROVEN |
 | Portfolio / Liquidity / OM control chain | **Not present** in Artemis decision route | PROVEN |
-| Live automated trading | Not authorized; policy gate can suppress side effects | PROVEN |
+| Live automated trading | Not authorized; policy may classify path as dry-run while response still says approved | PROVEN |
 
 ### 2.2 Proven backend owners
 
@@ -68,7 +70,7 @@ Tier 0 — Read-Only / Documentation.
 | `backend/engine/scheduler.js` | `startArtemisScheduler` | Interval exists; **`autoDecisions` body is empty placeholder** (no Live side effects) | PROVEN |
 | `backend/engine/tradingEngine.js` | `getArtemisApproval` | Calls `http://localhost:${PORT}/api/artemis/decision` — **path mismatch** vs mounted `/api/v1/artemis/decision` → falls back to LLM helper | PROVEN defect |
 | `backend/routes/config.js` | `/artemis` GET/PUT | `system_config` key `artemis.decision_engine` — **dual config** alongside `artemis_state.config.decisionEngine` | PROVEN |
-| `backend/services/risk-gate.js` | Used by `manualTrading.js` | Pre-trade risk gate — **not** Artemis `/decision` | PROVEN |
+| `backend/services/risk-gate.js` | Used by `manualTrading.js` | Pre-trade risk gate — **not** Artemis `/decision`; hardcodes `RISK_AGENT_ID` UUID | PROVEN |
 | `backend/services/runtimeExecutionStateService.js` | Used by risk-gate / execution policy | Effective mode + Kill Switch (Redis cache, DB authoritative) | PROVEN |
 | `backend/services/agentExecutionPolicyService.js` | Used by Artemis `/decision` | Demo/Live policy + confirmation | PROVEN |
 | `backend/services/capabilities.js` | `ARTEMIS_DECISION_EXECUTE`, `ARTEMIS_STATE_WRITE` | Capability gates | PROVEN |
@@ -90,17 +92,60 @@ Tier 0 — Read-Only / Documentation.
 
 1. **`getMixtureDecision`** prompts LLMs with opportunity + “Agent Signals” JSON and aggregates provider votes by **majority action** and **average confidence** (`aggregateDecisions`).
 2. **`coordinateAgents` → `callAgentAPI`** currently returns a **mock** structure (`signal: 'NEUTRAL'`, `confidence: 50 + Math.random() * 30`) — comment states production would call real agent APIs. It does **not** call `agents/registry.runAgent`.
-3. **`AGENT_DEPENDENCIES`** keys are synthetic `agent-1`…`agent-15`, which are **incompatible** with `scheduledAgentResolver` (rejects synthetic IDs) and with real `ai_agents.id` UUIDs / `agent_key` values.
-4. **`POST /api/v1/artemis/decision`** can return `BUY`/`SELL`/`HOLD` after MoE or fallback confidence averaging; uses execution policy; does **not** call Risk Gate, Portfolio, Liquidity, or Order Management as a chained control plane. Decisions are logged to **`system_logs`** (`category=artemis_decision`) — Artemis does **not** INSERT into `ai_decisions`.
-5. Persistence of Agent run history uses `ai_decisions` (shared table, agent-specific `decision_type`) via `agentExecutionService` / Trend / Arbitrage writers — a **parallel** path from Artemis MoE.
-6. Tables: `artemis_state`, `ai_decisions`, `ai_agents` (schema in `database/schema.sql`).
-7. **Config dual-path:** Settings Decision Engine writes `system_config` (`artemis.decision_engine`) while Artemis routes also use `artemis_state.config.decisionEngine` — future SoT must pick one owner.
-8. **Trading Engine Artemis approval URL** uses `/api/artemis/decision` (missing `/v1`) against a server that mounts only `/api/v1/artemis` — proven broken path with fallback.
-9. Message bus referenced by orchestrator is **RabbitMQ** (`messageQueue.js`), not Redis; Redis remains runtime-state cache only.
+3. **Legacy Agent ID / dependency graph defect (Finding 1):** see §2.6.
+4. **Legacy `/artemis/decision` approval semantics (Finding 2):** see §2.7 — classify output **LEGACY_ADVISORY_ONLY / NOT_EXECUTION_ELIGIBLE**.
+5. **Risk identity debt (Finding 3):** `risk-gate.js` hardcodes `RISK_AGENT_ID = 79bbdf0b-94a3-4cbc-adef-98c25f5ba1a7`. It still calls the existing Risk Agent implementation (do not invent a second Risk owner). Future Artemis must resolve Risk via canonical `agent_key` / registry ownership; UUID remains instance/run provenance only.
+6. Persistence of Agent run history uses `ai_decisions` (shared table, agent-specific `decision_type`) via `agentExecutionService` / Trend / Arbitrage writers — a **parallel** path from Artemis MoE. Artemis decisions log to **`system_logs`** (`category=artemis_decision`) and do **not** INSERT into `ai_decisions`.
+7. Tables: `artemis_state`, `ai_decisions`, `ai_agents` (schema in `database/schema.sql`).
+8. **Config dual-path:** Settings Decision Engine writes `system_config` (`artemis.decision_engine`) while Artemis routes also use `artemis_state.config.decisionEngine`.
+9. **Trading Engine Artemis approval URL** uses `/api/artemis/decision` (missing `/v1`) against a server that mounts only `/api/v1/artemis` — proven broken path with fallback.
+10. Message bus referenced by orchestrator is **RabbitMQ** (`messageQueue.js`), not Redis; Redis remains runtime-state cache only.
 
 ### 2.5 Deploy copies
 
 `deploy/blue/**` and `deploy/green/**` contain mirrored Artemis files. Canonical engineering source for this discovery is the worktree root (not deploy mirrors).
+
+### 2.6 Finding 1 — Legacy Agent ID / dependency graph defect (PROVEN)
+
+In `backend/services/artemisOrchestrator.js`:
+
+| Step | Current behavior |
+|---|---|
+| Dependency map | `AGENT_DEPENDENCIES` is keyed by positional IDs `agent-1` … `agent-15` |
+| Normal DB path | `coordinateAgents()` loads enabled Agents via `SELECT id, name, type, status, config FROM ai_agents …` |
+| Identity type | `ai_agents.id` is a **UUID** |
+| Plan lookup | `buildExecutionPlan()` uses `AGENT_DEPENDENCIES[agent.id]` |
+| Result | On the normal DB-backed path, dependency lookups miss; the legacy graph is **not keyed to real DB identity** |
+| Fallback path | Only the DB-unavailable fallback fabricates `agent-1..agent-15` objects — that is not the normal production path |
+| Execution call | `callAgentAPI(agent.id, …)` receives the UUID (or synthetic id) and returns mock `NEUTRAL` + random confidence |
+
+**Classification:** This is not merely a mock-data defect. It is an **identity and orchestration contract defect**.
+
+**Future rule (design — not implemented here):** Artemis must use canonical stable `agent_key` as evidence `agentId`. Do **not** use positional `agent-N` identity or hardcoded `ai_agents` UUIDs as the cross-system Agent identity. UUID may remain record/instance provenance where needed.
+
+### 2.7 Finding 2 — Legacy `/api/v1/artemis/decision` approval semantics (PROVEN safety finding)
+
+Escalate beyond “legacy MoE exists.” Current route semantics are unsafe to treat as execution authorization.
+
+Proven behavior:
+
+1. Route requires `CAP.ARTEMIS_DECISION_EXECUTE`.
+2. Calls `evaluateExecutionPolicy()` with `agentKey = 'artemis_decision'`, `params.action = 'execute_decision'`, and **does not** pass `apply: true`.
+3. `artemis_decision` is registered as `sideEffectClass = portfolio_mutation`, `liveCapable = true` (`agentCapabilityRegistry.js`).
+4. `requiresLiveSideEffects()` treats `portfolio_mutation` as live-side-effect requested **only** when `params.apply === true` (or `params.input.apply === true`).
+5. Therefore the policy can classify this route as a **safe/dry-run** path even though the endpoint has execute/approval naming and Trading Engine integration intent.
+6. With Kill Switch active, policy may still **allow** the dry-run analytical path while suppressing external side effects.
+7. The route assigns `sideEffectsSuppressed` but **does not stop** merely because `sideEffectsSuppressed === true`.
+8. It can subsequently return `approved: true` with `action: BUY` or `SELL` from MoE confidence or the legacy fallback.
+9. The fallback can approve from caller-provided `opportunity.confidence` and averaged signal confidence **without** the canonical Risk → Portfolio → Liquidity → Runtime → Order Management chain.
+
+**Not claimed:** This route itself is **not** proven here to place an exchange order directly.
+
+**Hard classification until control chain exists:**
+
+- Output class: **`LEGACY_ADVISORY_ONLY`**
+- Eligibility: **`NOT_EXECUTION_ELIGIBLE`**
+- **Hard target rule:** No current `approved: true` from the legacy Artemis route may be interpreted as v4.5 `approved_for_execution`.
 
 ---
 
@@ -108,26 +153,27 @@ Tier 0 — Read-Only / Documentation.
 
 | Concern | Canonical owner today | Notes for Artemis Foundation |
 |---|---|---|
+| **Canonical Agent identity (future)** | Stable `agent_key` as evidence `agentId` | **Approved direction:** do **not** use `ai_agents` UUID as cross-system `agentId`; UUID = record/instance only |
 | Agent key inventory (planning) | `constants/agentKeys.ts` (`AGENT_KEYS`, 15 keys) | `TREND` constant = `trend_detection`; registry maps to `trend` |
 | Backend agent module dispatch | `backend/services/agents/registry.js` (`AGENT_MODULES`) | Key `trend` (not `trend_detection`) |
 | Frontend control panels | `components/ai/agentRegistry.ts` | Lazy panels; Trend registered as `trend` |
-| Agent run persistence | PostgreSQL `ai_decisions` | Writers: `agentExecutionService`, `trendRunService`, `arbitrageRunService`, `ai-agents` routes, GraphQL |
-| Trend product contract | `backend/services/trendDomain.js` + `trendRunService.js` | `decision_type = trend_analysis`; CLOSED/FROZEN |
+| Agent run persistence | PostgreSQL `ai_decisions` | **Preserve** as Agent-run SoT; do **not** overwrite frozen `output_data` into a new schema |
+| Future Artemis evidence/decision lineage | **Does not exist yet** | Prefer separate append-only/versioned persistence owner (migration requires explicit approval) |
+| Trend product contract | `backend/services/trendDomain.js` + `trendRunService.js` | Canonical Artemis `agentId` = **`trend`**; `trend_detection` = documented legacy alias only; product stays frozen |
 | Arbitrage product contract | `backend/services/arbitrageScanContract.js` + `arbitrageRunService.js` | `decision_type = arbitrage_scan`; CLOSED/FROZEN |
-| Artemis MoE orchestration | `artemisOrchestrator.js` | LLM MoE — **not** evidence-contract consumer |
+| Artemis MoE orchestration | `artemisOrchestrator.js` | LLM MoE — **not** evidence-contract consumer; dependency graph identity broken (§2.6) |
+| Legacy Artemis decision route | `POST /api/v1/artemis/decision` | **LEGACY_ADVISORY_ONLY / NOT_EXECUTION_ELIGIBLE** (§2.7); CONTAIN |
 | Artemis UI/state | `artemis_state` + `/api/v1/artemis/*` | State/config/health |
 | Runtime mode / Kill Switch | `runtimeExecutionStateService.js` (DB SoT; Redis cache) | Must remain fail-closed |
 | Capability matrix | Connections / `capabilities.js` / agent capability registry | Agents must not fork capability copies |
 | Scheduler allowlist | Analytical scheduler status services | Staging allowlist remains `["arbitrage"]` |
-| Risk veto (pre-trade) | `risk-gate.js` via `manualTrading.js` | Not Artemis decision chain today |
-| Canonical Artemis evidence contract | **DOES NOT EXIST YET** | This document proposes the future owner |
+| Risk veto (pre-trade) | `risk-gate.js` → existing Risk Agent | Hardcoded `RISK_AGENT_ID` UUID debt; still the same Risk owner — resolve via canonical key later |
+| Canonical Artemis evidence contract | **DOES NOT EXIST YET** | Approved naming: `schemaVersion=1.0.0`, `contractVersion=artemis-evidence-1.0.0` |
 
-**Key alias debt (document only — do not “fix” in this outcome):**  
-- `trend` (backend module / registry / `TREND_AGENT_KEY`) ↔ `trend_detection` (`AGENT_KEYS.TREND` / some `run()` payloads) ↔ frontend `toRegistryKey` mapping.  
+**Key alias debt (document only — do not “fix” frozen products in this outcome):**  
+- Canonical Trend Artemis `agentId` = **`trend`**. `trend_detection` is a **legacy alias only**.  
 - `portfolio` (registry) ↔ output `agent_key: 'portfolio_allocation'` in `agents/portfolio.js`.  
-- `order` (registry) ↔ payload `agent: 'order_management'` in `agents/order.js`.  
-
-Artemis contract must accept a **single canonical `agentId` per Agent** with documented aliases.
+- `order` (registry) ↔ payload `agent: 'order_management'` in `agents/order.js`.
 
 ---
 
@@ -458,7 +504,9 @@ Proposed canonical decision states (v4.5 §49.1 — adopt only with definitions)
 
 `insufficient_evidence` · `incompatible_evidence` · `stale_evidence` · `analysis_only` · `proposed` · `blocked_by_risk` · `blocked_by_portfolio` · `blocked_by_liquidity` · `blocked_by_runtime` · `awaiting_confirmation` · `shadow_only` · `paper_only` · `approved_for_execution` · `execution_failed` · `executed` · `reconciled`
 
-**Mapping from today’s Artemis BUY/SELL/HOLD:** treat current MoE output as **legacy advisory** until contract + control chain exist. Do not equate MoE `approved: true` with `approved_for_execution`.
+**Hard rule for today’s legacy route:** classify every current `POST /api/v1/artemis/decision` success payload as **`LEGACY_ADVISORY_ONLY` / `NOT_EXECUTION_ELIGIBLE`**.  
+
+**No current `approved: true` from the legacy Artemis route may be interpreted as v4.5 `approved_for_execution`.**
 
 ---
 
@@ -585,15 +633,53 @@ Design-only stages (aligned to v4.5 §53; user-facing shorthand Independent → 
 
 ## 23. Proposed Implementation Slices (future — not authorized now)
 
-1. **Contract package:** schema Zod/JSON Schema, version consts, validators, golden fixtures.
-2. **Persistence + lineage:** decisionContext + envelope storage; no Live.
-3. **Trend adapter (read-only consumer):** map frozen Trend snapshots → envelope; contract tests; no Trend product edits.
-4. **Arbitrage adapter (read-only consumer):** same pattern.
-5. **Artemis advisory consumer:** ingest envelopes; conflict/correlation reporting; UI analysis_only.
-6. **Control-chain wiring:** Risk → Portfolio/Optimization → Liquidity — still no OM Live.
-7. **Shadow / Paper maturity WP** (separate authorizations).
-8. **Liquidity real feasibility product** (replace stub) before CONTROL_ELIGIBLE.
-9. **Tier-4 Live** only under explicit separate authorization.
+**Owner-approved order.** No slice below is authorized for implementation by this discovery commit.
+
+### WP-A — Legacy Artemis safety containment (first)
+
+- Prove all consumers of `/artemis/decision` (including Trading Engine path mismatch).
+- Prevent legacy `approved: true` from being treated as execution eligibility.
+- Preserve backward compatibility for advisory consumers.
+- Explicitly mark / contain output as advisory / analysis-only until the full control chain exists.
+- No Live activation.
+- Focused regression only.
+
+### WP-B — Canonical contract package
+
+- Shared canonical enums/types.
+- Zod / JSON Schema.
+- Strict validators.
+- Version constants (`schemaVersion=1.0.0`, `contractVersion=artemis-evidence-1.0.0`).
+- Golden fixtures.
+- Canonical identity / alias registry (`agent_key` as `agentId`; Trend `trend` + alias `trend_detection`).
+- No Agent product rewrites.
+
+### WP-C — Evidence persistence / lineage foundation
+
+- Separate approved migration (explicit owner approval required).
+- Append-only / versioned evidence and decision-context persistence.
+- Preserve `ai_decisions` as existing Agent-run Source of Truth.
+- Do **not** overwrite frozen Agent `output_data` into a new schema.
+
+### WP-D — Read-only adapters
+
+- Trend adapter outside frozen product surfaces.
+- Arbitrage adapter outside frozen product surfaces.
+- Map persisted product outputs → canonical envelope; no product IA/business edits.
+
+### WP-E — Artemis advisory consumer
+
+- `analysis_only`.
+- Correlation-aware.
+- Conflict-aware.
+- No orders.
+
+### Only after WP-A…WP-E
+
+1. Risk → Portfolio/Optimization → Liquidity control-chain work (resolve Risk via canonical identity; replace Liquidity stub before feasibility eligibility).
+2. Shadow / Paper maturity WPs (separate authorizations).
+3. Tier-4 Live only under explicit separate authorization.
+4. Dual `titan-engine-worker` remediation remains a **separate** shared-runtime outcome.
 
 ---
 
@@ -601,18 +687,21 @@ Design-only stages (aligned to v4.5 §53; user-facing shorthand Independent → 
 
 | Risk | Severity | Mitigation |
 |---|---|---|
+| **Finding 1:** `AGENT_DEPENDENCIES[agent.id]` UUID miss vs `agent-1..15` graph | High | Future orchestration must key by canonical `agent_key`; do not repair in discovery |
+| **Finding 2:** legacy `/decision` returns `approved:true` without control chain / without requiring `apply:true` live side-effect intent | Critical | WP-A containment; classify `LEGACY_ADVISORY_ONLY`; never map to `approved_for_execution` |
+| **Finding 3:** Risk Gate hardcoded `RISK_AGENT_ID` UUID | High | Keep single Risk owner; resolve via canonical agent identity in future WP; no Risk Gate change now |
 | Parallel per-Agent Artemis schemas | High | One shared contract owner before adapters proliferate |
-| Mock `coordinateAgents` mistaken for real evidence | High | Replace only under implementation WP; gate MoE on real envelopes |
-| Synthetic `agent-1..15` dependency graph | High | Replace with canonical `agent_key` graph before any real coordination |
-| Trading Engine `/api/artemis` vs `/api/v1/artemis` path mismatch | High | Fix only inside an approved Artemis/Trading WP; do not silently enable Live |
-| Dual Decision Engine config owners | High | Single SoT (`artemis_state` vs `system_config`) before advisory activation |
-| Confidence averaging / majority votes | High | Role-aware policy; ban equal weights |
-| AgentId alias debt (`trend`/`trend_detection`, `portfolio`/`portfolio_allocation`, `order`/`order_management`) | Medium | Canonical agentId + alias map |
-| Reopening frozen Trend/Arbitrage | High | Adapter-outside-freeze rule |
+| Mock `coordinateAgents` mistaken for real evidence | High | Gate MoE on real envelopes; WP-B/D/E |
+| Overwriting frozen `ai_decisions.output_data` | High | Forbidden; use separate append-only Artemis lineage (WP-C) |
+| Trading Engine `/api/artemis` vs `/api/v1/artemis` path mismatch | High | Prove consumers in WP-A; fix only under approved containment/Trading WP; no Live |
+| Dual Decision Engine config owners | High | Single SoT before advisory activation |
+| Confidence averaging / majority / equal votes | High | Role-aware policy; ban equal weights |
+| AgentId alias debt | Medium | Canonical `agentId` + alias registry (Trend = `trend`) |
+| Reopening frozen Trend/Arbitrage | High | Adapter-outside-freeze rule (WP-D) |
 | Using `ai_decisions.confidence` as calibrated probability | Medium | Nullable + method required |
-| Artemis decisions only in `system_logs` (no lineage table) | Medium | Decision-context persistence before DECISION_ELIGIBLE |
+| Artemis decisions only in `system_logs` | Medium | WP-C lineage before DECISION_ELIGIBLE |
 | Dead/alternate surfaces (`ArtemisComponents.tsx`, non-PM2 `engineWorker.js`) | Medium | Do not revive; prove reachability before edits |
-| Dual workers / Scheduler fingerprint | Medium | Deferred separate WP — do not couple |
+| Dual workers / Scheduler fingerprint | Medium | Separate shared-runtime outcome |
 | Deploy blue/green drift | Medium | Implement only in canonical source; deploy via normal pipeline |
 
 ---
@@ -630,21 +719,50 @@ This discovery outcome is complete when:
 - [x] Compatibility / correlation / conflict / control chain / lineage / maturity designed
 - [x] Frozen Trend + Arbitrage adapter plans documented
 - [x] Runtime code = 0; migrations = 0; deployments = 0; Scheduler/worker mutations = 0; private provider calls = 0
-- [ ] Owner review of this document (Human) — **pending**
+- [x] Owner re-review findings 1–3 documented (identity graph, legacy approval semantics, Risk UUID debt)
+- [x] Owner design directions recorded as APPROVED in §26
+- [ ] Owner re-review of remediated document (Human) — **pending**
 
 ---
 
-## 26. Owner Decisions Required
+## 26. Owner Decisions — APPROVED DESIGN DIRECTION
 
-1. Approve `schemaVersion`/`contractVersion` naming and single schema owner path.
-2. Choose persistence strategy: embed envelopes in `ai_decisions.output_data` vs new tables (implementation WP).
-3. Confirm canonical `agentId` for Trend (`trend` vs `trend_detection`) as permanent SoT.
-4. Prioritize first implementation slice (contract package vs Trend adapter vs advisory consumer).
-5. Decide fate of legacy MoE `/decision` BUY/SELL path during advisory era (contain, deprecate, or dual-run shadow).
-6. Confirm Liquidity productization precedes any execution-feasibility eligibility.
-7. Keep dual-worker remediation as separate shared-runtime WP.
-8. Choose single Decision Engine config SoT (`artemis_state` vs `system_config`).
-9. Authorize (or defer) repair of Trading Engine Artemis approval URL mismatch without enabling Live.
+These are **no longer ambiguous**. Recorded as owner-approved design direction for future implementation WPs (still **not** implementation authorization):
+
+1. **Canonical contract — APPROVED**  
+   `schemaVersion = 1.0.0`  
+   `contractVersion = artemis-evidence-1.0.0`  
+   until an implementation review proves a naming conflict.
+
+2. **Canonical Agent identity — APPROVED**  
+   Use canonical stable agent key as evidence `agentId`.  
+   Do **not** use `ai_agents` UUID as canonical cross-system `agentId`.  
+   UUID remains record/instance identity where needed.
+
+3. **Trend canonical Artemis `agentId` — APPROVED**  
+   `trend`  
+   `trend_detection` is a documented **legacy alias only**.  
+   Do **not** modify the frozen Trend product to rename it.
+
+4. **Persistence direction — APPROVED**  
+   Preserve `ai_decisions` as the existing Agent-run Source of Truth.  
+   Do **not** overwrite frozen Agent `output_data` into a new schema.  
+   Prefer a separate append-only/versioned Artemis evidence/decision lineage persistence owner in the future implementation WP.  
+   Exact table design still requires implementation-time DB review and explicit migration approval.
+
+5. **Legacy `/artemis/decision` — APPROVED: CONTAIN**  
+   Do not treat as execution approval.  
+   Preserve compatibility until consumers are proven.  
+   Future containment must make output explicitly advisory/analysis-only until the full control chain exists.  
+   Classification: `LEGACY_ADVISORY_ONLY` / `NOT_EXECUTION_ELIGIBLE`.
+
+6. **Liquidity — APPROVED**  
+   Real Liquidity productization is **mandatory** before any execution-feasibility eligibility.
+
+7. **Dual `titan-engine-worker` remediation — APPROVED as separate outcome**  
+   Remains a separate shared-runtime outcome; not part of Artemis Contract Foundation discovery.
+
+**Still open for a later implementation WP (not blocking this discovery remediation):** single Decision Engine config SoT (`artemis_state` vs `system_config`) — to be decided during WP-A/WP-E consumer proof.
 
 ---
 
@@ -666,20 +784,20 @@ This discovery outcome is complete when:
 
 ## 28. Final Recommendation
 
-**Proceed to owner review of this Contract Foundation design.**  
+**Proceed to owner re-review of this remediated Contract Foundation design.**  
 
-Do **not** implement Artemis consumption, adapters, or control-chain wiring until the owner explicitly approves a Shared Foundation implementation Work Package with a scoped acceptance set.
+Do **not** implement Artemis runtime, adapters, migrations, or control-chain wiring until the owner explicitly approves the next Work Package (expected first: **WP-A Legacy Artemis safety containment**).
 
 Until then:
 
 - Keep Trend and Arbitrage **CLOSED AND FROZEN**.
-- Treat current Artemis MoE as **legacy advisory infrastructure**, not v4.5 orchestration.
+- Treat legacy `/artemis/decision` as **`LEGACY_ADVISORY_ONLY` / `NOT_EXECUTION_ELIGIBLE`** — never as `approved_for_execution`.
 - Keep Scheduler allowlist `["arbitrage"]`.
 - Keep dual-worker issue deferred.
 - Preserve ACTIVE Core Rules **v4.5** as governing authority for all subsequent Artemis work.
 
 **Discovery verdict:**  
-`ARTEMIS CONTRACT FOUNDATION DISCOVERY — READY FOR OWNER REVIEW`
+`ARTEMIS CONTRACT FOUNDATION DISCOVERY REMEDIATED — READY FOR OWNER RE-REVIEW`
 
 ---
 
@@ -692,6 +810,7 @@ Until then:
 | Branch | `feat/artemis-contract-foundation` |
 | Worktree | `/home/ubuntu/worktrees/titangold-artemis-contract-foundation` |
 | Parallel discovery reconciliation | Inventory + Agent authority findings folded into §§2–3, §24, §26 |
+| Owner re-review remediation | Findings 1–3 + APPROVED §26 directions + WP-A…WP-E order |
 | Runtime code changed | 0 |
 | Migrations | 0 |
 | Deployments | 0 |
