@@ -63,8 +63,11 @@ Tier 0 — Read-Only / Documentation.
 | `backend/routes/artemis.js` | Imported by v1 index | Health, state, decision, config, decision-engine patch, logs | PROVEN |
 | `backend/services/artemisOrchestrator.js` | Imported by routes + `engineWorker.js` | `getMixtureDecision`, `coordinateAgents`, training helpers | PROVEN |
 | `backend/schemas/artemisSchemas.js` | Imported by routes + `schemas/index.js` | Zod response/body schemas | PROVEN |
-| `backend/workers/engineWorker.js` | PM2 worker path | Full cycle: DataHub refresh → `coordinateAgents` → `getMixtureDecision` → Telegram | PROVEN import |
-| `backend/routes/config.js` | `/artemis` GET/PUT | Legacy/config Artemis settings surface | PROVEN |
+| `backend/workers/engineWorkerLeader.js` | **PM2 entry** (`ecosystem.config.json` → `titan-engine-worker`) | Kill-switch monitor; starts scheduler / autopilot / tradingEngine | PROVEN |
+| `backend/workers/engineWorker.js` | Alternate full-cycle script | DataHub → `coordinateAgents` (mock) → MoE → Telegram; **not** the PM2 entry | PROVEN import; FILENAME-ONLY for PM2 |
+| `backend/engine/scheduler.js` | `startArtemisScheduler` | Interval exists; **`autoDecisions` body is empty placeholder** (no Live side effects) | PROVEN |
+| `backend/engine/tradingEngine.js` | `getArtemisApproval` | Calls `http://localhost:${PORT}/api/artemis/decision` — **path mismatch** vs mounted `/api/v1/artemis/decision` → falls back to LLM helper | PROVEN defect |
+| `backend/routes/config.js` | `/artemis` GET/PUT | `system_config` key `artemis.decision_engine` — **dual config** alongside `artemis_state.config.decisionEngine` | PROVEN |
 | `backend/services/risk-gate.js` | Used by `manualTrading.js` | Pre-trade risk gate — **not** Artemis `/decision` | PROVEN |
 | `backend/services/runtimeExecutionStateService.js` | Used by risk-gate / execution policy | Effective mode + Kill Switch (Redis cache, DB authoritative) | PROVEN |
 | `backend/services/agentExecutionPolicyService.js` | Used by Artemis `/decision` | Demo/Live policy + confirmation | PROVEN |
@@ -74,21 +77,26 @@ Tier 0 — Read-Only / Documentation.
 
 | Path | Role | Provenance |
 |---|---|---|
-| `components/ai/ArtemisComponents.tsx` | Artemis UI components | PROVEN (large panel surface) |
-| `components/ai/hooks/useArtemisState.ts` | Artemis state hook | PROVEN |
-| `components/widgets/ArtemisInsightsWidget.tsx` | Dashboard insights widget | PROVEN |
-| `components/ai/AIManager/tabs/DecisionEngineTab.tsx` | Decision Engine tab (receives `artemis` prop) | PROVEN |
-| `components/settings/configuration/DecisionEngine.tsx` | Settings Decision Engine | PROVEN filename + AI Manager linkage |
-| `services/api.ts` / `services/api-backend.ts` | `fetchArtemisState`, Artemis training helpers, `/api/v1/artemis/state` | PROVEN |
+| `components/ai/AIManager/index.tsx` + tabs | Canonical Artemis/Manager UI shell | PROVEN (mounted via AICenter) |
+| `components/ai/hooks/useArtemisState.ts` | Artemis state hook → `GET /api/v1/artemis/state` | PROVEN |
+| `components/ai/AIManager/tabs/DecisionEngineTab.tsx` | Mostly redirects to Settings Decision Engine | PROVEN |
+| `components/settings/configuration/DecisionEngine.tsx` | Decision Engine config UI → `/api/v1/config/artemis` | PROVEN |
+| `components/widgets/ArtemisInsightsWidget.tsx` | Dashboard widget | PROVEN import; **hardcoded stub data** (not API-backed) |
+| `components/ai/ArtemisComponents.tsx` | Legacy Backtesting/Logs/Settings surface | **FILENAME-ONLY / likely dead** — no production import from AIManager/App; do not treat as canonical UI |
+| `services/api.ts` / `services/api-backend.ts` | `fetchArtemisState`, Artemis helpers, `/api/v1/artemis/*` | PROVEN |
 | `e2e/artemis-tabs.spec.ts` | E2E coverage for Artemis tabs | PROVEN |
 
 ### 2.4 Critical implementation facts (PROVEN)
 
 1. **`getMixtureDecision`** prompts LLMs with opportunity + “Agent Signals” JSON and aggregates provider votes by **majority action** and **average confidence** (`aggregateDecisions`).
-2. **`coordinateAgents` → `callAgentAPI`** currently returns a **mock** structure (`signal: 'NEUTRAL'`, `confidence: 50 + Math.random() * 30`) — comment states production would call real agent APIs.
-3. **`POST /api/v1/artemis/decision`** can return `BUY`/`SELL`/`HOLD` after MoE or fallback confidence averaging; uses execution policy; does **not** call Risk Gate, Portfolio, Liquidity, or Order Management as a chained control plane.
-4. Persistence of Artemis operational logs uses `system_logs` category `artemis_decision`; Agent run history uses `ai_decisions` (shared table, agent-specific `decision_type`).
-5. Tables: `artemis_state`, `ai_decisions`, `ai_agents` (schema in `database/schema.sql`).
+2. **`coordinateAgents` → `callAgentAPI`** currently returns a **mock** structure (`signal: 'NEUTRAL'`, `confidence: 50 + Math.random() * 30`) — comment states production would call real agent APIs. It does **not** call `agents/registry.runAgent`.
+3. **`AGENT_DEPENDENCIES`** keys are synthetic `agent-1`…`agent-15`, which are **incompatible** with `scheduledAgentResolver` (rejects synthetic IDs) and with real `ai_agents.id` UUIDs / `agent_key` values.
+4. **`POST /api/v1/artemis/decision`** can return `BUY`/`SELL`/`HOLD` after MoE or fallback confidence averaging; uses execution policy; does **not** call Risk Gate, Portfolio, Liquidity, or Order Management as a chained control plane. Decisions are logged to **`system_logs`** (`category=artemis_decision`) — Artemis does **not** INSERT into `ai_decisions`.
+5. Persistence of Agent run history uses `ai_decisions` (shared table, agent-specific `decision_type`) via `agentExecutionService` / Trend / Arbitrage writers — a **parallel** path from Artemis MoE.
+6. Tables: `artemis_state`, `ai_decisions`, `ai_agents` (schema in `database/schema.sql`).
+7. **Config dual-path:** Settings Decision Engine writes `system_config` (`artemis.decision_engine`) while Artemis routes also use `artemis_state.config.decisionEngine` — future SoT must pick one owner.
+8. **Trading Engine Artemis approval URL** uses `/api/artemis/decision` (missing `/v1`) against a server that mounts only `/api/v1/artemis` — proven broken path with fallback.
+9. Message bus referenced by orchestrator is **RabbitMQ** (`messageQueue.js`), not Redis; Redis remains runtime-state cache only.
 
 ### 2.5 Deploy copies
 
@@ -115,7 +123,11 @@ Tier 0 — Read-Only / Documentation.
 | Canonical Artemis evidence contract | **DOES NOT EXIST YET** | This document proposes the future owner |
 
 **Key alias debt (document only — do not “fix” in this outcome):**  
-`trend` (backend module / registry / TREND_AGENT_KEY) ↔ `trend_detection` (`AGENT_KEYS.TREND`) ↔ frontend `toRegistryKey` mapping. Artemis contract must accept a **single canonical `agentId`** with documented aliases.
+- `trend` (backend module / registry / `TREND_AGENT_KEY`) ↔ `trend_detection` (`AGENT_KEYS.TREND` / some `run()` payloads) ↔ frontend `toRegistryKey` mapping.  
+- `portfolio` (registry) ↔ output `agent_key: 'portfolio_allocation'` in `agents/portfolio.js`.  
+- `order` (registry) ↔ payload `agent: 'order_management'` in `agents/order.js`.  
+
+Artemis contract must accept a **single canonical `agentId` per Agent** with documented aliases.
 
 ---
 
@@ -591,10 +603,15 @@ Design-only stages (aligned to v4.5 §53; user-facing shorthand Independent → 
 |---|---|---|
 | Parallel per-Agent Artemis schemas | High | One shared contract owner before adapters proliferate |
 | Mock `coordinateAgents` mistaken for real evidence | High | Replace only under implementation WP; gate MoE on real envelopes |
+| Synthetic `agent-1..15` dependency graph | High | Replace with canonical `agent_key` graph before any real coordination |
+| Trading Engine `/api/artemis` vs `/api/v1/artemis` path mismatch | High | Fix only inside an approved Artemis/Trading WP; do not silently enable Live |
+| Dual Decision Engine config owners | High | Single SoT (`artemis_state` vs `system_config`) before advisory activation |
 | Confidence averaging / majority votes | High | Role-aware policy; ban equal weights |
-| `trend` vs `trend_detection` alias debt | Medium | Canonical agentId + alias map |
+| AgentId alias debt (`trend`/`trend_detection`, `portfolio`/`portfolio_allocation`, `order`/`order_management`) | Medium | Canonical agentId + alias map |
 | Reopening frozen Trend/Arbitrage | High | Adapter-outside-freeze rule |
 | Using `ai_decisions.confidence` as calibrated probability | Medium | Nullable + method required |
+| Artemis decisions only in `system_logs` (no lineage table) | Medium | Decision-context persistence before DECISION_ELIGIBLE |
+| Dead/alternate surfaces (`ArtemisComponents.tsx`, non-PM2 `engineWorker.js`) | Medium | Do not revive; prove reachability before edits |
 | Dual workers / Scheduler fingerprint | Medium | Deferred separate WP — do not couple |
 | Deploy blue/green drift | Medium | Implement only in canonical source; deploy via normal pipeline |
 
@@ -626,6 +643,8 @@ This discovery outcome is complete when:
 5. Decide fate of legacy MoE `/decision` BUY/SELL path during advisory era (contain, deprecate, or dual-run shadow).
 6. Confirm Liquidity productization precedes any execution-feasibility eligibility.
 7. Keep dual-worker remediation as separate shared-runtime WP.
+8. Choose single Decision Engine config SoT (`artemis_state` vs `system_config`).
+9. Authorize (or defer) repair of Trading Engine Artemis approval URL mismatch without enabling Live.
 
 ---
 
@@ -672,6 +691,7 @@ Until then:
 | Base `origin/main` | `a100f7ba21131c351b561fb66554e90990da8725` |
 | Branch | `feat/artemis-contract-foundation` |
 | Worktree | `/home/ubuntu/worktrees/titangold-artemis-contract-foundation` |
+| Parallel discovery reconciliation | Inventory + Agent authority findings folded into §§2–3, §24, §26 |
 | Runtime code changed | 0 |
 | Migrations | 0 |
 | Deployments | 0 |
