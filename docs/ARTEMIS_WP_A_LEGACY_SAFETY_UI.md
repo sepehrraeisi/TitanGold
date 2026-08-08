@@ -1,6 +1,6 @@
 # ARTEMIS WP-A — Legacy Safety Containment + Specialized UI/UX Redesign
 
-**Status:** SPECIALIZED REDESIGN IMPLEMENTED — READY FOR OWNER HUMAN QA RE-REVIEW (not CLOSED)  
+**Status:** NOVICE-FIRST REDESIGN IMPLEMENTED — READY FOR OWNER HUMAN QA ROUND 3 (not CLOSED)  
 **Classification:** Shared Foundation implementation  
 **Foundation baseline (closed):** `01e461634c6910bad795a2c3c3b506ecf2c343df`  
 **Branch:** `feat/artemis-wp-a-legacy-safety-ui`  
@@ -528,5 +528,53 @@ Canonical EvidenceEnvelope · real orchestration · Risk UUID modernization · L
 
 **ARTEMIS WP-A — SPECIALIZED REDESIGN IMPLEMENTED**  
 **READY FOR OWNER HUMAN QA RE-REVIEW**
+
+Not CLOSED.
+
+## 22. Owner Human QA Round 2 — novice-first redesign
+
+Owner Round 1: Data Hub PASS / frozen. Artemis FAIL (engineering-oriented + count/list contradictions).
+
+### 22.1 Count / list RCA
+
+| Symptom | Cause | Fix |
+|---------|--------|-----|
+| Recommendations: count=7 and “No advisory records” | Summary from `readiness.advisory.count`; list from `/logs` `systemLogs`. Empty `[]` short-circuited fallback. `/logs` failures returned empty silently. `/logs.total` was page length, not COUNT. | Readiness now returns `count + latestAt + recent[] + loadedCount + detailsAvailable` from the same `system_logs` category. UI uses `resolveRecordWindow(audit.systemLogs \|\| readiness.advisory.recent)`. If count>0 and loaded=0 → “N records exist, but details could not be loaded” + Retry. Never “No records”. |
+| History: Agent runs=6051 and “No audit records” | Same empty-array trap on `audit.decisions \|\| readiness.agentRuns.recent`. Recent window was 12 and unused when audit returned `[]`. | `agentRuns.recent` window=50 + `detailsAvailable`. UI states “6,051 recorded · Showing latest 50” or truthful unavailable. `/logs` fail-soft + real totals. |
+
+### 22.2 Visible IA (IDs unchanged)
+
+Home · AI Inputs · Recommendations · Coordination · Safety & Approval · History & Audit · System Health  
+Deep links: `overview` `evidence` `decisions` `orchestration` `controls` `lineage` `system`.
+
+### 22.3 Presentation
+
+Simple (default) / Advanced — UI preference only (`localStorage titangold.ui.artemis.presentation`). Not Demo/Live.
+
+First-visit explainer: dismissible “New to Artemis?” (3 steps + Got it). Preference: `titangold.ui.artemis.explainerDismissed`.
+
+### 22.4 Staging evidence (Round 2)
+
+| Item | Value |
+|------|-------|
+| Implementation HEAD | `7420903` |
+| Documentation HEAD | living doc on `feat/artemis-wp-a-legacy-safety-ui` after Round 2 closeout note |
+| Runtime commit | `7420903` (`provenanceVerified=true`) |
+| Served bundle | `index-Ckx5_P5w.js` |
+| Data Hub chunk | `DataHubWorkspace-B8N0zeJk.js` (product source untouched; Vite chunk rebuilt) |
+| Deploy | dist rsync + titan-backend restart only; workers not restarted |
+| Workers | id4 pid=1639616 ↺=0; id8 pid=1639645 ↺=0 |
+| Backend tests | containment 3/3 + readiness 3/3 PASS |
+| Frontend tests | 28/28 PASS (`ArtemisWpA.test.tsx`, including A–E) |
+| Production build | PASS |
+| Data Hub | Owner PASS unchanged; not modified |
+| Side effects | private=0 orders=0 transfers=0 withdrawals=0 scheduler=0 workers=0 migrations=0 Live=0 · authorized titan-backend restart only |
+| Screenshots | Owner captures in Round 3 (login-gated Staging) |
+| Draft PR | Not created (WP-A remains open) |
+
+### 22.5 Verdict
+
+**ARTEMIS WP-A — NOVICE-FIRST REDESIGN IMPLEMENTED**  
+**READY FOR OWNER HUMAN QA ROUND 3**
 
 Not CLOSED.
