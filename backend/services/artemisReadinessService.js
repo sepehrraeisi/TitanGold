@@ -183,31 +183,69 @@ export async function buildArtemisReadiness(opts = {}) {
     };
   });
 
-  let advisory = unavailable({ count: null, latestAt: null });
-  const adv = await safeQuery(
+  const ADVISORY_WINDOW = 50;
+  const AGENT_RUN_WINDOW = 50;
+
+  let advisory = unavailable({
+    count: null,
+    latestAt: null,
+    recent: [],
+    limit: ADVISORY_WINDOW,
+    loadedCount: 0,
+    detailsAvailable: false,
+  });
+  const advCount = await safeQuery(
     `SELECT COUNT(*)::int AS c, MAX(created_at) AS latest
        FROM system_logs
       WHERE category = 'artemis_decision'`,
     [],
-    'advisory logs',
+    'advisory logs count',
   );
-  if (adv) {
+  const advRecent = await safeQuery(
+    `SELECT id, level, category, message, metadata, created_at
+       FROM system_logs
+      WHERE category = 'artemis_decision'
+      ORDER BY created_at DESC
+      LIMIT $1`,
+    [ADVISORY_WINDOW],
+    'advisory logs recent',
+  );
+  if (advCount) {
+    const recentRows = (advRecent?.rows || []).map((row) => ({
+      id: row.id,
+      level: row.level || null,
+      category: row.category || null,
+      message: row.message || null,
+      metadata: row.metadata || null,
+      created_at: row.created_at ? new Date(row.created_at).toISOString() : null,
+    }));
     advisory = {
       truth: 'PERSISTED',
-      count: asInt(adv.rows[0]?.c) || 0,
-      latestAt: adv.rows[0]?.latest ? new Date(adv.rows[0].latest).toISOString() : null,
+      count: asInt(advCount.rows[0]?.c) || 0,
+      latestAt: advCount.rows[0]?.latest ? new Date(advCount.rows[0].latest).toISOString() : null,
+      recent: recentRows,
+      limit: ADVISORY_WINDOW,
+      loadedCount: recentRows.length,
+      detailsAvailable: recentRows.length > 0,
     };
   }
 
-  let agentRuns = unavailable({ count: null, latestAt: null, recent: [] });
+  let agentRuns = unavailable({
+    count: null,
+    latestAt: null,
+    recent: [],
+    limit: AGENT_RUN_WINDOW,
+    loadedCount: 0,
+    detailsAvailable: false,
+  });
   const runs = await safeQuery(
     `SELECT d.id, d.agent_id, d.was_successful, d.confidence, d.created_at, d.input, d.output,
             a.agent_key, a.name AS agent_name
        FROM ai_decisions d
   LEFT JOIN ai_agents a ON a.id = d.agent_id
       ORDER BY d.created_at DESC
-      LIMIT 12`,
-    [],
+      LIMIT $1`,
+    [AGENT_RUN_WINDOW],
     'ai_decisions recent',
   );
   const runCount = await safeQuery(
@@ -216,25 +254,29 @@ export async function buildArtemisReadiness(opts = {}) {
     'ai_decisions count',
   );
   if (runCount) {
+    const recentRuns = (runs?.rows || []).map((row) => ({
+      id: row.id,
+      agentId: row.agent_id,
+      agentKey: row.agent_key || null,
+      agentName: row.agent_name || null,
+      successful: row.was_successful === true,
+      recordedScore: typeof row.confidence === 'number' ? row.confidence : null,
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+      symbol:
+        row.input?.symbol ||
+        row.input?.pair ||
+        row.output?.symbol ||
+        null,
+      action: row.output?.action || row.output?.decision || null,
+    }));
     agentRuns = {
       truth: 'PERSISTED',
       count: asInt(runCount.rows[0]?.c) || 0,
       latestAt: runCount.rows[0]?.latest ? new Date(runCount.rows[0].latest).toISOString() : null,
-      recent: (runs?.rows || []).map((row) => ({
-        id: row.id,
-        agentId: row.agent_id,
-        agentKey: row.agent_key || null,
-        agentName: row.agent_name || null,
-        successful: row.was_successful === true,
-        recordedScore: typeof row.confidence === 'number' ? row.confidence : null,
-        createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
-        symbol:
-          row.input?.symbol ||
-          row.input?.pair ||
-          row.output?.symbol ||
-          null,
-        action: row.output?.action || row.output?.decision || null,
-      })),
+      recent: recentRuns,
+      limit: AGENT_RUN_WINDOW,
+      loadedCount: recentRuns.length,
+      detailsAvailable: recentRuns.length > 0,
     };
   }
 

@@ -56,7 +56,23 @@ describe('Artemis WP-A readiness aggregation', () => {
       if (text.includes('FROM ai_agents')) {
         return { rows: [{ id: 'a1', agent_key: 'technical', name: 'Technical', type: 'technical', status: 'active', is_enabled: true }] };
       }
-      if (text.includes("category = 'artemis_decision'")) return { rows: [{ c: 2, latest: new Date().toISOString() }] };
+      if (text.includes("category = 'artemis_decision'") && text.includes('COUNT(')) {
+        return { rows: [{ c: 2, latest: new Date().toISOString() }] };
+      }
+      if (text.includes("category = 'artemis_decision'")) {
+        return {
+          rows: [
+            {
+              id: 'log-1',
+              level: 'info',
+              category: 'artemis_decision',
+              message: 'HOLD BTC/USDT',
+              metadata: { action: 'HOLD', opportunity: { symbol: 'BTC/USDT' } },
+              created_at: new Date().toISOString(),
+            },
+          ],
+        };
+      }
       if (text.includes('FROM ai_decisions d')) return { rows: [] };
       if (text.includes('FROM ai_decisions')) return { rows: [{ c: 3, latest: new Date().toISOString() }] };
       if (text.includes('FROM data_sources')) return { rows: [{ total_sources: 4, active_sources: 2 }] };
@@ -81,6 +97,33 @@ describe('Artemis WP-A readiness aggregation', () => {
     expect(readiness.dataHub.status).toBe('available');
     expect(readiness.executionEligible).toBe(false);
     expect(readiness.blockers.some((b) => b.code === 'evidence_not_connected')).toBe(true);
+    expect(readiness.advisory.count).toBe(2);
+    expect(readiness.advisory.recent).toHaveLength(1);
+    expect(readiness.advisory.detailsAvailable).toBe(true);
+    expect(readiness.agentRuns.count).toBe(3);
+    expect(readiness.agentRuns.detailsAvailable).toBe(false);
+  });
+
+  it('keeps advisory count when recent rows fail to load', async () => {
+    mockGetRuntimeExecutionState.mockResolvedValue({ killSwitchActive: false });
+    mockBuildRuntimeView.mockReturnValue({ requestedMode: 'demo', effectiveMode: 'demo', killSwitchActive: false });
+    mockQuery.mockImplementation(async (sql) => {
+      const text = String(sql);
+      if (text.includes("category = 'artemis_decision'") && text.includes('COUNT(')) {
+        return { rows: [{ c: 7, latest: new Date().toISOString() }] };
+      }
+      if (text.includes("category = 'artemis_decision'")) throw new Error('rows unavailable');
+      if (text.includes('FROM ai_decisions d')) throw new Error('recent runs unavailable');
+      if (text.includes('FROM ai_decisions')) return { rows: [{ c: 6051, latest: new Date().toISOString() }] };
+      return { rows: [] };
+    });
+    const readiness = await buildArtemisReadiness({});
+    expect(readiness.advisory.count).toBe(7);
+    expect(readiness.advisory.recent).toEqual([]);
+    expect(readiness.advisory.detailsAvailable).toBe(false);
+    expect(readiness.agentRuns.count).toBe(6051);
+    expect(readiness.agentRuns.recent).toEqual([]);
+    expect(readiness.agentRuns.detailsAvailable).toBe(false);
   });
 
   it('survives runtime SSOT failure without fabricating readiness', async () => {

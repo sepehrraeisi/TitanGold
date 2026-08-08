@@ -1,12 +1,12 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-A Legacy Safety + Specialized UI Redesign
+description: TitanGold Rule 02 — Artemis WP-A Novice-First UX Round 2
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-A — LEGACY SAFETY CONTAINMENT + SPECIALIZED UI/UX REDESIGN**
+**ARTEMIS WP-A — NOVICE-FIRST UX REDESIGN + DATA CONSISTENCY**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
@@ -15,48 +15,50 @@ Current program slice:
 ARTEMIS-WP-A-LEGACY-SAFETY-UI
 
 Risk tier:
-Tier 2–3 (API contract containment + frontend product redesign; no Tier-4 Live)
+Tier 2 (frontend presentation + read-only readiness enrichment; no Tier-4 Live)
 
 Engineering status:
-**DATA HUB HUMAN QA = PASS (OUT OF SCOPE — DO NOT TOUCH)**  
-**ARTEMIS WP-A — SPECIALIZED REDESIGN IMPLEMENTED**  
-**READY FOR OWNER HUMAN QA RE-REVIEW**  
+**DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
+**ARTEMIS = NOT YET HUMAN-QA APPROVED**  
+**NOVICE-FIRST REDESIGN IN PROGRESS**  
 Not CLOSED. Do not create a closeout PR.
 
 Branch / worktree:
 - `feat/artemis-wp-a-legacy-safety-ui`
 - `/home/ubuntu/worktrees/titangold-artemis-wp-a`
 
-Authorized in this remediation:
-- Full specialized redesign of all canonical Artemis tabs
-- Product presentation layer (no raw enums/keys/WP names)
-- Read-only `/api/v1/artemis/readiness` enrichment (no new SoT)
-- Remove Legacy Admin from primary Artemis tab strip
+Authorized in this round:
+- Fix Decisions/History count vs list Source-of-Truth contradictions
+- Simple / Advanced UI presentation preference (default Simple; not Demo/Live)
+- Visible nav label rename only (IDs/deep links unchanged)
+- Novice-first redesign of all 7 Artemis sections + first-visit explainer + help tips
 - EN / FA / RTL + responsive + a11y
-- Focused tests + Staging deploy (backend-only if needed; workers unchanged)
+- Focused regression tests A–E
+- Staging deploy (backend-only if needed; workers unchanged)
 
 Not authorized / unchanged:
-- Data Hub product (Owner PASS — out of scope)
+- Data Hub product (Owner PASS — frozen)
 - DB migrations
 - Scheduler allowlist / worker topology
 - Live / orders / private provider calls
 - Risk→Portfolio→Liquidity→OM full wiring
 - Frozen Trend/Arbitrage product surfaces
-- Restore of former AIManager tabs (Learning, Scenarios, Backtesting, System Logs)
 - FR-1…FR-4 future rehomes
-- Fake evidence envelopes / fake orchestration / fake confidence
+- Fake evidence / fake orchestration / fake confidence
 - Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
 Canonical AI Center nav (do not change):
 Artemis · Agents · Data Hub · Training · Analytics · Integrations · Topic Routing
 
-Canonical Artemis IA:
-Overview · Evidence · Decisions · Orchestration · Controls · Lineage & Audit · System & Integrations  
-Legacy Admin is NOT a primary tab.
+Canonical Artemis section IDs (deep links unchanged):
+overview · evidence · decisions · orchestration · controls · lineage · system
+
+Visible product labels (Simple default):
+Home · AI Inputs · Recommendations · Coordination · Safety & Approval · History & Audit · System Health
 
 Human QA:
-Owner re-review required after specialized redesign + Staging deploy.
+Owner Human QA Round 3 after novice-first redesign + Staging deploy.
 Do not self-close. Do not declare CLOSED without explicit Owner Human QA PASS.
 
-Next transition after Owner Human QA re-review PASS:
+Next transition after Owner Human QA Round 3 PASS:
 Draft PR review → explicit merge approval.

@@ -4,7 +4,7 @@ import React from 'react';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ARTEMIS_AGENT_CATALOG } from '../../../../constants/artemisAgentCatalog.js';
-import { RAW_ENUM_SCAN } from '../../../../components/ai/AIManager/artemisProductCopy.ts';
+import { RAW_ENUM_SCAN, SIMPLE_VIEW_FORBIDDEN } from '../../../../components/ai/AIManager/artemisProductCopy.ts';
 
 const productEn = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, '../../../../deploy/blue/locales/en.json'), 'utf8'),
@@ -80,8 +80,8 @@ const readinessFixture = {
   providers: { truth: 'MEASURED', ready: true, activeHealthy: 2, quorum: 2, items: [] },
   connections: { truth: 'MEASURED', providerConnected: false, count: 0, status: 'broker_unavailable' },
   scheduler: { truth: 'MEASURED', allowlist: ['arbitrage'], agentsEnabled: true, isRunning: true, stale: false },
-  advisory: { truth: 'PERSISTED', count: 0, latestAt: null },
-  agentRuns: { truth: 'PERSISTED', count: 0, latestAt: null, recent: [] },
+  advisory: { truth: 'PERSISTED', count: 0, latestAt: null, recent: [], limit: 50, loadedCount: 0, detailsAvailable: false },
+  agentRuns: { truth: 'PERSISTED', count: 0, latestAt: null, recent: [], limit: 50, loadedCount: 0, detailsAvailable: false },
   provenance: { truth: 'MEASURED', runtimeCommit: '32a65e4' },
   pipeline: [
     { id: 'data_foundation', labelKey: 'artemis_pipe_data', ownerKey: 'artemis_owner_data_hub', status: 'AVAILABLE', truth: 'PERSISTED', nav: { view: 'ai', aiTab: 'data_hub' } },
@@ -195,15 +195,24 @@ import AICenter, { readAiTabFromLocation } from '../../../../components/AICenter
 import ArtemisInsightsWidget from '../../../../components/widgets/ArtemisInsightsWidget.tsx';
 import { CANONICAL_SECTIONS } from '../../../../components/ai/AIManager/artemisProductTypes.ts';
 import { payloadToURLState, readStateFromURL, writeStateToURL } from '../../../../utils/urlSync.ts';
+import { fetchArtemisAuditBundle, fetchArtemisReadiness } from '../../../../services/artemisReadinessApi.ts';
+import { resolveRecordWindow } from '../../../../components/ai/AIManager/artemisActivityModel.ts';
 
 function primaryText(): string {
   return document.body.innerText || '';
+}
+
+async function waitForHome() {
+  await waitFor(() => expect(screen.getByText(/Artemis is analyzing only/i)).toBeInTheDocument());
 }
 
 describe('Artemis WP-A UI', () => {
   beforeEach(() => {
     currentLanguage = 'en';
     window.history.replaceState({}, '', '/?view=ai');
+    localStorage.clear();
+    vi.mocked(fetchArtemisReadiness).mockResolvedValue(readinessFixture as never);
+    vi.mocked(fetchArtemisAuditBundle).mockResolvedValue({ systemLogs: [], decisions: [], loadFailed: false });
   });
 
   afterEach(() => {
@@ -238,7 +247,7 @@ describe('Artemis WP-A UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Analytics' }));
     expect(await screen.findByText('Analytics Tab')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Artemis' }));
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Artemis is analyzing only|Advisory only/i).length).toBeGreaterThan(0));
   });
 
   it('legacy Artemis data_hub deep links open AI Center Data Hub', () => {
@@ -262,8 +271,8 @@ describe('Artemis WP-A UI', () => {
   it('Artemis System Open Data Hub navigates to AI Center Data Hub', async () => {
     const onNavigate = vi.fn();
     render(<AIManager onNavigate={onNavigate} />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: 'System & Integrations' }));
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'System Health' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open Data Hub' }));
     expect(onNavigate).toHaveBeenCalledWith({ view: 'ai', aiTab: 'data_hub' });
   });
@@ -285,22 +294,28 @@ describe('Artemis WP-A UI', () => {
 
   it('renders canonical Artemis sections without Legacy Admin or Autopilot in product nav', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
+    await waitForHome();
     for (const section of CANONICAL_SECTIONS) {
       expect(screen.getByRole('button', { name: tMap[section.labelKey] })).toBeInTheDocument();
     }
+    expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AI Inputs' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Recommendations' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Coordination' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Safety & Approval' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'History & Audit' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'System Health' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Autopilot$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Legacy Admin/i })).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Requested mode/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Effective mode/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Execution unavailable/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Advisory only/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Automated trading is unavailable/i).length).toBeGreaterThan(0);
   });
 
   it('Overview shows runtime, blockers and owner links without fake metrics', async () => {
     const onNavigate = vi.fn();
     render(<AIManager onNavigate={onNavigate} />);
-    await waitFor(() => expect(screen.getByText(/What Artemis can do now/i)).toBeInTheDocument());
-    expect(screen.getAllByText(/Canonical Agent evidence is not connected yet/i).length).toBeGreaterThan(0);
+    await waitForHome();
+    expect(screen.getAllByText(/Connect Agent intelligence/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/87%/)).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: 'Open Agents' })[0]);
     expect(onNavigate).toHaveBeenCalledWith({ view: 'ai', aiTab: 'agents' });
@@ -308,68 +323,71 @@ describe('Artemis WP-A UI', () => {
 
   it('Evidence renders 15 Agents by role without fake envelopes', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: 'Evidence' }));
-    expect(await screen.findByText(/Canonical evidence integration has not been activated yet/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Technical Analysis/i).length).toBeGreaterThan(0);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'AI Inputs' }));
+    expect(await screen.findByText(/Artemis receives intelligence from 15 specialized AI Agents/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Market Analysis/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Order Management/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Analytical intelligence/i).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'View all Agents' }));
+    expect(screen.getAllByText(/Technical Analysis/i).length).toBeGreaterThan(0);
     expect(primaryText()).not.toMatch(/WP-B|WP-D/);
   });
 
-  it('Decisions shows advisory empty state and execution wording', async () => {
+  it('Decisions shows true empty recommendations without claiming records exist', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: 'Decisions' }));
-    expect((await screen.findAllByText(/No advisory records|No legacy/i)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Execution unavailable/i).length).toBeGreaterThan(0);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Recommendations' }));
+    expect(await screen.findByText(/No recommendations have been generated yet/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/advisory only/i).length).toBeGreaterThan(0);
+    expect(primaryText()).not.toMatch(/No advisory records exist/i);
   });
 
   it('Orchestration shows truthful topology, not mock coordination', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: 'Orchestration' }));
-    expect(await screen.findByText(/coordination path is not active yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/Legacy coordination is retained for compatibility/i)).toBeInTheDocument();
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Coordination' }));
+    expect(await screen.findByText(/Current coordination/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Not active/i).length).toBeGreaterThan(0);
     expect(primaryText()).not.toMatch(/agent-1|UUID mismatch/i);
   });
 
   it('Controls shows Risk veto, liquidity limitation and order boundary', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: 'Controls' }));
-    expect(await screen.findByText(/Veto authority/i)).toBeInTheDocument();
-    expect(screen.getByText(/Execution feasibility validation is not available yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/Executes an approved intent only/i)).toBeInTheDocument();
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Safety & Approval' }));
+    expect(await screen.findByText(/Why execution is unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/Protects the portfolio from unacceptable risk/i)).toBeInTheDocument();
+    expect(screen.getByText(/Makes sure an order could realistically be executed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Only executes an intent after every required approval/i)).toBeInTheDocument();
     expect(screen.queryByText(/^veto$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/execution_only/)).not.toBeInTheDocument();
   });
 
   it('Lineage keeps audit sources separated', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: 'Lineage & Audit' }));
-    expect((await screen.findAllByText(/Artemis advisory logs/i)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Agent analytical runs/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Canonical decision lineage has not been activated yet/i)).toBeInTheDocument();
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'History & Audit' }));
+    expect((await screen.findAllByText(/Recent Artemis recommendations/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Recent Agent activity/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/No Artemis recommendations or Agent activity have been recorded yet/i)).toBeInTheDocument();
   });
 
   it('System shows dependency statuses and canonical links', async () => {
     const onNavigate = vi.fn();
     render(<AIManager onNavigate={onNavigate} />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: 'System & Integrations' }));
-    expect(await screen.findByText(/LLM \/ AI providers/i)).toBeInTheDocument();
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'System Health' }));
+    expect(await screen.findByText(/AI Providers/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open Data Hub' }));
     expect(onNavigate).toHaveBeenCalledWith({ view: 'ai', aiTab: 'data_hub' });
-    expect(screen.getByText(/Administrative \/ legacy tools/i)).toBeInTheDocument();
+    expect(screen.getByText(/Administrative tools|Administrative \/ legacy tools/i)).toBeInTheDocument();
     expect(screen.queryByText(/Enable Autopilot/i)).not.toBeInTheDocument();
   });
 
   it('writes artemisSection deep link', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: 'Decisions' }));
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Recommendations' }));
     await waitFor(() => {
       expect(window.location.search).toContain('artemisSection=decisions');
     });
@@ -377,7 +395,7 @@ describe('Artemis WP-A UI', () => {
 
   it('Insights widget has no hardcoded confidence 87', async () => {
     render(<ArtemisInsightsWidget />);
-    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Advisory only/i).length).toBeGreaterThan(0));
     expect(screen.queryByText(/87%/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/No hardcoded confidence/i).length).toBeGreaterThan(0);
   });
@@ -399,12 +417,112 @@ describe('Artemis WP-A UI', () => {
 
   it('primary Artemis copy has no raw enums or translation keys', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getByText(/What Artemis can do now/i)).toBeInTheDocument());
+    await waitForHome();
     const text = primaryText();
     for (const token of RAW_ENUM_SCAN) {
       expect(text).not.toContain(token);
     }
     expect(text).not.toMatch(/artemis_[a-z_]+/);
+  });
+
+  it('Simple view forbids engineering tokens until Advanced is opened', async () => {
+    const { container } = render(<AIManager />);
+    await waitForHome();
+    const text = primaryText();
+    for (const token of SIMPLE_VIEW_FORBIDDEN) {
+      expect(text.toLowerCase()).not.toContain(String(token).toLowerCase());
+    }
+    expect(container.querySelector('[data-artemis-view="simple"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    expect(container.querySelector('[data-artemis-view="advanced"]')).toBeTruthy();
+  });
+
+  it('A: advisory count > 0 with empty logs does not say no records exist', async () => {
+    vi.mocked(fetchArtemisReadiness).mockResolvedValue({
+      ...readinessFixture,
+      advisory: {
+        truth: 'PERSISTED',
+        count: 7,
+        latestAt: '2026-08-08T07:31:00.000Z',
+        recent: [],
+        limit: 50,
+        loadedCount: 0,
+        detailsAvailable: false,
+      },
+    } as never);
+    vi.mocked(fetchArtemisAuditBundle).mockResolvedValue({ systemLogs: [], decisions: [], loadFailed: true });
+    render(<AIManager />);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Recommendations' }));
+    expect(await screen.findByText(/7 advisory records exist, but their details could not be loaded/i)).toBeInTheDocument();
+    expect(primaryText()).not.toMatch(/No advisory records exist/i);
+    expect(primaryText()).not.toMatch(/No recommendations have been generated yet/i);
+    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
+  });
+
+  it('B: agent run count > 0 with empty recent window stays truthful', async () => {
+    vi.mocked(fetchArtemisReadiness).mockResolvedValue({
+      ...readinessFixture,
+      agentRuns: {
+        truth: 'PERSISTED',
+        count: 6051,
+        latestAt: '2026-08-08T07:31:00.000Z',
+        recent: [],
+        limit: 50,
+        loadedCount: 0,
+        detailsAvailable: false,
+      },
+    } as never);
+    vi.mocked(fetchArtemisAuditBundle).mockResolvedValue({ systemLogs: [], decisions: [], loadFailed: true });
+    render(<AIManager />);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'History & Audit' }));
+    expect(await screen.findByText(/6[,.]?051 Agent runs recorded, but recent details could not be loaded/i)).toBeInTheDocument();
+    expect(primaryText()).not.toMatch(/No audit records/i);
+  });
+
+  it('C: Orchestration distinguishes Agent operational from Artemis connected', async () => {
+    render(<AIManager />);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Coordination' }));
+    await waitFor(() => expect(document.querySelector('[data-artemis-coord-agent="trend"]')).toBeTruthy());
+    const card = document.querySelector('[data-artemis-coord-agent="trend"]');
+    expect(card?.textContent).toMatch(/Operational|Working/i);
+    expect(card?.textContent).toMatch(/Not connected/i);
+  });
+
+  it('D: Liquidity never shows a misleading Available badge', async () => {
+    render(<AIManager />);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Coordination' }));
+    await waitFor(() => expect(document.querySelector('[data-artemis-coord-agent="liquidity"]')).toBeTruthy());
+    const card = document.querySelector('[data-artemis-coord-agent="liquidity"]');
+    expect(card?.textContent).toMatch(/Blocked|Unavailable|Not connected/i);
+    expect(card?.textContent).not.toMatch(/\bAvailable\b/);
+  });
+
+  it('E: Order operational is not execution eligible', async () => {
+    render(<AIManager />);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Coordination' }));
+    await waitFor(() => expect(document.querySelector('[data-artemis-coord-agent="order"]')).toBeTruthy());
+    const card = document.querySelector('[data-artemis-coord-agent="order"]');
+    expect(card?.textContent).toMatch(/Operational|Working/i);
+    expect(card?.textContent).toMatch(/Unavailable|Not connected|Blocked/i);
+    expect(card?.textContent).not.toMatch(/\bAvailable\b/);
+  });
+
+  it('record window helper never treats empty loaded rows as true empty when count > 0', () => {
+    const unavailable = resolveRecordWindow({ persistedCount: 7, primaryRecords: [], fallbackRecords: [] });
+    expect(unavailable.kind).toBe('details_unavailable');
+    const trueEmpty = resolveRecordWindow({ persistedCount: 0, primaryRecords: [], fallbackRecords: [] });
+    expect(trueEmpty.kind).toBe('true_empty');
+    const windowed = resolveRecordWindow({
+      persistedCount: 6051,
+      primaryRecords: Array.from({ length: 50 }, (_, i) => ({ id: i })),
+    });
+    expect(windowed.showingPartialWindow).toBe(true);
+    expect(windowed.kind).toBe('loaded');
   });
 
   it('responsive shell keeps section nav usable', async () => {

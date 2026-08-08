@@ -1,110 +1,146 @@
 import React from 'react';
 import type { ArtemisSectionProps } from '../../artemisProductTypes.ts';
 import {
-  productAuthority,
-  productGroup,
+  agentArtemisConnection,
+  noviceGroup,
+  noviceStatus,
   productLabel,
   productLimitation,
-  productStatus,
-  statusTone,
 } from '../../artemisProductCopy.ts';
-import { StatusPill, TechnicalDetails, TextAction } from '../../components/ArtemisUi.tsx';
+import { isSimpleView } from '../../artemisPresentation.ts';
+import { ExpandableGroup, HelpTip, StatusPill, TechnicalDetails, TextAction } from '../../components/ArtemisUi.tsx';
 
 const FLOW = ['analytical', 'opportunity', 'capital_risk', 'feasibility', 'execution'] as const;
 
-export const OrchestrationSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onNavigate }) => {
+function connectionCopy(
+  agent: { key: string; evidenceCompatible?: boolean; evidenceAvailable?: boolean; consumption?: string },
+  t: ArtemisSectionProps['t'],
+) {
+  const state = agentArtemisConnection(agent);
+  if (state === 'blocked') return { label: productLabel(t, 'artemis_user_blocked', 'Blocked'), tone: 'danger' as const };
+  if (state === 'unavailable') return { label: productLabel(t, 'artemis_user_unavailable', 'Unavailable'), tone: 'danger' as const };
+  return { label: productLabel(t, 'artemis_user_not_connected', 'Not connected'), tone: 'warning' as const };
+}
+
+export const OrchestrationSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onNavigate, presentation }) => {
+  const simple = isSimpleView(presentation);
   const agents = readiness?.catalog?.agents || [];
   return (
     <div className="space-y-4" data-artemis-page="orchestration">
       <header>
-        <h2 className="text-lg font-bold">{productLabel(t, 'artemis_orchestration_workspace', 'Orchestration readiness')}</h2>
+        <h2 className="text-lg font-bold">{productLabel(t, 'artemis_coord_title', 'Coordination')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
           {productLabel(
             t,
-            'artemis_orchestration_purpose',
-            'Intended coordination topology. Canonical orchestration is not active.',
+            'artemis_coord_purpose',
+            'Artemis is meant to combine specialized Agents into one recommendation. That coordination is not active yet.',
           )}
         </p>
       </header>
 
-      <section className="bg-card border border-border rounded-lg p-4 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          <StatusPill label={productLabel(t, 'artemis_canonical_orchestration', 'Canonical orchestration')} tone="danger" />
-          <StatusPill label={productStatus('UNAVAILABLE', t)} tone="danger" />
+      <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+        <div className="flex flex-col md:flex-row md:flex-wrap gap-2 text-sm font-medium">
+          {FLOW.map((group, index) => {
+            const rows = agents.filter((a) => a.group === group);
+            return (
+              <React.Fragment key={group}>
+                <span className="rounded-xl border border-border px-3 py-2 bg-secondary/20">
+                  {rows.length} {noviceGroup(group, t)}
+                </span>
+                {index < FLOW.length - 1 ? (
+                  <span className="text-muted-foreground self-center" aria-hidden>
+                    +
+                  </span>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+          <span className="text-muted-foreground self-center" aria-hidden>
+            ↓
+          </span>
+          <span className="rounded-xl border border-blue-500/40 px-3 py-2">Artemis</span>
         </div>
         <p className="text-sm">
+          {productLabel(t, 'artemis_coord_current', 'Current coordination')}:{' '}
+          <StatusPill label={productLabel(t, 'artemis_coord_not_active', 'Not active')} tone="danger" />
+        </p>
+        <p className="text-sm text-muted-foreground">
           {productLabel(
             t,
-            'artemis_orchestration_human',
-            'Artemis is intended to combine Agent intelligence, then apply the control chain. That coordination path is not active yet.',
+            'artemis_coord_reason',
+            'Agent outputs have not yet been connected using the Artemis evidence contract.',
           )}
         </p>
-        <div className="flex flex-col md:flex-row md:flex-wrap gap-2 text-sm font-medium">
-          <span className="rounded-md border border-border px-2 py-1">{productGroup('analytical', t)}</span>
-          <span className="text-muted-foreground self-center">+</span>
-          <span className="rounded-md border border-border px-2 py-1">{productGroup('opportunity', t)}</span>
-          <span className="text-muted-foreground self-center">→</span>
-          <span className="rounded-md border border-dashed border-amber-500/40 px-2 py-1">
-            {productLabel(t, 'artemis_pipe_evidence', 'Evidence compatibility')}
-          </span>
-          <span className="text-muted-foreground self-center">→</span>
-          <span className="rounded-md border border-blue-500/40 px-2 py-1">Artemis</span>
-          <span className="text-muted-foreground self-center">→</span>
-          <span className="rounded-md border border-border px-2 py-1">
-            {productLabel(t, 'artemis_control_chain', 'Control chain')}
-          </span>
-        </div>
       </section>
 
       {FLOW.map((group) => {
         const rows = agents.filter((a) => a.group === group);
+        const operational = rows.filter((a) => a.operationalNow).length;
         return (
-          <section key={group} className="space-y-2" aria-label={productGroup(group, t)}>
-            <h3 className="text-sm font-semibold">{productGroup(group, t)}</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-              {rows.map((agent) => (
-                <article key={agent.key} className="bg-card border border-border rounded-lg p-3 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-semibold text-sm">{productLabel(t, agent.nameKey, agent.key)}</h4>
-                    <StatusPill label={productStatus(agent.operational === 'operational' ? 'AVAILABLE' : agent.readiness, t)} tone={statusTone(agent.readiness)} />
-                  </div>
-                  <p className="text-xs text-muted-foreground">{productAuthority(agent.authority, t)}</p>
-                  <p className="text-xs">
-                    {agent.exists
-                      ? productLabel(t, 'artemis_op_configured', 'Configured')
-                      : productLabel(t, 'artemis_op_unconfigured', 'Not configured')}
-                    {' · '}
-                    {productStatus(agent.consumption, t)}
-                  </p>
-                  {agent.limitationKey ? (
-                    <p className="text-xs text-amber-800 dark:text-amber-200">{productLimitation(agent.limitationKey, t)}</p>
-                  ) : null}
-                  <TextAction onClick={() => onNavigate?.({ view: 'ai', aiTab: 'agents', agentId: agent.registryKey })}>
-                    {productLabel(t, 'artemis_open_agent', 'Open Agent')}
-                  </TextAction>
-                </article>
-              ))}
-            </div>
-          </section>
+          <ExpandableGroup
+            key={group}
+            title={`${noviceGroup(group, t)} · ${rows.length}`}
+            summary={productLabel(t, 'artemis_coord_group_summary', '{ready} working independently · 0 connected to Artemis')
+              .replace('{ready}', String(operational))}
+          >
+            <ul className="space-y-2">
+              {rows.map((agent) => {
+                const connection = connectionCopy(agent, t);
+                return (
+                  <li key={agent.key} className="rounded-xl border border-border p-3" data-artemis-coord-agent={agent.key}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <h4 className="font-semibold text-sm">{productLabel(t, agent.nameKey, agent.key)}</h4>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">{productLabel(t, 'artemis_agent_status', 'Agent status')}</dt>
+                        <dd className="mt-1">
+                          <StatusPill
+                            label={agent.operationalNow ? productLabel(t, 'artemis_op_operational', 'Operational') : noviceStatus(agent.operational, t)}
+                            tone={agent.operationalNow ? 'ok' : 'warning'}
+                          />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">
+                          {productLabel(t, 'artemis_connection_status', 'Artemis connection')}
+                          {agent.key === 'liquidity' ? (
+                            <HelpTip label={productLabel(t, 'artemis_help_liquidity_label', 'What is liquidity?')}>
+                              {productLabel(
+                                t,
+                                'artemis_help_liquidity',
+                                'Liquidity checks whether an order could realistically be filled without excessive slippage.',
+                              )}
+                            </HelpTip>
+                          ) : null}
+                        </dt>
+                        <dd className="mt-1">
+                          <StatusPill label={connection.label} tone={connection.tone} />
+                        </dd>
+                      </div>
+                    </dl>
+                    {!simple && agent.limitationKey ? (
+                      <p className="text-xs text-amber-800 dark:text-amber-200 mt-2">{productLimitation(agent.limitationKey, t)}</p>
+                    ) : null}
+                    <div className="mt-2">
+                      <TextAction onClick={() => onNavigate?.({ view: 'ai', aiTab: 'agents', agentId: agent.registryKey })}>
+                        {productLabel(t, 'artemis_open_agent', 'Open Agent')}
+                      </TextAction>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </ExpandableGroup>
         );
       })}
 
-      <section className="rounded-lg border border-dashed border-border p-4 space-y-2 opacity-90">
-        <h3 className="text-sm font-semibold text-muted-foreground">
-          {productLabel(t, 'artemis_legacy_coordination', 'Legacy coordination')}
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          {productLabel(
-            t,
-            'artemis_legacy_coordination_note',
-            'Legacy coordination is retained for compatibility but is not used as canonical Artemis orchestration.',
-          )}
-        </p>
+      {!simple ? (
         <TechnicalDetails title={productLabel(t, 'artemis_technical_details', 'Technical details')}>
-          <p>{productLabel(t, 'artemis_diag_legacy_graph', 'Legacy identity graph is not canonical and must not be used for coordination.')}</p>
-          <p>realAgentCoordination: {String(readiness?.orchestration?.realAgentCoordination === true)}</p>
+          <p>realAgentCoordination={String(readiness?.orchestration?.realAgentCoordination === true)}</p>
+          <p>orchestration.readiness={String(readiness?.orchestration?.readiness || '')}</p>
         </TechnicalDetails>
-      </section>
+      ) : null}
     </div>
   );
 };

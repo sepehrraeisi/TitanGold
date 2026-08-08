@@ -1,5 +1,6 @@
 import type { ExecutionRuntimeView } from '../../services/executionRuntimeApi.ts';
 import type { OnNavigateHandler, NavigationPayload } from '../../../types/navigation.ts';
+import type { ArtemisPresentationMode } from './artemisPresentation.ts';
 
 export type ArtemisSectionId =
   | 'overview'
@@ -64,6 +65,10 @@ export type ArtemisAgentRun = {
 export type ArtemisAuditBundle = {
   systemLogs: ArtemisAuditLog[];
   decisions: ArtemisAgentRun[];
+  loadFailed?: boolean;
+  limit?: number;
+  advisoryTotal?: number | null;
+  agentRunTotal?: number | null;
 };
 
 export type ArtemisReadiness = {
@@ -153,12 +158,23 @@ export type ArtemisReadiness = {
     owner?: string | null;
     lastTickAt?: string | null;
   };
-  advisory?: { truth: TruthClass | string; count?: number | null; latestAt?: string | null };
+  advisory?: {
+    truth: TruthClass | string;
+    count?: number | null;
+    latestAt?: string | null;
+    recent?: ArtemisAuditLog[];
+    limit?: number;
+    loadedCount?: number;
+    detailsAvailable?: boolean;
+  };
   agentRuns?: {
     truth: TruthClass | string;
     count?: number | null;
     latestAt?: string | null;
     recent?: ArtemisAgentRun[];
+    limit?: number;
+    loadedCount?: number;
+    detailsAvailable?: boolean;
   };
   provenance?: { truth: TruthClass | string; runtimeCommit?: string | null };
   pipeline?: Array<{
@@ -185,16 +201,18 @@ export type ArtemisSectionProps = {
   onNavigate?: OnNavigateHandler;
   audit?: ArtemisAuditBundle;
   onOpenSection?: (id: ArtemisSectionId) => void;
+  presentation?: ArtemisPresentationMode;
+  onRetry?: () => void;
 };
 
 export const CANONICAL_SECTIONS: { id: Exclude<ArtemisSectionId, 'legacy_admin'>; labelKey: string; fallback: string }[] = [
-  { id: 'overview', labelKey: 'artemis_nav_overview', fallback: 'Overview' },
-  { id: 'evidence', labelKey: 'artemis_nav_evidence', fallback: 'Evidence' },
-  { id: 'decisions', labelKey: 'artemis_nav_decisions', fallback: 'Decisions' },
-  { id: 'orchestration', labelKey: 'artemis_nav_orchestration', fallback: 'Orchestration' },
-  { id: 'controls', labelKey: 'artemis_nav_controls', fallback: 'Controls' },
-  { id: 'lineage', labelKey: 'artemis_nav_lineage', fallback: 'Lineage & Audit' },
-  { id: 'system', labelKey: 'artemis_nav_system', fallback: 'System & Integrations' },
+  { id: 'overview', labelKey: 'artemis_nav_overview', fallback: 'Home' },
+  { id: 'evidence', labelKey: 'artemis_nav_evidence', fallback: 'AI Inputs' },
+  { id: 'decisions', labelKey: 'artemis_nav_decisions', fallback: 'Recommendations' },
+  { id: 'orchestration', labelKey: 'artemis_nav_orchestration', fallback: 'Coordination' },
+  { id: 'controls', labelKey: 'artemis_nav_controls', fallback: 'Safety & Approval' },
+  { id: 'lineage', labelKey: 'artemis_nav_lineage', fallback: 'History & Audit' },
+  { id: 'system', labelKey: 'artemis_nav_system', fallback: 'System Health' },
 ];
 
 export function truthLabel(truth: TruthClass | string | undefined, t: (k: string) => string): string {

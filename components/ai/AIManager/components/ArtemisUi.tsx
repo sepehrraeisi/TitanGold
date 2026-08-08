@@ -40,10 +40,15 @@ export const ArtemisCard: React.FC<{
   </section>
 );
 
-export const EmptyState: React.FC<{ title: string; body: string }> = ({ title, body }) => (
+export const EmptyState: React.FC<{ title: string; body: string; action?: React.ReactNode }> = ({
+  title,
+  body,
+  action,
+}) => (
   <div className="rounded-lg border border-dashed border-border px-4 py-3" role="status">
     <p className="text-sm font-medium text-foreground">{title}</p>
     <p className="text-sm text-muted-foreground mt-1">{body}</p>
+    {action ? <div className="mt-3">{action}</div> : null}
   </div>
 );
 
@@ -206,3 +211,149 @@ export const NativeSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement
     className={`rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${props.className || ''}`}
   />
 );
+
+export const HelpTip: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => {
+  const id = useId();
+  const [open, setOpen] = React.useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+  return (
+    <span className="relative inline-flex align-middle">
+      <button
+        ref={buttonRef}
+        type="button"
+        className="ms-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-[11px] text-muted-foreground hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        aria-label={label}
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((v) => !v)}
+      >
+        ?
+      </button>
+      {open ? (
+        <span
+          id={id}
+          role="tooltip"
+          className="absolute z-30 top-7 start-0 w-64 max-w-[80vw] rounded-md border border-border bg-card p-2 text-xs text-foreground shadow-lg"
+        >
+          {children}
+        </span>
+      ) : null}
+    </span>
+  );
+};
+
+export const PresentationToggle: React.FC<{
+  mode: 'simple' | 'advanced';
+  onChange: (mode: 'simple' | 'advanced') => void;
+  simpleLabel: string;
+  advancedLabel: string;
+}> = ({ mode, onChange, simpleLabel, advancedLabel }) => (
+  <div
+    className="inline-flex rounded-lg border border-border p-0.5"
+    role="group"
+    aria-label="Artemis presentation"
+    data-artemis-presentation={mode}
+  >
+    <button
+      type="button"
+      aria-pressed={mode === 'simple'}
+      onClick={() => onChange('simple')}
+      className={`px-3 py-1.5 text-xs font-semibold rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+        mode === 'simple' ? 'bg-blue-600 text-white' : 'text-muted-foreground hover:bg-secondary'
+      }`}
+    >
+      {simpleLabel}
+    </button>
+    <button
+      type="button"
+      aria-pressed={mode === 'advanced'}
+      onClick={() => onChange('advanced')}
+      className={`px-3 py-1.5 text-xs font-semibold rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+        mode === 'advanced' ? 'bg-blue-600 text-white' : 'text-muted-foreground hover:bg-secondary'
+      }`}
+    >
+      {advancedLabel}
+    </button>
+  </div>
+);
+
+export const FirstVisitExplainer: React.FC<{
+  title: string;
+  steps: string[];
+  gotItLabel: string;
+  learnMoreLabel?: string;
+  onGotIt: () => void;
+  onLearnMore?: () => void;
+}> = ({ title, steps, gotItLabel, learnMoreLabel, onGotIt, onLearnMore }) => (
+  <section
+    className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4"
+    data-artemis-explainer="true"
+    aria-label={title}
+  >
+    <h2 className="text-sm font-bold">{title}</h2>
+    <ol className="mt-2 space-y-1 text-sm text-foreground/90">
+      {steps.map((step, index) => (
+        <li key={step}>
+          <span className="font-semibold tabular-nums">{index + 1}.</span> {step}
+        </li>
+      ))}
+    </ol>
+    <div className="mt-3 flex flex-wrap gap-2">
+      <LinkAction onClick={onGotIt}>{gotItLabel}</LinkAction>
+      {learnMoreLabel && onLearnMore ? <TextAction onClick={onLearnMore}>{learnMoreLabel}</TextAction> : null}
+    </div>
+  </section>
+);
+
+export const ExpandableGroup: React.FC<{
+  title: string;
+  summary: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}> = ({ title, summary, children, defaultOpen = false }) => (
+  <details className="rounded-xl border border-border bg-card p-3" open={defaultOpen || undefined}>
+    <summary className="cursor-pointer list-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="text-xs text-muted-foreground mt-1">{summary}</p>
+        </div>
+      </div>
+    </summary>
+    <div className="mt-3">{children}</div>
+  </details>
+);
+
+export const FlowNode: React.FC<{
+  label: string;
+  status?: string;
+  tone?: 'neutral' | 'warning' | 'danger' | 'info' | 'ok';
+  onClick?: () => void;
+}> = ({ label, status, tone = 'neutral', onClick }) => {
+  const body = (
+    <>
+      <p className="text-sm font-semibold">{label}</p>
+      {status ? <div className="mt-1"><StatusPill label={status} tone={tone} /></div> : null}
+    </>
+  );
+  const className = 'min-w-[120px] flex-1 bg-card border border-border rounded-xl p-3 text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500';
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {body}
+      </button>
+    );
+  }
+  return <div className={className}>{body}</div>;
+};

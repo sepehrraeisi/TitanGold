@@ -554,41 +554,91 @@ router.patch('/config/decision-engine', authenticateStrict, requireCapability(CA
   }
 });
 
-// Get Artemis decision logs
-router.get('/logs', authenticate, async (req, res) => {
+// Get Artemis decision logs — fail-soft per source so count/list stay reconcilable
+router.get('/logs', authenticateStrict, async (req, res) => {
   try {
-    const { limit = 50, offset = 0, level, category } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const { level } = req.query;
 
     let whereClause = "category = 'artemis_decision'";
-    const params = [parseInt(limit), parseInt(offset)];
-
+    const filterParams = [];
     if (level) {
-      whereClause += " AND level = $3";
-      params.push(level);
+      filterParams.push(level);
+      whereClause += ` AND level = $${filterParams.length}`;
+    }
+    const pageParams = [...filterParams, limit, offset];
+    const limitPlaceholder = `$${filterParams.length + 1}`;
+    const offsetPlaceholder = `$${filterParams.length + 2}`;
+
+    let systemLogs = [];
+    let advisoryTotal = null;
+    let decisions = [];
+    let agentRunTotal = null;
+    let sourceError = null;
+
+    try {
+      const countResult = await query(
+        `SELECT COUNT(*)::int AS c FROM system_logs WHERE ${whereClause}`,
+        filterParams,
+      );
+      advisoryTotal = Number.parseInt(countResult.rows?.[0]?.c, 10);
+      if (!Number.isFinite(advisoryTotal)) advisoryTotal = null;
+    } catch (error) {
+      logger.warn('Artemis logs: advisory count unavailable', error.message);
+      sourceError = 'advisory_count';
     }
 
-    const result = await query(
-      `SELECT id, level, category, message, metadata, created_at 
-       FROM system_logs 
-       WHERE ${whereClause}
-       ORDER BY created_at DESC 
-       LIMIT $1 OFFSET $2`,
-      params
-    );
+    try {
+      const result = await query(
+        `SELECT id, level, category, message, metadata, created_at
+           FROM system_logs
+          WHERE ${whereClause}
+          ORDER BY created_at DESC
+          LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+        pageParams,
+      );
+      systemLogs = result.rows || [];
+    } catch (error) {
+      logger.warn('Artemis logs: advisory rows unavailable', error.message);
+      sourceError = sourceError || 'advisory_rows';
+    }
 
-    // Also get AI decisions for decision-specific logs
-    const decisionsResult = await query(
-      `SELECT id, agent_id, input, output, was_successful, confidence, created_at 
-       FROM ai_decisions 
-       ORDER BY created_at DESC 
-       LIMIT $1`,
-      [parseInt(limit)]
-    );
+    try {
+      const runCount = await query(`SELECT COUNT(*)::int AS c FROM ai_decisions`);
+      agentRunTotal = Number.parseInt(runCount.rows?.[0]?.c, 10);
+      if (!Number.isFinite(agentRunTotal)) agentRunTotal = null;
+    } catch (error) {
+      logger.warn('Artemis logs: agent-run count unavailable', error.message);
+      sourceError = sourceError || 'agent_run_count';
+    }
+
+    try {
+      const decisionsResult = await query(
+        `SELECT id, agent_id, input, output, was_successful, confidence, created_at
+           FROM ai_decisions
+          ORDER BY created_at DESC
+          LIMIT $1`,
+        [limit],
+      );
+      decisions = decisionsResult.rows || [];
+    } catch (error) {
+      logger.warn('Artemis logs: agent-run rows unavailable', error.message);
+      sourceError = sourceError || 'agent_run_rows';
+    }
 
     res.json({
-      systemLogs: result.rows || [],
-      decisions: decisionsResult.rows || [],
-      total: result.rows?.length || 0,
+      systemLogs,
+      decisions,
+      total: advisoryTotal != null ? advisoryTotal : systemLogs.length,
+      advisoryTotal,
+      agentRunTotal,
+      limit,
+      offset,
+      loadedAdvisory: systemLogs.length,
+      loadedAgentRuns: decisions.length,
+      detailsAvailable: systemLogs.length > 0 || decisions.length > 0,
+      sourceError,
     });
   } catch (error) {
     logger.error('Failed to fetch Artemis logs:', error);

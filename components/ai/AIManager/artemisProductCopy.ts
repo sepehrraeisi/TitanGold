@@ -126,6 +126,83 @@ export function productMode(mode: string | undefined | null, t: TFn): string {
   return translate(t, 'artemis_status_unavailable', 'Unavailable');
 }
 
+const NOVICE_STATUS_KEYS: Record<string, { key: string; fallback: string }> = {
+  ROLE_MAPPED: { key: 'artemis_user_not_connected', fallback: 'Not connected' },
+  NOT_EXECUTION_ELIGIBLE: { key: 'artemis_user_unavailable', fallback: 'Unavailable' },
+  BLOCKED: { key: 'artemis_user_blocked', fallback: 'Blocked' },
+  PARTIAL: { key: 'artemis_user_partial', fallback: 'Partially ready' },
+  AVAILABLE: { key: 'artemis_user_ready', fallback: 'Ready' },
+  LEGACY: { key: 'artemis_user_advisory', fallback: 'Advisory only' },
+  UNAVAILABLE: { key: 'artemis_user_unavailable', fallback: 'Unavailable' },
+  CONTRACT_FOUNDATION_APPROVED: { key: 'artemis_user_needs_setup', fallback: 'Needs setup' },
+  LEGACY_ADVISORY: { key: 'artemis_user_advisory', fallback: 'Advisory only' },
+  LEGACY_ADVISORY_ONLY: { key: 'artemis_user_advisory', fallback: 'Advisory only' },
+  configured: { key: 'artemis_user_needs_setup', fallback: 'Needs setup' },
+  operational: { key: 'artemis_user_working', fallback: 'Working' },
+  unconfigured: { key: 'artemis_user_needs_setup', fallback: 'Needs setup' },
+  disabled: { key: 'artemis_user_blocked', fallback: 'Blocked' },
+  contract_pending: { key: 'artemis_user_not_connected', fallback: 'Not connected' },
+  not_consumable: { key: 'artemis_user_not_connected', fallback: 'Not connected' },
+  not_execution_eligible: { key: 'artemis_user_unavailable', fallback: 'Unavailable' },
+  blocked: { key: 'artemis_user_blocked', fallback: 'Blocked' },
+  available: { key: 'artemis_user_ready', fallback: 'Ready' },
+  broker_unavailable: { key: 'artemis_user_unavailable', fallback: 'Unavailable' },
+  unavailable: { key: 'artemis_user_unavailable', fallback: 'Unavailable' },
+  MEASURED: { key: 'artemis_user_ready', fallback: 'Ready' },
+  PERSISTED: { key: 'artemis_user_ready', fallback: 'Ready' },
+  DERIVED: { key: 'artemis_user_partial', fallback: 'Partially ready' },
+  CONFIGURED: { key: 'artemis_user_needs_setup', fallback: 'Needs setup' },
+};
+
+const SIMPLE_GROUP_KEYS: Record<string, { key: string; fallback: string }> = {
+  analytical: { key: 'artemis_group_simple_analytical', fallback: 'Market Analysis' },
+  analyticalEvidence: { key: 'artemis_group_simple_analytical', fallback: 'Market Analysis' },
+  opportunity: { key: 'artemis_group_simple_opportunity', fallback: 'Forecasting' },
+  opportunityForecast: { key: 'artemis_group_simple_opportunity', fallback: 'Forecasting' },
+  capital_risk: { key: 'artemis_group_simple_capital_risk', fallback: 'Risk & Capital' },
+  control: { key: 'artemis_group_simple_capital_risk', fallback: 'Risk & Capital' },
+  feasibility: { key: 'artemis_group_simple_feasibility', fallback: 'Liquidity' },
+  execution: { key: 'artemis_group_simple_execution', fallback: 'Order Management' },
+};
+
+export function noviceStatus(code: string | undefined | null, t: TFn): string {
+  if (!code) return translate(t, 'artemis_user_unavailable', 'Unavailable');
+  const mapped = NOVICE_STATUS_KEYS[code] || NOVICE_STATUS_KEYS[String(code).toUpperCase()] || NOVICE_STATUS_KEYS[String(code).toLowerCase()];
+  if (mapped) return translate(t, mapped.key, mapped.fallback);
+  return translate(t, 'artemis_user_unavailable', 'Unavailable');
+}
+
+export function noviceGroup(code: string | undefined | null, t: TFn): string {
+  if (!code) return translate(t, 'artemis_group_simple_analytical', 'Market Analysis');
+  const mapped = SIMPLE_GROUP_KEYS[code];
+  if (mapped) return translate(t, mapped.key, mapped.fallback);
+  return productGroup(code, t);
+}
+
+export function noviceTone(
+  code: string | undefined | null,
+): 'neutral' | 'warning' | 'danger' | 'info' | 'ok' {
+  const value = String(code || '').toUpperCase();
+  if (['AVAILABLE', 'OPERATIONAL', 'OK', 'WORKING', 'READY'].includes(value)) return 'ok';
+  if (['PARTIAL', 'ROLE_MAPPED', 'LEGACY', 'CONTRACT_PENDING', 'CONFIGURED', 'NEEDS_SETUP', 'ADVISORY'].includes(value)) {
+    return 'warning';
+  }
+  if (['BLOCKED', 'NOT_EXECUTION_ELIGIBLE', 'UNAVAILABLE', 'DISABLED', 'NOT_CONNECTED'].includes(value)) return 'danger';
+  return statusTone(code);
+}
+
+export function agentArtemisConnection(agent: {
+  key?: string;
+  evidenceCompatible?: boolean;
+  evidenceAvailable?: boolean;
+  consumption?: string;
+}): 'not_connected' | 'blocked' | 'unavailable' {
+  if (agent.key === 'liquidity' || agent.consumption === 'blocked') return 'blocked';
+  if (agent.key === 'order' || agent.consumption === 'not_execution_eligible') return 'unavailable';
+  if (agent.evidenceCompatible || agent.evidenceAvailable) return 'not_connected';
+  return 'not_connected';
+}
+
 export function statusTone(
   code: string | undefined | null,
 ): 'neutral' | 'warning' | 'danger' | 'info' | 'ok' {
@@ -171,4 +248,19 @@ export const RAW_ENUM_SCAN = [
   'WP-D',
   'stub',
   '/api/v1/artemis/health',
+];
+
+export const SIMPLE_VIEW_FORBIDDEN = [
+  ...RAW_ENUM_SCAN,
+  'contractVersion',
+  'schemaVersion',
+  'LEGACY_',
+  'ROLE_',
+  'NOT_',
+  'UUID',
+  'WP-',
+  'allowlist',
+  'commit=',
+  'canonical',
+  'Source of Truth',
 ];

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { fetchArtemisReadiness } from '../../services/artemisReadinessApi.ts';
-import { productLabel, productStatus } from '../ai/AIManager/artemisProductCopy.ts';
+import { noviceStatus, productLabel } from '../ai/AIManager/artemisProductCopy.ts';
 
 const WidgetCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="bg-white dark:bg-[#1c1e2f] border border-slate-200 dark:border-gray-700/50 rounded-lg p-4 h-full flex flex-col">
@@ -59,24 +59,24 @@ const ArtemisInsightsWidget: React.FC = () => {
               {productLabel(
                 t,
                 'artemis_insights_unavailable_reason',
-                'Canonical advisory state could not be loaded. No fabricated confidence is shown.',
+                'Artemis status could not be loaded. No fabricated confidence is shown.',
               )}
             </p>
           </>
         ) : (
           <>
             <p className="text-sm text-slate-700 dark:text-gray-300 mt-1">
-              {productStatus(stage || 'LEGACY_ADVISORY', t)}
+              {noviceStatus(stage || 'LEGACY_ADVISORY', t)}
             </p>
             <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-semibold">
-              {productLabel(t, 'execution_eligibility', 'Execution eligibility')}:{' '}
-              {eligible ? productLabel(t, 'yes', 'Yes') : productLabel(t, 'no', 'No')}
+              {productLabel(t, 'artemis_chip_trading', 'Trading')}:{' '}
+              {eligible ? productLabel(t, 'artemis_user_ready', 'Ready') : productLabel(t, 'artemis_user_unavailable', 'Unavailable')}
             </p>
             <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
               {productLabel(
                 t,
                 'artemis_insights_no_fake_confidence',
-                'No hardcoded confidence. Legacy advisory only.',
+                'No hardcoded confidence. Advisory only.',
               )}
             </p>
           </>

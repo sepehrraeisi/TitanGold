@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import type { ArtemisSectionProps } from '../../artemisProductTypes.ts';
-import { productLabel, productLimitation, productStatus } from '../../artemisProductCopy.ts';
-import { truthLabel } from '../../artemisProductTypes.ts';
+import { noviceStatus, productLabel } from '../../artemisProductCopy.ts';
+import { isSimpleView } from '../../artemisPresentation.ts';
 import { StatusPill, TechnicalDetails, TextAction } from '../../components/ArtemisUi.tsx';
 import { useAppContext } from '../../../../../context/AppContext.tsx';
 import { isAdminRole } from '../../../../../utils/auth.ts';
 
-export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onNavigate }) => {
+export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onNavigate, presentation }) => {
+  const simple = isSimpleView(presentation);
   const { user } = useAppContext();
   const isAdmin = isAdminRole(user?.role);
   const [showLegacy, setShowLegacy] = useState(false);
@@ -19,16 +20,14 @@ export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onN
   const cards = [
     {
       id: 'providers',
-      title: productLabel(t, 'artemis_dep_llm', 'LLM / AI providers'),
-      role: productLabel(t, 'artemis_dep_llm_role', 'Advisory model pool'),
+      title: productLabel(t, 'artemis_dep_llm_simple', 'AI Providers'),
+      why: productLabel(t, 'artemis_why_providers', 'Artemis uses these models to explain and combine Agent insights.'),
       status: providers?.truth === 'UNAVAILABLE'
-        ? productStatus('UNAVAILABLE', t)
+        ? noviceStatus('UNAVAILABLE', t)
         : providers?.ready
-          ? productLabel(t, 'artemis_dep_healthy', 'Healthy keys available')
-          : productLabel(t, 'artemis_dep_degraded', 'No healthy keys'),
+          ? productLabel(t, 'artemis_user_ready', 'Ready')
+          : productLabel(t, 'artemis_user_needs_setup', 'Needs setup'),
       tone: providers?.ready ? 'ok' : 'warning',
-      truth: providers?.truth,
-      limitation: providers?.truth === 'UNAVAILABLE' ? productLabel(t, 'artemis_dep_llm_unread', 'Provider health could not be read.') : null,
       action: () => onNavigate?.({ view: 'settings', settingsTab: 'configuration', settingsSubtab: 'integrations' }),
       actionLabel: productLabel(t, 'artemis_open_integrations', 'Open Integrations'),
       diag: `healthyProviders=${providers?.activeHealthy ?? 'n/a'} quorum=${providers?.quorum ?? 'n/a'}`,
@@ -36,16 +35,16 @@ export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onN
     {
       id: 'connections',
       title: productLabel(t, 'connections', 'Connections'),
-      role: productLabel(t, 'artemis_dep_connections_role', 'Broker / exchange authentication'),
+      why: productLabel(
+        t,
+        'artemis_why_connections',
+        'Artemis can analyze markets, but trading-related provider actions are unavailable until a broker is connected.',
+      ),
       status:
         connections?.status === 'available'
-          ? productStatus('AVAILABLE', t)
-          : connections?.truth === 'UNAVAILABLE'
-            ? productStatus('UNAVAILABLE', t)
-            : productLabel(t, 'artemis_dep_broker_unavailable', 'Broker unavailable'),
+          ? noviceStatus('AVAILABLE', t)
+          : productLabel(t, 'artemis_dep_broker_simple', 'Broker is not connected'),
       tone: connections?.status === 'available' ? 'ok' : 'warning',
-      truth: connections?.truth,
-      limitation: null,
       action: () => onNavigate?.(readiness?.owners?.connections || { view: 'settings', settingsTab: 'connections' }),
       actionLabel: productLabel(t, 'artemis_open_connections', 'Open Connections'),
       diag: `count=${connections?.count ?? 'n/a'}`,
@@ -53,41 +52,35 @@ export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onN
     {
       id: 'datahub',
       title: 'Data Hub',
-      role: productLabel(t, 'artemis_datahub_role', 'Market / external-data foundation'),
-      status: dh?.status === 'available' ? productStatus('AVAILABLE', t) : productStatus('UNAVAILABLE', t),
+      why: productLabel(t, 'artemis_why_datahub', 'Market and external data that Agents and Artemis rely on.'),
+      status: dh?.status === 'available' ? noviceStatus('AVAILABLE', t) : noviceStatus('UNAVAILABLE', t),
       tone: dh?.status === 'available' ? 'ok' : 'warning',
-      truth: dh?.truth,
-      limitation: null,
       action: () => onNavigate?.({ view: 'ai', aiTab: 'data_hub' }),
       actionLabel: productLabel(t, 'artemis_open_data_hub', 'Open Data Hub'),
       diag: `sources=${dh?.totalSources ?? 'n/a'} active=${dh?.activeSources ?? 'n/a'}`,
     },
     {
       id: 'runtime',
-      title: productLabel(t, 'artemis_runtime_safety', 'Runtime safety'),
-      role: productLabel(t, 'artemis_dep_runtime_role', 'Requested/effective mode and Emergency Stop'),
-      status: runtime
-        ? `${productLabel(t, 'effective_mode', 'Effective mode')}: ${String(runtime.effectiveMode || '—')} · ${
-            runtime.killSwitchActive ? productLabel(t, 'emergency_stop', 'Emergency Stop') : productLabel(t, 'inactive', 'Inactive')
-          }`
-        : productStatus('UNAVAILABLE', t),
+      title: productLabel(t, 'artemis_runtime_safety_simple', 'Runtime Safety'),
+      why: productLabel(t, 'artemis_why_runtime', 'Keeps Demo/Live mode and Emergency Stop in charge of financial safety.'),
+      status: runtime?.killSwitchActive
+        ? productLabel(t, 'artemis_estop_active_short', 'Emergency Stop active')
+        : runtime
+          ? productLabel(t, 'artemis_user_ready', 'Ready')
+          : noviceStatus('UNAVAILABLE', t),
       tone: runtime?.killSwitchActive ? 'danger' : runtime ? 'ok' : 'warning',
-      truth: readiness?.runtimeTruth,
-      limitation: null,
       action: () => onNavigate?.({ view: 'settings', settingsTab: 'configuration' }),
       actionLabel: productLabel(t, 'artemis_open_runtime', 'Open runtime settings'),
       diag: `requested=${runtime?.requestedMode || 'n/a'} effective=${runtime?.effectiveMode || 'n/a'}`,
     },
     {
       id: 'decision',
-      title: productLabel(t, 'decision_engine', 'Decision Engine'),
-      role: productLabel(t, 'artemis_dep_de_role', 'Advisory mixture configuration'),
+      title: productLabel(t, 'artemis_dep_engine_simple', 'Decision Engine'),
+      why: productLabel(t, 'artemis_why_engine', 'Holds advisory mixture settings. It does not authorize live trading.'),
       status: readiness?.dualConfigLimitationKey
-        ? productLabel(t, 'artemis_blocker_dual_decision_config', 'Configuration ownership conflict detected')
-        : productLabel(t, 'artemis_op_configured', 'Configured'),
+        ? productLabel(t, 'artemis_user_needs_setup', 'Needs setup')
+        : productLabel(t, 'artemis_user_partial', 'Partially ready'),
       tone: readiness?.dualConfigLimitationKey ? 'warning' : 'info',
-      truth: 'CONFIGURED',
-      limitation: readiness?.dualConfigLimitationKey ? productLimitation(readiness.dualConfigLimitationKey, t) : null,
       action: () =>
         onNavigate?.(
           readiness?.owners?.decisionEngine || {
@@ -101,40 +94,36 @@ export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onN
     },
     {
       id: 'contract',
-      title: productLabel(t, 'artemis_contract_panel', 'Agent contract readiness'),
-      role: productLabel(t, 'artemis_dep_contract_role', 'Canonical evidence consumption'),
-      status: productLabel(t, 'artemis_status_not_activated', 'Not activated'),
+      title: productLabel(t, 'artemis_dep_agent_connection', 'Agent Connection'),
+      why: productLabel(t, 'artemis_why_agent_connection', 'Until Agent outputs are connected, Artemis can only advise from legacy records.'),
+      status: productLabel(t, 'artemis_user_not_connected', 'Not connected'),
       tone: 'warning',
-      truth: 'UNAVAILABLE',
-      limitation: productLabel(t, 'artemis_evidence_not_activated', 'Canonical evidence integration has not been activated yet.'),
       action: undefined,
       actionLabel: '',
       diag: `contract=${readiness?.contract.contractVersion || 'n/a'}`,
     },
     {
       id: 'scheduler',
-      title: productLabel(t, 'artemis_dep_scheduler', 'Scheduler relationship'),
-      role: productLabel(t, 'artemis_dep_scheduler_role', 'Analytical scheduler allowlist (read-only)'),
+      title: productLabel(t, 'artemis_dep_scheduler_simple', 'Scheduler'),
+      why: productLabel(t, 'artemis_why_scheduler', 'Runs independent Agent analysis. Artemis does not change the scheduler.'),
       status: scheduler?.truth === 'UNAVAILABLE'
-        ? productStatus('UNAVAILABLE', t)
+        ? noviceStatus('UNAVAILABLE', t)
         : scheduler?.stale
-          ? productLabel(t, 'artemis_dep_scheduler_stale', 'Worker status stale or unread')
-          : productLabel(t, 'artemis_dep_scheduler_observed', 'Observed (read-only)'),
-      tone: scheduler?.stale || scheduler?.truth === 'UNAVAILABLE' ? 'warning' : 'info',
-      truth: scheduler?.truth,
-      limitation: productLabel(t, 'artemis_dep_scheduler_note', 'Artemis does not own or mutate the scheduler.'),
+          ? productLabel(t, 'artemis_user_partial', 'Partially ready')
+          : productLabel(t, 'artemis_user_ready', 'Ready'),
+      tone: scheduler?.stale || scheduler?.truth === 'UNAVAILABLE' ? 'warning' : 'ok',
       action: undefined,
       actionLabel: '',
       diag: `allowlist=${(scheduler?.allowlist || []).join(',') || 'n/a'} running=${String(scheduler?.isRunning)}`,
     },
     {
       id: 'provenance',
-      title: productLabel(t, 'artemis_dep_provenance', 'Deployment / runtime provenance'),
-      role: productLabel(t, 'artemis_dep_provenance_role', 'Served runtime marker'),
-      status: readiness?.provenance?.runtimeCommit || productStatus('UNAVAILABLE', t),
-      tone: readiness?.provenance?.runtimeCommit ? 'info' : 'warning',
-      truth: readiness?.provenance?.truth,
-      limitation: null,
+      title: productLabel(t, 'artemis_dep_deployment_simple', 'Deployment'),
+      why: productLabel(t, 'artemis_why_deployment', 'Shows which software version is currently running.'),
+      status: readiness?.provenance?.runtimeCommit
+        ? productLabel(t, 'artemis_user_ready', 'Ready')
+        : noviceStatus('UNAVAILABLE', t),
+      tone: readiness?.provenance?.runtimeCommit ? 'ok' : 'warning',
       action: undefined,
       actionLabel: '',
       diag: `commit=${readiness?.provenance?.runtimeCommit || 'n/a'}`,
@@ -144,47 +133,42 @@ export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onN
   return (
     <div className="space-y-4" data-artemis-page="system">
       <header>
-        <h2 className="text-lg font-bold">{productLabel(t, 'artemis_system_workspace', 'Operational dependencies')}</h2>
+        <h2 className="text-lg font-bold">{productLabel(t, 'artemis_system_title_simple', 'System Health')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          {productLabel(t, 'artemis_system_purpose', 'Are Artemis dependencies healthy, and where are they managed?')}
+          {productLabel(t, 'artemis_system_purpose_simple', 'Are the systems Artemis depends on healthy, and where do you manage them?')}
         </p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {cards.map((card) => (
-          <article key={card.id} className="bg-card border border-border rounded-lg p-4 space-y-2" data-artemis-dependency={card.id}>
+          <article key={card.id} className="bg-card border border-border rounded-2xl p-4 space-y-2" data-artemis-dependency={card.id}>
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <h3 className="font-semibold">{card.title}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">{card.role}</p>
-              </div>
+              <h3 className="font-semibold">{card.title}</h3>
               <StatusPill label={String(card.status)} tone={card.tone as never} />
             </div>
-            <p className="text-xs text-muted-foreground">
-              {productLabel(t, 'artemis_source_of_truth', 'Source of truth')}: {truthLabel(String(card.truth || 'UNAVAILABLE'), t)}
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{productLabel(t, 'artemis_why_it_matters', 'Why it matters')}: </span>
+              {card.why}
             </p>
-            {card.limitation ? <p className="text-sm">{card.limitation}</p> : null}
             {card.action ? <TextAction onClick={card.action}>{card.actionLabel}</TextAction> : null}
-            <TechnicalDetails title={productLabel(t, 'artemis_diagnostics', 'Diagnostics')}>
-              <p>{card.diag}</p>
-            </TechnicalDetails>
+            {!simple ? (
+              <TechnicalDetails title={productLabel(t, 'artemis_diagnostics', 'Diagnostics')}>
+                <p>{card.diag}</p>
+              </TechnicalDetails>
+            ) : null}
           </article>
         ))}
       </div>
 
       {isAdmin ? (
-        <section className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-2" data-artemis-legacy-tools="true">
-          <h3 className="text-sm font-semibold">{productLabel(t, 'artemis_legacy_tools', 'Administrative / legacy tools')}</h3>
+        <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2" data-artemis-legacy-tools="true">
+          <h3 className="text-sm font-semibold">{productLabel(t, 'artemis_legacy_tools', 'Administrative tools')}</h3>
           <p className="text-sm text-muted-foreground">
-            {productLabel(
-              t,
-              'artemis_legacy_tools_note',
-              'Not automated-trading ready. Not Live authorization. Hidden from normal Artemis navigation.',
-            )}
+            {productLabel(t, 'artemis_legacy_tools_note_simple', 'Not automated-trading ready. Not Live authorization.')}
           </p>
           {!showLegacy ? (
             <TextAction onClick={() => setShowLegacy(true)}>
-              {productLabel(t, 'artemis_show_legacy_status', 'Show legacy Autopilot status (read-only)')}
+              {productLabel(t, 'artemis_show_legacy_status', 'Show Autopilot status (read-only)')}
             </TextAction>
           ) : (
             <p className="text-sm">

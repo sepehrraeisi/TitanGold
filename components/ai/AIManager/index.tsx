@@ -10,6 +10,14 @@ import {
 } from './artemisProductTypes.ts';
 import { productLabel } from './artemisProductCopy.ts';
 import {
+  readExplainerDismissed,
+  readPresentationMode,
+  writeExplainerDismissed,
+  writePresentationMode,
+  type ArtemisPresentationMode,
+} from './artemisPresentation.ts';
+import { FirstVisitExplainer, HelpTip, PresentationToggle } from './components/ArtemisUi.tsx';
+import {
   OverviewSection,
   EvidenceSection,
   DecisionsSection,
@@ -46,12 +54,14 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
   const [readinessError, setReadinessError] = useState<string | null>(null);
   const [audit, setAudit] = useState<ArtemisAuditBundle>({ systemLogs: [], decisions: [] });
   const [loading, setLoading] = useState(true);
+  const [presentation, setPresentation] = useState<ArtemisPresentationMode>(() => readPresentationMode());
+  const [explainerDismissed, setExplainerDismissed] = useState(() => readExplainerDismissed());
 
   const load = useCallback(async () => {
     setLoading(true);
     setReadinessError(null);
     try {
-      const [ready, bundle] = await Promise.all([fetchArtemisReadiness(), fetchArtemisAuditBundle(40)]);
+      const [ready, bundle] = await Promise.all([fetchArtemisReadiness(), fetchArtemisAuditBundle(50)]);
       setReadiness(ready);
       setAudit(bundle);
     } catch (e) {
@@ -84,6 +94,8 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
     readinessError,
     onNavigate,
     audit,
+    presentation,
+    onRetry: load,
     onOpenSection: (id: ArtemisSectionId) => {
       if (id === 'legacy_admin') {
         setActiveSection('system');
@@ -111,18 +123,71 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
       default:
         return <OverviewSection {...common} />;
     }
-  }, [activeSection, t, language, readiness, readinessError, onNavigate, audit]);
+  }, [activeSection, t, language, readiness, readinessError, onNavigate, audit, presentation]);
+
+  const changePresentation = (mode: ArtemisPresentationMode) => {
+    setPresentation(mode);
+    writePresentationMode(mode);
+  };
 
   return (
-    <div className="space-y-4" dir={dir} data-artemis-shell="canonical-wpa">
-      <header className="bg-card border border-border rounded-lg p-4">
-        <h1 className="text-xl font-bold text-foreground">{t('artemis') !== 'artemis' ? t('artemis') : 'Artemis'}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {productLabel(t, 'artemis_central_intelligence', 'Central intelligence — advisory maturity')}
-        </p>
+    <div className="space-y-4" dir={dir} data-artemis-shell="canonical-wpa" data-artemis-view={presentation}>
+      <header className="bg-card border border-border rounded-2xl p-4 md:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="max-w-3xl">
+            <h1 className="text-xl md:text-2xl font-bold text-foreground">
+              {t('artemis') !== 'artemis' ? t('artemis') : 'Artemis'}
+              <HelpTip label={productLabel(t, 'artemis_help_artemis_label', 'What is Artemis?')}>
+                {productLabel(
+                  t,
+                  'artemis_help_artemis',
+                  'Artemis is TitanGold’s central intelligence. It combines Agent insights, checks safety, and turns them into recommendations.',
+                )}
+              </HelpTip>
+            </h1>
+            <p className="text-sm md:text-base text-foreground mt-2">
+              {productLabel(
+                t,
+                'artemis_product_sentence',
+                "Artemis combines insights from TitanGold's AI Agents, checks safety and risk, and turns them into understandable recommendations.",
+              )}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {productLabel(
+                t,
+                'artemis_now_sentence',
+                'Right now Artemis can analyze and advise, but automated trading is not enabled.',
+              )}
+            </p>
+          </div>
+          <PresentationToggle
+            mode={presentation}
+            onChange={changePresentation}
+            simpleLabel={productLabel(t, 'artemis_view_simple', 'Simple')}
+            advancedLabel={productLabel(t, 'artemis_view_advanced', 'Advanced')}
+          />
+        </div>
       </header>
 
-      <nav className="bg-card border border-border rounded-lg p-2 overflow-x-auto" aria-label={productLabel(t, 'artemis_sections', 'Artemis sections')}>
+      {!explainerDismissed ? (
+        <FirstVisitExplainer
+          title={productLabel(t, 'artemis_explainer_title', 'New to Artemis?')}
+          steps={[
+            productLabel(t, 'artemis_explainer_step_1', 'Agents analyze the market.'),
+            productLabel(t, 'artemis_explainer_step_2', 'Artemis combines their intelligence.'),
+            productLabel(t, 'artemis_explainer_step_3', 'Safety checks must approve before execution is possible.'),
+          ]}
+          gotItLabel={productLabel(t, 'artemis_explainer_got_it', 'Got it')}
+          learnMoreLabel={productLabel(t, 'artemis_explainer_learn_more', 'Learn more')}
+          onGotIt={() => {
+            writeExplainerDismissed();
+            setExplainerDismissed(true);
+          }}
+          onLearnMore={() => setActiveSection('overview')}
+        />
+      ) : null}
+
+      <nav className="bg-card border border-border rounded-xl p-2 overflow-x-auto" aria-label={productLabel(t, 'artemis_sections', 'Artemis sections')}>
         <div className="flex min-w-max gap-1">
           {CANONICAL_SECTIONS.map((section) => {
             const selected = activeSection === section.id;
