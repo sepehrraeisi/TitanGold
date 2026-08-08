@@ -1,12 +1,12 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-A PR #19 code-review remediation
+description: TitanGold Rule 02 — Artemis WP-A PR #19 residual truthfulness remediation
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-A — PR #19 CODE-REVIEW REMEDIATION**
+**ARTEMIS WP-A — PR #19 RESIDUAL TRUTHFULNESS REMEDIATION**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
@@ -15,12 +15,13 @@ Current program slice:
 ARTEMIS-WP-A-LEGACY-SAFETY-UI
 
 Risk tier:
-Tier 2–3 (audit projection / capability / readiness truth / TE gate tests; no Tier-4 Live)
+Tier 1–2 (readiness-error shell truthfulness + History window copy; no Tier-4 Live)
 
 Engineering status:
 **DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
 **OWNER HUMAN QA ROUND 4 = PASS** (not erased)  
-**PR #19 independent review findings in remediation**  
+**Prior PR #19 review findings materially fixed**  
+**Residual truthfulness blockers in remediation**  
 Not CLOSED. PR remains Draft. Do not merge. Do not mark Ready for Review.
 
 Branch / worktree:
@@ -28,22 +29,20 @@ Branch / worktree:
 - `/home/ubuntu/worktrees/titangold-artemis-wp-a`
 
 Authorized in this round:
-- Consumer-safe Artemis audit projection (no raw metadata/input/output)
-- `/logs` capability + sanitized product payload
-- Canonical provider quorum readiness
-- Sanitized readiness 500
-- Production Trading Engine gate tests
-- Minimal frontend consumer compatibility (no visual redesign)
-- Staging backend deploy (workers unchanged)
+- Shell-level readinessError unavailable/Retry (no fabricated operational states)
+- History metric window hint only when loadedCount > 0
+- Focused frontend tests + production build
+- Frontend-only Staging deploy (no backend/worker restart)
 
 Not authorized / unchanged:
 - Data Hub product behavior, API, or frozen UI
+- Visual redesign / IA rewrite
 - Trend / Arbitrage product surfaces
 - DB migrations
 - Scheduler allowlist / worker topology
 - Live / orders / private provider calls
-- Service-token / auth bypass for TE → Artemis
-- UI redesign / IA rewrite
+- titan-backend restart
+- titan-engine-worker restart
 - Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
 Canonical Artemis section IDs (deep links unchanged):
@@ -51,4 +50,4 @@ overview · evidence · decisions · orchestration · controls · lineage · sys
 
 Human QA:
 Owner Human QA Round 4 remains PASS.
-Next gate: independent re-review of PR #19 (Draft).
+Next gate: final independent re-review of PR #19 (Draft).
