@@ -160,6 +160,15 @@ Not CLOSED.
 | Data Hub functionality removed | 0 |
 | Data Hub backend/API changed | 0 |
 | Duplicate owner | No — `DataHubWorkspace` wraps existing `DataHubTab` only |
+| Implementation HEAD | `06561cf0c4e97586d29f7e1386336fd83705f5e3` (`06561cf`) |
+| Backend runtime | `32a65e4` (unchanged; frontend-only correction) |
+| Served bundle | `index-CMh5A4K9.js` |
+| Data Hub chunk | `DataHubWorkspace-CSVuQGC4.js` (lazy) |
+| Workers before/after | id4 pid=1639616 ↺=0; id8 pid=1639645 ↺=0 |
+| Frontend tests | 16/16 PASS (`ArtemisWpA.test.tsx`) |
+| urlSync regression | 11/11 PASS |
+| Production build | PASS |
+| Side effects | private=0 orders=0 transfers=0 withdrawals=0 scheduler=0 workers=0 migrations=0 Live=0 |
 
 ## 14. Verdict after Data Hub rehome
 
