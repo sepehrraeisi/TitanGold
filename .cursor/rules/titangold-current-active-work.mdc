@@ -1,12 +1,13 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-A Design-System Compliance Ready for Round 4
+description: TitanGold Rule 02 — Artemis WP-A Owner Human QA PASS / Pre-PR Closeout
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-A — DATAHUB DESIGN SYSTEM COMPLIANT**
+**ARTEMIS WP-A — OWNER HUMAN QA PASS**  
+**PRE-PR CLOSEOUT / REVIEW EVIDENCE**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
@@ -15,23 +16,34 @@ Current program slice:
 ARTEMIS-WP-A-LEGACY-SAFETY-UI
 
 Risk tier:
-Tier 1–2 (visual standardization + UX polish; no Tier-4 Live)
+Tier 1–2 (closeout / review evidence; no Tier-4 Live)
 
 Engineering status:
 **DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
-**ARTEMIS IA / NOVICE-FIRST = OWNER APPROVED**  
-**VISUAL DESIGN-SYSTEM COMPLIANCE IMPLEMENTED**  
-**READY FOR OWNER HUMAN QA ROUND 4**  
-Not CLOSED. Do not create a closeout PR.
+**ARTEMIS IA = PASS**  
+**NOVICE-FIRST UX = PASS**  
+**SIMPLE VIEW = PASS**  
+**ADVANCED VIEW = PASS**  
+**DESIGN_SYSTEM_DATAHUB.md COMPLIANCE = PASS**  
+**OWNER HUMAN QA ROUND 4 = PASS**  
+**PRE-PR CLOSEOUT**  
+Not CLOSED. Do not merge. Do not freeze WP-A yet.
 
 Branch / worktree:
 - `feat/artemis-wp-a-legacy-safety-ui`
 - `/home/ubuntu/worktrees/titangold-artemis-wp-a`
 
-Authorized in this round:
-- Owner Human QA Round 4 against Staging
-- Visual comparison vs DESIGN_SYSTEM_DATAHUB.md + Telegram Collector reference
-- Remediation only if Owner finds related visual defects inside WP-A
+Product freeze:
+NO opportunistic redesign, menu restructuring, visual polish without a reproduced defect, unrelated refactor, or Data Hub changes.
+
+Only allowed now:
+- build/test failures
+- factual UX contradictions
+- accessibility regressions
+- localization regressions
+- security/safety defects
+- code-review findings
+- CI failures
 
 Not authorized / unchanged:
 - Data Hub product behavior, API, or frozen UI
@@ -50,7 +62,7 @@ Visible product labels:
 Home · AI Inputs · Recommendations · Coordination · Safety & Approval · History & Audit · System Health
 
 Human QA:
-Owner Human QA Round 4. Do not self-close.
+Owner Human QA Round 4 = PASS. Do not self-close.
 
-Next transition after Owner Human QA Round 4 PASS:
-Draft PR review → explicit merge approval.
+Next gate:
+Draft PR → independent code review → GitHub CI → explicit Owner merge approval.

@@ -1,6 +1,6 @@
 # ARTEMIS WP-A — Legacy Safety Containment + Specialized UI/UX Redesign
 
-**Status:** DATAHUB DESIGN SYSTEM COMPLIANT — READY FOR OWNER HUMAN QA ROUND 4 (not CLOSED)  
+**Status:** OWNER HUMAN QA PASS — PRE-PR CLOSEOUT / REVIEW EVIDENCE (not CLOSED)  
 **Classification:** Shared Foundation implementation  
 **Foundation baseline (closed):** `01e461634c6910bad795a2c3c3b506ecf2c343df`  
 **Branch:** `feat/artemis-wp-a-legacy-safety-ui`  
@@ -612,18 +612,18 @@ Artemis does **not** import Data Hub business components. Visual rules were copi
 
 | Screen | DataHub pattern used | Deviation | Reason | Responsive | Visual QA |
 |--------|----------------------|-----------|--------|------------|-----------|
-| Shell / header | `DATAHUB_SHELL` gradient + glass | AI Center outer chrome unchanged | Shared chrome includes frozen Data Hub; Artemis-only shell is the compliance surface | header wrap; nav `overflow-x-auto` | Cursor visual-structure PASS; Owner Round 4 pending |
-| Nav | `DataHubTabStrip` purple pills | 7 product sections vs Data Hub collector tabs | Artemis IA approved; same pill grammar | horizontal scroll, no clip | pending Owner |
-| Explainer | info glass + purple primary + sky text | 3-step novice copy | product identity, not Collector onboarding | stacks on mobile | pending Owner |
-| Simple/Advanced | segmented control purple selected | labels Simple/Advanced not Collector modes | presentation preference only | wrap | pending Owner |
-| Home | hero glass + metric 2/4 grid + flow nodes + mini metrics + amber/red alerts | hero title `text-base md:text-lg` (not `text-sm`) | primary product state needs one step above section titles; still far below old 2xl/3xl | metric `grid-cols-2 md:grid-cols-4`; flow column→row | pending Owner |
-| AI Inputs | semantic group metric cards + DS table + mobile cards | group accents are role-semantic not live health % | no fake percentages; color = role/state | 1/2/3 card grid; table `md+`, cards mobile | pending Owner |
-| Recommendations | slate intelligence cards + compact Advisory pill + DS drawer | page-level amber limited to one alert, not full-page border | avoid amber wash | 1/2 card grid | pending Owner |
-| Coordination | inner slate + semantic pills + expandable groups + compact agent rows | flow uses `+` / `→` not Collector pipeline chrome | Artemis coordination story | agent grid 1/2/3 | pending Owner |
-| Safety & Approval | error alert + semantic stepper | Emergency Stop remains visible even when runtime emerald | safety-block must not be softened | stepper full width, 2-col owner/can-block | pending Owner |
-| History & Audit | metric cards + compact `ARTEMIS_ROW` timeline + DS drawer | source pills Artemis/Agents/Safety | semantic accent per source | metrics 2/3; rows full width | pending Owner |
-| System Health | operational status cards + collapsed mono diagnostics | 2-col tablet, 3-col wide | readability over forcing 4-col | 1/2/3 | pending Owner |
-| Drawer | canonical modal overlay/panel | close = slate secondary (`ARTEMIS_BTN_MODAL_CLOSE`) | matches DataHub modal close, not purple primary | near-full mobile + internal scroll | pending Owner |
+| Shell / header | `DATAHUB_SHELL` gradient + glass | AI Center outer chrome unchanged | Shared chrome includes frozen Data Hub; Artemis-only shell is the compliance surface | header wrap; nav `overflow-x-auto` | Owner Round 4 PASS |
+| Nav | `DataHubTabStrip` purple pills | 7 product sections vs Data Hub collector tabs | Artemis IA approved; same pill grammar | horizontal scroll, no clip | Owner Round 4 PASS |
+| Explainer | info glass + purple primary + sky text | 3-step novice copy | product identity, not Collector onboarding | stacks on mobile | Owner Round 4 PASS |
+| Simple/Advanced | segmented control purple selected | labels Simple/Advanced not Collector modes | presentation preference only | wrap | Owner Round 4 PASS |
+| Home | hero glass + metric 2/4 grid + flow nodes + mini metrics + amber/red alerts | hero title `text-base md:text-lg` (not `text-sm`) | primary product state needs one step above section titles; still far below old 2xl/3xl | metric `grid-cols-2 md:grid-cols-4`; flow column→row | Owner Round 4 PASS |
+| AI Inputs | semantic group metric cards + DS table + mobile cards | group accents are role-semantic not live health % | no fake percentages; color = role/state | 1/2/3 card grid; table `md+`, cards mobile | Owner Round 4 PASS |
+| Recommendations | slate intelligence cards + compact Advisory pill + DS drawer | page-level amber limited to one alert, not full-page border | avoid amber wash | 1/2 card grid | Owner Round 4 PASS |
+| Coordination | inner slate + semantic pills + expandable groups + compact agent rows | flow uses `+` / `→` not Collector pipeline chrome | Artemis coordination story | agent grid 1/2/3 | Owner Round 4 PASS |
+| Safety & Approval | error alert + semantic stepper | Emergency Stop remains visible even when runtime emerald | safety-block must not be softened | stepper full width, 2-col owner/can-block | Owner Round 4 PASS |
+| History & Audit | metric cards + compact `ARTEMIS_ROW` timeline + DS drawer | source pills Artemis/Agents/Safety | semantic accent per source | metrics 2/3; rows full width | Owner Round 4 PASS |
+| System Health | operational status cards + collapsed mono diagnostics | 2-col tablet, 3-col wide | readability over forcing 4-col | 1/2/3 | Owner Round 4 PASS |
+| Drawer | canonical modal overlay/panel | close = slate secondary (`ARTEMIS_BTN_MODAL_CLOSE`) | matches DataHub modal close, not purple primary | near-full mobile + internal scroll | Owner Round 4 PASS |
 
 ### 23.3 Justified deviations remaining
 
@@ -654,5 +654,68 @@ Artemis does **not** import Data Hub business components. Visual rules were copi
 
 **ARTEMIS WP-A — DATAHUB DESIGN SYSTEM COMPLIANT**  
 **READY FOR OWNER HUMAN QA ROUND 4**
+
+Not CLOSED.
+
+## 24. Owner Human QA Round 4 PASS — pre-PR closeout
+
+Owner verdict (Round 4):
+
+| Gate | Result |
+|------|--------|
+| Data Hub Human QA | PASS / FROZEN (prior Owner PASS remains valid) |
+| Artemis IA | PASS |
+| Novice-first UX | PASS |
+| Simple View | PASS |
+| Advanced View | PASS |
+| DESIGN_SYSTEM_DATAHUB.md compliance | PASS |
+| Owner Human QA Round 4 | **PASS** |
+
+Owner-reviewed surfaces: Home · AI Inputs · Recommendations · Coordination · Safety & Approval · History & Audit · System Health · Simple · Advanced · DataHub design-system harmony.
+
+Verified implementation commit: `12f47b08f60378516efa85b19607a36f06ff60f8`  
+`feat(artemis): align WP-A UI with DataHub design system`
+
+No new screenshots were invented. Owner Human QA is the visual authority. Cursor closeout did not redeploy Staging because provenance already matched the approved Human-QA state.
+
+### 24.1 Future rehome backlog (NOT implemented; not WP-A blockers)
+
+Preserved from §16:
+
+| ID | Item | Future home |
+|----|------|-------------|
+| FR-1 | Learning | Training specialization |
+| FR-2 | Trading Scenarios | Analytics / Evaluation / Simulation |
+| FR-3 | Backtesting | Analytics after truthful engine + persistence |
+| FR-4 | Full System Logs browser | History & Audit enhancement if justified |
+
+### 24.2 Pre-PR closeout evidence
+
+| Item | Value |
+|------|-------|
+| origin/main | `a100f7b` |
+| Visual implementation HEAD | `12f47b0` |
+| Documentation HEAD (this closeout) | recorded after this section on `feat/artemis-wp-a-legacy-safety-ui` |
+| Backend runtime | `7420903` (`provenanceVerified=true`) |
+| Served bundle | `index-DMthIK9F.js` |
+| Data Hub chunk | `DataHubWorkspace-Zt-_1y4f.js` (product source untouched) |
+| Deploy this closeout | none (Staging already matched Human-QA state) |
+| Workers | id4 pid=1639616 ↺=0; id8 pid=1639645 ↺=0 |
+| Backend tests | containment 3/3 + readiness 3/3 + TE gate 3/3 = 9/9 PASS |
+| Frontend WP-A | `ArtemisWpA.test.tsx` 31/31 PASS |
+| Regression | Agents / Trend / Arbitrage / Telegram Collector i18n+labels / Connections nav — included suites PASS |
+| Production build | PASS (artifact unchanged: `index-DMthIK9F.js`) |
+| Data Hub product implementation | TelegramPanel / dataHubUi unchanged vs this WP-A visual commit |
+| Trend / Arbitrage product files | 0 in WP-A diff vs main |
+| Protected scripts | 0 |
+| Scheduler/worker/migrations | 0 |
+| Side effects | private=0 orders=0 transfer/withdraw=0 financial=0 Live=0 scheduler=0 workers=0 migrations=0 backend restart=0 |
+| Draft PR | created after this closeout; remains Draft; not merge-ready until independent review + Owner merge approval |
+| WP-A CLOSED | NO |
+
+### 24.3 Verdict
+
+**ARTEMIS WP-A — OWNER HUMAN QA PASS**  
+**DRAFT PR READY FOR INDEPENDENT REVIEW**
 
 Not CLOSED.
