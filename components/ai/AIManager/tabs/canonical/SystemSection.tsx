@@ -34,11 +34,13 @@ export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onN
         ? noviceStatus('UNAVAILABLE', t)
         : providers?.ready
           ? productLabel(t, 'artemis_user_ready', 'Ready')
-          : productLabel(t, 'artemis_user_needs_setup', 'Needs setup'),
+          : Number(providers?.activeUsableInstances ?? providers?.activeHealthy ?? 0) > 0
+            ? productLabel(t, 'artemis_user_partial', 'Partially ready')
+            : productLabel(t, 'artemis_user_needs_setup', 'Needs setup'),
       tone: providers?.ready ? 'ok' : 'warning',
       action: () => onNavigate?.({ view: 'settings', settingsTab: 'configuration', settingsSubtab: 'integrations' }),
       actionLabel: productLabel(t, 'artemis_open_integrations', 'Open Integrations'),
-      diag: `healthyProviders=${providers?.activeHealthy ?? 'n/a'} quorum=${providers?.quorum ?? 'n/a'}`,
+      diag: `configured=${providers?.configured ?? 'n/a'} healthy=${providers?.healthy ?? 'n/a'} usable=${providers?.activeUsableInstances ?? providers?.activeHealthy ?? 'n/a'} quorum=${providers?.quorum ?? 'n/a'} ready=${String(providers?.ready)}`,
     },
     {
       id: 'connections',

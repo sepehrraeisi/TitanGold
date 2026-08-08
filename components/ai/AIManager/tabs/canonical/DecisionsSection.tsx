@@ -20,20 +20,12 @@ import {
   TechnicalDetails,
 } from '../../components/ArtemisUi.tsx';
 
-function metaOf(log: ArtemisAuditLog): Record<string, unknown> {
-  return log.metadata && typeof log.metadata === 'object' ? log.metadata : {};
-}
-
 function advisoryAction(log: ArtemisAuditLog): string {
-  const meta = metaOf(log);
-  const decision = (meta.decision as Record<string, unknown> | undefined) || {};
-  return String(decision.action || meta.action || '').toUpperCase() || 'HOLD';
+  return String(log.action || '').toUpperCase() || 'HOLD';
 }
 
 function advisorySymbol(log: ArtemisAuditLog): string {
-  const meta = metaOf(log);
-  const opportunity = (meta.opportunity as Record<string, unknown> | undefined) || {};
-  return String(opportunity.symbol || meta.symbol || '—');
+  return String(log.symbol || '—');
 }
 
 export const DecisionsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, audit, presentation, onRetry }) => {
@@ -191,7 +183,10 @@ export const DecisionsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, 
             {!simple ? (
               <TechnicalDetails title={productLabel(t, 'artemis_technical_details', 'Technical details')}>
                 <p>id: {String(selected.id || '—')}</p>
-                <pre className="whitespace-pre-wrap">{JSON.stringify(selected.metadata || {}, null, 2).slice(0, 2000)}</pre>
+                <p>action: {advisoryAction(selected)}</p>
+                <p>symbol: {advisorySymbol(selected)}</p>
+                <p>classification: {selected.classification || '—'}</p>
+                <p>executionEligible: {String(selected.executionEligible === true)}</p>
               </TechnicalDetails>
             ) : null}
           </div>

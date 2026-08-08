@@ -46,7 +46,7 @@ export const LineageSection: React.FC<ArtemisSectionProps> = ({ t, readiness, au
       time: log.created_at || null,
       agent: 'Artemis',
       type: productLabel(t, 'artemis_user_advisory', 'Advisory only'),
-      context: String((log.metadata as { opportunity?: { symbol?: string } } | undefined)?.opportunity?.symbol || '—'),
+      context: String(log.symbol || '—'),
       status: productLabel(t, 'artemis_not_approved_execution', 'Not approved for execution'),
       message: log.message || null,
       raw: log,
@@ -226,7 +226,10 @@ export const LineageSection: React.FC<ArtemisSectionProps> = ({ t, readiness, au
             <p>{selected.message}</p>
             {!simple ? (
               <TechnicalDetails title={productLabel(t, 'artemis_technical_details', 'Technical details')}>
-                <pre className="whitespace-pre-wrap">{JSON.stringify(selected.raw || {}, null, 2).slice(0, 2500)}</pre>
+                <p>id: {selected.id}</p>
+                <p>source: {selected.source}</p>
+                <p>context: {selected.context || '—'}</p>
+                <p>status: {selected.status || '—'}</p>
               </TechnicalDetails>
             ) : null}
           </div>

@@ -6,6 +6,8 @@ import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 const mockGetRuntimeExecutionState = jest.fn();
 const mockBuildRuntimeView = jest.fn();
 const mockQuery = jest.fn();
+const mockGetProviderHealth = jest.fn();
+const mockCountActiveProviderInstances = jest.fn();
 
 jest.unstable_mockModule('../../services/runtimeExecutionStateService.js', () => ({
   getRuntimeExecutionState: mockGetRuntimeExecutionState,
@@ -29,8 +31,9 @@ jest.unstable_mockModule('../../services/analyticalSchedulerStatus.js', () => ({
 }));
 
 jest.unstable_mockModule('../../services/providerPool.js', () => ({
-  getProviderHealth: async () => [{ provider: 'openai', healthy_keys: 1, enabled_keys: 1, total_keys: 1 }],
-  getQuorum: () => 2,
+  getProviderHealth: mockGetProviderHealth,
+  countActiveProviderInstances: mockCountActiveProviderInstances,
+  getQuorum: (n) => Math.max(2, Math.ceil((Number(n) || 0) * 0.4)),
 }));
 
 const { buildArtemisReadiness } = await import('../../services/artemisReadinessService.js');
@@ -40,6 +43,10 @@ describe('Artemis WP-A readiness aggregation', () => {
     mockGetRuntimeExecutionState.mockReset();
     mockBuildRuntimeView.mockReset();
     mockQuery.mockReset();
+    mockGetProviderHealth.mockReset();
+    mockCountActiveProviderInstances.mockReset();
+    mockGetProviderHealth.mockResolvedValue([{ provider: 'openai', healthy_keys: 1, enabled_keys: 1, total_keys: 1 }]);
+    mockCountActiveProviderInstances.mockResolvedValue(1);
   });
 
   it('returns LEGACY_ADVISORY readiness with executionEligible false', async () => {
@@ -100,8 +107,66 @@ describe('Artemis WP-A readiness aggregation', () => {
     expect(readiness.advisory.count).toBe(2);
     expect(readiness.advisory.recent).toHaveLength(1);
     expect(readiness.advisory.detailsAvailable).toBe(true);
+    expect(readiness.advisory.recent[0]).toMatchObject({
+      action: 'HOLD',
+      symbol: 'BTC/USDT',
+      executionEligible: false,
+      advisoryOnly: true,
+    });
+    expect(readiness.advisory.recent[0].metadata).toBeUndefined();
+    expect(JSON.stringify(readiness.advisory.recent)).not.toMatch(/opportunity/);
     expect(readiness.agentRuns.count).toBe(3);
     expect(readiness.agentRuns.detailsAvailable).toBe(false);
+    expect(readiness.providers.configured).toBe(1);
+    expect(readiness.providers.healthy).toBe(1);
+    expect(readiness.providers.activeUsableInstances).toBe(1);
+    expect(readiness.providers.quorum).toBe(2);
+    expect(readiness.providers.ready).toBe(false);
+  });
+
+  it('one usable provider with canonical quorum 2 is not ready', async () => {
+    mockGetRuntimeExecutionState.mockResolvedValue({ killSwitchActive: false });
+    mockBuildRuntimeView.mockReturnValue({ requestedMode: 'demo', effectiveMode: 'demo', killSwitchActive: false });
+    mockQuery.mockResolvedValue({ rows: [] });
+    mockCountActiveProviderInstances.mockResolvedValue(1);
+    mockGetProviderHealth.mockResolvedValue([{ provider: 'openai', healthy_keys: 1, enabled_keys: 1, total_keys: 1 }]);
+    const readiness = await buildArtemisReadiness({});
+    expect(readiness.providers.truth).toBe('MEASURED');
+    expect(readiness.providers.activeUsableInstances).toBe(1);
+    expect(readiness.providers.quorum).toBe(2);
+    expect(readiness.providers.ready).toBe(false);
+  });
+
+  it('two usable providers satisfying quorum 2 are ready', async () => {
+    mockGetRuntimeExecutionState.mockResolvedValue({ killSwitchActive: false });
+    mockBuildRuntimeView.mockReturnValue({ requestedMode: 'demo', effectiveMode: 'demo', killSwitchActive: false });
+    mockQuery.mockResolvedValue({ rows: [] });
+    mockCountActiveProviderInstances.mockResolvedValue(2);
+    mockGetProviderHealth.mockResolvedValue([
+      { provider: 'openai', healthy_keys: 1, enabled_keys: 1, total_keys: 1 },
+      { provider: 'anthropic', healthy_keys: 1, enabled_keys: 1, total_keys: 1 },
+    ]);
+    const readiness = await buildArtemisReadiness({});
+    expect(readiness.providers.configured).toBe(2);
+    expect(readiness.providers.healthy).toBe(2);
+    expect(readiness.providers.activeUsableInstances).toBe(2);
+    expect(readiness.providers.quorum).toBe(2);
+    expect(readiness.providers.ready).toBe(true);
+  });
+
+  it('provider health unavailable stays unavailable, not zero/success', async () => {
+    mockGetRuntimeExecutionState.mockResolvedValue({ killSwitchActive: false });
+    mockBuildRuntimeView.mockReturnValue({ requestedMode: 'demo', effectiveMode: 'demo', killSwitchActive: false });
+    mockQuery.mockResolvedValue({ rows: [] });
+    mockCountActiveProviderInstances.mockRejectedValue(new Error('provider pool redis timeout'));
+    mockGetProviderHealth.mockRejectedValue(new Error('provider pool redis timeout'));
+    const readiness = await buildArtemisReadiness({});
+    expect(readiness.providers.truth).toBe('UNAVAILABLE');
+    expect(readiness.providers.ready).toBeNull();
+    expect(readiness.providers.quorum).toBeNull();
+    expect(readiness.providers.activeUsableInstances).toBeNull();
+    expect(readiness.providers.configured).toBeNull();
+    expect(readiness.providers.healthy).toBeNull();
   });
 
   it('keeps advisory count when recent rows fail to load', async () => {

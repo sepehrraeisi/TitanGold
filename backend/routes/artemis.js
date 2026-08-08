@@ -7,6 +7,8 @@ import { query } from '../database/db.js';
 import { getMixtureDecision } from '../services/artemisOrchestrator.js';
 import { containLegacyArtemisDecision } from '../services/artemisDecisionContainment.js';
 import { buildArtemisReadiness } from '../services/artemisReadinessService.js';
+import { projectAdvisoryRecord, projectAgentRunRecord } from '../services/artemisAuditProjection.js';
+import { ARTEMIS_READINESS_ERROR, sendArtemisInternalError } from '../services/artemisHttpErrors.js';
 import { logger } from '../services/logger.js';
 import { validateBody, validateParams, validateResponse } from '../middleware/validation.js';
 import {
@@ -90,11 +92,7 @@ router.get('/readiness', authenticateStrict, requireCapability(CAP.AI_AGENT_READ
     const readiness = await buildArtemisReadiness({ userId: req.user?.id });
     return res.json(readiness);
   } catch (error) {
-    logger.error('Failed to build Artemis readiness:', error);
-    return res.status(500).json({
-      error: 'Failed to build Artemis readiness',
-      message: error.message,
-    });
+    return sendArtemisInternalError(res, ARTEMIS_READINESS_ERROR, error);
   }
 });
 
@@ -555,7 +553,7 @@ router.patch('/config/decision-engine', authenticateStrict, requireCapability(CA
 });
 
 // Get Artemis decision logs — fail-soft per source so count/list stay reconcilable
-router.get('/logs', authenticateStrict, async (req, res) => {
+router.get('/logs', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
@@ -598,7 +596,7 @@ router.get('/logs', authenticateStrict, async (req, res) => {
           LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
         pageParams,
       );
-      systemLogs = result.rows || [];
+      systemLogs = (result.rows || []).map((row) => projectAdvisoryRecord(row));
     } catch (error) {
       logger.warn('Artemis logs: advisory rows unavailable', error.message);
       sourceError = sourceError || 'advisory_rows';
@@ -615,13 +613,15 @@ router.get('/logs', authenticateStrict, async (req, res) => {
 
     try {
       const decisionsResult = await query(
-        `SELECT id, agent_id, input, output, was_successful, confidence, created_at
-           FROM ai_decisions
-          ORDER BY created_at DESC
+        `SELECT d.id, d.agent_id, d.input, d.output, d.was_successful, d.confidence, d.created_at,
+                a.agent_key, a.name AS agent_name
+           FROM ai_decisions d
+      LEFT JOIN ai_agents a ON a.id = d.agent_id
+          ORDER BY d.created_at DESC
           LIMIT $1`,
         [limit],
       );
-      decisions = decisionsResult.rows || [];
+      decisions = (decisionsResult.rows || []).map((row) => projectAgentRunRecord(row));
     } catch (error) {
       logger.warn('Artemis logs: agent-run rows unavailable', error.message);
       sourceError = sourceError || 'agent_run_rows';

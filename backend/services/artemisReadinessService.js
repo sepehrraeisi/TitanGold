@@ -15,7 +15,8 @@ import {
   LEGACY_ADVISORY_STAGE,
 } from './artemisDecisionContainment.js';
 import { readAnalyticalSchedulerStatus } from './analyticalSchedulerStatus.js';
-import { getProviderHealth, getQuorum } from './providerPool.js';
+import { countActiveProviderInstances, getProviderHealth, getQuorum } from './providerPool.js';
+import { projectAdvisoryRecord, projectAgentRunRecord } from './artemisAuditProjection.js';
 import {
   ARTEMIS_AGENT_CATALOG,
   ARTEMIS_ROLE_GROUPS,
@@ -211,14 +212,7 @@ export async function buildArtemisReadiness(opts = {}) {
     'advisory logs recent',
   );
   if (advCount) {
-    const recentRows = (advRecent?.rows || []).map((row) => ({
-      id: row.id,
-      level: row.level || null,
-      category: row.category || null,
-      message: row.message || null,
-      metadata: row.metadata || null,
-      created_at: row.created_at ? new Date(row.created_at).toISOString() : null,
-    }));
+    const recentRows = (advRecent?.rows || []).map((row) => projectAdvisoryRecord(row));
     advisory = {
       truth: 'PERSISTED',
       count: asInt(advCount.rows[0]?.c) || 0,
@@ -254,21 +248,7 @@ export async function buildArtemisReadiness(opts = {}) {
     'ai_decisions count',
   );
   if (runCount) {
-    const recentRuns = (runs?.rows || []).map((row) => ({
-      id: row.id,
-      agentId: row.agent_id,
-      agentKey: row.agent_key || null,
-      agentName: row.agent_name || null,
-      successful: row.was_successful === true,
-      recordedScore: typeof row.confidence === 'number' ? row.confidence : null,
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
-      symbol:
-        row.input?.symbol ||
-        row.input?.pair ||
-        row.output?.symbol ||
-        null,
-      action: row.output?.action || row.output?.decision || null,
-    }));
+    const recentRuns = (runs?.rows || []).map((row) => projectAgentRunRecord(row));
     agentRuns = {
       truth: 'PERSISTED',
       count: asInt(runCount.rows[0]?.c) || 0,
@@ -297,9 +277,20 @@ export async function buildArtemisReadiness(opts = {}) {
     };
   }
 
-  let providers = unavailable({ ready: null, activeHealthy: null, quorum: null, items: [] });
+  let providers = unavailable({
+    ready: null,
+    configured: null,
+    healthy: null,
+    activeHealthy: null,
+    activeUsableInstances: null,
+    quorum: null,
+    items: [],
+  });
   try {
-    const healthSummary = await getProviderHealth();
+    const [healthSummary, activeUsableInstances] = await Promise.all([
+      getProviderHealth(),
+      countActiveProviderInstances(),
+    ]);
     const items = (healthSummary || []).map((row) => ({
       id: row.provider,
       healthyKeys: asInt(row.healthy_keys) || 0,
@@ -307,13 +298,18 @@ export async function buildArtemisReadiness(opts = {}) {
       totalKeys: asInt(row.total_keys) || 0,
       ok: (asInt(row.healthy_keys) || 0) > 0,
     }));
-    const activeHealthy = items.reduce((sum, item) => sum + (item.ok ? 1 : 0), 0);
-    const totalHealthyKeys = items.reduce((sum, item) => sum + item.healthyKeys, 0);
+    const configured = items.reduce((sum, item) => sum + item.totalKeys, 0);
+    const healthy = items.reduce((sum, item) => sum + item.healthyKeys, 0);
+    const usable = Number.isFinite(activeUsableInstances) ? activeUsableInstances : 0;
+    const quorum = getQuorum(usable);
     providers = {
       truth: 'MEASURED',
-      ready: totalHealthyKeys > 0,
-      activeHealthy,
-      quorum: getQuorum(Math.max(totalHealthyKeys, items.length)),
+      configured,
+      healthy,
+      activeUsableInstances: usable,
+      activeHealthy: usable,
+      quorum,
+      ready: usable >= quorum,
       items,
     };
   } catch (e) {

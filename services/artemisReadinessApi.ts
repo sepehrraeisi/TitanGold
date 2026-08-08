@@ -47,10 +47,15 @@ export async function fetchArtemisAuditBundle(limit = 50): Promise<ArtemisAuditB
           agentKey: row.agent_key || row.agentKey || null,
           agentName: row.agent_name || row.agentName || null,
           successful: row.was_successful === true || row.successful === true,
-          recordedScore: typeof row.confidence === 'number' ? row.confidence : null,
-          createdAt: row.created_at || row.createdAt || null,
-          symbol: (row.input as { symbol?: string } | undefined)?.symbol || null,
-          action: (row.output as { action?: string } | undefined)?.action || null,
+          recordedScore:
+            typeof row.recordedScore === 'number'
+              ? row.recordedScore
+              : typeof row.confidence === 'number'
+                ? row.confidence
+                : null,
+          createdAt: (row.created_at || row.createdAt || null) as string | null,
+          symbol: typeof row.symbol === 'string' ? row.symbol : null,
+          action: typeof row.action === 'string' ? row.action : null,
         }))
       : [];
     return {

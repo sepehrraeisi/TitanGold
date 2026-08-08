@@ -6,6 +6,7 @@ import { mexcService } from '../services/mexc.js';
 import { aiService } from '../services/ai.js';
 import { telegramService } from '../services/telegram.js';
 import { logger } from '../services/logger.js';
+import { isArtemisDecisionExecutionAuthorized } from '../services/artemisExecutionGate.js';
 
 // ============================================================================
 // AI Rate-Limit Circuit Breaker (Quick Fix for 429 Storm)
@@ -754,11 +755,8 @@ class TradingEngine {
             if (response.ok) {
                 const decision = await response.json();
                 // WP-A: never treat legacy advisory as execution approval
-                const executionEligible = decision.executionEligible === true
-                    && decision.approvedForExecution === true;
-                const actionOk = decision.action === 'EXECUTE' || decision.action === 'BUY' || decision.action === 'SELL';
                 return {
-                    approved: executionEligible && actionOk,
+                    approved: isArtemisDecisionExecutionAuthorized(decision),
                     reason: decision.reason || 'Artemis legacy advisory — not execution eligible',
                     confidence: decision.confidence || opportunity.confidence,
                     decision,

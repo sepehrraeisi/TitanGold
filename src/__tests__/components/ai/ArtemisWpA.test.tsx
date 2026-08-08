@@ -77,7 +77,16 @@ const readinessFixture = {
   catalog: { truth: 'CONFIGURED', agents: catalogAgents },
   inventory: { truth: 'PERSISTED', agents: [], configuredCount: 15, operationalCount: 12 },
   dataHub: { truth: 'PERSISTED', status: 'available', totalSources: 4, activeSources: 3 },
-  providers: { truth: 'MEASURED', ready: true, activeHealthy: 2, quorum: 2, items: [] },
+  providers: {
+    truth: 'MEASURED',
+    ready: true,
+    configured: 2,
+    healthy: 2,
+    activeHealthy: 2,
+    activeUsableInstances: 2,
+    quorum: 2,
+    items: [],
+  },
   connections: { truth: 'MEASURED', providerConnected: false, count: 0, status: 'broker_unavailable' },
   scheduler: { truth: 'MEASURED', allowlist: ['arbitrage'], agentsEnabled: true, isRunning: true, stale: false },
   advisory: { truth: 'PERSISTED', count: 0, latestAt: null, recent: [], limit: 50, loadedCount: 0, detailsAvailable: false },
@@ -573,14 +582,34 @@ describe('Artemis WP-A UI', () => {
         truth: 'PERSISTED',
         count: 1,
         latestAt: '2026-08-08T07:31:00.000Z',
-        recent: [{ id: 9, created_at: '2026-08-08T07:31:00.000Z', message: 'Hold BTCUSDT', metadata: { opportunity: { symbol: 'BTCUSDT' }, decision: { action: 'HOLD' } } }],
+        recent: [{
+          id: 9,
+          created_at: '2026-08-08T07:31:00.000Z',
+          timestamp: '2026-08-08T07:31:00.000Z',
+          message: 'Hold BTCUSDT',
+          action: 'HOLD',
+          symbol: 'BTCUSDT',
+          classification: 'LEGACY_ADVISORY_ONLY',
+          executionEligible: false,
+          advisoryOnly: true,
+        }],
         limit: 50,
         loadedCount: 1,
         detailsAvailable: true,
       },
     } as never);
     vi.mocked(fetchArtemisAuditBundle).mockResolvedValue({
-      systemLogs: [{ id: 9, created_at: '2026-08-08T07:31:00.000Z', message: 'Hold BTCUSDT', metadata: { opportunity: { symbol: 'BTCUSDT' }, decision: { action: 'HOLD' } } }],
+      systemLogs: [{
+        id: 9,
+        created_at: '2026-08-08T07:31:00.000Z',
+        timestamp: '2026-08-08T07:31:00.000Z',
+        message: 'Hold BTCUSDT',
+        action: 'HOLD',
+        symbol: 'BTCUSDT',
+        classification: 'LEGACY_ADVISORY_ONLY',
+        executionEligible: false,
+        advisoryOnly: true,
+      }],
       decisions: [],
       loadFailed: false,
     } as never);
@@ -596,6 +625,32 @@ describe('Artemis WP-A UI', () => {
     expect(drawer?.innerHTML).toMatch(/border-white\/10/);
     expect(drawer?.innerHTML).toMatch(/rounded-xl/);
     expect(drawer?.innerHTML).toMatch(/shadow-2xl/);
+    expect(drawer?.innerHTML).not.toMatch(/"metadata"/);
+    expect(drawer?.innerHTML).not.toMatch(/portfolioValue/);
+    expect(drawer?.innerHTML).not.toMatch(/dailyLoss/);
+    expect(drawer?.innerHTML).not.toMatch(/opportunity/);
+  });
+
+  it('System Health shows Partially ready when usable providers are below quorum', async () => {
+    vi.mocked(fetchArtemisReadiness).mockResolvedValue({
+      ...readinessFixture,
+      providers: {
+        truth: 'MEASURED',
+        ready: false,
+        configured: 1,
+        healthy: 1,
+        activeHealthy: 1,
+        activeUsableInstances: 1,
+        quorum: 2,
+        items: [{ id: 'openai', healthyKeys: 1, enabledKeys: 1, totalKeys: 1, ok: true }],
+      },
+    } as never);
+    render(<AIManager />);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'System Health' }));
+    const card = document.querySelector('[data-artemis-dependency="providers"]');
+    expect(card?.textContent).toMatch(/Partially ready/i);
+    expect(card?.textContent).not.toMatch(/\bReady\b/);
   });
 
   it('Artemis UI does not import Data Hub business components', () => {

@@ -41,13 +41,17 @@ export type ArtemisCatalogAgent = {
 };
 
 export type ArtemisAuditLog = {
-  id?: string;
-  level?: string;
-  category?: string;
-  message?: string;
-  metadata?: Record<string, unknown> | null;
-  created_at?: string;
-  timestamp?: string;
+  id?: string | number | null;
+  level?: string | null;
+  classification?: string | null;
+  created_at?: string | null;
+  timestamp?: string | null;
+  action?: string | null;
+  symbol?: string | null;
+  message?: string | null;
+  reason?: string | null;
+  executionEligible?: boolean;
+  advisoryOnly?: boolean;
 };
 
 export type ArtemisAgentRun = {
@@ -127,7 +131,10 @@ export type ArtemisReadiness = {
   providers?: {
     truth: TruthClass | string;
     ready?: boolean | null;
+    configured?: number | null;
+    healthy?: number | null;
     activeHealthy?: number | null;
+    activeUsableInstances?: number | null;
     quorum?: number | null;
     items?: Array<{
       id: string;

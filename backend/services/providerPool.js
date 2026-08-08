@@ -193,6 +193,24 @@ export function getQuorum(totalInstances) {
 }
 
 /**
+ * Count active usable provider instances using the same filter as getProviderInstances,
+ * without decrypting API keys. Canonical Artemis health/readiness capacity owner.
+ */
+export async function countActiveProviderInstances() {
+  const sql = `
+    SELECT COUNT(*)::int AS c
+    FROM api_integrations i
+    LEFT JOIN api_integration_runtime r ON r.integration_id = i.id
+    WHERE i.enabled = true
+      AND COALESCE(r.status, 'healthy') != 'disabled'
+      AND (r.cooldown_until IS NULL OR r.cooldown_until <= NOW())
+  `;
+  const res = await query(sql);
+  const count = Number.parseInt(res.rows?.[0]?.c, 10);
+  return Number.isFinite(count) ? count : 0;
+}
+
+/**
  * Get provider health summary
  */
 export async function getProviderHealth() {
