@@ -837,24 +837,3 @@ Owner Human QA Round 4 remains **PASS**. No visual redesign. PR #19 remains Draf
 
 Not CLOSED. PR remains Draft. Do not merge.
 
-## 26. PR #19 residual truthfulness remediation
-
-Owner Human QA Round 4 remains **PASS**. No visual redesign. PR #19 remains Draft. Not merged.
-
-### 26.1 Readiness failure must fail truthfully
-
-**RCA:** AIManager kept rendering the selected canonical section when `readinessError` was set and `readiness=null`. Only Overview handled the error. Deep link `artemisSection=system` therefore derived fabricated states (Needs setup / Broker is not connected / Partially ready) from missing readiness.
-
-**Fix:** one shell-level guard after header + Simple/Advanced + canonical nav. Section body is replaced with `Artemis status unavailable` / sanitized message / Retry. No section receives `readiness=null` for operational derivation.
-
-### 26.2 History window copy
-
-**RCA:** Lineage metric hints used `loadedCount || limit`, so `count>0` + `loadedCount=0` claimed “Showing latest 50” while EmptyState said details could not be loaded.
-
-**Fix:** “Showing latest N” only when `loadedCount > 0`, using the actual loaded count. Zero-loaded windows keep EmptyState only (no window hint).
-
-### 26.3 Verdict target
-
-**ARTEMIS WP-A — RESIDUAL REVIEW FINDINGS REMEDIATED**  
-**READY FOR FINAL INDEPENDENT RE-REVIEW**
-
