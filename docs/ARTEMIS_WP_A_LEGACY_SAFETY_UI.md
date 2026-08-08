@@ -636,8 +636,18 @@ Artemis does **not** import Data Hub business components. Visual rules were copi
 
 | Item | Value |
 |------|-------|
-| Frontend tests | `ArtemisWpA.test.tsx` including visual-structure + drawer + no Data Hub import |
-| Data Hub source | unchanged (Owner PASS / frozen) |
+| Visual implementation HEAD | `12f47b0` |
+| Documentation HEAD | living doc on `feat/artemis-wp-a-legacy-safety-ui` after this section |
+| Runtime commit (backend) | `7420903` (`provenanceVerified=true`) — backend unchanged this round |
+| Served bundle | `index-DMthIK9F.js` |
+| Data Hub chunk | `DataHubWorkspace-Zt-_1y4f.js` (product source untouched; Vite chunk rebuilt) |
+| Deploy | dist rsync only; titan-backend not restarted; workers not restarted |
+| Workers | id4 pid=1639616 ↺=0; id8 pid=1639645 ↺=0 |
+| Frontend tests | 31/31 PASS (`ArtemisWpA.test.tsx`, including visual-structure + A–E) |
+| Production build | PASS |
+| Data Hub source diff | empty / Owner PASS unchanged |
+| Side effects | private=0 orders=0 transfers=0 withdrawals=0 scheduler=0 workers=0 migrations=0 Live=0 · backend restart=0 |
+| Screenshots | Owner captures in Round 4 (login-gated Staging) |
 | Draft PR | Not created (WP-A remains open) |
 
 ### 23.5 Verdict
