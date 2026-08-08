@@ -1,6 +1,6 @@
 # ARTEMIS WP-A — Legacy Safety Containment + Specialized UI/UX Redesign
 
-**Status:** OWNER HUMAN QA FAILED (Data Hub PASS) — specialized Artemis redesign implementing (not CLOSED)  
+**Status:** SPECIALIZED REDESIGN IMPLEMENTED — READY FOR OWNER HUMAN QA RE-REVIEW (not CLOSED)  
 **Classification:** Shared Foundation implementation  
 **Foundation baseline (closed):** `01e461634c6910bad795a2c3c3b506ecf2c343df`  
 **Branch:** `feat/artemis-wp-a-legacy-safety-ui`  
@@ -506,4 +506,27 @@ Canonical EvidenceEnvelope · real orchestration · Risk UUID modernization · L
 
 ### 20.4 Staging evidence
 
-_(filled after deploy)_
+| Item | Value |
+|------|-------|
+| Implementation HEAD | `fa9b1b1` |
+| Runtime commit | `fa9b1b1` (`provenanceVerified=true`) |
+| Served bundle | `index-Dk1RoeiR.js` |
+| Data Hub chunk | `DataHubWorkspace-DlvypHXD.js` (untouched product; lazy chunk rebuilt) |
+| Deploy | titan-backend-only + dist rsync; workers not restarted |
+| Workers | id4 pid=1639616 ↺=0; id8 pid=1639645 ↺=0 |
+| Backend tests | containment 3/3 + readiness 2/2 PASS |
+| Frontend tests | 21/21 PASS (`ArtemisWpA.test.tsx`) |
+| Production build | PASS |
+| Native dialogs (canonical Artemis) | 0 |
+| Synthetic metrics | 0 |
+| Raw enum/key scan (primary Overview) | 0 |
+| Data Hub | Owner PASS unchanged; not modified |
+| Side effects | private=0 orders=0 transfers=0 withdrawals=0 scheduler=0 workers=0 migrations=0 Live=0 |
+| Draft PR | Not created (WP-A remains open) |
+
+## 21. Verdict after specialized redesign
+
+**ARTEMIS WP-A — SPECIALIZED REDESIGN IMPLEMENTED**  
+**READY FOR OWNER HUMAN QA RE-REVIEW**
+
+Not CLOSED.

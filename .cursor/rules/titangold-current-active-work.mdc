@@ -19,8 +19,8 @@ Tier 2–3 (API contract containment + frontend product redesign; no Tier-4 Live
 
 Engineering status:
 **DATA HUB HUMAN QA = PASS (OUT OF SCOPE — DO NOT TOUCH)**  
-**ARTEMIS HUMAN QA = FAIL**  
-**ARTEMIS WP-A — SPECIALIZED TAB REDESIGN IMPLEMENTATION IN PROGRESS**  
+**ARTEMIS WP-A — SPECIALIZED REDESIGN IMPLEMENTED**  
+**READY FOR OWNER HUMAN QA RE-REVIEW**  
 Not CLOSED. Do not create a closeout PR.
 
 Branch / worktree:
