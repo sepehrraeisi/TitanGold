@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
 import { fetchArtemisReadiness } from '../../services/artemisReadinessApi.ts';
+import { productLabel, productStatus } from '../ai/AIManager/artemisProductCopy.ts';
 
 const WidgetCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="bg-white dark:bg-[#1c1e2f] border border-slate-200 dark:border-gray-700/50 rounded-lg p-4 h-full flex flex-col">
@@ -11,9 +12,6 @@ const WidgetCard: React.FC<{ title: string; children: React.ReactNode }> = ({ ti
   </div>
 );
 
-/**
- * WP-A: replace hardcoded confidence/recommendation with truthful readiness.
- */
 const ArtemisInsightsWidget: React.FC = () => {
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
@@ -48,33 +46,38 @@ const ArtemisInsightsWidget: React.FC = () => {
     <WidgetCard title={t('artemis_insights') || 'Artemis Insights'}>
       <div className="bg-blue-500/10 border-l-4 border-blue-400 p-3 rounded-r-lg" role="status">
         <p className="text-sm font-bold text-blue-700 dark:text-blue-300">
-          {t('artemis_readiness_title') || 'Artemis Readiness'}
+          {productLabel(t, 'artemis_readiness_title', 'Artemis readiness')}
         </p>
         {loading ? (
           <p className="text-sm text-slate-700 dark:text-gray-300 mt-1">{t('loading')}</p>
         ) : error ? (
           <>
             <p className="text-sm text-slate-700 dark:text-gray-300 mt-1">
-              {t('unavailable') || 'Unavailable'}
+              {productLabel(t, 'unavailable', 'Unavailable')}
             </p>
             <p className="text-xs text-slate-500 dark:text-gray-400 mt-2">
-              {t('artemis_insights_unavailable_reason') ||
-                'Canonical advisory state could not be loaded. No fabricated confidence is shown.'}
+              {productLabel(
+                t,
+                'artemis_insights_unavailable_reason',
+                'Canonical advisory state could not be loaded. No fabricated confidence is shown.',
+              )}
             </p>
           </>
         ) : (
           <>
             <p className="text-sm text-slate-700 dark:text-gray-300 mt-1">
-              {(t('artemis_stage_legacy_advisory') || 'LEGACY ADVISORY') +
-                (stage ? ` · ${stage}` : '')}
+              {productStatus(stage || 'LEGACY_ADVISORY', t)}
             </p>
             <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-semibold">
-              {t('execution_eligibility') || 'Execution eligibility'}:{' '}
-              {eligible ? t('yes') || 'Yes' : t('no') || 'No'}
+              {productLabel(t, 'execution_eligibility', 'Execution eligibility')}:{' '}
+              {eligible ? productLabel(t, 'yes', 'Yes') : productLabel(t, 'no', 'No')}
             </p>
             <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-              {t('artemis_insights_no_fake_confidence') ||
-                'No hardcoded confidence. Legacy advisory only.'}
+              {productLabel(
+                t,
+                'artemis_insights_no_fake_confidence',
+                'No hardcoded confidence. Legacy advisory only.',
+              )}
             </p>
           </>
         )}

@@ -125,7 +125,19 @@ export const artemisReadinessResponseSchema = z.object({
     limitations: z.array(z.string()),
     dualConfigLimitationKey: z.string().optional(),
     generatedAt: z.string(),
-});
+    catalog: z.record(z.any()).optional(),
+    inventory: z.record(z.any()).optional(),
+    providers: z.record(z.any()).optional(),
+    connections: z.record(z.any()).optional(),
+    dataHub: z.record(z.any()).optional(),
+    scheduler: z.record(z.any()).optional(),
+    advisory: z.record(z.any()).optional(),
+    agentRuns: z.record(z.any()).optional(),
+    provenance: z.record(z.any()).optional(),
+    pipeline: z.array(z.any()).optional(),
+    blockers: z.array(z.any()).optional(),
+    owners: z.record(z.any()).optional(),
+}).passthrough();
 
 export const artemisDecisionEnginePatchSchema = z.object({
     useMixture: z.boolean().optional(),

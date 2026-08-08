@@ -9,7 +9,7 @@ Current outcome:
 **ARTEMIS WP-A — LEGACY SAFETY CONTAINMENT + SPECIALIZED UI/UX REDESIGN**
 
 Current area:
-Shared Foundation → Artemis Central Intelligence (AI Center → Artemis / Data Hub)
+Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
 
 Current program slice:
 ARTEMIS-WP-A-LEGACY-SAFETY-UI
@@ -18,47 +18,45 @@ Risk tier:
 Tier 2–3 (API contract containment + frontend product redesign; no Tier-4 Live)
 
 Engineering status:
-**LEGACY AI MANAGER SALVAGE AUDIT — ACCEPTED**  
-**ARTEMIS WP-A — READY FOR OWNER HUMAN QA**  
-Not CLOSED. Wait for explicit Owner Human QA PASS.
+**DATA HUB HUMAN QA = PASS (OUT OF SCOPE — DO NOT TOUCH)**  
+**ARTEMIS HUMAN QA = FAIL**  
+**ARTEMIS WP-A — SPECIALIZED TAB REDESIGN IMPLEMENTATION IN PROGRESS**  
+Not CLOSED. Do not create a closeout PR.
 
 Branch / worktree:
 - `feat/artemis-wp-a-legacy-safety-ui`
 - `/home/ubuntu/worktrees/titangold-artemis-wp-a`
 
-Authorized in WP-A:
-- Legacy `/artemis/decision` advisory containment
-- Trading Engine fail-closed on `executionEligible`
-- AI Center label Manager → Artemis (id `manager`)
-- Artemis shell + IA redesign
-- Autopilot/Demo↔Real/Insights/native-dialog containment
-- Read-only readiness aggregation
-- Restore Data Hub as first-class AI Center tab (no Data Hub rewrite)
+Authorized in this remediation:
+- Full specialized redesign of all canonical Artemis tabs
+- Product presentation layer (no raw enums/keys/WP names)
+- Read-only `/api/v1/artemis/readiness` enrichment (no new SoT)
+- Remove Legacy Admin from primary Artemis tab strip
+- EN / FA / RTL + responsive + a11y
 - Focused tests + Staging deploy (backend-only if needed; workers unchanged)
-- Read-only salvage audit of former AIManager tabs (no blind restoration)
-- Record future rehome backlog only (no WP-A implementation)
 
 Not authorized / unchanged:
+- Data Hub product (Owner PASS — out of scope)
 - DB migrations
 - Scheduler allowlist / worker topology
 - Live / orders / private provider calls
 - Risk→Portfolio→Liquidity→OM full wiring
 - Frozen Trend/Arbitrage product surfaces
-- Data Hub product rewrite or Data Hub modification
-- Restore of former AIManager tabs (Learning, Scenarios, Backtesting, System Logs, Decision Engine, Monitoring, Settings, mock Orchestration)
-- FR-1 Learning → Training specialization
-- FR-2 Trading Scenarios → Analytics / Evaluation / Simulation
-- FR-3 Backtesting → Analytics / Evaluation only after truthful engine + persistence owner
-- FR-4 Full System Log browser → Lineage enhancement if justified
+- Restore of former AIManager tabs (Learning, Scenarios, Backtesting, System Logs)
+- FR-1…FR-4 future rehomes
+- Fake evidence envelopes / fake orchestration / fake confidence
 - Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
 Canonical AI Center nav (do not change):
 Artemis · Agents · Data Hub · Training · Analytics · Integrations · Topic Routing
 
-Human QA:
-Required against Staging `https://titan.zala.ir`.
-Checklist: `docs/ARTEMIS_WP_A_LEGACY_SAFETY_UI.md` §17.
-Do not declare CLOSED without explicit Owner Human QA PASS.
+Canonical Artemis IA:
+Overview · Evidence · Decisions · Orchestration · Controls · Lineage & Audit · System & Integrations  
+Legacy Admin is NOT a primary tab.
 
-Next transition after Human QA PASS:
+Human QA:
+Owner re-review required after specialized redesign + Staging deploy.
+Do not self-close. Do not declare CLOSED without explicit Owner Human QA PASS.
+
+Next transition after Owner Human QA re-review PASS:
 Draft PR review → explicit merge approval.

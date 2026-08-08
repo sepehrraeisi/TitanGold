@@ -1,6 +1,6 @@
 # ARTEMIS WP-A — Legacy Safety Containment + Specialized UI/UX Redesign
 
-**Status:** READY FOR OWNER HUMAN QA (not CLOSED)  
+**Status:** OWNER HUMAN QA FAILED (Data Hub PASS) — specialized Artemis redesign implementing (not CLOSED)  
 **Classification:** Shared Foundation implementation  
 **Foundation baseline (closed):** `01e461634c6910bad795a2c3c3b506ecf2c343df`  
 **Branch:** `feat/artemis-wp-a-legacy-safety-ui`  
@@ -373,8 +373,137 @@ Artemis System → **Open Data Hub** is a link only.
 
 Owner records PASS or FAIL against this checklist. Cursor must wait for **explicit Owner Human QA PASS**.
 
-## 18. Final status (pre–Owner PASS)
+## 18. Owner Human QA result (2026-08-08)
 
-**ARTEMIS WP-A — READY FOR OWNER HUMAN QA**
+| Surface | Verdict |
+|---------|---------|
+| Data Hub | **PASS** — out of scope; do not touch |
+| Artemis | **FAIL** — skeletal / engineering language / insufficient specialized UX |
 
-Not CLOSED.
+WP-A remains OPEN. No closeout PR.
+
+## 19. Specialized tab redesign — needs assessment (before implementation)
+
+Truth classes used below: MEASURED · PERSISTED · DERIVED · CONFIGURED · LEGACY · UNAVAILABLE.
+
+### 19.1 Final Artemis IA (unchanged names; Legacy Admin removed from primary nav)
+
+1. Overview  
+2. Evidence  
+3. Decisions  
+4. Orchestration  
+5. Controls  
+6. Lineage & Audit  
+7. System & Integrations  
+
+Legacy Admin: **not a primary tab**. Admin-only status disclosure under System → Administrative / Legacy Tools. Autopilot Enable / Run Once UI hidden at current maturity; backend capability preserved.
+
+No tabs merged or renamed.
+
+### 19.2 Overview
+
+| Item | Assessment |
+|------|------------|
+| User question | What can Artemis do now, what is blocking it, and what needs attention? |
+| Decisions/actions | Understand maturity; open owners (Agents, Data Hub, Decision Engine, Connections, control Agents) |
+| Real data | Runtime SSOT (MEASURED); readiness aggregation (CONFIGURED/DERIVED); inventory (PERSISTED); advisory/run counts (PERSISTED); blockers (DERIVED) |
+| Owners | Runtime SSOT; `/artemis/readiness`; `ai_agents`; `system_logs` / `ai_decisions`; Settings Decision Engine; AI Center Data Hub/Agents |
+| Justified now | Hero, readiness pipeline, 15-Agent role summary, top blockers, recent activity if persisted, quick links |
+| Deferred | Canonical evidence envelopes; real orchestration; Live/execution |
+| Hierarchy | Hero → pipeline → Agent summary → blockers → activity → links |
+| Visualization | Pipeline/stepper + grouped Agent counts + compact activity list |
+| Mobile | Summary-first stacked hero; pipeline vertical; links wrap |
+| Empty | Compact empty activity; never fake zeros as success |
+| Hide from primary UX | WP names, raw enums, API paths, UUIDs |
+
+### 19.3 Evidence
+
+| Item | Assessment |
+|------|------------|
+| User question | What intelligence is available to Artemis, from whom, and is it usable? |
+| Actions | Search/filter Agents; open Agent product; inspect contract readiness |
+| Real data | 15-Agent catalog (CONFIGURED); `ai_agents` inventory (PERSISTED); contract not implemented (UNAVAILABLE); evidence envelopes (UNAVAILABLE) |
+| Distinguish | Exists ≠ operational ≠ contract-compatible ≠ currently consumable |
+| Justified now | Agent Evidence Readiness workspace + contract panel |
+| Deferred | Real EvidenceEnvelope publishing |
+| Visualization | Grouped table/cards + filters + compact contract panel |
+| Hide | WP-B/WP-D, raw keys as primary copy |
+
+### 19.4 Decisions
+
+| Item | Assessment |
+|------|------------|
+| User question | What has Artemis concluded, why, and can anything be executed? |
+| Data | `system_logs` category `artemis_decision` (LEGACY/PERSISTED); containment flags (CONFIGURED); `approved:true` is advisory only |
+| Justified now | Status summary + history table/timeline + filters + details drawer |
+| Confidence | Only in Technical Details; not as calibrated probability |
+| Empty | Compact: no advisory records yet |
+| Hide | Raw JSON, `approved:true` as execution approval |
+
+### 19.5 Orchestration
+
+| Item | Assessment |
+|------|------------|
+| User question | How should Artemis coordinate intelligence, and what is actually ready? |
+| Data | Agent inventory (PERSISTED); role catalog (CONFIGURED); real coordination (UNAVAILABLE); legacy coordinateAgents (LEGACY, mock) |
+| Justified now | Truthful topology + per-node status + canonical vs legacy sections + Agent deep links |
+| Must not | Fake active orchestration; expose agent-1..15 / UUID mismatch in primary copy |
+| Visualization | Role-group flow into Artemis then control chain |
+
+### 19.6 Controls
+
+| Item | Assessment |
+|------|------------|
+| User question | Who can approve, block, size, validate, or execute? |
+| Data | controlChain (CONFIGURED); runtime (MEASURED); Risk UUID debt (CONFIGURED limitation); Liquidity not control-eligible (CONFIGURED/UNAVAILABLE) |
+| Justified now | Visual authority chain + veto emphasis + why execution = No + owner links |
+| Must not | Fake readiness %; hardcoded UUID as primary UI; “stub” wording |
+| Order boundary | Executes approved intent only; cannot determine market direction |
+
+### 19.7 Lineage & Audit
+
+| Item | Assessment |
+|------|------------|
+| User question | Can I trace what happened and which system produced it? |
+| Data | `system_logs` Artemis records (LEGACY/PERSISTED); `ai_decisions` Agent runs (PERSISTED); canonical lineage (UNAVAILABLE) |
+| Justified now | Source summary + unified read-only activity view + filters + details + compact lineage-unavailable card |
+| Must not | Mutate sources; treat the two tables as one SoT; use WP-C as primary copy |
+
+### 19.8 System & Integrations
+
+| Item | Assessment |
+|------|------------|
+| User question | Are Artemis dependencies healthy and where are they managed? |
+| Data | LLM provider health (MEASURED); Connections count (MEASURED); Data Hub source counts (PERSISTED/DERIVED, read-only); runtime (MEASURED); Decision Engine dual-config (CONFIGURED); scheduler allowlist/status (MEASURED/LEGACY read-only Redis); provenance env commit (MEASURED if present) |
+| Justified now | Dependency cards with status, truth, limitation, canonical links; admin-only legacy tools disclosure |
+| Must not | Raw `/api/v1/artemis/health` as status; Data Hub rewrite; Enable Autopilot / Run Once in product UI |
+
+### 19.9 Features deferred (not WP-A)
+
+Canonical EvidenceEnvelope · real 15-Agent orchestration · Risk UUID modernization · Liquidity control eligibility · Live/execution · FR-1…FR-4 rehomes · Autopilot productization
+
+## 20. Specialized redesign implementation ledger
+
+### 20.1 IA
+
+Unchanged names. Legacy Admin removed from primary nav. No tabs merged/renamed.
+
+### 20.2 Features added (truthful, read-only)
+
+- Product presentation layer (`artemisProductCopy.ts`) — no raw enums in primary UX
+- Overview executive cockpit: hero, pipeline, 15-Agent summary, blockers, activity, quick links
+- Evidence workspace: 15 Agents by role, search/filters, contract panel
+- Decisions workspace: advisory summary, history table/drawer, execution-ineligible wording
+- Orchestration topology: role groups + canonical vs legacy coordination
+- Controls authority chain with Risk veto, liquidity limitation, Order boundary
+- Lineage unified read-only audit (Artemis logs ≠ Agent runs)
+- System operational dependencies + admin-only legacy tools disclosure (no Enable/Run Once)
+- Readiness API enrichment: inventory, catalog, providers, connections, Data Hub counts, scheduler read-only, advisory/run counts, provenance, pipeline, blockers
+
+### 20.3 Deferred
+
+Canonical EvidenceEnvelope · real orchestration · Risk UUID modernization · Liquidity control eligibility · Live · FR-1…FR-4 · Autopilot product UI
+
+### 20.4 Staging evidence
+
+_(filled after deploy)_

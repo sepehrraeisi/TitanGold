@@ -1,6 +1,31 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
+import { ARTEMIS_AGENT_CATALOG } from '../../../../constants/artemisAgentCatalog.js';
+import { RAW_ENUM_SCAN } from '../../../../components/ai/AIManager/artemisProductCopy.ts';
+
+const productEn = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '../../../../deploy/blue/locales/en.json'), 'utf8'),
+) as Record<string, string>;
+
+const catalogAgents = ARTEMIS_AGENT_CATALOG.map((agent) => ({
+  key: agent.key,
+  registryKey: agent.registryKey,
+  nameKey: agent.nameKey,
+  group: agent.group,
+  authority: agent.authority,
+  readiness: agent.key === 'liquidity' ? 'BLOCKED' : agent.key === 'order' ? 'NOT_EXECUTION_ELIGIBLE' : 'ROLE_MAPPED',
+  operational: 'configured',
+  exists: true,
+  operationalNow: agent.key !== 'liquidity',
+  evidenceCompatible: false,
+  evidenceAvailable: false,
+  consumption: agent.key === 'liquidity' ? 'blocked' : 'contract_pending',
+  limitationKey: agent.key === 'liquidity' ? 'artemis_liquidity_stub' : agent.key === 'risk' ? 'artemis_risk_uuid_debt' : null,
+  truth: 'CONFIGURED',
+}));
 
 const readinessFixture = {
   maturityStage: 'LEGACY_ADVISORY',
@@ -12,6 +37,9 @@ const readinessFixture = {
     contractVersion: 'artemis-evidence-1.0.0',
     readiness: 'CONTRACT_FOUNDATION_APPROVED',
     implemented: false,
+    adaptersRequired: true,
+    compatibleAgentCount: 0,
+    catalogAgentCount: 15,
     truth: 'CONFIGURED',
   },
   evidence: {
@@ -26,10 +54,10 @@ const readinessFixture = {
     truth: 'LEGACY',
   },
   controlChain: {
-    risk: { authority: 'veto', readiness: 'PARTIAL', truth: 'CONFIGURED' },
+    risk: { authority: 'veto', readiness: 'PARTIAL', truth: 'CONFIGURED', limitationKey: 'artemis_risk_uuid_debt', ownerNav: { view: 'ai', aiTab: 'agents', agentId: 'risk' } },
     portfolio: { authority: 'sizing', readiness: 'PARTIAL', truth: 'CONFIGURED' },
     optimization: { authority: 'sizing', readiness: 'PARTIAL', truth: 'CONFIGURED' },
-    liquidity: { authority: 'feasibility', readiness: 'BLOCKED', truth: 'CONFIGURED' },
+    liquidity: { authority: 'feasibility', readiness: 'BLOCKED', truth: 'CONFIGURED', limitationKey: 'artemis_liquidity_stub' },
     runtime: { authority: 'runtime_safety', readiness: 'AVAILABLE', truth: 'MEASURED' },
     order: { authority: 'execution_only', readiness: 'NOT_EXECUTION_ELIGIBLE', truth: 'CONFIGURED' },
   },
@@ -46,6 +74,28 @@ const readinessFixture = {
     feasibility: { keys: ['liquidity'], readiness: 'BLOCKED', limitationKey: 'artemis_liquidity_stub' },
     execution: { keys: ['order'], readiness: 'NOT_EXECUTION_ELIGIBLE' },
   },
+  catalog: { truth: 'CONFIGURED', agents: catalogAgents },
+  inventory: { truth: 'PERSISTED', agents: [], configuredCount: 15, operationalCount: 12 },
+  dataHub: { truth: 'PERSISTED', status: 'available', totalSources: 4, activeSources: 3 },
+  providers: { truth: 'MEASURED', ready: true, activeHealthy: 2, quorum: 2, items: [] },
+  connections: { truth: 'MEASURED', providerConnected: false, count: 0, status: 'broker_unavailable' },
+  scheduler: { truth: 'MEASURED', allowlist: ['arbitrage'], agentsEnabled: true, isRunning: true, stale: false },
+  advisory: { truth: 'PERSISTED', count: 0, latestAt: null },
+  agentRuns: { truth: 'PERSISTED', count: 0, latestAt: null, recent: [] },
+  provenance: { truth: 'MEASURED', runtimeCommit: '32a65e4' },
+  pipeline: [
+    { id: 'data_foundation', labelKey: 'artemis_pipe_data', ownerKey: 'artemis_owner_data_hub', status: 'AVAILABLE', truth: 'PERSISTED', nav: { view: 'ai', aiTab: 'data_hub' } },
+    { id: 'evidence_contract', labelKey: 'artemis_pipe_evidence', ownerKey: 'artemis_nav_evidence', status: 'UNAVAILABLE', truth: 'UNAVAILABLE', nav: { artemisSection: 'evidence' }, blockerKey: 'artemis_blocker_evidence_not_connected' },
+  ],
+  blockers: [
+    { code: 'evidence_not_connected', severity: 'high', labelKey: 'artemis_blocker_evidence_not_connected' },
+    { code: 'liquidity_unavailable', severity: 'high', labelKey: 'artemis_blocker_liquidity_unavailable' },
+  ],
+  owners: {
+    dataHub: { view: 'ai', aiTab: 'data_hub' },
+    decisionEngine: { view: 'settings', settingsTab: 'configuration', settingsSubtab: 'decision-engine' },
+    connections: { view: 'settings', settingsTab: 'connections' },
+  },
   limitations: ['artemis_decision_legacy_advisory_only', 'artemis_no_live_automation'],
   dualConfigLimitationKey: 'artemis_dual_decision_engine_config',
   generatedAt: '2026-08-07T00:00:00.000Z',
@@ -53,6 +103,7 @@ const readinessFixture = {
 
 vi.mock('../../../../services/artemisReadinessApi.ts', () => ({
   fetchArtemisReadiness: vi.fn(async () => readinessFixture),
+  fetchArtemisAuditBundle: vi.fn(async () => ({ systemLogs: [], decisions: [] })),
   fetchArtemisLegacyDecisionLogs: vi.fn(async () => []),
 }));
 
@@ -75,11 +126,23 @@ const tMap: Record<string, string> = {
   ai_management_system: 'AI Center',
   ai_management_desc: 'AI Center',
   retry: 'Retry',
-  artemis_open_data_hub: 'Open Data Hub',
-  artemis_datahub_status: 'Status',
-  artemis_datahub_status_available: 'Available as AI Center product',
-  artemis_datahub_role: 'Role: Market / external-data foundation',
-  artemis_current_capability: 'Current capability',
+  requested_mode: 'Requested mode',
+  effective_mode: 'Effective mode',
+  emergency_stop: 'Emergency Stop',
+  execution_eligibility: 'Execution eligibility',
+  inactive: 'Inactive',
+  active: 'Active',
+  no: 'No',
+  yes: 'Yes',
+  unavailable: 'Unavailable',
+  close: 'Close',
+  search: 'Search',
+  all: 'All',
+  connections: 'Connections',
+  decision_engine: 'Decision Engine',
+  open_decision_engine_settings: 'Open Decision Engine',
+  artemis_insights: 'Artemis Insights',
+  artemis_insights_no_fake_confidence: 'No hardcoded confidence. Legacy advisory only.',
   artemis_nav_overview: 'Overview',
   artemis_nav_evidence: 'Evidence',
   artemis_nav_decisions: 'Decisions',
@@ -87,38 +150,7 @@ const tMap: Record<string, string> = {
   artemis_nav_controls: 'Controls',
   artemis_nav_lineage: 'Lineage & Audit',
   artemis_nav_system: 'System & Integrations',
-  artemis_central_intelligence: 'Central Intelligence — legacy advisory maturity',
-  artemis_stage_legacy_advisory: 'LEGACY ADVISORY',
-  artemis_not_execution_eligible: 'NOT EXECUTION ELIGIBLE',
-  artemis_legacy_admin_nav: 'Legacy Admin',
-  artemis_autopilot_hidden: 'Autopilot is hidden from normal Artemis navigation',
-  artemis_readiness_title: 'Artemis Readiness',
-  artemis_overview_purpose: 'What can Artemis truthfully do right now?',
-  artemis_runtime_safety: 'Runtime Safety',
-  artemis_control_chain: 'Control Chain',
-  artemis_intelligence_inputs: 'Intelligence Inputs',
-  artemis_limitations: 'Current Limitations',
-  artemis_evidence_not_ready: 'Canonical evidence contract not implemented yet',
-  artemis_legacy_advisory: 'Legacy Advisory',
-  artemis_not_execution_approval: 'NOT EXECUTION APPROVAL',
-  artemis_legacy_orchestration: 'Legacy Orchestration',
-  artemis_canonical_orchestration_unavailable: 'Canonical orchestration unavailable',
-  artemis_controls_title: 'Controls',
-  artemis_lineage_title: 'Lineage & Audit',
-  artemis_system_title: 'System & Integrations',
-  requested_mode: 'Requested Mode',
-  effective_mode: 'Effective Mode',
-  emergency_stop: 'Emergency Stop',
-  execution_eligibility: 'Execution Eligibility',
-  inactive: 'Inactive',
-  no: 'No',
-  unavailable: 'Unavailable',
-  artemis_no_one_click_live: 'Artemis does not provide one-click Live automation.',
-  artemis_sections: 'Artemis sections',
-  artemis_insights: 'Artemis Insights',
-  artemis_insights_no_fake_confidence: 'No hardcoded confidence. Legacy advisory only.',
-  artemis_decision_legacy_advisory_only: 'legacy decision advisory only',
-  artemis_no_live_automation: 'no live automation',
+  ...productEn,
 };
 
 vi.mock('../../../../context/LanguageContext.tsx', () => ({
@@ -127,6 +159,10 @@ vi.mock('../../../../context/LanguageContext.tsx', () => ({
     language: currentLanguage,
     dir: currentLanguage === 'fa' ? 'rtl' : 'ltr',
   }),
+}));
+
+vi.mock('../../../../context/AppContext.tsx', () => ({
+  useAppContext: () => ({ user: { role: 'admin' } }),
 }));
 
 vi.mock('../../../../components/OfflineIndicator', () => ({
@@ -159,8 +195,10 @@ import AICenter, { readAiTabFromLocation } from '../../../../components/AICenter
 import ArtemisInsightsWidget from '../../../../components/widgets/ArtemisInsightsWidget.tsx';
 import { CANONICAL_SECTIONS } from '../../../../components/ai/AIManager/artemisProductTypes.ts';
 import { payloadToURLState, readStateFromURL, writeStateToURL } from '../../../../utils/urlSync.ts';
-import fs from 'node:fs';
-import path from 'node:path';
+
+function primaryText(): string {
+  return document.body.innerText || '';
+}
 
 describe('Artemis WP-A UI', () => {
   beforeEach(() => {
@@ -191,9 +229,7 @@ describe('Artemis WP-A UI', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Data Hub' }));
     expect(await screen.findByTestId('datahub-workspace')).toBeInTheDocument();
-    expect(screen.getByTestId('datahub-workspace').getAttribute('data-datahub-owner')).toBe(
-      'canonical',
-    );
+    expect(screen.getByTestId('datahub-workspace').getAttribute('data-datahub-owner')).toBe('canonical');
 
     fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
     expect(await screen.findByText('Agents Tab')).toBeInTheDocument();
@@ -202,7 +238,7 @@ describe('Artemis WP-A UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Analytics' }));
     expect(await screen.findByText('Analytics Tab')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Artemis' }));
-    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
   });
 
   it('legacy Artemis data_hub deep links open AI Center Data Hub', () => {
@@ -226,7 +262,7 @@ describe('Artemis WP-A UI', () => {
   it('Artemis System Open Data Hub navigates to AI Center Data Hub', async () => {
     const onNavigate = vi.fn();
     render(<AIManager onNavigate={onNavigate} />);
-    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: 'System & Integrations' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open Data Hub' }));
     expect(onNavigate).toHaveBeenCalledWith({ view: 'ai', aiTab: 'data_hub' });
@@ -245,52 +281,94 @@ describe('Artemis WP-A UI', () => {
     expect(aiManager).not.toMatch(/DataHubTab/);
     expect(aiManager).not.toMatch(/DataHubWorkspace/);
     expect(aiCenter).toMatch(/DataHubWorkspace/);
-    expect(aiCenter.match(/DataHubWorkspace/g)?.length).toBeGreaterThan(0);
   });
 
-  it('renders canonical Artemis sections without Autopilot in product nav', async () => {
+  it('renders canonical Artemis sections without Legacy Admin or Autopilot in product nav', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
-
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
     for (const section of CANONICAL_SECTIONS) {
       expect(screen.getByRole('button', { name: tMap[section.labelKey] })).toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: /^Autopilot$/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/one-click Live/i)).toBeInTheDocument();
-    expect(screen.getAllByText('Requested Mode').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Effective Mode').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('NOT EXECUTION ELIGIBLE').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /Legacy Admin/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Requested mode/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Effective mode/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Execution unavailable/i).length).toBeGreaterThan(0);
   });
 
-  it('does not show synthetic overview percentages', async () => {
-    render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
+  it('Overview shows runtime, blockers and owner links without fake metrics', async () => {
+    const onNavigate = vi.fn();
+    render(<AIManager onNavigate={onNavigate} />);
+    await waitFor(() => expect(screen.getByText(/What Artemis can do now/i)).toBeInTheDocument());
+    expect(screen.getAllByText(/Canonical Agent evidence is not connected yet/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/87%/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open Agents' })[0]);
+    expect(onNavigate).toHaveBeenCalledWith({ view: 'ai', aiTab: 'agents' });
   });
 
-  it('Evidence and Orchestration show truthful unavailable states', async () => {
+  it('Evidence renders 15 Agents by role without fake envelopes', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: 'Evidence' }));
-    expect(
-      await screen.findByText(/Canonical evidence contract not implemented yet/i),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Orchestration' }));
-    expect(await screen.findByText(/Canonical orchestration unavailable/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Canonical evidence integration has not been activated yet/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Technical Analysis/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Order Management/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Analytical intelligence/i).length).toBeGreaterThan(0);
+    expect(primaryText()).not.toMatch(/WP-B|WP-D/);
   });
 
-  it('Controls section shows Risk veto authority', async () => {
+  it('Decisions shows advisory empty state and execution wording', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Decisions' }));
+    expect((await screen.findAllByText(/No advisory records|No legacy/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Execution unavailable/i).length).toBeGreaterThan(0);
+  });
+
+  it('Orchestration shows truthful topology, not mock coordination', async () => {
+    render(<AIManager />);
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Orchestration' }));
+    expect(await screen.findByText(/coordination path is not active yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Legacy coordination is retained for compatibility/i)).toBeInTheDocument();
+    expect(primaryText()).not.toMatch(/agent-1|UUID mismatch/i);
+  });
+
+  it('Controls shows Risk veto, liquidity limitation and order boundary', async () => {
+    render(<AIManager />);
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: 'Controls' }));
-    expect(await screen.findByText('veto')).toBeInTheDocument();
-    expect(screen.getByText('feasibility')).toBeInTheDocument();
-    expect(screen.getByText('execution_only')).toBeInTheDocument();
+    expect(await screen.findByText(/Veto authority/i)).toBeInTheDocument();
+    expect(screen.getByText(/Execution feasibility validation is not available yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Executes an approved intent only/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^veto$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/execution_only/)).not.toBeInTheDocument();
+  });
+
+  it('Lineage keeps audit sources separated', async () => {
+    render(<AIManager />);
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Lineage & Audit' }));
+    expect((await screen.findAllByText(/Artemis advisory logs/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Agent analytical runs/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Canonical decision lineage has not been activated yet/i)).toBeInTheDocument();
+  });
+
+  it('System shows dependency statuses and canonical links', async () => {
+    const onNavigate = vi.fn();
+    render(<AIManager onNavigate={onNavigate} />);
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'System & Integrations' }));
+    expect(await screen.findByText(/LLM \/ AI providers/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Data Hub' }));
+    expect(onNavigate).toHaveBeenCalledWith({ view: 'ai', aiTab: 'data_hub' });
+    expect(screen.getByText(/Administrative \/ legacy tools/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Enable Autopilot/i)).not.toBeInTheDocument();
   });
 
   it('writes artemisSection deep link', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: 'Decisions' }));
     await waitFor(() => {
       expect(window.location.search).toContain('artemisSection=decisions');
@@ -299,7 +377,7 @@ describe('Artemis WP-A UI', () => {
 
   it('Insights widget has no hardcoded confidence 87', async () => {
     render(<ArtemisInsightsWidget />);
-    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Legacy advisory/i).length).toBeGreaterThan(0));
     expect(screen.queryByText(/87%/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/No hardcoded confidence/i).length).toBeGreaterThan(0);
   });
@@ -319,12 +397,20 @@ describe('Artemis WP-A UI', () => {
     expect(screen.getByRole('button', { name: 'Data Hub' })).toBeInTheDocument();
   });
 
-  it('legacy admin gate does not auto-open Autopilot', async () => {
+  it('primary Artemis copy has no raw enums or translation keys', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: 'Legacy Admin' }));
-    expect(
-      await screen.findByText(/Autopilot is hidden from normal Artemis navigation/i),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/What Artemis can do now/i)).toBeInTheDocument());
+    const text = primaryText();
+    for (const token of RAW_ENUM_SCAN) {
+      expect(text).not.toContain(token);
+    }
+    expect(text).not.toMatch(/artemis_[a-z_]+/);
+  });
+
+  it('responsive shell keeps section nav usable', async () => {
+    const { container } = render(<AIManager />);
+    await waitFor(() => expect(container.querySelector('[data-artemis-shell]')).toBeTruthy());
+    expect(container.querySelector('nav')?.className).toMatch(/overflow-x-auto/);
+    expect(container.querySelector('[data-artemis-page="overview"]')).toBeTruthy();
   });
 });
