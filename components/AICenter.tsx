@@ -1,15 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import { OnNavigateHandler } from '../types/navigation.ts';
 import AIManager from './ai/AIManager/index.tsx';
 import AIAgents from './ai/AIAgents.tsx';
-import DataHubWorkspace from './ai/DataHubWorkspace.tsx';
 import TrainingCenter from './ai/TrainingCenter.tsx';
 import AnalyticsDashboard from './ai/AnalyticsDashboard.tsx';
 import APIConfig from './ai/APIConfig.tsx';
 import TopicRouting from './ai/TopicRouting.tsx';
 import OfflineIndicator, { CachedDataBadge, useOnlineStatus } from './OfflineIndicator';
 import * as api from '../services/api.ts';
+
+const DataHubWorkspace = lazy(() => import('./ai/DataHubWorkspace.tsx'));
 
 export type AITab =
   | 'manager'
@@ -149,7 +150,11 @@ const AICenter: React.FC<Props> = ({
           />
         );
       case 'data_hub':
-        return <DataHubWorkspace />;
+        return (
+          <Suspense fallback={<div className="text-center p-10">{t('loading')}</div>}>
+            <DataHubWorkspace />
+          </Suspense>
+        );
       case 'training':
         return <TrainingCenter />;
       case 'analytics':
