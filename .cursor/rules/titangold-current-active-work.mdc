@@ -18,7 +18,9 @@ Risk tier:
 Tier 2–3 (API contract containment + frontend product redesign; no Tier-4 Live)
 
 Engineering status:
-**DATA HUB NAVIGATION REGRESSION CORRECTED — READY FOR OWNER HUMAN QA**
+**DATA HUB NAVIGATION REGRESSION CORRECTED**  
+**LEGACY AI MANAGER SALVAGE AUDIT — PASS**  
+**READY FOR OWNER HUMAN QA**
 
 Branch / worktree:
 - `feat/artemis-wp-a-legacy-safety-ui`
@@ -33,6 +35,7 @@ Authorized in WP-A:
 - Read-only readiness aggregation
 - Restore Data Hub as first-class AI Center tab (no Data Hub rewrite)
 - Focused tests + Staging deploy (backend-only if needed; workers unchanged)
+- Read-only salvage audit of former AIManager tabs (no blind restoration)
 
 Not authorized / unchanged:
 - DB migrations

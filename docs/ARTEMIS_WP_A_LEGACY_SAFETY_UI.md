@@ -176,3 +176,91 @@ Not CLOSED.
 **READY FOR OWNER HUMAN QA**
 
 Not CLOSED.
+
+## 15. Legacy AI Manager salvage audit (read-only)
+
+Audit date: 2026-08-08  
+Branch HEAD at audit: `cd1cb55972f36da62cc6d47fa1544e3664c58fde` (docs may advance after this section)  
+Scope: former AIManager tabs only. No tab restoration. No backend/deploy.
+
+Approved AI Center nav (unchanged):
+
+1. Artemis  
+2. Agents  
+3. Data Hub  
+4. Training  
+5. Analytics  
+6. Integrations  
+7. Topic Routing  
+
+### 15.1 Matrix
+
+| Former area | Value | Current owner | Reachable? | Disposition |
+|-------------|-------|---------------|------------|-------------|
+| Overview | High (truthful readiness, not old synthetic metrics) | Artemis → Overview | Yes | **A PRESERVED IN ARTEMIS** (redesigned `ArtemisSections.OverviewSection`). Legacy `OverviewTab.tsx` unimported. |
+| Decision Engine | High (config) | Settings → Configuration → Decision Engine | Yes | **B REHOMED**. Artemis System/Controls link only. Legacy `DecisionEngineTab.tsx` is a dead redirect, unimported. |
+| Orchestration | Low as mock UI; high as truthful unavailability | Artemis → Orchestration | Yes (truthful unavailable) | **D LEGACY / SUPERSEDED**. Do not restore `OrchestrationTab.tsx` (`GET /api/v1/artemis/orchestration` + mock-style task/resource UI). Unimported. |
+| Learning | Medium–high unique (decision mistakes/improvements) | None in current nav; intended Training | No UI | **C FUTURE REHOME** → AI Center → Training. Not an Artemis tab. See §15.2. |
+| Monitoring | Medium (runtime status vs config) | Artemis Overview/System (runtime) + Settings → Configuration → Monitoring (config) | Yes | **A + B**. Legacy `MonitoringTab.tsx` is a dead redirect, unimported. |
+| Trading Scenarios | Medium workflow; IndexedDB + synthetic backtest coupling | None in current nav; intended Analytics/Evaluation | No UI | **C FUTURE REHOME** → Analytics/Evaluation after truthfulness review. See §15.2. |
+| Data Hub | High completed product | AI Center → Data Hub | Yes | **B REHOMED**. Canonical `DataHubWorkspace` → `DataHubTab`. |
+| Backtesting | Low as current UI (client `Math.random` + IndexedDB); backend `backtest_runs` also simulated | None in nav; intended Analytics | No UI | **D LEGACY / SUPERSEDED** for current UI; **C FUTURE REHOME** only after a truthful engine. See §15.2. Do not restore into Artemis. |
+| System Logs | Medium audit browser (filters/pagination) | Artemis → Lineage & Audit (legacy decision logs subset) | Partial | **A** for Artemis-specific logs already in Lineage. **C FUTURE REHOME** of full log browser into Lineage (not a new Artemis tab). `SystemLogsTab.tsx` unimported. |
+| Settings | High where canonical | Settings (Configuration / Connections / runtime) | Yes | **B REHOMED**. Legacy `SettingsTab.tsx` unimported (mostly redirects + unreachable Scheduler subpanel). |
+| Autopilot | Low at current maturity; admin-only | Artemis → Legacy Admin gate | Yes (gated) | **A PRESERVED** as Legacy Administrative / Not Automated-Trading Ready / Not Live. |
+
+`SchedulerSettings.tsx` is only mounted from dead `SettingsTab` / `ArtemisComponents.tsx`. Arbitrage Integrations already shows scheduler status for the allowlisted agent. Do **not** restore 24/7 scheduler toggles into Artemis. Future owner: Settings/runtime (separate WP; WP-A forbids scheduler mutation).
+
+`ArtemisComponents.tsx`: filename-only, not production-imported. Do not revive.
+
+### 15.2 Learning / Backtesting / Scenarios detail
+
+#### Learning
+
+| Item | Finding |
+|------|---------|
+| Frontend | `components/ai/AIManager/tabs/LearningTab.tsx` (unimported) |
+| Backend/API | `GET /api/v1/artemis/learning`; `PATCH /api/artemis/learning/mistake/:id/mark-learned` |
+| Persistence | PostgreSQL `ai_learning_events` |
+| Production reachability | **No** (no AIManager/Training import) |
+| Unique useful functionality | Yes: decision-derived improvements/mistakes, mark-learned. Native `alert` still present. |
+| Equivalent in Training? | **No.** TrainingCenter owns sessions/agents/recommendations/history/config via `/api/v1/training/*`. |
+| Recommended owner | AI Center → Training (or Evaluation), not Artemis |
+| Future WP justified? | Yes — Training productization: absorb learning events without duplicating Artemis nav |
+
+#### Backtesting
+
+| Item | Finding |
+|------|---------|
+| Frontend | `components/ai/AIManager/tabs/BacktestingTab.tsx` (unimported) |
+| Backend/API | UI uses `services/api.ts` `runBacktest` / `fetchBacktestResults` (**IndexedDB** + **`Math.random` simulation**). Separate unused `backend/routes/backtest.js` (`backtest_runs`) also simulates. |
+| Persistence | IndexedDB `settings.backtest_results` (UI); unused PG `backtest_runs` |
+| Production reachability | **No** |
+| Unique useful functionality | Run/history UX idea only; **not truthful**. Must not be shown as real evaluation. |
+| Equivalent in Analytics? | **No.** AnalyticsDashboard is agent accuracy/trends/comparison via `/api/v1/analytics/overview`. Training only has a “require backtest” config checkbox. |
+| Recommended owner | Analytics/Evaluation **after** a truthful backtest engine exists |
+| Future WP justified? | Yes, but not a restore of this tab. Do not put synthetic backtest in Artemis. |
+
+#### Trading Scenarios
+
+| Item | Finding |
+|------|---------|
+| Frontend | `components/ai/AIManager/tabs/ScenariosTab.tsx` (unimported) |
+| Backend/API | UI uses IndexedDB `fetchTradingScenarios` / `generateAITradingScenario`. Unused `backend/routes/scenarios.js`. |
+| Persistence | IndexedDB `settings.trading_scenarios` (UI); unused PG `trading_scenarios` |
+| Production reachability | **No** |
+| Unique useful functionality | Scenario CRUD + AI generate + trigger backtest. Coupled to synthetic backtest. Native dialogs present. |
+| Equivalent in Analytics? | **No.** PricePrediction agent has a local “scenarios” view of a prediction, not this product. |
+| Recommended owner | Analytics / Simulation / Evaluation after SoT + truthfulness review |
+| Future WP justified? | Yes — rehome or retire after deciding IndexedDB vs PG owner. Not an Artemis tab. |
+
+### 15.3 Salvage verdict
+
+No completed product remains orphaned from **canonical navigation** after Data Hub rehome.
+
+No **required Artemis tab** is missing: Overview, Orchestration (truthful), Controls, Lineage, System, Legacy Admin Autopilot are present; Decision Engine/Monitoring/Settings are linked to Settings; Data Hub is first-class in AI Center.
+
+Learning / Scenarios / truthful Backtesting are **future rehomes outside Artemis**, not reasons to restore legacy Manager clutter.
+
+**LEGACY AI MANAGER SALVAGE AUDIT — PASS**  
+**NO REQUIRED ARTEMIS TABS MISSING**
