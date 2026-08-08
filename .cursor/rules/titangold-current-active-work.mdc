@@ -20,7 +20,8 @@ Tier 2 (frontend presentation + read-only readiness enrichment; no Tier-4 Live)
 Engineering status:
 **DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
 **ARTEMIS = NOT YET HUMAN-QA APPROVED**  
-**NOVICE-FIRST REDESIGN IN PROGRESS**  
+**NOVICE-FIRST REDESIGN IMPLEMENTED**  
+**READY FOR OWNER HUMAN QA ROUND 3**  
 Not CLOSED. Do not create a closeout PR.
 
 Branch / worktree:
