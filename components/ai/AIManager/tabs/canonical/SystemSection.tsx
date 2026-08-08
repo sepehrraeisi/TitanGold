@@ -2,7 +2,15 @@ import React, { useState } from 'react';
 import type { ArtemisSectionProps } from '../../artemisProductTypes.ts';
 import { noviceStatus, productLabel } from '../../artemisProductCopy.ts';
 import { isSimpleView } from '../../artemisPresentation.ts';
-import { StatusPill, TechnicalDetails, TextAction } from '../../components/ArtemisUi.tsx';
+import {
+  AlertBanner,
+  SectionHeader,
+  StatusPill,
+  TechnicalDetails,
+  TextAction,
+  toneToMetric,
+} from '../../components/ArtemisUi.tsx';
+import { METRIC_GRADIENT } from '../../artemisDesignTokens.ts';
 import { useAppContext } from '../../../../../context/AppContext.tsx';
 import { isAdminRole } from '../../../../../utils/auth.ts';
 
@@ -132,21 +140,23 @@ export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onN
 
   return (
     <div className="space-y-4" data-artemis-page="system">
-      <header>
-        <h2 className="text-lg font-bold">{productLabel(t, 'artemis_system_title_simple', 'System Health')}</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {productLabel(t, 'artemis_system_purpose_simple', 'Are the systems Artemis depends on healthy, and where do you manage them?')}
-        </p>
-      </header>
+      <SectionHeader
+        title={productLabel(t, 'artemis_system_title_simple', 'System Health')}
+        subtitle={productLabel(t, 'artemis_system_purpose_simple', 'Are the systems Artemis depends on healthy, and where do you manage them?')}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {cards.map((card) => (
-          <article key={card.id} className="bg-card border border-border rounded-2xl p-4 space-y-2" data-artemis-dependency={card.id}>
+          <article
+            key={card.id}
+            className={`rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[toneToMetric(card.tone)]} to-transparent p-3 backdrop-blur-sm space-y-2`}
+            data-artemis-dependency={card.id}
+          >
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold">{card.title}</h3>
+              <h3 className="text-sm font-semibold text-foreground">{card.title}</h3>
               <StatusPill label={String(card.status)} tone={card.tone as never} />
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               <span className="font-medium text-foreground">{productLabel(t, 'artemis_why_it_matters', 'Why it matters')}: </span>
               {card.why}
             </p>
@@ -161,25 +171,28 @@ export const SystemSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onN
       </div>
 
       {isAdmin ? (
-        <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2" data-artemis-legacy-tools="true">
-          <h3 className="text-sm font-semibold">{productLabel(t, 'artemis_legacy_tools', 'Administrative tools')}</h3>
-          <p className="text-sm text-muted-foreground">
-            {productLabel(t, 'artemis_legacy_tools_note_simple', 'Not automated-trading ready. Not Live authorization.')}
-          </p>
-          {!showLegacy ? (
-            <TextAction onClick={() => setShowLegacy(true)}>
-              {productLabel(t, 'artemis_show_legacy_status', 'Show Autopilot status (read-only)')}
-            </TextAction>
-          ) : (
-            <p className="text-sm">
-              {productLabel(
-                t,
-                'artemis_legacy_autopilot_hidden_ops',
-                'Enable Autopilot and Run Once remain server-capable but are not exposed in the product at this maturity.',
-              )}
+        <div data-artemis-legacy-tools="true">
+          <AlertBanner variant="warning" title={productLabel(t, 'artemis_legacy_tools', 'Administrative tools')}>
+            <p>
+              {productLabel(t, 'artemis_legacy_tools_note_simple', 'Not automated-trading ready. Not Live authorization.')}
             </p>
-          )}
-        </section>
+            {!showLegacy ? (
+              <div className="mt-2">
+                <TextAction onClick={() => setShowLegacy(true)}>
+                  {productLabel(t, 'artemis_show_legacy_status', 'Show Autopilot status (read-only)')}
+                </TextAction>
+              </div>
+            ) : (
+              <p className="mt-2">
+                {productLabel(
+                  t,
+                  'artemis_legacy_autopilot_hidden_ops',
+                  'Enable Autopilot and Run Once remain server-capable but are not exposed in the product at this maturity.',
+                )}
+              </p>
+            )}
+          </AlertBanner>
+        </div>
       ) : null}
     </div>
   );

@@ -531,4 +531,83 @@ describe('Artemis WP-A UI', () => {
     expect(container.querySelector('nav')?.className).toMatch(/overflow-x-auto/);
     expect(container.querySelector('[data-artemis-page="overview"]')).toBeTruthy();
   });
+
+  it('Artemis primitives follow DataHub design tokens', async () => {
+    const { container } = render(<AIManager />);
+    await waitForHome();
+    const header = container.querySelector('[data-artemis-header]');
+    expect(header?.className).toMatch(/bg-gradient-to-br/);
+    expect(header?.className).toMatch(/from-slate-950/);
+    expect(header?.className).toMatch(/border-white\/5/);
+    expect(container.querySelector('[data-artemis-nav]')?.className).toMatch(/overflow-x-auto/);
+    const selected = container.querySelector('[aria-current="page"]');
+    expect(selected?.className).toMatch(/purple/);
+    expect(selected?.className).not.toMatch(/bg-blue-600(?!\/)/);
+    const pill = container.querySelector('[data-artemis-pill]');
+    expect(pill?.className).toMatch(/rounded-full/);
+    expect(pill?.className).toMatch(/text-\[10px\]/);
+    const metric = container.querySelector('[data-artemis-metric]');
+    expect(metric?.className).toMatch(/border-white\/5/);
+    expect(metric?.className).toMatch(/bg-gradient-to-br/);
+    const explainer = container.querySelector('[data-artemis-explainer]');
+    expect(explainer?.className).toMatch(/from-purple-500\/10/);
+    expect(explainer?.className).not.toMatch(/border-blue-500/);
+    const primary = container.querySelector('[data-artemis-primary-action]');
+    expect(primary?.className).toMatch(/rounded-full/);
+    expect(primary?.className).toMatch(/bg-purple-600/);
+    fireEvent.click(screen.getByRole('button', { name: 'History & Audit' }));
+    const filter = container.querySelector('select');
+    expect(filter?.className).toMatch(/bg-slate-900/);
+    expect(filter?.className).toMatch(/border-slate-700/);
+    fireEvent.click(screen.getByRole('button', { name: 'Home' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    const tech = container.querySelector('[data-artemis-technical]');
+    expect(tech).toBeTruthy();
+    expect((tech as HTMLDetailsElement | null)?.open).toBe(false);
+  });
+
+  it('recommendation drawer uses canonical overlay and panel', async () => {
+    vi.mocked(fetchArtemisReadiness).mockResolvedValue({
+      ...readinessFixture,
+      advisory: {
+        truth: 'PERSISTED',
+        count: 1,
+        latestAt: '2026-08-08T07:31:00.000Z',
+        recent: [{ id: 9, created_at: '2026-08-08T07:31:00.000Z', message: 'Hold BTCUSDT', metadata: { opportunity: { symbol: 'BTCUSDT' }, decision: { action: 'HOLD' } } }],
+        limit: 50,
+        loadedCount: 1,
+        detailsAvailable: true,
+      },
+    } as never);
+    vi.mocked(fetchArtemisAuditBundle).mockResolvedValue({
+      systemLogs: [{ id: 9, created_at: '2026-08-08T07:31:00.000Z', message: 'Hold BTCUSDT', metadata: { opportunity: { symbol: 'BTCUSDT' }, decision: { action: 'HOLD' } } }],
+      decisions: [],
+      loadFailed: false,
+    } as never);
+    const { container } = render(<AIManager />);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Recommendations' }));
+    fireEvent.click(await screen.findByRole('button', { name: /BTCUSDT/i }));
+    const drawer = container.querySelector('[data-artemis-drawer]');
+    expect(drawer).toBeTruthy();
+    expect(drawer?.innerHTML).toMatch(/bg-black\/60/);
+    expect(drawer?.innerHTML).toMatch(/backdrop-blur-sm/);
+    expect(drawer?.innerHTML).toMatch(/from-slate-950\/95/);
+    expect(drawer?.innerHTML).toMatch(/border-white\/10/);
+    expect(drawer?.innerHTML).toMatch(/rounded-xl/);
+    expect(drawer?.innerHTML).toMatch(/shadow-2xl/);
+  });
+
+  it('Artemis UI does not import Data Hub business components', () => {
+    const root = path.resolve(__dirname, '../../../..');
+    const ui = fs.readFileSync(path.join(root, 'components/ai/AIManager/components/ArtemisUi.tsx'), 'utf8');
+    const tokens = fs.readFileSync(path.join(root, 'components/ai/AIManager/artemisDesignTokens.ts'), 'utf8');
+    const manager = fs.readFileSync(path.join(root, 'components/ai/AIManager/index.tsx'), 'utf8');
+    expect(ui).not.toMatch(/tabs\/DataHub/);
+    expect(tokens).not.toMatch(/tabs\/DataHub/);
+    expect(manager).not.toMatch(/tabs\/DataHub/);
+    expect(tokens).toMatch(/from-slate-950\/90/);
+    expect(tokens).toMatch(/border-white\/5/);
+    expect(tokens).toMatch(/bg-purple-600/);
+  });
 });

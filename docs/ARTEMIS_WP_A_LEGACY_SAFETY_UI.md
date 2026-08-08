@@ -1,6 +1,6 @@
 # ARTEMIS WP-A — Legacy Safety Containment + Specialized UI/UX Redesign
 
-**Status:** NOVICE-FIRST REDESIGN IMPLEMENTED — READY FOR OWNER HUMAN QA ROUND 3 (not CLOSED)  
+**Status:** DATAHUB DESIGN SYSTEM COMPLIANT — READY FOR OWNER HUMAN QA ROUND 4 (not CLOSED)  
 **Classification:** Shared Foundation implementation  
 **Foundation baseline (closed):** `01e461634c6910bad795a2c3c3b506ecf2c343df`  
 **Branch:** `feat/artemis-wp-a-legacy-safety-ui`  
@@ -576,5 +576,73 @@ First-visit explainer: dismissible “New to Artemis?” (3 steps + Got it). Pre
 
 **ARTEMIS WP-A — NOVICE-FIRST REDESIGN IMPLEMENTED**  
 **READY FOR OWNER HUMAN QA ROUND 3**
+
+Not CLOSED.
+
+## 23. DESIGN SYSTEM COMPLIANCE (Owner Round 3 visual pass)
+
+Authoritative standard: `DESIGN_SYSTEM_DATAHUB.md`.  
+Authoritative reference UI: `TelegramPanel.tsx` + `dataHubUi.tsx` only. Other Data Hub tabs were not used as visual benchmarks.
+
+Artemis does **not** import Data Hub business components. Visual rules were copied into:
+
+- `components/ai/AIManager/artemisDesignTokens.ts`
+- `components/ai/AIManager/components/ArtemisUi.tsx`
+
+### 23.1 Compliance inventory (pre-pass → remediation)
+
+| Design rule | Artemis before | Gap | Remediation |
+|-------------|----------------|-----|-------------|
+| Primary slate/glass gradient | flat `bg-card` | not DS family | `ARTEMIS_SHELL` / header gradient |
+| Purple nav accent | oversized `bg-blue-600` rect tabs | confused with info blue | `ARTEMIS_TAB_*` rounded-full purple selected |
+| Compact typography | `text-2xl/3xl` hero, `text-sm` body | oversized | titles `text-sm md:text-base`; body `text-xs`; secondary `text-[11px]`; badges `text-[10px]` |
+| Semantic metric cards | flat `bg-secondary/20` | no semantic gradient | `MetricCard` emerald/amber/red/blue/purple |
+| Status pills | `rounded-md text-xs` | not DS pill grammar | one `StatusPill` owner: `rounded-full text-[10px]` success/error/warning/info/neutral/primary |
+| Primary actions | rectangular blue | not purple pill | `ARTEMIS_BTN_PRIMARY` purple `rounded-full text-xs` |
+| Filters | `bg-background border-border text-sm` | browser-default feel | `ARTEMIS_INPUT`/`SELECT` slate-950/900 + slate-700 |
+| Modal/drawer | `bg-black/40` + `bg-card` | not DS overlay/panel | overlay `bg-black/60 backdrop-blur-sm`; panel slate gradient `border-white/10 rounded-xl shadow-2xl` |
+| Explainer | heavy full-width blue box | visually dominates | subtle purple/slate glass; Got it purple pill; Learn more sky text |
+| Simple/Advanced | blue rectangular toggle | looked like trading mode | compact purple segmented control |
+| Tables | generic `text-sm` + `border-border` | not DS table | overflow-x-auto, thead `text-[11px]` muted, row `border-slate-900/60` |
+| Technical details | `bg-secondary/20` often visible | too primary | collapsed `ARTEMIS_TECH` mono `text-[10px]` |
+| Coordination wall | tall identical cards | height noise | group containers + 1/2/3-col compact rows |
+| Safety cards | giant identical cards | weak hierarchy | vertical stepper + semantic accents |
+
+### 23.2 Per-screen compliance
+
+| Screen | DataHub pattern used | Deviation | Reason | Responsive | Visual QA |
+|--------|----------------------|-----------|--------|------------|-----------|
+| Shell / header | `DATAHUB_SHELL` gradient + glass | AI Center outer chrome unchanged | Shared chrome includes frozen Data Hub; Artemis-only shell is the compliance surface | header wrap; nav `overflow-x-auto` | Cursor visual-structure PASS; Owner Round 4 pending |
+| Nav | `DataHubTabStrip` purple pills | 7 product sections vs Data Hub collector tabs | Artemis IA approved; same pill grammar | horizontal scroll, no clip | pending Owner |
+| Explainer | info glass + purple primary + sky text | 3-step novice copy | product identity, not Collector onboarding | stacks on mobile | pending Owner |
+| Simple/Advanced | segmented control purple selected | labels Simple/Advanced not Collector modes | presentation preference only | wrap | pending Owner |
+| Home | hero glass + metric 2/4 grid + flow nodes + mini metrics + amber/red alerts | hero title `text-base md:text-lg` (not `text-sm`) | primary product state needs one step above section titles; still far below old 2xl/3xl | metric `grid-cols-2 md:grid-cols-4`; flow column→row | pending Owner |
+| AI Inputs | semantic group metric cards + DS table + mobile cards | group accents are role-semantic not live health % | no fake percentages; color = role/state | 1/2/3 card grid; table `md+`, cards mobile | pending Owner |
+| Recommendations | slate intelligence cards + compact Advisory pill + DS drawer | page-level amber limited to one alert, not full-page border | avoid amber wash | 1/2 card grid | pending Owner |
+| Coordination | inner slate + semantic pills + expandable groups + compact agent rows | flow uses `+` / `→` not Collector pipeline chrome | Artemis coordination story | agent grid 1/2/3 | pending Owner |
+| Safety & Approval | error alert + semantic stepper | Emergency Stop remains visible even when runtime emerald | safety-block must not be softened | stepper full width, 2-col owner/can-block | pending Owner |
+| History & Audit | metric cards + compact `ARTEMIS_ROW` timeline + DS drawer | source pills Artemis/Agents/Safety | semantic accent per source | metrics 2/3; rows full width | pending Owner |
+| System Health | operational status cards + collapsed mono diagnostics | 2-col tablet, 3-col wide | readability over forcing 4-col | 1/2/3 | pending Owner |
+| Drawer | canonical modal overlay/panel | close = slate secondary (`ARTEMIS_BTN_MODAL_CLOSE`) | matches DataHub modal close, not purple primary | near-full mobile + internal scroll | pending Owner |
+
+### 23.3 Justified deviations remaining
+
+1. **AI Center outer card** not restyled — would change chrome around frozen Data Hub.
+2. **Hero title one step larger** than section titles — primary “analyzing only” statement.
+3. **Artemis purple identity** slightly stronger than Collector on Home hero — central-intelligence product, still same token family.
+4. **No pixel-perfect screenshot CI** — infrastructure does not support it; visual-structure class-token tests added instead.
+
+### 23.4 Tests / build / staging (Round 3 visual)
+
+| Item | Value |
+|------|-------|
+| Frontend tests | `ArtemisWpA.test.tsx` including visual-structure + drawer + no Data Hub import |
+| Data Hub source | unchanged (Owner PASS / frozen) |
+| Draft PR | Not created (WP-A remains open) |
+
+### 23.5 Verdict
+
+**ARTEMIS WP-A — DATAHUB DESIGN SYSTEM COMPLIANT**  
+**READY FOR OWNER HUMAN QA ROUND 4**
 
 Not CLOSED.

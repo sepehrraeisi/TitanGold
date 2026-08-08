@@ -4,13 +4,17 @@ import { productLabel } from '../../artemisProductCopy.ts';
 import { isSimpleView } from '../../artemisPresentation.ts';
 import { formatCount, resolveAdvisoryWindow, resolveAgentRunWindow } from '../../artemisActivityModel.ts';
 import {
+  ARTEMIS_FOCUS,
+  ARTEMIS_ROW,
   DetailDrawer,
   EmptyState,
   Field,
   FilterBar,
   LinkAction,
+  MetricCard,
   NativeInput,
   NativeSelect,
+  SectionHeader,
   StatusPill,
   TechnicalDetails,
 } from '../../components/ArtemisUi.tsx';
@@ -86,42 +90,42 @@ export const LineageSection: React.FC<ArtemisSectionProps> = ({ t, readiness, au
 
   return (
     <div className="space-y-4" data-artemis-page="lineage">
-      <header>
-        <h2 className="text-lg font-bold">{productLabel(t, 'artemis_history_title', 'History & Audit')}</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {productLabel(t, 'artemis_history_purpose', 'Recent Artemis recommendations, Agent activity, and safety events.')}
-        </p>
-      </header>
+      <SectionHeader
+        title={productLabel(t, 'artemis_history_title', 'History & Audit')}
+        subtitle={productLabel(t, 'artemis_history_purpose', 'Recent Artemis recommendations, Agent activity, and safety events.')}
+      />
 
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-2">
-        <article className="bg-card border border-border rounded-2xl p-3">
-          <h3 className="text-sm font-semibold">{productLabel(t, 'artemis_history_recs', 'Recent Artemis recommendations')}</h3>
-          <p className="text-2xl font-bold tabular-nums mt-1" data-artemis-history-advisory-count={String(advisory.count ?? '')}>
-            {formatCount(advisory.count)}
-          </p>
-          {advisory.showingPartialWindow || (advisory.count || 0) > 0 ? (
-            <p className="text-xs text-muted-foreground mt-1">
-              {productLabel(t, 'artemis_showing_latest', 'Showing latest {shown}')
-                .replace('{shown}', formatCount(Math.min(advisory.loadedCount || advisory.limit, advisory.limit)))}
-            </p>
-          ) : null}
-        </article>
-        <article className="bg-card border border-border rounded-2xl p-3">
-          <h3 className="text-sm font-semibold">{productLabel(t, 'artemis_history_agents', 'Recent Agent activity')}</h3>
-          <p className="text-2xl font-bold tabular-nums mt-1" data-artemis-history-run-count={String(runs.count ?? '')}>
-            {formatCount(runs.count)}
-          </p>
-          {(runs.count || 0) > 0 ? (
-            <p className="text-xs text-muted-foreground mt-1" data-artemis-history-run-window="true">
-              {productLabel(t, 'artemis_runs_recorded_showing', '{total} Agent runs recorded · Showing latest {shown}')
-                .replace('{total}', formatCount(runs.count))
-                .replace('{shown}', formatCount(runs.loadedCount || Math.min(runs.limit, runs.count || 0)))}
-            </p>
-          ) : null}
-        </article>
-        <article className="bg-card border border-border rounded-2xl p-3">
-          <h3 className="text-sm font-semibold">{productLabel(t, 'artemis_history_safety', 'Safety / system events')}</h3>
-          <p className="mt-2">
+      <section className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <MetricCard
+          label={productLabel(t, 'artemis_history_recs', 'Recent Artemis recommendations')}
+          value={<span data-artemis-history-advisory-count={String(advisory.count ?? '')}>{formatCount(advisory.count)}</span>}
+          color="purple"
+          hint={
+            advisory.showingPartialWindow || (advisory.count || 0) > 0
+              ? productLabel(t, 'artemis_showing_latest', 'Showing latest {shown}').replace(
+                  '{shown}',
+                  formatCount(Math.min(advisory.loadedCount || advisory.limit, advisory.limit)),
+                )
+              : undefined
+          }
+        />
+        <MetricCard
+          label={productLabel(t, 'artemis_history_agents', 'Recent Agent activity')}
+          value={<span data-artemis-history-run-count={String(runs.count ?? '')}>{formatCount(runs.count)}</span>}
+          color="blue"
+          hint={
+            (runs.count || 0) > 0 ? (
+              <span data-artemis-history-run-window="true">
+                {productLabel(t, 'artemis_runs_recorded_showing', '{total} Agent runs recorded · Showing latest {shown}')
+                  .replace('{total}', formatCount(runs.count))
+                  .replace('{shown}', formatCount(runs.loadedCount || Math.min(runs.limit, runs.count || 0)))}
+              </span>
+            ) : undefined
+          }
+        />
+        <MetricCard
+          label={productLabel(t, 'artemis_history_safety', 'Safety / system events')}
+          value={
             <StatusPill
               label={
                 readiness?.runtime?.killSwitchActive
@@ -130,8 +134,9 @@ export const LineageSection: React.FC<ArtemisSectionProps> = ({ t, readiness, au
               }
               tone={readiness?.runtime?.killSwitchActive ? 'danger' : 'ok'}
             />
-          </p>
-        </article>
+          }
+          color={readiness?.runtime?.killSwitchActive ? 'red' : 'emerald'}
+        />
       </section>
 
       <FilterBar>
@@ -177,13 +182,22 @@ export const LineageSection: React.FC<ArtemisSectionProps> = ({ t, readiness, au
             <li key={row.id}>
               <button
                 type="button"
-                className="w-full text-start bg-card border border-border rounded-2xl p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className={`w-full text-start ${ARTEMIS_ROW} ${ARTEMIS_FOCUS}`}
                 onClick={() => setSelected(row)}
               >
-                <p className="text-xs text-muted-foreground">{row.time ? new Date(row.time).toLocaleString() : '—'}</p>
-                <p className="font-semibold mt-1">{row.agent}</p>
-                <p className="text-sm">{row.type}{row.context && row.context !== '—' ? ` · ${row.context}` : ''}</p>
-                <p className="text-xs text-muted-foreground mt-1">{row.status}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[11px] text-muted-foreground">{row.time ? new Date(row.time).toLocaleString() : '—'}</p>
+                  <StatusPill
+                    label={row.source === 'artemis' ? 'Artemis' : row.source === 'safety' ? productLabel(t, 'artemis_chip_safety', 'Safety') : productLabel(t, 'ai_agents', 'Agents')}
+                    tone={row.source === 'safety' ? 'danger' : row.source === 'artemis' ? 'primary' : 'info'}
+                  />
+                </div>
+                <p className="text-xs font-semibold mt-1">{row.agent}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {row.type}
+                  {row.context && row.context !== '—' ? ` · ${row.context}` : ''}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{row.status}</p>
               </button>
             </li>
           ))}
@@ -205,7 +219,7 @@ export const LineageSection: React.FC<ArtemisSectionProps> = ({ t, readiness, au
         closeLabel={productLabel(t, 'close', 'Close')}
       >
         {selected ? (
-          <div className="space-y-2 text-sm">
+          <div className="space-y-2 text-xs">
             <p>{selected.agent}</p>
             <p>{selected.type}</p>
             <p>{selected.context}</p>

@@ -16,7 +16,15 @@ import {
   writePresentationMode,
   type ArtemisPresentationMode,
 } from './artemisPresentation.ts';
-import { FirstVisitExplainer, HelpTip, PresentationToggle } from './components/ArtemisUi.tsx';
+import {
+  ARTEMIS_SHELL,
+  ARTEMIS_TAB_ACTIVE,
+  ARTEMIS_TAB_ITEM,
+  ARTEMIS_TAB_STRIP,
+  FirstVisitExplainer,
+  HelpTip,
+  PresentationToggle,
+} from './components/ArtemisUi.tsx';
 import {
   OverviewSection,
   EvidenceSection,
@@ -132,10 +140,10 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-4" dir={dir} data-artemis-shell="canonical-wpa" data-artemis-view={presentation}>
-      <header className="bg-card border border-border rounded-2xl p-4 md:p-5">
+      <header className={ARTEMIS_SHELL} data-artemis-header="true">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="max-w-3xl">
-            <h1 className="text-xl md:text-2xl font-bold text-foreground">
+            <h1 className="text-sm md:text-base font-semibold text-foreground">
               {t('artemis') !== 'artemis' ? t('artemis') : 'Artemis'}
               <HelpTip label={productLabel(t, 'artemis_help_artemis_label', 'What is Artemis?')}>
                 {productLabel(
@@ -145,14 +153,14 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
                 )}
               </HelpTip>
             </h1>
-            <p className="text-sm md:text-base text-foreground mt-2">
+            <p className="text-xs text-foreground mt-2">
               {productLabel(
                 t,
                 'artemis_product_sentence',
                 "Artemis combines insights from TitanGold's AI Agents, checks safety and risk, and turns them into understandable recommendations.",
               )}
             </p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[11px] text-muted-foreground mt-1">
               {productLabel(
                 t,
                 'artemis_now_sentence',
@@ -187,8 +195,12 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
         />
       ) : null}
 
-      <nav className="bg-card border border-border rounded-xl p-2 overflow-x-auto" aria-label={productLabel(t, 'artemis_sections', 'Artemis sections')}>
-        <div className="flex min-w-max gap-1">
+      <nav
+        className={ARTEMIS_TAB_STRIP}
+        aria-label={productLabel(t, 'artemis_sections', 'Artemis sections')}
+        data-artemis-nav="true"
+      >
+        <div className="flex min-w-max gap-1.5">
           {CANONICAL_SECTIONS.map((section) => {
             const selected = activeSection === section.id;
             const label = t(section.labelKey) !== section.labelKey ? t(section.labelKey) : section.fallback;
@@ -200,11 +212,7 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
                 data-artemis-section={section.id}
                 aria-current={selected ? 'page' : undefined}
                 onClick={() => setActiveSection(section.id)}
-                className={`px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                  selected
-                    ? 'bg-blue-600 text-white'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                }`}
+                className={`${ARTEMIS_TAB_ITEM} ${selected ? ARTEMIS_TAB_ACTIVE : ''}`}
               >
                 {label}
               </button>

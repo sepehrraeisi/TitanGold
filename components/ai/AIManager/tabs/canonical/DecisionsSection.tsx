@@ -4,14 +4,18 @@ import { noviceStatus, productLabel } from '../../artemisProductCopy.ts';
 import { isSimpleView } from '../../artemisPresentation.ts';
 import { formatCount, resolveAdvisoryWindow, resolveRecordWindow } from '../../artemisActivityModel.ts';
 import {
+  ARTEMIS_FOCUS,
+  AlertBanner,
   DetailDrawer,
   EmptyState,
   Field,
   FilterBar,
   HelpTip,
   LinkAction,
+  MetricCard,
   NativeInput,
   NativeSelect,
+  SectionHeader,
   StatusPill,
   TechnicalDetails,
 } from '../../components/ArtemisUi.tsx';
@@ -59,9 +63,10 @@ export const DecisionsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, 
 
   return (
     <div className="space-y-4" data-artemis-page="decisions">
-      <header>
-        <h2 className="text-lg font-bold">
-          {productLabel(t, 'artemis_recs_title', 'Recommendations')}
+      <SectionHeader
+        title={productLabel(t, 'artemis_recs_title', 'Recommendations')}
+        subtitle={productLabel(t, 'artemis_recs_purpose', 'Artemis recommendations are informational and cannot place trades.')}
+        actions={
           <HelpTip label={productLabel(t, 'artemis_help_recs_label', 'What is a recommendation?')}>
             {productLabel(
               t,
@@ -69,38 +74,38 @@ export const DecisionsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, 
               'A recommendation is informational advice. It cannot place a trade by itself.',
             )}
           </HelpTip>
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {productLabel(t, 'artemis_recs_purpose', 'Artemis recommendations are informational and cannot place trades.')}
-        </p>
-      </header>
+        }
+      />
 
-      <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3" data-artemis-advisory-banner="true">
-        <StatusPill label={productLabel(t, 'artemis_recs_banner', 'Current recommendations are advisory only.')} tone="warning" />
-      </section>
+      <div data-artemis-advisory-banner="true">
+        <AlertBanner variant="warning">
+          <StatusPill label={productLabel(t, 'artemis_recs_banner', 'Current recommendations are advisory only.')} tone="warning" />
+        </AlertBanner>
+      </div>
 
-      <section className="bg-card border border-border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-        <div>
-          <p className="text-xs text-muted-foreground">{productLabel(t, 'artemis_recs_status', 'Status')}</p>
-          <p className="font-semibold mt-1">{noviceStatus('LEGACY_ADVISORY', t)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{productLabel(t, 'artemis_latest_decision', 'Latest recommendation')}</p>
-          <p className="font-semibold mt-1 text-xs md:text-sm">{latest ? new Date(latest).toLocaleString() : '—'}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{productLabel(t, 'artemis_records_available', 'Records available')}</p>
-          <p className="font-semibold mt-1 tabular-nums" data-artemis-advisory-count={String(windowState.count ?? '')}>
-            {formatCount(windowState.count)}
-          </p>
-          {windowState.showingPartialWindow ? (
-            <p className="text-xs text-muted-foreground mt-1">
-              {productLabel(t, 'artemis_showing_recent_of', 'Showing the most recent {shown} of {total}')
-                .replace('{shown}', formatCount(windowState.loadedCount))
-                .replace('{total}', formatCount(windowState.count))}
-            </p>
-          ) : null}
-        </div>
+      <section className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <MetricCard
+          label={productLabel(t, 'artemis_recs_status', 'Status')}
+          value={noviceStatus('LEGACY_ADVISORY', t)}
+          color="amber"
+        />
+        <MetricCard
+          label={productLabel(t, 'artemis_latest_decision', 'Latest recommendation')}
+          value={latest ? new Date(latest).toLocaleString() : '—'}
+          color="purple"
+        />
+        <MetricCard
+          label={productLabel(t, 'artemis_records_available', 'Records available')}
+          value={<span data-artemis-advisory-count={String(windowState.count ?? '')}>{formatCount(windowState.count)}</span>}
+          color="blue"
+          hint={
+            windowState.showingPartialWindow
+              ? productLabel(t, 'artemis_showing_recent_of', 'Showing the most recent {shown} of {total}')
+                  .replace('{shown}', formatCount(windowState.loadedCount))
+                  .replace('{total}', formatCount(windowState.count))
+              : undefined
+          }
+        />
       </section>
 
       {windowState.detailsAvailable ? (
@@ -147,21 +152,21 @@ export const DecisionsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, 
             <li key={String(log.id || log.created_at)}>
               <button
                 type="button"
-                className="w-full text-start bg-card border border-border rounded-2xl p-4 space-y-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className={`w-full text-start rounded-xl border border-white/5 bg-gradient-to-br from-slate-950/90 via-slate-950/80 to-slate-900/80 p-3 backdrop-blur-sm space-y-1.5 ${ARTEMIS_FOCUS}`}
                 onClick={() => setSelected(log)}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-lg font-bold">{advisorySymbol(log)}</p>
+                  <p className="text-sm font-semibold font-mono">{advisorySymbol(log)}</p>
                   <StatusPill label={noviceStatus('LEGACY_ADVISORY', t)} tone="warning" />
                 </div>
-                <p className="text-sm">
+                <p className="text-xs">
                   {productLabel(t, 'artemis_recs_suggestion', 'Suggestion')}: {advisoryAction(log)}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   {productLabel(t, 'artemis_recs_generated', 'Generated')}:{' '}
                   {log.created_at ? new Date(log.created_at).toLocaleString() : '—'}
                 </p>
-                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                <p className="text-[11px] font-medium text-sky-300">
                   {productLabel(t, 'artemis_recs_why', 'Why? Open details')}
                 </p>
               </button>
@@ -177,7 +182,7 @@ export const DecisionsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, 
         closeLabel={productLabel(t, 'close', 'Close')}
       >
         {selected ? (
-          <div className="space-y-3 text-sm">
+          <div className="space-y-3 text-xs">
             <p>
               {advisorySymbol(selected)} · {advisoryAction(selected)}
             </p>

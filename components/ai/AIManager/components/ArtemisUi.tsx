@@ -1,41 +1,128 @@
 import React, { useEffect, useId, useRef } from 'react';
 import type { TruthClass } from '../artemisProductTypes.ts';
 import { truthLabel } from '../artemisProductTypes.ts';
+import {
+  ARTEMIS_BTN_MODAL_CLOSE,
+  ARTEMIS_BTN_OUTLINE,
+  ARTEMIS_BTN_PRIMARY,
+  ARTEMIS_BTN_TEXT,
+  ARTEMIS_FOCUS,
+  ARTEMIS_INNER,
+  ARTEMIS_INPUT,
+  ARTEMIS_ROW,
+  ARTEMIS_SELECT,
+  ARTEMIS_SHELL,
+  ARTEMIS_TAB_ACTIVE,
+  ARTEMIS_TAB_ITEM,
+  ARTEMIS_TAB_STRIP,
+  ARTEMIS_TABLE,
+  ARTEMIS_TABLE_WRAP,
+  ARTEMIS_TD,
+  ARTEMIS_TECH,
+  ARTEMIS_TH,
+  ARTEMIS_THEAD,
+  ARTEMIS_TR,
+  METRIC_GRADIENT,
+  METRIC_LABEL,
+  METRIC_VALUE,
+  PILL_CLASS,
+  toneToMetric,
+  toneToVariant,
+  type ArtemisMetricColor,
+  type ArtemisPillVariant,
+  type ArtemisTone,
+} from '../artemisDesignTokens.ts';
+
+export {
+  ARTEMIS_FOCUS,
+  ARTEMIS_SHELL,
+  ARTEMIS_INNER,
+  ARTEMIS_ROW,
+  ARTEMIS_TAB_STRIP,
+  ARTEMIS_TAB_ITEM,
+  ARTEMIS_TAB_ACTIVE,
+  ARTEMIS_TABLE_WRAP,
+  ARTEMIS_TABLE,
+  ARTEMIS_THEAD,
+  ARTEMIS_TH,
+  ARTEMIS_TR,
+  ARTEMIS_TD,
+  ARTEMIS_TECH,
+  toneToMetric,
+  toneToVariant,
+};
 
 export const StatusPill: React.FC<{
   label: string;
-  tone?: 'neutral' | 'warning' | 'danger' | 'info' | 'ok';
-}> = ({ label, tone = 'neutral' }) => {
-  const tones: Record<string, string> = {
-    neutral: 'bg-secondary text-foreground border-border',
-    warning: 'bg-amber-500/15 text-amber-800 dark:text-amber-200 border-amber-500/30',
-    danger: 'bg-red-500/15 text-red-800 dark:text-red-200 border-red-500/30',
-    info: 'bg-blue-500/15 text-blue-800 dark:text-blue-200 border-blue-500/30',
-    ok: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 border-emerald-500/30',
-  };
+  tone?: ArtemisTone | string;
+  variant?: ArtemisPillVariant;
+}> = ({ label, tone = 'neutral', variant }) => {
+  const resolved = variant || toneToVariant(tone);
   return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${tones[tone]}`}>
+    <span
+      data-artemis-pill={resolved}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${PILL_CLASS[resolved]}`}
+    >
       {label}
     </span>
   );
 };
 
-export const ArtemisCard: React.FC<{
+export const MetricCard: React.FC<{
+  label: string;
+  value: React.ReactNode;
+  color?: ArtemisMetricColor;
+  hint?: React.ReactNode;
+  badge?: React.ReactNode;
+}> = ({ label, value, color = 'purple', hint, badge }) => (
+  <div
+    data-artemis-metric={color}
+    className={`rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[color]} to-transparent p-3 backdrop-blur-sm`}
+  >
+    <div className="flex items-center justify-between gap-1 mb-1">
+      <p className={`text-[11px] ${METRIC_LABEL[color]}`}>{label}</p>
+      {badge}
+    </div>
+    <p className={`text-sm font-semibold ${METRIC_VALUE[color]}`}>{value}</p>
+    {hint ? <p className="text-[10px] text-muted-foreground/80 mt-1">{hint}</p> : null}
+  </div>
+);
+
+export const SectionHeader: React.FC<{
   title: string;
+  subtitle?: string;
+  actions?: React.ReactNode;
+  titleId?: string;
+}> = ({ title, subtitle, actions, titleId }) => (
+  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3 md:mb-4">
+    <div>
+      <h2 id={titleId} className="text-sm md:text-base font-semibold text-foreground">
+        {title}
+      </h2>
+      {subtitle ? <p className="text-[11px] text-muted-foreground mt-1 max-w-2xl">{subtitle}</p> : null}
+    </div>
+    {actions ? <div className="flex flex-wrap gap-2 shrink-0">{actions}</div> : null}
+  </div>
+);
+
+export const ArtemisCard: React.FC<{
+  title?: string;
   children: React.ReactNode;
   className?: string;
   truth?: TruthClass | string;
-  t: (key: string) => string;
-}> = ({ title, children, className = '', truth, t }) => (
-  <section className={`bg-card border border-border rounded-lg p-4 space-y-3 ${className}`} aria-label={title}>
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      {truth ? (
-        <span className="text-[10px] tracking-wide text-muted-foreground border border-border rounded px-2 py-0.5">
-          {truthLabel(truth, t)}
-        </span>
-      ) : null}
-    </div>
+  t?: (key: string) => string;
+  accent?: ArtemisMetricColor;
+}> = ({ title, children, className = '', truth, t, accent }) => (
+  <section
+    className={`${accent ? `rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[accent]} to-transparent p-3 md:p-4 backdrop-blur-sm` : ARTEMIS_INNER} ${className}`}
+    aria-label={title}
+  >
+    {title ? (
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        {truth && t ? <StatusPill label={truthLabel(truth, t)} variant="neutral" /> : null}
+      </div>
+    ) : null}
     {children}
   </section>
 );
@@ -45,10 +132,10 @@ export const EmptyState: React.FC<{ title: string; body: string; action?: React.
   body,
   action,
 }) => (
-  <div className="rounded-lg border border-dashed border-border px-4 py-3" role="status">
-    <p className="text-sm font-medium text-foreground">{title}</p>
-    <p className="text-sm text-muted-foreground mt-1">{body}</p>
-    {action ? <div className="mt-3">{action}</div> : null}
+  <div className="py-8 text-center bg-slate-900/60 border border-white/5 rounded-lg px-4" role="status">
+    <p className="text-xs font-medium text-foreground">{title}</p>
+    <p className="text-[11px] text-muted-foreground mt-1">{body}</p>
+    {action ? <div className="mt-3 flex justify-center">{action}</div> : null}
   </div>
 );
 
@@ -58,16 +145,40 @@ export const UnavailableBlock: React.FC<{
   t: (key: string) => string;
 }> = ({ title, reason }) => <EmptyState title={title} body={reason} />;
 
+export const AlertBanner: React.FC<{
+  variant: 'warning' | 'error' | 'info';
+  title?: string;
+  children: React.ReactNode;
+}> = ({ variant, title, children }) => {
+  const box =
+    variant === 'error'
+      ? 'border-red-500/30 bg-red-500/10 text-red-100'
+      : variant === 'info'
+        ? 'border-blue-500/30 bg-blue-500/10 text-blue-100'
+        : 'border-amber-500/30 bg-amber-500/10 text-amber-100';
+  return (
+    <div className={`p-2 rounded border text-[11px] ${box}`} data-artemis-alert={variant}>
+      {title ? <p className="font-semibold mb-0.5">{title}</p> : null}
+      <div>{children}</div>
+    </div>
+  );
+};
+
 export const LinkAction: React.FC<{
   children: React.ReactNode;
   onClick?: () => void;
   className?: string;
 }> = ({ children, onClick, className = '' }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={`inline-flex items-center rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${className}`}
-  >
+  <button type="button" onClick={onClick} data-artemis-primary-action="true" className={`${ARTEMIS_BTN_PRIMARY} ${className}`}>
+    {children}
+  </button>
+);
+
+export const OutlineAction: React.FC<{
+  children: React.ReactNode;
+  onClick?: () => void;
+}> = ({ children, onClick }) => (
+  <button type="button" onClick={onClick} className={ARTEMIS_BTN_OUTLINE}>
     {children}
   </button>
 );
@@ -76,11 +187,7 @@ export const TextAction: React.FC<{
   children: React.ReactNode;
   onClick?: () => void;
 }> = ({ children, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="text-sm font-medium text-blue-700 dark:text-blue-300 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-  >
+  <button type="button" onClick={onClick} className={ARTEMIS_BTN_TEXT}>
     {children}
   </button>
 );
@@ -89,20 +196,18 @@ export const TechnicalDetails: React.FC<{
   title: string;
   children: React.ReactNode;
 }> = ({ title, children }) => (
-  <details className="rounded-md border border-border/70 bg-secondary/20 px-3 py-2 text-xs">
-    <summary className="cursor-pointer font-medium text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded">
+  <details className={`${ARTEMIS_TECH} mt-3`} data-artemis-technical="true">
+    <summary className={`cursor-pointer font-medium text-muted-foreground ${ARTEMIS_FOCUS} rounded`}>
       {title}
     </summary>
-    <div className="mt-2 space-y-1 text-muted-foreground font-mono break-all" data-artemis-diagnostics="true">
+    <div className="mt-2 space-y-1 break-all" data-artemis-diagnostics="true">
       {children}
     </div>
   </details>
 );
 
-export const PipelineTrack: React.FC<{
-  children: React.ReactNode;
-}> = ({ children }) => (
-  <ol className="flex flex-col md:flex-row md:flex-wrap gap-2 md:gap-0" aria-label="Readiness pipeline">
+export const PipelineTrack: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <ol className="flex flex-col md:flex-row md:flex-wrap gap-2 md:items-stretch" aria-label="Readiness pipeline">
     {children}
   </ol>
 );
@@ -113,24 +218,22 @@ export const PipelineStep: React.FC<{
   status: string;
   owner: string;
   blocker?: string | null;
-  tone?: 'neutral' | 'warning' | 'danger' | 'info' | 'ok';
+  tone?: ArtemisTone;
   onOpen?: () => void;
   openLabel?: string;
   isLast?: boolean;
 }> = ({ index, label, status, owner, blocker, tone = 'neutral', onOpen, openLabel, isLast }) => (
-  <li className="flex md:flex-1 min-w-[140px] gap-2">
+  <li className="flex md:flex-1 min-w-[120px] gap-2">
     <div className="flex md:flex-col items-stretch gap-2 flex-1">
-      <div className="bg-card border border-border rounded-lg p-3 flex-1">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{index + 1}</p>
+      <div className={`flex-1 ${ARTEMIS_ROW}`}>
+        <p className="text-[10px] font-medium text-muted-foreground">{index + 1}</p>
         <h4 className="text-sm font-semibold mt-0.5">{label}</h4>
         <div className="mt-2">
           <StatusPill label={status} tone={tone} />
         </div>
-        <p className="text-xs text-muted-foreground mt-2">{owner}</p>
-        {blocker ? <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">{blocker}</p> : null}
-        {onOpen ? (
-          <TextAction onClick={onOpen}>{openLabel || 'Open'}</TextAction>
-        ) : null}
+        <p className="text-[11px] text-muted-foreground mt-2">{owner}</p>
+        {blocker ? <p className="text-[11px] text-amber-200 mt-1">{blocker}</p> : null}
+        {onOpen ? <div className="mt-2"><TextAction onClick={onOpen}>{openLabel || 'Open'}</TextAction></div> : null}
       </div>
       {!isLast ? (
         <div className="hidden md:flex items-center justify-center text-muted-foreground px-1" aria-hidden>
@@ -165,51 +268,46 @@ export const DetailDrawer: React.FC<{
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-labelledby={headingId}>
-      <button type="button" className="absolute inset-0 bg-black/40" aria-label={closeLabel} onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-t-xl sm:rounded-xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 m-0 sm:m-4">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 id={headingId} className="text-base font-semibold">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={headingId}
+      data-artemis-drawer="true"
+    >
+      <button type="button" className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-label={closeLabel} onClick={onClose} />
+      <div className="relative bg-gradient-to-br from-slate-950/95 via-slate-950/90 to-slate-900/95 border border-white/10 rounded-xl shadow-2xl w-full sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col m-0">
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <h3 id={headingId} className="text-sm font-semibold text-foreground">
             {title}
           </h3>
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-border px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-          >
+          <button ref={closeRef} type="button" onClick={onClose} className={ARTEMIS_BTN_MODAL_CLOSE}>
             {closeLabel}
           </button>
         </div>
-        {children}
+        <div className="p-4 overflow-y-auto flex-1 text-xs">{children}</div>
       </div>
     </div>
   );
 };
 
 export const FilterBar: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">{children}</div>
+  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 md:gap-3">{children}</div>
 );
 
 export const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <label className="flex flex-col gap-1 text-xs text-muted-foreground min-w-[140px] flex-1">
+  <label className="flex flex-col gap-1 text-[11px] text-muted-foreground min-w-[140px] flex-1">
     <span>{label}</span>
     {children}
   </label>
 );
 
 export const NativeInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => (
-  <input
-    {...props}
-    className={`rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${props.className || ''}`}
-  />
+  <input {...props} className={`${ARTEMIS_INPUT} ${props.className || ''}`} />
 );
 
 export const NativeSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (props) => (
-  <select
-    {...props}
-    className={`rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${props.className || ''}`}
-  />
+  <select {...props} className={`${ARTEMIS_SELECT} ${props.className || ''}`} />
 );
 
 export const HelpTip: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => {
@@ -232,7 +330,7 @@ export const HelpTip: React.FC<{ label: string; children: React.ReactNode }> = (
       <button
         ref={buttonRef}
         type="button"
-        className="ms-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-[11px] text-muted-foreground hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        className={`ms-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/10 text-[10px] text-muted-foreground hover:bg-slate-900/90 ${ARTEMIS_FOCUS}`}
         aria-label={label}
         aria-expanded={open}
         aria-controls={id}
@@ -244,7 +342,7 @@ export const HelpTip: React.FC<{ label: string; children: React.ReactNode }> = (
         <span
           id={id}
           role="tooltip"
-          className="absolute z-30 top-7 start-0 w-64 max-w-[80vw] rounded-md border border-border bg-card p-2 text-xs text-foreground shadow-lg"
+          className="absolute z-30 top-6 start-0 w-64 max-w-[80vw] rounded-lg border border-white/10 bg-slate-950/95 p-2 text-[11px] text-foreground shadow-2xl"
         >
           {children}
         </span>
@@ -260,31 +358,32 @@ export const PresentationToggle: React.FC<{
   advancedLabel: string;
 }> = ({ mode, onChange, simpleLabel, advancedLabel }) => (
   <div
-    className="inline-flex rounded-lg border border-border p-0.5"
+    className="inline-flex flex-wrap gap-1.5 p-1 border border-white/5 bg-slate-950/70 rounded-xl"
     role="group"
     aria-label="Artemis presentation"
     data-artemis-presentation={mode}
   >
-    <button
-      type="button"
-      aria-pressed={mode === 'simple'}
-      onClick={() => onChange('simple')}
-      className={`px-3 py-1.5 text-xs font-semibold rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-        mode === 'simple' ? 'bg-blue-600 text-white' : 'text-muted-foreground hover:bg-secondary'
-      }`}
-    >
-      {simpleLabel}
-    </button>
-    <button
-      type="button"
-      aria-pressed={mode === 'advanced'}
-      onClick={() => onChange('advanced')}
-      className={`px-3 py-1.5 text-xs font-semibold rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-        mode === 'advanced' ? 'bg-blue-600 text-white' : 'text-muted-foreground hover:bg-secondary'
-      }`}
-    >
-      {advancedLabel}
-    </button>
+    {([
+      ['simple', simpleLabel],
+      ['advanced', advancedLabel],
+    ] as const).map(([value, label]) => {
+      const active = mode === value;
+      return (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={active}
+          onClick={() => onChange(value)}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-medium border whitespace-nowrap ${ARTEMIS_FOCUS} ${
+            active
+              ? 'bg-purple-600/20 border-purple-500/60 text-purple-300'
+              : 'border-white/5 bg-slate-900/60 text-muted-foreground hover:bg-slate-900/90 hover:text-foreground'
+          }`}
+        >
+          {label}
+        </button>
+      );
+    })}
   </div>
 );
 
@@ -297,21 +396,31 @@ export const FirstVisitExplainer: React.FC<{
   onLearnMore?: () => void;
 }> = ({ title, steps, gotItLabel, learnMoreLabel, onGotIt, onLearnMore }) => (
   <section
-    className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4"
+    className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-slate-950/80 to-slate-900/80 p-3 md:p-4 backdrop-blur-sm"
     data-artemis-explainer="true"
     aria-label={title}
   >
-    <h2 className="text-sm font-bold">{title}</h2>
-    <ol className="mt-2 space-y-1 text-sm text-foreground/90">
-      {steps.map((step, index) => (
-        <li key={step}>
-          <span className="font-semibold tabular-nums">{index + 1}.</span> {step}
-        </li>
-      ))}
-    </ol>
-    <div className="mt-3 flex flex-wrap gap-2">
-      <LinkAction onClick={onGotIt}>{gotItLabel}</LinkAction>
-      {learnMoreLabel && onLearnMore ? <TextAction onClick={onLearnMore}>{learnMoreLabel}</TextAction> : null}
+    <div className="flex items-start gap-3">
+      <span
+        className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-600/20 border border-purple-500/40 text-[11px] font-semibold text-purple-200"
+        aria-hidden
+      >
+        i
+      </span>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        <ol className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
+          {steps.map((step, index) => (
+            <li key={step}>
+              <span className="font-medium text-foreground/80 tabular-nums">{index + 1}.</span> {step}
+            </li>
+          ))}
+        </ol>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <LinkAction onClick={onGotIt}>{gotItLabel}</LinkAction>
+          {learnMoreLabel && onLearnMore ? <TextAction onClick={onLearnMore}>{learnMoreLabel}</TextAction> : null}
+        </div>
+      </div>
     </div>
   </section>
 );
@@ -321,15 +430,15 @@ export const ExpandableGroup: React.FC<{
   summary: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
-}> = ({ title, summary, children, defaultOpen = false }) => (
-  <details className="rounded-xl border border-border bg-card p-3" open={defaultOpen || undefined}>
-    <summary className="cursor-pointer list-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="text-xs text-muted-foreground mt-1">{summary}</p>
-        </div>
-      </div>
+  accent?: ArtemisMetricColor;
+}> = ({ title, summary, children, defaultOpen = false, accent = 'purple' }) => (
+  <details
+    className={`rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[accent]} to-transparent p-3 backdrop-blur-sm`}
+    {...(defaultOpen ? { open: true } : {})}
+  >
+    <summary className={`cursor-pointer list-none ${ARTEMIS_FOCUS} rounded`}>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <p className="text-[11px] text-muted-foreground mt-1">{summary}</p>
     </summary>
     <div className="mt-3">{children}</div>
   </details>
@@ -338,16 +447,21 @@ export const ExpandableGroup: React.FC<{
 export const FlowNode: React.FC<{
   label: string;
   status?: string;
-  tone?: 'neutral' | 'warning' | 'danger' | 'info' | 'ok';
+  tone?: ArtemisTone;
   onClick?: () => void;
 }> = ({ label, status, tone = 'neutral', onClick }) => {
+  const color = toneToMetric(tone);
   const body = (
     <>
-      <p className="text-sm font-semibold">{label}</p>
-      {status ? <div className="mt-1"><StatusPill label={status} tone={tone} /></div> : null}
+      <p className="text-sm font-semibold text-foreground">{label}</p>
+      {status ? (
+        <div className="mt-1">
+          <StatusPill label={status} tone={tone} />
+        </div>
+      ) : null}
     </>
   );
-  const className = 'min-w-[120px] flex-1 bg-card border border-border rounded-xl p-3 text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500';
+  const className = `min-w-[110px] flex-1 text-start rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[color]} to-transparent p-3 backdrop-blur-sm ${ARTEMIS_FOCUS}`;
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className={className}>
@@ -357,3 +471,34 @@ export const FlowNode: React.FC<{
   }
   return <div className={className}>{body}</div>;
 };
+
+export const StepRow: React.FC<{
+  index: number;
+  title: string;
+  purpose: string;
+  status: string;
+  tone?: ArtemisTone;
+  owner?: string;
+  canBlock?: string;
+  action?: React.ReactNode;
+  accent?: ArtemisMetricColor;
+}> = ({ index, title, purpose, status, tone = 'warning', owner, canBlock, action, accent }) => (
+  <article
+    className={`rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[accent || toneToMetric(tone)]} to-transparent p-3 backdrop-blur-sm`}
+    data-artemis-step={index}
+  >
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-[10px] font-medium text-muted-foreground">{index}</p>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <p className="text-[11px] text-muted-foreground mt-1">{purpose}</p>
+      </div>
+      <StatusPill label={status} tone={tone} />
+    </div>
+    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-foreground/90">
+      {owner ? <p>{owner}</p> : null}
+      {canBlock ? <p>{canBlock}</p> : null}
+    </div>
+    {action ? <div className="mt-2">{action}</div> : null}
+  </article>
+);

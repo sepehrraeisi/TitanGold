@@ -11,14 +11,18 @@ import {
 import { isSimpleView } from '../../artemisPresentation.ts';
 import { formatCount, resolveAdvisoryWindow, resolveAgentRunWindow } from '../../artemisActivityModel.ts';
 import {
+  ARTEMIS_ROW,
+  AlertBanner,
   EmptyState,
   ExpandableGroup,
   FlowNode,
   HelpTip,
   LinkAction,
-  StatusPill,
+  MetricCard,
+  SectionHeader,
   TechnicalDetails,
   TextAction,
+  toneToMetric,
 } from '../../components/ArtemisUi.tsx';
 
 const STAGES = [
@@ -26,27 +30,39 @@ const STAGES = [
     id: 'data_ai',
     titleKey: 'artemis_stage_data_ai',
     title: 'Data & AI',
+    accent: 'emerald' as const,
     items: (p: ReturnType<typeof stageFacts>) => p.dataAi,
   },
   {
     id: 'intelligence',
     titleKey: 'artemis_stage_intelligence',
     title: 'Artemis Intelligence',
+    accent: 'purple' as const,
     items: (p: ReturnType<typeof stageFacts>) => p.intelligence,
   },
   {
     id: 'safety',
     titleKey: 'artemis_stage_safety_capital',
     title: 'Safety & Capital',
+    accent: 'amber' as const,
     items: (p: ReturnType<typeof stageFacts>) => p.safety,
   },
   {
     id: 'execution',
     titleKey: 'artemis_stage_execution',
     title: 'Execution',
+    accent: 'red' as const,
     items: (p: ReturnType<typeof stageFacts>) => p.execution,
   },
 ] as const;
+
+const TEAM_ACCENT = {
+  analytical: 'purple',
+  opportunity: 'blue',
+  capital_risk: 'amber',
+  feasibility: 'red',
+  execution: 'red',
+} as const;
 
 function stageFacts(readiness: NonNullable<ArtemisSectionProps['readiness']>, t: ArtemisSectionProps['t']) {
   const catalog = readiness.catalog?.agents || [];
@@ -179,15 +195,19 @@ export const OverviewSection: React.FC<ArtemisSectionProps> = ({
   ] as const;
 
   return (
-    <div className="space-y-5" data-artemis-page="overview">
-      <section className="bg-card border border-border rounded-2xl p-4 md:p-6" aria-labelledby="artemis-hero-title">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+    <div className="space-y-4" data-artemis-page="overview">
+      <section
+        className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-500/10 via-slate-950/80 to-slate-900/80 p-4 md:p-5 backdrop-blur-sm"
+        aria-labelledby="artemis-hero-title"
+        data-artemis-hero="true"
+      >
+        <p className="text-[11px] text-muted-foreground">
           {productLabel(t, 'artemis_right_now', 'Artemis right now')}
         </p>
-        <h2 id="artemis-hero-title" className="text-2xl md:text-3xl font-bold mt-1">
+        <h2 id="artemis-hero-title" className="text-base md:text-lg font-semibold mt-1 text-foreground">
           {productLabel(t, 'artemis_hero_analyzing_only', 'Artemis is analyzing only')}
         </h2>
-        <p className="text-sm md:text-base text-muted-foreground mt-2">
+        <p className="text-[11px] text-muted-foreground mt-1">
           {productLabel(t, 'artemis_hero_trading_unavailable', 'Automated trading is unavailable')}
           <HelpTip label={productLabel(t, 'artemis_help_execution_label', 'What does execution mean?')}>
             {productLabel(
@@ -197,7 +217,7 @@ export const OverviewSection: React.FC<ArtemisSectionProps> = ({
             )}
           </HelpTip>
         </p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
           {[
             {
               label: productLabel(t, 'artemis_chip_ai_analysis', 'AI analysis'),
@@ -225,17 +245,15 @@ export const OverviewSection: React.FC<ArtemisSectionProps> = ({
               tone: 'danger',
             },
           ].map((chip) => (
-            <div key={chip.label} className="rounded-xl border border-border bg-secondary/20 p-3">
-              <p className="text-xs text-muted-foreground">
-                {chip.label}
-                {'help' in chip && chip.help ? (
-                  <HelpTip label={productLabel(t, 'emergency_stop', 'Emergency Stop')}>{chip.help}</HelpTip>
-                ) : null}
-              </p>
-              <div className="mt-2">
-                <StatusPill label={chip.value} tone={chip.tone as never} />
-              </div>
-            </div>
+            <MetricCard
+              key={chip.label}
+              label={chip.label}
+              value={chip.value}
+              color={toneToMetric(chip.tone)}
+              badge={'help' in chip && chip.help ? (
+                <HelpTip label={productLabel(t, 'emergency_stop', 'Emergency Stop')}>{chip.help}</HelpTip>
+              ) : null}
+            />
           ))}
         </div>
         {!simple ? (
@@ -248,9 +266,7 @@ export const OverviewSection: React.FC<ArtemisSectionProps> = ({
       </section>
 
       <section aria-labelledby="artemis-why-title">
-        <h3 id="artemis-why-title" className="text-sm font-semibold mb-2">
-          {productLabel(t, 'artemis_why_cant_trade', "Why can't Artemis trade yet?")}
-        </h3>
+        <SectionHeader title={productLabel(t, 'artemis_why_cant_trade', "Why can't Artemis trade yet?")} titleId="artemis-why-title" />
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
           {STAGES.map((stage) => {
             const items = stage.items(facts);
@@ -259,8 +275,9 @@ export const OverviewSection: React.FC<ArtemisSectionProps> = ({
                 key={stage.id}
                 title={productLabel(t, stage.titleKey, stage.title)}
                 summary={items.map((item) => `${mark(item)} ${item.label}`).join(' · ')}
+                accent={stage.accent}
               >
-                <ul className="space-y-1 text-sm">
+                <ul className="space-y-1 text-xs">
                   {items.map((item) => (
                     <li key={item.label}>
                       <span aria-hidden>{mark(item)}</span> {item.label}
@@ -287,9 +304,7 @@ export const OverviewSection: React.FC<ArtemisSectionProps> = ({
       </section>
 
       <section aria-labelledby="artemis-how-title">
-        <h3 id="artemis-how-title" className="text-sm font-semibold mb-2">
-          {productLabel(t, 'artemis_how_it_works', 'How Artemis works')}
-        </h3>
+        <SectionHeader title={productLabel(t, 'artemis_how_it_works', 'How Artemis works')} titleId="artemis-how-title" />
         <div className="flex flex-col md:flex-row md:flex-wrap gap-2 md:items-stretch">
           {flow.map((node, index) => (
             <React.Fragment key={node.id}>
@@ -315,75 +330,66 @@ export const OverviewSection: React.FC<ArtemisSectionProps> = ({
       </section>
 
       <section aria-labelledby="artemis-team-title">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <h3 id="artemis-team-title" className="text-sm font-semibold">
-            {productLabel(t, 'artemis_your_ai_team', 'Your AI team')}
-          </h3>
-          <TextAction onClick={() => onNavigate?.({ view: 'ai', aiTab: 'agents' })}>
-            {productLabel(t, 'artemis_open_agents', 'Open Agents')}
-          </TextAction>
-        </div>
-        <p className="text-sm text-muted-foreground mb-3">
-          {productLabel(t, 'artemis_team_count', '{count} AI Agents').replace('{count}', String(catalog.length || 15))}
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2">
+        <SectionHeader
+          title={productLabel(t, 'artemis_your_ai_team', 'Your AI team')}
+          titleId="artemis-team-title"
+          subtitle={productLabel(t, 'artemis_team_count', '{count} AI Agents').replace('{count}', String(catalog.length || 15))}
+          actions={
+            <TextAction onClick={() => onNavigate?.({ view: 'ai', aiTab: 'agents' })}>
+              {productLabel(t, 'artemis_open_agents', 'Open Agents')}
+            </TextAction>
+          }
+        />
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-2">
           {groups.map((group) => {
             const members = catalog.filter((a) => a.group === group.id);
             const operational = members.filter((a) => a.operationalNow).length;
             const connected = members.filter((a) => agentArtemisConnection(a) !== 'not_connected' && (a.evidenceCompatible || a.evidenceAvailable)).length;
             return (
-              <article key={group.id} className="bg-card border border-border rounded-xl p-3">
-                <p className="text-sm font-semibold">{noviceGroup(group.id, t)}</p>
-                <p className="text-2xl font-bold mt-1 tabular-nums">{members.length || group.expected}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {productLabel(t, 'artemis_group_ready_count', '{count} Agents ready').replace('{count}', String(operational))}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {productLabel(t, 'artemis_group_connected_count', '{count} currently connected to Artemis').replace(
-                    '{count}',
-                    String(connected),
-                  )}
-                </p>
-              </article>
+              <MetricCard
+                key={group.id}
+                label={noviceGroup(group.id, t)}
+                value={members.length || group.expected}
+                color={TEAM_ACCENT[group.id]}
+                hint={`${productLabel(t, 'artemis_group_ready_count', '{count} Agents ready').replace('{count}', String(operational))} · ${productLabel(t, 'artemis_group_connected_count', '{count} currently connected to Artemis').replace('{count}', String(connected))}`}
+              />
             );
           })}
         </div>
       </section>
 
       <section aria-labelledby="artemis-attention-title">
-        <h3 id="artemis-attention-title" className="text-sm font-semibold mb-2">
-          {productLabel(t, 'artemis_needs_attention', 'What needs attention?')}
-        </h3>
+        <SectionHeader title={productLabel(t, 'artemis_needs_attention', 'What needs attention?')} titleId="artemis-attention-title" />
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {blockers.map((blocker) => (
-            <li key={blocker.code} className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-3">
-              <p className="text-sm font-semibold">
-                {blocker.code === 'evidence_not_connected'
-                  ? productLabel(t, 'artemis_attention_connect', 'Connect Agent intelligence')
-                  : blocker.code === 'liquidity_unavailable'
-                    ? productLabel(t, 'artemis_attention_liquidity', 'Liquidity validation')
-                    : blocker.code === 'execution_unavailable'
-                      ? productLabel(t, 'artemis_attention_execution', 'Automated trading')
-                      : productLabel(t, 'artemis_attention_coordination', 'Coordination not active')}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {blocker.code === 'evidence_not_connected'
-                  ? productLabel(
-                      t,
-                      'artemis_attention_connect_body',
-                      'The Agents work independently, but Artemis cannot consume their standardized outputs yet.',
-                    )
-                  : productLabel(t, blocker.labelKey, productLimitation(blocker.labelKey, t))}
-              </p>
-            </li>
-          ))}
+          {blockers.map((blocker) => {
+            const blocking = blocker.code === 'liquidity_unavailable' || blocker.code === 'execution_unavailable';
+            return (
+              <li key={blocker.code}>
+                <AlertBanner variant={blocking ? 'error' : 'warning'} title={
+                  blocker.code === 'evidence_not_connected'
+                    ? productLabel(t, 'artemis_attention_connect', 'Connect Agent intelligence')
+                    : blocker.code === 'liquidity_unavailable'
+                      ? productLabel(t, 'artemis_attention_liquidity', 'Liquidity validation')
+                      : blocker.code === 'execution_unavailable'
+                        ? productLabel(t, 'artemis_attention_execution', 'Automated trading')
+                        : productLabel(t, 'artemis_attention_coordination', 'Coordination not active')
+                }>
+                  {blocker.code === 'evidence_not_connected'
+                    ? productLabel(
+                        t,
+                        'artemis_attention_connect_body',
+                        'The Agents work independently, but Artemis cannot consume their standardized outputs yet.',
+                      )
+                    : productLabel(t, blocker.labelKey, productLimitation(blocker.labelKey, t))}
+                </AlertBanner>
+              </li>
+            );
+          })}
         </ul>
       </section>
 
       <section aria-labelledby="artemis-activity-title">
-        <h3 id="artemis-activity-title" className="text-sm font-semibold mb-2">
-          {productLabel(t, 'artemis_recent_activity', 'Recent activity')}
-        </h3>
+        <SectionHeader title={productLabel(t, 'artemis_recent_activity', 'Recent activity')} titleId="artemis-activity-title" />
         {advisory.kind === 'details_unavailable' || (advisory.kind === 'true_empty' && runs.kind === 'details_unavailable') ? (
           <EmptyState
             title={productLabel(t, 'artemis_activity_details_unavailable_title', 'Activity details unavailable')}
@@ -400,17 +406,17 @@ export const OverviewSection: React.FC<ArtemisSectionProps> = ({
             body={productLabel(t, 'artemis_activity_empty_expected', 'No Artemis recommendations or Agent runs have been generated yet.')}
           />
         ) : (
-          <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+          <ul className="space-y-2">
             {recentLogs.map((log) => (
-              <li key={String(log.id || log.created_at)} className="px-3 py-2 text-sm">
-                <p className="text-xs text-muted-foreground">{log.created_at ? new Date(log.created_at).toLocaleString() : '—'}</p>
-                <p>{log.message || productLabel(t, 'artemis_user_advisory', 'Advisory only')}</p>
+              <li key={String(log.id || log.created_at)} className={ARTEMIS_ROW}>
+                <p className="text-[11px] text-muted-foreground">{log.created_at ? new Date(log.created_at).toLocaleString() : '—'}</p>
+                <p className="text-xs mt-0.5">{log.message || productLabel(t, 'artemis_user_advisory', 'Advisory only')}</p>
               </li>
             ))}
             {recentRuns.map((run) => (
-              <li key={String(run.id || run.createdAt)} className="px-3 py-2 text-sm">
-                <p className="text-xs text-muted-foreground">{run.createdAt ? new Date(run.createdAt).toLocaleString() : '—'}</p>
-                <p>
+              <li key={String(run.id || run.createdAt)} className={ARTEMIS_ROW}>
+                <p className="text-[11px] text-muted-foreground">{run.createdAt ? new Date(run.createdAt).toLocaleString() : '—'}</p>
+                <p className="text-xs mt-0.5">
                   {run.agentName || run.agentKey || productLabel(t, 'ai_agents', 'Agents')}
                   {run.symbol ? ` · ${run.symbol}` : ''}
                 </p>

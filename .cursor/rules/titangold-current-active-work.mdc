@@ -1,12 +1,12 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-A Novice-First UX Round 2
+description: TitanGold Rule 02 — Artemis WP-A Design-System Compliance Ready for Round 4
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-A — NOVICE-FIRST UX REDESIGN + DATA CONSISTENCY**
+**ARTEMIS WP-A — DATAHUB DESIGN SYSTEM COMPLIANT**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
@@ -15,13 +15,13 @@ Current program slice:
 ARTEMIS-WP-A-LEGACY-SAFETY-UI
 
 Risk tier:
-Tier 2 (frontend presentation + read-only readiness enrichment; no Tier-4 Live)
+Tier 1–2 (visual standardization + UX polish; no Tier-4 Live)
 
 Engineering status:
 **DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
-**ARTEMIS = NOT YET HUMAN-QA APPROVED**  
-**NOVICE-FIRST REDESIGN IMPLEMENTED**  
-**READY FOR OWNER HUMAN QA ROUND 3**  
+**ARTEMIS IA / NOVICE-FIRST = OWNER APPROVED**  
+**VISUAL DESIGN-SYSTEM COMPLIANCE IMPLEMENTED**  
+**READY FOR OWNER HUMAN QA ROUND 4**  
 Not CLOSED. Do not create a closeout PR.
 
 Branch / worktree:
@@ -29,37 +29,28 @@ Branch / worktree:
 - `/home/ubuntu/worktrees/titangold-artemis-wp-a`
 
 Authorized in this round:
-- Fix Decisions/History count vs list Source-of-Truth contradictions
-- Simple / Advanced UI presentation preference (default Simple; not Demo/Live)
-- Visible nav label rename only (IDs/deep links unchanged)
-- Novice-first redesign of all 7 Artemis sections + first-visit explainer + help tips
-- EN / FA / RTL + responsive + a11y
-- Focused regression tests A–E
-- Staging deploy (backend-only if needed; workers unchanged)
+- Owner Human QA Round 4 against Staging
+- Visual comparison vs DESIGN_SYSTEM_DATAHUB.md + Telegram Collector reference
+- Remediation only if Owner finds related visual defects inside WP-A
 
 Not authorized / unchanged:
-- Data Hub product (Owner PASS — frozen)
+- Data Hub product behavior, API, or frozen UI
 - DB migrations
 - Scheduler allowlist / worker topology
 - Live / orders / private provider calls
-- Risk→Portfolio→Liquidity→OM full wiring
-- Frozen Trend/Arbitrage product surfaces
-- FR-1…FR-4 future rehomes
+- Trend / Arbitrage product surfaces
+- IA rewrite of Artemis tabs
 - Fake evidence / fake orchestration / fake confidence
 - Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
-
-Canonical AI Center nav (do not change):
-Artemis · Agents · Data Hub · Training · Analytics · Integrations · Topic Routing
 
 Canonical Artemis section IDs (deep links unchanged):
 overview · evidence · decisions · orchestration · controls · lineage · system
 
-Visible product labels (Simple default):
+Visible product labels:
 Home · AI Inputs · Recommendations · Coordination · Safety & Approval · History & Audit · System Health
 
 Human QA:
-Owner Human QA Round 3 after novice-first redesign + Staging deploy.
-Do not self-close. Do not declare CLOSED without explicit Owner Human QA PASS.
+Owner Human QA Round 4. Do not self-close.
 
-Next transition after Owner Human QA Round 3 PASS:
+Next transition after Owner Human QA Round 4 PASS:
 Draft PR review → explicit merge approval.

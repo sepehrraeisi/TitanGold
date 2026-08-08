@@ -11,18 +11,37 @@ import {
 } from '../../artemisProductCopy.ts';
 import { isSimpleView } from '../../artemisPresentation.ts';
 import {
+  ARTEMIS_FOCUS,
+  ARTEMIS_INNER,
+  ARTEMIS_ROW,
+  ARTEMIS_TABLE,
+  ARTEMIS_TABLE_WRAP,
+  ARTEMIS_TD,
+  ARTEMIS_TH,
+  ARTEMIS_THEAD,
+  ARTEMIS_TR,
   EmptyState,
   Field,
   FilterBar,
   HelpTip,
   NativeInput,
   NativeSelect,
+  SectionHeader,
   StatusPill,
   TechnicalDetails,
   TextAction,
 } from '../../components/ArtemisUi.tsx';
+import { METRIC_GRADIENT, type ArtemisMetricColor } from '../../artemisDesignTokens.ts';
 
 const GROUPS = ['analytical', 'opportunity', 'capital_risk', 'feasibility', 'execution'] as const;
+
+const GROUP_ACCENT: Record<(typeof GROUPS)[number], ArtemisMetricColor> = {
+  analytical: 'purple',
+  opportunity: 'blue',
+  capital_risk: 'amber',
+  feasibility: 'red',
+  execution: 'red',
+};
 
 function connectionLabel(
   agent: { key: string; evidenceCompatible?: boolean; evidenceAvailable?: boolean; consumption?: string },
@@ -57,9 +76,10 @@ export const EvidenceSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
 
   return (
     <div className="space-y-4" data-artemis-page="evidence">
-      <header>
-        <h2 className="text-lg font-bold">
-          {productLabel(t, 'artemis_inputs_title', 'AI Inputs')}
+      <SectionHeader
+        title={productLabel(t, 'artemis_inputs_title', 'AI Inputs')}
+        subtitle={productLabel(t, 'artemis_inputs_intro', 'Artemis receives intelligence from 15 specialized AI Agents.')}
+        actions={
           <HelpTip label={productLabel(t, 'artemis_help_evidence_label', 'What is evidence?')}>
             {productLabel(
               t,
@@ -67,21 +87,18 @@ export const EvidenceSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
               'Evidence is the structured intelligence an Agent produces. Artemis can only combine it after that output is connected.',
             )}
           </HelpTip>
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {productLabel(t, 'artemis_inputs_intro', 'Artemis receives intelligence from 15 specialized AI Agents.')}
-        </p>
-        <p className="text-sm mt-2">
-          {productLabel(
-            t,
-            'artemis_inputs_distinction',
-            'These Agents are operational on their own, but their outputs are not yet connected to Artemis.',
-          )}
-        </p>
-      </header>
+        }
+      />
+      <p className="text-[11px] text-muted-foreground -mt-2">
+        {productLabel(
+          t,
+          'artemis_inputs_distinction',
+          'These Agents are operational on their own, but their outputs are not yet connected to Artemis.',
+        )}
+      </p>
 
-      <section className="rounded-xl border border-border bg-secondary/20 p-3 text-xs md:text-sm" aria-label={productLabel(t, 'artemis_inputs_legend', 'Status legend')}>
-        <p className="font-semibold mb-1">{productLabel(t, 'artemis_inputs_legend', 'Status legend')}</p>
+      <section className={`${ARTEMIS_INNER} text-[11px] text-muted-foreground`} aria-label={productLabel(t, 'artemis_inputs_legend', 'Status legend')}>
+        <p className="text-xs font-semibold text-foreground mb-1">{productLabel(t, 'artemis_inputs_legend', 'Status legend')}</p>
         <p>{productLabel(t, 'artemis_legend_working', 'Working — the Agent can run independently.')}</p>
         <p>{productLabel(t, 'artemis_legend_not_connected', 'Not connected — Artemis cannot yet consume its output.')}</p>
         <p>{productLabel(t, 'artemis_legend_blocked', 'Blocked — this capability is not ready for Artemis.')}</p>
@@ -95,15 +112,20 @@ export const EvidenceSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
           const usable = 0;
           const first = group.rows[0];
           const connection = first ? connectionLabel(first, t) : productLabel(t, 'artemis_user_not_connected', 'Not connected');
+          const accent = GROUP_ACCENT[group.id];
           return (
-            <article key={group.id} className="bg-card border border-border rounded-2xl p-4 space-y-2" data-artemis-input-group={group.id}>
-              <h3 className="font-semibold">{group.label}</h3>
-              <p className="text-sm text-muted-foreground">
+            <article
+              key={group.id}
+              className={`rounded-xl border border-white/5 bg-gradient-to-br ${METRIC_GRADIENT[accent]} to-transparent p-3 backdrop-blur-sm space-y-2`}
+              data-artemis-input-group={group.id}
+            >
+              <h3 className="text-sm font-semibold text-foreground">{group.label}</h3>
+              <p className="text-[11px] text-muted-foreground">
                 {productLabel(t, 'artemis_inputs_agents_count', '{count} Agents').replace('{count}', String(group.rows.length))}
               </p>
-              <dl className="text-sm space-y-1">
-                <div className="flex justify-between gap-2">
-                  <dt>{productLabel(t, 'artemis_inputs_independent', 'Working independently?')}</dt>
+              <dl className="text-xs space-y-1.5">
+                <div className="flex justify-between gap-2 items-center">
+                  <dt className="text-muted-foreground">{productLabel(t, 'artemis_inputs_independent', 'Working independently?')}</dt>
                   <dd>
                     <StatusPill
                       label={operational > 0 ? productLabel(t, 'artemis_user_working', 'Working') : productLabel(t, 'artemis_user_needs_setup', 'Needs setup')}
@@ -111,14 +133,14 @@ export const EvidenceSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
                     />
                   </dd>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <dt>{productLabel(t, 'artemis_inputs_connected', 'Connected to Artemis?')}</dt>
+                <div className="flex justify-between gap-2 items-center">
+                  <dt className="text-muted-foreground">{productLabel(t, 'artemis_inputs_connected', 'Connected to Artemis?')}</dt>
                   <dd>
                     <StatusPill label={connection} tone={connected > 0 ? 'ok' : noviceTone(first?.consumption || 'contract_pending')} />
                   </dd>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <dt>{productLabel(t, 'artemis_inputs_usable', 'Evidence currently usable?')}</dt>
+                <div className="flex justify-between gap-2 items-center">
+                  <dt className="text-muted-foreground">{productLabel(t, 'artemis_inputs_usable', 'Evidence currently usable?')}</dt>
                   <dd>
                     <StatusPill
                       label={usable > 0 ? productLabel(t, 'yes', 'Yes') : productLabel(t, 'no', 'No')}
@@ -153,36 +175,36 @@ export const EvidenceSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
             />
           ) : (
             <>
-              <div className="hidden md:block overflow-x-auto rounded-xl border border-border">
-                <table className="w-full text-sm">
-                  <thead className="bg-secondary/40 text-xs text-muted-foreground">
+              <div className={`hidden md:block ${ARTEMIS_TABLE_WRAP} rounded-xl border border-white/5`}>
+                <table className={ARTEMIS_TABLE}>
+                  <thead className={ARTEMIS_THEAD}>
                     <tr>
-                      <th className="text-start p-2">{productLabel(t, 'artemis_col_agent', 'Agent')}</th>
-                      <th className="text-start p-2">{productLabel(t, 'artemis_col_role', 'Role')}</th>
-                      <th className="text-start p-2">{productLabel(t, 'artemis_agent_status', 'Agent status')}</th>
-                      <th className="text-start p-2">{productLabel(t, 'artemis_connection_status', 'Artemis connection')}</th>
+                      <th className={ARTEMIS_TH}>{productLabel(t, 'artemis_col_agent', 'Agent')}</th>
+                      <th className={ARTEMIS_TH}>{productLabel(t, 'artemis_col_role', 'Role')}</th>
+                      <th className={ARTEMIS_TH}>{productLabel(t, 'artemis_agent_status', 'Agent status')}</th>
+                      <th className={ARTEMIS_TH}>{productLabel(t, 'artemis_connection_status', 'Artemis connection')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map((agent) => (
-                      <tr key={agent.key} className="border-t border-border">
-                        <td className="p-2">
+                      <tr key={agent.key} className={ARTEMIS_TR}>
+                        <td className={ARTEMIS_TD}>
                           <button
                             type="button"
-                            className="font-medium text-start hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                            className={`font-medium text-start hover:underline ${ARTEMIS_FOCUS} rounded`}
                             onClick={() => onNavigate?.({ view: 'ai', aiTab: 'agents', agentId: agent.registryKey })}
                           >
                             {productLabel(t, agent.nameKey, agent.key)}
                           </button>
                         </td>
-                        <td className="p-2">{simple ? noviceGroup(agent.group, t) : productAuthority(agent.authority, t)}</td>
-                        <td className="p-2">
+                        <td className={ARTEMIS_TD}>{simple ? noviceGroup(agent.group, t) : productAuthority(agent.authority, t)}</td>
+                        <td className={ARTEMIS_TD}>
                           <StatusPill
                             label={agent.operationalNow ? productLabel(t, 'artemis_user_working', 'Working') : noviceStatus(agent.operational, t)}
                             tone={agent.operationalNow ? 'ok' : 'warning'}
                           />
                         </td>
-                        <td className="p-2">
+                        <td className={ARTEMIS_TD}>
                           <StatusPill label={connectionLabel(agent, t)} tone={noviceTone(agent.consumption)} />
                         </td>
                       </tr>
@@ -192,9 +214,9 @@ export const EvidenceSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
               </div>
               <ul className="md:hidden space-y-2">
                 {filtered.map((agent) => (
-                  <li key={agent.key} className="bg-card border border-border rounded-xl p-3 space-y-2">
-                    <p className="font-semibold">{productLabel(t, agent.nameKey, agent.key)}</p>
-                    <p className="text-xs text-muted-foreground">{noviceGroup(agent.group, t)}</p>
+                  <li key={agent.key} className={`${ARTEMIS_ROW} space-y-2`}>
+                    <p className="text-sm font-semibold">{productLabel(t, agent.nameKey, agent.key)}</p>
+                    <p className="text-[11px] text-muted-foreground">{noviceGroup(agent.group, t)}</p>
                     <div className="flex flex-wrap gap-2">
                       <StatusPill label={agent.operationalNow ? productLabel(t, 'artemis_user_working', 'Working') : noviceStatus(agent.operational, t)} tone={agent.operationalNow ? 'ok' : 'warning'} />
                       <StatusPill label={connectionLabel(agent, t)} tone={noviceTone(agent.consumption)} />

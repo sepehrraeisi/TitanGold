@@ -2,7 +2,16 @@ import React from 'react';
 import type { ArtemisSectionProps } from '../../artemisProductTypes.ts';
 import { noviceStatus, noviceTone, productLabel, productLimitation, productStatus } from '../../artemisProductCopy.ts';
 import { isSimpleView } from '../../artemisPresentation.ts';
-import { HelpTip, StatusPill, TechnicalDetails, TextAction } from '../../components/ArtemisUi.tsx';
+import {
+  AlertBanner,
+  HelpTip,
+  SectionHeader,
+  StatusPill,
+  StepRow,
+  TechnicalDetails,
+  TextAction,
+} from '../../components/ArtemisUi.tsx';
+import type { ArtemisMetricColor } from '../../artemisDesignTokens.ts';
 
 const CHAIN = [
   {
@@ -70,11 +79,18 @@ const CHAIN = [
 export const ControlsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, onNavigate, presentation }) => {
   const simple = isSimpleView(presentation);
   const rt = readiness?.runtime;
+  const stepAccent = (id: string): ArtemisMetricColor => {
+    if (id === 'liquidity' || id === 'order') return 'red';
+    if (id === 'runtime') return rt?.killSwitchActive ? 'red' : 'emerald';
+    return 'amber';
+  };
+
   return (
     <div className="space-y-4" data-artemis-page="controls">
-      <header>
-        <h2 className="text-lg font-bold">
-          {productLabel(t, 'artemis_safety_title', 'Safety & Approval')}
+      <SectionHeader
+        title={productLabel(t, 'artemis_safety_title', 'Safety & Approval')}
+        subtitle={productLabel(t, 'artemis_safety_purpose', 'Every recommendation must pass these checks before trading could ever happen.')}
+        actions={
           <HelpTip label={productLabel(t, 'artemis_help_risk_label', 'What is a risk veto?')}>
             {productLabel(
               t,
@@ -82,26 +98,27 @@ export const ControlsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
               'Risk can block a recommendation from becoming a trade. Artemis cannot override that protection.',
             )}
           </HelpTip>
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {productLabel(t, 'artemis_safety_purpose', 'Every recommendation must pass these checks before trading could ever happen.')}
-        </p>
-      </header>
+        }
+      />
 
-      <section className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 space-y-2">
-        <h3 className="text-sm font-bold">{productLabel(t, 'artemis_why_execution_unavailable', 'Why execution is unavailable')}</h3>
-        <ul className="list-disc ps-5 text-sm space-y-1">
+      <AlertBanner variant="error" title={productLabel(t, 'artemis_why_execution_unavailable', 'Why execution is unavailable')}>
+        <ul className="list-disc ps-4 space-y-0.5">
           <li>{productLabel(t, 'artemis_why_exec_1', 'Agent intelligence is not yet connected to Artemis.')}</li>
           <li>{productLabel(t, 'artemis_why_exec_2', 'Liquidity validation is not available.')}</li>
           <li>{productLabel(t, 'artemis_why_exec_3', 'Automated order execution is not enabled.')}</li>
         </ul>
-        <p className="text-sm">
-          {productLabel(t, 'emergency_stop', 'Emergency Stop')}:{' '}
-          {rt
-            ? rt.killSwitchActive
-              ? productLabel(t, 'artemis_estop_active_short', 'Emergency Stop active')
-              : productLabel(t, 'artemis_estop_inactive_short', 'Emergency Stop off')
-            : noviceStatus('UNAVAILABLE', t)}
+        <p className="mt-2 flex flex-wrap items-center gap-2">
+          <span>{productLabel(t, 'emergency_stop', 'Emergency Stop')}</span>
+          <StatusPill
+            label={
+              rt
+                ? rt.killSwitchActive
+                  ? productLabel(t, 'artemis_estop_active_short', 'Emergency Stop active')
+                  : productLabel(t, 'artemis_estop_inactive_short', 'Emergency Stop off')
+                : noviceStatus('UNAVAILABLE', t)
+            }
+            tone={rt?.killSwitchActive ? 'danger' : rt ? 'ok' : 'warning'}
+          />
           <HelpTip label={productLabel(t, 'emergency_stop', 'Emergency Stop')}>
             {productLabel(
               t,
@@ -110,7 +127,7 @@ export const ControlsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
             )}
           </HelpTip>
         </p>
-      </section>
+      </AlertBanner>
 
       <ol className="space-y-2">
         {CHAIN.map((step, index) => {
@@ -122,39 +139,31 @@ export const ControlsSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
                 ? 'NOT_EXECUTION_ELIGIBLE'
                 : item?.readiness || 'PARTIAL';
           return (
-            <li key={step.id}>
-              <article className="bg-card border border-border rounded-2xl p-4" data-artemis-control={step.id}>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{index + 1}</p>
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h3 className="text-base font-bold">{productLabel(t, step.titleKey, step.title)}</h3>
-                  <StatusPill label={noviceStatus(statusCode, t)} tone={noviceTone(statusCode)} />
-                </div>
-                <p className="text-sm mt-2">{productLabel(t, step.purposeKey, step.purpose)}</p>
-                <dl className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                  <div>
-                    <dt className="text-xs text-muted-foreground">{productLabel(t, 'artemis_safety_owner', 'Who owns it?')}</dt>
-                    <dd>{productLabel(t, step.ownerKey, step.owner)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">{productLabel(t, 'artemis_safety_result', 'Current result')}</dt>
-                    <dd>{noviceStatus(statusCode, t)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">{productLabel(t, 'artemis_safety_can_block', 'Can it block execution?')}</dt>
-                    <dd>{step.canBlock ? productLabel(t, 'yes', 'Yes') : productLabel(t, 'no', 'No')}</dd>
-                  </div>
-                </dl>
-                {item?.ownerNav ? (
-                  <div className="mt-3">
-                    <TextAction onClick={() => onNavigate?.(item.ownerNav as never)}>
-                      {productLabel(t, 'artemis_open_owner', 'Open owner')}
-                    </TextAction>
-                  </div>
-                ) : null}
-                {!simple && item?.limitationKey ? (
-                  <p className="text-xs text-muted-foreground mt-2">{productLimitation(item.limitationKey, t)}</p>
-                ) : null}
-              </article>
+            <li key={step.id} data-artemis-control={step.id}>
+              <StepRow
+                index={index + 1}
+                title={productLabel(t, step.titleKey, step.title)}
+                purpose={productLabel(t, step.purposeKey, step.purpose)}
+                status={noviceStatus(statusCode, t)}
+                tone={noviceTone(statusCode)}
+                accent={stepAccent(step.id)}
+                owner={`${productLabel(t, 'artemis_safety_owner', 'Who owns it?')}: ${productLabel(t, step.ownerKey, step.owner)}`}
+                canBlock={`${productLabel(t, 'artemis_safety_can_block', 'Can it block execution?')}: ${
+                  step.canBlock ? productLabel(t, 'yes', 'Yes') : productLabel(t, 'no', 'No')
+                }`}
+                action={
+                  <>
+                    {item?.ownerNav ? (
+                      <TextAction onClick={() => onNavigate?.(item.ownerNav as never)}>
+                        {productLabel(t, 'artemis_open_owner', 'Open owner')}
+                      </TextAction>
+                    ) : null}
+                    {!simple && item?.limitationKey ? (
+                      <p className="text-[11px] text-muted-foreground mt-1">{productLimitation(item.limitationKey, t)}</p>
+                    ) : null}
+                  </>
+                }
+              />
             </li>
           );
         })}
