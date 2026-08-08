@@ -467,6 +467,10 @@ describe('Artemis WP-A UI', () => {
     expect(primaryText()).not.toMatch(/No advisory records exist/i);
     expect(primaryText()).not.toMatch(/No recommendations have been generated yet/i);
     expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'History & Audit' }));
+    expect(await screen.findByText(/7 Artemis advisory records exist, but their details could not be loaded/i)).toBeInTheDocument();
+    expect(primaryText()).not.toMatch(/Showing latest/i);
+    expect(primaryText()).not.toMatch(/Showing latest 50/i);
   });
 
   it('B: agent run count > 0 with empty recent window stays truthful', async () => {
@@ -488,6 +492,44 @@ describe('Artemis WP-A UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'History & Audit' }));
     expect(await screen.findByText(/6[,.]?051 Agent runs recorded, but recent details could not be loaded/i)).toBeInTheDocument();
     expect(primaryText()).not.toMatch(/No audit records/i);
+    expect(primaryText()).not.toMatch(/Showing latest/i);
+    expect(primaryText()).not.toMatch(/Showing latest 50/i);
+  });
+
+  it('History loaded window may say Showing latest 50', async () => {
+    const recentRuns = Array.from({ length: 50 }, (_, index) => ({
+      id: `run-${index}`,
+      agentId: 'a1',
+      agentKey: 'technical',
+      agentName: 'Technical',
+      successful: true,
+      recordedScore: 0.5,
+      createdAt: '2026-08-08T07:31:00.000Z',
+      symbol: 'BTC/USDT',
+      action: 'HOLD',
+    }));
+    vi.mocked(fetchArtemisReadiness).mockResolvedValue({
+      ...readinessFixture,
+      agentRuns: {
+        truth: 'PERSISTED',
+        count: 6051,
+        latestAt: '2026-08-08T07:31:00.000Z',
+        recent: recentRuns,
+        limit: 50,
+        loadedCount: 50,
+        detailsAvailable: true,
+      },
+    } as never);
+    vi.mocked(fetchArtemisAuditBundle).mockResolvedValue({
+      systemLogs: [],
+      decisions: recentRuns,
+      loadFailed: false,
+    } as never);
+    render(<AIManager />);
+    await waitForHome();
+    fireEvent.click(screen.getByRole('button', { name: 'History & Audit' }));
+    expect(await screen.findByText(/Showing latest 50/i)).toBeInTheDocument();
+    expect(document.querySelector('[data-artemis-history-run-count="6051"]')).toBeTruthy();
   });
 
   it('C: Orchestration distinguishes Agent operational from Artemis connected', async () => {
@@ -629,6 +671,42 @@ describe('Artemis WP-A UI', () => {
     expect(drawer?.innerHTML).not.toMatch(/portfolioValue/);
     expect(drawer?.innerHTML).not.toMatch(/dailyLoss/);
     expect(drawer?.innerHTML).not.toMatch(/opportunity/);
+  });
+
+  it('readiness failure on System Health deep link is unavailable, not fabricated setup', async () => {
+    window.history.replaceState({}, '', '/?view=ai&artemisSection=system');
+    vi.mocked(fetchArtemisReadiness).mockRejectedValue(new Error('Failed to build Artemis readiness'));
+    render(<AIManager />);
+    expect(await screen.findByText(/Readiness unavailable|Artemis status unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/Failed to build Artemis readiness/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
+    expect(document.querySelector('[data-artemis-readiness-error="true"]')).toBeTruthy();
+    expect(document.querySelector('[data-artemis-header]')).toBeTruthy();
+    expect(document.querySelector('[data-artemis-nav]')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Simple' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Advanced' })).toBeInTheDocument();
+    expect(primaryText()).not.toMatch(/Needs setup/i);
+    expect(primaryText()).not.toMatch(/Broker is not connected/i);
+    expect(primaryText()).not.toMatch(/Partially ready/i);
+    expect(document.querySelector('[data-artemis-page="system"]')).toBeNull();
+  });
+
+  it('readiness failure shell guard covers non-Home sections', async () => {
+    window.history.replaceState({}, '', '/?view=ai&artemisSection=system');
+    vi.mocked(fetchArtemisReadiness).mockRejectedValue(new Error('Failed to build Artemis readiness'));
+    render(<AIManager />);
+    await screen.findByText(/Failed to build Artemis readiness/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Recommendations' }));
+    expect(screen.getByText(/Readiness unavailable|Artemis status unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
+    expect(document.querySelector('[data-artemis-page="decisions"]')).toBeNull();
+    expect(document.querySelector('[data-artemis-page="system"]')).toBeNull();
+    expect(primaryText()).not.toMatch(/Needs setup/i);
+    expect(primaryText()).not.toMatch(/Broker is not connected/i);
+    expect(primaryText()).not.toMatch(/Partially ready/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Coordination' }));
+    expect(document.querySelector('[data-artemis-readiness-error="true"]')).toBeTruthy();
+    expect(document.querySelector('[data-artemis-page="orchestration"]')).toBeNull();
   });
 
   it('System Health shows Partially ready when usable providers are below quorum', async () => {

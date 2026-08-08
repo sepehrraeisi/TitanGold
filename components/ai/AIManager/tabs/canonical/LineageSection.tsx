@@ -101,10 +101,10 @@ export const LineageSection: React.FC<ArtemisSectionProps> = ({ t, readiness, au
           value={<span data-artemis-history-advisory-count={String(advisory.count ?? '')}>{formatCount(advisory.count)}</span>}
           color="purple"
           hint={
-            advisory.showingPartialWindow || (advisory.count || 0) > 0
+            advisory.loadedCount > 0
               ? productLabel(t, 'artemis_showing_latest', 'Showing latest {shown}').replace(
                   '{shown}',
-                  formatCount(Math.min(advisory.loadedCount || advisory.limit, advisory.limit)),
+                  formatCount(advisory.loadedCount),
                 )
               : undefined
           }
@@ -114,11 +114,11 @@ export const LineageSection: React.FC<ArtemisSectionProps> = ({ t, readiness, au
           value={<span data-artemis-history-run-count={String(runs.count ?? '')}>{formatCount(runs.count)}</span>}
           color="blue"
           hint={
-            (runs.count || 0) > 0 ? (
+            runs.loadedCount > 0 ? (
               <span data-artemis-history-run-window="true">
                 {productLabel(t, 'artemis_runs_recorded_showing', '{total} Agent runs recorded · Showing latest {shown}')
                   .replace('{total}', formatCount(runs.count))
-                  .replace('{shown}', formatCount(runs.loadedCount || Math.min(runs.limit, runs.count || 0)))}
+                  .replace('{shown}', formatCount(runs.loadedCount))}
               </span>
             ) : undefined
           }

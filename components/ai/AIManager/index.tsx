@@ -21,8 +21,10 @@ import {
   ARTEMIS_TAB_ACTIVE,
   ARTEMIS_TAB_ITEM,
   ARTEMIS_TAB_STRIP,
+  EmptyState,
   FirstVisitExplainer,
   HelpTip,
+  LinkAction,
   PresentationToggle,
 } from './components/ArtemisUi.tsx';
 import {
@@ -224,6 +226,14 @@ const AIManager: React.FC<Props> = ({ onNavigate }) => {
       {loading ? (
         <div className="text-center p-10" role="status">
           {t('loading')}
+        </div>
+      ) : readinessError ? (
+        <div className="min-h-[320px]" data-artemis-readiness-error="true">
+          <EmptyState
+            title={productLabel(t, 'artemis_readiness_error', 'Artemis status unavailable')}
+            body={readinessError}
+            action={<LinkAction onClick={load}>{productLabel(t, 'retry', 'Retry')}</LinkAction>}
+          />
         </div>
       ) : (
         <div className="min-h-[320px]">{sectionBody}</div>
