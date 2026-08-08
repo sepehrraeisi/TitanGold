@@ -7,13 +7,16 @@ dotenv.config();
 
 // Shared pool tuning (DATABASE-005). Prefer DATABASE_URL when set (CI / migrate tooling);
 // otherwise fall back to discrete DB_* vars used by local/runtime configs.
+const isTestEnv = process.env.NODE_ENV === 'test';
 const poolTuning = {
   max: parseInt(process.env.DB_POOL_MAX) || 20,
-  min: parseInt(process.env.DB_POOL_MIN) || 2,
+  min: parseInt(process.env.DB_POOL_MIN) || (isTestEnv ? 0 : 2),
   idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT) || 30000,
   connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT) || 2000,
   maxLifetimeSeconds: parseInt(process.env.DB_POOL_MAX_LIFETIME) || 3600,
-  allowExitOnIdle: false,
+  // Production keeps the process alive with idle clients. Jest in-band (CI
+  // maxWorkers=1) must be allowed to exit after unit tests finish.
+  allowExitOnIdle: isTestEnv,
   ssl: process.env.DB_SSL === 'true' ? {
     rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
   } : false,

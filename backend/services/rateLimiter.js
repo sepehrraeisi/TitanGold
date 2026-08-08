@@ -298,10 +298,14 @@ export const exchangeLimiter = new RateLimiter({
 });
 
 // Cleanup expired cache every 2 minutes (reduced from 1 minute)
-// Less frequent cleanup since we have longer TTLs
-setInterval(() => {
+// Less frequent cleanup since we have longer TTLs.
+// unref so importing this module in unit tests cannot pin the Jest process.
+const rateLimiterCleanupTimer = setInterval(() => {
   mexcLimiter.cleanupCache();
   exchangeLimiter.cleanupCache();
 }, 120000);
+if (typeof rateLimiterCleanupTimer.unref === 'function') {
+  rateLimiterCleanupTimer.unref();
+}
 
 export default RateLimiter;

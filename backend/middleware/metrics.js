@@ -27,24 +27,28 @@ register.setDefaultLabels({
 // DEFAULT METRICS (Node.js process metrics)
 // ============================================================================
 
-// Collect default metrics (CPU, memory, event loop lag, etc.)
-promClient.collectDefaultMetrics({
-  register,
-  prefix: 'titangold_',
-  gcDurationBuckets: [0.001, 0.01, 0.1, 1, 2, 5], // seconds
-});
+// Collect default metrics (CPU, memory, event loop lag, etc.).
+// Skip in unit tests: monitorEventLoopDelay keeps the Jest process alive
+// when the suite runs in-band (GHA 2-CPU → maxWorkers 50% → 1).
+if (process.env.NODE_ENV !== 'test') {
+  promClient.collectDefaultMetrics({
+    register,
+    prefix: 'titangold_',
+    gcDurationBuckets: [0.001, 0.01, 0.1, 1, 2, 5], // seconds
+  });
 
-logger.info('Prometheus default metrics enabled', {
-  prefix: 'titangold_',
-  metrics: [
-    'process_cpu_user_seconds_total',
-    'process_cpu_system_seconds_total',
-    'process_resident_memory_bytes',
-    'process_heap_bytes',
-    'nodejs_eventloop_lag_seconds',
-    'nodejs_gc_duration_seconds',
-  ],
-});
+  logger.info('Prometheus default metrics enabled', {
+    prefix: 'titangold_',
+    metrics: [
+      'process_cpu_user_seconds_total',
+      'process_cpu_system_seconds_total',
+      'process_resident_memory_bytes',
+      'process_heap_bytes',
+      'nodejs_eventloop_lag_seconds',
+      'nodejs_gc_duration_seconds',
+    ],
+  });
+}
 
 // ============================================================================
 // CUSTOM METRICS

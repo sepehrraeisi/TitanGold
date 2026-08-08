@@ -1,11 +1,39 @@
 /**
- * Expanded order-agent safety tests (mocked — no real exchange)
+ * Expanded order-agent safety tests (mocked — no real exchange / no live DB)
  * @jest-environment node
  */
 import { describe, expect, it, jest, beforeEach, beforeAll } from '@jest/globals';
 
 jest.unstable_mockModule('../../services/logger.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+
+// evaluateExecutionPolicy imports database/db.js at module load. Without this mock,
+// a real pg Pool client stays idle with allowExitOnIdle:false and Jest never exits
+// when the suite runs in-band (GHA 2-CPU → maxWorkers 50% → 1).
+jest.unstable_mockModule('../../database/db.js', () => ({
+  query: jest.fn(async () => ({ rows: [] })),
+}));
+
+jest.unstable_mockModule('../../utils/redis.js', () => ({
+  getRedisClient: jest.fn(async () => ({
+    setEx: jest.fn(),
+    get: jest.fn(),
+    publish: jest.fn(),
+    isOpen: false,
+  })),
+  isRedisAvailable: jest.fn(() => false),
+}));
+
+jest.unstable_mockModule('../../services/runtimeExecutionStateService.js', () => ({
+  getRuntimeExecutionState: jest.fn(async () => ({
+    globalMode: 'demo',
+    killSwitchActive: true,
+    version: 1,
+  })),
+  getEffectiveGlobalMode: jest.fn(async () => 'demo'),
+  isKillSwitchActive: jest.fn(async () => true),
+  isDeploymentEngineEnabled: jest.fn(() => true),
 }));
 
 const mockPlace = jest.fn();

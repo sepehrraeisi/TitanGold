@@ -1,12 +1,12 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-A PR #19 residual truthfulness remediation
+description: TitanGold Rule 02 — Artemis WP-A PR #19 backend CI hang remediation
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-A — PR #19 RESIDUAL TRUTHFULNESS REMEDIATION**
+**ARTEMIS WP-A — PR #19 BACKEND CI HANG REMEDIATION**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
@@ -15,13 +15,13 @@ Current program slice:
 ARTEMIS-WP-A-LEGACY-SAFETY-UI
 
 Risk tier:
-Tier 1–2 (readiness-error shell truthfulness + History window copy; no Tier-4 Live)
+Tier 2 (CI unit-test hang / resource lifecycle; no Tier-4 Live)
 
 Engineering status:
 **DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
 **OWNER HUMAN QA ROUND 4 = PASS** (not erased)  
-**Prior PR #19 review findings materially fixed**  
-**Residual truthfulness blockers in remediation**  
+**Product/code review findings otherwise cleared**  
+**Backend CI hang RCA fixed locally — awaiting final-head GitHub Actions**  
 Not CLOSED. PR remains Draft. Do not merge. Do not mark Ready for Review.
 
 Branch / worktree:
@@ -29,20 +29,21 @@ Branch / worktree:
 - `/home/ubuntu/worktrees/titangold-artemis-wp-a`
 
 Authorized in this round:
-- Shell-level readinessError unavailable/Retry (no fabricated operational states)
-- History metric window hint only when loadedCount > 0
-- Focused frontend tests + production build
-- Frontend-only Staging deploy (no backend/worker restart)
+- Reproduce exact Backend workflow unit-test path on disposable DB only
+- Compare origin/main vs PR branch
+- Diagnose open handles / import-graph leaks
+- Fix the proven root cause so `npm run test:unit` exits naturally
+- Focused commit + push (PR remains Draft)
 
 Not authorized / unchanged:
 - Data Hub product behavior, API, or frozen UI
 - Visual redesign / IA rewrite
 - Trend / Arbitrage product surfaces
-- DB migrations
 - Scheduler allowlist / worker topology
 - Live / orders / private provider calls
-- titan-backend restart
-- titan-engine-worker restart
+- Staging deploy unless a real runtime lifecycle defect requires it
+- `--forceExit`, skipped tests, workflow bypass, blanket timeout
+- Protected unrelated dirty work in this worktree
 - Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
 Canonical Artemis section IDs (deep links unchanged):
@@ -50,4 +51,4 @@ overview · evidence · decisions · orchestration · controls · lineage · sys
 
 Human QA:
 Owner Human QA Round 4 remains PASS.
-Next gate: final independent re-review of PR #19 (Draft).
+Next gate: Backend CI green on the new PR head (Draft).
