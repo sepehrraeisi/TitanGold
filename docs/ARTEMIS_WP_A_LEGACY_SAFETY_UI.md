@@ -1,6 +1,6 @@
 # ARTEMIS WP-A — Legacy Safety Containment + Specialized UI/UX Redesign
 
-**Status:** OWNER HUMAN QA PASS — PRE-PR CLOSEOUT / REVIEW EVIDENCE (not CLOSED)  
+**Status:** OWNER HUMAN QA ROUND 4 PASS — PR #19 CODE-REVIEW REMEDIATION (not CLOSED)  
 **Classification:** Shared Foundation implementation  
 **Foundation baseline (closed):** `01e461634c6910bad795a2c3c3b506ecf2c343df`  
 **Branch:** `feat/artemis-wp-a-legacy-safety-ui`  
@@ -719,3 +719,82 @@ Preserved from §16:
 **DRAFT PR READY FOR INDEPENDENT REVIEW**
 
 Not CLOSED.
+
+## 25. PR #19 independent review remediation
+
+Owner Human QA Round 4 remains **PASS**. No visual redesign. PR #19 remains Draft. Not merged.
+
+### 25.1 Finding 1 — consumer-safe audit projection
+
+**RCA:** `/api/v1/artemis/logs` was only `authenticateStrict` and returned `system_logs.metadata` plus raw `ai_decisions.input` / `output`. `/readiness` used `AI_AGENT_READ` but copied `metadata` into `advisory.recent`. `AI_AGENT_READ` is granted to ordinary `user` / `vip`, so a capability bump alone would not protect global historical payloads. No user-ownership column exists; no migration is authorized.
+
+**Fix:** one explicit product projection (`backend/services/artemisAuditProjection.js`).
+
+Normal-user / ordinary-product advisory fields:
+
+- `id`, `level`, `classification`, `created_at`, `timestamp`, `action`, `symbol`, `message`, `reason`, `executionEligible=false`, `advisoryOnly=true`
+
+Agent-run fields:
+
+- `id`, `agentId`, `agentKey`, `agentName`, `createdAt`, `successful`, `recordedScore` (only when finite), `symbol`, `action`
+
+Removed from ordinary product responses:
+
+- `metadata`, `input`, `output`, `context`, `opportunity`, `signals`, `providers`, `portfolioValue`, `dailyLoss`, `dailyProfit`, `activeTrades`, `maxTrades`, raw provider payloads
+
+RBAC:
+
+- `/logs` now requires `authenticateStrict` + `AI_AGENT_READ`
+- unauthenticated → 401
+- role without `AI_AGENT_READ` → 403 `CAPABILITY_DENIED`
+- `user` / `vip` / `trader` / `admin` receive the **same sanitized projection**
+- no new raw-debug endpoint (no proven consumer)
+
+Frontend consumers read projected `action` / `symbol` only. Advanced technical details no longer dump raw JSON.
+
+### 25.2 Finding 2 — provider readiness quorum
+
+**RCA:** readiness used `ready = totalHealthyKeys > 0` while still computing canonical `getQuorum` (minimum 2). One healthy key therefore displayed Ready.
+
+**Canonical formula (reuse `providerPool`):**
+
+- `configured` = sum of provider key totals
+- `healthy` = sum of healthy keys
+- `activeUsableInstances` = `countActiveProviderInstances()` (same filter as `getProviderInstances`, no key decrypt)
+- `quorum` = `getQuorum(activeUsableInstances)` = `max(2, ceil(n * 0.4))`
+- `ready` = `activeUsableInstances >= quorum`
+
+Unavailable provider health → `truth=UNAVAILABLE`, `ready=null` (not fake zero/success).
+
+System Health: Ready only when quorum is satisfied; one usable instance → Partially ready; zero → Needs setup.
+
+### 25.3 Finding 3 — readiness 500 leak
+
+`GET /api/v1/artemis/readiness` catch now returns only:
+
+```json
+{ "error": "Failed to build Artemis readiness" }
+```
+
+Full exception stays in server logs. No stack / SQL / internal `error.message`. `/logs` 500 was already sanitized. No unrelated legacy error cleanup.
+
+### 25.4 Finding 4 — production Trading Engine gate test
+
+Extracted `isArtemisDecisionExecutionAuthorized` into `backend/services/artemisExecutionGate.js`. `tradingEngine.js` imports that helper. Unit tests import the **same production function** (no in-test duplicate predicate).
+
+Assertions: missing flags → false; flags false → false; flags true + HOLD/invalid → false; flags true + BUY/SELL/EXECUTE → predicate true. No provider call. No order. Live not enabled. TE return envelope still `executionEligible: false`.
+
+### 25.5 Non-blocking legacy debt (documented only)
+
+Trading Engine still POSTs `http://localhost:${PORT}/api/v1/artemis/decision` with only `Content-Type: application/json` while the route is `authenticateStrict`. Unauthenticated calls 401 and **fail closed** into the safe advisory fallback.
+
+**Future integration debt:** Trading Engine → Artemis authenticated internal transport.
+
+WP-A does **not** invent a service token or weaken `authenticateStrict`.
+
+### 25.6 Verdict target after this remediation
+
+**ARTEMIS WP-A — PR #19 REVIEW FINDINGS REMEDIATED**  
+**READY FOR INDEPENDENT RE-REVIEW**
+
+Not CLOSED. PR remains Draft. Do not merge.

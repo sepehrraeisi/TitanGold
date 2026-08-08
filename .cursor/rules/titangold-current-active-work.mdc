@@ -1,13 +1,12 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-A Owner Human QA PASS / Pre-PR Closeout
+description: TitanGold Rule 02 — Artemis WP-A PR #19 code-review remediation
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-A — OWNER HUMAN QA PASS**  
-**PRE-PR CLOSEOUT / REVIEW EVIDENCE**
+**ARTEMIS WP-A — PR #19 CODE-REVIEW REMEDIATION**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
@@ -16,53 +15,40 @@ Current program slice:
 ARTEMIS-WP-A-LEGACY-SAFETY-UI
 
 Risk tier:
-Tier 1–2 (closeout / review evidence; no Tier-4 Live)
+Tier 2–3 (audit projection / capability / readiness truth / TE gate tests; no Tier-4 Live)
 
 Engineering status:
 **DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
-**ARTEMIS IA = PASS**  
-**NOVICE-FIRST UX = PASS**  
-**SIMPLE VIEW = PASS**  
-**ADVANCED VIEW = PASS**  
-**DESIGN_SYSTEM_DATAHUB.md COMPLIANCE = PASS**  
-**OWNER HUMAN QA ROUND 4 = PASS**  
-**PRE-PR CLOSEOUT**  
-Not CLOSED. Do not merge. Do not freeze WP-A yet.
+**OWNER HUMAN QA ROUND 4 = PASS** (not erased)  
+**PR #19 independent review findings in remediation**  
+Not CLOSED. PR remains Draft. Do not merge. Do not mark Ready for Review.
 
 Branch / worktree:
 - `feat/artemis-wp-a-legacy-safety-ui`
 - `/home/ubuntu/worktrees/titangold-artemis-wp-a`
 
-Product freeze:
-NO opportunistic redesign, menu restructuring, visual polish without a reproduced defect, unrelated refactor, or Data Hub changes.
-
-Only allowed now:
-- build/test failures
-- factual UX contradictions
-- accessibility regressions
-- localization regressions
-- security/safety defects
-- code-review findings
-- CI failures
+Authorized in this round:
+- Consumer-safe Artemis audit projection (no raw metadata/input/output)
+- `/logs` capability + sanitized product payload
+- Canonical provider quorum readiness
+- Sanitized readiness 500
+- Production Trading Engine gate tests
+- Minimal frontend consumer compatibility (no visual redesign)
+- Staging backend deploy (workers unchanged)
 
 Not authorized / unchanged:
 - Data Hub product behavior, API, or frozen UI
+- Trend / Arbitrage product surfaces
 - DB migrations
 - Scheduler allowlist / worker topology
 - Live / orders / private provider calls
-- Trend / Arbitrage product surfaces
-- IA rewrite of Artemis tabs
-- Fake evidence / fake orchestration / fake confidence
+- Service-token / auth bypass for TE → Artemis
+- UI redesign / IA rewrite
 - Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
 Canonical Artemis section IDs (deep links unchanged):
 overview · evidence · decisions · orchestration · controls · lineage · system
 
-Visible product labels:
-Home · AI Inputs · Recommendations · Coordination · Safety & Approval · History & Audit · System Health
-
 Human QA:
-Owner Human QA Round 4 = PASS. Do not self-close.
-
-Next gate:
-Draft PR → independent code review → GitHub CI → explicit Owner merge approval.
+Owner Human QA Round 4 remains PASS.
+Next gate: independent re-review of PR #19 (Draft).
