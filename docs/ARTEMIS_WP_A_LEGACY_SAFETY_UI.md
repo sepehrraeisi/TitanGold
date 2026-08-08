@@ -1,6 +1,6 @@
 # ARTEMIS WP-A — Legacy Safety Containment + Specialized UI/UX Redesign
 
-**Status:** IMPLEMENTATION IN PROGRESS → Staging → Owner Human QA  
+**Status:** READY FOR OWNER HUMAN QA (not CLOSED)  
 **Classification:** Shared Foundation implementation  
 **Foundation baseline (closed):** `01e461634c6910bad795a2c3c3b506ecf2c343df`  
 **Branch:** `feat/artemis-wp-a-legacy-safety-ui`  
@@ -263,4 +263,118 @@ No **required Artemis tab** is missing: Overview, Orchestration (truthful), Cont
 Learning / Scenarios / truthful Backtesting are **future rehomes outside Artemis**, not reasons to restore legacy Manager clutter.
 
 **LEGACY AI MANAGER SALVAGE AUDIT — PASS**  
-**NO REQUIRED ARTEMIS TABS MISSING**
+**NO REQUIRED ARTEMIS TABS MISSING**  
+**OWNER ACCEPTED — 2026-08-08**
+
+Do not restore any former AIManager tabs into Artemis or AI Center navigation.
+
+## 16. Future rehome backlog (out of WP-A)
+
+Accepted by Owner. Record only. **Do not implement in WP-A.**
+
+| ID | Capability | Future owner | Gate |
+|----|------------|--------------|------|
+| FR-1 | Learning (decision mistakes / improvements / mark-learned; `ai_learning_events`) | AI Center → Training specialization / consolidation | Separate Training WP. Not an Artemis tab. |
+| FR-2 | Trading Scenarios (CRUD / generate; IndexedDB today) | Analytics / Evaluation / Simulation | Separate WP after Source-of-Truth review. Not an Artemis tab. |
+| FR-3 | Backtesting | Analytics / Evaluation | Only after a truthful canonical backtesting engine **and** persistence owner are proven. Current IndexedDB + `Math.random` UI must not be restored. |
+| FR-4 | Full System Log browser | Artemis → Lineage & Audit enhancement | Only if operationally justified. Current Lineage already shows Artemis-specific legacy decision logs. Not a new Artemis nav tab. |
+
+`SchedulerSettings` remains out of Artemis. Any 24/7 scheduler toggle UI is a separate Settings/runtime WP (WP-A forbids scheduler mutation).
+
+## 17. Owner Human QA prep (current Staging)
+
+Environment: **Staging** `https://titan.zala.ir` (not Production)  
+Health: `status=ok` · `commit=32a65e4` · `runtimeCommit=32a65e4` · `provenanceVerified=true`  
+Served frontend bundle: `index-CMh5A4K9.js` (Data Hub first-class rehome)  
+Data Hub chunk: `DataHubWorkspace-CSVuQGC4.js`  
+Docs HEAD (this handoff): recorded after commit  
+Workers: unchanged (no restart for this docs-only prep)  
+Deploy for this prep: **none** (documentation only)
+
+Entry: `https://titan.zala.ir/?view=ai`
+
+### 17.1 AI Center navigation (must remain exactly this order)
+
+| Check | Deep link | Pass? |
+|-------|-----------|-------|
+| Artemis visible | `?view=ai&aiTab=manager` | ☐ |
+| Agents visible | `?view=ai&aiTab=agents` | ☐ |
+| Data Hub visible and fully reachable | `?view=ai&aiTab=data_hub` | ☐ |
+| Training visible | `?view=ai&aiTab=training` | ☐ |
+| Analytics visible | `?view=ai&aiTab=analytics` | ☐ |
+| Integrations visible | `?view=ai&aiTab=config` | ☐ |
+| Topic Routing visible | `?view=ai&aiTab=topic_routing` | ☐ |
+| Browser Back / Forward works across AI tabs | history after switching tabs | ☐ |
+
+Former Manager tabs must **not** appear in this nav: Learning, Trading Scenarios, Backtesting, Decision Engine, Monitoring, System Logs, Settings, Orchestration-as-product, Autopilot-as-product.
+
+### 17.2 Artemis sections
+
+| Check | Deep link | Pass? |
+|-------|-----------|-------|
+| Overview | `?view=ai&aiTab=manager&artemisSection=overview` | ☐ |
+| Evidence | `&artemisSection=evidence` | ☐ |
+| Decisions | `&artemisSection=decisions` | ☐ |
+| Orchestration | `&artemisSection=orchestration` | ☐ |
+| Controls | `&artemisSection=controls` | ☐ |
+| Lineage & Audit | `&artemisSection=lineage` | ☐ |
+| System & Integrations | `&artemisSection=system` | ☐ |
+| Legacy Admin gate (not product Autopilot) | `&artemisSection=legacy_admin` | ☐ |
+
+### 17.3 Visual / truthfulness (Artemis)
+
+| Check | Pass? |
+|-------|-------|
+| No misleading Live / Real activation | ☐ |
+| Legacy Advisory is clear | ☐ |
+| Not Execution Eligible is clear | ☐ |
+| Emergency Stop is clear | ☐ |
+| No fake metrics | ☐ |
+| No fake confidence | ☐ |
+| No fake orchestration (unavailable is truthful) | ☐ |
+| Unavailable states are understandable | ☐ |
+| No native dialogs (`alert` / `confirm` / `prompt`) in canonical Artemis | ☐ |
+| Layout professional — not warning-box overload | ☐ |
+
+### 17.4 Data Hub (first-class; do not rewrite)
+
+Owner: AI Center → Data Hub (`DataHubWorkspace` → existing `DataHubTab`).  
+Artemis System → **Open Data Hub** is a link only.
+
+| Check | Pass? |
+|-------|-------|
+| Sources | ☐ |
+| Categories | ☐ |
+| Pipeline | ☐ |
+| Health | ☐ |
+| Logs | ☐ |
+| Advanced | ☐ |
+| Telegram | ☐ |
+| No functionality lost after rehome | ☐ |
+
+### 17.5 Layouts
+
+| Check | Pass? |
+|-------|-------|
+| EN desktop LTR | ☐ |
+| FA RTL desktop | ☐ |
+| Mobile portrait | ☐ |
+| Tablet sanity | ☐ |
+
+### 17.6 Explicit out of Human QA / WP-A
+
+- Do not restore Learning / Scenarios / Backtesting / full System Logs
+- Do not implement FR-1…FR-4
+- Do not modify Data Hub product code
+- Do not change Scheduler / workers
+- Do not Live-activate
+- Do not private provider calls
+- Do not mark WP-A **CLOSED** from this prep
+
+Owner records PASS or FAIL against this checklist. Cursor must wait for **explicit Owner Human QA PASS**.
+
+## 18. Final status (pre–Owner PASS)
+
+**ARTEMIS WP-A — READY FOR OWNER HUMAN QA**
+
+Not CLOSED.

@@ -18,9 +18,9 @@ Risk tier:
 Tier 2–3 (API contract containment + frontend product redesign; no Tier-4 Live)
 
 Engineering status:
-**DATA HUB NAVIGATION REGRESSION CORRECTED**  
-**LEGACY AI MANAGER SALVAGE AUDIT — PASS**  
-**READY FOR OWNER HUMAN QA**
+**LEGACY AI MANAGER SALVAGE AUDIT — ACCEPTED**  
+**ARTEMIS WP-A — READY FOR OWNER HUMAN QA**  
+Not CLOSED. Wait for explicit Owner Human QA PASS.
 
 Branch / worktree:
 - `feat/artemis-wp-a-legacy-safety-ui`
@@ -36,6 +36,7 @@ Authorized in WP-A:
 - Restore Data Hub as first-class AI Center tab (no Data Hub rewrite)
 - Focused tests + Staging deploy (backend-only if needed; workers unchanged)
 - Read-only salvage audit of former AIManager tabs (no blind restoration)
+- Record future rehome backlog only (no WP-A implementation)
 
 Not authorized / unchanged:
 - DB migrations
@@ -43,11 +44,21 @@ Not authorized / unchanged:
 - Live / orders / private provider calls
 - Risk→Portfolio→Liquidity→OM full wiring
 - Frozen Trend/Arbitrage product surfaces
-- Data Hub product rewrite
+- Data Hub product rewrite or Data Hub modification
+- Restore of former AIManager tabs (Learning, Scenarios, Backtesting, System Logs, Decision Engine, Monitoring, Settings, mock Orchestration)
+- FR-1 Learning → Training specialization
+- FR-2 Trading Scenarios → Analytics / Evaluation / Simulation
+- FR-3 Backtesting → Analytics / Evaluation only after truthful engine + persistence owner
+- FR-4 Full System Log browser → Lineage enhancement if justified
 - Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
+Canonical AI Center nav (do not change):
+Artemis · Agents · Data Hub · Training · Analytics · Integrations · Topic Routing
+
 Human QA:
-Required. Do not declare CLOSED without Owner Human QA PASS.
+Required against Staging `https://titan.zala.ir`.
+Checklist: `docs/ARTEMIS_WP_A_LEGACY_SAFETY_UI.md` §17.
+Do not declare CLOSED without explicit Owner Human QA PASS.
 
 Next transition after Human QA PASS:
 Draft PR review → explicit merge approval.
