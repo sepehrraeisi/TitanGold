@@ -47,6 +47,8 @@ export type NavigationPayload = {
   agentId?: string;
   agentSection?: AgentWorkspaceSection;
   runId?: string;
+  /** AI Center tab id (`manager` | `agents` | `data_hub` | …). */
+  aiTab?: string;
 };
 
 export type NavigationTarget = ViewKey | NavigationPayload;

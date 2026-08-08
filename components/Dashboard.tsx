@@ -44,7 +44,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     const urlState = readStateFromURL();
     if (urlState) {
       setActiveView(urlState.view);
-      if (urlState.settingsTab || urlState.settingsSubtab || urlState.provider || urlState.section || urlState.agentId || urlState.agentSection || urlState.runId) {
+      if (urlState.settingsTab || urlState.settingsSubtab || urlState.provider || urlState.section || urlState.agentId || urlState.agentSection || urlState.runId || urlState.aiTab) {
         setNavigationPayload({
           view: urlState.view,
           settingsTab: urlState.settingsTab,
@@ -54,6 +54,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           agentId: urlState.agentId,
           agentSection: urlState.agentSection,
           runId: urlState.runId,
+          aiTab: urlState.aiTab,
         });
       } else {
         // Explicitly clear payload when URL has no settingsTab/settingsSubtab
@@ -78,13 +79,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       const urlState = readStateFromURL();
       if (urlState) {
         setActiveView(urlState.view);
-        if (urlState.settingsTab || urlState.settingsSubtab || urlState.provider || urlState.section) {
+        if (urlState.settingsTab || urlState.settingsSubtab || urlState.provider || urlState.section || urlState.aiTab) {
           setNavigationPayload({
             view: urlState.view,
             settingsTab: urlState.settingsTab,
             settingsSubtab: urlState.settingsSubtab,
             provider: urlState.provider,
             section: urlState.section,
+            aiTab: urlState.aiTab,
           });
         } else {
           setNavigationPayload(null);
@@ -164,6 +166,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             initialAgentId={navigationPayload?.agentId}
             initialAgentSection={navigationPayload?.agentSection}
             initialRunId={navigationPayload?.runId}
+            initialAiTab={navigationPayload?.aiTab}
           />
         );
       case 'gold':

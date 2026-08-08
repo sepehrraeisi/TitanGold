@@ -24,7 +24,7 @@ export const OverviewSection: React.FC<CommonProps> = ({ t, readiness, readiness
   const rt = readiness.runtime;
   return (
     <div className="space-y-4">
-      <ArtemisCard title={t('artemis_readiness_title') || 'Artemis Readiness'} truth="CONFIGURED" t={t}>
+      <ArtemisCard title={t('artemis_current_capability') || 'Current capability'} truth="CONFIGURED" t={t}>
         <div className="flex flex-wrap gap-2">
           <StatusPill label={t('artemis_stage_legacy_advisory') || 'LEGACY ADVISORY'} tone="warning" />
           <StatusPill label={t('artemis_not_execution_eligible') || 'NOT EXECUTION ELIGIBLE'} tone="danger" />
@@ -36,6 +36,10 @@ export const OverviewSection: React.FC<CommonProps> = ({ t, readiness, readiness
         <p className="text-sm text-muted-foreground mt-3">
           {t('artemis_overview_purpose') ||
             'What can Artemis truthfully do right now? Advisory intelligence only — not automated trading.'}
+        </p>
+        <p className="text-xs text-muted-foreground mt-2">
+          {t('artemis_next_maturity') ||
+            'Next maturity requires canonical evidence and orchestration before decision eligibility.'}
         </p>
       </ArtemisCard>
 
@@ -308,19 +312,33 @@ export const SystemSection: React.FC<CommonProps> = ({ t, readiness, onNavigate 
         >
           {t('connections') || 'Connections'}
         </button>
-        <button
-          type="button"
-          className="text-sm underline text-blue-600 dark:text-blue-300"
-          onClick={() => onNavigate?.({ view: 'ai' /* Data Hub remains closed product; link via AI Center manager legacy only if needed */ })}
-        >
-          {t('ai_center') || 'AI Center'}
-        </button>
       </div>
       {readiness?.dualConfigLimitationKey ? (
         <p className="text-xs text-amber-700 dark:text-amber-300 mt-3">
           {limitText(t, readiness.dualConfigLimitationKey)}
         </p>
       ) : null}
+    </ArtemisCard>
+
+    <ArtemisCard title={t('artemis_data_hub') || 'Data Hub'} truth="CONFIGURED" t={t}>
+      <p className="text-sm font-medium">
+        {t('artemis_datahub_status') || 'Status'}: {t('artemis_datahub_status_available') || 'Available as AI Center product'}
+      </p>
+      <p className="text-sm text-muted-foreground mt-1">
+        {t('artemis_datahub_role') || 'Role: Market / external-data foundation'}
+      </p>
+      <p className="text-xs text-muted-foreground mt-2">
+        {t('artemis_datahub_not_embedded') ||
+          'Data Hub is not an Artemis subsection. Open the canonical AI Center product.'}
+      </p>
+      <button
+        type="button"
+        data-artemis-open-datahub="true"
+        className="mt-3 inline-flex items-center rounded-md bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+        onClick={() => onNavigate?.({ view: 'ai', aiTab: 'data_hub' })}
+      >
+        {t('artemis_open_data_hub') || 'Open Data Hub'}
+      </button>
     </ArtemisCard>
   </div>
 );

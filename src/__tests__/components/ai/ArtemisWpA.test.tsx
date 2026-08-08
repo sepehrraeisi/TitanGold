@@ -64,11 +64,22 @@ const tMap: Record<string, string> = {
   ai_agents: 'Agents',
   ai_training: 'Training',
   ai_analytics: 'Analytics',
-  ai_config: 'API / Integrations',
+  ai_config: 'Configuration',
+  ai_integrations: 'Integrations',
+  ai_data_hub: 'Data Hub',
+  artemis_data_hub: 'Data Hub',
   topic_routing: 'Topic Routing',
+  ai_center_title: 'AI Center',
+  ai_center_desc: 'Central intelligence, specialized agents, and data foundation',
+  ai_center_nav: 'AI Center',
   ai_management_system: 'AI Center',
   ai_management_desc: 'AI Center',
   retry: 'Retry',
+  artemis_open_data_hub: 'Open Data Hub',
+  artemis_datahub_status: 'Status',
+  artemis_datahub_status_available: 'Available as AI Center product',
+  artemis_datahub_role: 'Role: Market / external-data foundation',
+  artemis_current_capability: 'Current capability',
   artemis_nav_overview: 'Overview',
   artemis_nav_evidence: 'Evidence',
   artemis_nav_decisions: 'Decisions',
@@ -135,11 +146,21 @@ vi.mock('../../../../components/ai/TrainingCenter.tsx', () => ({ default: () => 
 vi.mock('../../../../components/ai/AnalyticsDashboard.tsx', () => ({ default: () => <div>Analytics Tab</div> }));
 vi.mock('../../../../components/ai/APIConfig.tsx', () => ({ default: () => <div>Config Tab</div> }));
 vi.mock('../../../../components/ai/TopicRouting.tsx', () => ({ default: () => <div>Topic Routing Tab</div> }));
+vi.mock('../../../../components/ai/DataHubWorkspace.tsx', () => ({
+  default: () => (
+    <div data-testid="datahub-workspace" data-datahub-owner="canonical">
+      Canonical Data Hub
+    </div>
+  ),
+}));
 
 import AIManager from '../../../../components/ai/AIManager/index.tsx';
-import AICenter from '../../../../components/AICenter.tsx';
+import AICenter, { readAiTabFromLocation } from '../../../../components/AICenter.tsx';
 import ArtemisInsightsWidget from '../../../../components/widgets/ArtemisInsightsWidget.tsx';
 import { CANONICAL_SECTIONS } from '../../../../components/ai/AIManager/artemisProductTypes.ts';
+import { payloadToURLState, readStateFromURL, writeStateToURL } from '../../../../utils/urlSync.ts';
+import fs from 'node:fs';
+import path from 'node:path';
 
 describe('Artemis WP-A UI', () => {
   beforeEach(() => {
@@ -157,9 +178,79 @@ describe('Artemis WP-A UI', () => {
     expect(screen.queryByRole('button', { name: 'AI Manager' })).not.toBeInTheDocument();
   });
 
+  it('AI Center has first-class Data Hub navigation and keeps primary products reachable', async () => {
+    render(<AICenter />);
+    expect(await screen.findByRole('button', { name: 'Artemis' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agents' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Data Hub' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Training' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analytics' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Integrations' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Topic Routing' })).toBeInTheDocument();
+    expect(document.querySelector('[aria-label="AI Center"]')?.className).toMatch(/overflow-x-auto/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Data Hub' }));
+    expect(await screen.findByTestId('datahub-workspace')).toBeInTheDocument();
+    expect(screen.getByTestId('datahub-workspace').getAttribute('data-datahub-owner')).toBe(
+      'canonical',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    expect(await screen.findByText('Agents Tab')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Training' }));
+    expect(await screen.findByText('Training Tab')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Analytics' }));
+    expect(await screen.findByText('Analytics Tab')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Artemis' }));
+    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
+  });
+
+  it('legacy Artemis data_hub deep links open AI Center Data Hub', () => {
+    window.history.replaceState({}, '', '/?view=ai&subtab=data_hub');
+    expect(readAiTabFromLocation()).toBe('data_hub');
+    window.history.replaceState({}, '', '/?view=ai&artemisSection=data_hub');
+    expect(readAiTabFromLocation()).toBe('data_hub');
+    window.history.replaceState({}, '', '/?view=ai&aiTab=data_hub');
+    expect(readAiTabFromLocation()).toBe('data_hub');
+    window.history.replaceState({}, '', '/?view=ai&artemisSection=overview');
+    expect(readAiTabFromLocation()).toBe('manager');
+  });
+
+  it('renders canonical Data Hub from legacy subtab without mounting a second owner', async () => {
+    window.history.replaceState({}, '', '/?view=ai&subtab=data_hub');
+    render(<AICenter />);
+    expect(await screen.findByTestId('datahub-workspace')).toBeInTheDocument();
+    expect(screen.queryAllByTestId('datahub-workspace')).toHaveLength(1);
+  });
+
+  it('Artemis System Open Data Hub navigates to AI Center Data Hub', async () => {
+    const onNavigate = vi.fn();
+    render(<AIManager onNavigate={onNavigate} />);
+    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'System & Integrations' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Data Hub' }));
+    expect(onNavigate).toHaveBeenCalledWith({ view: 'ai', aiTab: 'data_hub' });
+  });
+
+  it('urlSync preserves aiTab deep links', () => {
+    writeStateToURL(payloadToURLState({ view: 'ai', aiTab: 'data_hub' }), true);
+    expect(readStateFromURL()?.aiTab).toBe('data_hub');
+    expect(window.location.search).toContain('aiTab=data_hub');
+  });
+
+  it('keeps a single Data Hub UI owner', () => {
+    const root = path.resolve(__dirname, '../../../..');
+    const aiManager = fs.readFileSync(path.join(root, 'components/ai/AIManager/index.tsx'), 'utf8');
+    const aiCenter = fs.readFileSync(path.join(root, 'components/AICenter.tsx'), 'utf8');
+    expect(aiManager).not.toMatch(/DataHubTab/);
+    expect(aiManager).not.toMatch(/DataHubWorkspace/);
+    expect(aiCenter).toMatch(/DataHubWorkspace/);
+    expect(aiCenter.match(/DataHubWorkspace/g)?.length).toBeGreaterThan(0);
+  });
+
   it('renders canonical Artemis sections without Autopilot in product nav', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getByText('Artemis Readiness')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
 
     for (const section of CANONICAL_SECTIONS) {
       expect(screen.getByRole('button', { name: tMap[section.labelKey] })).toBeInTheDocument();
@@ -173,13 +264,13 @@ describe('Artemis WP-A UI', () => {
 
   it('does not show synthetic overview percentages', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getByText('Artemis Readiness')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
     expect(screen.queryByText(/87%/)).not.toBeInTheDocument();
   });
 
   it('Evidence and Orchestration show truthful unavailable states', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getByText('Artemis Readiness')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: 'Evidence' }));
     expect(
       await screen.findByText(/Canonical evidence contract not implemented yet/i),
@@ -190,7 +281,7 @@ describe('Artemis WP-A UI', () => {
 
   it('Controls section shows Risk veto authority', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getByText('Artemis Readiness')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: 'Controls' }));
     expect(await screen.findByText('veto')).toBeInTheDocument();
     expect(screen.getByText('feasibility')).toBeInTheDocument();
@@ -199,7 +290,7 @@ describe('Artemis WP-A UI', () => {
 
   it('writes artemisSection deep link', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getByText('Artemis Readiness')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: 'Decisions' }));
     await waitFor(() => {
       expect(window.location.search).toContain('artemisSection=decisions');
@@ -220,9 +311,17 @@ describe('Artemis WP-A UI', () => {
     expect(container.querySelector('[data-artemis-shell]')?.getAttribute('dir')).toBe('rtl');
   });
 
+  it('AI Center supports FA RTL navigation', async () => {
+    currentLanguage = 'fa';
+    const { container } = render(<AICenter />);
+    await waitFor(() => expect(container.querySelector('[data-ai-center]')).toBeTruthy());
+    expect(container.querySelector('[data-ai-center]')?.getAttribute('dir')).toBe('rtl');
+    expect(screen.getByRole('button', { name: 'Data Hub' })).toBeInTheDocument();
+  });
+
   it('legacy admin gate does not auto-open Autopilot', async () => {
     render(<AIManager />);
-    await waitFor(() => expect(screen.getByText('Artemis Readiness')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/LEGACY ADVISORY/i).length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: 'Legacy Admin' }));
     expect(
       await screen.findByText(/Autopilot is hidden from normal Artemis navigation/i),

@@ -6,7 +6,7 @@
  * - Deep linking / shareable URLs
  * - Reproducible QA testing
  *
- * Scope: view, settingsTab, settingsSubtab, provider, section
+ * Scope: view, settingsTab, settingsSubtab, provider, section, aiTab
  * No complex routing, no internal AI state
  */
 
@@ -41,6 +41,7 @@ export interface URLState {
   agentId?: string;
   agentSection?: AgentWorkspaceSection;
   runId?: string;
+  aiTab?: string;
 }
 
 /**
@@ -66,6 +67,7 @@ export function readStateFromURL(): URLState | null {
     agentId: params.get('agentId') || undefined,
     agentSection: parseAgentSection(params.get('agentSection')),
     runId: params.get('runId') || undefined,
+    aiTab: params.get('aiTab') || undefined,
   };
 }
 
@@ -107,6 +109,10 @@ export function writeStateToURL(state: URLState, replace: boolean = false): void
     params.set('runId', state.runId);
   }
 
+  if (state.aiTab) {
+    params.set('aiTab', state.aiTab);
+  }
+
   const newURL = `${window.location.pathname}?${params.toString()}`;
 
   if (replace) {
@@ -129,6 +135,7 @@ export function payloadToURLState(payload: NavigationPayload): URLState {
     agentId: payload.agentId,
     agentSection: payload.agentSection,
     runId: payload.runId,
+    aiTab: payload.aiTab,
   };
 }
 
@@ -154,5 +161,6 @@ export function isURLStateEqual(a: URLState | null, b: URLState | null): boolean
     && a.agentId === b.agentId
     && a.agentSection === b.agentSection
     && a.runId === b.runId
+    && a.aiTab === b.aiTab
   );
 }

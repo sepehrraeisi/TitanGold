@@ -33,6 +33,7 @@ function readSectionFromLocation(): ArtemisSectionId {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('artemisSection') || params.get('subtab') || 'overview';
     const allowed = new Set(CANONICAL_SECTIONS.map((s) => s.id));
+    if (raw === 'data_hub' || raw === 'datahub') return 'overview';
     if (raw === 'autopilot' || raw === 'legacy_admin') return 'legacy_admin';
     if (allowed.has(raw as ArtemisSectionId)) return raw as ArtemisSectionId;
   } catch {
