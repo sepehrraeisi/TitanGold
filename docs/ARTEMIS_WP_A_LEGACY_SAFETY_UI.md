@@ -792,7 +792,22 @@ Trading Engine still POSTs `http://localhost:${PORT}/api/v1/artemis/decision` wi
 
 WP-A does **not** invent a service token or weaken `authenticateStrict`.
 
-### 25.6 Verdict target after this remediation
+### 25.6 Staging evidence (this remediation)
+
+| Item | Value |
+|------|-------|
+| Implementation commit | `e6c9f98c96bd7ba5bc9ed1a8d0fed773f0505c8c` |
+| Documentation HEAD | recorded after this section |
+| Staging backend runtime commit | `e6c9f98` (`provenanceVerified=true`) |
+| Served frontend bundle | `index-Bbqg6A93.js` |
+| Data Hub chunk | `DataHubWorkspace-BywwA3pP.js` (product source untouched) |
+| titan-backend restart | yes (titan-backend-only) |
+| titan-engine-worker | unchanged: id4 pid=1639616 ↺=0; id8 pid=1639645 ↺=0 |
+| Unauth `/readiness` `/logs` | 401 sanitized, no internal exception text |
+| Data Hub files in remediation diff | 0 |
+| PR | #19 remains Draft; not marked Ready; not merged |
+
+### 25.7 Verdict target after this remediation
 
 **ARTEMIS WP-A — PR #19 REVIEW FINDINGS REMEDIATED**  
 **READY FOR INDEPENDENT RE-REVIEW**
