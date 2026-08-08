@@ -9,7 +9,7 @@ Current outcome:
 **ARTEMIS WP-A — LEGACY SAFETY CONTAINMENT + SPECIALIZED UI/UX REDESIGN**
 
 Current area:
-Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
+Shared Foundation → Artemis Central Intelligence (AI Center → Artemis / Data Hub)
 
 Current program slice:
 ARTEMIS-WP-A-LEGACY-SAFETY-UI
@@ -18,21 +18,21 @@ Risk tier:
 Tier 2–3 (API contract containment + frontend product redesign; no Tier-4 Live)
 
 Engineering status:
-**IMPLEMENTED ON STAGING — READY FOR OWNER HUMAN QA**
+**DATA HUB NAVIGATION REGRESSION CORRECTED — READY FOR OWNER HUMAN QA**
 
-Branch / HEAD:
+Branch / worktree:
 - `feat/artemis-wp-a-legacy-safety-ui`
 - `/home/ubuntu/worktrees/titangold-artemis-wp-a`
-- Implementation + runtime: `32a65e4`
 
-Authorized completed in WP-A:
+Authorized in WP-A:
 - Legacy `/artemis/decision` advisory containment
 - Trading Engine fail-closed on `executionEligible`
 - AI Center label Manager → Artemis (id `manager`)
 - Artemis shell + IA redesign
 - Autopilot/Demo↔Real/Insights/native-dialog containment
 - Read-only readiness aggregation
-- Focused tests + Staging deploy (backend-only; workers unchanged)
+- Restore Data Hub as first-class AI Center tab (no Data Hub rewrite)
+- Focused tests + Staging deploy (backend-only if needed; workers unchanged)
 
 Not authorized / unchanged:
 - DB migrations
@@ -40,6 +40,7 @@ Not authorized / unchanged:
 - Live / orders / private provider calls
 - Risk→Portfolio→Liquidity→OM full wiring
 - Frozen Trend/Arbitrage product surfaces
+- Data Hub product rewrite
 - Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
 Human QA:

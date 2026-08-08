@@ -15,7 +15,8 @@ Contain legacy Artemis advisory so no caller can treat it as v4.5 execution appr
 | Area | User goal | Decision | Notes |
 |------|-----------|----------|-------|
 | AI Center nav label | Find Artemis | RENAME | Visible `AI Manager` → `Artemis`; id `manager` kept |
-| AI Center tabs | Reach Agents/Training/Analytics/Config/Topic Routing | KEEP order | Labels assessed; no gratuitous regroup in WP-A |
+| AI Center tabs | Reach Artemis/Agents/Data Hub/Training/Analytics/Integrations/Topic Routing | REDESIGN | Data Hub restored as first-class AI Center product |
+| Data Hub | Completed data foundation must remain reachable | MOVE / REHOME | Canonical owner: AI Center → Data Hub; not an Artemis subsection |
 | Artemis shell | Maturity + safety at a glance | REDESIGN | Requested/Effective mode separate; no Demo↔Real toggle |
 | Overview | “What can Artemis do now?” | REDESIGN | Readiness, Runtime Safety, Intelligence Inputs, Control Chain, Limitations |
 | Evidence | Contract readiness | ADD FEATURE (truthful unavailable) | No fake EvidenceEnvelope |
@@ -23,7 +24,7 @@ Contain legacy Artemis advisory so no caller can treat it as v4.5 execution appr
 | Orchestration | Real coordination? | REDESIGN | Legacy Orchestration / canonical UNAVAILABLE |
 | Controls | Control-chain visibility | ADD/REDESIGN | Risk veto explicit; not a trading panel |
 | Lineage & Audit | Audit truth | REDESIGN | Separate current sources vs canonical readiness |
-| System & Integrations | Dependency ownership | REDESIGN + LINK | Link Decision Engine / Connections; dual-config limitation |
+| System & Integrations | Dependency ownership | REDESIGN + LINK | Link Decision Engine / Connections; Data Hub as external dependency with Open Data Hub |
 | Autopilot | Not product-ready | HIDE / Legacy Admin gate | ConfirmModal; no native dialogs |
 | Insights widget | Reachable dashboard | REDESIGN | Readiness-backed; no confidence 87 |
 | Decision Engine / Learning / Backtesting / Data Hub / Logs / Settings / Monitoring / Scenarios | Ownership | LINK / MOVE / RETIRE from Artemis nav | Backend retained; not in canonical Artemis nav |
@@ -31,12 +32,16 @@ Contain legacy Artemis advisory so no caller can treat it as v4.5 execution appr
 
 ## 3. Final AI Center menu architecture
 
-1. Artemis (`manager`)
-2. Agents
-3. Training
-4. Analytics
-5. API / Integrations (`config`)
-6. Topic Routing
+1. Artemis (`manager`) — Central Intelligence
+2. Agents — Specialized Intelligence
+3. Data Hub (`data_hub`) — Data Foundation (first-class)
+4. Training — Model/Agent Training
+5. Analytics — Evaluation / analytics
+6. Integrations (`config`) — AI/provider configuration
+7. Topic Routing — routing capability
+
+Deep link: `?view=ai&aiTab=data_hub`  
+Legacy compatibility: `?view=ai&subtab=data_hub` and `?view=ai&artemisSection=data_hub` → AI Center Data Hub.
 
 ## 4. Final Artemis IA
 
@@ -66,6 +71,21 @@ private provider calls=0 · orders=0 · transfers=0 · withdrawals=0 · financia
 
 - Backend unit: containment, readiness, TE gate
 - Frontend vitest: AI Center label, sections, Insights, deep link, FA RTL, no Autopilot product nav, no fake metrics
+- Frontend vitest: first-class Data Hub nav, single owner, legacy `data_hub` deep links, Artemis → Open Data Hub, urlSync `aiTab`
+
+## 7.1 Centralization rule
+
+Centralization must never make an already-completed product unreachable.
+
+When moving a feature out of Artemis, BEFORE removing the old primary navigation:
+
+1. identify canonical new owner
+2. implement canonical new route/navigation
+3. verify feature parity
+4. preserve compatible deep links
+5. then retire the old navigation
+
+No completed product may become orphaned. A textual link is not enough.
 
 ## 8. Staging / Human QA
 
@@ -82,6 +102,8 @@ See checklist below. WP-A must not close until Owner Human QA PASS.
 - [ ] Orchestration truthfulness
 - [ ] Lineage usefulness
 - [ ] System/integration ownership links
+- [ ] Data Hub first-class AI Center tab (not buried under Artemis)
+- [ ] Data Hub product parity (Sources/Categories/Pipeline/Health/Logs/Advanced/Telegram)
 - [ ] EN / FA / RTL
 - [ ] Mobile / tablet
 - [ ] Overall product quality
@@ -122,6 +144,26 @@ See checklist below. WP-A must not close until Owner Human QA PASS.
 ## 12. Pre–Human QA verdict
 
 **ARTEMIS WP-A — IMPLEMENTED ON STAGING**  
+**READY FOR OWNER HUMAN QA**
+
+Not CLOSED.
+
+## 13. Data Hub navigation correction (Owner QA blocker)
+
+| Item | Value |
+|------|-------|
+| Previous path | Artemis tab `data_hub` inside AI Manager |
+| Canonical path | AI Center → Data Hub (`data_hub`) |
+| Compatibility | `subtab=data_hub` / `artemisSection=data_hub` / `aiTab=data_hub` |
+| Artemis reference | System & Integrations → Open Data Hub (external dependency, not embedded) |
+| Data Hub files deleted | 0 |
+| Data Hub functionality removed | 0 |
+| Data Hub backend/API changed | 0 |
+| Duplicate owner | No — `DataHubWorkspace` wraps existing `DataHubTab` only |
+
+## 14. Verdict after Data Hub rehome
+
+**ARTEMIS WP-A — DATA HUB NAVIGATION REGRESSION CORRECTED**  
 **READY FOR OWNER HUMAN QA**
 
 Not CLOSED.
