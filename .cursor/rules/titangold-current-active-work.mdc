@@ -1,12 +1,12 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-A PR #19 backend CI hang remediation
+description: TitanGold Rule 02 — Artemis WP-A CLOSED AND FROZEN
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-A — PR #19 BACKEND CI HANG REMEDIATION**
+**ARTEMIS WP-A — CLOSED AND FROZEN**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
@@ -14,41 +14,37 @@ Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
 Current program slice:
 ARTEMIS-WP-A-LEGACY-SAFETY-UI
 
+Canonical product baseline (squash merge PR #19):
+`7c13fe13015de1b44ab534dff8deb72c6e5f5668`
+
 Risk tier:
-Tier 2 (CI unit-test hang / resource lifecycle; no Tier-4 Live)
+Closed baseline (no active implementation). Future Artemis runtime maturity is WP-B/C/D only.
 
 Engineering status:
 **DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
-**OWNER HUMAN QA ROUND 4 = PASS** (not erased)  
-**Product/code review findings otherwise cleared**  
-**Backend CI hang RCA fixed locally — awaiting final-head GitHub Actions**  
-Not CLOSED. PR remains Draft. Do not merge. Do not mark Ready for Review.
+**ARTEMIS OWNER HUMAN QA ROUND 4 = PASS**  
+**Independent code review = PASS**  
+**Final-head GitHub CI = PASS**  
+**Exact-main Staging aligned**  
+**WP-A CLOSED AND FROZEN**
 
-Branch / worktree:
-- `feat/artemis-wp-a-legacy-safety-ui`
-- `/home/ubuntu/worktrees/titangold-artemis-wp-a`
+Current Artemis maturity:
+**ADVISORY ONLY** (`LEGACY_ADVISORY_ONLY`)
 
-Authorized in this round:
-- Reproduce exact Backend workflow unit-test path on disposable DB only
-- Compare origin/main vs PR branch
-- Diagnose open handles / import-graph leaks
-- Fix the proven root cause so `npm run test:unit` exits naturally
-- Focused commit + push (PR remains Draft)
+Execution:
+**NOT ACTIVATED**  
+`executionEligible = false` · `approvedForExecution` must not be treated as true  
+Legacy `approved:true` ≠ execution authorization
 
-Not authorized / unchanged:
-- Data Hub product behavior, API, or frozen UI
-- Visual redesign / IA rewrite
-- Trend / Arbitrage product surfaces
-- Scheduler allowlist / worker topology
-- Live / orders / private provider calls
-- Staging deploy unless a real runtime lifecycle defect requires it
-- `--forceExit`, skipped tests, workflow bypass, blanket timeout
-- Protected unrelated dirty work in this worktree
+Not authorized:
+- Do not reopen WP-A
+- Do not redesign Data Hub / Trend / Arbitrage
+- Do not enable Live / orders / private provider calls
+- Do not start WP-B implementation in this baseline
 - Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
-Canonical Artemis section IDs (deep links unchanged):
+Canonical Artemis section IDs:
 overview · evidence · decisions · orchestration · controls · lineage · system
 
-Human QA:
-Owner Human QA Round 4 remains PASS.
-Next gate: Backend CI green on the new PR head (Draft).
+Next authorized transition:
+WP-B discovery only, after explicit Rule 02 replacement. Do not begin WP-B from this freeze commit.

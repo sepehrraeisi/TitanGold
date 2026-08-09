@@ -1,10 +1,11 @@
 # ARTEMIS WP-A — Legacy Safety Containment + Specialized UI/UX Redesign
 
-**Status:** OWNER HUMAN QA ROUND 4 PASS — PR #19 RESIDUAL TRUTHFULNESS REMEDIATION (not CLOSED)  
+**Status:** ARTEMIS WP-A — CLOSED AND FROZEN  
 **Classification:** Shared Foundation implementation  
 **Foundation baseline (closed):** `01e461634c6910bad795a2c3c3b506ecf2c343df`  
-**Branch:** `feat/artemis-wp-a-legacy-safety-ui`  
-**Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-a`
+**PR #19:** MERGED (squash)  
+**Canonical product baseline:** `7c13fe13015de1b44ab534dff8deb72c6e5f5668`  
+**Closeout worktree:** `/home/ubuntu/worktrees/titangold-artemis-wpa-closeout`
 
 ## 1. Outcome
 
@@ -835,5 +836,107 @@ Owner Human QA Round 4 remains **PASS**. No visual redesign. PR #19 remains Draf
 **ARTEMIS WP-A — RESIDUAL REVIEW FINDINGS REMEDIATED**  
 **READY FOR FINAL INDEPENDENT RE-REVIEW**
 
-Not CLOSED. PR remains Draft. Do not merge.
+Historical note: this section predates Owner merge. PR #19 was subsequently squash-merged. See §27.
+
+## 27. Post-merge exact-main Staging alignment — CLOSED AND FROZEN
+
+PR #19 squash merge on `main`:
+
+`7c13fe13015de1b44ab534dff8deb72c6e5f5668`  
+`feat(artemis): establish safe novice-first central intelligence workspace (#19)`
+
+This SHA is the **only** canonical WP-A product implementation baseline.
+
+| Gate | Result |
+|------|--------|
+| PR #19 | MERGED (squash) |
+| origin/main at closeout start | `7c13fe13015de1b44ab534dff8deb72c6e5f5668` (exact match) |
+| Owner Human QA Round 4 | PASS |
+| Independent code review | PASS |
+| Final-head GitHub CI | PASS |
+| Exact-main Staging | PASS |
+| WP-A | CLOSED AND FROZEN |
+
+### 27.1 Build / tests (clean closeout worktree)
+
+| Item | Value |
+|------|--------|
+| Closeout worktree | `/home/ubuntu/worktrees/titangold-artemis-wpa-closeout` (detached `7c13fe1`) |
+| Production `npm run build` | PASS |
+| Frontend bundle | `index-BS0U-Ga4.js` |
+| Data Hub chunk | `DataHubWorkspace-DgIpZrxk.js` |
+| Focused Artemis backend | 6 suites / 23 tests PASS (containment, audit projection, readiness, product audit routes, HTTP errors, TE gate) |
+| Frontend `ArtemisWpA.test.tsx` | 35/35 PASS (includes AI Center + Data Hub navigation) |
+| `npm run test:unit` | 95/95 suites · 687/687 tests · EXIT 0 (natural exit, no `--forceExit`) |
+
+### 27.2 Exact-main Staging provenance
+
+| Item | Value |
+|------|--------|
+| Domain | https://titan.zala.ir |
+| Frontend implementation | `7c13fe13015de1b44ab534dff8deb72c6e5f5668` → served `index-BS0U-Ga4.js` |
+| Data Hub chunk served | `DataHubWorkspace-DgIpZrxk.js` |
+| Backend `runtimeCommit` | `7c13fe1` (health short form of `7c13fe13015de1b44ab534dff8deb72c6e5f5668`; PM2 env has full SHA) |
+| `provenanceVerified` | true |
+| `titan-backend` restart this closeout | 1 (cluster ids 1–4; restart_time 2 → 3) |
+| `titan-engine-worker` | unchanged — id5 pid=1454 ↺=0; id9 pid=1510 ↺=0 (PM2 ids are not the historical id4/id8; id4 is a backend instance) |
+| Scheduler / allowlist mutation | 0 |
+| Migrations | 0 |
+
+Historical feature SHAs (`53bf93c`, `92ad3f4`, `e6c9f98`) remain evidence only and are not the runtime identity.
+
+### 27.3 Selective authenticated smoke
+
+AI Center tabs reachable in served bundle: Artemis · Agents · Data Hub · Training · Analytics · Integrations · Topic Routing.
+
+Artemis sections reachable: Home · AI Inputs · Recommendations · Coordination · Safety & Approval · History & Audit · System Health · Simple · Advanced.
+
+Data Hub: canonical `aiTab=data_hub` owner; `DataHubWorkspace-DgIpZrxk.js` mounts (Telegram/workspace markers present).
+
+Readiness API (admin JWT, no decision POST):
+
+- HTTP 200 · unauth 401
+- `maturityStage=LEGACY_ADVISORY` · `classification=LEGACY_ADVISORY_ONLY`
+- `executionEligible=false`
+- `approvedForExecution` absent/null (not true)
+- requested/effective mode = demo · Emergency Stop / kill switch = true
+- Risk authority = veto · Order = execution_only · Liquidity = BLOCKED / feasibility
+- `/logs` sanitized (no `metadata`/`input`/`output` dump)
+
+No raw i18n keys in primary product copy. No Demo↔Real toggle. Canonical Autopilot / Run Once are not product nav (Legacy Admin copy only: “not exposed at this maturity”). No one-click Live trading. No artificial Artemis decisions created.
+
+### 27.4 Safety contract
+
+- Advisory only. Execution not activated.
+- Legacy `approved:true` ≠ execution authorization (`isArtemisDecisionExecutionAuthorized` requires both eligibility flags).
+- Risk veto preserved.
+- Order Management: execution only; does not choose direction.
+- Liquidity: not execution-feasibility ready.
+- TE → Artemis internal auth debt: still fail-closed / deferred (`localhost` POST without auth → `authenticateStrict` 401 → safe advisory fallback). Not remediated in closeout.
+
+### 27.5 Side-effect ledger (this closeout window)
+
+| Class | Count |
+|------|------:|
+| private provider calls | 0 |
+| orders | 0 |
+| transfers | 0 |
+| withdrawals | 0 |
+| financial mutations | 0 |
+| Live activation | 0 |
+| scheduler changes | 0 |
+| allowlist changes | 0 |
+| worker topology mutations | 0 |
+| titan-engine-worker restarts | 0 |
+| DB migrations | 0 |
+| Data Hub product source changes | 0 |
+| titan-backend restart | 1 |
+
+### 27.6 Verdict
+
+**ARTEMIS WP-A — CLOSED AND FROZEN**  
+**EXACT-MAIN STAGING ALIGNED**  
+**READY TO BEGIN WP-B DISCOVERY**
+
+Do not start WP-B from this documentation commit. Product baseline remains `7c13fe13015de1b44ab534dff8deb72c6e5f5668`. The post-closeout docs SHA is recorded separately after push.
 
