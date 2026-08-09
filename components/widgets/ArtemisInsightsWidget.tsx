@@ -1,38 +1,89 @@
-
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext.tsx';
-import { ArtemisInsight } from '../../types.ts';
+import { fetchArtemisReadiness } from '../../services/artemisReadinessApi.ts';
+import { noviceStatus, productLabel } from '../ai/AIManager/artemisProductCopy.ts';
 
-const WidgetCard: React.FC<{ title: string; children: React.ReactNode; }> = ({ title, children }) => (
-    <div className="bg-white dark:bg-[#1c1e2f] border border-slate-200 dark:border-gray-700/50 rounded-lg p-4 h-full flex flex-col">
-        <div className="flex justify-between items-center mb-2">
-            <h3 className="text-sm font-semibold text-slate-500 dark:text-gray-300">{title}</h3>
-            <svg className="h-5 w-5 text-slate-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
-        </div>
-        <div className="flex-grow mt-2">
-            {children}
-        </div>
+const WidgetCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div className="bg-white dark:bg-[#1c1e2f] border border-slate-200 dark:border-gray-700/50 rounded-lg p-4 h-full flex flex-col">
+    <div className="flex justify-between items-center mb-2">
+      <h3 className="text-sm font-semibold text-slate-500 dark:text-gray-300">{title}</h3>
     </div>
+    <div className="flex-grow mt-2">{children}</div>
+  </div>
 );
 
 const ArtemisInsightsWidget: React.FC = () => {
-    const { t } = useLanguage();
-    const insight: ArtemisInsight = {
-        id: '1',
-        title: t('artemis_recommendation'),
-        text: t('market_consolidating'),
-        confidence: 87
-    };
+  const { t } = useLanguage();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<string | null>(null);
+  const [eligible, setEligible] = useState<boolean | null>(null);
 
-    return (
-        <WidgetCard title={t('artemis_insights')}>
-            <div className="bg-blue-500/10 border-l-4 border-blue-400 p-3 rounded-r-lg">
-                <p className="text-sm font-bold text-blue-700 dark:text-blue-300">{insight.title}</p>
-                <p className="text-sm text-slate-700 dark:text-gray-300 mt-1">{insight.text}</p>
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-semibold">Confidence: {insight.confidence}%</p>
-            </div>
-        </WidgetCard>
-    );
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const readiness = await fetchArtemisReadiness();
+        if (cancelled) return;
+        setStage(readiness.maturityStage);
+        setEligible(readiness.executionEligible === true);
+        setError(null);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : 'unavailable');
+        setStage(null);
+        setEligible(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <WidgetCard title={t('artemis_insights') || 'Artemis Insights'}>
+      <div className="bg-blue-500/10 border-l-4 border-blue-400 p-3 rounded-r-lg" role="status">
+        <p className="text-sm font-bold text-blue-700 dark:text-blue-300">
+          {productLabel(t, 'artemis_readiness_title', 'Artemis readiness')}
+        </p>
+        {loading ? (
+          <p className="text-sm text-slate-700 dark:text-gray-300 mt-1">{t('loading')}</p>
+        ) : error ? (
+          <>
+            <p className="text-sm text-slate-700 dark:text-gray-300 mt-1">
+              {productLabel(t, 'unavailable', 'Unavailable')}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-gray-400 mt-2">
+              {productLabel(
+                t,
+                'artemis_insights_unavailable_reason',
+                'Artemis status could not be loaded. No fabricated confidence is shown.',
+              )}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-slate-700 dark:text-gray-300 mt-1">
+              {noviceStatus(stage || 'LEGACY_ADVISORY', t)}
+            </p>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-semibold">
+              {productLabel(t, 'artemis_chip_trading', 'Trading')}:{' '}
+              {eligible ? productLabel(t, 'artemis_user_ready', 'Ready') : productLabel(t, 'artemis_user_unavailable', 'Unavailable')}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
+              {productLabel(
+                t,
+                'artemis_insights_no_fake_confidence',
+                'No hardcoded confidence. Advisory only.',
+              )}
+            </p>
+          </>
+        )}
+      </div>
+    </WidgetCard>
+  );
 };
 
 export default ArtemisInsightsWidget;

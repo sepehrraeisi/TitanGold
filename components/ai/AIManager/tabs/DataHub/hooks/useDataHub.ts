@@ -41,7 +41,7 @@ import { createTelegramDataSource, isChannelLinked, type TelegramChannel } from 
 import { fetchPipelineNormalizationSummary } from '../../../../../../services/dataPipelineApi.ts';
 import { handleDataHubError, DataHubError, shouldNotifyUser } from '../utils/errorHandler';
 
-export const useDataHub = (artemis: ArtemisState, onRefresh: () => void, t: (key: string) => string) => {
+export const useDataHub = (_artemis: ArtemisState | null | undefined, onRefresh: () => void, t: (key: string) => string) => {
     const queryClient = useQueryClient();
     // React Query Hooks
     const { data: dataHub, isLoading: isLoadingDataHub, error: dataHubErrorObj, refetch: loadDataHub } = useDataHubQuery();

@@ -18,9 +18,9 @@ import ErrorNotification from './DataHub/components/ErrorNotification';
 import { DATAHUB_SHELL, DataHubTabStrip, DataHubTabStripSkeleton } from './DataHub/dataHubUi';
 
 interface Props {
-    artemis: ArtemisState;
+    artemis?: ArtemisState;
     t: (key: string) => string;
-    onRefresh: () => void;
+    onRefresh?: () => void;
     Card: React.FC<{ children: React.ReactNode; className?: string }>;
 }
 
@@ -128,7 +128,7 @@ const DataHubTab: React.FC<Props> = ({ artemis, t, onRefresh, Card }) => {
         accountsRefreshTrigger,
         channelsRefreshTrigger,
         collectorCooldownSeconds,
-    } = useDataHub(artemis, onRefresh, t);
+    } = useDataHub(artemis, onRefresh || (() => undefined), t);
 
     if (isLoading && !dataHub) {
         return (

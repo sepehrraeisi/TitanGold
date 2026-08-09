@@ -46,7 +46,7 @@ async function clickFirstVisible(page: Page, selectors: string[], stepLabel: str
   throw new Error(`${stepLabel}: no selector matched: ${selectors.join(' OR ')}`);
 }
 
-test.describe('Controlled smoke: AI Center → AI Manager → Data Hub', () => {
+test.describe('Controlled smoke: AI Center → Data Hub', () => {
   test('DataHub loads; tabs work; no raw errors; cache hit not 75%', async ({ page }) => {
     const consoleErrors: string[] = [];
     const failedRequests: string[] = [];
@@ -75,21 +75,25 @@ test.describe('Controlled smoke: AI Center → AI Manager → Data Hub', () => {
     await page.waitForTimeout(1200);
     await expectNoFailText(page, 'after /?view=ai');
 
-    // 2) AICenter default is agents; click AI Manager
-    await clickFirstVisible(page, ['button:has-text("Manager")'], 'AICenter: open Manager');
+    // 2) AI Center first-class Data Hub tab
+    await clickFirstVisible(
+      page,
+      [
+        '[data-ai-tab="data_hub"]',
+        'button:has-text("Data Hub")',
+        'button:has-text("دیتا هاب")',
+        'button:has-text("هاب داده")',
+      ],
+      'AICenter: open Data Hub',
+    );
 
-    // Wait up to 20s for AIManager tabs to become visible (short, controlled timeout).
-    const aiManagerReady = page
-      .locator(
-        'button:has-text("Overview"), button:has-text("Decision Engine"), button:has-text("Data Hub")'
-      )
-      .first();
+    const dataHubReady = page.locator('[data-datahub-owner="canonical"], button:has-text("Sources"), button:has-text("Data Sources")').first();
     try {
-      await aiManagerReady.waitFor({ state: 'visible', timeout: 20000 });
+      await dataHubReady.waitFor({ state: 'visible', timeout: 20000 });
     } catch {
-      await page.screenshot({ path: 'test-results/datahub-smoke-ai-manager-loading-failed.png', fullPage: true });
+      await page.screenshot({ path: 'test-results/datahub-smoke-ai-center-loading-failed.png', fullPage: true });
       const dump = [
-        'AIManager loading blocker: tabs not visible within 20s after clicking Manager.',
+        'Data Hub loading blocker: canonical workspace not visible within 20s after AI Center Data Hub tab.',
         '',
         'Console errors:',
         ...(consoleErrors.length ? consoleErrors : ['(none)']),
@@ -102,18 +106,6 @@ test.describe('Controlled smoke: AI Center → AI Manager → Data Hub', () => {
       ].join('\n');
       throw new Error(dump);
     }
-
-    // 3) AIManager: click Data Hub
-    await clickFirstVisible(
-      page,
-      [
-        'button:has-text("Data Hub")',
-        // fallback: translated key value (exact text depends on locale)
-        'button:has-text("دیتا هاب")',
-        'button:has-text("هاب داده")',
-      ],
-      'AIManager: open Data Hub'
-    );
 
     // 4) Check key surfaces (we only enforce "no raw fail strings" + cache not 75.0%)
     await expectNoFailText(page, 'DataHub: initial render');

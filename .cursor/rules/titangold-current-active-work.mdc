@@ -1,55 +1,54 @@
 ---
-description: TitanGold dynamic active-work authority — Trend CLOSED AND FROZEN
+description: TitanGold Rule 02 — Artemis WP-A PR #19 backend CI hang remediation
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**TREND-DETECTION-SPECIALIZED-PRODUCTIZATION**
+**ARTEMIS WP-A — PR #19 BACKEND CI HANG REMEDIATION**
 
 Current area:
-Agents → Trend Detection
+Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
 
 Current program slice:
-TREND-POST-MERGE-CLOSEOUT-AND-FREEZE
+ARTEMIS-WP-A-LEGACY-SAFETY-UI
 
 Risk tier:
-Tier 0 (documentation / freeze closeout after exact-main deploy)
+Tier 2 (CI unit-test hang / resource lifecycle; no Tier-4 Live)
 
 Engineering status:
-**MERGED · EXACT-MAIN DEPLOYED · HUMAN-QA PASSED · CLOSED AND FROZEN**
+**DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
+**OWNER HUMAN QA ROUND 4 = PASS** (not erased)  
+**Product/code review findings otherwise cleared**  
+**Backend CI hang RCA fixed locally — awaiting final-head GitHub Actions**  
+Not CLOSED. PR remains Draft. Do not merge. Do not mark Ready for Review.
 
-Authorized scope:
-- Documentation and Rule 02 freeze only
-- No Trend product runtime changes
-- No Scheduler / worker changes
-- Do not reopen Trend without a reproduced defect and a separate approved work package
+Branch / worktree:
+- `feat/artemis-wp-a-legacy-safety-ui`
+- `/home/ubuntu/worktrees/titangold-artemis-wp-a`
 
-Hard boundaries:
-- Do **not** reopen Trend productization
-- Do **not** restart `titan-engine-worker` or change Scheduler allowlist
-- Do **not** call private MEXC or enable Live execution
-- Do **not** begin another Agent productization outcome from this freeze commit
+Authorized in this round:
+- Reproduce exact Backend workflow unit-test path on disposable DB only
+- Compare origin/main vs PR branch
+- Diagnose open handles / import-graph leaks
+- Fix the proven root cause so `npm run test:unit` exits naturally
+- Focused commit + push (PR remains Draft)
 
-Provenance (Staging exact-main alignment):
-- Squash merge commit (PR #18): **`b242c9c3df1aedb283f96784a11d46e80699909b`**
-- Deployed runtime source commit: **`b242c9c`**
-- Backend health `commit` / `runtimeCommit`: **`b242c9c`**
-- `provenanceVerified`: **true**
-- Served frontend bundle: **`assets/index-CLflvsy0.js`**
-- Frontend build source: exact-main worktree `@ b242c9c`
-- Environment: Staging (`https://titan.zala.ir`)
-- Worktree used for deploy: `/home/ubuntu/worktrees/titangold-trend-exact-main`
+Not authorized / unchanged:
+- Data Hub product behavior, API, or frozen UI
+- Visual redesign / IA rewrite
+- Trend / Arbitrage product surfaces
+- Scheduler allowlist / worker topology
+- Live / orders / private provider calls
+- Staging deploy unless a real runtime lifecycle defect requires it
+- `--forceExit`, skipped tests, workflow bypass, blanket timeout
+- Protected unrelated dirty work in this worktree
+- Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
-Deferred (separate outcomes — not Trend):
-- Dual-worker scheduler leader election / deploy fingerprint guard
-- Scheduled Trend runs (allowlist change)
-- Core Rules v4.5 activation (requires authoritative source file)
-- Artemis Contract Foundation discovery
+Canonical Artemis section IDs (deep links unchanged):
+overview · evidence · decisions · orchestration · controls · lineage · system
 
-Next transition:
-Activate Core Rules v4.5 (when source available) → Artemis Contract Foundation read-only discovery
-
-Evidence:
-- `docs/TREND_DETECTION_PRODUCT.md` — Post-Merge Exact-Main Alignment and Freeze
+Human QA:
+Owner Human QA Round 4 remains PASS.
+Next gate: Backend CI green on the new PR head (Draft).

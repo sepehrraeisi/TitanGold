@@ -5,12 +5,17 @@ import { CAP } from '../services/capabilities.js';
 import { evaluateExecutionPolicy, REASON } from '../services/agentExecutionPolicyService.js';
 import { query } from '../database/db.js';
 import { getMixtureDecision } from '../services/artemisOrchestrator.js';
+import { containLegacyArtemisDecision } from '../services/artemisDecisionContainment.js';
+import { buildArtemisReadiness } from '../services/artemisReadinessService.js';
+import { projectAdvisoryRecord, projectAgentRunRecord } from '../services/artemisAuditProjection.js';
+import { ARTEMIS_READINESS_ERROR, sendArtemisInternalError } from '../services/artemisHttpErrors.js';
 import { logger } from '../services/logger.js';
 import { validateBody, validateParams, validateResponse } from '../middleware/validation.js';
 import {
   artemisHealthResponseSchema,
   artemisStateResponseSchema,
   artemisDecisionResponseSchema,
+  artemisReadinessResponseSchema,
   artemisDecisionEnginePatchSchema,
   artemisConfigPutSchema,
 } from '../schemas/artemisSchemas.js';
@@ -82,6 +87,15 @@ router.get('/health', authenticate, validateResponse(artemisHealthResponseSchema
     });
   }
 });
+router.get('/readiness', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), validateResponse(artemisReadinessResponseSchema), async (req, res) => {
+  try {
+    const readiness = await buildArtemisReadiness({ userId: req.user?.id });
+    return res.json(readiness);
+  } catch (error) {
+    return sendArtemisInternalError(res, ARTEMIS_READINESS_ERROR, error);
+  }
+});
+
 router.get('/state', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), validateResponse(artemisStateResponseSchema), async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -297,31 +311,33 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
     });
 
     if (!decisionPolicy.allowed) {
-      return res.status(decisionPolicy.reasonCode === REASON.CONFIRMATION_REQUIRED ? 409 : 403).json({
-        action: 'HOLD',
-        approved: false,
-        reason: decisionPolicy.suppressionReason || decisionPolicy.reasonCode,
-        confidence: opportunity?.confidence || 0,
-        policy: {
-          effective_mode: decisionPolicy.effectiveMode,
-          side_effects_suppressed: decisionPolicy.sideEffectsSuppressed,
-        },
-      });
+      return res.status(decisionPolicy.reasonCode === REASON.CONFIRMATION_REQUIRED ? 409 : 403).json(
+        containLegacyArtemisDecision({
+          action: 'HOLD',
+          approved: false,
+          reason: decisionPolicy.suppressionReason || decisionPolicy.reasonCode,
+          confidence: opportunity?.confidence || 0,
+          policy: {
+            effective_mode: decisionPolicy.effectiveMode,
+            side_effects_suppressed: decisionPolicy.sideEffectsSuppressed,
+          },
+        }, { sideEffectsSuppressed: true })
+      );
     }
 
-    const sideEffectsSuppressed = decisionPolicy.sideEffectsSuppressed;
+    const sideEffectsSuppressed = decisionPolicy.sideEffectsSuppressed !== false;
 
     // Get Artemis state
     const stateResult = await query('SELECT * FROM artemis_state ORDER BY created_at DESC LIMIT 1');
     const artemisState = stateResult.rows[0];
 
     if (!artemisState || artemisState.status !== 'active') {
-      const payload = {
+      const payload = containLegacyArtemisDecision({
         action: 'HOLD',
         approved: false,
         reason: 'Artemis is not active',
         confidence: 0,
-      };
+      }, { sideEffectsSuppressed });
       await logDecision('warning', 'Artemis decision skipped: Artemis not active', {
         opportunity,
         context,
@@ -359,12 +375,12 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
 
     // Check if we have enough capacity
     if (context && context.activeTrades >= context.maxTrades) {
-      const payload = {
+      const payload = containLegacyArtemisDecision({
         action: 'HOLD',
         approved: false,
         reason: 'Maximum concurrent trades reached',
         confidence: opportunity.confidence,
-      };
+      }, { sideEffectsSuppressed });
       await logDecision('info', 'Artemis decision blocked: max concurrent trades reached', {
         opportunity,
         context,
@@ -376,12 +392,12 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
 
     // Check risk limits
     if (context && context.dailyLoss && Math.abs(context.dailyLoss) > (context.portfolioValue * 0.05)) {
-      const payload = {
+      const payload = containLegacyArtemisDecision({
         action: 'HOLD',
         approved: false,
         reason: 'Daily loss limit reached',
         confidence: opportunity.confidence,
-      };
+      }, { sideEffectsSuppressed });
       await logDecision('warning', 'Artemis decision blocked: daily loss limit reached', {
         opportunity,
         context,
@@ -406,18 +422,18 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
         (mixture.action === 'BUY' || mixture.action === 'SELL') &&
         mixture.confidence >= minConfidence;
 
-      const payload = {
+      const payload = containLegacyArtemisDecision({
         action: finalApproved ? mixture.action : 'HOLD',
         approved: finalApproved,
         reason:
           mixture.reason ||
           (finalApproved
-            ? 'Mixture-of-experts approved opportunity'
+            ? 'Mixture-of-experts advisory opportunity (not execution approval)'
             : 'Mixture-of-experts below confidence threshold'),
         confidence: mixture.confidence,
         signals: signalCount,
         providers: mixture.providers,
-      };
+      }, { sideEffectsSuppressed });
 
       await logDecision('info', 'Artemis mixture-of-experts decision', {
         opportunity,
@@ -435,7 +451,7 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
     // Fallback: منطق جمع ساده confidence + سیگنال‌ها
     const finalApproved = baseApproved && totalConfidence >= minConfidence;
 
-    const payload = {
+    const payload = containLegacyArtemisDecision({
       action: finalApproved
         ? opportunity.side === 'BUY'
           ? 'BUY'
@@ -443,15 +459,15 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
         : 'HOLD',
       approved: finalApproved,
       reason: finalApproved
-        ? `High confidence opportunity (${totalConfidence.toFixed(
+        ? `Legacy advisory opportunity (${totalConfidence.toFixed(
           1
-        )}%) with ${signalCount} agent signals`
+        )}%) with ${signalCount} agent signals — not execution approval`
         : `Confidence ${totalConfidence.toFixed(
           1
         )}% below threshold ${minConfidence}%`,
       confidence: totalConfidence,
       signals: signalCount,
-    };
+    }, { sideEffectsSuppressed });
 
     await logDecision('info', 'Artemis baseline decision (no mixture or mixture failed)', {
       opportunity,
@@ -465,12 +481,12 @@ router.post('/decision', authenticateStrict, requireCapability(CAP.ARTEMIS_DECIS
     return res.json(payload);
   } catch (error) {
     logger.error('Artemis decision error:', error);
-    res.status(500).json({
+    res.status(500).json(containLegacyArtemisDecision({
       action: 'HOLD',
       approved: false,
       reason: 'Decision engine error',
       confidence: 0,
-    });
+    }, { sideEffectsSuppressed: true }));
   }
 });
 
@@ -536,41 +552,93 @@ router.patch('/config/decision-engine', authenticateStrict, requireCapability(CA
   }
 });
 
-// Get Artemis decision logs
-router.get('/logs', authenticate, async (req, res) => {
+// Get Artemis decision logs — fail-soft per source so count/list stay reconcilable
+router.get('/logs', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), async (req, res) => {
   try {
-    const { limit = 50, offset = 0, level, category } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const { level } = req.query;
 
     let whereClause = "category = 'artemis_decision'";
-    const params = [parseInt(limit), parseInt(offset)];
-
+    const filterParams = [];
     if (level) {
-      whereClause += " AND level = $3";
-      params.push(level);
+      filterParams.push(level);
+      whereClause += ` AND level = $${filterParams.length}`;
+    }
+    const pageParams = [...filterParams, limit, offset];
+    const limitPlaceholder = `$${filterParams.length + 1}`;
+    const offsetPlaceholder = `$${filterParams.length + 2}`;
+
+    let systemLogs = [];
+    let advisoryTotal = null;
+    let decisions = [];
+    let agentRunTotal = null;
+    let sourceError = null;
+
+    try {
+      const countResult = await query(
+        `SELECT COUNT(*)::int AS c FROM system_logs WHERE ${whereClause}`,
+        filterParams,
+      );
+      advisoryTotal = Number.parseInt(countResult.rows?.[0]?.c, 10);
+      if (!Number.isFinite(advisoryTotal)) advisoryTotal = null;
+    } catch (error) {
+      logger.warn('Artemis logs: advisory count unavailable', error.message);
+      sourceError = 'advisory_count';
     }
 
-    const result = await query(
-      `SELECT id, level, category, message, metadata, created_at 
-       FROM system_logs 
-       WHERE ${whereClause}
-       ORDER BY created_at DESC 
-       LIMIT $1 OFFSET $2`,
-      params
-    );
+    try {
+      const result = await query(
+        `SELECT id, level, category, message, metadata, created_at
+           FROM system_logs
+          WHERE ${whereClause}
+          ORDER BY created_at DESC
+          LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+        pageParams,
+      );
+      systemLogs = (result.rows || []).map((row) => projectAdvisoryRecord(row));
+    } catch (error) {
+      logger.warn('Artemis logs: advisory rows unavailable', error.message);
+      sourceError = sourceError || 'advisory_rows';
+    }
 
-    // Also get AI decisions for decision-specific logs
-    const decisionsResult = await query(
-      `SELECT id, agent_id, input, output, was_successful, confidence, created_at 
-       FROM ai_decisions 
-       ORDER BY created_at DESC 
-       LIMIT $1`,
-      [parseInt(limit)]
-    );
+    try {
+      const runCount = await query(`SELECT COUNT(*)::int AS c FROM ai_decisions`);
+      agentRunTotal = Number.parseInt(runCount.rows?.[0]?.c, 10);
+      if (!Number.isFinite(agentRunTotal)) agentRunTotal = null;
+    } catch (error) {
+      logger.warn('Artemis logs: agent-run count unavailable', error.message);
+      sourceError = sourceError || 'agent_run_count';
+    }
+
+    try {
+      const decisionsResult = await query(
+        `SELECT d.id, d.agent_id, d.input, d.output, d.was_successful, d.confidence, d.created_at,
+                a.agent_key, a.name AS agent_name
+           FROM ai_decisions d
+      LEFT JOIN ai_agents a ON a.id = d.agent_id
+          ORDER BY d.created_at DESC
+          LIMIT $1`,
+        [limit],
+      );
+      decisions = (decisionsResult.rows || []).map((row) => projectAgentRunRecord(row));
+    } catch (error) {
+      logger.warn('Artemis logs: agent-run rows unavailable', error.message);
+      sourceError = sourceError || 'agent_run_rows';
+    }
 
     res.json({
-      systemLogs: result.rows || [],
-      decisions: decisionsResult.rows || [],
-      total: result.rows?.length || 0,
+      systemLogs,
+      decisions,
+      total: advisoryTotal != null ? advisoryTotal : systemLogs.length,
+      advisoryTotal,
+      agentRunTotal,
+      limit,
+      offset,
+      loadedAdvisory: systemLogs.length,
+      loadedAgentRuns: decisions.length,
+      detailsAvailable: systemLogs.length > 0 || decisions.length > 0,
+      sourceError,
     });
   } catch (error) {
     logger.error('Failed to fetch Artemis logs:', error);

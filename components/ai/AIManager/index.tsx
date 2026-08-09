@@ -1,266 +1,243 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../../context/LanguageContext.tsx';
 import { OnNavigateHandler } from '../../../types/navigation.ts';
-import { useArtemisState } from '../hooks/useArtemisState.ts';
-import * as api from '../../../services/api.ts';
-import { AIManagerOverview, ArtemisState } from '../../../types.ts';
-
-const OverviewTab = lazy(() => import('./tabs/OverviewTab.tsx'));
-const DecisionEngineTab = lazy(() => import('./tabs/DecisionEngineTab.tsx'));
-const OrchestrationTab = lazy(() => import('./tabs/OrchestrationTab.tsx'));
-const LearningTab = lazy(() => import('./tabs/LearningTab.tsx'));
-const MonitoringTab = lazy(() => import('./tabs/MonitoringTab.tsx'));
-const ScenariosTab = lazy(() => import('./tabs/ScenariosTab.tsx'));
-const DataHubTab = lazy(() => import('./tabs/DataHubTab.tsx'));
-const BacktestingTab = lazy(() => import('./tabs/BacktestingTab.tsx'));
-const SystemLogsTab = lazy(() => import('./tabs/SystemLogsTab.tsx'));
-const SettingsTab = lazy(() => import('./tabs/SettingsTab.tsx'));
-const AutopilotTab = lazy(() => import('./tabs/AutopilotTab.tsx'));
-
-type ArtemisTab =
-  | 'overview'
-  | 'decision_engine'
-  | 'orchestration'
-  | 'learning'
-  | 'monitoring'
-  | 'scenarios'
-  | 'data_hub'
-  | 'backtesting'
-  | 'logs'
-  | 'settings'
-  | 'autopilot';
-
-const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({
-  children,
-  className,
-}) => (
-  <div className={`bg-card border border-border rounded-lg p-4 ${className || ''}`}>{children}</div>
-);
+import { fetchArtemisAuditBundle, fetchArtemisReadiness } from '../../../services/artemisReadinessApi.ts';
+import {
+  CANONICAL_SECTIONS,
+  type ArtemisAuditBundle,
+  type ArtemisReadiness,
+  type ArtemisSectionId,
+} from './artemisProductTypes.ts';
+import { productLabel } from './artemisProductCopy.ts';
+import {
+  readExplainerDismissed,
+  readPresentationMode,
+  writeExplainerDismissed,
+  writePresentationMode,
+  type ArtemisPresentationMode,
+} from './artemisPresentation.ts';
+import {
+  ARTEMIS_SHELL,
+  ARTEMIS_TAB_ACTIVE,
+  ARTEMIS_TAB_ITEM,
+  ARTEMIS_TAB_STRIP,
+  EmptyState,
+  FirstVisitExplainer,
+  HelpTip,
+  LinkAction,
+  PresentationToggle,
+} from './components/ArtemisUi.tsx';
+import {
+  OverviewSection,
+  EvidenceSection,
+  DecisionsSection,
+  OrchestrationSection,
+  ControlsSection,
+  LineageSection,
+  SystemSection,
+} from './tabs/canonical/ArtemisSections.tsx';
 
 type Props = {
   onNavigate?: OnNavigateHandler;
 };
 
-const AIManager: React.FC<Props> = ({ onNavigate }) => {
-  const { t } = useLanguage();
-  const [isLoading, setIsLoading] = useState(true);
-  const [data, setData] = useState<AIManagerOverview | null>(null);
-  const {
-    state: artemis,
-    loading: artemisLoading,
-    error: artemisError,
-    reload: reloadArtemis,
-    setSafeState: setArtemis,
-  } = useArtemisState();
-  const [activeTab, setActiveTab] = useState<ArtemisTab>('overview');
-  const [error, setError] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const managerData = await api.fetchAIManagerData();
-        setData(managerData);
-        if (managerData.artemis) {
-          setArtemis(managerData.artemis);
-        } else {
-          await reloadArtemis();
-        }
-      } catch (e) {
-        console.error('Failed to load AIManager data:', e);
-        setError(e instanceof Error ? e.message : 'Failed to load data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, [reloadArtemis, setArtemis]);
-
-  if (isLoading || artemisLoading) {
-    return <div className="text-center p-10">{t('loading')}</div>;
-  }
-
-  const combinedError = error || artemisError;
-  if (combinedError) {
-    return (
-      <div className="text-center p-10">
-        <p className="text-red-400 mb-4">
-          {t('error_loading') || 'Error loading data'}: {combinedError}
-        </p>
-        <button
-          onClick={() => window.location.reload()}
-          className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
-        >
-          {t('reload') || 'Reload'}
-        </button>
-      </div>
-    );
-  }
-
-  if (!data || !artemis) {
-    return <div className="text-center p-10">{t('no_data') || 'No data available'}</div>;
-  }
-
-  const tabs: { id: ArtemisTab; label: string }[] = [
-    { id: 'overview', label: t('artemis_overview') || 'Overview' },
-    { id: 'decision_engine', label: t('artemis_decision_engine') || 'Decision Engine' },
-    { id: 'orchestration', label: t('artemis_orchestration') || 'Agent Orchestration' },
-    { id: 'learning', label: t('artemis_learning') || 'Learning System' },
-    { id: 'monitoring', label: t('artemis_monitoring') || 'System Monitoring' },
-    { id: 'scenarios', label: t('artemis_scenarios') || 'Trading Scenarios' },
-    { id: 'data_hub', label: t('artemis_data_hub') || 'Data Hub' },
-    { id: 'backtesting', label: t('artemis_backtesting') || 'Backtesting' },
-    { id: 'logs', label: t('artemis_logs') || 'System Logs' },
-    { id: 'settings', label: t('artemis_settings') || 'Settings' },
-    { id: 'autopilot', label: t('artemis_autopilot') || 'Autopilot' },
-  ];
-
-  const refreshArtemis = async () => {
-    try {
-      await reloadArtemis();
-    } catch (e) {
-      console.error('Failed to refresh Artemis state:', e);
+function readSectionFromLocation(): Exclude<ArtemisSectionId, 'legacy_admin'> {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('artemisSection') || params.get('subtab') || 'overview';
+    const allowed = new Set(CANONICAL_SECTIONS.map((s) => s.id));
+    if (raw === 'data_hub' || raw === 'datahub') return 'overview';
+    if (raw === 'autopilot' || raw === 'legacy_admin') return 'system';
+    if (allowed.has(raw as (typeof CANONICAL_SECTIONS)[number]['id'])) {
+      return raw as (typeof CANONICAL_SECTIONS)[number]['id'];
     }
+  } catch {
+    /* ignore */
+  }
+  return 'overview';
+}
+
+const AIManager: React.FC<Props> = ({ onNavigate }) => {
+  const { t, language } = useLanguage();
+  const [activeSection, setActiveSection] = useState<Exclude<ArtemisSectionId, 'legacy_admin'>>(readSectionFromLocation);
+  const [readiness, setReadiness] = useState<ArtemisReadiness | null>(null);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
+  const [audit, setAudit] = useState<ArtemisAuditBundle>({ systemLogs: [], decisions: [] });
+  const [loading, setLoading] = useState(true);
+  const [presentation, setPresentation] = useState<ArtemisPresentationMode>(() => readPresentationMode());
+  const [explainerDismissed, setExplainerDismissed] = useState(() => readExplainerDismissed());
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setReadinessError(null);
+    try {
+      const [ready, bundle] = await Promise.all([fetchArtemisReadiness(), fetchArtemisAuditBundle(50)]);
+      setReadiness(ready);
+      setAudit(bundle);
+    } catch (e) {
+      setReadiness(null);
+      setReadinessError(e instanceof Error ? e.message : 'Failed to load Artemis readiness');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('artemisSection', activeSection);
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      /* ignore */
+    }
+  }, [activeSection]);
+
+  const dir = language === 'fa' ? 'rtl' : 'ltr';
+  const common = {
+    t,
+    language,
+    readiness,
+    readinessError,
+    onNavigate,
+    audit,
+    presentation,
+    onRetry: load,
+    onOpenSection: (id: ArtemisSectionId) => {
+      if (id === 'legacy_admin') {
+        setActiveSection('system');
+        return;
+      }
+      setActiveSection(id);
+    },
+  };
+
+  const sectionBody = useMemo(() => {
+    switch (activeSection) {
+      case 'evidence':
+        return <EvidenceSection {...common} />;
+      case 'decisions':
+        return <DecisionsSection {...common} />;
+      case 'orchestration':
+        return <OrchestrationSection {...common} />;
+      case 'controls':
+        return <ControlsSection {...common} />;
+      case 'lineage':
+        return <LineageSection {...common} />;
+      case 'system':
+        return <SystemSection {...common} />;
+      case 'overview':
+      default:
+        return <OverviewSection {...common} />;
+    }
+  }, [activeSection, t, language, readiness, readinessError, onNavigate, audit, presentation]);
+
+  const changePresentation = (mode: ArtemisPresentationMode) => {
+    setPresentation(mode);
+    writePresentationMode(mode);
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              {t('artemis_central_ai') || 'Artemis Central AI Controller'}
+    <div className="space-y-4" dir={dir} data-artemis-shell="canonical-wpa" data-artemis-view={presentation}>
+      <header className={ARTEMIS_SHELL} data-artemis-header="true">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="max-w-3xl">
+            <h1 className="text-sm md:text-base font-semibold text-foreground">
+              {t('artemis') !== 'artemis' ? t('artemis') : 'Artemis'}
+              <HelpTip label={productLabel(t, 'artemis_help_artemis_label', 'What is Artemis?')}>
+                {productLabel(
+                  t,
+                  'artemis_help_artemis',
+                  'Artemis is TitanGold’s central intelligence. It combines Agent insights, checks safety, and turns them into recommendations.',
+                )}
+              </HelpTip>
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {t('artemis_description') ||
-                'Central decision-making and coordination system for autonomous trading'}
+            <p className="text-xs text-foreground mt-2">
+              {productLabel(
+                t,
+                'artemis_product_sentence',
+                "Artemis combines insights from TitanGold's AI Agents, checks safety and risk, and turns them into understandable recommendations.",
+              )}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {productLabel(
+                t,
+                'artemis_now_sentence',
+                'Right now Artemis can analyze and advise, but automated trading is not enabled.',
+              )}
             </p>
           </div>
-          <div className="flex gap-2 items-center">
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                artemis.status === 'active'
-                  ? 'bg-green-500/20 text-green-400'
-                  : artemis.status === 'standby'
-                    ? 'bg-yellow-500/20 text-yellow-400'
-                    : artemis.status === 'maintenance'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'bg-red-500/20 text-red-400'
-              }`}
-            >
-              {t(artemis.status) || artemis.status}
-            </span>
-            <button
-              onClick={async () => {
-                const newMode = artemis.mode === 'demo' ? 'real' : 'demo';
-                if (
-                  confirm(
-                    t('switch_mode_confirm') ||
-                      `Switch to ${newMode} mode? This will affect all trading operations.`
-                  )
-                ) {
-                  try {
-                    const updated = await api.updateArtemisMode(newMode);
-                    setArtemis(updated);
-                    alert(t('mode_switched') || `Mode switched to ${newMode}`);
-                  } catch (e) {
-                    console.error('Failed to switch mode:', e);
-                    alert(t('mode_switch_failed') || 'Failed to switch mode');
-                  }
-                }
-              }}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-80 ${
-                artemis.mode === 'real'
-                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                  : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-              }`}
-              title={t('click_to_switch_mode') || 'Click to switch between demo and real mode'}
-            >
-              {artemis.mode === 'real' ? '🔴 ' : '🟢 '}
-              {t(artemis.mode) || artemis.mode}
-            </button>
-          </div>
+          <PresentationToggle
+            mode={presentation}
+            onChange={changePresentation}
+            simpleLabel={productLabel(t, 'artemis_view_simple', 'Simple')}
+            advancedLabel={productLabel(t, 'artemis_view_advanced', 'Advanced')}
+          />
         </div>
+      </header>
 
-        <div className="border-b border-border">
-          <nav className="-mb-px flex space-x-6 overflow-x-auto">
-            {tabs.map(tab => (
+      {!explainerDismissed ? (
+        <FirstVisitExplainer
+          title={productLabel(t, 'artemis_explainer_title', 'New to Artemis?')}
+          steps={[
+            productLabel(t, 'artemis_explainer_step_1', 'Agents analyze the market.'),
+            productLabel(t, 'artemis_explainer_step_2', 'Artemis combines their intelligence.'),
+            productLabel(t, 'artemis_explainer_step_3', 'Safety checks must approve before execution is possible.'),
+          ]}
+          gotItLabel={productLabel(t, 'artemis_explainer_got_it', 'Got it')}
+          learnMoreLabel={productLabel(t, 'artemis_explainer_learn_more', 'Learn more')}
+          onGotIt={() => {
+            writeExplainerDismissed();
+            setExplainerDismissed(true);
+          }}
+          onLearnMore={() => setActiveSection('overview')}
+        />
+      ) : null}
+
+      <nav
+        className={ARTEMIS_TAB_STRIP}
+        aria-label={productLabel(t, 'artemis_sections', 'Artemis sections')}
+        data-artemis-nav="true"
+      >
+        <div className="flex min-w-max gap-1.5">
+          {CANONICAL_SECTIONS.map((section) => {
+            const selected = activeSection === section.id;
+            const label = t(section.labelKey) !== section.labelKey ? t(section.labelKey) : section.fallback;
+            return (
               <button
-                key={tab.id}
-                data-artemis-tab={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-purple-500 text-purple-400'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
+                key={section.id}
+                type="button"
+                data-artemis-tab={section.id}
+                data-artemis-section={section.id}
+                aria-current={selected ? 'page' : undefined}
+                onClick={() => setActiveSection(section.id)}
+                className={`${ARTEMIS_TAB_ITEM} ${selected ? ARTEMIS_TAB_ACTIVE : ''}`}
               >
-                {tab.label}
+                {label}
               </button>
-            ))}
-          </nav>
+            );
+          })}
         </div>
-      </Card>
+      </nav>
 
-      <div className="mt-6">
-        <Suspense fallback={<div className="text-center p-10">{t('loading')}</div>}>
-          {activeTab === 'overview' && (
-            <OverviewTab
-              data={data}
-              artemis={artemis}
-              t={t}
-              onRefresh={refreshArtemis}
-              onNavigate={setActiveTab}
-              Card={Card}
-            />
-          )}
-          {activeTab === 'decision_engine' && (
-            <DecisionEngineTab
-              artemis={artemis}
-              t={t}
-              onRefresh={refreshArtemis}
-              Card={Card}
-              onNavigate={onNavigate}
-            />
-          )}
-          {activeTab === 'orchestration' && <OrchestrationTab t={t} Card={Card} />}
-          {activeTab === 'learning' && <LearningTab t={t} Card={Card} />}
-          {activeTab === 'monitoring' && (
-            <MonitoringTab
-              artemis={artemis}
-              t={t}
-              onRefresh={refreshArtemis}
-              Card={Card}
-              onNavigate={onNavigate}
-            />
-          )}
-          {activeTab === 'scenarios' && (
-            <ScenariosTab t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-          {activeTab === 'data_hub' && (
-            <DataHubTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-          {activeTab === 'backtesting' && (
-            <BacktestingTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-          {activeTab === 'logs' && (
-            <SystemLogsTab artemis={artemis} t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-          {activeTab === 'settings' && (
-            <SettingsTab
-              artemis={artemis}
-              t={t}
-              onRefresh={refreshArtemis}
-              Card={Card}
-              onNavigate={onNavigate}
-            />
-          )}
-          {activeTab === 'autopilot' && (
-            <AutopilotTab t={t} onRefresh={refreshArtemis} Card={Card} />
-          )}
-        </Suspense>
-      </div>
+      {loading ? (
+        <div className="text-center p-10" role="status">
+          {t('loading')}
+        </div>
+      ) : readinessError ? (
+        <div className="min-h-[320px]" data-artemis-readiness-error="true">
+          <EmptyState
+            title={productLabel(t, 'artemis_readiness_error', 'Artemis status unavailable')}
+            body={readinessError}
+            action={<LinkAction onClick={load}>{productLabel(t, 'retry', 'Retry')}</LinkAction>}
+          />
+        </div>
+      ) : (
+        <div className="min-h-[320px]">{sectionBody}</div>
+      )}
     </div>
   );
 };
