@@ -1,50 +1,55 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-A CLOSED AND FROZEN
+description: TitanGold Rule 02 — Artemis WP-B canonical evidence contract discovery
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-A — CLOSED AND FROZEN**
+**ARTEMIS WP-B — CANONICAL EVIDENCE CONTRACT DISCOVERY**
 
 Current area:
-Shared Foundation → Artemis Central Intelligence (AI Center → Artemis)
+Shared Foundation → Artemis Central Intelligence (Agent → Artemis evidence layer)
 
 Current program slice:
-ARTEMIS-WP-A-LEGACY-SAFETY-UI
-
-Canonical product baseline (squash merge PR #19):
-`7c13fe13015de1b44ab534dff8deb72c6e5f5668`
+ARTEMIS-WP-B-EVIDENCE-CONTRACT-DISCOVERY
 
 Risk tier:
-Closed baseline (no active implementation). Future Artemis runtime maturity is WP-B/C/D only.
+**DISCOVERY ONLY** (Tier 0 — documentation; no runtime implementation)
 
-Engineering status:
-**DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
-**ARTEMIS OWNER HUMAN QA ROUND 4 = PASS**  
-**Independent code review = PASS**  
-**Final-head GitHub CI = PASS**  
-**Exact-main Staging aligned**  
-**WP-A CLOSED AND FROZEN**
+Frozen baselines (do not reopen):
+- **WP-A product:** `7c13fe13015de1b44ab534dff8deb72c6e5f5668` — CLOSED AND FROZEN
+- **WP-A docs closeout:** `845ea0d35b75b1beca516be235f47d98c5703692`
+- **Data Hub:** PASS / FROZEN
+- **Trend:** FROZEN
+- **Arbitrage:** FROZEN
 
 Current Artemis maturity:
 **ADVISORY ONLY** (`LEGACY_ADVISORY_ONLY`)
 
 Execution:
 **NOT ACTIVATED**  
-`executionEligible = false` · `approvedForExecution` must not be treated as true  
-Legacy `approved:true` ≠ execution authorization
+`executionEligible = false` · legacy `approved:true` ≠ execution authorization
+
+Authorized in this round:
+- Read-only discovery
+- Living discovery document
+- Rule 02 update
+- Discovery-only git commit + push (no PR unless Owner requests)
 
 Not authorized:
-- Do not reopen WP-A
-- Do not redesign Data Hub / Trend / Arbitrage
-- Do not enable Live / orders / private provider calls
-- Do not start WP-B implementation in this baseline
-- Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
+- Runtime / product code
+- Database migration
+- Staging/Production deploy
+- Live / orders / private provider calls
+- Scheduler / worker topology
+- WP-A UI redesign
+- Data Hub / Trend / Arbitrage product edits
 
-Canonical Artemis section IDs:
-overview · evidence · decisions · orchestration · controls · lineage · system
+Branch / worktree:
+- `feat/artemis-wp-b-evidence-contract-discovery`
+- `/home/ubuntu/worktrees/titangold-artemis-wp-b-discovery`
 
-Next authorized transition:
-WP-B discovery only, after explicit Rule 02 replacement. Do not begin WP-B from this freeze commit.
+Next gate:
+Owner review of `docs/ARTEMIS_WP_B_EVIDENCE_CONTRACT_DISCOVERY.md`.  
+Implementation of WP-B is **not** started and is **not** authorized by this discovery.
