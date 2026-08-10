@@ -63,4 +63,5 @@ Branch / worktree:
 
 Next gate:
 Owner Human QA of Staging Artemis product truthfulness.  
-Do not create PR until Human QA is requested.
+Do not create PR until Human QA is requested.  
+Do not start WP-C or B10.
