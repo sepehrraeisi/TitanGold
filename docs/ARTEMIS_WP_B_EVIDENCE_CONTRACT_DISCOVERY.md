@@ -766,10 +766,11 @@ Remaining items are **not** open B0 questions; they are future gates:
 | Commit C (on-read + SQL + readiness + i18n) | `11a178be97938b6113b1ab8565f616b9fa8a93d3` |
 | Pre-Human-QA validator strictness | `6c12fe69bf109f8969fc437476c8f5b679f15aa3` |
 | Pre-Human-QA frontend consumption truth | `4652c36f21039e7f99f2600751a007b73a0347c4` |
+| Semantic hardening implementation | *(this commit)* |
 | Documentation HEAD | *(this commit)* |
-| Backend runtimeCommit (Staging) | `6c12fe69bf109f8969fc437476c8f5b679f15aa3` (`6c12fe6`, `env:TITAN_RUNTIME_COMMIT`) |
-| Frontend product implementation tree | `4652c36f21039e7f99f2600751a007b73a0347c4` |
-| Served frontend bundle | `assets/index-DRB6fBxf.js` |
+| Backend runtimeCommit (Staging) | semantic-hardening HEAD after guarded titan-backend deploy |
+| Frontend product implementation tree | `4652c36f21039e7f99f2600751a007b73a0347c4` *(unchanged this round)* |
+| Served frontend bundle | `assets/index-DRB6fBxf.js` *(frontend not redeployed)* |
 | Data Hub lazy chunk | `assets/DataHubWorkspace-DmjSjCKZ.js` |
 | schemaVersion / contractVersion | `1.0.0` / `artemis-evidence-1.0.0` *(not bumped)* |
 | Adapter versions | trend `1.0.0` · arbitrage `1.0.0` · volume `1.0.0` |
@@ -786,13 +787,18 @@ Remaining items are **not** open B0 questions; they are future gates:
 | Persistence | On-read only · **no** `ai_decisions` migration · **no** B10 table |
 | SQL column fix | `/logs` + readiness use `d.input_data AS input`, `d.output_data AS output` |
 | Identity | envelope `agentId` = one of 15 canonical keys only · alias/`agent-N` rejected by validator |
-| Nested contract | allowlisted conclusion/strength/confidence/freshness/dataQuality/provenance/EvidenceItem/ownershipScope |
+| UUID identifiers | `agentRecordId`/`runId`/`correlationId`/`decisionContextId` = UUID, `null`, `"unavailable"`, or `{availability:unavailable\|not_applicable\|blocked, reasonKey?}` |
+| dataQuality | status/sourceAvailability/completeness/sampleAdequacy enums · staleness=freshness states · providerDegradation boolean or unavailable · coverage unavailable or `{expected,observed,unit}` |
+| confidence | `calibrationState` enum · `sampleWindow` unavailable or bounded `{start,end,size,unit}` |
+| EvidenceItem nested | freshness/provenance use the same sub-schemas as the top-level contract |
+| Role extensions | analytical ≠ opportunity ≠ veto ≠ sizing ≠ feasibility ≠ execution · Optimization `NOT_APPLICABLE` · no fake Risk/Liquidity/Order adapters |
+| Nested contract | allowlisted conclusion/strength/confidence/freshness/dataQuality/provenance/EvidenceItem/ownershipScope/opportunity/control/allocation/feasibility |
 | Secret scan | defense in depth · still rejects JWT/API key/token/`input_data`/`output_data`/`metadata` |
 | Trend confidence | UNAVAILABLE · `conclusion.strength` from `raw.trend.confidence` (`percent_100`) |
 | Generic writer 0.5 | UNAVAILABLE unless explicit Agent confidence field exists |
 | Freshness | missing/ambiguous source or unknown TF → `unknown` · never assume `1h` |
 | Frozen diff vs B0 | Trend/Arbitrage/Data Hub/WP-A IA/containment/TE gate owners = **unchanged** |
-| Backend unit | `npm run test:unit` → **100 passed / 100 total / 720 tests / EXIT 0** |
+| Backend unit | `npm run test:unit` → **100 passed / 100 total / 728 tests / EXIT 0** |
 | Frontend Artemis regression | `ArtemisWpA.test.tsx` → **35 passed / 35** |
 | Production frontend build | `npm run build` → **PASS** |
 | Staging Browser QA | authenticated Simple+Advanced 7 sections + Data Hub nav → **69/69 PASS** |
@@ -836,6 +842,21 @@ Remaining items are **not** open B0 questions; they are future gates:
 | Authenticated `/readiness`+`/logs` | `implemented=true` · `compatibleAgentCount=3` · `ON_READ_PARTIAL` · `artemisConsumable/decisionEligible/executionEligible=false` · `orchestration=LEGACY` · `sourceError=null` |
 | Browser QA | Simple + Advanced · no raw enums/i18n keys/WP-B/WP-C copy in Simple · Optimization truthful · Pattern blocked · Advisory only · Data Hub canonical mount |
 | Pre-existing Data Hub console | hydration `<div>` inside `<p>` on Data Hub nav · **not** WP-B.1 owned · Data Hub remains FROZEN |
+
+### 24.4 Canonical contract semantic hardening
+
+| Item | Value |
+|---|---|
+| UUID identifiers | available = RFC 4122 · absent/`null` allowed · `"unavailable"` or `{availability, reasonKey?}` · reject `foo`/`run-1`/`agent123` |
+| dataQuality | real enums · no fake coverage percent · measured coverage must declare expected/observed/unit |
+| confidence | `calibrationState` ∈ uncalibrated/pending/calibrated/not_applicable/unavailable |
+| sampleWindow | unavailable representation or bounded ISO start/end + non-negative integer size + unit enum |
+| EvidenceItem | nested freshness/provenance validated with the same sub-schemas |
+| Role model | identity/authority mapping for 15 agents is separate from role-payload validation |
+| WP-B.1 emitters | Trend / Arbitrage / Volume only · Pattern excluded · Optimization `NOT_APPLICABLE` |
+| Invalid roles | Risk/Portfolio/Optimization/Liquidity/Order analytical BUY/SELL/bullish envelopes rejected · Arbitrage directional vote rejected |
+| Execution | still fail-closed · `artemisConsumable/decisionEligible/executionEligible=false` · TE gate untouched |
+| Frontend | not redeployed · previous Browser QA remains valid · bounded smoke only |
 
 **Verdict:**  
 **ARTEMIS WP-B.1 — IMPLEMENTATION COMPLETE ON STAGING**  

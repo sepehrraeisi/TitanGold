@@ -165,7 +165,7 @@ export function mapVolumePersistedRun({ row = {}, output: rawOutput, input: rawI
       freshness,
       dataQuality: resolveDataQuality({
         sourceAvailability: 'available',
-        sampleAdequacy: asFiniteNumber(output.metadata?.dataPoints) >= 20 ? 'ok' : 'degraded',
+        sampleAdequacy: asFiniteNumber(output.metadata?.dataPoints) >= 20 ? 'ok' : 'insufficient',
         mockOrPlaceholder: false,
         freshnessStatus: freshness.status,
         knownLimitationKeys: limitations,

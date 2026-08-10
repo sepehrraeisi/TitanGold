@@ -6,6 +6,7 @@ import {
   EXECUTION_CLASS,
   LIFECYCLE_STATUS,
   SCHEMA_VERSION,
+  canonicalIdentifier,
 } from '../../contracts/artemisEvidenceContract.js';
 import { asIsoOrNull } from '../artemisEvidenceTruth.js';
 
@@ -64,8 +65,8 @@ export function buildBaseEnvelope({
     agentId,
     agentRole: role.agentRole,
     authorityClass: role.authorityClass,
-    runId: runId || null,
-    agentRecordId: agentRecordId || null,
+    runId: canonicalIdentifier(runId),
+    agentRecordId: canonicalIdentifier(agentRecordId),
     analysisTimestamp: asIsoOrNull(analysisTimestamp),
     createdAt: asIsoOrNull(createdAt),
     symbol: symbol || null,

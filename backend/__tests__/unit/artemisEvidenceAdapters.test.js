@@ -8,14 +8,18 @@ import { mapArbitragePersistedRun } from '../../services/artemisEvidenceAdapters
 import { mapVolumePersistedRun } from '../../services/artemisEvidenceAdapters/volumeAdapter.js';
 
 const NOW = Date.parse('2026-08-10T12:10:00.000Z');
+const TREND_RUN_ID = '11111111-1111-4111-8111-111111111111';
+const TREND_AGENT_RECORD_ID = '22222222-2222-4222-8222-222222222222';
+const ARB_RUN_ID = '33333333-3333-4333-8333-333333333333';
+const VOL_RUN_ID = '44444444-4444-4444-8444-444444444444';
 
 describe('Trend read-only adapter', () => {
   it('maps truthful strength and keeps confidence unavailable', () => {
     const mapped = mapTrendPersistedRun({
       nowMs: NOW,
       row: {
-        id: 'trend-run-1',
-        agent_id: 'uuid-trend',
+        id: TREND_RUN_ID,
+        agent_id: TREND_AGENT_RECORD_ID,
         created_at: '2026-08-10T12:00:00.000Z',
         confidence: 0.72,
       },
@@ -48,7 +52,7 @@ describe('Trend read-only adapter', () => {
   it('does not treat last_candle === analysis timestamp as fresh and never assumes 1h', () => {
     const ambiguous = mapTrendPersistedRun({
       nowMs: NOW,
-      row: { id: 'trend-run-2', created_at: '2026-08-10T12:00:00.000Z' },
+      row: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', created_at: '2026-08-10T12:00:00.000Z' },
       output: {
         symbol: 'ETH/USDT',
         timeframe: '1h',
@@ -62,7 +66,7 @@ describe('Trend read-only adapter', () => {
 
     const unknownTf = mapTrendPersistedRun({
       nowMs: NOW,
-      row: { id: 'trend-run-3', created_at: '2026-08-10T12:00:00.000Z' },
+      row: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', created_at: '2026-08-10T12:00:00.000Z' },
       output: {
         timestamp: '2026-08-10T12:00:00.000Z',
         last_candle_timestamp: '2026-08-10T11:00:00.000Z',
@@ -79,7 +83,7 @@ describe('Arbitrage read-only adapter', () => {
   it('is opportunity evidence, not a directional vote', () => {
     const mapped = mapArbitragePersistedRun({
       nowMs: NOW,
-      row: { id: 'arb-1', agent_id: 'uuid-arb', created_at: '2026-08-10T12:00:00.000Z', confidence: 0.5 },
+      row: { id: ARB_RUN_ID, agent_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', created_at: '2026-08-10T12:00:00.000Z', confidence: 0.5 },
       output: {
         timestamp: '2026-08-10T12:00:00.000Z',
         confidence: 0.5,
@@ -105,7 +109,7 @@ describe('Arbitrage read-only adapter', () => {
   it('marks generic writer 0.5 without explicit Agent confidence unavailable', () => {
     const mapped = mapArbitragePersistedRun({
       nowMs: NOW,
-      row: { id: 'arb-2', created_at: '2026-08-10T12:00:00.000Z', confidence: 0.5 },
+      row: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', created_at: '2026-08-10T12:00:00.000Z', confidence: 0.5 },
       output: {
         timestamp: '2026-08-10T12:00:00.000Z',
         candidates: [],
@@ -120,7 +124,7 @@ describe('Volume read-only adapter', () => {
   it('uses explicit trading_recommendation.confidence on percent_100 scale', () => {
     const mapped = mapVolumePersistedRun({
       nowMs: NOW,
-      row: { id: 'vol-1', created_at: '2026-08-10T12:00:00.000Z', confidence: 0.5 },
+      row: { id: VOL_RUN_ID, created_at: '2026-08-10T12:00:00.000Z', confidence: 0.5 },
       output: {
         symbol: 'BTC/USDT',
         timeframe: '1h',
@@ -147,7 +151,7 @@ describe('Volume read-only adapter', () => {
   it('fails closed on mock/placeholder or missing core indicators', () => {
     const mock = mapVolumePersistedRun({
       nowMs: NOW,
-      row: { id: 'vol-mock', created_at: '2026-08-10T12:00:00.000Z' },
+      row: { id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1', created_at: '2026-08-10T12:00:00.000Z' },
       output: {
         timestamp: '2026-08-10T12:00:00.000Z',
         obv: { current: 1 },
@@ -159,7 +163,7 @@ describe('Volume read-only adapter', () => {
 
     const missing = mapVolumePersistedRun({
       nowMs: NOW,
-      row: { id: 'vol-empty', created_at: '2026-08-10T12:00:00.000Z', confidence: 0.5 },
+      row: { id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', created_at: '2026-08-10T12:00:00.000Z', confidence: 0.5 },
       output: { timestamp: '2026-08-10T12:00:00.000Z', trading_recommendation: { action: 'HOLD' } },
     });
     expect(missing.envelope.availability).toBe('unavailable');

@@ -45,20 +45,23 @@ Readiness terminology (do not overclaim):
 - `artemisConsumable = false` · `decisionEligible = false` · `executionEligible = false`
 
 Provenance (Staging):
-- Backend runtimeCommit: `6c12fe69bf109f8969fc437476c8f5b679f15aa3`
-- Frontend product tree: `4652c36f21039e7f99f2600751a007b73a0347c4`
-- Served bundle: `assets/index-DRB6fBxf.js`
+- Backend runtimeCommit: semantic-hardening HEAD after guarded titan-backend deploy
+- Frontend product tree: `4652c36f21039e7f99f2600751a007b73a0347c4` (unchanged this round)
+- Served bundle: `assets/index-DRB6fBxf.js` (frontend not redeployed)
 
 Authorized in this round:
-- Canonical evidence contract 1.0.0 (strict identity + nested allowlists)
+- Canonical evidence contract 1.0.0 (strict identity + nested allowlists + role semantics)
+- UUID / unavailable identifier semantics
+- dataQuality / confidence / sampleWindow / nested EvidenceItem sub-schemas
 - Identity normalization
 - Truthful confidence / strength / freshness / data-quality
 - Read-only Trend + Arbitrage + Volume adapters
 - On-read projection from `ai_decisions`
 - Scoped SQL column fix (`input_data` / `output_data`)
 - Safe RBAC projection + readiness compatibility counts
-- Pre-Human-QA validator/frontend remediation
-- Focused tests, guarded backend+frontend Staging deploy, authenticated smoke + Browser QA
+- Pre-Human-QA validator/frontend remediation + final semantic hardening
+- Focused tests, guarded titan-backend Staging deploy, authenticated smoke
+- Bounded Browser QA only if frontend-visible semantics change (this round: no FE change)
 
 Not authorized:
 - Database migration / B10 evidence table
