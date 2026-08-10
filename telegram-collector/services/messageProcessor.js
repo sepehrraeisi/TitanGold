@@ -11,6 +11,12 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const ProcessorCore = require('./messageProcessorCore');
 const EnhancedFeatures = require('./enhancedFeatures');
+const {
+    DEFAULT_PROCESSOR_CONCURRENCY,
+    parseProcessorConcurrency,
+    mapWithConcurrency,
+    CompletionDrivenScheduler,
+} = require('./messageProcessorHelpers');
 
 // Database connection (same as collector via telegram-collector/.env)
 const pool = new Pool({
@@ -23,12 +29,18 @@ const pool = new Pool({
 });
 
 class EnhancedMessageProcessor {
-    constructor() {
+    constructor(options = {}) {
         this.config = {
             enabled: process.env.TELEGRAM_PROCESSOR_ENABLED !== 'false',
             batchSize: parseInt(process.env.TELEGRAM_PROCESSOR_BATCH_SIZE || '150'),
             intervalSeconds: parseInt(process.env.TELEGRAM_PROCESSOR_INTERVAL_SECONDS || '15'),
-            
+            concurrency: parseProcessorConcurrency(
+                options.concurrency != null
+                    ? options.concurrency
+                    : process.env.TELEGRAM_PROCESSOR_CONCURRENCY,
+                DEFAULT_PROCESSOR_CONCURRENCY
+            ),
+
             // Assets
             assets: ['BTC', 'ETH', 'USDT', 'GOLD', 'DOLLAR', 'EURO', 'DIRHAM', 'BITCOIN', 'ETHEREUM', 'OIL', 'SILVER'],
             currencies: ['USD', 'IRR', 'EUR', 'AED', 'TRY', 'GBP', 'JPY'],
@@ -43,7 +55,7 @@ class EnhancedMessageProcessor {
                 'نفت': 'OIL',
                 'نقره': 'SILVER'
             },
-            
+
             // Countries
             countries: ['Iran', 'USA', 'Russia', 'China', 'Europe', 'UK', 'Germany', 'France', 'Turkey', 'UAE', 'Israel', 'Syria', 'Iraq'],
             countryMappings: {
@@ -62,13 +74,38 @@ class EnhancedMessageProcessor {
                 'عراق': 'Iraq'
             }
         };
-        
+
         // Initialize modules
         this.core = new ProcessorCore(this.config);
         this.enhanced = new EnhancedFeatures(this.config);
-        
-        this.intervalId = null;
-        this.isRunning = false;
+
+        // Completion-driven scheduling (replaces overlapping setInterval cycles)
+        this.scheduler = new CompletionDrivenScheduler({
+            getIntervalSeconds: () => this.config.intervalSeconds,
+            runCycle: () => this.processMessages(),
+            onError: (err) => console.error('❌ Error in processing cycle:', err),
+        });
+    }
+
+    get isRunning() {
+        return this.scheduler.isRunning;
+    }
+
+    get cycleRunning() {
+        return this.scheduler.cycleRunning;
+    }
+
+    get cycleTimer() {
+        return this.scheduler.cycleTimer;
+    }
+
+    // Back-compat for older code/tests that assigned these fields directly
+    set isRunning(value) {
+        this.scheduler.isRunning = Boolean(value);
+    }
+
+    set cycleRunning(value) {
+        this.scheduler.cycleRunning = Boolean(value);
     }
 
     /**
@@ -76,6 +113,8 @@ class EnhancedMessageProcessor {
      */
     async getUnprocessedMessages() {
         // Use NOT EXISTS instead of NOT IN for better performance and to avoid hang on large processed set
+        // NOTE: Do not switch to telegram_messages.is_processed here unless that flag is proven
+        // transactionally consistent with processed_telegram_messages for this processor path.
         const query = `
             SELECT 
                 m.id,
@@ -95,7 +134,7 @@ class EnhancedMessageProcessor {
             ORDER BY m.created_at ASC
             LIMIT $1
         `;
-        
+
         const result = await pool.query(query, [this.config.batchSize]);
         return result.rows;
     }
@@ -105,34 +144,34 @@ class EnhancedMessageProcessor {
      */
     async processMessageEnhanced(message) {
         const startTime = Date.now();
-        
+
         try {
             const text = message.message_text;
-            
+
             // === PHASE 1: Core Processing ===
             const language = this.core.detectLanguage(text);
             const cleaned_text = this.core.cleanText(text);
             const keywords = this.core.extractKeywords(text);
             const hashtags = this.core.extractHashtags(text);
             const urls = this.core.extractURLs(text);
-            
+
             // === PHASE 2: Entity Extraction ===
             const mentioned_assets = this.core.extractAssets(text);
             const mentioned_currencies = this.core.extractCurrencies(text);
             const extracted_prices = this.core.extractPrices(text);
             const countries = this.enhanced.extractCountries(text);
-            
+
             // === PHASE 3: Enhanced Categorization ===
             const event_category = this.enhanced.detectEventCategory(text);
             const geopolitical_relevance = this.enhanced.detectGeopoliticalRelevance(text);
-            
+
             // === PHASE 4: Sentiment Analysis ===
             const sentimentResult = this.core.analyzeSentiment(text);
-            
+
             // === PHASE 5: Classification ===
             const news_type = this.core.classifyNewsType(text, mentioned_assets);
             const news_category = this.core.determineCategory(text, mentioned_assets);
-            
+
             // === PHASE 6: Impact Assessment ===
             const market_impact_level = this.enhanced.assessMarketImpact(
                 event_category,
@@ -141,7 +180,7 @@ class EnhancedMessageProcessor {
                 countries,
                 geopolitical_relevance
             );
-            
+
             const importance_level = this.core.assessImportance(
                 sentimentResult,
                 extracted_prices,
@@ -149,18 +188,18 @@ class EnhancedMessageProcessor {
                 message.priority,
                 market_impact_level
             );
-            
+
             const is_actionable = (
                 importance_level === 'critical' ||
                 importance_level === 'high'
             ) && (mentioned_assets.length > 0 || geopolitical_relevance);
-            
+
             // === PHASE 7: Breaking News Detection ===
             const is_breaking = this.enhanced.detectBreakingNews(text, event_category, market_impact_level);
-            
+
             // === PHASE 8: Spam Detection ===
             const spam_probability = (text.length < 20 || hashtags.length > 5) ? 0.7 : 0.1;
-            
+
             // Prepare processed data object
             const processedData = {
                 cleaned_text,
@@ -180,7 +219,7 @@ class EnhancedMessageProcessor {
                 is_breaking,
                 event_urgency: is_breaking ? 'immediate' : 'medium_term'
             };
-            
+
             // === PHASE 9: Agent Impact Calculation ===
             const agentImpacts = this.enhanced.calculateAgentImpact(processedData);
             const affected_agents = agentImpacts.map(ai => ai.agent_key);
@@ -189,12 +228,12 @@ class EnhancedMessageProcessor {
                 high_impact_agents: agentImpacts.filter(ai => ai.impact_score >= 0.7).map(ai => ai.agent_key),
                 action_required: agentImpacts.filter(ai => ai.requires_action).length
             };
-            
+
             // === PHASE 10: Save to Database ===
             const client = await pool.connect();
             try {
                 await client.query('BEGIN');
-                
+
                 // Insert processed message
                 const insertQuery = `
                     INSERT INTO processed_telegram_messages (
@@ -212,7 +251,7 @@ class EnhancedMessageProcessor {
                         $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
                     ) RETURNING id
                 `;
-                
+
                 const values = [
                     message.id, message.channel_id, language, cleaned_text,
                     keywords, hashtags, urls,
@@ -225,10 +264,10 @@ class EnhancedMessageProcessor {
                     spam_probability, 'completed',
                     new Date(startTime), new Date(), Date.now() - startTime
                 ];
-                
+
                 const result = await client.query(insertQuery, values);
                 const processedId = result.rows[0].id;
-                
+
                 // Insert agent impacts
                 for (const impact of agentImpacts) {
                     await client.query(`
@@ -245,7 +284,7 @@ class EnhancedMessageProcessor {
                         impact.priority_level, impact.requires_action, impact.action_type
                     ]);
                 }
-                
+
                 // Insert news event if significant
                 if (geopolitical_relevance || is_breaking || market_impact_level === 'severe' || market_impact_level === 'high') {
                     await client.query(`
@@ -262,9 +301,9 @@ class EnhancedMessageProcessor {
                         processedData.event_urgency, 0.8
                     ]);
                 }
-                
+
                 await client.query('COMMIT');
-                
+
                 return {
                     success: true,
                     processed_id: processedId,
@@ -273,17 +312,17 @@ class EnhancedMessageProcessor {
                     is_breaking: is_breaking,
                     event_category: event_category
                 };
-                
+
             } catch (error) {
                 await client.query('ROLLBACK');
                 throw error;
             } finally {
                 client.release();
             }
-            
+
         } catch (error) {
             console.error(`❌ Error processing message ${message.id}:`, error.message);
-            
+
             // Save error
             try {
                 await pool.query(`
@@ -298,7 +337,7 @@ class EnhancedMessageProcessor {
             } catch (dbError) {
                 console.error('❌ Error saving failure:', dbError.message);
             }
-            
+
             return {
                 success: false,
                 error: error.message,
@@ -313,39 +352,42 @@ class EnhancedMessageProcessor {
     async processMessages() {
         try {
             console.log('\n🔄 Starting enhanced processing cycle...');
-            
+
             const messages = await this.getUnprocessedMessages();
-            
+
             if (messages.length === 0) {
                 console.log('   ✅ No new messages to process');
                 return;
             }
-            
+
             console.log(`   📋 Found ${messages.length} message(s) to process`);
-            
-            const results = await Promise.allSettled(
-                messages.map(msg => this.processMessageEnhanced(msg))
+            console.log(`   🔒 Concurrency: ${this.config.concurrency}`);
+
+            const results = await mapWithConcurrency(
+                messages,
+                this.config.concurrency,
+                (msg) => this.processMessageEnhanced(msg)
             );
-            
+
             const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
             const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length;
-            const breaking = results.filter(r => r.status === 'fulfilled' && r.value.is_breaking).length;
+            const breaking = results.filter(r => r.status === 'fulfilled' && r.value && r.value.is_breaking).length;
             const totalAgents = results
-                .filter(r => r.status === 'fulfilled' && r.value.success)
+                .filter(r => r.status === 'fulfilled' && r.value && r.value.success)
                 .reduce((sum, r) => sum + (r.value.agents_affected || 0), 0);
-            
+
             const avgDuration = results
-                .filter(r => r.status === 'fulfilled')
+                .filter(r => r.status === 'fulfilled' && r.value)
                 .map(r => r.value.duration_ms)
-                .reduce((a, b) => a + b, 0) / results.length;
-            
+                .reduce((a, b) => a + b, 0) / (results.filter(r => r.status === 'fulfilled' && r.value).length || 1);
+
             // Category breakdown
             const categories = {};
-            results.filter(r => r.status === 'fulfilled' && r.value.success).forEach(r => {
+            results.filter(r => r.status === 'fulfilled' && r.value && r.value.success).forEach(r => {
                 const cat = r.value.event_category || 'GENERAL';
                 categories[cat] = (categories[cat] || 0) + 1;
             });
-            
+
             console.log(`\n✅ Enhanced processing cycle completed`);
             console.log(`   📊 Successful: ${successful}`);
             console.log(`   ❌ Failed: ${failed}`);
@@ -353,10 +395,20 @@ class EnhancedMessageProcessor {
             console.log(`   🤖 Agent impacts: ${totalAgents}`);
             console.log(`   ⏱️  Avg duration: ${avgDuration.toFixed(0)}ms`);
             console.log(`   📰 Categories:`, Object.entries(categories).map(([k,v]) => `${k}=${v}`).join(', '));
-            
+
         } catch (error) {
             console.error('❌ Error in processMessages:', error);
+            // Preserve prior behavior: cycle errors are logged here and must not
+            // permanently disable scheduling (scheduler also guards with try/finally).
         }
+    }
+
+    /**
+     * Run one cycle with a strict in-flight guard.
+     * Failures reset state in finally so future cycles are not permanently disabled.
+     */
+    async runOneCycle() {
+        return this.scheduler.runOneCycle();
     }
 
     /**
@@ -368,39 +420,26 @@ class EnhancedMessageProcessor {
             return;
         }
 
-        if (this.isRunning) {
+        if (this.scheduler.isRunning) {
             console.log('⚠️ Enhanced Processor already running');
             return;
         }
 
-        this.isRunning = true;
         console.log(`🚀 Starting Enhanced Telegram Message Processor v2.0`);
         console.log(`   📊 Batch size: ${this.config.batchSize}`);
         console.log(`   ⏱️  Interval: ${this.config.intervalSeconds}s`);
+        console.log(`   🔒 Concurrency: ${this.config.concurrency}`);
         console.log(`   🤖 AI Agents: 15 specialized agents`);
         console.log(`   📰 Categories: 15 news categories`);
 
-        // Run immediately
-        await this.processMessages().catch(err =>
-            console.error('❌ Error in initial processing:', err)
-        );
-
-        // Schedule periodic processing
-        this.intervalId = setInterval(async () => {
-            await this.processMessages().catch(err =>
-                console.error('❌ Error in periodic processing:', err)
-            );
-        }, this.config.intervalSeconds * 1000);
+        // Initial immediate run, then completion-driven scheduling.
+        await this.scheduler.start();
 
         console.log('✅ Enhanced Processor started successfully\n');
     }
 
     stop() {
-        if (this.intervalId) {
-            clearInterval(this.intervalId);
-            this.intervalId = null;
-        }
-        this.isRunning = false;
+        this.scheduler.stop();
         console.log('🛑 Enhanced Processor stopped');
     }
 
@@ -410,9 +449,14 @@ class EnhancedMessageProcessor {
     }
 }
 
-// Export
+// Export singleton (PM2 / require.main entrypoint)
 const processor = new EnhancedMessageProcessor();
 module.exports = processor;
+module.exports.EnhancedMessageProcessor = EnhancedMessageProcessor;
+module.exports.mapWithConcurrency = mapWithConcurrency;
+module.exports.parseProcessorConcurrency = parseProcessorConcurrency;
+module.exports.DEFAULT_PROCESSOR_CONCURRENCY = DEFAULT_PROCESSOR_CONCURRENCY;
+module.exports.CompletionDrivenScheduler = CompletionDrivenScheduler;
 
 // Auto-start
 if (require.main === module) {
@@ -421,13 +465,13 @@ if (require.main === module) {
         console.error('❌ Fatal error:', err);
         process.exit(1);
     });
-    
+
     process.on('SIGINT', () => {
         console.log('\n📡 Received SIGINT, shutting down...');
         processor.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', () => {
         console.log('\n📡 Received SIGTERM, shutting down...');
         processor.stop();
