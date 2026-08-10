@@ -764,11 +764,18 @@ Remaining items are **not** open B0 questions; they are future gates:
 | Commit A (contract + identity + truth) | `78a9c7d969f90e5dddd3ad5485b41406f102170f` |
 | Commit B (Trend/Arbitrage/Volume adapters) | `85b0b04c81bb36b3ab07d46fa312e0b885d0aacc` |
 | Commit C (on-read + SQL + readiness + i18n) | `11a178be97938b6113b1ab8565f616b9fa8a93d3` |
-| Documentation HEAD | *(this commit D)* |
-| Runtime implementation commit | `11a178be97938b6113b1ab8565f616b9fa8a93d3` |
-| schemaVersion / contractVersion | `1.0.0` / `artemis-evidence-1.0.0` |
+| Pre-Human-QA validator strictness | `6c12fe69bf109f8969fc437476c8f5b679f15aa3` |
+| Pre-Human-QA frontend consumption truth | `4652c36f21039e7f99f2600751a007b73a0347c4` |
+| Documentation HEAD | *(this commit)* |
+| Backend runtimeCommit (Staging) | `6c12fe69bf109f8969fc437476c8f5b679f15aa3` (`6c12fe6`, `env:TITAN_RUNTIME_COMMIT`) |
+| Frontend product implementation tree | `4652c36f21039e7f99f2600751a007b73a0347c4` |
+| Served frontend bundle | `assets/index-DRB6fBxf.js` |
+| Data Hub lazy chunk | `assets/DataHubWorkspace-DmjSjCKZ.js` |
+| schemaVersion / contractVersion | `1.0.0` / `artemis-evidence-1.0.0` *(not bumped)* |
 | Adapter versions | trend `1.0.0` · arbitrage `1.0.0` · volume `1.0.0` |
 | Compatible agents | 3 (`trend`, `arbitrage`, `volume`) |
+| Catalog readiness | `ROLE_MAPPED` + `consumption=evidence_compatible` for Trend/Arbitrage/Volume |
+| Artemis integration readiness | **NOT** `EVIDENCE_READY` · `evidence.readiness=ON_READ_PARTIAL` · `artemisConsumable=false` |
 | Pattern | BLOCKED / excluded from WP-B.1 |
 | Optimization | `NOT_APPLICABLE` for sizing/control |
 | Artemis consumable | **false** |
@@ -778,18 +785,21 @@ Remaining items are **not** open B0 questions; they are future gates:
 | Maturity | `LEGACY_ADVISORY` / `LEGACY_ADVISORY_ONLY` |
 | Persistence | On-read only · **no** `ai_decisions` migration · **no** B10 table |
 | SQL column fix | `/logs` + readiness use `d.input_data AS input`, `d.output_data AS output` |
-| Identity | `agentId` = stable `agent_key` · UUID = `agentRecordId` · `trend_detection` alias only |
+| Identity | envelope `agentId` = one of 15 canonical keys only · alias/`agent-N` rejected by validator |
+| Nested contract | allowlisted conclusion/strength/confidence/freshness/dataQuality/provenance/EvidenceItem/ownershipScope |
+| Secret scan | defense in depth · still rejects JWT/API key/token/`input_data`/`output_data`/`metadata` |
 | Trend confidence | UNAVAILABLE · `conclusion.strength` from `raw.trend.confidence` (`percent_100`) |
 | Generic writer 0.5 | UNAVAILABLE unless explicit Agent confidence field exists |
 | Freshness | missing/ambiguous source or unknown TF → `unknown` · never assume `1h` |
-| Frozen diff vs B0 | Trend/Arbitrage/Data Hub/WP-A IA/containment/TE gate = **0** |
-| Backend unit | `npm run test:unit` → **100 passed / 100 total / 712 tests / EXIT 0** |
+| Frozen diff vs B0 | Trend/Arbitrage/Data Hub/WP-A IA/containment/TE gate owners = **unchanged** |
+| Backend unit | `npm run test:unit` → **100 passed / 100 total / 720 tests / EXIT 0** |
 | Frontend Artemis regression | `ArtemisWpA.test.tsx` → **35 passed / 35** |
-| Production build | `npm run build` → **PASS** |
-| Migration | **NO** |
+| Production frontend build | `npm run build` → **PASS** |
+| Staging Browser QA | authenticated Simple+Advanced 7 sections + Data Hub nav → **69/69 PASS** |
+| Migration | **NO** / **0** |
 | Private/public provider calls | **0** |
 | Agent executions for testing | **0** |
-| Scheduler / allowlist / worker topology | **unchanged** |
+| titan-engine-worker | pid `1454` / `1510` · restart `0` · topology unchanged |
 | Live / orders / transfers / withdrawals | **0** |
 | PR | **not created** |
 | Human QA | **PENDING** |
@@ -811,10 +821,25 @@ Remaining items are **not** open B0 questions; they are future gates:
 - Owner Human QA of Staging Artemis product truthfulness
 - Do **not** create PR until Human QA is requested
 - Do **not** start WP-C orchestration or B10 persistence
-- Frontend bundle remains WP-A frozen; additive i18n is committed for later frontend alignment if Human QA requires served copy updates
+- Do **not** label Trend/Arbitrage/Volume as `EVIDENCE_READY` merely because on-read adapters exist
+
+### 24.3 Pre-Human-QA remediation
+
+| Item | Value |
+|---|---|
+| Independent review blockers | unknown `agentId` not fail-closed in validator · nested JSON only size/secret-scanned · `EVIDENCE_READY` overclaim · frontend not deployed |
+| Validator | canonical `agentId` allowlist + nested field allowlists + typed optional domains · secret scan retained |
+| Frontend align | WP-B.1 product copy deployed to `https://titan.zala.ir` · Home no longer treats `evidenceCompatible` as Artemis-connected |
+| Backend deploy | `titan-backend` by NAME only · runtime `6c12fe6` |
+| Frontend deploy | nginx root `/home/ubuntu/webapp/TitanGold/dist` · served `index-DRB6fBxf.js` |
+| Worker restart | **0** |
+| Authenticated `/readiness`+`/logs` | `implemented=true` · `compatibleAgentCount=3` · `ON_READ_PARTIAL` · `artemisConsumable/decisionEligible/executionEligible=false` · `orchestration=LEGACY` · `sourceError=null` |
+| Browser QA | Simple + Advanced · no raw enums/i18n keys/WP-B/WP-C copy in Simple · Optimization truthful · Pattern blocked · Advisory only · Data Hub canonical mount |
+| Pre-existing Data Hub console | hydration `<div>` inside `<p>` on Data Hub nav · **not** WP-B.1 owned · Data Hub remains FROZEN |
 
 **Verdict:**  
 **ARTEMIS WP-B.1 — IMPLEMENTATION COMPLETE ON STAGING**  
 **CANONICAL EVIDENCE FOUNDATION VERIFIED**  
+**AUTOMATED AND BROWSER QA PASS**  
 **READY FOR OWNER HUMAN QA**  
 **NOT CLOSED**

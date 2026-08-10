@@ -10,6 +10,7 @@ Current outcome:
 
 Status:
 **IMPLEMENTATION COMPLETE ON STAGING**  
+**AUTOMATED + BROWSER QA PASS**  
 **HUMAN QA PENDING**  
 **NOT CLOSED**
 
@@ -37,15 +38,27 @@ Execution:
 **NOT ACTIVATED**  
 `executionEligible = false` · legacy `approved:true` ≠ execution authorization
 
+Readiness terminology (do not overclaim):
+- Catalog: `ROLE_MAPPED` + `consumption=evidence_compatible` for Trend / Arbitrage / Volume
+- Evidence: `ON_READ_PARTIAL`
+- **NOT** `EVIDENCE_READY`
+- `artemisConsumable = false` · `decisionEligible = false` · `executionEligible = false`
+
+Provenance (Staging):
+- Backend runtimeCommit: `6c12fe69bf109f8969fc437476c8f5b679f15aa3`
+- Frontend product tree: `4652c36f21039e7f99f2600751a007b73a0347c4`
+- Served bundle: `assets/index-DRB6fBxf.js`
+
 Authorized in this round:
-- Canonical evidence contract 1.0.0
+- Canonical evidence contract 1.0.0 (strict identity + nested allowlists)
 - Identity normalization
 - Truthful confidence / strength / freshness / data-quality
 - Read-only Trend + Arbitrage + Volume adapters
 - On-read projection from `ai_decisions`
 - Scoped SQL column fix (`input_data` / `output_data`)
 - Safe RBAC projection + readiness compatibility counts
-- Focused tests, backend Staging deploy, read-only smoke
+- Pre-Human-QA validator/frontend remediation
+- Focused tests, guarded backend+frontend Staging deploy, authenticated smoke + Browser QA
 
 Not authorized:
 - Database migration / B10 evidence table
