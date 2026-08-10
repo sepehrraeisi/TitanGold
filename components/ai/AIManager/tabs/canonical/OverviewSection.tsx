@@ -66,7 +66,11 @@ const TEAM_ACCENT = {
 
 function stageFacts(readiness: NonNullable<ArtemisSectionProps['readiness']>, t: ArtemisSectionProps['t']) {
   const catalog = readiness.catalog?.agents || [];
-  const connected = catalog.filter((a) => a.evidenceCompatible || a.evidenceAvailable).length;
+  const artemisConsumable =
+    readiness.evidence?.artemisConsumable === true || readiness.contract?.artemisConsumable === true;
+  const connected = artemisConsumable
+    ? catalog.filter((a) => a.evidenceCompatible || a.evidenceAvailable).length
+    : 0;
   const operational = catalog.filter((a) => a.operationalNow).length;
   return {
     dataAi: [

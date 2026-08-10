@@ -108,7 +108,6 @@ export const EvidenceSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {grouped.map((group) => {
           const operational = group.rows.filter((a) => a.operationalNow).length;
-          const connected = group.rows.filter((a) => a.evidenceCompatible || a.evidenceAvailable).length;
           const usable = 0;
           const first = group.rows[0];
           const connection = first ? connectionLabel(first, t) : productLabel(t, 'artemis_user_not_connected', 'Not connected');
@@ -136,7 +135,7 @@ export const EvidenceSection: React.FC<ArtemisSectionProps> = ({ t, readiness, o
                 <div className="flex justify-between gap-2 items-center">
                   <dt className="text-muted-foreground">{productLabel(t, 'artemis_inputs_connected', 'Connected to Artemis?')}</dt>
                   <dd>
-                    <StatusPill label={connection} tone={connected > 0 ? 'ok' : noviceTone(first?.consumption || 'contract_pending')} />
+                    <StatusPill label={connection} tone={noviceTone(first?.consumption || 'contract_pending')} />
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2 items-center">

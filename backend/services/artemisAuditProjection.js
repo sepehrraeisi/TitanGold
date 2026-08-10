@@ -9,6 +9,8 @@ export const ARTEMIS_PRODUCT_AUDIT_FORBIDDEN_KEYS = Object.freeze([
   'metadata',
   'input',
   'output',
+  'input_data',
+  'output_data',
   'context',
   'opportunity',
   'signals',

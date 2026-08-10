@@ -613,7 +613,7 @@ router.get('/logs', authenticateStrict, requireCapability(CAP.AI_AGENT_READ), as
 
     try {
       const decisionsResult = await query(
-        `SELECT d.id, d.agent_id, d.input, d.output, d.was_successful, d.confidence, d.created_at,
+        `SELECT d.id, d.agent_id, d.input_data AS input, d.output_data AS output, d.was_successful, d.confidence, d.created_at,
                 a.agent_key, a.name AS agent_name
            FROM ai_decisions d
       LEFT JOIN ai_agents a ON a.id = d.agent_id
